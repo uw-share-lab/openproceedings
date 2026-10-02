@@ -147,7 +147,9 @@ jobs:
           if-no-files-found: warn  # the report step failed, and said why
           retention-days: 30
   # make mutate, time-boxed: the full run (548 mutants) needs ~6.5 h on a 4-CPU runner, past GitHub's 6 h job
-  # cap (63 in 45 min in 36972065571), until mutate.py can be sharded across jobs (deferred, TASK-057). A
+  # cap (63 in 45 min in 36972065571), until mutate.py can be sharded across jobs (the mutate.py sharding
+  # follow-up, filed in the 2026-10-02 follow-ups PR). mutate.py runs mutants in a fixed order, so until then only
+  # about the first 190 of 548 are checked each night; the rest only by reviews' `make mutate-changed`. A
   # surviving or stale mutant still fails the job; a run cut off at 140 min with none is a pass with a
   # "partial run" warning giving about how many mutants it checked. Reviews run `make mutate-changed` in full.
   mutate:

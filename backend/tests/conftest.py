@@ -130,6 +130,8 @@ class _EarlyFailures:
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
         if report.failed:
             terminal = self.config.pluginmanager.get_plugin("terminalreporter")
+            if terminal is None:  # `-p no:terminal`: nowhere to write
+                return
             terminal.write_line(f"::error::{report.nodeid} failed ({report.when}); its report follows")
             terminal.write_line(report.longreprtext)
 
