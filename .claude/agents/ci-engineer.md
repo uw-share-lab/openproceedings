@@ -42,7 +42,7 @@ tempted to bypass it.
    each Playwright run. There is no persistent fixture-index cache; add one only with a key covering the
    fixture manifest, `TOKENIZER_VERSION` and `SCHEMA_VERSION`.
 5. **claude-tooling:** `make tooling` — roster lint, `.claude/README.md` and learnings `INDEX.md`
-   freshness (`--check`), `check_backlog.py` (no Done task left in `backlog/tasks/`), and every hook case
+   freshness (`--check`), `check_backlog.py` (no Done task left in `backlog/tasks/`, no task or decision id used twice), and every hook case
    table.
 6. **pr-gates** (three jobs): `attribution` scans every commit message in `base..head` and the PR
    title/body; `learnings` needs an added or extended `YYYY-MM-DD-<slug>.md` entry directly in

@@ -111,7 +111,7 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 |---|---|
 | `lint` → `lint` | `make lint` (ruff format/check, mypy --strict once `backend/src` exists, shellcheck, frontend prettier/eslint/tsc), then actionlint |
 | `test` → `test` | pytest under pytest-xdist at the `pr` Hypothesis profile (200 examples, 2 s deadline) (unit, golden, differential@200, contract; the 2,000-example `ci` profile runs nightly, TASK-127); vitest; `next build` (the standalone server must exist); OpenAPI snapshot and TS types freshness (`make openapi`, then `git diff --exit-code` on `backend/tests/contract/openapi.json` and `frontend/src/api/schema.ts`; unconditional, TASK-040) |
-| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`) |
+| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`, no task or decision id used twice: §Merge queue), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha. In a merge-queue build, `merge_group_gate.py` runs the same three checks on every PR in the group (§Merge queue) |
 | `nightly` (scheduled, not a PR check) | Four parallel jobs, each with its own time limit: the whole backend suite at the `ci` profile (2,000 examples) under pytest-xdist; the oracle-backed properties at 50,000 examples; the exhaustive tokenizer check (`OP_EXHAUSTIVE=1`) plus every other property at 50,000; and `make mutate` (every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent). Differential@50k gets its own job in task-057 (M4); full-corpus parity stays local (decision-004) |
 | `bench` → `bench` (advisory: not a required check yet) | pytest-benchmark on the 5k fixture index (`backend/tests/bench`, task-031): the PR's base and head on one runner; a minimum time over 20% slower than the base fails, and each benchmark asserts its spec 03 budget (p95). It becomes required once it has run green on a few PRs without false failures (runner noise); a maintainer adds it to `dev`'s required checks |
@@ -155,6 +155,16 @@ wiring in `pr-gates.yml`, `test.yml`, `lint.yml` and `claude-tooling.yml`. The m
 on `merge_group`, so the queue never waits for them. The combined result is first e2e-tested on `dev`'s
 push run.
 
+Because the queue doesn't require a PR to be up to date, two PRs that each ran `backlog task create` (or
+`backlog decision create`) on the same `dev` get the same id under different filenames, and git sees no
+conflict. `check_backlog.py`, in `claude-tooling` and so in every queue build, fails when two files in
+`backlog/tasks/` + `backlog/completed/` share a task id or two in `backlog/decisions/` share a decision id,
+naming the files. It reads the frontmatter `id:`, else the filename prefix, and compares numbers
+(`TASK-075` = `task-75`); a file whose id it can't read fails it too. `backlog/archive/` is not compared,
+because Backlog.md 1.53 gives an archived task's id to the next new task. New ids are therefore created last,
+after rebasing onto `dev`, and on a clash the unmerged PR drops its id commit and creates the id again (skill
+`task-hygiene`, §Ids). The rows are in `.claude/scripts/tests/test-tooling-scripts.sh`.
+
 **Dependabot** (`.github/dependabot.yml`, weekly) watches `github-actions` (prefix `ci`), `uv` and `npm` (prefix
 `deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch version updates
 are grouped into one PR per ecosystem (a docker digest bump is not a version change and comes as its own PR),
@@ -185,7 +195,8 @@ Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
 - **Learnings every time:** a PR adds or extends a `.claude/learnings/` entry (`/record-learnings`), unless
   labelled `no-learning`. Every session starts with the index loaded.
 - **Keep everything current** (skill: `task-hygiene`): tasks, docs, specs and READMEs change in the same
-  commit as the behaviour. Finished tasks leave `backlog/tasks/` via `backlog task complete <id>`.
+  commit as the behaviour. Finished tasks leave `backlog/tasks/` via `backlog task complete <id>`. New task
+  and decision ids are created last, after rebasing onto `dev` (§Merge queue).
 - **No AI authorship** in commits or PRs (project decision 2026-09-25). `.claude/` is committed.
 - Secrets (OpenReview credentials) live only in `.env` (gitignored, mode 600). `data/` is never committed.
 

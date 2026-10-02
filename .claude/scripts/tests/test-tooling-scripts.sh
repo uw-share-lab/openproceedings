@@ -64,6 +64,51 @@ fresh; printf -- "---\nid: task-1\nstatus: 'Done'\n---\n" > "$TMP/r/backlog/task
 expect err "a quoted 'Done' status"                                     check_backlog.py
 fresh; printf -- '---\nid: task-1\nstatus: Done\n---\n' > "$TMP/r/backlog/completed/task-1 - x.md"
 expect ok  "a Done task in completed/"                                  check_backlog.py
+# duplicate ids (decision-027: the queue merges two PRs that each created task-N under different filenames)
+B="$TMP/r/backlog"
+task() { printf -- '---\nid: %s\nstatus: To Do\n---\n' "$2" > "$B/$1"; }
+dec() { mkdir -p "$B/decisions"; printf -- '---\nid: %s\nstatus: accepted\n---\n' "$2" > "$B/decisions/$1"; }
+# expect_clash <label> <id>  — exits 1 AND names <id> as a duplicate, so an unrelated failure can't pass the row
+expect_clash() {
+  local label="$1" id="$2" got
+  if python3 "$TMP/r/.claude/scripts/check_backlog.py" 2>&1 >/dev/null | grep -q "^backlog: $id is used by 2 files"; then got=clash; else got=none; fi
+  if [ "$got" = clash ]; then pass=$((pass+1)); printf '  ok   %-22s %-58s -> %s\n' check_backlog.py "$label" "$got"
+  else fail=$((fail+1)); printf '  FAIL %-22s %-58s -> %s (want clash on %s)\n' check_backlog.py "$label" "$got" "$id"; fi
+}
+fresh; task "tasks/task-1 - a.md" TASK-1; task "tasks/task-2 - b.md" TASK-2; task "completed/task-3 - c.md" TASK-3
+expect ok  "distinct ids across tasks/ and completed/"                  check_backlog.py
+fresh; task "tasks/task-1 - a.md" TASK-1; task "tasks/task-1 - b.md" TASK-1
+expect_clash "one id twice in tasks/" task-1
+fresh; task "tasks/task-7 - a.md" TASK-7; task "completed/task-7 - b.md" TASK-7
+expect_clash "one id in tasks/ and completed/" task-7
+fresh; task "tasks/task-75 - a.md" task-75; task "completed/task-075 - b.md" TASK-075
+expect_clash "TASK-075 and task-75 are one id" task-75
+fresh; task "tasks/task-8 - a.md" "'TASK-8'"; task "tasks/task-8 - b.md" '"task-8"'
+expect_clash "quoted ids are read" task-8
+fresh; task "tasks/task-1 - a.md" TASK-3; task "tasks/task-2 - b.md" TASK-3
+expect_clash "the frontmatter id wins over the filename (clash)" task-3
+fresh; task "tasks/task-1 - a.md" TASK-1; task "tasks/task-1 - b.md" TASK-2
+expect ok  "the frontmatter id wins over the filename (no clash)"       check_backlog.py
+fresh; printf 'no frontmatter\n' > "$B/tasks/task-4 - a.md"; printf -- '---\nstatus: To Do\n---\n' > "$B/completed/task-4 - b.md"
+expect_clash "no id field: the filename prefix is the id" task-4
+fresh; printf -- '---\nstatus: To Do\n---\nid: TASK-7\n' > "$B/tasks/task-5 - a.md"; printf -- '---\nstatus: To Do\n---\nid: TASK-7\n' > "$B/tasks/task-6 - b.md"
+expect ok  "an id: line below the frontmatter is body text"             check_backlog.py
+fresh; printf -- '---\r\nid: TASK-9\r\nstatus: To Do\r\n---\r\n' > "$B/tasks/task-1 - a.md"; task "tasks/task-2 - b.md" TASK-9
+expect_clash "CRLF frontmatter is read" task-9
+fresh; task "tasks/task-12 - a.md" TASK-12; task "tasks/task-12.1 - b.md" TASK-12.1
+expect ok  "a subtask 12.1 is not task 12"                              check_backlog.py
+fresh; task "tasks/notes.md" "some note"
+expect err "a file with no readable id fails closed"                    check_backlog.py
+fresh; task "tasks/task-3 - a.md" decision-3
+expect err "a decision id in tasks/ fails closed"                       check_backlog.py
+fresh; mkdir -p "$B/archive/tasks"; task "archive/tasks/task-2 - a.md" TASK-2; task "tasks/task-2 - b.md" TASK-2
+expect ok  "backlog/archive/ is not compared (the CLI reuses its ids)"  check_backlog.py
+fresh; dec "decision-1 - a.md" decision-1; dec "decision-2 - b.md" decision-2; task "tasks/task-1 - c.md" TASK-1
+expect ok  "distinct decisions; task-1 and decision-1 don't clash"      check_backlog.py
+fresh; dec "decision-29 - a.md" decision-29; dec "decision-29 - b.md" decision-029
+expect_clash "one decision id twice" decision-29
+fresh; printf 'no frontmatter\n' > "$B/tasks/task-1 - a.md"; dec "decision-5 - a.md" decision-5; dec "decision-6 - b.md" decision-5
+expect_clash "decision clash: the frontmatter id wins over the filename" decision-5
 
 echo "== check_digest_pins.py"
 W="$TMP/r/deploy/web.Dockerfile"
