@@ -3,10 +3,10 @@ id: TASK-158
 title: >-
   A full year range glued to a group parenthesis parses while every other glued
   filter value is refused (lexer vs spec 02)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-02 00:40'
-updated_date: '2026-10-02 04:15'
+updated_date: '2026-10-02 04:19'
 labels:
   - query
 milestone: m-3
@@ -45,3 +45,9 @@ Refuse a ( glued to any filter value (RANGE joins WORD/PHRASE); keep ) before a 
 <!-- SECTION:NOTES:BEGIN -->
 Decision-027 (decision-026 is taken by TASK-155's branch). First tried refusing a ) glued to a field prefix too: test_clauses failed on the Trust-Evals strings (…)(source:ICLR OR …) → the venue splice writes …)venue:(ICLR)) and on year:(2019)status:accepted, so that side stays accepted. Newly refused: a typed full range glued to ( (year:2020..2022(x)). No canonical string writes a value before ( (clauses joined by ' AND '), so stored canonical and identification_query strings re-parse unchanged and QUERY_VERSION stays 2. Verified: test_lexer, test_parser (new GLUED_CLAUSES table, both modes), test_clauses, test_properties, the lexer golden (regenerated) and frontend src/editor + src/builder vitest (2,274 passed).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+A ( glued to any filter value is now PARSE_PAREN_TOUCHES_WORD, a full year range included (year:2020..2022(x) used to parse as x AND year:2020..2022), with a message naming the field's value and where the space goes. A ) glued to a field prefix stays accepted, since it splits nothing and facet clicks splice field:(…) after a ) on real Trust-Evals strings. A glued value is still checked as a value (year:..2022(x) is also FIELD_UNKNOWN_VALUE), and filter values (bare or in their group) get no text warnings (year:..2022 no longer WARN_SYMBOLS_DROPPED). Decision-027: QUERY_VERSION stays 2, as no canonical string writes a glued form. Spec 02, lexer docstring and query-grammar skill updated; lexer golden regenerated. Verified with test_lexer, test_parser (GLUED_CLAUSES, both modes), test_clauses, test_properties, frontend editor/builder vitest.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { HOSTILE, quotedSafely } from "@/test/hostile";
 import { copy, RECORDS } from "@/test/record-fixture";
 import { bucketsText, indexGone, replayView, savedLine, type Replay } from "./replay-status";
 
@@ -84,5 +85,64 @@ describe("replayView and savedLine (copy RC-2–RC-7, SV-4)", () => {
     expect(indexGone(record, null)).toBe(false);
     expect(indexGone(record, replay())).toBe(false);
     expect(indexGone(record, replay({ index_version: "other" }))).toBe(true);
+  });
+});
+
+describe("values the API sent are clipped wherever a line quotes them (TASK-160)", () => {
+  it.each(HOSTILE)("a refusal code %j is quoted as %j", (code, shown) => {
+    const v = replayView(
+      record,
+      replay({
+        status: "drifted",
+        refused: code as Replay["refused"],
+        total: null,
+        added_total: null,
+        removed_total: null,
+      }),
+      "x",
+    );
+    expect(v).toEqual({
+      kind: "refused",
+      text: `Drifted — could not be re-run: \`${shown}\`. No counts were compared.`,
+    });
+    if (v.kind === "refused") quotedSafely(v.text);
+  });
+
+  it.each(HOSTILE)("both index versions %j are quoted as %j", (version, shown) => {
+    const r = replay({
+      status: "drifted",
+      index_version: `${version}-now`,
+      total: 3,
+      added_total: 1,
+      removed_total: 0,
+    });
+    const v = replayView({ ...record, index_version: version }, r, "x");
+    expect(v.kind === "drifted" && v.text).toBe(
+      `Drifted: this instance no longer has index \`${shown}\`, so the search was re-run on index ` +
+        `\`${shown}-now\`. It now finds 3 papers: +1 / −0 against the record.`,
+    );
+    if (v.kind === "drifted") quotedSafely(v.text);
+  });
+
+  it.each(HOSTILE)("both query versions %j are quoted bare as %j", (version, shown) => {
+    const r = replay({
+      status: "drifted",
+      query_version: `${version}2`,
+      changed: [{ input: "query_version", kind: "method", recorded: version, current: `${version}2` }],
+    });
+    const v = replayView({ ...record, query_version: version }, r, "x");
+    expect(
+      v.kind === "drifted" &&
+        v.text.startsWith(
+          `Drifted: the query rules changed (query version ${shown} → ${shown}2). Re-run on the record's own index`,
+        ),
+    ).toBe(true);
+    if (v.kind === "drifted") quotedSafely(v.text);
+  });
+
+  it.each(HOSTILE)("the saved panel quotes the index version %j as %j", (version, shown) => {
+    const line = savedLine({ ...record, index_version: version }, replay({ index_version: version }), "x");
+    expect(line).toBe(`Reproduced just now on index \`${shown}\`.`);
+    quotedSafely(line ?? "");
   });
 });

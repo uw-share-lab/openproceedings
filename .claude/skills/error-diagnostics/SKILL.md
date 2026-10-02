@@ -94,8 +94,12 @@ use them exactly as named there.
   and `test_422_names_a_few_problems_and_counts_the_rest` pin it).
   **The frontend quotes alike:** a message the frontend builds (the URL↔state reducer's `SearchStateError`
   refusals, `describeNotice`/`noticeText`) quotes every value it did not write itself through
-  `frontend/src/lib/clip.ts`, the twin of `diagnostics.clip` with the same escapes and widths; its table
-  (`clip.test.ts`) holds the backend's own outputs, and `search-state.test.ts` checks every call site (each
+  `frontend/src/lib/clip.ts`, the twin of `diagnostics.clip` with the same escapes and widths; its cases
+  (`clip-golden.json`, read by `clip.test.ts`) are generated from the backend's own `clip` by
+  `backend/tests/contract/test_frontend_clip_golden.py`, which fails while the file is stale (TASK-160). Every
+  other message `Coded` draws from API values quotes them through it too: the banner's default clauses and include descriptions
+  (`exclusions.ts`, `clauseText`, `defaultsText`) and the replay lines (`replay-status.ts`), each value bare or
+  in backticks, checked with `src/test/hostile.ts`'s values and `quotedSafely` (TASK-160). `search-state.test.ts` checks every reducer call site (each
   refusal code that quotes a value or a field, the span bounds and error, and each notice) with hostile values
   (TASK-144).
 - Message text is prose, not contract: codes, spans and `reading` are what clients use (they never parse
