@@ -596,12 +596,13 @@ def wrap_cases(draw: st.DrawFn) -> ParseCase:
     return ParseCase(q, mode, "near-cap", refused)
 
 
-# A part that ends in a word, not a `)`: written directly before a group it is PARSE_PAREN_TOUCHES_WORD (a group,
-# `abstract:(a OR b)(x)`, is not; nor, as the lexer stands, a full range, `year:2020..2022(x)`, so none is drawn)
+# A part that ends in a word or a range, not a `)`: written directly before a group it is PARSE_PAREN_TOUCHES_WORD
+# (a group, `abstract:(a OR b)(x)`, is not; a full range, `year:2020..2022(x)`, is, decision-027)
 _BEFORE_A_GROUP = st.sampled_from(
     [
         *(f"{f}:{v}" for f, values in CLAUSE_VALUES.items() for v in values),
         "year:2021",
+        "year:2020..2022",
         *(w for w in _CLAUSE_WORDS if not w.endswith(")")),
     ]
 )

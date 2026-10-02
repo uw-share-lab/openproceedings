@@ -154,7 +154,14 @@ Rules:
     punctuation (`"trust 「in」 AI"` is one phrase). A quote touching a letter or digit on the outside
     (`"trust in "AI"`, `a"b c"`, a possessive `"GPT-4"'s`, a decomposed accent `cafe\u0301"x"`) is
     `PARSE_AMBIGUOUS_QUOTE` (its span covers the rest of the glued text: one mistake, one error), and a parenthesis glued to a word or phrase
-    (`model(s)`, `"a"(b)`) is `PARSE_PAREN_TOUCHES_WORD`: both would otherwise silently split a query.
+    (`model(s)`, `"a"(b)`) is `PARSE_PAREN_TOUCHES_WORD`: both would otherwise silently split a query. A filter
+    value is no exception, whatever its form: `year:2021(x)`, `venue:iclr(x)` and the range `year:2020..2022(x)`
+    are all refused, and the message says to put a space before the `(` (decision-027). A `)` glued to a
+    following field prefix (`(x)year:2021`) and a group glued to a group (`year:(2021)(x)`, `(a)(b)`) split no
+    word or value and are accepted, as they must be: a facet click splices `field:(…)` over a clause that may
+    follow a `)` directly. A glued value is still checked as a value (`year:..2022(x)` is also
+    `FIELD_UNKNOWN_VALUE`), and a filter value never gets the text-only warnings (`year:..2022` is
+    `FIELD_UNKNOWN_VALUE`, not also `WARN_SYMBOLS_DROPPED`).
     A backslash keeps the next character in the word
     (`G\"odel`). Characters whose NFKC form is a syntax character (full-width `（ ）｜：－＊＂`, …) act as
     it, because the tokenizer applies NFKC too; super/subscript parentheses are notation, not grouping.
@@ -301,7 +308,8 @@ A nested clause beside a single top-level one doesn't block it (`track:main (tra
 **The caps.** A click always writes the grouped form, `field:(v1 OR …)`, even for one value (`field:(v)`;
 the same canonical form and hash as `field:v`), so its `)` ends every edit and no edit can touch a group
 that follows the clause (`track:(main OR workshop)(x OR y)` → `track:(workshop)(x OR y)`, where a bare
-`track:workshop(x OR y)` would be `PARSE_PAREN_TOUCHES_WORD`). A toggleable clause is checked by making the
+`track:workshop(x OR y)` would be `PARSE_PAREN_TOUCHES_WORD`, as would any value glued to a `(`, a full year range
+included; decision-027). A toggleable clause is checked by making the
 widest edit a click can make and parsing it in the query's mode: every vocabulary value (for year,
 `MAX_YEAR_RANGES` = 4 disjoint `dddd..dddd` ranges, the most a year action writes; see below), spliced over
 the span or wrapped around `q`, exactly as the reducer writes it. Every narrower edit is then sound too: a
@@ -403,7 +411,7 @@ with a bad operand, a missing operand (`a OR`), a word or phrase with no letters
 nested text field, a malformed filter group, nesting deeper than 64, an ambiguous `-`, a stray `:`, a
 detached or mid-word wildcard, `source:` outside Scholar mode, an unknown field, an unknown filter value
 (listing the valid ones), a range with start > end, an all-negative query, a quote or parenthesis glued
-to a word (`"trust in "AI"`, `model(s)`), or a query longer than 2,000 code points (`PARSE_TOO_LONG`,
+to a word (`"trust in "AI"`, `model(s)`) or a `(` glued to a filter value (`year:2020..2022(x)`), or a query longer than 2,000 code points (`PARSE_TOO_LONG`,
 checked before any other work). The canonical string is capped too: a query whose canonical form (the
 defaults explicit, ` AND ` for juxtaposition, a field prefix on every leaf, parentheses) is over 2,000 code
 points is `PARSE_TOO_LONG`, spanning the whole input and saying how much the canonical form adds

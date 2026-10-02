@@ -10,7 +10,9 @@ Lexical rules, in the order they are tried at the start of each lexeme:
   With no closing quote the phrase runs to the end of `q` and PARSE_UNTERMINATED_PHRASE is raised.
   A quote touching a letter, mark or number on the outside (`a"b c"`, `"trust in "AI"`, a possessive
   `"GPT-4"'s`, a decomposed accent) is PARSE_AMBIGUOUS_QUOTE, once per unbroken run; a `(` glued to a
-  preceding word or phrase, or a `)` to a following one (`model(s)`), is PARSE_PAREN_TOUCHES_WORD.
+  preceding word, phrase or range, or a `)` to a following word or phrase (`model(s)`, `year:2020..2022(x)`), is
+  PARSE_PAREN_TOUCHES_WORD; a `)` glued to a field prefix (`(x)year:2021`) splits nothing and is fine
+  (decision-027).
 - `-` is `NOT` when it starts the query or follows whitespace, `(`, `|` or a field's `:`, and a primary
   follows it directly. Any other word that starts with `-` (`a - b`, `"x"-based`, `--x`) is
   PARSE_AMBIGUOUS_MINUS: it would otherwise silently mean either NOT or a literal hyphen.
@@ -41,7 +43,8 @@ something to the tokenizer (`C++` → `c`, `.NET` → `net`, a bare `\\epsilon` 
 math: WARN_SYMBOLS_DROPPED); CJK text, which is not split into words (WARN_CJK_RUN); a logic sign (`∨`,
 `∧`, `¬`), which is searched as its word, not as an operator (WARN_LOOKALIKE_OPERATOR); a spelled Greek
 name (`alpha`), which finds only the word since abstracts' `$\\alpha$` and `α` are indexed as `α`
-(WARN_SPELLED_GREEK; not for filter values, wildcards, or when the query already has the letter). A
+(WARN_SPELLED_GREEK; not for wildcards or when the query already has the letter). A filter field's value, bare
+or in its group, is never text, so it gets neither text warning (`year:..2022`, `venue:(pi)`). A
 wildcard straight after an operator (`vision×*`, `$\\le$*`) is PARSE_WILDCARD_DETACHED (decision-006).
 Bad input is a diagnostic, never an exception.
 """
@@ -119,7 +122,11 @@ class Kind(StrEnum):
     RANGE = "RANGE"
 
 
-_TERMS = (Kind.WORD, Kind.PHRASE)  # what a glued parenthesis would silently AND with
+# what a glued parenthesis would silently AND with: a `(` after a word, a phrase or a range (`year:2020..2022(x)`),
+# a `)` before a word or a phrase; not a `)` before a field prefix (`(x)year:2021`), which splits nothing (spec 02
+# §Grammar, decision-027)
+_BEFORE_LPAREN = frozenset({Kind.WORD, Kind.PHRASE, Kind.RANGE})
+_AFTER_RPAREN = frozenset({Kind.WORD, Kind.PHRASE})
 _OPERATORS = {"AND": Kind.AND, "OR": Kind.OR, "NOT": Kind.NOT}
 _ENDS_A_TERM = frozenset({Kind.WORD, Kind.PHRASE, Kind.RPAREN, Kind.RANGE})
 _STARTS_A_TERM = frozenset({Kind.WORD, Kind.PHRASE, Kind.LPAREN, Kind.FIELD, Kind.NOT, Kind.RANGE})
@@ -237,6 +244,7 @@ class _Lexer:
         self.out: list[Lexeme] = []
         self.errors: list[Diagnostic] = []
         self.warnings: list[Diagnostic] = []
+        self.groups: list[bool] = []  # per open `(`: whether it holds a filter field's values (`year:(…)`)
 
     def error(self, code: DiagnosticCode, message: str, start: int, end: int) -> None:
         self.errors.append(_diag(code, message, start, end))
@@ -252,6 +260,10 @@ class _Lexer:
                 i += 1
             elif c in _BREAKS:
                 kind = Kind.LPAREN if c in LPARENS else Kind.RPAREN if c in RPARENS else Kind.OR
+                if kind is Kind.LPAREN:
+                    self.groups.append(self.filter_value_next())
+                elif kind is Kind.RPAREN and self.groups:
+                    self.groups.pop()
                 self.out.append(Lexeme(kind, i, i + 1, c))
                 i += 1
             elif c in QUOTES:
@@ -267,6 +279,14 @@ class _Lexer:
             else:
                 i = self.word_or_operator(i)
         self.after_pass()
+
+    def filter_value_next(self) -> bool:
+        """Whether a word lexed now is a filter field's value (`year:..2022`, `venue:(pi OR x)`), which is
+        never searched as text, so the text warnings about it don't apply."""
+        prev = self.out[-1] if self.out else None
+        if prev is not None and prev.kind is Kind.FIELD:
+            return prev.field in _FILTER_FIELDS
+        return bool(self.groups) and self.groups[-1]
 
     def negates(self, i: int) -> bool:
         """Whether the `-` at `i` is NOT: at a primary's start, directly followed by what it excludes."""
@@ -610,8 +630,8 @@ class _Lexer:
                 end,
             )
         elif wildcard is None and folded.casefold() in _GREEK_NAMES:
-            if prev is not None and prev.kind is Kind.FIELD and prev.field in _FILTER_FIELDS:
-                return  # a filter value (`venue:pi`) is never searched as text
+            if self.filter_value_next():
+                return  # a filter value (`venue:pi`, `venue:(pi)`) is never searched as text
             name = folded.casefold()
             letter = GREEK[name]
             if letter in unicodedata.normalize("NFKC", self.q).casefold():
@@ -632,6 +652,8 @@ class _Lexer:
         symbols = stem.endswith(("+", "#")) or stem.startswith((".", "#", "+", "@"))
         if not symbols and not _COMMAND.search(stem):
             return  # the common case: no tokenizing at all (it is a full LaTeX scan)
+        if self.filter_value_next():
+            return  # a filter value (`year:..2022`) is never searched as text: its own check refuses it
         toks = tokenize(stem)
         if not toks:
             return  # nothing left at all: an error or the phrase-part warning says so
@@ -705,21 +727,28 @@ class _Lexer:
 
     def after_pass(self) -> None:
         """Diagnostics that depend on the neighbouring lexemes: words that look like operators, and a
-        parenthesis glued to a word, which would silently mean AND (`model(s)` → `model AND s`)."""
-        for x, y in zip(self.out, self.out[1:], strict=False):
+        parenthesis glued to a word, which would silently mean AND (`model(s)` → `model AND s`), or a `(` to a
+        field's value (`year:2020..2022(x)` → `year:2020..2022 AND x`)."""
+        for k, (x, y) in enumerate(zip(self.out, self.out[1:], strict=False)):
             if x.end != y.start:
                 continue
-            if (x.kind in _TERMS and y.kind is Kind.LPAREN and x.text[0] not in MINUSES) or (
-                x.kind is Kind.RPAREN and y.kind in _TERMS and y.text[0] not in MINUSES
-            ):
-                glued = (x.start, y.end)
+            if x.kind in _BEFORE_LPAREN and y.kind is Kind.LPAREN and x.text[0] not in MINUSES:
+                clause = k > 0 and self.out[k - 1].kind is Kind.FIELD  # x is a field's value
+            elif x.kind is Kind.RPAREN and y.kind in _AFTER_RPAREN and y.text[0] not in MINUSES:
+                clause = False
             else:
                 continue
+            glued = self.q[x.start : y.end]
             self.error(
                 DiagnosticCode.PARSE_PAREN_TOUCHES_WORD,
-                f"`{clip(self.q[glued[0] : glued[1]])}`: a parenthesis touching a word would be read as AND (`model(s)` "
-                "means `model AND s`) — for a plural write `model$`, for a group put a space: `model (s)`.",
-                *glued,
+                f"`{clip(glued)}`: a parenthesis touching a field's value would be read as AND (`year:2021(x)` means "
+                "`year:2021 AND x`) — put a space before the `(`; for several values write a group, "
+                "`year:(2021 OR 2022)`."
+                if clause
+                else f"`{clip(glued)}`: a parenthesis touching a word would be read as AND (`model(s)` means `model "
+                "AND s`) — for a plural write `model$`, for a group put a space: `model (s)`.",
+                x.start,
+                y.end,
             )
         for x in self.out:
             if x.kind is Kind.WORD and unicodedata.normalize("NFKC", x.text) == "NEAR":

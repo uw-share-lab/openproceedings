@@ -170,9 +170,12 @@ class _Parser:
         self.depth = 0
         self.lex_errors = lex_errors
         self.covered = bytearray(len(q) + 2)  # 1 where an error already points: O(1) "already reported?"
+        # 1 where only a glued parenthesis points: it says nothing about the filter value it covers, so a value's
+        # own check still reports (`year:..2022(x)` is both; spec 02 §Grammar, decision-027)
+        self.glued = bytearray(len(q) + 2)
         for e in lex_errors:
             if e.span is not None:
-                self.cover(*e.span)
+                self.cover(*e.span, glued=e.code is DiagnosticCode.PARSE_PAREN_TOUCHES_WORD)
         self.errors: list[Diagnostic] = []
         self.warnings: list[Diagnostic] = []
 
@@ -192,12 +195,15 @@ class _Parser:
         self.i += 1
         return tok
 
-    def reported(self, start: int, end: int) -> bool:
-        """Whether an error already covers part of [start, end), so a second one would repeat it."""
-        return self.covered.find(1, start, max(end, start + 1)) != -1
+    def reported(self, start: int, end: int, *, glue: bool = True) -> bool:
+        """Whether an error already covers part of [start, end), so a second one would repeat it. With
+        `glue=False` a glued parenthesis's error doesn't count."""
+        stop = max(end, start + 1)
+        return self.covered.find(1, start, stop) != -1 or (glue and self.glued.find(1, start, stop) != -1)
 
-    def cover(self, start: int, end: int) -> None:
-        self.covered[start : max(end, start + 1)] = b"\x01" * (max(end, start + 1) - start)
+    def cover(self, start: int, end: int, *, glued: bool = False) -> None:
+        stop = max(end, start + 1)
+        (self.glued if glued else self.covered)[start:stop] = b"\x01" * (stop - start)
 
     def error(self, code: DiagnosticCode, message: str, start: int, end: int) -> None:
         self.errors.append(Diagnostic(code=code, message=message, span=(start, end)))
@@ -626,7 +632,7 @@ class _Parser:
         key = source_key(text) if v.wildcard is None else ""
         venue = SOURCE_ALIASES.get(key)
         if venue is None:
-            if not self.reported(v.start, v.end):
+            if not self.reported(v.start, v.end, glue=False):
                 known = ", ".join(f"`{k}`" for k in SOURCE_ALIASES)
                 self.error(
                     DiagnosticCode.FIELD_UNKNOWN_VALUE,
@@ -657,7 +663,7 @@ class _Parser:
         if self.in_source:
             return self.source_value(v)
         found = filter_value(name, v)
-        if found is not None or self.reported(v.start, v.end):
+        if found is not None or self.reported(v.start, v.end, glue=False):
             return found
         if name == "year":
             if v.kind is Kind.RANGE and v.range is not None and v.range[0] > v.range[1]:

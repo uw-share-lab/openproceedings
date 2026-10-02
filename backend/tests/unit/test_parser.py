@@ -988,3 +988,84 @@ def test_a_canonical_overflow_suggests_shortening_not_splitting() -> None:
     assert error.code is DiagnosticCode.PARSE_TOO_LONG
     assert error.message.endswith(" Shorten it, e.g. replace a list of word forms with one wildcard.")
     assert "several searches" not in error.message
+
+
+# A filter value glued to a following `(` is refused like a glued word, whatever the value (spec 02 §Grammar,
+# decision-027, TASK-158): `year:2020..2022(x)` once parsed as `x AND year:2020..2022` while `year:2021(x)` was
+# refused. A `)` glued to a following field prefix still parses: a field name ends at its `:`, so nothing is
+# split, and a facet click splices `field:(…)` straight after a `)` (`…)(source:ICLR OR …)`, the Trust-Evals
+# strings)
+_P = DiagnosticCode.PARSE_PAREN_TOUCHES_WORD
+_V = DiagnosticCode.FIELD_UNKNOWN_VALUE
+GLUED_CLAUSES: list[tuple[str, str | list[tuple[DiagnosticCode, tuple[int, int]]]]] = [
+    ("year:2020..2022(x)", [(_P, (5, 16))]),
+    ("year:2021(x)", [(_P, (5, 10))]),
+    ("venue:iclr(x)", [(_P, (6, 11))]),
+    ("track:main(x)", [(_P, (6, 11))]),
+    ("title:y(x)", [(_P, (6, 8))]),
+    ("(x)year:2020..2022", "(AND x year:2020..2022)"),
+    ("(x)year:2021", "(AND x year:2021)"),
+    ("(x)venue:iclr", "(AND x venue:ICLR)"),
+    ("(x)title:y", "(AND x title:y)"),
+    ("(x)track:main", "(AND x track:main)"),
+    # an invalid year value is reported on the value, and on the glued `(` too where there is one (TASK-158 #3)
+    ("year:..2022(x)", [(_V, (5, 11)), (_P, (5, 12))]),
+    ("year:2020..(x)", [(_V, (5, 11)), (_P, (5, 12))]),
+    ("(x)year:..2022", [(_V, (8, 14))]),
+]
+
+
+@pytest.mark.parametrize(("q", "outcome"), GLUED_CLAUSES, ids=[q for q, _ in GLUED_CLAUSES])
+@pytest.mark.parametrize("mode", ["native", "scholar"])
+def test_a_parenthesis_glued_to_a_filter_clause(
+    q: str, outcome: str | list[tuple[DiagnosticCode, tuple[int, int]]], mode: Literal["native", "scholar"]
+) -> None:
+    result = parse(q, mode)
+    if isinstance(outcome, str):
+        assert result.errors == [] and result.ast is not None
+        assert show(result.ast) == outcome
+    else:
+        assert [(e.code, e.span) for e in result.errors] == outcome
+        assert result.ast is None
+
+
+@pytest.mark.parametrize(
+    "q", ["year:2020..2022 (x)", "year:2021 (x)", "venue:iclr (x)", "(x)year:2020..2022"]
+)
+def test_a_spaced_or_accepted_glued_clause_has_a_canonical_string_that_replays(q: str) -> None:
+    """The message's fix parses; and no canonical string writes a value before `(` (clauses and groups are
+    joined by ` AND `), so every saved record's canonical string re-parses unchanged (decision-027)."""
+    result = parse(q)
+    assert result.errors == [] and result.canonical is not None
+    again = parse(result.canonical)
+    assert again.errors == [] and again.canonical == result.canonical
+
+
+def test_a_glued_value_message_says_where_the_space_goes() -> None:
+    message = parse("year:2020..2022(x)").errors[0].message
+    assert (
+        message.startswith("`2020..2022(`: a parenthesis touching a field's value")
+        and "before the `(`" in message
+    )
+    assert "`model(s)`" in parse("model(s)").errors[0].message  # a text word keeps its own hint
+    bare = [
+        e.message for e in parse("2020..2022(x)").errors if e.code is DiagnosticCode.PARSE_PAREN_TOUCHES_WORD
+    ]
+    assert len(bare) == 1 and "`model(s)`" in bare[0]  # a bare range is no field's value
+
+
+def test_a_group_glued_to_a_group_is_not_this_rule() -> None:
+    """No value is split by `)(`, so the rule doesn't cover it (decision-027)."""
+    assert parsed("year:(2020..2022)(x)") == "(AND year:2020..2022 x)"
+    assert parsed("(a)(b)") == "(AND a b)"
+
+
+def test_an_open_year_range_value_is_refused_without_a_text_warning() -> None:
+    """`..2022` as a filter value is FIELD_UNKNOWN_VALUE only, not also read as a search word (TASK-158 #4);
+    as a text term it still warns that the dots are dropped."""
+    for q in ("year:..2022", "year: ..2022", "year:(2021 OR ..2022)"):
+        result = parse(q)
+        assert [e.code for e in result.errors] == [DiagnosticCode.FIELD_UNKNOWN_VALUE], q
+        assert result.warnings == [], q
+    assert [w.code for w in parse("..2022").warnings] == [DiagnosticCode.WARN_SYMBOLS_DROPPED]
+    assert [w.code for w in parse("title:..2022").warnings] == [DiagnosticCode.WARN_SYMBOLS_DROPPED]
