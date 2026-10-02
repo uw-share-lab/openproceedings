@@ -5,14 +5,14 @@
 - two files in backlog/tasks/ + backlog/completed/ with the same task id, or two files in backlog/decisions/
   with the same decision id. `dev` merges through a queue without the up-to-date rule (decision-027), so two
   PRs that each ran `backlog task create` get different filenames, no git conflict, and the same id;
-- a file in those directories with no frontmatter, with a top-level frontmatter line that isn't a plain
-  `key:`, a `- ` item or a comment (a `{` flow mapping, a `?` or `<<` key, a tag, an anchor or alias, an
-  escaped key: YAML could read an `id` from it that this check doesn't), with an id it can't read or more
-  than one `id:`, or whose frontmatter id disagrees with its filename prefix (the CLI always writes them
-  equal, so any of these is a hand edit that could hide a duplicate). A missing tasks/ or completed/
-  directory fails too.
+- a file in those directories with no frontmatter, with an indented line before its first key, with a
+  top-level frontmatter line that isn't a plain `key:`, a `- ` item or a comment (a `{` flow mapping, a `?` or
+  `<<` key, a tag, an anchor or alias, an escaped key: YAML could read an `id` from it that this check
+  doesn't), with no `id:` (Backlog.md doesn't read the filename), with an id it can't read or more than one
+  `id:`, or whose frontmatter id disagrees with its filename prefix (the CLI always writes them equal, so any
+  of these is a hand edit that could hide a duplicate). A missing tasks/ or completed/ directory fails too.
 
-The id comes from the frontmatter `id:` field, else (no `id:` in the frontmatter) the filename prefix, and
+The id comes from the frontmatter `id:` field, else (no `id:`, which fails anyway) the filename prefix, and
 is compared by number: TASK-075, task-75 and 'task-075' are one id, and a subtask 12.1 is not 12.
 backlog/archive/ is not compared: Backlog.md 1.53 hands an archived task's id to the next `backlog task
 create` (task-075 twice, 2026-09-26; skill task-hygiene), nothing in a PR can renumber an archived file, and
@@ -49,17 +49,21 @@ def number(m: re.Match[str] | None) -> tuple[int, ...] | None:
 
 
 def read_id(kind: str, text: str, name: str) -> tuple[tuple[int, ...] | None, str]:
-    """(the id's number, "") or (None, why it can't be read). The number is a tuple: 12.1 is not 12."""
+    """(the id's number or None, the problem or ""). Both are set when there is no `id:` but the filename
+    gives one: the file is still compared, and still fails. The number is a tuple: 12.1 is not 12."""
     pattern = id_pattern(kind)
     from_name = number(pattern.match(name))
     fm = FRONTMATTER.match(text)
     if fm is None:
         return None, "has no frontmatter (it must start with a `---` line)"
-    lines = [line for line in fm.group(1).split("\n") if line.strip()]
-    if lines and lines[0][0] in " \t":
-        return None, "has frontmatter this check can't read (its first line is indented)"
-    for line in lines:
-        if line[0] not in " \t" and not TOP_LINE.match(line):
+    keyed = False  # an indented line before the first top-level key would be the mapping's own indentation
+    for line in (line for line in fm.group(1).split("\n") if line.strip()):
+        if line[0] in " \t":
+            if not keyed:
+                return None, "has frontmatter this check can't read (an indented line before the first key)"
+            continue
+        keyed = keyed or line[0] not in "#-"
+        if not TOP_LINE.match(line):
             return (
                 None,
                 f"has frontmatter this check can't read (a top-level line that isn't a plain key: {line[:40]!r})",
@@ -68,9 +72,11 @@ def read_id(kind: str, text: str, name: str) -> tuple[tuple[int, ...] | None, st
     if len(fields) > 1:
         return None, f"has {len(fields)} `id:` fields in its frontmatter"
     if not fields:
+        # Backlog.md reads no id from the filename (it lists such a file as `TASK-`), so this is a problem
+        # even when the filename prefix gives the id this check compares
         if from_name is None:
             return None, f"has no readable {kind} id (frontmatter `id:` or filename)"
-        return from_name, ""
+        return from_name, "has no frontmatter `id:` (Backlog.md doesn't read the id from the filename)"
     value = fields[0].strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
         value = value[1:-1].strip()
@@ -109,9 +115,9 @@ def main() -> int:
                 if p not in texts:
                     continue  # already reported as unreadable
                 num, why = read_id(kind, texts[p], p.name)
-                if num is None:
+                if why:
                     problems.append(f"'{d}/{p.name}' {why}")
-                else:
+                if num is not None:
                     seen[num].append(f"{d}/{p.name}")
         for num, files in sorted(seen.items()):
             if len(files) > 1:

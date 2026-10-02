@@ -93,9 +93,11 @@ fresh; task "tasks/task-8 - a.md" "'TASK-8'"; task "tasks/task-8 - b.md" '"task-
 expect_clash "quoted ids are read"                                      task-8
 fresh; printf -- '---\nstatus: To Do\n---\n' > "$B/tasks/task-4 - a.md"; printf -- '---\ntitle: b\n---\n' > "$B/completed/task-4 - b.md"
 expect_clash "no id field: the filename prefix is the id"               task-4
+fresh; printf -- '---\nstatus: To Do\n---\n' > "$B/tasks/task-4 - a.md"
+expect_msg "no id field fails (Backlog.md lists it as TASK-)"           "'tasks/task-4 - a.md' has no frontmatter .id:."
 fresh; task "tasks/x - a.md" TASK-3; task "tasks/y - b.md" TASK-3
 expect_clash "no filename prefix: the frontmatter id is the id"         task-3
-fresh; printf -- '---\nstatus: To Do\n---\nid: TASK-7\n' > "$B/tasks/task-5 - a.md"; printf -- '---\nstatus: To Do\n---\nid: TASK-7\n' > "$B/tasks/task-6 - b.md"
+fresh; printf -- '---\nid: TASK-5\n---\nid: TASK-7\n' > "$B/tasks/task-5 - a.md"; printf -- '---\nid: TASK-6\n---\nid: TASK-7\n' > "$B/tasks/task-6 - b.md"
 expect ok  "an id: line below the frontmatter is body text"             check_backlog.py
 fresh; printf -- '---\r\nid: TASK-9\r\nstatus: To Do\r\n---\r\n' > "$B/tasks/x - a.md"; task "tasks/y - b.md" TASK-9
 expect_clash "CRLF frontmatter is read"                                 task-9
@@ -128,6 +130,8 @@ fresh; task "tasks/task-5 - a.md" TASK-5; printf -- '---\nx: &a {id: TASK-5}\n<<
 expect_msg "an anchor merged through an alias fails closed"             "'tasks/task-6 - b.md' has frontmatter this check can't read"
 fresh; printf -- '---\n  id: TASK-6\n---\n' > "$B/tasks/task-6 - b.md"
 expect_msg "an indented first frontmatter line fails closed"            "'tasks/task-6 - b.md' has frontmatter this check can't read"
+fresh; task "tasks/task-5 - a.md" TASK-5; printf -- '---\n# c\n  "i\\x64": TASK-5\n  title: hidden\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "a comment, then an indented mapping, fails closed"          "'tasks/task-6 - b.md' has frontmatter this check can't read"
 fresh; printf -- '---\nid: TASK-6\ntitle: >-\n  Read every file when the\n  {frontmatter} holds ?odd values\nlabels:\n- a\n  - b\n# a comment\nstatus: To Do\n---\n' > "$B/tasks/task-6 - b.md"
 expect ok  "CLI-shaped frontmatter: {/? on folded lines, lists, comment" check_backlog.py
 fresh; printf '\n---\nid: TASK-5\n---\n' > "$B/tasks/task-6 - b.md"

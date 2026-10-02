@@ -44,10 +44,11 @@ write different filenames, git sees no conflict, and both would merge with one i
 - **`check_backlog.py` enforces uniqueness**, in `claude-tooling` on the PR (whose merge ref already holds
   `dev`) and again in every queue build (`merge_group`), where two PRs that raced first meet. It fails, naming
   the files, when two files in `tasks/` + `completed/` share a task id, or two in `decisions/` share a decision
-  id. The id is the frontmatter `id:` (else the filename prefix), compared by number (`TASK-075` = `task-75`;
-  a subtask `12.1` is not `12`). A file fails too if it has no frontmatter, a top-level frontmatter line
-  that isn't a plain `key:`, a `- ` item or a comment (`{…}`, `? id`, `<<:`, a tag, anchor or escaped key),
-  no readable id, two `id:` fields, or a frontmatter id that disagrees with its filename; so does a missing
+  id. The id is the frontmatter `id:`, compared by number (`TASK-075` = `task-75`; a subtask `12.1` is not
+  `12`). A file fails too if it has no frontmatter, an indented line before its first key, a top-level
+  frontmatter line that isn't a plain `key:`, a `- ` item or a comment (`{…}`, `? id`, `<<:`, a tag, anchor
+  or escaped key), no `id:` (Backlog.md doesn't read the filename; the filename prefix is still compared),
+  an unreadable id, two `id:` fields, or a frontmatter id that disagrees with its filename; so does a missing
   `tasks/` or `completed/`. `archive/` is not compared (the 1.53 reuse above). Rows:
   `.claude/scripts/tests/test-tooling-scripts.sh`; mutants: `.claude/scripts/mutants/backlog.json`.
 - **On a clash**, the PR that hasn't merged renumbers: rebase onto `dev`, drop the commit that created the id,
