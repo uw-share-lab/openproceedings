@@ -1074,6 +1074,13 @@ def test_a_glued_value_message_says_where_the_space_goes() -> None:
         "values joined by OR (`year:(… OR …)`) — end the group with `)` before the `(`."
     )
     # a negated value gets no rewrite that would drop its `-`; a NOT further back is not this value's
+    # a value that clip would change (whitespace, an escape, a cut) is not quoted in the fix: one visible line
+    for q in ('venue:"a\nb"(x)', 'venue:"a\tb"(x)'):
+        message = next(e.message for e in parse(q).errors if e.code is _P)
+        assert "\n" not in message and "\t" not in message, q
+        assert message.endswith(
+            "— put a space before the `(`; for several values write a group, `venue:(… OR …)`."
+        )
     # nor does a `source:` value, whose rewrite native mode would refuse (FIELD_COMPAT_ONLY)
     for q in ("-year:2021(x)", "year:-2021(x)", "source:neurips(x)"):
         message = next(e.message for e in parse(q).errors if e.code is _P)

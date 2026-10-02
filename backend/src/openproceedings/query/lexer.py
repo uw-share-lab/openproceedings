@@ -758,7 +758,9 @@ class _Lexer:
         negated = before[-2:] in ([Kind.FIELD, Kind.NOT], [Kind.NOT, Kind.FIELD])
         x = self.out[k]
         # `source:` is Scholar mode's only, and the lexer has no mode: a rewrite could itself be refused
-        if negated or field == "source" or not verbatim(x.text) or len(x.text) > 40:
+        # the value is quoted as typed only when `clip` would leave it whole: no escape, no whitespace run to
+        # collapse (`venue:"a<newline>b"(x)`), no cut
+        if negated or field == "source" or clip(x.text) != x.text:
             return (
                 f"{lead} — put a space before the `(`; for several values write a group, `{field}:(… OR …)`."
             )
