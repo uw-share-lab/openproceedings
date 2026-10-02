@@ -137,6 +137,7 @@ RESERVED = {
     "done",
     "esac",
     "function",
+    "coproc",  # `coproc git push …` runs the push (TASK-156)
 }
 GIT_VALUE_OPTS = {"-C", "-c", "--config-env", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 # git's builtins: git never lets an alias shadow one, so only another name is looked up as an alias (a name
@@ -784,9 +785,15 @@ def _substitution_end(text: str, k: int, closer: str) -> int:
         elif c == "#" and (k == 0 or text[k - 1] in " \t\n;&|()"):
             e = text.find("\n", k)
             k = e if e >= 0 else n
-        elif at_word and (m := CASE_WORD.match(text, k)) and _command_position(text, start, k):
+        elif (
+            at_word
+            and (m := CASE_WORD.match(text, k))
+            and (_case_shape(text, m.end()) if m.group(1) else _command_position(text, start, k))
+        ):
             # a `case` statement's patterns end in `)`, which closes nothing; its `esac` ends the case (TASK-156
-            # review); a `case` that is only an argument (`echo use case`) is a word
+            # review). A `case` counts by its shape, `case <word> in`, wherever it starts (`coproc case …`, `function
+            # g case …`); one that is only an argument (`echo use case`) is a word, and so is an `esac` that isn't
+            # where a command goes
             if m.group(1):
                 cases.append(depth)
             elif cases:
@@ -808,8 +815,44 @@ def _substitution_end(text: str, k: int, closer: str) -> int:
 
 # `case` and `esac` as words in a substitution body
 CASE_WORD = re.compile(r"(case)(?=\s)|(esac)(?=[\s;&|()]|$)")
+
+
+def _case_shape(text: str, j: int) -> bool:
+    """Does `text[j:]`, just after a `case`, go on as a case statement: blanks, one word (quotes and substitutions
+    read whole), blanks or newlines, then `in`?"""
+    n, begin = len(text), j
+    while j < n and text[j] in " \t":
+        j += 1
+    if j == begin:
+        return False
+    word = j
+    try:
+        while j < n and text[j] not in " \t\n;&|()<>":
+            if text[j] == "\\":
+                j += 2
+            elif text[j] == '"':
+                j = _double_quoted_end(text, j + 1)
+            elif text[j] == "'":
+                j = text.index("'", j + 1) + 1
+            elif text.startswith("$(", j):
+                j = _substitution_end(text, j + 2, ")")
+            elif text[j] == "`":
+                j = _substitution_end(text, j + 1, "`")
+            else:
+                j += 1
+    except (ParseError, ValueError):
+        return False
+    if j == word:
+        return False
+    while j < n and text[j] in " \t\n":
+        j += 1
+    return text.startswith("in", j) and (j + 2 == n or text[j + 2] in " \t\n;&|()")
+
+
 # words after which the next word is a command name
-COMMAND_LEADERS = frozenset({"then", "do", "else", "elif", "if", "while", "until", "!", "{", "time"})
+COMMAND_LEADERS = frozenset(
+    {"then", "do", "else", "elif", "if", "while", "until", "!", "{", "time", "coproc"}
+)
 
 
 def _is_arithmetic(inside: str) -> bool:
@@ -830,7 +873,9 @@ def _command_position(text: str, start: int, k: int) -> bool:
     before = text[start:k].rstrip(" \t")
     if not before or before[-1] in ";&|()\n":  # `)`: after a case pattern
         return True
-    return before.split()[-1] in COMMAND_LEADERS
+    words = before.split()
+    # also `function NAME …` and `time -p …`
+    return words[-1] in COMMAND_LEADERS or words[-2:-1] == ["function"] or words[-2:] == ["time", "-p"]
 
 
 # a `cd` word that starts at $HOME: `~`, `~/…`, `$HOME…`, `${HOME}…`

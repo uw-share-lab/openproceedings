@@ -568,7 +568,7 @@ them:
 - separators with or without spaces: `;` `&&` `||` `|` `&` `(` `)`, newlines, and process substitution
   `<(…)`/`>(…)`;
 - shell reserved words at the start of a command (`if`/`then`/`elif`/`else`/`fi`, `while`/`until`/
-  `do`/`done`, `{`/`}`, `!`, `esac`, `function`) are skipped;
+  `do`/`done`, `{`/`}`, `!`, `esac`, `function`, `coproc`) are skipped;
 - `VAR=val` assignments and the wrappers `env`, `command`, `builtin`, `exec`, `time`, `nohup`, `nice`,
   `sudo`, `timeout`, `stdbuf`, `xargs` and `watch` are skipped, each with its own table of options that take
   a value; the assignments are kept, and a command run by `xargs` is marked, because the words xargs appends
@@ -589,7 +589,9 @@ them:
 - redirections come out of argv as separate `(operator, target)` pairs;
 - the command substitutions the words would hide (a `$(…)` inside double quotes, `$((…) )` included, backquotes
   outside single quotes, those in an unquoted heredoc body) are walked before the command holding them, each as
-  a subshell, their bodies read as bash reads them (nested quotes, heredocs, `case` patterns), and the word keeps
+  a subshell, their bodies read as bash reads them (nested quotes, heredocs, `case` patterns: a `case <word> in` opens one
+  wherever it starts, and an unbalanced `case`/`esac` is a parse error; `$((…))` whose inner `(` closes at its end is
+  arithmetic, read as text), and the word keeps
   its text; an unquoted `$(…)` is split into commands by its parentheses (TASK-156);
 - `for v in <words>; do …; done` is read once per word with `v` set to it (up to 64 words and 20,000 unrolled
   tokens per command; past either, without `in`, or with a `break`/`continue`/`return`/`exit` in the body, `$v`

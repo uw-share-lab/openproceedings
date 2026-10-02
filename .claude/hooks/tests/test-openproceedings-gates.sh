@@ -1124,6 +1124,11 @@ check $P block "case form: ( case … ) in a pattern" "$(payload_bash 'x="$(case
 check $P block "case form: heredoc: nested case after a pattern" "$(payload_bash 'cat <<EOF
 $(case a in a) case b in b) :;; esac;; c) :;; esac; rm -rf data/snapshots)
 EOF')"
+check $P block "case form: coproc case …" "$(payload_bash 'x="$(coproc case a in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: function g case …" "$(payload_bash 'x="$(function g case a in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: time -p case …" "$(payload_bash 'x="$(time -p case a in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: case $(…) in …" "$(payload_bash 'x="$(case $(echo a) in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $R block "coproc git push origin other2"           "$(payload_bash 'coproc git push origin other2')"
 check $P allow "x=\"\$(case \"\$1\" in -h) …;; *) …;; esac)\" (a real case)" "$(payload_bash 'x="$(case "$1" in -h) echo h;; *) echo o;; esac)"; echo "$x"')"
 check $P allow "echo \"\$((1<<n))\" (arithmetic, not a body)"  "$(payload_bash 'echo "$((1<<n))"')"
 check $P allow "git commit -m \"\$(echo use case)\" (case as a word)" "$(payload_bash 'git commit -m "$(echo use case)"')"

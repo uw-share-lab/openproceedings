@@ -3216,8 +3216,8 @@
  {
   "label": "cmdparse: any word case counted as a case statement (TASK-156)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": " and _command_position(text, start, k)",
-  "new": ""
+  "old": "(_case_shape(text, m.end()) if m.group(1) else _command_position(text, start, k))",
+  "new": "True"
  },
  {
   "label": "cmdparse: bash -c substitutions not walked (TASK-156)",
@@ -3260,5 +3260,17 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "    if not before or before[-1] in \";&|()\\n\":",
   "new": "    if not before or before[-1] in \";&|(\\n\":"
+ },
+ {
+  "label": "cmdparse: a case counted by its position, not its shape (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(_case_shape(text, m.end()) if m.group(1) else _command_position(text, start, k))",
+  "new": "_command_position(text, start, k)"
+ },
+ {
+  "label": "cmdparse: coproc not a reserved word (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"coproc\",  # `coproc git push …` runs the push (TASK-156)\n",
+  "new": ""
  }
 ]
