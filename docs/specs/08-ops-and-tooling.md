@@ -544,7 +544,8 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    Merge it with a merge commit, never `--squash` or `--rebase`, which would leave `main`'s commit out of
    `dev`. Once `dev`'s merge queue is active, that means adding it to the queue (`gh pr merge <n> --auto`;
    the queue's method is MERGE). Before the queue is active, use `gh pr merge <n> --merge`. Then check
-   `git fetch origin && git merge-base --is-ancestor origin/main origin/dev`. On `dev`, `python3 .claude/scripts/changelog.py --check` then passes.
+   `git fetch origin && git merge-base --is-ancestor origin/main origin/dev`. On `dev`,
+   `python3 .claude/scripts/changelog.py --check` then passes.
 8. **Retention.** Keep every index and snapshot a search record pins (`op index retire` refuses a pinned
    index; §CLI). After a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy, its code
    can't serve the older pinned indexes (after a `QUERY_VERSION`-only change it still serves them, and
