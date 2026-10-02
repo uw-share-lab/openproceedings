@@ -1,6 +1,6 @@
 # OpenReview's `_bibtex` url can name the wrong forum, so corroborate it before linking on it
 
-**Key lesson:** Before trusting a field that names another record (here a v1 note's `_bibtex` url), tally what it names across the whole listing. All 35 ICLR 2017 `Invite to Workshop` copies named one unrelated forum. Accept such a link only when an independent signal agrees (the same dedup title key). Add a cross-record link as a provenance-only claim, so `op snapshot diff` shows exactly the linked records as `provenance_only` and nothing else moves.
+**Key lesson:** Before trusting a field that names another record (here a v1 note's `_bibtex` url), tally what it names across the whole listing. All 35 ICLR 2017 `Invite to Workshop` notes named one unrelated forum. Accept such a link only when an independent signal agrees (the same dedup title key). Add a cross-record link as a provenance-only claim, so `op snapshot diff` shows exactly the linked records as `provenance_only` and nothing else moves.
 
 - **Date:** 2026-10-02 · **Task:** task-159, task-157 · **Area:** ingest
 - **Artifacts:** `backend/src/openproceedings/ingest/sources/openreview_v1.py` (`link_twins`, `is_twin_outcome`, `submission_listing`), `backend/src/openproceedings/ingest/ris.py` (`_invitation`, `_twin_outcome`), decision-029, `docs/results/2026-10-02-iclr-2017-twins.md`
@@ -12,7 +12,7 @@ them), and let the RIS importer tell a copy from a real rejection by scholarmend
 ## What we learned
 - TASK-152 had found that the 18 `Submitted to ICLR 2017` copies' `_bibtex` names their title twin. The tempting
   generalisation, "a `_bibtex` naming a conference forum is a twin link", is wrong. All 35 `Invite to Workshop`
-  copies' `_bibtex` name `B1akgy9xx`, a conference note with another title. A bare `_bibtex` rule would have
+  notes' `_bibtex` name `B1akgy9xx`, a conference note with another title. A bare `_bibtex` rule would have
   linked 35 papers to one wrong record. (Evidence: a tally over the cached workshop listing.)
 - The dedup title key is the reliable signal. Only ICLR 2017 has non-main submission notes whose key matches a
   main-track note: every other v1 adapter's workshop, Tiny Papers, BlogPosts and D&B listings have 0. So a

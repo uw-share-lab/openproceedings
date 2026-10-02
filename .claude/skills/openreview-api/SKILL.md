@@ -104,7 +104,7 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 - A copy and its main-track twin stay two records, linked (rule 6, `link_twins`, TASK-159, decision-029). A copy
   is a record from a non-main submission listing whose dedup title key matches exactly one main-track submission,
   or several of which its `_bibtex` names one. Each side gets a `twin` claim naming the other's id, counted in the
-  report's `twins_linked`. ICLR 2017's 35 `Invite to Workshop` copies' `_bibtex` all name one unrelated forum
+  report's `twins_linked`. ICLR 2017's 35 `Invite to Workshop` notes' `_bibtex` all name one unrelated forum
   (`B1akgy9xx`), so `_bibtex` counts only when it names the copy's title. Only ICLR 2017 has copies: 53, linked
   to 51 conference notes.
 - Status per v1 year (the submission invitation lists what was **submitted**, never what was accepted):

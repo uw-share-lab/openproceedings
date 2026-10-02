@@ -61,7 +61,8 @@ def orv(
 
 
 def v1(title: str, fid: str, vid: str, venue_string: str, evidence: str | None = None,
-       also: tuple[str, str] | None = None, invitation: tuple[str, str] | None = None) -> None:  # fmt: skip
+       also: tuple[str, str] | None = None, invitation: tuple[str, str] | None = None,
+       also_invitation: tuple[str, str] | None = None) -> None:  # fmt: skip
     """An OpenReview record with scholarmend 0.1.4's `venue_string` claim (evidence: its venueid), plus
     optionally a second one (`also`: string, evidence), and optionally scholarmend 0.1.5's `invitation` claim
     (`invitation`: the note's top-level invitation verbatim, evidence)."""
@@ -71,7 +72,8 @@ def v1(title: str, fid: str, vid: str, venue_string: str, evidence: str | None =
         [*orv(fid, vid, venue, int(year), track),
          c("venue_string", venue_string, "openreview_api", evidence or f"venueid={vid}"),
          *([c("venue_string", also[0], "openreview_api", also[1])] if also else []),
-         *([c("invitation", invitation[0], "openreview_api", invitation[1])] if invitation else [])],
+         *([c("invitation", invitation[0], "openreview_api", invitation[1])] if invitation else []),
+         *([c("invitation", also_invitation[0], "openreview_api", also_invitation[1])] if also_invitation else [])],
         rows=V1_ROWS)  # fmt: skip
 
 
@@ -199,6 +201,20 @@ v1("A Synthetic Unlisted Invitation", "V1Ic17Inv3", _IC17, "Submitted to ICLR 20
    invitation=("ICLR.cc/2017/workshop/-/Synthetic", f"venueid={_IC17}"))  # fmt: skip
 v1("A Synthetic Workshop Invitation Of A Poster", "V1Ic17Inv4", _IC17, "ICLR 2017 Poster",
    invitation=("ICLR.cc/2017/workshop/-/submission", f"venueid={_IC17}"))  # fmt: skip
+# an invitation outside the v1 years is ignored (scholarmend emits none for v2 notes); two different invitations,
+# or an empty one, are no evidence (review round 1)
+v1("A Synthetic v2 Invitation", "V2Invite01", "ICLR.cc/2024/Conference/Rejected_Submission", "ICLR 2024 Poster",
+   invitation=("ICLR.cc/2024/Conference/-/Submission", "venueid=ICLR.cc/2024/Conference/Rejected_Submission"))  # fmt: skip
+v1("A Synthetic Pair Of Invitations", "V1Ic17Inv5", _IC17, "Submitted to ICLR 2017",
+   invitation=("ICLR.cc/2017/workshop/-/submission", f"venueid={_IC17}"),
+   also_invitation=("ICLR.cc/2017/conference/-/submission", f"venueid={_IC17}"))  # fmt: skip
+v1(
+    "A Synthetic Empty Invitation",
+    "V1Ic17Inv6",
+    _IC17,
+    "Submitted to ICLR 2017",
+    invitation=("", f"venueid={_IC17}"),
+)
 
 
 def write(rows: list[dict[str, Any]], out: Path) -> None:

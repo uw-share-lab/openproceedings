@@ -62,9 +62,9 @@ The authority rules (never broken):
 6. **A copy and its main-track twin are two linked records** (TASK-159, decision-029). A record from a non-main
    submission listing whose dedup title key is that of exactly one record from the main-track submission listing
    (or of several, one of which its `_bibtex` url names) is a copy of it: ICLR 2017's workshop listing holds 53,
-   18 saying `Submitted to ICLR 2017` (their `_bibtex` names the twin), 34 `Invite to Workshop` (whose `_bibtex`
-   all name one unrelated forum, so a `_bibtex` counts only when its forum has the copy's title) and 1 with no
-   venue. They link to 51 conference records (two have two copies), 104 records in all.
+   18 saying `Submitted to ICLR 2017` (their `_bibtex` names the twin), 34 `Invite to Workshop` (all 35 such
+   notes' `_bibtex` name one unrelated forum, so a `_bibtex` counts only when its forum has the copy's title) and
+   1 with no venue. They link to 51 conference records (two have two copies), 104 records in all.
    They are different submissions with their own outcomes, so they are never merged; each gets a `twin` claim
    naming the other's id (`link_twins`, after rule 5), counted in the report's `twins_linked`. No other v1
    venue-year has such a title match on the 2026-09-29 crawl.
@@ -861,7 +861,8 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
                     "listings": len(report.listings), "forums": report.forums, "notes_read": report.notes_read,
                     "imported": report.imported, "skipped": sum(report.skipped.values()),
                     "unknown_track": report.unknown_track, "unknown_status": report.unknown_status,
-                    "conflicts": len(report.conflicts), "requests": client.requests, "cached": client.cached,
+                    "conflicts": len(report.conflicts), "twins_linked": report.twins_linked,
+                    "requests": client.requests, "cached": client.cached,
                     "cache_incompatible": incompatible,
                     "ms": elapsed_ms(began, time.monotonic)})  # fmt: skip
     if ad.gaps:
@@ -890,7 +891,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
 def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: CrawlReport,
              records: dict[str, PaperRecord], numbers: dict[str, object], silent: set[str],
              read_forum: ForumReader, page_size: int, tick: Callable[[], None],
-             listed: dict[str, Listed] | None = None) -> None:  # fmt: skip
+             listed: dict[str, Listed]) -> None:  # fmt: skip
     """Page through one invitation's notes into `records` (and the silent ones' ids into `silent`), checking the
     listing is consistent (v1 sends `count` on every page); `tick()` before each note (the crawl's heartbeat)."""
     seen: set[str] = set()
@@ -933,8 +934,7 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
             else:
                 records[got.id] = got
                 numbers[got.id] = note.get("number")
-                if listed is not None:
-                    listed[got.id] = Listed(listing, _bibtex_forum(note))
+                listed[got.id] = Listed(listing, _bibtex_forum(note))
                 if _says_nothing_of_status(ad, note, got):
                     silent.add(got.id)
     if rows != len(seen) or len(counts) > 1 or (counts and counts.pop() != rows):
@@ -969,39 +969,41 @@ def _bibtex_forum(note: Mapping[str, Any]) -> str | None:
 def link_twins(records: dict[str, PaperRecord], listed: Mapping[str, Listed]) -> list[tuple[str, str]]:
     """Link, in place, each copy (a record from a non-main submission listing) to its twin: the main-track
     submission listing's record with the same dedup title key. The copy's `_bibtex` decides between several such
-    records when it names one of them; otherwise there must be exactly one. A `_bibtex` naming a record with
-    another title is ignored (ICLR 2017's 35 `Invite to Workshop` copies all name one unrelated forum). Both stay
+    records when it names one of them; otherwise there must be exactly one. A title whose key is empty
+    (punctuation or symbols only) is never matched, as dedup never matches it. A `_bibtex` naming a record with
+    another title is ignored (ICLR 2017's 35 `Invite to Workshop` notes all name one unrelated forum). Both stay
     records (two forum ids are two submissions, dedup-rules §Never merge); each gets one `twin` claim, its value
     the other records' ids, sorted, its url and fetched_at its own title claim's (the listing page it came from).
-    On the 2026-09-29 crawl only ICLR 2017 has such copies: 53 of its 161 workshop notes
-    (docs/results/2026-10-02-iclr-2017-twins.md). Return the (copy,
+    Run after rule 5's collapses, so a dropped note is never named. On the 2026-09-29 crawl only ICLR 2017 has
+    such copies: 53 of its 161 workshop notes (docs/results/2026-10-02-iclr-2017-twins.md). Return the (copy,
     twin) native ids, sorted."""
     mains: defaultdict[str, list[str]] = defaultdict(list)
     for rid, at in listed.items():
-        if rid in records and at.listing.role == "submission" and at.listing.track == "main":
-            mains[title_key(records[rid].title)].append(rid)
+        main = rid in records and at.listing.role == "submission" and at.listing.track == "main"
+        if main and (key := title_key(records[rid].title)):
+            mains[key].append(rid)
     links: defaultdict[str, list[tuple[str, str]]] = defaultdict(list)  # record id → (other id, evidence)
     pairs = []
-    for rid in sorted(listed):
+    for rid in sorted(listed):  # in id order, so each record's links are too
         at = listed[rid]
         if rid not in records or at.listing.role != "submission" or at.listing.track == "main":
             continue
         copy = records[rid]
-        same = sorted(mains.get(title_key(copy.title), ()))
+        same = sorted(mains.get(title_key(copy.title) or "\0", ()))  # "\0": no main record has that key
         named = [m for m in same if records[m].native == at.bibtex_forum]
         if named:
             [twin] = named
-            why, theirs = (
-                "its _bibtex names that forum, the main-track submission with this title",
-                ("its _bibtex names this forum, the main-track submission with its title"),
-            )
+            why = "its _bibtex names that forum, the main-track submission with this title"
+            theirs = "its _bibtex names this forum, the main-track submission with its title"
         elif len(same) == 1:
             [twin] = same
-            why, theirs = (
-                "the only main-track submission with this title",
-                ("the only main-track submission with its title"),
-            )
+            why = "the only main-track submission with this title"
+            theirs = "the only main-track submission with its title"
         else:
+            if same:  # several main-track submissions share the title and its _bibtex names none: no link
+                log.debug(
+                    "openreview_v1_twin_ambiguous", extra={"forum": copy.native, "candidates": len(same)}
+                )
             continue
         track = at.listing.track
         links[rid].append((twin, f"{track} copy of {records[twin].native}: {why}"))
@@ -1009,8 +1011,9 @@ def link_twins(records: dict[str, PaperRecord], listed: Mapping[str, Listed]) ->
         pairs.append((copy.native, records[twin].native))
     for rid, named_by in links.items():
         record = records[rid]
-        [title] = [c for c in record.claims("title") if c.source == SOURCE]
-        named_by.sort()
+        title = next((c for c in record.claims("title") if c.source == SOURCE), None)
+        if title is None:  # every v1 record is built with one (`note_record`); never guess a page
+            raise CrawlError(f"{record.native} has no {SOURCE} title claim to date its twin claim by")
         claim = Claim(field="twin", value=tuple(o for o, _ in named_by), source=SOURCE, url=title.url,
                       fetched_at=title.fetched_at, evidence="; ".join(e for _, e in named_by))  # fmt: skip
         records[rid] = record.model_copy(update={"provenance": (*record.provenance, claim)})

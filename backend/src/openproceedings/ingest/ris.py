@@ -68,6 +68,7 @@ from openproceedings.ingest.classify import (
     is_v1,
 )
 from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Urls, is_url
+from openproceedings.ingest.sources.openreview_v1 import is_twin_outcome, submission_listing
 from openproceedings.ingest.urls import pmlr, proceedings, proceedings_native, proceedings_parts
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 from openproceedings.vocab import venue_name
@@ -165,9 +166,8 @@ class _Identity:
     evidence: dict[str, tuple[str, str]]  # venue/year/track/status → (scholarmend source, evidence)
     urls: tuple[tuple[ClaimField, str, str], ...]  # (field, url, scholarmend source)
     status_override: bool = False
-    invitation: str | None = (
-        None  # scholarmend 0.1.5's `invitation` claim, when it names this note (TASK-157)
-    )
+    # scholarmend 0.1.5's `invitation` claim, when it names this note (TASK-157)
+    invitation: str | None = None
 
 
 def _claims(entry: dict[str, Any], fld: str, source: str) -> list[dict[str, Any]]:
@@ -285,7 +285,9 @@ def _invitation(entry: dict[str, Any], vid: str) -> str | None:
     `invitation`, verbatim): one string, every such claim's evidence naming this record's venueid. None otherwise,
     as for every entry scholarmend cached before 0.1.5."""
     claims = _claims(entry, "invitation", "openreview_api")
-    values = {c["value"] for c in claims}
+    values = {
+        c["value"] if isinstance(c["value"], str) else "" for c in claims
+    }  # a non-string is no evidence
     if len(values) != 1 or any(c["evidence"] != f"venueid={vid}" for c in claims):
         return None
     value = values.pop()
@@ -299,8 +301,6 @@ def _twin_outcome(
     main-track outcome on a note of a non-main submission listing, where the venueid names no track, is its
     conference twin's, so the note takes its listing's track and an unknown status (TASK-157). None when it
     doesn't apply."""
-    from openproceedings.ingest.sources.openreview_v1 import is_twin_outcome, submission_listing
-
     if cls.venue is None or cls.year is None or invitation is None:
         return None
     listing = submission_listing(cls.venue, cls.year, invitation)

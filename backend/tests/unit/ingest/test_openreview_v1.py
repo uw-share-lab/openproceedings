@@ -341,7 +341,7 @@ def test_a_workshop_copy_and_its_conference_twin_are_linked_both_ways(
 
 
 def test_a_title_match_links_a_copy_whose_bibtex_names_another_forum(tmp_path: Path) -> None:
-    """ICLR 2017's 35 `Invite to Workshop` copies all carry a `_bibtex` naming one unrelated conference forum
+    """ICLR 2017's 35 `Invite to Workshop` notes all carry a `_bibtex` naming one unrelated conference forum
     (B1akgy9xx), so a `_bibtex` counts only when it names a submission with the copy's title; otherwise the one
     main-track submission with that title is the twin, by title alone."""
     rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
@@ -360,14 +360,56 @@ def test_a_title_match_links_a_copy_whose_bibtex_names_another_forum(tmp_path: P
     assert got["Unrelated01"].claims("twin") == ()
 
 
-def test_no_title_match_or_two_leaves_a_workshop_note_unlinked(tmp_path: Path) -> None:
+def test_no_title_match_or_two_leaves_a_workshop_note_unlinked(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
     same = v1_clone(rejected, "SameTitle1", number=999, abstract="Another synthetic abstract.")  # a 2nd one
     alone = v1_clone(v1_note(WORKSHOP_COPY), "WsAlone001", title="A title no conference note has")
     ambiguous = v1_clone(v1_note(WORKSHOP_COPY), "WsTwoMatch", title=rejected["content"]["title"])
-    crawl = iclr_2017(tmp_path, [rejected, same], [alone, ambiguous])
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        crawl = iclr_2017(tmp_path, [rejected, same], [alone, ambiguous])
     assert all(r.claims("twin") == () for r in crawl.records)
     assert "twins_linked" not in crawl.report.to_manifest()
+    [line] = [r for r in caplog.records if r.getMessage() == "openreview_v1_twin_ambiguous"]
+    assert (line.__dict__["forum"], line.__dict__["candidates"]) == ("WsTwoMatch", 2)
+
+
+def test_a_title_of_punctuation_only_is_never_matched(tmp_path: Path) -> None:
+    """Review round 1: dedup never matches an empty title key, and neither does the twin rule."""
+    rejected = v1_clone(v1_note("iclr-2017/note-rejected-bare-venueid.json"), "Punct00001", title="???")
+    copy = v1_clone(v1_note(WORKSHOP_COPY), "WsPunct001", title="\u2014!")
+    crawl = iclr_2017(tmp_path, [rejected], [copy])
+    assert len(crawl.records) == 2 and all(r.claims("twin") == () for r in crawl.records)
+
+
+def test_a_twin_the_collapse_dropped_is_never_named(tmp_path: Path) -> None:
+    """Rule 6 runs after rule 5: the copy's `_bibtex` names the higher-numbered of two identical conference notes,
+    which the collapse drops, so the copy links to the survivor, the one record with its title."""
+    rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    dropped = v1_clone(rejected, "Dropped001", number=9_999)
+    copy = v1_clone(
+        v1_note(WORKSHOP_COPY), "WsCopy0001", title=rejected["content"]["title"], _bibtex=bibtex("Dropped001")
+    )
+    crawl = iclr_2017(tmp_path, [rejected, dropped], [copy])
+    got = by_forum(crawl)
+    assert "Dropped001" not in got and crawl.report.skipped["duplicate_submission"] == 1
+    assert twins(got["WsCopy0001"]) == (
+        (got[rejected["id"]].id,),
+        f"workshop copy of {rejected['id']}: the only main-track submission with this title",
+    )
+
+
+def test_a_copy_the_collapse_dropped_is_never_named(tmp_path: Path) -> None:
+    """Two identical workshop copies collapse to the lower-numbered one before linking: the twin names only it."""
+    rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    kept, dropped = (v1_clone(v1_note(WORKSHOP_COPY), nid, number=n, title=rejected["content"]["title"])
+                     for nid, n in (("WsCopyKept", 100), ("WsCopyGone", 200)))  # fmt: skip
+    crawl = iclr_2017(tmp_path, [rejected], [kept, dropped])
+    got = by_forum(crawl)
+    assert "WsCopyGone" not in got and crawl.report.skipped["duplicate_submission"] == 1
+    assert twins(got[rejected["id"]])[0] == ("op:iclr:2017:WsCopyKept",)
+    assert crawl.report.to_manifest()["twins_linked"] == 1
 
 
 def test_a_bibtex_naming_one_of_two_title_matches_picks_it(tmp_path: Path) -> None:
@@ -395,14 +437,25 @@ def test_a_conference_note_with_two_copies_names_both(tmp_path: Path) -> None:
     )
 
 
-def test_twin_claims_survive_dedup_and_a_second_run(tmp_path: Path) -> None:
+def test_twin_claims_survive_dedup_a_ris_merge_and_a_takedown(tmp_path: Path) -> None:
+    """The links are provenance: dedup never merges the pair (two forum ids), a RIS record of the twin merges into
+    it by forum id with the claim kept, a takedown of the copy keeps the claims, and the snapshot renders."""
     rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
     copy = v1_clone(v1_note(WORKSHOP_COPY), "WsCopy0001", title=rejected["content"]["title"])
-    crawl = iclr_2017(tmp_path, [rejected], [copy])
-    result = dedup(crawl.records)
-    assert not result.merges  # two forum ids: never merged (dedup-rules §Never merge)
-    assert {r.id: r.claims("twin") for r in result.records} == {r.id: r.claims("twin") for r in crawl.records}
-    assert dedup(result.records).records == result.records
+    crawl = iclr_2017(tmp_path / "crawl", [rejected], [copy])
+    claims = {r.id: r.claims("twin") for r in crawl.records}
+    alone = dedup(crawl.records)
+    assert not alone.merges  # two forum ids: never merged (dedup-rules §Never merge)
+    assert {r.id: r.claims("twin") for r in alone.records} == claims
+    assert dedup(alone.records).records == alone.records
+    ris = ris_record_of(tmp_path / "ris", 12, rejected["id"])  # the twin's RIS record, merged by forum id
+    result = dedup([*crawl.records, ris])
+    assert [(m.rule, m.key) for m in result.merges] == [("forum_id", rejected["id"])]
+    assert {r.id: tuple(c for c in r.claims("twin")) for r in result.records} == claims
+    withheld = snap.withhold(result, frozenset({"op:iclr:2017:WsCopy0001"}))
+    assert {r.id: r.claims("twin") for r in withheld.result.records} == claims
+    files = snap.render(withheld.result, [], datetime(2026, 10, 2, tzinfo=UTC), withheld=withheld.withheld)
+    assert files["records.jsonl"].count(b'"field":"twin"') == 2
 
 
 def test_a_snapshot_refuses_a_twin_it_doesnt_hold(tmp_path: Path) -> None:
@@ -412,7 +465,10 @@ def test_a_snapshot_refuses_a_twin_it_doesnt_hold(tmp_path: Path) -> None:
     built = datetime(2026, 10, 2, tzinfo=UTC)
     assert snap.render(dedup(crawl.records), [], built)["records.jsonl"].count(b'"field":"twin"') == 2
     alone = [r for r in crawl.records if r.native == "WsCopy0001"]
-    with pytest.raises(snap.SnapshotError, match="twin claim names a record"):
+    rejected_id = f"op:iclr:2017:{rejected['id']}"
+    with pytest.raises(
+        snap.SnapshotError, match=f"record op:iclr:2017:WsCopy0001's twin claim names {rejected_id}, "
+    ):
         snap.render(dedup(alone), [], built)
 
 
