@@ -38,7 +38,7 @@ from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
 from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
-RECORD_SCHEMA_VERSION = "4"  # 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; DECISION-TASK159)
+RECORD_SCHEMA_VERSION = "4"  # 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-028)
 # Sent with a record, never stored: computed from its fields, so a snapshot line never holds it (`record_line`)
 # and the shape above is unchanged (TASK-112). Output only: a dump that is validated again excludes it.
 DERIVED = frozenset({"venue_name"})

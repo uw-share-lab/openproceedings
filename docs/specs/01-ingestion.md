@@ -24,7 +24,7 @@ build.
 | `venue_id_raw` | str \| null | OpenReview `content.venueid` verbatim, e.g. `NeurIPS.cc/2023/Track/Datasets_and_Benchmarks`. |
 | `urls` | object | `forum`, `pdf`, `proceedings`, `doi`, each optional. |
 | `keywords` | list[str] | Stored and displayed, **not searched** (guarantee 2). |
-| `provenance` | list[Claim] | For each field: the source, URL, fetch time and evidence (scholarmend's claim/ledger pattern). Two claim fields are provenance only, never a record field (record schema 4, DECISION-TASK159): `twin`, the ids of a v1 copy's linked twins (§Pipeline, TASK-159), and `invitation`, a v1 note's OpenReview submission invitation from scholarmend 0.1.5 (§Sources, RIS row; TASK-157). |
+| `provenance` | list[Claim] | For each field: the source, URL, fetch time and evidence (scholarmend's claim/ledger pattern). Two claim fields are provenance only, never a record field (record schema 4, decision-028): `twin`, the ids of a v1 copy's linked twins (§Pipeline, TASK-159), and `invitation`, a v1 note's OpenReview submission invitation from scholarmend 0.1.5 (§Sources, RIS row; TASK-157). |
 | `content_hash` | str | sha256 of the canonical JSON of the searchable and filterable fields. |
 | `venue_name` | str | **Derived, never stored** (TASK-112): the venue string of spec 04 §Exports, `vocab.venue_name(venue, year)`, e.g. `International Conference on Learning Representations (ICLR 2024)`. A pydantic computed field: sent wherever the record is (`GET /papers/{id}`'s `paper`), left out of `records.jsonl` (`record.DERIVED`, `snapshot.record_line`), so snapshots, their hashes, `RECORD_SCHEMA_VERSION` and `content_hash` don't change, and stored data that names it is refused as an extra field. |
 
@@ -374,7 +374,7 @@ whether a third, accepted one absorbs them. On the 2026-09-29 crawl this is one 
 supplementary material, title, authors, abstract and keywords, so the paper merges with its proceedings record.
 Notes differing in any other compared field (another pdf; ICLR 2018's blind vs withdrawn copies of one pdf) stay
 separate, and a note without a pdf is never collapsed. API v2 has no such notes (the 2026-09-29 crawl) and doesn't
-run this rule. **A copy and its main-track twin are two linked records** (TASK-159, DECISION-TASK159; the owner,
+run this rule. **A copy and its main-track twin are two linked records** (TASK-159, decision-028; the owner,
 2026-10-02):
 - **What a copy is.** A record from a non-main submission listing whose dedup title key is that of exactly one
   record from the main-track submission listing is a copy of it. With several such records, it is a copy of the

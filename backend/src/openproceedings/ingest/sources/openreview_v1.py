@@ -59,7 +59,7 @@ The authority rules (never broken):
    non-null `venue` or `venueid` (even `''`) is not, so which of two identical notes has the lower number never
    decides whether the paper's third, accepted note absorbs them.
 
-6. **A copy and its main-track twin are two linked records** (TASK-159, DECISION-TASK159). A record from a non-main
+6. **A copy and its main-track twin are two linked records** (TASK-159, decision-028). A record from a non-main
    submission listing whose dedup title key is that of exactly one record from the main-track submission listing
    (or of several, one of which its `_bibtex` url names) is a copy of it: ICLR 2017's workshop listing holds 53,
    18 saying `Submitted to ICLR 2017` (their `_bibtex` names the twin), 34 `Invite to Workshop` (all 35 such
@@ -951,7 +951,7 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
     report.listings[listing.invitation] = rows
 
 
-# --- a copy and its main-track twin (rule 6, TASK-159, DECISION-TASK159) -------------------------------------------
+# --- a copy and its main-track twin (rule 6, TASK-159, decision-028) -------------------------------------------
 
 
 @dataclass(frozen=True)

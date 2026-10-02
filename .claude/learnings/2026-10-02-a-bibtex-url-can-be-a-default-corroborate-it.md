@@ -3,7 +3,7 @@
 **Key lesson:** Before trusting a field that names another record (here a v1 note's `_bibtex` url), tally what it names across the whole listing. All 35 ICLR 2017 `Invite to Workshop` notes named one unrelated forum. Accept such a link only when an independent signal agrees (the same dedup title key). Add a cross-record link as a provenance-only claim, so `op snapshot diff` shows exactly the linked records as `provenance_only` and nothing else moves.
 
 - **Date:** 2026-10-02 · **Task:** task-159, task-157 · **Area:** ingest
-- **Artifacts:** `backend/src/openproceedings/ingest/sources/openreview_v1.py` (`link_twins`, `is_twin_outcome`, `submission_listing`), `backend/src/openproceedings/ingest/ris.py` (`_invitation`, `_twin_outcome`), DECISION-TASK159, `docs/results/2026-10-02-iclr-2017-twins.md`
+- **Artifacts:** `backend/src/openproceedings/ingest/sources/openreview_v1.py` (`link_twins`, `is_twin_outcome`, `submission_listing`), `backend/src/openproceedings/ingest/ris.py` (`_invitation`, `_twin_outcome`), decision-028, `docs/results/2026-10-02-iclr-2017-twins.md`
 
 ## What we set out to do
 Link ICLR 2017's workshop-listing copies to their conference twins (the owner chose to link them, not merge
