@@ -108,15 +108,19 @@ fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `
 |---|---|
 | `enforce-pr-workflow.sh` | `main` and `dev` take no direct commits (cherry-pick, revert, am and rebase included, and after a `checkout`/`switch` to them in the same command), pushes (glob and `:` refspecs included, and a refspec-less push whose repo config picks the target), merges or ref moves (`update-ref`, `reset`, `branch -f`/`-M`/`-C`, `checkout -B`, `switch -C`, `worktree add -B`, a fetch into them). A commit or push whose directory, refspec or branch it can't resolve (`cd "$X"`, `HEAD:$UNSET`) is refused, and so is a push after a checkout/switch/worktree add that writes an upstream, and an unparseable command with `git` and a write word in it. Flow: `feature → PR → dev → PR → main`. |
 | `require-review.sh` | `git push` / `gh pr create` need an **APPROVE record for the exact HEAD sha**, written by `record-review.py` after `/review-gate`; `--tags`, glob refspecs and the matching refspec `:` are refused, and so is a refspec-less push whose config (`-c` or the repo's) picks what is pushed, and a push after any git command in the same call but one that moves no ref (status, log, diff, add, a fetch without a `src:dst` refspec or `--stdin`, …: push in its own call). `gh pr create` also needs an added or extended learnings entry. No record under `op-reviews/` is written by hand (Bash or a file tool). |
-| `block-ai-attribution.sh` | No `Co-Authored-By: Claude` or "Generated with Claude Code" in commits, PRs or release notes. `.claude/` is committed; authorship is not. |
+| `block-ai-attribution.sh` | No `Co-Authored-By: Claude` or "Generated with Claude Code" in commits, PRs or release notes, in the raw text or any word as bash reads it (`'Cl''aude'`). `.claude/` is committed; authorship is not. |
 | `enforce-backlog-cli.sh` | No hand edits under `backlog/`. Use the `backlog` CLI. (Decision *bodies* may be edited, since the CLI can't write them.) |
-| `protect-data-dir.sh` | `data/snapshots/` and `data/indexes/` are immutable. `data/` and any `takedowns/` directory are never committed. No shell edits under `backlog/`. Paths are judged after `~`, `$PWD`, `$(pwd)`, `$(git rev-parse …)`, `$(mktemp)`, `for` loop variables and other variables are resolved (when they can be) and `cd`/`pushd`/`popd` followed, each against the worktree that contains it (case-blind); one it can't resolve (a redirect target too), or a command it can't parse, is refused where the main worktree has `data/`. |
+| `protect-data-dir.sh` | `data/snapshots/` and `data/indexes/` are immutable. `data/` and any `takedowns/` directory are never committed. No shell edits under `backlog/`. Paths are judged after `~`, `$PWD`, `$(pwd)`, `$(git rev-parse …)`, `$(mktemp)`, `for` loop variables and other variables are resolved (when they can be; `~`, HOME, TMPDIR and USER also as '') and `cd`/`pushd`/`popd` followed, each against the worktree that contains it (case-blind); one it can't resolve (a redirect target too), or a command it can't parse, is refused where the main worktree has `data/`. `--output` files and `git format-patch`'s output directory are writes. |
 | `remind-token-contract.sh` | Reminds you to bump `TOKENIZER_VERSION` and run the parity and differential suites after a tokenizer edit. |
 | `load-learnings.sh` | Every session starts with `.claude/learnings/INDEX.md` in context. |
 | `autofix.sh` | After every edit: formats and fixes the file, then reports what it couldn't fix. Never blocks. |
 
 Every gate fails closed: a command it can't parse is refused where it matters, and an internal error exits 2
-(a crash would exit 1, which Claude Code lets through). The case tables count only exit 2 as a block.
+(a crash would exit 1, which Claude Code lets through). block-ai-attribution, require-review and protect-data-dir
+also exit 2 when Python can't run (no python3), and read the payload on stdin, so a command past ARG_MAX is still
+read; enforce-pr-workflow falls back to its text check (a git write word is refused). A command inside a `"$(…)"`,
+backquotes or an unquoted heredoc body is checked like any other, and one with `~` or `$` is read again with
+HOME/TMPDIR/USER as '' in every gate (`cd ~` stays put, and a `cd ~/<path>` that doesn't exist that way is a failed cd) (TASK-156). The case tables count only exit 2 as a block.
 
 After editing any hook or tooling script, run `make tooling`. It runs every case table in
 `.claude/hooks/tests/` and `.claude/scripts/tests/`, in parallel, in about 15 seconds. Then run

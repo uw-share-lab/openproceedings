@@ -35,7 +35,11 @@
 #   HOME, TMPDIR or USER from this hook's environment (unset there: ''; `~` with HOME unset is the passwd
 #   home, as in bash, and unknown after `unset HOME`), each checked both as set and as '' (`rm -f "$TMPDIR/x"` is
 #   allowed, `rm -rf "${TMPDIR}data"` is not; read as '', `"$TMPDIR"/*` is not globbed as `/*`); `cd`/`pushd`/
-#   `popd` are followed. A `git log`/`diff`/`format-patch` `--output <file>` is a write like a redirect. A path that decides a check and can't be
+#   `popd` are followed, and a command with `~` or `$` is read both ways (`cd ~` with HOME '' stays put:
+#   TASK-156). A `git log`/`diff`/`format-patch` `--output <file>` is a write like a redirect, and so is each
+#   patch `git format-patch` writes into `-o`/`--output-directory`, format.outputDirectory or the directory it
+#   runs in (TASK-156). A command substitution's body (`x="$(rm -rf …)"`, backquotes) is checked like any
+#   command (cmdparse). A path that decides a check and can't be
 #   resolved (an unset variable, a relative path after a `cd` that couldn't be followed or went to a directory
 #   that doesn't exist, a redirect target such as `"$(echo data)/…"`) is refused where data/ is: in this worktree,
 #   the call's own, or their repository's MAIN worktree (a linked worktree has none of its own). Each target is
@@ -50,17 +54,16 @@
 # error exits 2, never 1: Claude Code lets a crash through). Paths are resolved against the repo root, so
 # frontend/src/data/… is unaffected. Exit 2 blocks.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
-input=$(cat)
-HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
-import functools, glob, json, os, re, subprocess, sys
+# The program goes to Python as an argument and the payload on stdin, never in an environment variable: past
+# ARG_MAX (about 1 MB) exec fails with 126, which Claude Code lets through. Any exit but 0 blocks (TASK-156).
+IFS= read -r -d '' PROG <<'PY' || true
+import functools, glob, os, re, subprocess, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import (GIT_VALUE_OPTS, Argv, FailClosed, ParseError, expand_word, git, git_subcommand, read_payload,
-                      repo_root, walk)
+from cmdparse import (GIT_VALUE_OPTS, Argv, FailClosed, ParseError, expand_word, git, git_config, git_config_opaque,
+                      git_subcommand, read_payload, repo_root, walk)
+from cmdparse import payload as hook_payload
 
-try:
-    payload = json.loads(os.environ.get("HOOK_INPUT") or "{}")
-except Exception:
-    payload = {}
+payload = hook_payload()
 tool = payload.get("tool_name", "")
 ti = payload.get("tool_input") or {}
 cwd = payload.get("cwd") or os.getcwd()
@@ -434,6 +437,33 @@ def main():
                 refuse(IMMUTABLE_MSG)
             if any(any_rel(in_backlog, o, gm[2]) for o in outputs):
                 refuse(BACKLOG_MSG)
+            if gm and gm[0] == "format-patch" and "--stdout" not in gm[1]:
+                # format-patch writes its patches into `-o`/`--output-directory` (or a unique prefix of it), else
+                # format.outputDirectory, else the directory it runs in (TASK-156)
+                fp, out_dirs = gm[1][: gm[1].index("--") if "--" in gm[1] else None], []
+                for k_, a_ in enumerate(fp):
+                    following = fp[k_ + 1] if k_ + 1 < len(fp) else ""
+                    name, eq, attached = a_.partition("=")
+                    if len(name) >= len("--output-d") and "--output-directory".startswith(name):
+                        out_dirs.append(attached if eq else following)
+                    elif a_.startswith("-") and not a_.startswith("--") and "o" in a_[1:]:
+                        out_dirs.append(a_[a_.index("o", 1) + 1 :] or following)  # `-o<dir>`, `-ko <dir>`
+                if not out_dirs and git_config_opaque(argv) and has_data:
+                    # format.outputDirectory may come from config this guard can't read (GIT_CONFIG_*, --config-env)
+                    refuse(IMMUTABLE_MSG + " (`git format-patch` without -o reads format.outputDirectory from config this "
+                           "guard can't read, in a repo with data/; pass -o <dir> or --stdout.)")
+                if not out_dirs:
+                    out_dirs = [git_config(argv).get("format.outputdirectory")
+                                or git(gm[2], "config", "--get", "format.outputDirectory") or "."]
+                for out_dir in out_dirs:
+                    found = resolve(out_dir, raw, gm[2])
+                    if found is None and has_data:
+                        refuse(UNRESOLVED_MSG)
+                    patch = os.path.join(found or out_dir, "0001-x.patch")
+                    if any_rel(inside_immutable, patch, gm[2]):
+                        refuse(IMMUTABLE_MSG)
+                    if any_rel(in_backlog, patch, gm[2]):
+                        refuse(BACKLOG_MSG)
             if gm and gm[0] == "clean":
                 # Separate -e/--exclude (and their values) from the flag clusters first: an attached `-enode_modules`
                 # contains an `n` and was read as a dry run (review round 4).
@@ -525,7 +555,7 @@ def main():
     # Every allowed environment variable (HOME, TMPDIR, USER: cmdparse.ENV_FALLBACK) is also read as '': the
     # agent's shell may not have it (review gate round 3: `rm -rf "${TMPDIR}data"`).
     check(walked_or_refuse(False))
-    if "$" in cmd:
+    if "$" in cmd or "~" in cmd:  # `cd ~` with HOME '' stays put (TASK-156)
         check(walked_or_refuse(True))
     sys.exit(0)
 
@@ -535,3 +565,13 @@ except Exception as exc:  # a crash exits 1, which Claude Code lets through: ref
     refuse(f"Blocked: protect-data-dir.sh could not check this command ({type(exc).__name__}). Write it more plainly "
            "(no deep brace nesting, no undecodable characters) and retry.")
 PY
+if [ -z "$PROG" ]; then  # the heredoc couldn't be read: an empty program would exit 0
+  echo "Blocked: protect-data-dir.sh could not load its check; refusing rather than letting the command through." >&2
+  exit 2
+fi
+python3 -c "$PROG" "$HOOK_DIR"
+rc=$?
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+  echo "Blocked: protect-data-dir.sh could not run its check (exit $rc); refusing rather than letting the command through." >&2
+fi
+[ "$rc" -eq 0 ] || exit 2

@@ -47,7 +47,9 @@
 # command after a `git config` that writes an alias, include or push key in the same command, a push after a
 # checkout/switch/worktree add that creates a branch with an upstream (`-t`, a remote-tracking start point), and
 # an ambiguous abbreviated option. A word that expands to nothing is dropped (`E=; git push origin $E` names no
-# refspec), and a push is read a second time with HOME/TMPDIR/USER empty (`git push origin $TMPDIR`).
+# refspec), and a command with `~` or `$` is read a second time with HOME/TMPDIR/USER empty (`git push origin
+# $TMPDIR`; `cd ~ && git commit` stays put: TASK-156). A git command inside a command substitution (`x="$(git
+# commit …)"`, backquotes) is read like any other (cmdparse).
 # `checkout -qt origin/dev` and `checkout main --` switch branches. Exit 2 blocks the call and feeds stderr back
 # to the agent.
 #
@@ -515,35 +517,41 @@ def git_calls(argv, directory):
 
 def analyze(cmd, cwd):
     """Walk the command (cmdparse.walk); return the first blocking verdict, else 'allow'."""
-    state = {}
     try:
-        for argv, d, _ in walk(cmd, cwd):
-            if not argv:
-                continue
-            if (_base(argv[0]) in SHELLS or argv[0] in SOURCE_CMDS) and any(not a.startswith("-") for a in argv[1:]):
-                # bash/sh/zsh/dash/ksh/./source <file ...> (no -c): an opaque script this parser cannot see
-                # inside. Only worth flagging where a hidden commit/push/merge would matter.
-                if get_branch(d) in PROTECTED:
-                    first = next(a for a in argv[1:] if not a.startswith("-"))
-                    if f"{argv[0]} {first}" not in warnings:
-                        warnings.append(f"{argv[0]} {first}")
-                continue
-            for call, cd_ in git_calls(argv, d):
-                r = resolved(call, cd_)
-                v = git_verdict(r, cd_, state)
-                # a push word that is empty when HOME/TMPDIR/USER are unset may name no refspec at all (`git push
-                # origin $TMPDIR`): the push is read that way too (TASK-067 final review gate)
-                alt = resolved(call, cd_, env_empty=True)
-                if v == "allow" and alt != r and (git_subcommand(alt, cd_) or ("",))[0] == "push":
-                    v = git_verdict(alt, cd_, state)
-                if v != "allow":
-                    return v
+        # and with HOME/TMPDIR/USER read as '', which the agent's shell may have: `cd ~` then stays put (TASK-156)
+        for env_empty in (False, True) if "~" in cmd or "$" in cmd else (False,):
+            v = analyze_pass(cmd, cwd, env_empty)
+            if v != "allow":
+                return v
     except FailClosed:
         return "unreadable"  # an ambiguous option, an alias set where this gate can't read it, a config write
     except ParseError:
         return "parse-fail"
     except Exception:
         return "parse-fail"  # a crash prints nothing, which the fallback below reads as a parse failure too
+    return "allow"
+
+
+def analyze_pass(cmd, cwd, env_empty):
+    """The first blocking verdict of one walk of the command (`walk(env_empty=…)`), else 'allow'."""
+    state = {}
+    for argv, d, _ in walk(cmd, cwd, env_empty):
+        if not argv:
+            continue
+        if (_base(argv[0]) in SHELLS or argv[0] in SOURCE_CMDS) and any(not a.startswith("-") for a in argv[1:]):
+            # bash/sh/zsh/dash/ksh/./source <file ...> (no -c): an opaque script this parser cannot see
+            # inside. Only worth flagging where a hidden commit/push/merge would matter.
+            if get_branch(d) in PROTECTED:
+                first = next(a for a in argv[1:] if not a.startswith("-"))
+                if f"{argv[0]} {first}" not in warnings:
+                    warnings.append(f"{argv[0]} {first}")
+            continue
+        for call, cd_ in git_calls(argv, d):
+            # in the second pass a push word that is empty when HOME/TMPDIR/USER are unset names no refspec at all
+            # (`git push origin $TMPDIR`: TASK-067 final review gate)
+            v = git_verdict(resolved(call, cd_, env_empty), cd_, state)
+            if v != "allow":
+                return v
     return "allow"
 
 

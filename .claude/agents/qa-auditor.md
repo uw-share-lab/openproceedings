@@ -59,3 +59,6 @@ serial, hand-written mutation loop took about 40 minutes in review round 3; don'
 logic, **add its mutants** to `.claude/scripts/mutants/gates.json` and show that each one is killed. Watch
 for rows that "pass for the wrong reason": a block row can be satisfied by a parser crash (which fails
 closed), so every parser change also needs an **allow** row on approved work.
+**Probe a hook only with payloads written to files** (the Write tool, or `python3 -c` with `json.dumps`), never
+through a shell heredoc of test commands: a test holding the heredoc's delimiter closes it early, and every
+later line runs for real (2026-10-02: `cd ~ && rm -rf data` ran in the home folder).

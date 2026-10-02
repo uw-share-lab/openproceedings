@@ -4,7 +4,8 @@ Parses a Bash tool command into simple commands (argv lists) the way bash reads 
 matter to a gate:
   * `preprocess` makes ONE pass over the whole text: quote state carries across lines (a multi-line quoted
     message is one word), an unquoted `#` at the start of a word starts a comment, and an unquoted
-    `<<DELIM` / `<<'DELIM'` / `<<-"DELIM"` starts a heredoc whose body is dropped unread (never `<<<`);
+    `<<DELIM` / `<<'DELIM'` / `<<-"DELIM"` starts a heredoc whose body is dropped (never `<<<`; an unquoted delimiter's
+    body is read for command substitutions first);
     `$'…'` is decoded (over several lines too) and `$"…"` read as "…" anywhere in a word, `$(pwd)` is written
     as ${PWD}, `$(git rev-parse --show-toplevel)`, `$(git rev-parse --git-common-dir|--git-dir|--absolute-git-dir)`
     and `$(mktemp [-d] [-t prefix])` as variables `expand_word` resolves, and `"$X"a` as ${X}a;
@@ -19,7 +20,7 @@ matter to a gate:
     wrapper with its own table of value-taking options; `env -S '…'` is split, `env -C`/`sudo -D` move dir;
     the argv comes back as an `Argv` that records the `VAR=val` words and whether xargs runs it;
   * command names compare by basename (`/usr/bin/git` is `git`);
-  * redirections leave argv as (operator, target) pairs (`redirect_targets`);
+  * redirections leave argv as (operator, target) pairs (`walk` yields them);
   * `cd`, `pushd` and `popd` are tracked (targets through `expand_word`, `-P` physically; one it can't resolve,
     one that doesn't exist, a relative one under CDPATH, or `cd -` back to an unknown one marks the directory
     unknown) and `bash -c "…"` (with the assignments before it exported to it) / `eval "…"` are recursed into;
@@ -37,7 +38,11 @@ matter to a gate:
     config file, in the same command line raises FailClosed (`config_steers_git`, `writes_git_config`): this
     parser read the config before it was written; so does a `git push` after a checkout/switch/worktree add
     that creates a branch with an upstream (`-t`, a remote-tracking start point: `creates_with_upstream`);
-  * `push_config` reads the repo config a refspec-less push uses.
+  * `push_config` reads the repo config a refspec-less push uses;
+  * the command substitutions the words would hide (a `$(…)` inside double quotes, backquotes outside single
+    quotes, those in an unquoted heredoc body) are walked before the command they're in, each as a subshell, and
+    the word reads as written (`x="$(git push origin HEAD:dev)"`: TASK-156); an unquoted `$(…)` is split into
+    commands by its parentheses.
 A command that cannot be parsed raises ParseError; every gate treats that as a reason to BLOCK a command
 that looks like what it guards (fail closed), never to allow it. A git command that parses but can't be
 classified (an ambiguous abbreviated option; config git reads from a source this parser can't, deciding an
@@ -45,11 +50,13 @@ alias; config written earlier in the same command) raises FailClosed, a ParseErr
 whatever the text looks like.
 
 Threat model (same as enforce-pr-workflow.sh): a guardrail against honest mistakes, not an adversarial
-control. `$(...)`, variables and script files are opaque to a static parser.
+control. What a `$(...)` prints, variables set outside the command, and script files are opaque to a static
+parser.
 """
 
 from __future__ import annotations
 
+import bisect
 import functools
 import json
 import os
@@ -130,6 +137,7 @@ RESERVED = {
     "done",
     "esac",
     "function",
+    "coproc",  # `coproc git push …` runs the push (TASK-156)
 }
 GIT_VALUE_OPTS = {"-C", "-c", "--config-env", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 # git's builtins: git never lets an alias shadow one, so only another name is looked up as an alias (a name
@@ -406,46 +414,80 @@ XARGS_GUARDED = {"rm", "mv"}
 XARGS_GUARDED_GIT = {"push", "add", "stage", "commit", "rm", "mv"}
 
 
-def read_payload() -> tuple[str, str]:
-    """Return (command, cwd) from the hook payload: $HOOK_INPUT if set (the bash wrapper captures
-    stdin there, because a `python3 - <<'PY'` heredoc occupies Python's stdin), else stdin."""
-    raw = os.environ.get("HOOK_INPUT")
+@functools.lru_cache(maxsize=1)
+def payload() -> dict:
+    """The hook payload, read once from stdin, where the gates pass it (TASK-156: in an environment variable, a
+    payload past ARG_MAX, about 1 MB, made exec fail with 126, which Claude Code lets through; and a HOOK_INPUT
+    the hook inherits is never read in its place). {} when it isn't a JSON object."""
     try:
-        data = json.loads(raw) if raw is not None else json.load(sys.stdin)
+        data = json.load(sys.stdin)
     except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def read_payload() -> tuple[str, str]:
+    """Return (command, cwd) from the hook payload (`payload`)."""
+    data = payload()
+    if not data:
         return "", os.getcwd()
     cmd = (data.get("tool_input") or {}).get("command") or ""
     cwd = data.get("cwd") or os.getcwd()
     return cmd, cwd
 
 
-def preprocess(cmd: str) -> str:
+def preprocess(cmd: str, subs: list[tuple[list[str], str]] | None = None) -> str:
     """One pass over the whole command, the way bash reads it, returning the text to tokenize:
     - quote state is carried ACROSS lines, so a multi-line quoted message stays one string (review round 3);
     - an unquoted `#` at the start of a word starts a comment, dropped to the end of the line;
     - an unquoted `<<DELIM` / `<<-'DELIM'` / `<<"DELIM"` / `<<\\DELIM` starts a heredoc: its body lines are
-      dropped unread, and it ends only at a line that is exactly DELIM (leading tabs allowed for `<<-`);
+      dropped (after its command substitutions are recorded, for an unquoted DELIM), and it ends only at a line
+      that is exactly DELIM (leading tabs allowed for `<<-`);
       `<<<` (herestring) and `<<` inside `$(( … ))` / `(( … ))` arithmetic are not heredocs (review round 4);
     - a backslash-newline outside single quotes and outside heredoc bodies joins the next line (bash line
       continuation) — done here, not before, so a heredoc body ending in `\\` can't swallow its delimiter;
     - a `<<` inside quotes is text (the usual `-m "$(cat <<'EOF' …)"` stays inside its quoted argument).
+    With `subs` (TASK-156), the command substitutions bash runs that the words would hide are recorded there:
+    a `$(…)` inside double quotes, a backquoted one anywhere outside single quotes, and those in the body of a
+    heredoc whose delimiter is unquoted. Each is written as a mark (`_mark`) that `_walk` reads the bodies of
+    and `_restore` turns back into the text as written. An unquoted `$(…)` needs none: its parentheses split
+    it into commands of their own.
     """
     out_lines: list[str] = []
     quote: str | None = None  # "'", '"', or "$'" (ANSI-C, decoded as it is read; review gate round 3)
     ansi_dead = False  # a NUL ended the current $'…' value: the rest of it is dropped
-    pending: list[tuple[str, bool]] = []  # (delimiter, dash)
+    pending: list[tuple[str, bool, int | None]] = []  # (delimiter, dash, `subs` entry of an unquoted one)
+    body: list[str] = []  # the lines of the current heredoc body
     arith = 0  # depth of $(( … )) / (( … )) arithmetic, where << is a shift
     inner = 0  # plain ( ) nesting inside the current arithmetic
     param = 0  # depth of an unquoted ${ … }, whose braces and commas are no brace expansion
     joining = False
-    for line in cmd.split("\n"):
+    if subs is not None and SUBST_MARK in cmd:
+        raise ParseError("the command holds the character this parser marks substitutions with")
+    lines = cmd.split("\n")
+    starts = [0]  # where each line starts in `cmd`
+    for line in lines[:-1]:
+        starts.append(starts[-1] + len(line) + 1)
+    # a substitution read past the end of its line ends at this line and column
+    resume_line, resume_at = -1, 0
+    for li, line in enumerate(lines):
+        if li < resume_line:
+            continue  # inside a substitution body already read
+        if pending and li == resume_line:
+            raise ParseError("a heredoc starts on a line a command substitution continues")
         if pending:
-            delim, dash = pending[0]
+            delim, dash, entry = pending[0]
             if (line.lstrip("\t") if dash else line) == delim:
                 pending.pop(0)
+                if entry is not None and subs is not None:
+                    subs[entry][0].extend(_heredoc_substitutions("\n".join(body)))
+                body = []
+            else:
+                body.append(line)
             continue
         kept: list[str] = []
-        i, n = 0, len(line)
+        i, n = (resume_at if li == resume_line else 0), len(line)
+        carried = False  # this line ends inside a substitution read on to a later line
         while i < n:
             c = line[i]
             if quote == "$'":
@@ -484,6 +526,26 @@ def preprocess(cmd: str) -> str:
                 kept.append("${" + m.group(1) + "}")
                 i = m.end(1)
                 continue
+            if subs is not None and (
+                (quote == '"' and line.startswith("$(", i)) or (quote in (None, '"') and c == "`")
+            ):
+                # a command substitution the words would hide (TASK-156: `x="$(git push origin HEAD:dev)"`); a
+                # quoted `$((…))` is walked too, since `"$((git push) )"` is one: arithmetic reads as harmless words
+                at = starts[li] + i
+                end = _substitution_end(cmd, at + (2 if c == "$" else 1), ")" if c == "$" else "`")
+                written = cmd[at:end]
+                if c == "$" and _is_arithmetic(written[2:-1]):
+                    kept.append(c)  # `"$((1<<n))"`: arithmetic, read on as text
+                    i += 1
+                    continue
+                inside = written[2:-1] if c == "$" else _unescape_backquoted(written[1:-1], quote == '"')
+                kept.append(_mark(subs, [inside], written))
+                end_line = bisect.bisect_right(starts, end - 1) - 1  # the line holding the closing ) or `
+                if end_line == li:
+                    i = end - starts[li]
+                    continue
+                resume_line, resume_at, carried = end_line, end - starts[end_line], True
+                break
             if quote:
                 kept.append(c)
                 if c == "\\" and quote == '"' and i + 1 < n:
@@ -545,8 +607,11 @@ def preprocess(cmd: str) -> str:
             if not arith and line.startswith("<<", i) and (m := HEREDOC.match(line, i)):
                 if m.end() < n and line[m.end()] not in " \t;&|<>()":
                     raise ParseError(f"heredoc delimiter not understood near {line[i : m.end() + 3]!r}")
-                pending.append((m.group("delim"), m.group("dash") == "-"))
-                kept.append(m.group(0))
+                # an unquoted delimiter: bash runs the substitutions in the body, read when it ends (TASK-156)
+                expands = subs is not None and not m.group("q") and "\\" not in m.group(0)
+                entry = len(subs) if expands else None
+                pending.append((m.group("delim"), m.group("dash") == "-", entry))
+                kept.append(m.group(0) + (_mark(subs, [], "") if expands else ""))
                 i = m.end()
                 continue
             if param or line.startswith("${", i):
@@ -576,7 +641,7 @@ def preprocess(cmd: str) -> str:
             out_lines[-1] += text  # bash deletes backslash-newline and inserts nothing (review round 6)
         else:
             out_lines.append(text)
-        joining = continues
+        joining = continues or carried  # the rest of a substitution's last line joins this one
     if arith or pending:
         # Unclosed arithmetic or a heredoc that never ends: the scan's model of this command has diverged
         # from bash's, so every later line may be misread. Raise; every gate treats that as BLOCK when the
@@ -641,6 +706,239 @@ def _ansi_c(line: str, i: int) -> tuple[str, int, bool]:
             out.append("\\" + d)
             i += 2
     return "".join(out), n, False
+
+
+# A command substitution `preprocess` records (TASK-156) is written as SUBST_MARK and one character naming its
+# `subs` entry, (bodies, text as written); `_walk` walks the bodies and `_restore` puts the text back.
+SUBST_MARK = ""
+SUBST_BASE = 0xF0000  # entry k is chr(SUBST_BASE + k), in Supplementary Private Use Area-A
+SUBST_LIMIT = 0xFFFE
+SUBST_REF = re.compile(SUBST_MARK + "(.)", re.DOTALL)
+
+
+def _mark(subs: list[tuple[list[str], str]], bodies: list[str], written: str) -> str:
+    """Record a substitution (its bodies, and the text it is restored to) and return its mark."""
+    if len(subs) >= SUBST_LIMIT:
+        raise ParseError("too many command substitutions")
+    subs.append((bodies, written))
+    return SUBST_MARK + chr(SUBST_BASE + len(subs) - 1)
+
+
+def _restore(word: str, subs: list[tuple[list[str], str]]) -> str:
+    """`word` with each substitution mark replaced by the text it stands for."""
+    if SUBST_MARK not in word:
+        return word
+    return SUBST_REF.sub(lambda m: subs[ord(m.group(1)) - SUBST_BASE][1], word)
+
+
+def _substitution_end(text: str, k: int, closer: str) -> int:
+    """The index just past the `)` (closer ")") or backquote (closer "`") that ends the command substitution
+    whose body starts at `text[k]`, read as bash reads the body: quotes, escapes, nested substitutions, comments
+    and heredoc bodies don't end it. ParseError if nothing does."""
+    n, depth, heredocs, start = len(text), 0, [], k
+    cases: list[int] = []  # the paren depth each open `case` statement started at
+    while k < n:
+        c = text[k]
+        at_word = k == start or text[k - 1] in " \t\n;&|()"
+        if closer == "`":
+            if c == "\\":
+                k += 2
+                continue
+            if c == "`":
+                return k + 1
+            k += 1
+            continue
+        if c == "\n" and heredocs:
+            k += 1
+            for delim, dash in heredocs:  # each body runs to a line that is exactly its delimiter
+                while True:
+                    e = text.find("\n", k)
+                    line = text[k : e if e >= 0 else n]
+                    if e < 0 and (line.lstrip("\t") if dash else line) != delim:
+                        raise ParseError(f"heredoc {delim!r} never ends")
+                    k = e + 1 if e >= 0 else n
+                    if (line.lstrip("\t") if dash else line) == delim:
+                        break
+            heredocs = []
+            continue
+        if c == "\\":
+            k += 2
+        elif c == "'":
+            e = text.find("'", k + 1)
+            if e < 0:
+                raise ParseError("unterminated quote in a command substitution")
+            k = e + 1
+        elif c == '"':
+            k = _double_quoted_end(text, k + 1)
+        elif c == "`":
+            k = _substitution_end(text, k + 1, "`")
+        elif text.startswith("$(", k):
+            k = _substitution_end(text, k + 2, ")")
+        elif text.startswith("$'", k):
+            k += 2
+            while k < n and text[k] != "'":
+                k += 2 if text[k] == "\\" else 1
+            k += 1
+        elif text.startswith("<<", k) and not text.startswith("<<<", k) and (m := HEREDOC.match(text, k)):
+            heredocs.append((m.group("delim"), m.group("dash") == "-"))
+            k = m.end()
+        elif c == "#" and (k == 0 or text[k - 1] in " \t\n;&|()"):
+            e = text.find("\n", k)
+            k = e if e >= 0 else n
+        elif (
+            at_word
+            and (m := CASE_WORD.match(text, k))
+            and (_case_shape(text, m.end()) if m.group(1) else _command_position(text, start, k))
+        ):
+            # a `case` statement's patterns end in `)`, which closes nothing; its `esac` ends the case (TASK-156
+            # review). A `case` counts by its shape, `case <word> in`, wherever it starts (`coproc case …`, `function
+            # g case …`); one that is only an argument (`echo use case`) is a word, and so is an `esac` that isn't
+            # where a command goes
+            if m.group(1):
+                cases.append(depth)
+            elif cases:
+                cases.pop()
+            else:
+                raise ParseError("an `esac` with no `case` in a command substitution")
+            k = m.end()
+        elif c == ")" and cases and cases[-1] == depth:
+            k += 1  # a pattern's `)`, at the depth its case started (`( case y in y) :;; esac )` too)
+        elif c == ")" and depth == 0:
+            if cases or _case_cut_short(text[start:k], text[k + 1 :]):
+                raise ParseError("a `case` with no `esac` in a command substitution")
+            return k + 1
+        else:
+            depth += 1 if c == "(" else -1 if c == ")" else 0
+            k += 1
+    raise ParseError("unterminated command substitution")
+
+
+# `case` and `esac` as words in a substitution body
+CASE_WORD = re.compile(r"(case)(?=\s)|(esac)(?=[\s;&|()]|$)")
+
+
+CASE_ANY = re.compile(r"(?:^|(?<=[\s;&|()]))case(?=\s)")
+ESAC_ANY = re.compile(r"(?:^|(?<=[\s;&|()]))esac(?=[\s;&|()]|$)")
+
+
+def _case_cut_short(body: str, rest: str) -> bool:
+    """Was a case statement cut short at one of its patterns' `)`: a `case` word in the body with no `esac` after
+    it there, and an `esac` later in the command? Whatever way the `case <word> in` is spelt (a comment, `${x:- a}`,
+    a `\\`-newline before `in`), its `esac` comes after the cut (TASK-156 review; fail closed)."""
+    body, rest = body.replace("\\\n", ""), rest.replace("\\\n", "")  # `ca\<newline>se` is `case` to bash
+    last_case = max((m.start() for m in CASE_ANY.finditer(body)), default=-1)
+    return last_case >= 0 and not ESAC_ANY.search(body, last_case) and ESAC_ANY.search(rest) is not None
+
+
+def _case_shape(text: str, j: int) -> bool:
+    """Does `text[j:]`, just after a `case`, go on as a case statement: blanks, one word (quotes and substitutions
+    read whole), blanks or newlines, then `in`?"""
+    n, begin = len(text), j
+    while j < n and text[j] in " \t":
+        j += 1
+    if j == begin:
+        return False
+    word = j
+    try:
+        while j < n and text[j] not in " \t\n;&|()<>":
+            if text[j] == "\\":
+                j += 2
+            elif text[j] == '"':
+                j = _double_quoted_end(text, j + 1)
+            elif text[j] == "'":
+                j = text.index("'", j + 1) + 1
+            elif text.startswith("$(", j):
+                j = _substitution_end(text, j + 2, ")")
+            elif text[j] == "`":
+                j = _substitution_end(text, j + 1, "`")
+            else:
+                j += 1
+    except (ParseError, ValueError):
+        return False
+    if j == word:
+        return False
+    while j < n and text[j] in " \t\n":
+        j += 1
+    return text.startswith("in", j) and (j + 2 == n or text[j + 2] in " \t\n;&|()")
+
+
+# words after which the next word is a command name
+COMMAND_LEADERS = frozenset(
+    {"then", "do", "else", "elif", "if", "while", "until", "!", "{", "time", "coproc"}
+)
+
+
+def _is_arithmetic(inside: str) -> bool:
+    """Is a `$(…)` whose text inside the outer parentheses is `inside` really `$((…))` arithmetic: does the `(` it
+    starts with close at its very end? `$((cmd) )` and `$((cmd)|cat)` are a subshell in a substitution."""
+    if not inside.startswith("("):
+        return False
+    depth = 0
+    for k, c in enumerate(inside):
+        depth += 1 if c == "(" else -1 if c == ")" else 0
+        if depth == 0:
+            return k == len(inside) - 1
+    return False
+
+
+def _command_position(text: str, start: int, k: int) -> bool:
+    """Is `text[k]` where a command name goes: the start of the body, or after a separator or a reserved word?"""
+    before = text[start:k].rstrip(" \t")
+    if not before or before[-1] in ";&|()\n":  # `)`: after a case pattern
+        return True
+    words = before.split()
+    # also `function NAME …` and `time -p …`
+    return words[-1] in COMMAND_LEADERS or words[-2:-1] == ["function"] or words[-2:] == ["time", "-p"]
+
+
+# a `cd` word that starts at $HOME: `~`, `~/…`, `$HOME…`, `${HOME}…`
+HOME_WORD = re.compile(r"~(/|$)|\$\{?HOME(?![A-Za-z0-9_])")
+
+
+def _double_quoted_end(text: str, k: int) -> int:
+    """The index just past the `"` that closes a double-quoted string whose text starts at `text[k]`."""
+    while k < len(text):
+        c = text[k]
+        if c == "\\":
+            k += 2
+        elif c == '"':
+            return k + 1
+        elif c == "`":
+            k = _substitution_end(text, k + 1, "`")
+        elif text.startswith("$(", k):
+            k = _substitution_end(text, k + 2, ")")
+        else:
+            k += 1
+    raise ParseError("unterminated double quote in a command substitution")
+
+
+def _unescape_backquoted(body: str, in_double_quotes: bool) -> str:
+    """A backquoted body as the shell runs it: `\\$`, `` \\` `` and `\\\\` lose the backslash (and `\\"` inside
+    double quotes)."""
+    keep = '$`\\"' if in_double_quotes else "$`\\"
+    return re.sub(r"\\(.)", lambda m: m.group(1) if m.group(1) in keep else m.group(0), body, flags=re.DOTALL)
+
+
+def _heredoc_substitutions(body: str) -> list[str]:
+    """The bodies of the command substitutions bash runs in a heredoc body with an unquoted delimiter."""
+    out, k = [], 0
+    while k < len(body):
+        if body[k] == "\\":
+            k += 2
+        elif body.startswith("$(", k):
+            end = _substitution_end(body, k + 2, ")")
+            if _is_arithmetic(body[k + 2 : end - 1]):
+                k += 3  # arithmetic: a substitution inside it is still read
+            else:
+                out.append(body[k + 2 : end - 1])
+                k = end
+        elif body[k] == "`":
+            end = _substitution_end(body, k + 1, "`")
+            out.append(_unescape_backquoted(body[k + 1 : end - 1], False))
+            k = end
+        else:
+            k += 1
+    return out
 
 
 # `$(pwd)` and `pwd` in backquotes name the shell's current directory: `preprocess` writes them as ${PWD}
@@ -741,11 +1039,14 @@ def _brace(word: str) -> list[str]:
     return [word]
 
 
-def tokenize(cmd: str) -> list[str]:
+def tokenize(cmd: str, subs: list[tuple[list[str], str]] | None = None) -> list[str]:
     """The words and operators of `cmd` (`preprocess`ed), each word brace-expanded the way bash does (an empty
     word a brace expansion makes is dropped, as bash drops it: `git push origin {,}` names no refspec). A word with
-    more than BRACE_GROUPS expandable `{`, or one that expands past BRACE_LIMIT words, raises ParseError."""
-    text = preprocess(cmd)
+    more than BRACE_GROUPS expandable `{`, or one that expands past BRACE_LIMIT words, raises ParseError. With
+    `subs` (the walk's), the words keep their command substitution marks (`preprocess`); else each reads as
+    written."""
+    marks = [] if subs is None else subs
+    text = preprocess(cmd, marks)
     lex = shlex.shlex(text, posix=True, punctuation_chars=PUNCT)
     lex.whitespace = " \t\r"
     lex.whitespace_split = True
@@ -756,7 +1057,8 @@ def tokenize(cmd: str) -> list[str]:
         raise ParseError(str(exc)) from exc
     if any(t.count(LB) > BRACE_GROUPS for t in tokens):
         raise ParseError(f"a word with more than {BRACE_GROUPS} brace groups")
-    return [w.translate(UNMARK) for t in tokens for w in (_brace(t) if LB in t else [t]) if w or LB not in t]
+    words = [w.translate(UNMARK) for t in tokens for w in (_brace(t) if LB in t else [t]) if w or LB not in t]
+    return words if subs is not None else [_restore(w, marks) for w in words]
 
 
 def is_separator(tok: str) -> bool:
@@ -923,17 +1225,10 @@ def split_redirects(argv: list[str]) -> tuple[list[str], list[tuple[str, str]]]:
 
 def simple_commands(cmd: str, cwd: str) -> Iterator[tuple[list[str], str]]:
     """Yield (argv, directory) for every simple command in `cmd`, with redirections removed from argv.
-    Raises ParseError on bad quoting. Use `redirect_targets` to see where output is written."""
+    Raises ParseError on bad quoting. Use `walk` to see where output is written."""
     for argv, d, _ in walk(cmd, cwd):
         if argv:
             yield argv, d
-
-
-def redirect_targets(cmd: str, cwd: str) -> Iterator[tuple[str, str, str]]:
-    """Yield (operator, target, directory) for every redirection in `cmd`."""
-    for _, d, redirects in walk(cmd, cwd):
-        for op, target in redirects:
-            yield op, target, d
 
 
 def walk(cmd: str, cwd: str, env_empty: bool = False) -> Iterator[tuple[Argv, str, list[tuple[str, str]]]]:
@@ -942,7 +1237,8 @@ def walk(cmd: str, cwd: str, env_empty: bool = False) -> Iterator[tuple[Argv, st
     `env_empty`: read HOME/TMPDIR/USER as '' wherever the command doesn't set them (`ENV_FALLBACK`): a gate
     walks both ways when a path decides its check. (Nesting too deep for Python, `eval eval … git push`, raises
     RecursionError: every gate refuses an exception it doesn't expect.)"""
-    yield from _walk(tokenize(cmd), {"dir": cwd, "env_empty": env_empty})
+    subs: list[tuple[list[str], str]] = []
+    yield from _walk(tokenize(cmd, subs), {"dir": cwd, "env_empty": env_empty, "subs": subs})
 
 
 VAR_REF = re.compile(r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?P<bare>[A-Za-z_][A-Za-z0-9_]*))")
@@ -1071,7 +1367,9 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
     `pushd data; rm -rf snapshots` was read from the old directory). Review gate round 3: `cd -P` resolves
     symlinks; a target that doesn't exist leaves the directory unknown (the `cd` fails and the shell stays,
     or `&&` stops: this parser can't tell which), and so is the directory before it unless it was already the
-    current one; with CDPATH set a relative target is unknown; `cd -` to an unknown directory is unknown.
+    current one, except in the HOME '' reading, where a missing `~/…` target (a path at the root) is a failed cd
+    and the shell stays (TASK-156); with CDPATH set a relative target is unknown; `cd -` to an unknown directory
+    is unknown.
     `assigns`, the command's own `VAR=val` prefix (`HOME=data cd`), counts first: the shell reads it."""
     opts = [w for w in words if len(w) > 1 and w[0] == "-" and w[1] in "LPen@"]  # cd -P, pushd -n
     words = [w for w in words if w not in opts]
@@ -1116,6 +1414,18 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
         cdpath = builtin_vars["CDPATH"] if "CDPATH" in builtin_vars else os.environ.get("CDPATH", "")
         if target is not None and cdpath and not re.match(r"(/|\.\.?(/|$))", target):
             target = None  # CDPATH may send it elsewhere
+        if (
+            target is not None
+            and env_empty
+            and "HOME" not in variables
+            and "HOME" in os.environ
+            and HOME_WORD.match(words[0])
+            and os.path.isabs(target)
+            and not os.path.isdir(target)
+        ):
+            # read with HOME '', `~/x` is `/x`, at the root, which this command can't have made: the cd fails and
+            # the shell stays where it was (TASK-156 review: `cd ~/<repo> && git commit` was refused)
+            return
     if head == "pushd" and target is not None:
         stack.append((cur, unknown))
     new = None
@@ -1134,10 +1444,11 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
 
 # `git config` keys that change what a later git command in the same command line runs or pushes: an alias,
 # an include, a push target, or a branch's upstream, which push.default=upstream pushes to (TASK-067 review
-# gate: `git config alias.p push && git p origin HEAD:dev`; round 3: `git config branch.<b>.merge …`)
+# gate: `git config alias.p push && git p origin HEAD:dev`; round 3: `git config branch.<b>.merge …`), or where
+# `git format-patch` writes (TASK-156 review)
 CONFIG_STEERS_GIT = re.compile(
     r"alias\..+|include(if\..+)?\.path|remote\..+\.(push|mirror)|push\.(default|followtags)|remote\.pushdefault"
-    r"|branch\..+\.(merge|remote|pushremote)",
+    r"|branch\..+\.(merge|remote|pushremote)|format\.outputdirectory",
     re.IGNORECASE,
 )
 CONFIG_READS = {
@@ -1371,6 +1682,21 @@ def _unroll_for(tokens: list[str], i: int, j: int, state: dict) -> list[str] | N
     return [*tokens[:i], *out, *tokens[end + 1 :]]
 
 
+def _subshell(body: str, state: dict) -> Iterator[tuple[Argv, str, list[tuple[str, str]]]]:
+    """Walk a command substitution's body: a subshell, which starts with everything its caller has, and whose
+    variables, exports and directory changes stay inside it (git config it writes doesn't: `config_written`)."""
+    saved = {key: state[key] for key in SUBSHELL_STATE if key in state}
+    state["exports"] = dict(state.get("exports", {}))
+    state["vars"] = dict(state.get("vars", {}))
+    state["dirstack"] = list(state.get("dirstack", []))
+    try:
+        yield from _walk(tokenize(body, state["subs"]), state)
+    finally:
+        for key in SUBSHELL_STATE:
+            state.pop(key, None)
+        state.update(saved)
+
+
 def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tuple[str, str]]]]:
     i = 0
     while i < len(tokens):
@@ -1381,6 +1707,13 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             tokens = unrolled
             continue
         raw, i = tokens[i:j], j + 1
+        if any(SUBST_MARK in t for t in raw):
+            # the command substitutions in this command run first, each in a subshell (TASK-156)
+            subs = state["subs"]
+            for k in dict.fromkeys(ord(m.group(1)) - SUBST_BASE for t in raw for m in SUBST_REF.finditer(t)):
+                for body in subs[k][0]:
+                    yield from _subshell(body, state)
+            raw = [_restore(t, subs) for t in raw]
         args, redirects = split_redirects(raw)
         argv = strip_prefixes(args, state)
         if writes_git_config(argv, redirects, state):
@@ -1432,7 +1765,7 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
                     state["vars"] = {**state.get("vars", {}), **argv.assigns}
                     state["dirstack"] = list(state.get("dirstack", []))
                     try:
-                        for inner in _walk(tokenize(argv[k + 1]), state):
+                        for inner in _walk(tokenize(argv[k + 1], state["subs"]), state):
                             # `xargs sh -c 'git push origin "$0"'`: the words still come from xargs
                             inner[0].via_xargs = inner[0].via_xargs or argv.via_xargs
                             yield inner
@@ -1450,7 +1783,7 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             # `eval eval … git push` chain stays linear)
             rest = argv[1:]
             plain = all(PLAIN_WORD.fullmatch(w) for w in rest)
-            yield from _walk(rest if plain else tokenize(" ".join(rest)), state)
+            yield from _walk(rest if plain else tokenize(" ".join(rest), state["subs"]), state)
             continue
         yield _context(argv, state), state["dir"], redirects
 
