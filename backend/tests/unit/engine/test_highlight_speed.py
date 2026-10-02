@@ -24,7 +24,7 @@ from openproceedings.engine.protocol import EngineInputError, EngineInternalErro
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.query import normalize
 from openproceedings.query.ast import Node
-from openproceedings.query.normalize import Token, tokenize
+from openproceedings.query.normalize import Tail, Token, tokenize, tokenize_with_tail
 from openproceedings.query.parser import parse
 
 from tests.corpus import Rec, fixture_records
@@ -32,8 +32,10 @@ from tests.fixtures.corpus.synthetic_5k import records, vocab
 from tests.golden.test_trust_evals import STRINGS
 from tests.strategies import asts, engine_asts
 from tests.unit.engine import highlight_before
+from tests.unit.test_latex_scan import fastest
 from tests.unit.test_normalize import TRICKY_ALPHABET
 from tests.unit.tokenize_before import tokenize as tokenize_before
+from tests.unit.tokenize_before_088 import _tokenize_each_char as each_char_before_088
 
 RECORDS = fixture_records()
 REFERENCE = ReferenceEngine(RECORDS)
@@ -62,9 +64,25 @@ MARKS = st.lists(
     max_size=40,
 ).map("".join)
 ASCII = st.text(alphabet=st.characters(max_codepoint=0x7F), max_size=80)
+# Latin text with the non-ASCII characters real abstracts hold (TASK-088): accents, typographic punctuation,
+# operators, ligatures, a mark after an ASCII letter or after punctuation, invisible joiners, LaTeX now and then
+LATIN = st.lists(
+    st.one_of(
+        st.sampled_from(["model", "Trust", "GPT", "4o", " ", " ", ", ", "-", "(", ")", ".", "'", "\\", "$"]),
+        st.sampled_from([*"éöïóäÉŁłçñØåßÆœ’—–“”‘‑‐×∼→≤≈⋅⋆°²³½ﬁℓαβΘεΔπϵ\ufffc－\u00a0\u00ad\u200b"]),
+        st.sampled_from(["\u0301", "\u0338", "\u0345", "\u0306", "\u0e48"]),
+        st.characters(min_codepoint=0x80, max_codepoint=0x24F),
+    ),
+    max_size=40,
+).map("".join)
 
 
-@given(st.one_of(st.text(max_size=80), ASCII, LATEXISH, MARKS))
+@given(st.one_of(st.text(max_size=80), ASCII, LATEXISH, MARKS, LATIN))
+@example("na\u00efve caf\u00e9 \u2014 \u201cTrust\u201d \u00d7 5")  # Latin with no LaTeX: no mask (TASK-088)
+@example("abc\u0301def ab,\u0301cd x--\u0338y")  # an ASCII run's last character with a mark after it
+@example('G\\"odel\\-ab cd$x$ef \\emph{abc}de')  # ASCII runs beside markup that joins or separates
+@example("caf\u00e9 ab.")  # a word whole inside a stretch, then the tail
+@example("\u0e01. \\-\u0301x")  # a stretch ending on a separator forgets the Thai base: the mark folds
 @example("Trust in AI: GPT-4o, 5 models.")  # the whole-text ASCII path
 @example("na\u00efve e\u0301 5\u00d73")  # non-ASCII: the loop, its ASCII branch around the rest
 @example("a\u0301b")  # an ASCII letter with a mark after it leaves the branch
@@ -74,11 +92,84 @@ ASCII = st.text(alphabet=st.characters(max_codepoint=0x7F), max_size=80)
 @example("\\\"{O}del \\'etude \\-x $^2x$")  # markup that opens a word: its span starts there (task-074)
 def test_tokenize_gives_exactly_the_old_tokens(text: str) -> None:
     assert full(tokenize(text)) == full(tokenize_before(text))
+    now, before = against_088(text)
+    assert now == before
+
+
+Tokenized = tuple[list[tuple[str, int, int, bool]], list[Tail]]
+
+
+def against_088(text: str) -> tuple[tuple[Tokenized, Tokenized], tuple[Tokenized, Tokenized]]:
+    """What the loop and `tokenize_with_tail` give now (tokens and `Tail`), and what the loop gave before
+    TASK-088 (twice, to line up)."""
+    old: list[Tail] = []
+    before = (full(each_char_before_088(text, old)), old)
+    new: list[Tail] = []
+    looped = full(normalize._tokenize_each_char(text, new))
+    tokens, tail = tokenize_with_tail(text)
+    return ((looped, new), (full(tokens), [tail])), (before, before)
 
 
 def test_tokenize_gives_exactly_the_old_tokens_on_every_fixture_text() -> None:
     texts = [t for r in [*RECORDS, *SYNTHETIC] for t in (r.title, r.abstract or "")]
     assert [full(tokenize(t)) for t in texts] == [full(tokenize_before(t)) for t in texts]
+    assert [t for t in texts if (pair := against_088(t))[0] != pair[1]] == []
+
+
+@pytest.mark.parametrize("unit", ["a\\-", "x$", "ab\u0301 ", "\\'e "])
+def test_the_stretches_of_a_text_are_found_in_linear_time(unit: str) -> None:
+    # each stretch's end is searched for once, not from every stretch to the text's end (TASK-088 review):
+    # quadrupling the text costs ~4x when linear, ~16x when quadratic; a late non-ASCII character makes the
+    # search for one reach the end
+    small, large = (fastest(tokenize, unit * (n // len(unit)) + "\u00e9") for n in (2_000, 8_000))
+    assert large / small < 8, (unit, small, large)
+
+
+def test_a_text_without_latex_never_builds_the_latex_mask(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    mask = normalize._latex_mask
+    monkeypatch.setattr(normalize, "_latex_mask", lambda t, *a, **k: calls.append(t) or mask(t, *a, **k))
+    tokenize("na\u00efve caf\u00e9 \u2014 GPT-4o")
+    assert calls == []
+    tokenize("na\u00efve $x$")
+    assert calls == ["na\u00efve $x$"]
+
+
+def test_a_character_is_folded_once_however_often_it_occurs(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    fold = normalize._fold
+    monkeypatch.setattr(normalize, "_fold", lambda c, b: calls.append(c) or fold(c, b))
+    monkeypatch.setattr(normalize, "_FOLDED", {})
+    assert normalize.normalize("caf\u00e9 " * 200) == ["cafe"] * 200
+    # once per class of base, to learn the fold doesn't depend on it
+    assert len(calls) <= len(normalize._BASES)
+
+
+def test_a_full_table_costs_one_fold_per_character(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    fold = normalize._fold
+    monkeypatch.setattr(normalize, "_fold", lambda c, b: calls.append(c) or fold(c, b))
+    monkeypatch.setattr(
+        normalize, "_FOLDED", dict.fromkeys(map(chr, range(0x4E00, 0x4E00 + normalize._FOLDED_MAX)))
+    )
+    assert normalize.normalize("caf\u00e9") == ["cafe"]
+    assert calls == ["\u00e9"]  # no table to learn for, so no fold after each class of base
+    assert "\u00e9" not in normalize._FOLDED
+
+
+@given(st.characters(), st.one_of(st.none(), st.characters()))
+@example("\u0301", "a")  # a mark: its fold depends on the base, so it is never cached
+@example("\u0306", "\u0438")  # kept on Cyrillic, folded on Latin
+@example("\u0654", "\u0628")  # kept on Arabic
+@example("\u200b", "a")  # an invisible joiner: no pieces, the base passes through
+@example("\u0345", "\u03b1")  # folds to a letter whatever the base
+def test_a_cached_fold_is_the_fold_after_any_base(c: str, base: str | None) -> None:
+    with (
+        pytest.MonkeyPatch.context() as patch
+    ):  # a table of its own: the shared one stays as other tests left it
+        patch.setattr(normalize, "_FOLDED", {})
+        assert normalize._fold_char(c, base) == normalize._fold(c, base)
+        assert normalize._fold_char(c, base) == normalize._fold(c, base)  # from the table, when it holds c
 
 
 def test_only_plain_ascii_takes_the_whole_text_path(monkeypatch: pytest.MonkeyPatch) -> None:

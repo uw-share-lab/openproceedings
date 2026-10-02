@@ -46,7 +46,11 @@ the folded pieces after the last word, `tokenize_with_tail(text) -> (tokens, Tai
 `normalize(text) -> list[str]`. It works character by character (with two exact shortcuts, task-073: a whole
 text that is ASCII with no `\` or `$` is its lower-cased `[A-Za-z0-9]+` runs, and in the loop an ASCII
 character with no mark after it skips `_fold`; `test_highlight_speed.py` pins both to a frozen copy of the
-loop, `tests/unit/tokenize_before.py`, and `test_normalize.py` checks every ASCII character alone and in
+loop, `tests/unit/tokenize_before.py`; and three more, TASK-088: a text with no `\` or `$` skips the LaTeX
+mask, the loop takes a stretch of KEEP ASCII characters with no mark after it word by word, and `_fold_char`
+folds a raw character once per process when its fold is the same after a base of each class `_folds_marks`
+tells apart (`_BASES`; a bounded table, `_FOLDED`), all pinned, with the `Tail`, to a frozen copy of the loop
+before them, `tests/unit/tokenize_before_088.py`, and `test_normalize.py` checks every ASCII character alone and in
 `a?b` against the loop, and that no operator or letter look-alike key is ASCII); a Hypothesis property pins it equal to an
 independent whole-string definition (block ranges, not Unicode names), including an adversarial Unicode
 alphabet, and the nightly workflow checks every code point in 8 contexts (`OP_EXHAUSTIVE=1`). The index is fed its output joined by spaces, and the Tantivy analyzer only splits on
