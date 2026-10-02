@@ -160,10 +160,11 @@ Because the queue doesn't require a PR to be up to date, two PRs that each ran `
 conflict. `check_backlog.py` runs in `claude-tooling` on the PR (whose merge ref already holds `dev`) and
 again in every queue build. It fails when two files in `backlog/tasks/` + `backlog/completed/` share a task
 id or two in `backlog/decisions/` share a decision id, naming the files. It reads the frontmatter `id:`, else
-the filename prefix, and compares numbers (`TASK-075` = `task-75`; a subtask `12.1` is not `12`). A file with
-no frontmatter, with frontmatter it doesn't read line by line (a `{` flow mapping or a `?` key), with no
-readable id or two `id:` fields, or whose frontmatter id disagrees with its filename also fails the check,
-and so does a missing `tasks/` or `completed/`. `backlog/archive/` is not compared, because Backlog.md
+the filename prefix, and compares numbers (`TASK-075` = `task-75`; a subtask `12.1` is not `12`). A file also
+fails the check if it has no frontmatter, a top-level frontmatter line that isn't a plain `key:`, a `- `
+item or a comment (`{…}`, `? id`, `<<:`, a tag, anchor or escaped key, any of which could give YAML an id
+the check doesn't see), no readable id or two `id:` fields, or a frontmatter id that disagrees with its
+filename; so does a missing `tasks/` or `completed/`. `backlog/archive/` is not compared, because Backlog.md
 1.53 gives an archived task's id to the next new task. Ids created during a branch's work are therefore
 created last, after rebasing onto `dev`, and on a clash the unmerged PR drops its id commit and creates the id
 again (skill `task-hygiene`, §Ids). The rows are in `.claude/scripts/tests/test-tooling-scripts.sh` and the

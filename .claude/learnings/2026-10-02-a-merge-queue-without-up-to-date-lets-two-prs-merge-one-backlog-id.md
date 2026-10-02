@@ -25,9 +25,12 @@ renumber its record to decision-029 by hand (commit 26f660d1 on `dev`).
 - "Frontmatter id, else filename" alone lets a hand edit hide a duplicate: a file named `task-6` with an
   `id:` the regex misses (`"id": TASK-5`, `--- ` with a trailing space, two `id:` lines) falls back to 6.
   Reading the key leniently, checking the value in Python (so `'TASK-5' # moved` fails instead of skipping
-  the line), refusing YAML it can't read line by line (`{id: …}`, `? id`) and failing when the frontmatter
-  id and the filename disagree closes that; the CLI always writes them equal (every file on `dev` agrees),
-  and Backlog.md itself reports the flow-mapping duplicate, so the check now reads what the CLI reads.
+  the line), failing when the frontmatter id and the filename disagree, and refusing any top-level
+  frontmatter line that isn't a plain `key:`, a `- ` item or a comment closes that. A denylist of YAML forms
+  kept leaking: after `{id: …}` and `? id` came `<<: {id: …}`, an anchor merged by alias, and an escaped
+  `"i\x64"` key, each of which Backlog.md 1.53 reads as a second TASK-5. An allowlist of what the CLI writes
+  (every file on `dev` passes it; indented lines are lists and folded-title continuations) holds. The check
+  is not a YAML parser; it refuses what it can't read.
 - `mutate.py` copies the whole repo and runs every case table per mutant, which takes over half an hour for
   one script's mutants on a loaded machine. To iterate, run the mutants against only the table that covers
   the script (a mktemp copy of `.claude/` per mutant), then leave the full run to CI's nightly.
@@ -46,4 +49,4 @@ renumber its record to decision-029 by hand (commit 26f660d1 on `dev`).
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `task-hygiene` §Ids, CLAUDE.md §Keep everything current, CONTRIBUTING.md §Flow, spec 08 §Merge queue and §Git and PR rules, `/review-gate` and `/record-learnings`, `project-manager`, `learning-recorder`, `docs-reviewer`, `ci-engineer`, `pr-workflow`
-- Test or hook added? — 31 new rows in `.claude/scripts/tests/test-tooling-scripts.sh`, 28 mutants in `.claude/scripts/mutants/backlog.json`
+- Test or hook added? — 36 new rows in `.claude/scripts/tests/test-tooling-scripts.sh`, 32 mutants in `.claude/scripts/mutants/backlog.json`

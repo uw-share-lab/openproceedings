@@ -5,16 +5,18 @@
 - two files in backlog/tasks/ + backlog/completed/ with the same task id, or two files in backlog/decisions/
   with the same decision id. `dev` merges through a queue without the up-to-date rule (decision-027), so two
   PRs that each ran `backlog task create` get different filenames, no git conflict, and the same id;
-- a file in those directories with no frontmatter, with frontmatter YAML it doesn't read line by line (a
-  `{` flow mapping, a `?` key), with an id it can't read or more than one `id:`, or whose frontmatter id
-  disagrees with its filename prefix (the CLI always writes them equal, so any of these is a hand edit that
-  could hide a duplicate). A missing tasks/ or completed/ directory fails too.
+- a file in those directories with no frontmatter, with a top-level frontmatter line that isn't a plain
+  `key:`, a `- ` item or a comment (a `{` flow mapping, a `?` or `<<` key, a tag, an anchor or alias, an
+  escaped key: YAML could read an `id` from it that this check doesn't), with an id it can't read or more
+  than one `id:`, or whose frontmatter id disagrees with its filename prefix (the CLI always writes them
+  equal, so any of these is a hand edit that could hide a duplicate). A missing tasks/ or completed/
+  directory fails too.
 
-The id comes from the frontmatter `id:` field, else (no `id:` in the frontmatter) the filename prefix, and is compared by number:
-TASK-075, task-75 and 'task-075' are one id, and a subtask 12.1 is not 12. backlog/archive/ is not compared:
-Backlog.md 1.53 hands an archived task's id to the next `backlog task create` (task-075 twice, 2026-09-26;
-skill task-hygiene), nothing in a PR can renumber an archived file, and archiving one copy of a duplicate is
-a deliberate act that takes it off the board."""
+The id comes from the frontmatter `id:` field, else (no `id:` in the frontmatter) the filename prefix, and
+is compared by number: TASK-075, task-75 and 'task-075' are one id, and a subtask 12.1 is not 12.
+backlog/archive/ is not compared: Backlog.md 1.53 hands an archived task's id to the next `backlog task
+create` (task-075 twice, 2026-09-26; skill task-hygiene), nothing in a PR can renumber an archived file, and
+archiving one copy of a duplicate is a deliberate act that takes it off the board."""
 
 from __future__ import annotations
 
@@ -29,8 +31,10 @@ FRONTMATTER = re.compile(r"\A---[ \t]*\n(.*?)\n---[ \t]*(?:\n|\Z)", re.DOTALL)
 # an `id` key, however a hand edit spells it: quoted ("id"), or with a space before the colon (id :); the
 # value is checked in read_id, so a value of any other shape fails instead of hiding the line
 ID_FIELD = re.compile(r"""^[ \t]*['"]?id['"]?[ \t]*:(.*)$""", re.MULTILINE)
-# YAML this check doesn't read line by line: a flow mapping ({id: …}) or an explicit key (? id)
-UNREAD_YAML = re.compile(r"^[ \t]*[{?]", re.MULTILINE)
+# what a top-level (column 0) frontmatter line may be: a plain `key:`, a `- ` list item, or a comment. Anything
+# else ({id: …}, `? id`, `<<: …`, a tag, an anchor or alias, an escaped "i\x64" key) can give YAML an `id` that
+# ID_FIELD doesn't see; indented lines are list items, nested keys or folded-scalar continuations
+TOP_LINE = re.compile(r"""(?:['"]?[A-Za-z_][A-Za-z0-9_-]*['"]?[ \t]*:(?:[ \t]|$)|-(?:[ \t]|$)|#)""")
 # GROUPS: the directories whose files must not share an id, and the id prefix their files carry
 GROUPS = {"task": ("tasks", "completed"), "decision": ("decisions",)}
 REQUIRED = ("tasks", "completed")
@@ -51,8 +55,15 @@ def read_id(kind: str, text: str, name: str) -> tuple[tuple[int, ...] | None, st
     fm = FRONTMATTER.match(text)
     if fm is None:
         return None, "has no frontmatter (it must start with a `---` line)"
-    if UNREAD_YAML.search(fm.group(1)):
-        return None, "has frontmatter this check can't read (a `{` flow mapping or a `?` key)"
+    lines = [line for line in fm.group(1).split("\n") if line.strip()]
+    if lines and lines[0][0] in " \t":
+        return None, "has frontmatter this check can't read (its first line is indented)"
+    for line in lines:
+        if line[0] not in " \t" and not TOP_LINE.match(line):
+            return (
+                None,
+                f"has frontmatter this check can't read (a top-level line that isn't a plain key: {line[:40]!r})",
+            )
     fields = ID_FIELD.findall(fm.group(1))
     if len(fields) > 1:
         return None, f"has {len(fields)} `id:` fields in its frontmatter"

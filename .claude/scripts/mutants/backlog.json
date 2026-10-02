@@ -138,12 +138,6 @@
     "new": "^id:(.*)$"
   },
   {
-    "label": "backlog: flow mapping / ? key not refused",
-    "file": ".claude/scripts/check_backlog.py",
-    "old": "    if UNREAD_YAML.search(fm.group(1)):\n",
-    "new": "    if False:\n"
-  },
-  {
     "label": "backlog: missing frontmatter falls back to the filename",
     "file": ".claude/scripts/check_backlog.py",
     "old": "    if fm is None:\n        return None, ",
@@ -166,5 +160,35 @@
     "file": ".claude/scripts/check_backlog.py",
     "old": "REQUIRED = (\"tasks\", \"completed\")",
     "new": "REQUIRED = (\"tasks\",)"
+  },
+  {
+    "label": "backlog: any top-level frontmatter line accepted",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "        if line[0] not in \" \\t\" and not TOP_LINE.match(line):\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "backlog: indented first frontmatter line accepted",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "    if lines and lines[0][0] in \" \\t\":\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "backlog: << and escaped keys accepted as plain keys",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "(?:['\"]?[A-Za-z_][A-Za-z0-9_-]*['\"]?",
+    "new": "(?:['\"]?[A-Za-z_<\\\\][A-Za-z0-9_<\\\\-]*['\"]?"
+  },
+  {
+    "label": "backlog: column-0 list items refused",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "|-(?:[ \\t]|$)|#)",
+    "new": "|#)"
+  },
+  {
+    "label": "backlog: column-0 comments refused",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "|-(?:[ \\t]|$)|#)",
+    "new": "|-(?:[ \\t]|$))"
   }
 ]
