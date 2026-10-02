@@ -281,7 +281,7 @@ is refused, as is `--no-rate-limit` with a non-loopback `--host`. Off loopback, 
 `<data-dir>/takedowns/withheld.txt` must exist before the first start (an empty file on a fresh instance), or
 the load fails `takedowns_missing` (TASK-067). Swagger UI (`/api/v1/docs`, scripts from a
 CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. `api` mounts `snapshots/` and `takedowns/` read-only, the
-search records' directory `records/` read-write (a host directory, 0700 and owned by uid 10001; `records.sqlite` and
+search records' directory `records/` read-write (a host directory, 0700 and owned by the API's uid, 10001 by default; `records.sqlite` and
 the WAL files SQLite writes beside it; spec 04 §Search records), and `indexes/` read-write but closed by file modes: Tantivy opens an index only after taking
 `.tantivy-meta.lock` for writing (so a `:ro` index mount fails to load), so each version directory is 0750 with
 group `op-api` and only its two lock files group-writable (`deploy/index-permissions.sh`, run after each `op index
@@ -445,7 +445,7 @@ documents both variables.
   elsewhere, not here. **In the compose deployment (TASK-065)** the `api` container mounts `<data-dir>/takedowns/`
   read-only, and that directory holds only `withheld.txt`. It mounts the directory, not the file alone, because
   an editor that saves by renaming would otherwise leave the container reading the old list after a SIGHUP. The
-  container runs as `op-api` (uid 10001), never as root or as the operator's account. The log therefore lives
+  container runs as `op-api` (uid 10001 by default, `OP_API_UID`), never as root or as the operator's account. The log therefore lives
   in its own directory outside the data directory, for example `/srv/openproceedings/takedown-log/log.jsonl`
   (0700 and 0600, the operator's). The compose `takedown-check` service reads it there, through `--log`, running
   as the operator's uid against `http://api:8000` on the internal network (`deploy/README.md` §Takedowns). On a
@@ -560,8 +560,8 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
 4. **Release branch.** From here until the tag exists, nothing else merges into `dev`. `git switch -c
    release/X.Y.Z origin/dev`; set `version` to `X.Y.Z` in `backend/pyproject.toml` and
    `frontend/package.json`, then `uv lock` and `npm install --package-lock-only --ignore-scripts`; in
-   `CITATION.cff` set `version: X.Y.Z` and `date-released:` to the day the tag is planned for (step 6; if the
-   tag lands on another day, the back-merge in step 7 corrects the date on `dev`); add
+   `CITATION.cff` set `version: X.Y.Z` (the release version, exactly) and `date-released:` to the day the tag
+   is planned for (step 6), so the tagged file is the one "Cite this repository" shows for it; add
    `[releases."X.Y.Z"]` to `docs/releases.toml` from step 3's index manifest
    (`data/indexes/<v>/manifest.json`) and the code's `QUERY_VERSION` (never edit a released table); `make
    changelog RELEASE=X.Y.Z`, which checks the table against that manifest (so run it in the checkout that
@@ -577,7 +577,10 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
 6. **Tag and notes.** First, the `v*` tag rulesets (§Branch protection; applied 2026-10-01) must be in place:
    `gh api repos/<owner>/<name>/rulesets --jq '.[] | select(.target == "tag") | .name'` lists them, one name
    per line and possibly more than one (today `Release tags: immutable` and `Release tags: maintainers only
-   create`); paste the output into the back-merge PR (step 7), since the promotion PR has merged. Then `git
+   create`); paste the output into the back-merge PR (step 7), since the promotion PR has merged. On
+   `origin/main`, `CITATION.cff`'s `version` must be `X.Y.Z` and its `date-released` today's date (UTC); if
+   either is not, don't tag: re-run step 4 with the corrected date (a new release branch and promotion), since
+   a tag's `CITATION.cff` is never edited after. Then `git
    fetch origin` and check out `origin/main`; `python3 .claude/scripts/changelog.py
    --check --release X.Y.Z` passes (the promotion holds exactly the PRs the file lists; with `OP_DATA_DIR` or
    `--data-dir` naming step 3's data dir when this checkout doesn't hold `data/`); `python3 .claude/scripts/changelog.py --release X.Y.Z
@@ -588,7 +591,7 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    `git rev-parse vX.Y.Z^{commit}` is that sha.
 7. **Back-merge.** `main` now holds the promotion's merge commit, which `dev` lacks, and the next promotion
    can't merge until `dev` has it. `git switch -c release/X.Y.Z-back-merge origin/dev && git merge --no-ff
-   origin/main` (no file changes, unless `CITATION.cff`'s `date-released` needs the tag's actual date), `/review-gate`, `git push -u origin release/X.Y.Z-back-merge` (the review
+   origin/main` (no file changes), `/review-gate`, `git push -u origin release/X.Y.Z-back-merge` (the review
    record covers the merge commit), then `gh pr create --base dev --title "chore: back-merge main after
    X.Y.Z" --body-file <file> --label no-learning` and `record-review.py APPROVE <dispositions> --attest`.
    Merge it with a merge commit, never `--squash` or `--rebase`, which would leave `main`'s commit out of

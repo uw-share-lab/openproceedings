@@ -2,7 +2,7 @@
 # The deploy smoke test (TASK-065): build the three images, start deploy/compose.yml over a throwaway fixture
 # data directory, and check, over TLS through Caddy:
 #   1. /api/v1/healthz has the index loaded and the web root answers 200 (AC #1);
-#   2. the api runs as op-api (uid 10001), not root; its takedown and snapshot mounts are read-only, its
+#   2. the api runs as op-api (uid 10001; this script pins OP_API_UID/OP_API_GID), not root; its takedown and snapshot mounts are read-only, its
 #      takedown directory holds only withheld.txt, and (on Linux) file modes refuse it any write in indexes/
 #      (AC #3);
 #   3. index promotion: repoint `current`, SIGHUP, /api/v1/meta reports the new version (AC #2);
@@ -98,6 +98,12 @@ step "build the images ($OP_IMAGE_TAG)"
 "${dc[@]}" build --quiet
 
 step "host setup: the record store and index permissions (as root, as an operator would with sudo)"
+# index-permissions.sh must refuse to run without an explicit gid (no default that may be another account's)
+if out=$(sh deploy/index-permissions.sh "$OP_DATA_HOST/indexes" "$big" 2>&1); then
+  fail "index-permissions.sh ran without a gid"
+fi
+grep -qF "usage:" <<<"$out" || fail "index-permissions.sh without a gid failed for another reason: $out"
+echo "index-permissions.sh without a gid: refused (usage)"
 if $linux; then
   # shellcheck disable=SC2016 # "$1" expands inside the container's sh, on purpose
   as_root 'install -d -o "$2" -g "$3" -m 0700 "$1"' "$OP_DATA_HOST/records" "$OP_API_UID" "$OP_API_GID"

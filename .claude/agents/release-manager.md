@@ -27,7 +27,7 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    first release a public instance serves); verify the index (the served one, or a new one when
    `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy changes) and replay sampled records with `--json`
    (`reproduced` or `drifted` as the versions say; `mismatch` blocks); freeze `dev` and cut `release/X.Y.Z`:
-   bump `backend/pyproject.toml` and `frontend/package.json`, relock, set `CITATION.cff`'s `version` and `date-released` (spec 08 §Release step 4), add the `docs/releases.toml` table
+   bump `backend/pyproject.toml` and `frontend/package.json`, relock, set `CITATION.cff`'s `version` (= the release version) and `date-released` (the planned tag day; spec 08 §Release step 4, checked again at step 6 before tagging), add the `docs/releases.toml` table
    from the index manifest, `make changelog RELEASE=X.Y.Z` (never hand-edit `CHANGELOG.md`),
    `/record-learnings`, `/review-gate`, `/open-pr`; promote with `gh pr create --base main --head dev` (not
    `/open-pr`), which needs a second person's approval (request it; never self-approve or bypass branch

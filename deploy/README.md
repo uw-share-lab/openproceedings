@@ -73,8 +73,8 @@ $OP_DATA_HOST/
   `op serve` behind the proxy refuses to load without it (`takedowns_missing`). Give it mode 0644 and the
   directory 0755.
 - **`records/` is the only copy of every saved search.** It belongs to `op-api`: create it once with
-  `sudo install -d -o "$OP_API_UID" -g "$OP_API_GID" -m 0700 "$OP_DATA_HOST/records"` (compose refuses to start without it,
-  rather than create one the API can't write). Read or write records only as that user, through the `api`
+  `sudo install -d -o "$OP_API_UID" -g "$OP_API_GID" -m 0700 "$OP_DATA_HOST/records"` (compose refuses to
+  start without it, rather than create one the API can't write). Read or write records only as that user, through the `api`
   container (`dc exec api op record replay <id> --json`): a store written by another user is one the API
   can't open. Because the operator can't read it, an `op index retire` run on the host refuses
   (`records_unreadable`) instead of counting no pins; run retire only in the `ops` container
@@ -182,8 +182,8 @@ index.
    For a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy, run all of these from the
    release's checkout on the host: the running images can't serve the new index.
 3. **Permissions:** `sudo deploy/index-permissions.sh "$OP_DATA_HOST/indexes" <new_version> "$OP_API_GID"`.
-   Then replay a sample of saved searches on the API's own store, `dc exec api op record replay <id> --json`. This checks
-   the running code, not the new index: a record replays on its own index whenever that index is kept, so
+   Then replay a sample of saved searches on the API's own store,
+   `dc exec api op record replay <id> --json`. This checks the running code, not the new index: a record replays on its own index whenever that index is kept, so
    every sampled record whose index is kept must report `reproduced`, and `mismatch` (exit 3) blocks the
    promotion. `--index <new_version>` applies only to a record whose own index is gone.
 4. **Switch `current` atomically and reload:**
