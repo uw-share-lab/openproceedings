@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-02 00:40'
+updated_date: '2026-10-02 00:49'
 labels:
   - ingest
 milestone: m-4
@@ -30,7 +31,7 @@ Source: a TASK-152 (PR #63) deferral (its final summary; `docs/results/2026-10-0
 <!-- AC:BEGIN -->
 - [ ] #1 scholarmend 0.1.5 is released (PyPI, Trusted Publishing) and its resolved.json carries a v1 OpenReview note's submission invitation as a claim, with tests in scholarmend over a v1 note from each ICLR 2017 listing
 - [ ] #2 This repo pins `scholarmend==0.1.5` in `backend/pyproject.toml` and `uv.lock`, and every existing RIS importer test passes unchanged on the new version
-- [ ] #3 The RIS importer reads the invitation claim the way `openreview_v1.judge` reads the listing: an RIS record of one of the 18 workshop copies (a recorded fixture, scrubbed per decision-004) imports as workshop/`unknown`, a real ICLR 2017 main-track rejection still imports as `main`/`rejected`, and a record without the claim (an older resolved.json) keeps today's reading; each case is a test
-- [ ] #4 A test feeds the same note to the v1 crawler and the RIS importer and asserts the same track and status (the per-path agreement TASK-152 AC #2 met only at the snapshot level)
+- [ ] #3 The RIS importer reads the invitation claim the way `openreview_v1.judge` reads the listing, and only where the venueid names no track: an RIS entry for `rkB_5hEKe` (added via `backend/tests/fixtures/ris/generate.py`, its claims matching the recorded note `backend/tests/fixtures/http/openreview/v1/iclr-2017/note-workshop-submitted-to-iclr-live.json`) imports as workshop/`unknown`, a real ICLR 2017 main-track rejection still imports as `main`/`rejected`, and an entry without the claim (an older resolved.json) keeps today's reading; each case is a test
+- [ ] #4 A test gives the recorded note to the v1 crawler, and the claims scholarmend 0.1.5 builds from it to the RIS importer, and asserts the same track and status (the per-path agreement TASK-152 AC #2 met only at the snapshot level)
 - [ ] #5 The claim's provenance is recorded on the record, and spec 01 (RIS row), the record-schema and openreview-venueids skills and the ris-importer agent no longer describe the RIS over-count as open
 <!-- AC:END -->
