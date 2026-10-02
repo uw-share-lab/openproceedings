@@ -426,7 +426,9 @@ def ris_record_of(tmp_path: Path, row: int, forum: str) -> PaperRecord:
     (tmp_path / "mended.ris").write_bytes((fixture / "mended.ris").read_bytes())
     (tmp_path / "resolved.json").write_text(json.dumps(entries), encoding="utf-8")
     records, _ = import_ris(tmp_path / "mended.ris")
-    [record] = [r for r in records if r.native == forum and r.title == " ".join(entries[row]["title"].split())]
+    [record] = [
+        r for r in records if r.native == forum and r.title == " ".join(entries[row]["title"].split())
+    ]
     return record  # the row itself: row 15 already holds the recorded copy's forum (TASK-157)
 
 
