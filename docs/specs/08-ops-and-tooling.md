@@ -38,7 +38,7 @@ openproceedings/
 ├── frontend/                    # npm workspace member: Next.js App Router, output standalone (spec 05; skeleton TASK-039)
 ├── docs/{specs,plans,results,design,usability,research}/   # created as needed; docs/releases.toml: each release's data (§Release)
 ├── backlog/                     # Backlog.md: tasks, completed, docs, decisions — CLI only
-├── deploy/                      # web.Dockerfile + web-build-gate.sh (TASK-136); compose.yml and the api image planned (TASK-065)
+├── deploy/                      # compose.yml, Caddyfile, api/web/caddy Dockerfiles, index-permissions.sh, smoke-test.sh, README.md (the runbook) (TASK-065); web-build-gate.sh (TASK-136)
 └── data/                        # gitignored: cache/, snapshots/, indexes/, embeddings/, research/, records/ (records.sqlite), takedowns/ (list and log)
 ```
 
@@ -185,7 +185,7 @@ Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
 
 - `feature → PR → dev → PR → main`. No direct commits, pushes or merges on `dev` or `main`
   (`enforce-pr-workflow.sh`, from Kreate). `main` also needs a second person's approval.
-- **Merging into `dev` goes through the merge queue** once it is enabled (§Branch protection). Once a PR's
+- **Merging into `dev` goes through the merge queue** (active since 2026-10-02; §Branch protection). Once a PR's
   checks are green, add it to the queue with `gh pr merge <n> --auto`. That needs the repository's
   "Allow auto-merge" setting. Without it, enqueue with GraphQL: `gh api graphql -f query='mutation($id:
   ID!) { enqueuePullRequest(input: {pullRequestId: $id}) { mergeQueueEntry { position } } }' -f id="$(gh
@@ -206,16 +206,28 @@ Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
 - **No AI authorship** in commits or PRs (project decision 2026-09-25). `.claude/` is committed.
 - Secrets (OpenReview credentials) live only in `.env` (gitignored, mode 600). `data/` is never committed.
 
-## Deploy (M6: the web image built, TASK-136, and built in CI, TASK-148; compose and the api image planned, TASK-065)
+## Deploy (M6: the web image, TASK-136, built in CI, TASK-148; compose, Caddy, the api image and the runbook, TASK-065; the host, TASK-064)
 
-`deploy/compose.yml`: `api` (uvicorn, loads `data/indexes/current`) and `web` (Next.js standalone), with
-Caddy in front for TLS. Caddy must not log query strings: `GET /api/v1/search?q=…` carries the query
+`deploy/compose.yml` (TASK-065): `api` (`op serve` from `deploy/api.Dockerfile`, loads `indexes/current`), `web`
+(`deploy/web.Dockerfile`, Next.js standalone) and `caddy` (`deploy/caddy.Dockerfile`) in front for TLS: the site
+name from `OP_DOMAIN`, Caddy's local CA for `localhost` and ACME for a real name. The operator's runbook (settings,
+first start, promotion, retire, takedowns, what remains for the host) is `deploy/README.md`; nothing in `deploy/`
+names a host or provider (00, question 5; TASK-064). Every container runs as a non-root user (`api` as `op-api`,
+uid 10001, never the operator's account; `web` as `node`; `caddy` as uid 10002, binding 80 and 443 through
+the container's `net.ipv4.ip_unprivileged_port_start`) with a read-only root filesystem, every capability dropped
+and `no-new-privileges`; `api` and `web` are on an `internal` network with no route out, and `--trusted-proxy`
+names Caddy's fixed address on it. `deploy/smoke-test.sh` runs the whole stack over a fixture (TLS, the users and
+mounts, a promotion, refused and done retires, a takedown with `op takedown check`, no query in any log); it is
+run by hand, not in CI. Caddy must not log query strings: `GET /api/v1/search?q=…` carries the query
 (spec 04 §Implementation notes). **`op serve` must sit behind that proxy**, never face clients directly:
 uvicorn (h11) has no request-header or slow-body timeout of its own, so the proxy's timeouts are what bound a
 client that sends its request slowly; the app caps a body at 64 KiB (413 `API_BODY_TOO_LARGE`), uvicorn's
 `limit_concurrency` (`ApiConfig.limit_concurrency`, default 256) bounds the connections one process holds,
 and `timeout_keep_alive` (`keep_alive_seconds`, default 5) closes an idle one. The Caddyfile **must** set
-(Caddy v2 directive names, checked against the Caddy docs 2026-09-27):
+(Caddy v2 directive names, checked against the Caddy docs 2026-09-27; `deploy/Caddyfile` sets them, with the site
+name `{$OP_DOMAIN:localhost}`, a `Strict-Transport-Security` header from `OP_HSTS` on every response, default
+`max-age=63072000` as the web app's own, with `includeSubDomains` left off until TASK-064 decides the domain, and
+`skip_install_trust`):
 
 ```caddy
 {
@@ -267,16 +279,23 @@ the one trusted proxy (`--trusted-proxy <its address>`); a trusted network wider
 is refused, as is `--no-rate-limit` with a non-loopback `--host`. Off loopback, or with a `--trusted-proxy`,
 `<data-dir>/takedowns/withheld.txt` must exist before the first start (an empty file on a fresh instance), or
 the load fails `takedowns_missing` (TASK-067). Swagger UI (`/api/v1/docs`, scripts from a
-CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. The data volume is read-only in `api`, except the `records/` directory
-(`records/records.sqlite` and the WAL files SQLite writes beside it; spec 04 §Search records), and it
-holds each served index's snapshot beside it (`/papers/{id}` reads provenance from it). Run `op record save`
-and `op record replay` against that data volume as the API's service user (`sudo -u <api user> op record …`
-or the `api` container's own user): the store's directory is 0700 and `records.sqlite` 0600, so a record
+CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. `api` mounts `snapshots/` and `takedowns/` read-only, the
+search records as the `records` volume (`records/records.sqlite` and the WAL files SQLite writes beside it; spec 04
+§Search records), and `indexes/` read-write but closed by file modes: Tantivy opens an index only after taking
+`.tantivy-meta.lock` for writing (so a `:ro` index mount fails to load), so each version directory is 0750 with
+group `op-api` and only its two lock files group-writable (`deploy/index-permissions.sh`, run after each `op index
+build`), and `indexes/` itself stays the operator's, 0755: the API can open an index and can't add, remove or
+repoint anything. It holds each served index's snapshot beside it (`/papers/{id}` reads provenance from it). Run
+`op record save` and `op record replay` as the API's service user (`docker compose exec api op record …`, or
+`sudo -u <api user> op record …` outside compose): the store's directory is 0700 and `records.sqlite` 0600, so a record
 saved as another user leaves a store (and WAL files) the API can't write, or can't read at all. Refreshing the index
 means building a new `index_version` offline, switching the `current` symlink, and sending SIGHUP; an old
 version no record pins can then be deleted with `op index retire <index_version>`, once `/api/v1/meta` reports
-the new version (the API serves the old one until its reload; §CLI). Hosting is
-still open (00, question 5).
+the new version (the API serves the old one until its reload; §CLI). In compose, retire runs in the `ops` service
+(root, with the record store and `indexes/`); it keeps `CAP_CHOWN` because SQLite, run as root, gives each `-shm`
+or `-wal` file it creates the database's owner, and without the capability leaves them root's, after which the
+API can't save a record (reproduced, TASK-065); `smoke-test.sh` checks the store's owners after a retire. Hosting
+is still open (00, question 5).
 
 **What a public instance serves (decision-018; not legal advice).** Every abstract in the index, in results,
 on paper pages and in exports. Before a deployment is public: (1) each record names the source of its abstract
@@ -308,7 +327,8 @@ docker build -f deploy/web.Dockerfile --build-arg OPENPROCEEDINGS_INSTANCE=publi
   --build-arg NEXT_PUBLIC_TAKEDOWN_CONTACT=takedown@your.org --build-arg NEXT_PUBLIC_API_BASE_URL= -t openproceedings-web .
 ```
 
-`.dockerignore` sends only what the image copies (never `data/`, a `takedowns/` directory or a `.env` file).
+`.dockerignore` sends only what the images copy (the frontend, the backend package with the lockfiles, the
+Caddyfile; never `data/`, a `takedowns/` directory or a `.env` file).
 CI's advisory `web-image` workflow builds the image on every PR into, and push to, `dev` and `main` that
 touches the paths §CI lists (`deploy/`, the frontend, the npm manifests, `.dockerignore`, the workflow): the private build, a public build with a placeholder contact, and a public build with no contact that
 must fail at `web-build-gate.sh` (TASK-148).
@@ -416,10 +436,15 @@ documents both variables.
   operator's account) fails when it is owned by another account, readable by others, malformed, when a listed
   id's latest entry isn't `withheld`, or when an id whose latest entry is `withheld` isn't listed (a line
   dropped from the list; TASK-067). A search record's deletion (the search-records skill's runbook) is logged
-  elsewhere, not here. For TASK-065: the api container should mount only the list (or the data directory without
-  the log), and never run as root or as the operator's account. If it mounts the list file alone, an editor
-  that saves by rename leaves the container reading the old file across SIGHUP: mount a directory that holds
-  only the list.
+  elsewhere, not here. **In the compose deployment (TASK-065)** the `api` container mounts `<data-dir>/takedowns/`
+  read-only, and that directory holds only `withheld.txt`. It mounts the directory, not the file alone, because
+  an editor that saves by renaming would otherwise leave the container reading the old list after a SIGHUP. The
+  container runs as `op-api` (uid 10001), never as root or as the operator's account. The log therefore lives
+  in its own directory outside the data directory, for example `/srv/openproceedings/takedown-log/log.jsonl`
+  (0700 and 0600, the operator's). The compose `takedown-check` service reads it there, through `--log`, running
+  as the operator's uid against `http://api:8000` on the internal network (`deploy/README.md` §Takedowns). On a
+  host without compose, the default `<data-dir>/takedowns/log.jsonl` stays valid, as long as the API's user
+  can't read it.
 - **Lifting a takedown:** append a `lifted` entry (its `applied` date too), remove the line, SIGHUP; versions that still
   hold the text show it again. A snapshot built while the id was listed keeps it withheld (and marked): rebuild
   and promote as in steps 3 and 4 to bring it back on the served index. `op takedown check` reads each id's
@@ -559,8 +584,7 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    record covers the merge commit), then `gh pr create --base dev --title "chore: back-merge main after
    X.Y.Z" --body-file <file> --label no-learning` and `record-review.py APPROVE <dispositions> --attest`.
    Merge it with a merge commit, never `--squash` or `--rebase`, which would leave `main`'s commit out of
-   `dev`. Once `dev`'s merge queue is active, that means adding it to the queue (`gh pr merge <n> --auto`;
-   the queue's method is MERGE). Before the queue is active, use `gh pr merge <n> --merge`. Then check
+   `dev`, which means adding it to the merge queue (`gh pr merge <n> --auto`; the queue's method is MERGE). Then check
    `git fetch origin && git merge-base --is-ancestor origin/main origin/dev`. On `dev`,
    `python3 .claude/scripts/changelog.py --check` then passes.
 8. **Retention.** Keep every index and snapshot a search record pins (`op index retire` refuses a pinned
@@ -569,7 +593,7 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    replay reports `drifted`), but the release each record was saved under still can: keep them. To find that release for a
    record, match its pinned index's manifest (`tokenizer_version`, `schema_version`, `tantivy_version`) and the
    record's `query_version` against the releases' Data sections.
-9. **After.** Deploying the release, and promoting an index, follow §Deploy (together, for a release that
+9. **After.** Deploying the release, and promoting an index, follow §Deploy and its runbook, `deploy/README.md` (together, for a release that
    changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy).
 
 ---
@@ -715,16 +739,15 @@ the repo was made public (free-plan orgs can't protect private repos). `dev` is 
 merged feature branches are deleted automatically.
 
 **`dev`'s merge queue** (TASK-161, decision-027) replaces "require branches to be up to date" on `dev`. A
-maintainer applies it after TASK-161's PR merges, with the commands in decision-027:
+maintainer applied it on 2026-10-02 with the commands in decision-027 (the first queued PR was #81):
 
 - the repository setting "Allow auto-merge", which `gh pr merge <n> --auto` needs;
 - a branch ruleset `dev: merge queue` on `refs/heads/dev` with one `merge_queue` rule: merge method MERGE,
   ALLGREEN grouping, up to 5 entries built and merged at once, and a 60-minute check timeout;
 - `strict: false` on `dev`'s classic required checks.
 
-The six required checks don't change, and they apply to the queue's builds too. Until the ruleset is in
-place, `dev` still requires PRs to be up to date. `gh api repos/<owner>/<name>/rules/branches/dev` shows
-whether the `merge_queue` rule is active.
+The six required checks don't change, and they apply to the queue's builds too.
+`gh api repos/<owner>/<name>/rules/branches/dev` shows the `merge_queue` rule (`merge_queue` in its `type`s).
 
 Release tags are protected by two active tag rulesets on `refs/tags/v*`, applied
 by a maintainer on 2026-10-01 (TASK-151), before the first release tag: **`Release tags: maintainers only

@@ -132,3 +132,16 @@ spec 08's proposal and were settled in TASK-136.
   list still applies rather than the reload failing.
 - **Caches.** Every API response says `Cache-Control: no-store`, so a proxy can't keep serving a withheld
   abstract after the SIGHUP.
+
+## Addendum (2026-10-02, TASK-065: where the log lives under compose)
+
+- **The API's takedown mount holds only the list.** Under `deploy/compose.yml`, the `api` container mounts
+  `<data-dir>/takedowns/` read-only. It mounts the directory, not the file, so a list that an editor saves by
+  renaming is still re-read on SIGHUP. That directory holds only `withheld.txt`. The log moves out of it, to a
+  directory of its own outside the data directory: for example `/srv/openproceedings/takedown-log/log.jsonl`,
+  with the directory 0700 and the file 0600, both the operator's. Nothing else in §2 changes: the API never reads
+  the log, and `op takedown check` reads it as the operator's account, with `--log` naming that path (the compose
+  `takedown-check` service passes it). The list keeps its default path, so `op snapshot build` and `op export`
+  need no flag. The default log path, `<data-dir>/takedowns/log.jsonl`, stays valid for a deployment without
+  compose that keeps the log away from the API's user. This is the hosting-model change that "What would reopen
+  it" anticipated, limited to where the file sits. It doesn't change who reads it.
