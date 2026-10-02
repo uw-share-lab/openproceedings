@@ -23,7 +23,7 @@ The options were:
 For each, text over the cap could be truncated, refused (the record dropped), or only reported. Refusing a
 record loses a paper from every result set over a defect in one field. Reporting alone leaves the cost in place.
 Trimming changes the stored text, so it must be visible. The real corpus leaves room for both caps (snapshot
-2026-09-29-d552baa07aed, 218,727 records):
+2026-09-29-d552baa07aed, 95,877 records holding 218,727 abstract texts across records and claims):
 - The longest abstract is 4,995 characters, and the longest abstract claim is 5,729. The p99.9 is about 2,440.
 - The longest run of marks in any title or abstract, record or claim, is 1.
 
