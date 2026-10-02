@@ -1595,6 +1595,16 @@
    ]
   },
   {
+   "q": "ೢ*",
+   "tokens": [
+    [
+     "WILDCARD",
+     0,
+     2
+    ]
+   ]
+  },
+  {
    "q": "\"trust in AI",
    "tokens": [
     [

@@ -802,7 +802,7 @@ def test_wildcard_after_a_non_word_piece_is_detached(q: str, piece: str, hint: s
 # hide the separator the wildcard follows. Each was accepted as the bare stem (`vision*`) at 30756ce.
 @pytest.mark.parametrize(
     "q",
-    ["vision-ަ*", "abcd-ि*", "abcd-ิ*", "abcd.ெ*", '"trust vision.ަ*"', "calibrat-ྜྷ*"],
+    ["vision-ަ*", "abcd-\u0ce2*", "abcd-ि*", "abcd-ิ*", "abcd.ெ*", '"trust vision.ަ*"', "calibrat-ྜྷ*"],
     ids=ascii,
 )
 def test_a_lone_mark_after_a_separator_leaves_the_wildcard_detached(q: str) -> None:

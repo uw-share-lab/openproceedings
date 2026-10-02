@@ -10,7 +10,10 @@ description: The exact normalization contract shared by the query parser and the
 2. **Case-fold** (`str.casefold()`, not `lower()` — `ß` → `ss`).
 3. **Mark fold**: NFD, drop combining marks (combining class ≠ 0) whose base's Unicode NAME begins with
    LATIN, GREEK, CYRILLIC, HEBREW, ARABIC or EXTENDED ARABIC, or is an ASCII digit; **keep** marks that spell a distinct letter (Cyrillic breve,
-   Arabic hamza, Thai tones, kana voicing, Indic signs); drop a stray mark with no base and any mark-only run; then NFC.
+   Arabic hamza, Thai tones, kana voicing, Indic signs); drop a stray combining mark (class ≠ 0) with no base; then NFC.
+   After NFKC, a class-0 Mn/Mc mark that step 5 doesn't make invisible is a word character (e.g. U+0CE2), even
+   with no base: a word made only of marks makes no token, but a letter after it joins it (U+0CE2 alone →
+   nothing, U+0CE2 + `x` → one word); marks NFKC decomposes into combining marks are stray.
 4. **LaTeX** (a three-state mask — keep / separate / join — so offsets survive): `\cmd{X}` → `X`; a bare
    `\cmd` outside math is dropped; math is `$…$` (Pandoc rule: opener followed by a non-space, closer
    preceded by a non-space and not followed by a digit), `$$…$$`, `\(…\)`, `\[…\]`, and inside it a

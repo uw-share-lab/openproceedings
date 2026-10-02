@@ -20,8 +20,11 @@ The query side and the index side run the **same** normalization function (`norm
    follow their script: IPA `ɓ` is Latin and folds; Coptic `ϣ` does not.) So `naïve` ≡ `naive`, `ά` ≡ `α`, and Hebrew and Arabic vowel points fold (`שָׁלוֹם` ≡ `שלום`). Marks
    that spell a *different letter* are kept: Cyrillic breve (`мой` ≠ `мои`), Arabic hamza (`سؤال`), Thai
    tone marks (`ป่า` "forest" ≠ `ปา` "throw"), kana voicing (`が` ≠ `か`), and Indic viramas and vowel
-   signs. A stray mark with no base letter is dropped, and a run made only of marks (a lone vowel sign) is not a
-   token.
+   signs. A stray combining mark (class ≠ 0) with no base (a letter, digit or class-0 mark before it) is
+   dropped. After NFKC, a class-0 Mn/Mc mark that step 4 doesn't make invisible is a word character (e.g.
+   U+0CE2 KANNADA VOWEL SIGN VOCALIC L), so a run made only of marks (a lone vowel sign) is not a token on its
+   own, but a letter written after it joins it (U+0CE2 + `x` is one word); marks NFKC decomposes into
+   combining marks are stray.
 3. LaTeX, by classifying characters (so raw offsets survive):
    - `\cmd{X}` → `X`; a bare `\cmd` outside math is dropped.
    - Math regions are `$…$` (Pandoc's rule: the opening `$` is followed by a non-space, the closing `$` is
