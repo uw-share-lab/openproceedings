@@ -3241,10 +3241,11 @@
   "new": "    if not before or before[-1] in \";&|(\\n\":"
  },
  {
-  "label": "cmdparse: a case counted by its position, not its shape (TASK-156)",
+  "label": "cmdparse: a case counted by its position, not its shape (equivalent since TASK-156: with coproc, function NAME and time -p as leaders, position finds every case statement shape does, and _case_cut_short, whose own mutant is killed, refuses any case either misses; 12 legitimate case forms give the same verdict either way)",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "(_case_shape(text, m.end()) if m.group(1) else _command_position(text, start, k))",
-  "new": "_command_position(text, start, k)"
+  "new": "_command_position(text, start, k)",
+  "equivalent": true
  },
  {
   "label": "cmdparse: coproc not a reserved word (TASK-156)",
