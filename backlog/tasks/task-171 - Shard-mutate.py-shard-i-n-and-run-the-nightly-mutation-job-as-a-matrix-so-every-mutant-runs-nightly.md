@@ -6,11 +6,13 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-02 10:33'
+updated_date: '2026-10-02 10:34'
 labels:
   - tooling
   - ci
   - tests
-dependencies: []
+dependencies:
+  - TASK-057
 references:
   - .claude/scripts/mutate.py
   - .github/workflows/nightly.yml
@@ -27,7 +29,7 @@ Source: TASK-057 (PR #84), 2026-10-02. The full mutation run needs about 6.5 h o
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 `mutate.py --shard i/n` runs a deterministic, disjoint subset; the n shards together cover every mutant exactly once; a bad value (0/n, i>n, n<1, not i/n) is refused with a clear error
-- [ ] #2 Case-table rows check the partition (disjoint, complete, stable across runs) and the argument errors, with mutants for the sharding logic in .claude/scripts/mutants/
+- [ ] #2 Case-table rows (in .claude/scripts/tests/, a new table or an existing one) check the partition (disjoint, complete, stable across runs) and the argument errors, with mutants for the sharding logic in a new .claude/scripts/mutants/mutate.json
 - [ ] #3 nightly.yml runs the mutate job as a matrix over the shards, each within GitHub's 6 h cap with headroom, and fails if any shard has a surviving mutant; spec 08 §Mutation testing describes it
 - [ ] #4 One nightly run (or a manual dispatch) is recorded in the notes with every shard's time and result
 <!-- AC:END -->

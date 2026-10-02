@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-02 10:33'
+updated_date: '2026-10-02 10:34'
 labels:
   - security
   - tooling
@@ -28,6 +29,6 @@ Source: TASK-156 security review (PR #83, 2026-10-02), deferred; the gap predate
 <!-- AC:BEGIN -->
 - [ ] #1 A commit-message file named through a variable the hook can resolve (`F=msg.txt; … "$(cat "$F")"`) is read and scanned
 - [ ] #2 head, tail and sed readers are either read (the file's whole text scanned) or refused; the choice is written in the hook's comment and spec 08's hook table
-- [ ] #3 A substitution that reads a file the hook can't resolve (an unknown variable, an unmodelled reader) is refused, not passed
-- [ ] #4 Block and allow rows in the hook case table, with probes passed as data (TASK-169), and a mutant per new branch in .claude/scripts/mutants/gates.json; `make tooling` and `python3 .claude/scripts/mutate.py --changed` pass
+- [ ] #3 A substitution that reads a file named by an argument the hook can't resolve (an unknown variable, or a file argument to a reader it doesn't model) is refused, not passed; a substitution that reads no file (`$(date)`, `$(git log -1 --format=%s)`) is still allowed
+- [ ] #4 Block and allow rows in the hook case table (including an allow row for a substitution that reads no file), with probes passed as data (TASK-169), and a mutant per new branch in .claude/scripts/mutants/gates.json; `make tooling` and `python3 .claude/scripts/mutate.py --changed` pass
 <!-- AC:END -->
