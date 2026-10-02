@@ -25,9 +25,9 @@ protection stack, so the six required checks stay where they are.
 The three `pr-gates` jobs read `github.event.pull_request`, and a `merge_group` event doesn't have it.
 Without a `merge_group` trigger, a workflow never starts on a queue build, and the queue waits for its
 checks until the timeout. With the trigger but no other change, the steps would read empty `pull_request`
-fields. Made to pass on `merge_group`, the jobs would become no-ops. The owner asked for neither. The queue's builds must still prove
-that each PR in the group was reviewed (an APPROVE attested for that PR's head), has a learnings entry, and
-carries no AI attribution.
+fields. Made to pass on `merge_group`, the jobs would become no-ops. The owner asked for neither. The
+queue's builds must still prove that each PR in the group was reviewed (an APPROVE attested for that PR's
+head), has a learnings entry, and carries no AI attribution.
 
 Options considered:
 1. **Resolve the PRs from the head ref alone** (`pr-<N>` in `gh-readonly-queue/dev/pr-<N>-<sha>`), then check
@@ -125,13 +125,16 @@ If auto-merge is to stay off, a PR can be queued directly instead:
 `gh api graphql -f query='mutation($id: ID!) { enqueuePullRequest(input: {pullRequestId: $id}) {
 mergeQueueEntry { position } } }' -f id="$(gh pr view <n> --json id -q .id)"`.
 
-Rollback, if the queue's builds misbehave (auto-merge can stay on):
+Rollback, if the queue's builds misbehave (auto-merge can stay on). The subshell keeps a failed check from
+closing an interactive terminal:
 
 ```sh
-id=$(gh api repos/uw-share-lab/openproceedings/rulesets --jq '.[] | select(.name == "dev: merge queue") | .id')
-[ "$(printf '%s\n' "$id" | grep -c .)" -eq 1 ] || { echo "no single 'dev: merge queue' ruleset: $id"; exit 1; }
-gh api -X PATCH repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks -F strict=true
-gh api -X DELETE "repos/uw-share-lab/openproceedings/rulesets/$id"
+(
+  id=$(gh api repos/uw-share-lab/openproceedings/rulesets --jq '.[] | select(.name == "dev: merge queue") | .id')
+  [ "$(printf '%s\n' "$id" | grep -c .)" -eq 1 ] || { echo "no single 'dev: merge queue' ruleset: $id"; exit 1; }
+  gh api -X PATCH repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks -F strict=true
+  gh api -X DELETE "repos/uw-share-lab/openproceedings/rulesets/$id"
+)
 ```
 
 ## Consequences
@@ -149,7 +152,9 @@ gh api -X DELETE "repos/uw-share-lab/openproceedings/rulesets/$id"
   script is updated. The table `.claude/scripts/tests/test-merge-group-gate.sh` builds the expected shape with
   real merges and checks the workflow wiring as text. The first queued PR after the ruleset is applied is the
   live check of that shape. Its run log should be read for the `merge group …: #N @ …` line, to see whether
-  `base_sha` is `dev`'s tip (several PRs listed) or the previous entry (one PR). Record the answer here.
+  `base_sha` is `dev`'s tip (several PRs listed) or the previous entry (one PR). Once it merges, confirm
+  that its `merge_commit_sha` (`gh api repos/<owner>/<name>/pulls/<n> --jq .merge_commit_sha`) is its
+  `gh-readonly-queue` commit, which the merged-ahead exception assumes. Record both answers here.
 - Every queue entry runs the full `test` job again on the combined result. That doubles CI minutes per PR,
   which is the price of never merging an untested combination.
 - Release promotions (`dev → main`) and back-merges keep their existing procedure (spec 08 §Release). The

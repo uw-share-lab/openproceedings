@@ -86,8 +86,8 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
 
 All six also run on the merge queue's builds (`merge_group`). There, `merge_group_gate.py` runs
 `attribution`, `learnings` and `review-attested` on **each** PR in the group. Each PR's current body must
-attest APPROVE for the head the queue merged, and the PR must still be open, target `dev` and have that
-head. Anything the script can't resolve fails the build (spec 08 §Merge queue).
+attest APPROVE for the head the queue merged, and the PR must still be open (or already merged by this
+group's own queue commit), target `dev` and have that head. Anything the script can't resolve fails the build (spec 08 §Merge queue).
 
 The advisory `e2e`, `bench` and `web-image` checks (`web-image` runs only when a PR touches the paths spec 08
 §CI lists: `deploy/`, the frontend, the npm manifests, `.dockerignore` or the workflow) should also be green before merge; `nightly` is scheduled rather

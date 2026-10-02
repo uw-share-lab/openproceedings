@@ -133,10 +133,10 @@ all six required checks under the same names. `test` takes its OpenAPI baseline 
 are one two-parent merge per queued PR, oldest first: parent 1 is the previous queue commit (the first
 one's is `base_sha`) and parent 2 is the PR's head. The script names each merge's PR from GitHub's subject,
 `Merge pull request #N from …`, or else from the one open PR into `dev` whose head is parent 2. It checks
-that the newest merge's PR is the `N` in the head ref, `refs/heads/gh-readonly-queue/dev/pr-N-<sha>`. Then,
-for **each** PR in the group. A PR ahead in the group may already be merged when a build's jobs run, for
-example on a re-run, because GitHub merges an entry as soon as its own build is green. Such a PR counts only
-if this group's own queue commit merged it (`merged` and `merge_commit_sha` = that merge):
+that the newest merge's PR is the `N` in the head ref, `refs/heads/gh-readonly-queue/dev/pr-N-<sha>`. A PR
+ahead in the group may already be merged when a build's jobs run, for example on a re-run, because GitHub
+merges an entry as soon as its own build is green. Such a PR counts only if this group's own queue commit
+merged it (`merged` and `merge_commit_sha` = that merge). Then each job checks **every** PR in the group:
 
 | Job | Passes when |
 |---|---|
@@ -543,8 +543,8 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    X.Y.Z" --body-file <file> --label no-learning` and `record-review.py APPROVE <dispositions> --attest`.
    Merge it with a merge commit, never `--squash` or `--rebase`, which would leave `main`'s commit out of
    `dev`. Once `dev`'s merge queue is active, that means adding it to the queue (`gh pr merge <n> --auto`;
-   the queue's method is MERGE). Before the queue is active, use `gh pr merge <n> --merge`. Then check `git fetch origin && git merge-base --is-ancestor origin/main
-   origin/dev`. On `dev`, `python3 .claude/scripts/changelog.py --check` then passes.
+   the queue's method is MERGE). Before the queue is active, use `gh pr merge <n> --merge`. Then check
+   `git fetch origin && git merge-base --is-ancestor origin/main origin/dev`. On `dev`, `python3 .claude/scripts/changelog.py --check` then passes.
 8. **Retention.** Keep every index and snapshot a search record pins (`op index retire` refuses a pinned
    index; §CLI). After a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy, its code
    can't serve the older pinned indexes (after a `QUERY_VERSION`-only change it still serves them, and

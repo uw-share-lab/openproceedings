@@ -298,5 +298,11 @@
   "file": ".claude/scripts/merge_group_gate.py",
   "old": "if len(hits) != 1 or type(hits[0]) is not int:",
   "new": "if len(hits) < 1 or type(hits[0]) is not int:"
+ },
+ {
+  "label": "pr-gates: learnings job skipped on merge_group by a job-level if",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "    if: ${{ !(github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) }}",
+  "new": "    if: ${{ github.event_name == 'pull_request' }}"
  }
 ]

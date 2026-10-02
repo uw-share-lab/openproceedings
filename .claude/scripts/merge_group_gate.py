@@ -85,6 +85,7 @@ def pr_for_commit(repo: str, merge: str, pr_head: str) -> int:
     subject = git("log", "-1", "--format=%s", merge).strip()
     if m := MERGE_SUBJECT.match(subject):
         return int(m.group(1))
+    # Only an open PR qualifies here: a PR ahead that already merged is accepted only when named by its subject.
     pulls = gh_json(f"repos/{repo}/commits/{pr_head}/pulls")
     if not isinstance(pulls, list):
         raise GateError(f"the pulls for {pr_head[:10]} aren't a list")

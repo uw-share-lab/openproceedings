@@ -262,6 +262,14 @@ reset_prs; pr 11 "$A" "Summary"; setpr 11 'body=["x"]'
 expect err:"body isn't a string" "a body that isn't a string"                attribution "$BASE" "$Q1"
 reset_prs
 expect err:"gh api repos/o/r/pulls/11 failed" "gh can't read the PR"         attribution "$BASE" "$Q1"
+# No gh on PATH at all: an ::error::, not a traceback (git only, by symlink; python3 by absolute path).
+mkdir -p "$TMP/nogh" && ln -sf "$(command -v git)" "$TMP/nogh/git"
+PY3="$(command -v python3)"
+if (cd "$R" && PATH="$TMP/nogh" "$PY3" "$GATE" attribution --base "$BASE" --head "$Q1" \
+      --head-ref "refs/heads/gh-readonly-queue/dev/pr-11-$BASE" --repo o/r) > "$TMP/out" 2>&1; then got=ok; else got=err; fi
+if [ "$got" = err ] && grep -q "::error::.*could not run gh" "$TMP/out" && ! grep -q Traceback "$TMP/out"; then
+  pass=$((pass+1)); printf '  ok   %-12s %-66s -> %s\n' attribution "gh missing from PATH" err
+else fail=$((fail+1)); printf '  FAIL %-12s %-66s -> %s\n' attribution "gh missing from PATH" "$got"; sed 's/^/       /' "$TMP/out"; fi
 
 echo "== pr-gates.yml and test.yml wiring"
 # The workflow side of the gate, read as text (no YAML parser on the runner's python3): each pr-gates job refuses
@@ -298,6 +306,11 @@ for job, gate in (("attribution", "attribution"), ("learnings", "learnings"), ("
     for s in steps:
         if "github.event.pull_request" in s and "github.event_name == 'pull_request'" not in s:
             errs.append(f"{job}: a pull_request step runs on other events")
+    # A skipped job satisfies a required check, so a job-level if: may only be the dev -> main promotion exemption.
+    job_if = re.findall(r"^    if: (.*)$", jobs.get(job) or "", re.M)
+    exempt = "${{ !(github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) }}"
+    if any(cond != exempt for cond in job_if):
+        errs.append(f"{job}: a job-level if: other than the promotion exemption")
     if "pull-requests: read" not in (jobs.get(job) or ""):
         errs.append(f"{job}: no pull-requests: read")
 print("\n".join(errs))
