@@ -3,14 +3,20 @@ diagnostics?}}` with the registry's status, and FastAPI's `{"detail": …}` neve
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from hypothesis import given
+from hypothesis import strategies as st
 from openproceedings.api import RateLimit
+from openproceedings.api.errors import MAX_NAMED_PARAMS, bad_param_message
+from openproceedings.api.models import ParseRequest
 from openproceedings.diagnostics import DiagnosticCode, http_status
+from pydantic import ValidationError
 
 from tests.contract.conftest import SECRET, Store, make_app
 
@@ -69,6 +75,61 @@ def test_422_bad_parameter_is_api_bad_param_not_detail(client: TestClient, param
 def test_422_bad_parameter_message_does_not_echo_the_value(client: TestClient) -> None:
     error = envelope(client.get("/api/v1/search", params={"q": "x", "limit": SECRET}), "API_BAD_PARAM")
     assert SECRET not in error["message"]
+
+
+EXTRA = "Extra inputs are not permitted"
+
+
+def test_422_quotes_each_body_key_through_clip(client: TestClient) -> None:
+    """A location can be a key the client sent: it is quoted as every message quotes client text (TASK-143),
+    so a newline, tab, U+2028, NUL, ESC, U+202E or backtick in a JSON key leaves the message one visible line."""
+    body = {"q": "trust", "a\nb": 1, "x`y": 1, "\x00\x1b\u2028\u202e\t!": 1}
+    error = envelope(client.post("/api/v1/parse", json=body), "API_BAD_PARAM")
+    assert error["message"] == (
+        "Check the request's parameters — "
+        f"`body.a b`: {EXTRA}; `body.x\\x60y`: {EXTRA}; `body.\\x00\\x1b \\u202e !`: {EXTRA}."
+    )
+
+
+def test_422_names_a_few_problems_and_counts_the_rest(client: TestClient) -> None:
+    body = {"q": "trust", **{f"k{i}": i for i in range(MAX_NAMED_PARAMS + 2)}}
+    error = envelope(client.post("/api/v1/parse", json=body), "API_BAD_PARAM")
+    named = "; ".join(f"`body.k{i}`: {EXTRA}" for i in range(MAX_NAMED_PARAMS))
+    assert error["message"] == f"Check the request's parameters — {named}; 2 more."
+
+
+def test_422_message_is_bounded_whatever_the_key_or_text() -> None:
+    """A long key is clipped to 30 code points and pydantic's text to 200 (escaped too), and exactly
+    `MAX_NAMED_PARAMS` problems are all named, with no count."""
+    long = {"loc": ("body", "k" * 500), "msg": "m`\n" + "x" * 300}
+    assert bad_param_message([long]) == (
+        f"Check the request's parameters — `body.{'k' * 29}…`: m\\x60 {'x' * 193}…."
+    )
+    exact = [{"loc": ("body", f"k{i}"), "msg": EXTRA} for i in range(MAX_NAMED_PARAMS)]
+    named = "; ".join(f"`body.k{i}`: {EXTRA}" for i in range(MAX_NAMED_PARAMS))
+    assert bad_param_message(exact) == f"Check the request's parameters — {named}."
+
+
+def test_422_unknown_query_parameter_is_quoted_through_clip(client: TestClient) -> None:
+    error = envelope(client.get("/api/v1/search?q=trust&a%0Ab%60=1"), "API_BAD_PARAM")
+    assert error["message"].startswith("Check the request's parameters — unknown parameter `a b\\x60`.")
+
+
+@given(st.dictionaries(st.text(), st.integers(), min_size=1, max_size=8))
+def test_422_message_is_one_visible_line_whatever_the_keys(extra: dict[str, int]) -> None:
+    """Over arbitrary JSON keys: the message's backticks pair up (a key's own backtick is escaped), and it holds
+    no whitespace but a space and no control, format or surrogate character."""
+    try:
+        ParseRequest.model_validate({"q": "trust", **extra})
+    except ValidationError as e:
+        errors = [{**err, "loc": ("body", *err["loc"])} for err in e.errors()]
+    else:  # every key was a field of the body (`q`, `mode`), and none was refused
+        return
+    message = bad_param_message(errors)
+    assert message.count("`") % 2 == 0, message
+    for c in message:
+        assert c == " " or not c.isspace(), message
+        assert unicodedata.category(c) not in ("Cc", "Cf", "Cs"), message
 
 
 def test_422_parse_error_carries_diagnostics_with_spans(client: TestClient) -> None:
