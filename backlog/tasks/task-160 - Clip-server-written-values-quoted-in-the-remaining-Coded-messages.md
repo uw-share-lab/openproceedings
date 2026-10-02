@@ -4,7 +4,7 @@ title: Clip server-written values quoted in the remaining Coded messages
 status: To Do
 assignee: []
 created_date: '2026-10-02 00:59'
-updated_date: '2026-10-02 01:03'
+updated_date: '2026-10-02 01:04'
 labels:
   - frontend
   - bug
@@ -31,6 +31,6 @@ Source: a TASK-144 (PR #72) deferral (PR #72 body, Deferral). TASK-144 adds `fro
 <!-- AC:BEGIN -->
 - [ ] #1 Either `clip.test.ts`'s case table is generated from the backend `diagnostics.clip` (a backend contract test that fails when the committed table is stale, as the other frontend goldens are), or the reason not to is written in the error-diagnostics skill
 - [ ] #2 Every value the API returns (including /parse's slices of `q`) in a message `Coded` draws from `exclusion-banner.tsx`, `exclusions.ts` and `replay-status.ts` goes through `clip`, quoted or not: each default clause, the include description's bare value and its clause, `clauseText`, `replay.refused`, both index versions and both query versions; a literal the client code writes itself (a field name such as `track`) stays as it is
-- [ ] #3 Each call site has a test with hostile values (backtick, newline, NUL, ESC, U+202E) asserting the exact text and that the backticks still pair with no control or bidi character left, including a bare (unquoted) value; the banner's default-clause quoting, which has no test today, gets one (a component test, or the backtick join moved into `exclusions.ts` and unit-tested)
-- [ ] #4 Ordinary values read exactly as before (the existing `exclusions.test.ts` and `replay-status.test.ts` pass unchanged), and the include label that strips backticks from its clause (`exclusions.ts`, `fails.replaceAll`) still reads correctly with a clipped value
+- [ ] #3 Each call site has a test with hostile values (backtick, newline, NUL, ESC, U+202E) asserting the exact text and that the backticks still pair with no control or bidi character left, including a bare (unquoted) value; the banner's default-clause quoting gets a hostile-value test (`search-view.test.tsx` covers only ordinary clauses), as a component test or with the backtick join moved into `exclusions.ts` and unit-tested
+- [ ] #4 Ordinary values read exactly as before (the existing `exclusions.test.ts`, `replay-status.test.ts` and `search-view.test.tsx` banner tests pass unchanged), and the include label that strips backticks from its clause (`exclusions.ts`, `fails.replaceAll`) still reads correctly with a clipped value
 <!-- AC:END -->
