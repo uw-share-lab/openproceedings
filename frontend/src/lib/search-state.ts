@@ -182,32 +182,53 @@ export type NoticeRun = { readonly text: string } | { readonly code: string };
 const codeList = (values: readonly string[]): NoticeRun[] =>
   values.flatMap((v, i) => [...(i === 0 ? [] : [{ text: ", " }]), { code: v }]);
 
+/** A value as a message quotes it: through `clip`, and an empty one as `""` so it can't read as missing. */
+const shown = (v: string): string => (v === "" ? '""' : clip(v));
+
+/** How many code points of context `apart` keeps before the first difference. */
+const APART_CONTEXT = 10;
+
+/**
+ * Two values as a notice quotes them side by side. Clipped alike they could read the same (two long `q`
+ * values that differ only after the first 40 code points), so then each is shown from a little before the
+ * first difference, the cut start marked `…`.
+ */
+function apart(a: string, b: string): readonly [string, string] {
+  if (a === b || shown(a) !== shown(b)) return [shown(a), shown(b)];
+  const [x, y] = [[...a], [...b]];
+  let i = 0;
+  while (x[i] === y[i]) i += 1;
+  const from = (cps: readonly string[]) => `…${clip(cps.slice(Math.max(0, i - APART_CONTEXT)).join(""), 39)}`;
+  return [from(x), from(y)];
+}
+
 /**
  * The reader-facing sentence for a URL notice (ux-writing: what happened — why. What was used instead).
  * An empty value is written `""`, so it cannot be mistaken for a missing one. Valid values come from the
  * same constants the reducer checks against.
  */
 export function describeNotice(n: UrlNotice): NoticeRun[] {
-  const shown = (v: string) => (v === "" ? '""' : clip(v));
   switch (n.reason) {
     case "unknown_param":
       return [
-        { code: `${clip(n.param)}=${clip(n.value)}` },
+        { code: `${shown(n.param)}=${clip(n.value)}` },
         { text: " was ignored — " },
-        { code: clip(n.param) },
+        { code: shown(n.param) },
         { text: " is not a search parameter. Search parameters are " },
         ...codeList(KNOWN_PARAMS),
         { text: "." },
       ];
-    case "repeated_param":
+    case "repeated_param": {
+      const [used, ignored] = apart(n.used ?? "", n.value);
       return [
         { code: n.param },
         { text: " appears more than once; using the first value " },
-        { code: shown(n.used ?? "") },
+        { code: used },
         { text: " and ignoring " },
-        { code: shown(n.value) },
+        { code: ignored },
         { text: "." },
       ];
+    }
     case "invalid_value": {
       const head: NoticeRun[] = [{ code: `${n.param}=${clip(n.value)}` }];
       const used = n.used ?? "";
@@ -600,7 +621,7 @@ function spliceClause(
     if (!FILTER_VALUE.test(v)) {
       throw new SearchStateError(
         "BAD_VALUE",
-        `\`${clip(v)}\` is not a ${name} value — ${name} values are single words of letters, digits and \`_\`. ` +
+        `\`${shown(v)}\` is not a ${name} value — ${name} values are single words of letters, digits and \`_\`. ` +
           "Use a value listed by /meta.",
       );
     }
@@ -824,8 +845,7 @@ export function reduce(
         throw new SearchStateError(
           "ALREADY_INCLUDED",
           `\`${clip(action.field)}:${clip(action.value)}\` is already included — the \`${clip(action.field)}:\` ` +
-            "clause admits it. " +
-            "Nothing needs to change.",
+            "clause admits it. Nothing needs to change.",
         );
       }
       const next = [...values, action.value];

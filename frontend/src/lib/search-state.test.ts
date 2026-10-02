@@ -35,6 +35,7 @@ import {
   type SearchStateErrorCode,
 } from "./search-state";
 import { codePointLength } from "@/api/spans";
+import { clip } from "./clip";
 import clauseGolden from "./filter-clause-golden.json";
 import defaultLimits from "./default-limits.json";
 import golden from "./wrap-golden.json";
@@ -1130,6 +1131,115 @@ describe("refusals quote values they did not write through clip (TASK-144)", () 
       expect(blocked).not.toBeNull();
       quotedSafely(blocked?.message ?? "");
     }
+  });
+
+  it.each(HOSTILE)("a field %j is quoted as %j wherever a refusal names it", (field, shown) => {
+    const f = field as FilterField;
+    const toggle = (clause: FilterClause, value = "x"): SearchAction => ({
+      type: "facetToggle",
+      field: f,
+      value,
+      clause,
+    });
+    const stale = refused(() => reduce(at("trust"), toggle(atEnd(f, "other", ["a"]))), "STALE_CLAUSE");
+    expect(stale.message.startsWith(`The ${shown} filter was read from an earlier query — `)).toBe(true);
+    const wrong = refused(() => reduce(at("trust"), toggle(atEnd("venue", "trust", ["a"]))), "WRONG_FIELD");
+    expect(wrong.message).toContain(`not \`${shown}:\` — `);
+    expect(wrong.message).toContain(`Use the \`${shown}:\` clause`);
+    const bad = refused(() => reduce(at("trust"), toggle(atEnd(f, "trust", ["a"]), "x y")), "BAD_VALUE");
+    expect(bad.message).toContain(` is not a ${shown} value — ${shown} values are `);
+    const last = refused(() => reduce(at("trust"), toggle(atEnd(f, "trust", ["x"]))), "LAST_VALUE");
+    expect(last.message).toContain(`the last ${shown} value would exclude every record — the \`${shown}:\``);
+    const included = refused(
+      () =>
+        reduce(at("trust"), {
+          type: "includeExcluded",
+          field: f,
+          value: "x",
+          clause: atEnd(f, "trust", ["x"]),
+        } as SearchAction),
+      "ALREADY_INCLUDED",
+    );
+    expect(included.message.startsWith(`\`${shown}:x\` is already included — the \`${shown}:\` clause`)).toBe(
+      true,
+    );
+    const empty = { ...atEnd(f, "trust", ["a"]), span: [1, 1] } as FilterClause;
+    const span = refused(() => reduce(at("trust"), toggle(empty, "b")), "BAD_SPAN");
+    expect(span.message.startsWith(`The ${shown} filter's span [1, 1) is empty`)).toBe(true);
+    for (const e of [stale, wrong, bad, last, included, span]) quotedSafely(e.message);
+  });
+
+  it.each(HOSTILE)("BAD_SPAN quotes span bounds %j as %j", (bound, shown) => {
+    const at0 = { ...atEnd("venue", "trust", ["a"]), span: [bound, bound] } as unknown as FilterClause;
+    const empty = refused(
+      () => reduce(at("trust"), { type: "facetToggle", field: "venue", value: "b", clause: at0 }),
+      "BAD_SPAN",
+    );
+    expect(empty.message.startsWith(`The venue filter's span [${shown}, ${shown}) is empty`)).toBe(true);
+    const unfit = { ...atEnd("venue", "trust", ["a"]), span: [0, bound] } as unknown as FilterClause;
+    const thrown = refused(
+      () => reduce(at("trust"), { type: "facetToggle", field: "venue", value: "b", clause: unfit }),
+      "BAD_SPAN",
+    );
+    expect(thrown.message).toContain(`invalid code-point span [0, ${shown})`);
+    for (const e of [empty, thrown]) quotedSafely(e.message);
+  });
+
+  it("BAD_SPAN shows up to 120 code points of the span error, as the backend's parser messages", () => {
+    const long = "x".repeat(200);
+    const unfit = { ...atEnd("venue", "trust", ["a"]), span: [0, long] } as unknown as FilterClause;
+    const e = refused(
+      () => reduce(at("trust"), { type: "facetToggle", field: "venue", value: "b", clause: unfit }),
+      "BAD_SPAN",
+    );
+    expect(e.message).toContain(clip(`invalid code-point span [0, ${long})`, 120));
+  });
+
+  it.each(HOSTILE)("BAD_VALUE quotes the end of a year range %j as %j", (text, shown) => {
+    const range = { lo: 2020, hi: text } as unknown as YearRange;
+    const e = refused(
+      () => reduce(at("trust"), { type: "yearSet", range, clause: year("trust"), reason: null }),
+      "BAD_VALUE",
+    );
+    expect(e.message.startsWith(`\`2020..${shown}\` is not a year range — `)).toBe(true);
+    quotedSafely(e.message);
+  });
+
+  it('writes an empty value as "", so it can\'t read as a missing one', () => {
+    const e = refused(
+      () =>
+        reduce(at("trust"), {
+          type: "facetToggle",
+          field: "venue",
+          value: "",
+          clause: atEnd("venue", "trust", ["ICML"]),
+        }),
+      "BAD_VALUE",
+    );
+    expect(e.message.startsWith('`""` is not a venue value — ')).toBe(true);
+    const [n] = fromURL(
+      new URLSearchParams([
+        ["q", "a"],
+        ["", "x"],
+      ]),
+    ).notices;
+    expect(n && noticeText(n)).toBe(
+      '`""=x` was ignored — `""` is not a search parameter. Search parameters are `q`, `mode`, `sort`, `page`.',
+    );
+  });
+
+  it("tells two long repeated values apart from where they first differ", () => {
+    const head = "trust AND (reliance OR overreliance OR calibration OR ";
+    const [n] = fromURL(
+      new URLSearchParams([
+        ["q", `${head}appropriate)`],
+        ["q", `${head}complacency)`],
+      ]),
+    ).notices;
+    expect(n && noticeText(n)).toBe(
+      "`q` appears more than once; using the first value `…ration OR appropriate)` and ignoring " +
+        "`…ration OR complacency)`.",
+    );
   });
 
   it.each(HOSTILE)("noticeText quotes a URL value %j as %j", (value, shown) => {

@@ -74,8 +74,11 @@ also from `/meta`'s `limits` and `default-limits.json`),
 itself (a facet, action or clause value or field, year text, a page, a span) through `frontend/src/lib/clip.ts`,
 and so does `describeNotice` (and `noticeText`) for a URL notice's parameter and value: the frontend twin of
 the backend's `diagnostics.clip`, with the same escapes (a backtick as `\x60`, a control, format or surrogate
-character as its Python escape, whitespace runs as one space, at most 40 code points), so `Coded` still pairs
-the backticks and the message stays one visible line (TASK-144).
+character as its Python escape, whitespace runs as one space, at most 40 code points; 120 for `BAD_SPAN`'s span
+error, as the backend's parser messages), so `Coded` still pairs the backticks and the message stays one visible
+line (TASK-144). An empty value is written `""`, and two repeated URL values that clip alike are each shown from a
+little before where they first differ (`…ration OR appropriate)`). Clipping changes only the message: `q`, the URL
+and a saved record are never clipped.
 
 **Year** has its own actions (TASK-092), since a year clause is ranges, not values:
 `yearClauseFromParse(filters.year, q, mode)` narrows `/parse`'s `ParsedYearClause` as `clauseFromParse` does,
