@@ -123,8 +123,8 @@ class DedupResult:
 
 def title_key(title: str) -> str:
     """The token-contract normalisation of the title's NFC form, joined by single spaces: dedup and search agree
-    on 'same title' for NFC text (search's `normalize` doesn't NFC first), and every canonically equivalent spelling of it (NFC, NFD, marks stored in another order)
-    gets one key (TASK-168). `normalize` reads LaTeX before its per-character NFKC, so a backslash before a
+    on 'same title' for NFC text (search's `normalize` doesn't NFC first), and every canonically equivalent
+    spelling of it (NFC, NFD, marks stored in another order) gets one key (TASK-168, decision-031). `normalize` reads LaTeX before its per-character NFKC, so a backslash before a
     decomposed letter starts a command: NFD `Caf\\e\u0301` lost its `e` (`caf`) where NFC `Caf\\é` keeps it
     (`caf e`), and `Erd\\H{o\u030b}s` was no accent macro (`erd o s`, not `erdos`)."""
     return " ".join(normalize(unicodedata.normalize("NFC", title)))

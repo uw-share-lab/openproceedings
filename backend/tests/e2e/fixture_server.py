@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import tempfile
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 from openproceedings.api import ApiConfig, RateLimit
@@ -20,8 +21,8 @@ from openproceedings.search import run
 from tests.contract.conftest import attributed, build
 from tests.corpus import Rec
 from tests.fixtures.corpus.synthetic_5k import records
-from tests.unit.engine.test_exclusions import BUILT
 
+BUILT = datetime(2026, 9, 26, tzinfo=UTC)  # the twin claims' fetch time (the fixture's build time)
 TWINNED_QUERY = "trust"  # frontend/e2e/accessibility.spec.ts searches it and opens its first result
 
 

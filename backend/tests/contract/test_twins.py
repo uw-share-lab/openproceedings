@@ -2,8 +2,8 @@
 twin link (TASK-163, owner decision 2026-10-02).
 
 Two snapshots of the 5k fixture's first 300 records: `plain`, an older one without twin claims, and `twins`
-(current), where three of them (one venue-year) are made twins as ICLR 2017's are: `conf` names `copy` and `copy2`, each copy names `conf` (a two-id claim and two one-id claims). A takedown
-of any one withholds all three, everywhere the API serves them and in `op export`; `op takedown check` asks for
+(current), where three of them (one venue-year) are made twins as ICLR 2017's are: `conf` names `copy` and
+`copy2`, each copy names `conf` (a two-id claim and two one-id claims). A takedown of any one withholds all three, everywhere the API serves them and in `op export`; `op takedown check` asks for
 each twin to be listed (and so logged) too; and a snapshot build withholds them as it builds."""
 
 from __future__ import annotations
@@ -29,7 +29,15 @@ from scholarmend.parse import parse_ris
 
 from tests.contract.conftest import attributed, make_app, point_current
 from tests.contract.test_records import save
-from tests.contract.test_takedowns import DATE, FORMATS, _build, exported, fetcher, listing
+from tests.contract.test_takedowns import (
+    DATE,
+    FORMATS,
+    _build,
+    exported,
+    fetcher,
+    listing,
+    withheld_in_export,
+)
 from tests.fixtures.corpus.synthetic_5k import records
 
 type Twins = tuple[Path, PaperRecord, PaperRecord, PaperRecord, PaperRecord]  # data, conf, copy, copy2, other
@@ -99,11 +107,6 @@ def _versions(data: Path) -> tuple[str, str]:
         and not d.name.startswith(".")
     ]  # fmt: skip
     return plain, current
-
-
-def _abstract_out(fmt: str, text: str, r: PaperRecord) -> bool:
-    assert r.abstract is not None
-    return r.abstract not in text.replace("\r\n", "\n") and r.id in text
 
 
 # --- TASK-162: the twin ids the API sends ------------------------------------------------------------------
@@ -274,7 +277,7 @@ def test_a_pinned_older_version_withholds_the_twins_by_the_served_snapshots_clai
     listing(data, conf.id)
     with TestClient(make_app(data)) as c:
         text = exported(c, fmt, q=_cell(conf), index_version=plain)
-    assert all(_abstract_out(fmt, text, r) for r in (conf, copy, copy2))
+    assert all(withheld_in_export(fmt, text, r.id) for r in (conf, copy, copy2))  # read back by the parsers
     assert "See also" not in text and "openproceedings_twins" not in text  # plain's own records name none
 
 
@@ -329,6 +332,7 @@ def test_op_export_says_so_when_the_current_snapshot_cant_be_read(
     lines = [json.loads(x) for x in err.splitlines() if x.startswith("{")]
     [line] = [x for x in lines if x["event"] == "takedown_twins_unavailable"]
     assert (line["level"], line["error"], line["reason"]) == ("ERROR", "SnapshotError", "snapshot_invalid")
+    assert line["index"] == _versions(data)[1]
 
 
 # --- decision-021: an export whose snapshot can't be verified names no twins -------------------------------

@@ -229,7 +229,7 @@ function Paper({
           requires.
         </p>
       )}
-      {/* a refused `q` would only be refused again on the twin's page */}
+      {/* a dropped `q` (refused, or a 429 or 503) isn't carried to the twin's page either */}
       <TwinLinks twins={data.twins} q={dropped === null ? q : null} mode={mode} />
       <section aria-labelledby="abstract-h" className="space-y-1">
         <h2 id="abstract-h" className={h2}>

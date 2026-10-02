@@ -710,7 +710,8 @@ def _parsed(ns: argparse.Namespace) -> ParseResult | None:
 def _current_twin_pairs(data_dir: Path, exported: Path) -> list[tuple[str, str]]:
     """The (record, twin) pairs of the `current` index's snapshot when `exported` is another index, for an
     export's takedowns (TASK-163, as the API's `Served.withheld_in`); none when there is no current index, and
-    none with a warning when its snapshot can't be verified (the exported snapshot's own still apply)."""
+    none with one ERROR `takedown_twins_unavailable` and a stderr warning when its snapshot can't be verified
+    (the exported snapshot's own still apply)."""
     from openproceedings.api.errors import reason_of
     from openproceedings.api.state import snapshot_records
     from openproceedings.ingest.snapshot import SnapshotError
