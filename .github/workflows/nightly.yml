@@ -151,7 +151,8 @@ jobs:
   # follow-up, filed in the 2026-10-02 follow-ups PR). mutate.py runs mutants in a fixed order, so until then only
   # about the first 190 of 548 are checked each night; the rest only by reviews' `make mutate-changed`. A
   # surviving or stale mutant still fails the job; a run cut off at 140 min with none is a pass with a
-  # "partial run" warning giving about how many mutants it checked. Reviews run `make mutate-changed` in full.
+  # "partial run" warning giving about how many mutants it checked. A first step checks every mutant's pattern
+  # still exists, so a stale mutant past the time-box is still reported each night.
   mutate:
     runs-on: ubuntu-latest
     timeout-minutes: 150
@@ -161,6 +162,17 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
+      - name: Every mutant's pattern still exists (all of them, in seconds; the time-box below reaches only the first)
+        run: |
+          python3 -c '
+          import glob, json, pathlib, sys
+          ms = [m for f in sorted(glob.glob(".claude/scripts/mutants/*.json")) for m in json.loads(pathlib.Path(f).read_text())]
+          stale = [m["label"] for m in ms if m["old"] not in pathlib.Path(m["file"]).read_text()]
+          for label in stale:
+              print("::error::stale mutant, its pattern is gone from its file: " + label)
+          print(f"{len(ms)} mutants, {len(stale)} stale")
+          sys.exit(1 if stale else 0)
+          '
       - name: mutate.py (make mutate), time-boxed to 140 min (every mutant checked killed, or documented as equivalent)
         shell: bash  # -eo pipefail, so the pipe through tee keeps mutate.py's status (the default bash -e has no pipefail)
         run: |
