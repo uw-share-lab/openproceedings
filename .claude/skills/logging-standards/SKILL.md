@@ -100,11 +100,11 @@ it is required (`op serve` off loopback or behind a trusted proxy), a list is ap
 withheld abstracts, is `index_load_failed` with `reason` `takedowns_invalid`, `takedowns_unreadable` or
 `takedowns_missing`. A snapshot whose merges.csv doesn't match its manifest is one ERROR
 `takedown_merges_unavailable` per damaged snapshot (`snapshot`, its directory name; `error`; `reason`), and the
-list applies without that snapshot's merges (in the API and `op export`).
+list applies without that snapshot's merges (in the API and `op export`). Likewise `op export` of another index than `current` logs one ERROR `takedown_twins_unavailable` (`error`; `reason`; `index`, the current index's name) when the current index's snapshot can't be read: the list then follows only the exported snapshot's twin links (TASK-163).
 A 503 `API_BUSY` from the bounded pinned-open wait puts `busy: pinned_open` on the access line (TASK-067). `abstracts_withheld` means three counts,
 each named by its event: the list's size on a load, the records a build withheld on `snapshot_built`, the
 records of the body on an export's access line (the build's JSON gives the ids themselves, `withheld_ids`). `snapshot_built` / `snapshot_exists` carry
-`abstracts_withheld`, `takedowns_followed` and `takedowns_unmatched` counts, and `trimmed`: how many records
+`abstracts_withheld`, `takedowns_followed`, `takedowns_unmatched` and `takedowns_twins` counts, and `trimmed`: how many records
 the ingest caps trimmed (decision-026), never their ids. When it is non-zero the build also logs one WARNING
 `snapshot_trimmed` with the count. An export's access line carries
 `abstracts_withheld` (its `X-Abstracts-Withheld`). `op takedown check` logs one `takedown_checked` (INFO, WARNING when

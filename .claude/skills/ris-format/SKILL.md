@@ -58,10 +58,10 @@ by the exported index's snapshot) has no `AB` and no `Abstract source:` line; in
 
 **Twins (TASK-162, decision-029).** A record with twins (an ICLR 2017 workshop copy and its conference
 submission, two records of one paper) has one more `N1`, after the status sentence and before the abstract's
-line: `N1  - See also: <id>; <id> (this paper's other records on OpenReview, decision-029).` (`other record` for
+line: `N1  - See also: <id>; <id> (the same paper's other records on OpenReview, decision-029).` (`other record` for
 one; `export.see_also`). So the provenance line stays last and the abstract source or withheld line just before
 it. A record without twins is byte for byte what it was. The ids are notes for a screener, not an id carrier: the
-record's own id stays in `ID`.
+record's own id stays in `ID`. An attributed ICLR 2017 copy (`unknown` status) with a twin has four `N1` lines, untested in Covidence like the three-line case (low risk: Covidence shows screeners no `N1`, so a Covidence review finds twins from the CSV/JSONL `twins` before import).
 
 **Id carrier:** the round-trip test reads the openproceedings `id` back from the `ID` tag, for every
 record including PMLR-only ones. Never overload `N1` or recover ids from `UR`.

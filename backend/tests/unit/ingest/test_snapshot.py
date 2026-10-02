@@ -597,6 +597,40 @@ def test_both_snapshot_readers_name_a_bad_line_the_same_way(
         loader(copy)
 
 
+@pytest.mark.parametrize("value", ["op:iclr:2017:Hy-Conf01", ["op:iclr:2017:Hy-Conf01", 7], {"id": "x"}])
+def test_record_file_refuses_a_twin_claim_that_isnt_a_list_of_ids(
+    cache: Path, tmp_path: Path, value: object
+) -> None:
+    """TASK-162: a string would otherwise be read character by character into made-up twin ids."""
+    copy = writable_copy(build(cache, tmp_path / "s", BUILT).path, tmp_path / "copy")
+
+    def with_twin(lines: list[bytes]) -> list[bytes]:
+        record = json.loads(lines[0])
+        claim = {**record["provenance"][0], "field": "twin", "value": value}
+        record["provenance"] = [*record["provenance"], claim]
+        return [json.dumps(record).encode() + b"\n", *lines[1:]]
+
+    _corrupt(copy, with_twin)
+    with pytest.raises(SnapshotError, match=re.escape("line 1: invalid record (type_error)")):
+        RecordFile(copy)
+
+
+def test_record_file_reads_each_records_twins(cache: Path, tmp_path: Path) -> None:
+    copy = writable_copy(build(cache, tmp_path / "s", BUILT).path, tmp_path / "copy")
+    ids = [json.loads(line)["id"] for line in (copy / "records.jsonl").read_bytes().splitlines()]
+
+    def with_twin(lines: list[bytes]) -> list[bytes]:
+        record = json.loads(lines[0])
+        claim = {**record["provenance"][0], "field": "twin", "value": [ids[1], ids[0]]}
+        record["provenance"] = [*record["provenance"], claim]
+        return [json.dumps(record).encode() + b"\n", *lines[1:]]
+
+    _corrupt(copy, with_twin)
+    records = RecordFile(copy)
+    assert records.twins == {ids[0]: (ids[1],)}  # its own id left out
+    assert list(records.twin_pairs()) == [(ids[0], ids[1])]
+
+
 def test_the_field_lists_cover_the_record() -> None:
     fields = set(PaperRecord.model_fields) - {"id", "content_hash", "provenance"}
     assert set(HASHED) | set(DISPLAY) == fields and not set(HASHED) & set(DISPLAY)

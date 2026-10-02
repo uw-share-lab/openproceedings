@@ -203,8 +203,9 @@ warnings, the save's index check), the design doc says so; its open questions li
    *As built (TASK-162, decision-029).* A record with twins (the API's `twins`: the same paper kept as two
    records, an ICLR 2017 workshop copy and its conference submission) says "See also (the same paper's other
    record): `<id>`" ("other records" for two) in the result, after the abstract, and on the paper page, after its
-   status line (copy RH-18, PA-10); each id is a link to its paper page, carrying the query as a result title's
-   link does (none from a direct link). `TwinLinks` in `src/components/search/hit-item.tsx`.
+   status and match lines, just before "Abstract" (copy RH-18, PA-10); each id is a link to its paper page,
+   carrying the query as a result title's link does (none from a direct link, or when the link's query was
+   refused). `TwinLinks` in `src/components/search/hit-item.tsx`.
 
    *As built (TASK-136, decision-022).* An abstract the instance withholds at a rights holder's request (the
    API's `abstract_withheld`) reads "Abstract removed from this site at a rights holder's request" (copy RH-15,

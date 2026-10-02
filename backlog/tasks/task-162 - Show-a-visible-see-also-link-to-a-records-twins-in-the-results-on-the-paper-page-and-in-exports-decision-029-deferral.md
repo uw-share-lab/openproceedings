@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-02 18:12'
+updated_date: '2026-10-02 19:17'
 labels:
   - frontend
   - export
@@ -31,7 +31,13 @@ Source: decision-029 (TASK-159), Consequences, Deferred. TASK-159 links an ICLR 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 A result row and the paper page show a 'see also' line for a record with a `twin` claim, naming each twin id in the claim, each linking to that twin's paper page
-- [ ] #2 Each export format carries the twin ids in a documented field (the specs and the ris-format/bibtex-format skills say which); a record without a twin exports byte-identically to today
+- [ ] #2 Each export format carries the twin ids in a documented field (the specs and the ris-format/bibtex-format skills say which); a record without a twin exports byte-identically to today in RIS, BibTeX and JSONL, and CSV (fixed columns) gains one empty last column (additive under decision-021)
 - [ ] #3 Frontend tests (Vitest) cover a record with no twin, one twin and two twins; a contract test covers the API field, and `make openapi` output is committed
 - [ ] #4 Search results, counts and ID sets are unchanged (differential and golden suites pass)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built: additive `twins` (sorted ids) on /search hits and /papers (RecordFile.twins, read from twin claims at load); openapi.json and schema.ts regenerated. Frontend TwinLinks (hit-item.tsx): 'See also (the same paper's other record(s)): <id>…' in each result after the abstract, and on the paper page before Abstract (copy RH-18, PA-10). Links carry q/mode (none from a direct link or a refused q). Exports: RIS N1 'See also: …' after the status sentence, before the abstract line (export.see_also); BibTeX openproceedings_twins; CSV last column twins; JSONL twins only on a record with one. An unverifiable snapshot names no twins. CSV is the one format not byte-identical for records without twins (one empty cell, decision-021 additive); AC #2 was reworded to say so. e2e: the fixture server twins the first two 'trust' hits; the a11y spec covers the line (axe in both themes at 1280/320, 24 px targets, 320 px reflow); darwin visual baselines regenerated (Linux baselines come from the CI run, as in TASK-134).
+<!-- SECTION:NOTES:END -->

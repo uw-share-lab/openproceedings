@@ -201,7 +201,6 @@ function Paper({
           {paper.status === "unknown" ? "not known to be in its proceedings" : "not in its proceedings"}.
         </p>
       )}
-      <TwinLinks twins={data.twins} q={q} mode={mode} />
       {q !== null && dropped !== null && (
         <p role="status" className="text-sm">
           <span aria-hidden="true">ⓘ </span>
@@ -230,6 +229,8 @@ function Paper({
           requires.
         </p>
       )}
+      {/* a refused `q` would only be refused again on the twin's page */}
+      <TwinLinks twins={data.twins} q={dropped === null ? q : null} mode={mode} />
       <section aria-labelledby="abstract-h" className="space-y-1">
         <h2 id="abstract-h" className={h2}>
           Abstract

@@ -492,3 +492,20 @@ def test_an_opened_index_is_read_with_a_manual_reload_policy(
     index = open_index(built)
     assert calls == [((), {"reload_policy": "manual"})]
     assert index.searcher().num_docs == len(CORPUS)
+
+
+def test_a_build_reads_its_index_with_a_manual_reload_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TASK-165: the build's own reader is manual too (it reloads once, explicitly, after the commit)."""
+    calls: list[dict[str, Any]] = []
+    real = tantivy.Index.config_reader
+
+    def spy(self: tantivy.Index, *args: Any, **kwargs: Any) -> None:
+        calls.append(kwargs)
+        real(self, *args, **kwargs)
+
+    monkeypatch.setattr(tantivy.Index, "config_reader", spy)
+    monkeypatch.setattr(idx, "verify_index", lambda path: {})  # only the build's own reader is counted
+    build_index(snapshot_of(CORPUS, tmp_path / "snap"), tmp_path / "indexes", BUILT, workers=1)
+    assert calls == [{"reload_policy": "manual"}]

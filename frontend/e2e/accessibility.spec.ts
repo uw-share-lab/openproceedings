@@ -15,6 +15,9 @@ async function search(page: Page, q = "trust"): Promise<void> {
   await expect(page.getByText(/\d+ papers/).first()).toBeVisible();
 }
 
+/** A record's "See also" line (copy RH-18, PA-10): the fixture's two twins draw one each. */
+const seeAlso = (page: Page) => page.locator("p").filter({ hasText: /^See also \(the same paper/ });
+
 const states: State[] = [
   {
     name: "home",
@@ -24,7 +27,14 @@ const states: State[] = [
       await expect(page.getByText(/records indexed/)).toBeVisible();
     },
   },
-  { name: "search results", open: (page) => search(page) },
+  {
+    name: "search results",
+    open: async (page) => {
+      await search(page);
+      // the fixture makes the first two `trust` results twins (fixture_server.py, TASK-162)
+      await expect(seeAlso(page).first()).toBeVisible();
+    },
+  },
   {
     name: "parse error",
     open: async (page) => {
@@ -86,6 +96,9 @@ const states: State[] = [
       await search(page);
       await page.getByRole("list", { name: "Results" }).getByRole("link").first().click();
       await expect(page.locator("main h1").first()).toBeVisible();
+      await expect(page).toHaveURL(/\/paper\//);
+      await expect(seeAlso(page)).toHaveCount(1); // the first result is a twin; the results are gone
+      await expect(seeAlso(page)).toBeVisible();
     },
   },
   {
@@ -159,6 +172,7 @@ test("each result's author toggle and abstract source link meet the 24px target 
       .locator("article p")
       .filter({ hasText: /^Abstract: / })
       .getByRole("link"),
+    seeAlso(page).getByRole("link"), // TASK-162
   ];
   for (const found of targets) {
     await expect(found.first()).toBeVisible();
@@ -172,9 +186,15 @@ test("each result's author toggle and abstract source link meet the 24px target 
 
 test("the 320px pages do not overflow sideways", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 900 });
-  for (const path of ["/", "/search?q=trust", "/coverage", "/help/syntax"]) {
+  // the first result's paper page: a twin, so its "See also" line (a long monospace id) is drawn (TASK-162)
+  await search(page);
+  const first = page.getByRole("list", { name: "Results" }).getByRole("link").first();
+  const paper = await first.getAttribute("href");
+  expect(paper).not.toBeNull();
+  for (const path of ["/", "/search?q=trust", "/coverage", "/help/syntax", paper ?? ""]) {
     await page.goto(path);
     if (path.startsWith("/search?")) await expect(page.getByText(/\d+ papers/).first()).toBeVisible();
+    else if (path.startsWith("/paper/")) await expect(seeAlso(page)).toBeVisible();
     else if (path === "/coverage")
       await expect(page.getByRole("region", { name: "Coverage table" })).toBeVisible();
     else if (path === "/help/syntax") await expect(page.getByText(/At most .* characters/)).toBeVisible();

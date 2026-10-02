@@ -117,7 +117,7 @@ def see_also(twins: tuple[str, ...]) -> str:
     """What a record with twins says of them (RIS `N1`; TASK-162): the same paper's other OpenReview record or
     records (decision-029: an ICLR 2017 workshop copy and its conference submission, never merged)."""
     other = "other record" if len(twins) == 1 else "other records"
-    return f"See also: {'; '.join(twins)} (this paper's {other} on OpenReview, decision-029)."
+    return f"See also: {'; '.join(twins)} (the same paper's {other} on OpenReview, decision-029)."
 
 
 @dataclass(frozen=True, slots=True)

@@ -65,7 +65,7 @@ there, and ` (via RIS import)` after it for an RIS-imported abstract (the hit's 
 its `aria-label` is the visible text plus ", abstract source for <title>") → for a record with twins (the hit's
 `twins`, decision-029), "See also (the same paper's other record): <id>" in `text-sm`, each id a monospace
 underlined link to its paper page carrying the query (copy RH-18; the paper page shows the same line after its
-status line, PA-10) → links (OpenReview · PDF · proceedings). Highlights are `<mark>` with bold + `--hl-*`; spans come from the API.
+status and match lines, PA-10) → links (OpenReview · PDF · proceedings). Highlights are `<mark>` with bold + `--hl-*`; spans come from the API.
 
 ## Copy rules
 Say what happened, with the number: "412 papers match". Errors quote the server message and hint. Methods

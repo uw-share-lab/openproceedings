@@ -886,10 +886,14 @@ class RecordFile:
                     claimed = {c["source"] for c in line["provenance"]}
                     if not isinstance(rid, str) or not all(isinstance(c, str) for c in claimed):
                         raise TypeError(rid)
-                    about = [_Claim(c["source"], c["value"], c.get("url"), c.get("evidence"))
-                             for c in line["provenance"] if c["field"] == "abstract"]  # fmt: skip
-                    twins = sorted({t for c in line["provenance"] if c["field"] == "twin"
-                                    for t in _id_list(c["value"])} - {rid})  # fmt: skip
+                    about: list[_Claim] = []
+                    linked: set[str] = set()
+                    for c in line["provenance"]:  # one pass: the abstract claims, and the twin ids (TASK-162)
+                        if c["field"] == "abstract":
+                            about.append(_Claim(c["source"], c["value"], c.get("url"), c.get("evidence")))
+                        elif c["field"] == "twin":
+                            linked.update(_id_list(c["value"]))
+                    twins = sorted(linked - {rid})
                     urls = line["urls"]
                     credit = attribution(
                         line["abstract"],

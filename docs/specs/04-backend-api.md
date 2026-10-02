@@ -143,7 +143,7 @@ its `matched` is still the index's answer.
 paper that the index keeps apart, never merged (an ICLR 2017 workshop-listing copy and its conference
 submission), read from the record's `twin` claims. Each is a paper of the same index (a snapshot build refuses
 a dangling twin claim). Usually empty; one or two ids otherwise. Each twin keeps matching on its own text, so
-`twins` never changes what matches (guarantee 5). `GET /papers/{id}` carries the same `twins` at its top level
+`twins` never changes what matches (guarantee 4). `GET /papers/{id}` carries the same `twins` at its top level
 (the claims are in `paper.provenance` too). A takedown of a paper withholds its twins' abstracts as well
 (TASK-163, spec 08 §Deploy).
 
@@ -283,13 +283,14 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   when nothing is withheld), and a JSONL key of the same name (null when nothing is withheld): additive under
   decision-021. A record both listed and in an unattributable export says `takedown`.
   **Twins** (TASK-162, decision-029): a record with twins names their ids, sorted and joined by `; `: an RIS
-  `N1  - See also: <ids> (this paper's other record on OpenReview, decision-029).` (`other records` for two;
+  `N1  - See also: <ids> (the same paper's other record on OpenReview, decision-029).` (`other records` for two;
   after the status sentence, before the abstract's line, so the provenance line stays last and the
   abstract or withheld line just before it; `export.see_also`), a BibTeX `openproceedings_twins = {<ids>}`
   after `openproceedings_id`, a CSV column `twins` appended last (empty for a record without one), and a JSONL
   `twins` list. Additive under decision-021: a record without a twin exports byte for byte as before in RIS,
   BibTeX and JSONL (the JSONL key is left out, not null); CSV, whose columns are fixed, gains the one empty
-  cell. An export whose snapshot can't be verified (decision-021) names no twins.
+  cell. An export whose snapshot can't be verified (decision-021) names no twins. Covidence shows screeners no `N1` (`docs/results/2026-09-27-covidence-check.md`), so in a Covidence import the twins sit side by
+  side with nothing visible linking them: find them in the CSV/JSONL `twins` before import, and count any the review removes in its own duplicates-removed box.
 - **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
   translator (`RIS.js`, 2026-01-05) imports `CPAPER` as `conferencePaper` and puts `T2` in its
   `conferenceName`; a `JOUR` would become a `journalArticle` with the conference in `publicationTitle`.

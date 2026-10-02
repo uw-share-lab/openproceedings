@@ -711,6 +711,7 @@ def _current_twin_pairs(data_dir: Path, exported: Path) -> list[tuple[str, str]]
     """The (record, twin) pairs of the `current` index's snapshot when `exported` is another index, for an
     export's takedowns (TASK-163, as the API's `Served.withheld_in`); none when there is no current index, and
     none with a warning when its snapshot can't be verified (the exported snapshot's own still apply)."""
+    from openproceedings.api.errors import reason_of
     from openproceedings.api.state import snapshot_records
     from openproceedings.ingest.snapshot import SnapshotError
 
@@ -721,7 +722,11 @@ def _current_twin_pairs(data_dir: Path, exported: Path) -> list[tuple[str, str]]
         version = json.loads((current / "manifest.json").read_text(encoding="utf-8"))["index_version"]
         return list(snapshot_records(data_dir, current, str(version)).twin_pairs())
     except (OSError, ValueError, KeyError, TypeError, SnapshotError) as e:
-        log.warning("takedown_twins_unavailable", extra={"error": type(e).__name__})
+        # ERROR as `takedown_merges_unavailable`: the list then follows fewer links than the API does
+        fields: dict[str, object] = {"error": type(e).__name__, "index": current.resolve().name}
+        if (reason := reason_of(e)) is not None:
+            fields["reason"] = reason
+        log.error("takedown_twins_unavailable", extra=fields)
         print(
             "op export: warning: the current index's snapshot can't be read, so the takedown list follows only "
             "the exported snapshot's twin links",

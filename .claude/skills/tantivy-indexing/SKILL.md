@@ -76,8 +76,8 @@ older one only in tests), and the engine picks its path from the manifest (`Tant
    compose deployment makes the version directory 0750 with the API's group and only the two lock files
    group-writable (`deploy/index-permissions.sh`; spec 08 §Deploy, TASK-065). `open_index` (and the build) read with a **manual** reload policy (TASK-165): tantivy-py's
    `Index.open` starts a reader that a meta.json watcher thread reloads (at its first poll, measured landing
-   after `open` returns on 190 of 200 opens), and each reload takes `.tantivy-meta.lock`, creating the file
-   again, even after the engine is dropped; landing in an `rmtree` of the directory it failed it ("Directory not
+   after `open` returns on 190 of 200 opens, TASK-165 notes), and each reload takes `.tantivy-meta.lock`, creating the file
+   again; landing in an `rmtree` of the directory it failed it ("Directory not
    empty"). The manual reader replaces that one at once, so only a first poll that beats it can still reload
    (12 of 200, within 9 ms). Tests take an index away by renaming it, never `rmtree` right after an `op` call. Moving `current` is a
    separate release step. `TantivyEngine` opens only a verified index, and refuses (`API_INTERNAL`, "build a

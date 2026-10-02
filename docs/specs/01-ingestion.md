@@ -403,7 +403,7 @@ run this rule. **A copy and its main-track twin are two linked records** (TASK-1
 - **Checked.** A snapshot refuses a `twin` claim naming a record it doesn't hold.
 - **Reporting.** Linked twins are two records identified, as before. The tool removes neither before screening.
   Exports carry both, each naming the other (TASK-162), so a reviewer's own duplicate step can see why a
-  same-title pair is there; one it drops belongs in the review's own "duplicates removed" count.
+  same-title pair is there; one it drops belongs in the review's own "duplicates removed" count. Covidence shows screeners no `N1` (`docs/results/2026-09-27-covidence-check.md`), so in a Covidence import the twins sit side by side with nothing visible linking them: find them in the CSV/JSONL `twins` before import, and count any the review removes in its own duplicates-removed box.
 
 Responses are cached under
 `<data-dir>/cache/openreview/{v2,v1}/http/` (the shared `{key, payload}` cache contains only a versioned,

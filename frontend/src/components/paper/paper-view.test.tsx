@@ -205,6 +205,24 @@ describe("a record's twins (TASK-162, decision-029, PA-10)", () => {
   });
 });
 
+describe("a record's twins when the link's query was refused (PA-10, PA-4)", () => {
+  it("links the twin without the refused query", async () => {
+    const twin = "op:iclr:2024:Hy-Copy01";
+    draw(
+      "tr*",
+      api((call) =>
+        call.query.has("q")
+          ? json({ error: { code: "WILDCARD_TOO_MANY_EXPANSIONS", message: "m" } }, 422)
+          : json(answer({ twins: [twin] })),
+      ),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.getByRole("link", { name: twin }).getAttribute("href")).toBe(
+      `/paper/${encodeURIComponent(twin)}`,
+    );
+  });
+});
+
 describe("P2 not matched", () => {
   it("says the query doesn't match and lights nothing", async () => {
     draw(

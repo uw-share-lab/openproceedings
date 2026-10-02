@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-02 18:12'
+updated_date: '2026-10-02 19:17'
 labels:
   - decision
   - ops
@@ -35,5 +35,13 @@ Source: decision-029 (TASK-159), Consequences, Deferred: owner decision needed. 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 The owner picks an option; a decision record (`backlog decision create`) states it with the options considered and cites decision-022 and decision-029
-- [ ] #2 If the answer changes behaviour, a follow-up task is filed for `takedowns.same_paper`, its tests and spec 08 (§Deploy, the takedown procedure); otherwise spec 08 says a takedown does not follow a twin claim
+- [ ] #2 The owner chose option 2 (follow the twin claim), so the behaviour is implemented in this task's PR (the owner asked for one PR, 2026-10-02): `takedowns.same_paper` follows twin pairs (API serve time on every loaded version, `op export`), `op snapshot build` withholds twins (`takedowns_twins`), `op takedown check` asks for each twin to be listed and logged, with tests, and spec 08 §Deploy describes it
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Owner decision 2026-10-02 (via team-lead): option 2. A takedown follows twin links: listing either twin (ICLR 2017 workshop copy or conference submission, and any decision-029 twin, not only the 18 bibtex pairs) withholds the abstract on both, and both ids are listed and logged in the operator log.
+Built: takedowns.same_paper(listed, merges, ids, twins=pairs) links (record, twin) pairs both ways and transitively, together with merges and native ids. RecordFile.twins/twin_pairs read the claims at load. API Served.withheld_in uses the served snapshot's pairs plus the version's own, so an older snapshot without claims is covered. op export uses the exported snapshot's pairs plus the current index's (_current_twin_pairs; if that snapshot can't be read: one ERROR takedown_twins_unavailable and a stderr warning). snapshot.withhold withholds twins of listed/followed ids (Withholding.twins, BuildResult.takedowns_twins, JSON and stderr). op takedown check reports a listed paper's twin the list lacks, so both ids get listed and logged.
+Tests: tests/contract/test_twins.py (every twin withheld in /papers, /search and all four exports, plus op export, for any listed twin; pinned older version, record export and op export --index on a snapshot without claims; the unreadable-current warning; the check), tests/unit/test_takedowns.py, test_snapshot_takedowns.py. Spec 08 §Deploy and the op rows, spec 01, spec 04, and the snapshots and logging-standards skills are updated.
+<!-- SECTION:NOTES:END -->

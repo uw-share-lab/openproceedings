@@ -1,8 +1,8 @@
 """Twin records (decision-029): the API's and the exports' twin ids (TASK-162), and a takedown that follows a
 twin link (TASK-163, owner decision 2026-10-02).
 
-One snapshot of the 5k fixture's first 300 records, three of them (one venue-year) made twins as ICLR 2017's
-are: `conf` names `copy` and `copy2`, each copy names `conf` (a two-id claim and two one-id claims). A takedown
+Two snapshots of the 5k fixture's first 300 records: `plain`, an older one without twin claims, and `twins`
+(current), where three of them (one venue-year) are made twins as ICLR 2017's are: `conf` names `copy` and `copy2`, each copy names `conf` (a two-id claim and two one-id claims). A takedown
 of any one withholds all three, everywhere the API serves them and in `op export`; `op takedown check` asks for
 each twin to be listed (and so logged) too; and a snapshot build withholds them as it builds."""
 
@@ -27,7 +27,8 @@ from openproceedings.ingest.snapshot import withhold
 from refaudit.bibtex import parse_string
 from scholarmend.parse import parse_ris
 
-from tests.contract.conftest import attributed, make_app
+from tests.contract.conftest import attributed, make_app, point_current
+from tests.contract.test_records import save
 from tests.contract.test_takedowns import DATE, FORMATS, _build, exported, fetcher, listing
 from tests.fixtures.corpus.synthetic_5k import records
 
@@ -60,6 +61,7 @@ def twins_store(tmp_path_factory: pytest.TempPathFactory) -> Twins:
         copy.id: _twin(copy, conf.id),
         copy2.id: _twin(copy2, conf.id),
     }
+    _build(papers, data, "plain", frozenset())  # an older snapshot: the same papers, built before the claims
     papers = [linked.get(p.id, p) for p in papers]
     version = _build(papers, data, "twins", frozenset())
     (data / "indexes" / "current").symlink_to(version)
@@ -87,6 +89,21 @@ def client(data: Path) -> Iterator[TestClient]:
 
 def _cell(p: PaperRecord) -> str:
     return takedown_check.cell_query(p.id)
+
+
+def _versions(data: Path) -> tuple[str, str]:
+    """(plain, twins): the older index without twin claims, and `current`'s."""
+    current = (data / "indexes" / "current").resolve().name
+    (plain,) = [
+        d.name for d in (data / "indexes").iterdir() if d.is_dir() and not d.is_symlink() and d.name != current
+        and not d.name.startswith(".")
+    ]  # fmt: skip
+    return plain, current
+
+
+def _abstract_out(fmt: str, text: str, r: PaperRecord) -> bool:
+    assert r.abstract is not None
+    return r.abstract not in text.replace("\r\n", "\n") and r.id in text
 
 
 # --- TASK-162: the twin ids the API sends ------------------------------------------------------------------
@@ -244,3 +261,95 @@ def test_a_snapshot_build_withholds_the_twins_of_a_listed_paper(twins_store: Twi
     assert done.twins == {conf.id: copy.id, copy2.id: copy.id}  # copy2 reached through conf, from copy
     assert all(r.abstract is None for r in done.result.records if r.id != other.id)
     assert withhold(result, frozenset({other.id})).twins == {}
+
+
+# --- TASK-163 across index versions: an older snapshot without twin claims -----------------------------
+@pytest.mark.parametrize("fmt", FORMATS)
+def test_a_pinned_older_version_withholds_the_twins_by_the_served_snapshots_claims(
+    data: Path, twins_store: Twins, fmt: str
+) -> None:
+    """`plain` holds no twin claim; the served snapshot's (`Served.withheld_in`) still link its ids."""
+    _, conf, copy, copy2, _ = twins_store
+    plain, _ = _versions(data)
+    listing(data, conf.id)
+    with TestClient(make_app(data)) as c:
+        text = exported(c, fmt, q=_cell(conf), index_version=plain)
+    assert all(_abstract_out(fmt, text, r) for r in (conf, copy, copy2))
+    assert "See also" not in text and "openproceedings_twins" not in text  # plain's own records name none
+
+
+def test_a_record_export_pinned_to_the_older_version_withholds_the_twins(data: Path, twins_store: Twins) -> None:
+    _, conf, copy, copy2, _ = twins_store
+    plain, twins = _versions(data)
+    point_current(data, plain)
+    with TestClient(make_app(data)) as c:
+        record_id = save(c, _cell(conf))
+    point_current(data, twins)
+    listing(data, copy.id)
+    with TestClient(make_app(data)) as c:
+        text = exported(c, "jsonl", record_id=record_id)
+    objs = {o["id"]: o for o in map(json.loads, text.splitlines())}
+    assert all(objs[r.id]["abstract"] is None and objs[r.id]["abstract_withheld_reason"] == "takedown"
+               for r in (conf, copy, copy2))  # fmt: skip
+
+
+def test_op_export_of_the_older_version_follows_the_current_indexs_twin_claims(
+    data: Path, twins_store: Twins, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, conf, copy, copy2, _ = twins_store
+    plain, _ = _versions(data)
+    listing(data, copy2.id)
+    argv = ["--data-dir", str(data), "export", _cell(conf), "--index", plain, "--format", "jsonl"]
+    assert cli.main(argv) == 0
+    out, err = capsys.readouterr()
+    objs = {o["id"]: o for o in map(json.loads, out.splitlines())}
+    assert all(objs[r.id]["abstract"] is None for r in (conf, copy, copy2))
+    assert "twin links" not in err
+
+
+def test_op_export_says_so_when_the_current_snapshot_cant_be_read(
+    data: Path, twins_store: Twins, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The exported snapshot's own links still apply (here none): a warning on stderr and one ERROR line."""
+    _, conf, copy, copy2, _ = twins_store
+    plain, _ = _versions(data)
+    records = data / "snapshots" / "twins" / "records.jsonl"
+    records.chmod(0o644)
+    records.write_bytes(records.read_bytes() + b"\n")  # no longer hashes to its manifest
+    listing(data, copy2.id)
+    argv = ["--data-dir", str(data), "--log-level", "debug", "export", _cell(conf), "--index", plain,
+            "--format", "jsonl"]  # fmt: skip
+    assert cli.main(argv) == 0
+    out, err = capsys.readouterr()
+    objs = {o["id"]: o for o in map(json.loads, out.splitlines())}
+    assert objs[copy2.id]["abstract"] is None and objs[conf.id]["abstract"] is not None
+    assert "the takedown list follows only the exported snapshot's twin links" in err
+    lines = [json.loads(x) for x in err.splitlines() if x.startswith("{")]
+    [line] = [x for x in lines if x["event"] == "takedown_twins_unavailable"]
+    assert (line["level"], line["error"], line["reason"]) == ("ERROR", "SnapshotError", "snapshot_invalid")
+
+
+# --- decision-021: an export whose snapshot can't be verified names no twins -------------------------------
+@pytest.mark.parametrize("fmt", FORMATS)
+def test_an_unverifiable_pinned_snapshot_names_no_twins(data: Path, twins_store: Twins, fmt: str) -> None:
+    _, conf, _, _, _ = twins_store
+    plain, twins = _versions(data)
+    point_current(data, plain)
+    records = data / "snapshots" / "twins" / "records.jsonl"
+    records.chmod(0o644)
+    records.write_bytes(records.read_bytes() + b"\n")
+    with TestClient(make_app(data)) as c:
+        text = exported(c, fmt, q=_cell(conf), index_version=twins)
+    assert all(t == [] for t in _twins_in(fmt, text).values())
+    assert "See also" not in text and "openproceedings_twins" not in text
+
+
+def test_op_export_of_an_unverifiable_snapshot_names_no_twins(
+    data: Path, twins_store: Twins, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, conf, _, _, _ = twins_store
+    records = data / "snapshots" / "twins" / "records.jsonl"
+    records.chmod(0o644)
+    records.write_bytes(records.read_bytes() + b"\n")
+    assert cli.main(["--data-dir", str(data), "export", _cell(conf), "--format", "jsonl"]) == 0
+    assert all(t == [] for t in _twins_in("jsonl", capsys.readouterr().out).values())

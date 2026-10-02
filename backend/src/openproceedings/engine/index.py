@@ -171,10 +171,11 @@ def schema(version: str | None = None) -> tantivy.Schema:
 def open_index(path: Path) -> tantivy.Index:
     """An existing index, with `exact_v1` registered (a query must be analysed the same way), read with a
     manual reload policy: a built index never changes, so nothing reloads it. tantivy-py's `Index.open` starts
-    a reader that reloads whenever a meta.json watcher thread polls (once at once, then on every change), and
-    each reload takes `.tantivy-meta.lock`, creating the file again; such a reload could land after the call
-    that opened the index returned, even after the engine was dropped, and write into a directory being
-    removed (TASK-165). Dropping that reader at once leaves the watcher no one to reload."""
+    a reader that its meta.json watcher thread reloads at its first poll, and the reload takes
+    `.tantivy-meta.lock`, creating the file again; it landed after `open` returned (190 of 200 opens, TASK-165
+    notes) and could fall inside an `rmtree` of the directory. Replacing that reader at once leaves the watcher
+    no one to reload, unless its first poll beats this call (12 of 200, within 9 ms): so tests take an index
+    away by renaming it (`test_record_cli.take_away`), never `rmtree` right after an open."""
     index = tantivy.Index.open(str(path))
     index.config_reader(reload_policy="manual")
     index.register_tokenizer(ANALYZER, analyzer())
