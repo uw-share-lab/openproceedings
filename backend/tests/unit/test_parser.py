@@ -1055,6 +1055,15 @@ def test_a_glued_source_value_is_still_checked_as_a_value(mode: Literal["native"
         assert errors == [(DiagnosticCode.FIELD_COMPAT_ONLY, (0, 7)), (_P, (7, 11))]
 
 
+def test_a_group_whose_first_token_is_no_value_keeps_both_errors() -> None:
+    """Only a glued value's closing check is deduplicated (TASK-158 review): a field name where a group's first
+    value goes is an unknown field and a malformed group, as before."""
+    assert [(e.code, e.span) for e in parse("year:(xtitle:").errors] == [
+        (DiagnosticCode.FIELD_UNKNOWN, (6, 13)),
+        (DiagnosticCode.FIELD_FILTER_SYNTAX, (6, 13)),
+    ]
+
+
 def test_a_glued_word_error_still_stops_a_second_error_on_the_word() -> None:
     """Only a filter value's own check looks past the glue error; `~` (no letters) is said once."""
     assert [(e.code, e.span) for e in parse("~(x)").errors] == [(_P, (0, 2))]
