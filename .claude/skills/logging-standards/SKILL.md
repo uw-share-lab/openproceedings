@@ -104,7 +104,9 @@ list applies without that snapshot's merges (in the API and `op export`).
 A 503 `API_BUSY` from the bounded pinned-open wait puts `busy: pinned_open` on the access line (TASK-067). `abstracts_withheld` means three counts,
 each named by its event: the list's size on a load, the records a build withheld on `snapshot_built`, the
 records of the body on an export's access line (the build's JSON gives the ids themselves, `withheld_ids`). `snapshot_built` / `snapshot_exists` carry
-`abstracts_withheld`, `takedowns_followed` and `takedowns_unmatched` counts. An export's access line carries
+`abstracts_withheld`, `takedowns_followed` and `takedowns_unmatched` counts, and `trimmed`: how many records
+the ingest caps trimmed (decision-026), never their ids. When it is non-zero the build also logs one WARNING
+`snapshot_trimmed` with the count. An export's access line carries
 `abstracts_withheld` (its `X-Abstracts-Withheld`). `op takedown check` logs one `takedown_checked` (INFO, WARNING when
 it found problems) with `listed`, `index_versions` and `problems` counts: never an id's text or a requester.
 

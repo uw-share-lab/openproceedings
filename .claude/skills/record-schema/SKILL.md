@@ -14,8 +14,8 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | Field | Rule |
 |---|---|
 | `id` | `op:<venue>:<year>:<native>`, with venue lower-cased: `op:iclr:2024:iilhN2MycO`. Never changes once a snapshot has shipped it. |
-| `title` | Raw, whitespace-collapsed. **No** search normalization here (spec 03 owns it). |
-| `abstract` | Raw text or `null` (never an empty or whitespace-only string). Reject a value that starts or ends with `…`: that's a Scholar snippet. An ellipsis inside a real abstract (`x₁, …, x_n`) is allowed. HTML stripped, LaTeX kept verbatim. |
+| `title` | Raw, whitespace-collapsed. **No** search normalization here (spec 03 owns it). Capped by the snapshot build at 1,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
+| `abstract` | Raw text or `null` (never an empty or whitespace-only string). Reject a value that starts or ends with `…`: that's a Scholar snippet. An ellipsis inside a real abstract (`x₁, …, x_n`) is allowed. HTML stripped, LaTeX kept verbatim. Capped by the snapshot build at 20,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
 | `authors` | Display order, as the source gives them. |
 | `venue` | `NeurIPS` \| `ICLR` \| `ICML` (enum; extensible later). |
 | `year` | Conference year. Never the arXiv or PDF year. Required: a record with no year is not a valid `PaperRecord`, nor is one for a year its venue was not held under its name (NeurIPS before 1987, ICLR before 2013, ICML before 1988; `vocab.CONFERENCES`, spec 04 §Exports). |
@@ -116,3 +116,34 @@ evidence) must be valid Unicode (no lone surrogates), so a snapshot can always b
 no control characters; an abstract has no leading or trailing whitespace (importers strip it, and it is
 hashed). A claim's value must fit its field: `year` an int, `authors`/`keywords` a tuple, every other
 field a string. A forum-id native is 4–64 of `[A-Za-z0-9_-]` with at least one letter or digit.
+
+**The ingest caps** (`ingest/caps.py`, decision-026, TASK-155; spec 01 §Pipeline 2). They exist because NFKC's
+canonical reordering is superlinear in a long run of marks with alternating combining classes.
+- **Marks.** A title or abstract keeps at most 8 combining marks in a run, and the extras are dropped.
+  - A mark is a character whose NFKD form starts with a non-zero combining class.
+  - A run ends only at a base: a letter or digit that is not a mark, and that the tokenizer keeps
+    (`normalize.latex_mask`).
+  - The tokenizer joins a word across the invisible characters it drops (ZWJ, soft hyphen, variation selectors)
+    and across LaTeX markup (`\-`, the letter of an accent macro such as `\H{…}`). So none of those may reset
+    the count.
+  - A run is counted in NFKD non-starters, the base's own included.
+  - A run over the cap has its base (NFD) and marks (NFKD) decomposed in canonical order, then keeps its first 8.
+    Every other character stays as it was: in NFKD, `´` would be a space plus a mark, and the record would refuse
+    the double space. Trimmed text is then tidied (title collapsed, abstract stripped of whitespace and `…`).
+    So every Unicode form of the same text trims alike, and dedup title keys stay equal.
+  - This keeps every token's run of non-starters within 8.
+- **Length.** A title keeps at most 1,000 code points (the owner, 2026-10-02; the longest real one is 192), and
+  an abstract at most 20,000, both counted in NFKD. The cut falls before the last space that fits, so every
+  Unicode form keeps the same words, and it runs before the mark cap. A cut title is collapsed, and a cut abstract is stripped of whitespace and `…`.
+- **Where.** The caps run once, in `snapshot.load_sources`, before dedup, on the record's field and on every
+  claim of it alike.
+- **Flagged.** Never silent: a trimmed claim's `evidence` carries `trimmed at ingest (decision-026): <what>`,
+  the marks dropped and the length cut from and to.
+  - With no source evidence, the note is the whole evidence.
+  - Otherwise it follows the source's evidence in parentheses, so an RIS route and url stay first for
+    `dedup.attribution`.
+  - `caps.is_trimmed` matches only that form at the end.
+  - The manifest's `trimmed` lists the records with any trimmed title or abstract claim.
+- **Model.** The caps belong to the build, not the model: `PaperRecord` doesn't refuse text over them.
+- **Unchanged otherwise.** Text within both caps comes back unchanged, so the caps change no record of a corpus
+  within them.

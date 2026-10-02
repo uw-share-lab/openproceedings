@@ -510,6 +510,13 @@ def _plain_ascii(text: str) -> bool:
     return text.isascii() and "\\" not in text and "$" not in text
 
 
+def latex_mask(text: str) -> list[int]:
+    """How `tokenize` classifies each raw character of `text` for LaTeX: KEEP, SEP, JOIN (markup inside a word,
+    such as an accent macro or `\\-`, dropped) or SUB (a math command's backslash, read as its Unicode
+    spelling). Every character is KEEP without a `\\` or a `$`. The ingest caps read it (decision-026)."""
+    return _latex_mask(text) if "\\" in text or "$" in text else [KEEP] * len(text)
+
+
 def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token]:
     """`tokenize`'s definition for any text, one raw character at a time (steps 1-5 above). Given a `tail`
     list, it appends the text's `Tail` to it."""
