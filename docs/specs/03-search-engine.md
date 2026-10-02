@@ -66,7 +66,7 @@ never logged. It runs on the synthetic 5k corpus in CI; on the real corpus it ru
 |---|---|
 | `Term t` (no field) | `Boolean(SHOULD title:t, SHOULD abstract:t)` |
 | `Phrase` | `PhraseQuery` per field, combined with OR. Never across fields. |
-| `Near(a, b, n)` | Two different single terms: per field, `PhraseQuery([a, b], slop=n)` OR the reversed order (exact on tantivy 0.26.2, measured). A phrase or wildcard operand, a term with itself, or a phrase with a wildcard item takes the documented fallback: candidates filtered by Tantivy, then verified by position in Python over the stored token streams. |
+| `Near(a, b, n)` | Two different single terms: per field, `PhraseQuery([a, b], slop=n)` OR the reversed order (exact on tantivy 0.26.2, measured). A phrase or wildcard operand, a term with itself, or a phrase with a wildcard item takes the documented fallback: candidates filtered by Tantivy, then verified by position in Python over the stored token streams; the clause then matches its candidate query narrowed by an id set, naming the verified ids or, when fewer, the candidates that failed (excluded): the same matches and scores either way, and Tantivy resolves the shorter list on each search (TASK-076). |
 | `Wildcard` | Expanded via the term dictionary (the FST behind `RegexQuery` / term streaming) into an explicit OR of terms. The expansion is returned to the caller. |
 | `And` / `Or` / `Not` | `BooleanQuery` MUST / SHOULD / MUST_NOT |
 | `Filter` | `TermQuery` or `RangeQuery` on the fast fields, applied as a non-scoring filter |
@@ -205,6 +205,12 @@ as "current" and can load a pinned older version to replay a search record.
   exclusions is within budget, except `main-2-pop` (wildcard phrases) when cold: 10.1 s to search and 10.5 s
   for `match_ids` + exclusions, the exception above. Warm (the engine's verified-clause cache and compiled-
   query memo), its search is 27 ms p95 over 200 runs.
+- Measured, warm searches over wildcard phrases (TASK-076, `docs/results/2026-10-02-wildcard-phrases.md`; no
+  other test run, load 4–11). Tantivy resolves a verified clause's id set on every search (0.5–1.3 µs an id), so a clause names
+  the shorter list: its verified ids, or the candidates that failed, excluded (§AST → Tantivy compilation, the `Near` row).
+  `report_80k` (`docs/results/2026-10-02-bench.md`): `main-2-pop` warm **p95 28.8 ms, p99 48.0 ms** over 200
+  runs on the synthetic 80k. On the real M4 corpus its warm search went from p95 46.8 ms to 27.3 ms (old and new
+  compile alternated, 200 rounds each; `tests/bench/warm_verified.py`); no other string changed.
 - Measured, the `/search` endpoint (M3a review gate; `search.run(limit=50, facets=True, highlight=True)`,
   synthetic 80k). A first page collects the text query twice: the page, and once without its top-level
   filters for every facet and both exclusion buckets (task-086: counts per (venue, year, track, status) from

@@ -5,7 +5,7 @@
 
 It generates the synthetic corpus at 80,000 records with abstracts of realistic length (120-250 words; the
 same generator as the 5k differential corpus, so anyone can reproduce it), builds the index, and writes
-`docs/results/<date>-bench.md` (or OUT): build time, size and peak memory; p95 of a 50-hit search, of the
+`docs/results/<date>-bench.md` (or OUT): build time, size and peak memory; p95 of a 50-hit search (and its warm p99), of the
 50-hit search with its highlights, and of `match_ids` with exclusion accounting for every Trust-Evals protocol
 string; the `/search` endpoint's whole work (facets and exclusions too), first and later pages, as wall-time
 p95 (the facet aggregation overlaps the page on a worker thread, so wall time is what a client waits) and
@@ -46,8 +46,12 @@ VERIFIED = [
 
 
 def p95(times: list[float]) -> float:
+    return quantile(times, 0.95)
+
+
+def quantile(times: list[float], q: float) -> float:
     data = sorted(times)
-    return data[min(len(data) - 1, int(0.95 * len(data)))]
+    return data[min(len(data) - 1, int(q * len(data)))]
 
 
 def timed(f: object, rounds: int = ROUNDS) -> list[float]:
@@ -152,7 +156,8 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
         engine.compiled.clear()  # the compiled query holds verified results too
         engine.expanded.clear()
         cold = timed(lambda ast=ast: engine.search(ast, limit=50), rounds=1)[0]  # type: ignore[misc]
-        warm = p95(timed(lambda ast=ast: engine.search(ast, limit=50), WARM_ROUNDS))  # type: ignore[misc]
+        warm_runs = timed(lambda ast=ast: engine.search(ast, limit=50), WARM_ROUNDS)  # type: ignore[misc]
+        warm, warm99 = p95(warm_runs), quantile(warm_runs, 0.99)
         page = p95(timed(lambda ast=ast: search_with_highlights(engine, ast), WARM_ROUNDS))  # type: ignore[misc]
         exclusions = p95(timed(exclusion_run))
 
@@ -167,7 +172,7 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
         cpu = cpu_timed(first_page, ENDPOINT_ROUNDS)
         total = engine.search(ast, limit=0).total
         rows.append(
-            f"| {name} | {total:,} | {ms(cold)} | {ms(warm)} | {ms(page)} | {ms(first)} | {ms(later)} "
+            f"| {name} | {total:,} | {ms(cold)} | {ms(warm)} | {ms(warm99)} | {ms(page)} | {ms(first)} | {ms(later)} "
             f"| {ms(sum(cpu) / len(cpu))} | {ms(exclusions)} |"
         )
 
@@ -222,7 +227,7 @@ when cold (spec 03), so they are reported, not gated.
 ## Trust-Evals protocol strings, Scholar mode (budgets: 100 ms, 300 ms)
 
 Cold is the first run after every cache is cleared (verified clauses, expansions, compiled queries); warm is the
-p95 of the {WARM_ROUNDS} runs after it, with the caches an engine keeps; "with highlights" is the p95 of
+p95 and the p99 of the {WARM_ROUNDS} runs after it, with the caches an engine keeps; "with highlights" is the p95 of
 {WARM_ROUNDS} warm runs of the same search with its display records and every hit's highlights, as
 `search.run` assembles them (`test_bench.search_with_highlights`; no cache holds them; task-073); the two
 `/search` columns are the endpoint's whole engine work (`test_bench.search_endpoint`: `search.run` with facets,
@@ -231,10 +236,10 @@ highlights and exclusion accounting; its facet aggregation on a worker thread, o
 (offset 50) that reads it; then the first page's mean CPU time per request over {ENDPOINT_ROUNDS} more runs (all
 threads: the overlap saves wall time, not CPU); the exclusions column is the p95 of
 {ROUNDS} runs, each clearing every cache first. `main-2-pop` holds wildcard phrases (`model$`), which take the position-verified path spec 03 exempts, so
-its cold numbers are the exception's, not a budget miss (its warm headroom is task-076).
+its cold numbers are the exception's, not a budget miss (task-076 is its warm headroom).
 
-| String | Matches | Search, first 50 hits: cold | Search: p95 warm | Search with highlights: p95 warm | `/search`, first page: p95 wall | `/search`, a later page: p95 wall | `/search`, first page: CPU per request | `match_ids` + exclusions: p95 cold |
-|---|---|---|---|---|---|---|---|---|
+| String | Matches | Search, first 50 hits: cold | Search: p95 warm | Search: p99 warm | Search with highlights: p95 warm | `/search`, first page: p95 wall | `/search`, a later page: p95 wall | `/search`, first page: CPU per request | `match_ids` + exclusions: p95 cold |
+|---|---|---|---|---|---|---|---|---|---|
 {chr(10).join(rows)}
 
 ## Wildcard expansion (budget: 50 ms for up to 200 terms)
