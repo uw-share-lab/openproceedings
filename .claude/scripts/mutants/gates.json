@@ -222,12 +222,6 @@
   "new": "        if False:"
  },
  {
-  "label": "parse error not blocked",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "    if PATTERN.search(cmd):  # unbalanced",
-  "new": "    if False:  # unbalanced"
- },
- {
   "label": "dd branch removed",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "    if head == \"dd\"",
@@ -1217,24 +1211,6 @@
   "file": ".claude/hooks/require-review.sh",
   "old": "|op-?rev|review\", cmd.replace(",
   "new": "\", cmd.replace("
- },
- {
-  "label": "attribution: $(cat file) words not read",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        for m in (m for word in argv for m in SUBST_READ.finditer(word)):",
-  "new": "        for m in ():"
- },
- {
-  "label": "attribution: $(< file) form dropped",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "|<\\s*([^()]*?))",
-  "new": ")"
- },
- {
-  "label": "attribution: backquoted cat dropped",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "|`\\s*cat\\s+([^`]*?)\\s*`\")",
-  "new": "\")"
  },
  {
   "label": "backlog: path not normalised",

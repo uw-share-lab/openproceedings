@@ -19,7 +19,7 @@ HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 # The program goes to Python as an argument and the payload on stdin, never in an environment variable: past
 # ARG_MAX (about 1 MB) exec fails with 126, which Claude Code lets through. Any exit but 0 blocks (TASK-156).
 IFS= read -r -d '' PROG <<'PY' || true
-import os, re, shlex, sys
+import os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
 from cmdparse import (ParseError, expand_known, gh_subcommand, git_subcommand, opt_values, read_payload, tokenize,
                       walk)
@@ -32,9 +32,6 @@ GIT_MSG = {"commit", "merge", "tag", "notes", "revert", "cherry-pick"}
 GH_PR_WRITE = {"create", "edit", "comment", "review", "merge"}
 GH_RELEASE_WRITE = {"create", "edit"}
 MAX_BYTES = 1_000_000
-# A file read inside a word: `-m "$(cat msg.txt)"`, `"$(< msg.txt)"`, "`cat msg.txt`" (TASK-067: a quoted
-# substitution is one word, so its `cat` is no command of its own).
-SUBST_READ = re.compile(r"\$\(\s*(?:cat\s+([^()]*?)|<\s*([^()]*?))\s*\)|`\s*cat\s+([^`]*?)\s*`")
 
 def file_text(path, base):
     if path == "-":
@@ -64,9 +61,9 @@ def main():
             # and with HOME/TMPDIR/USER read as '', which the agent's shell may have: `cd ~` then stays put (TASK-156)
             walked += walk(cmd, cwd, env_empty=True)
     except ParseError:
-        if PATTERN.search(cmd):  # unbalanced quotes: bash won't run it, but don't let it look approved
-            blocked()
-        if PATTERN.search(re.sub(r"[\"'\\]", "", cmd)):  # and with its quotes gone: `'Cl''aude'` (TASK-156 review)
+        # unbalanced quotes: bash won't run it, but don't let it look approved; read with its quotes and backslashes
+        # gone, which keeps every raw match and joins `'Cl''aude'` (TASK-156 review)
+        if PATTERN.search(re.sub(r"[\"'\\]", "", cmd)):
             blocked()
         try:  # a git command it can't classify (FailClosed) still has words: `'Cl''aude'` (TASK-156 review)
             if PATTERN.search(" ".join(tokenize(cmd))):
@@ -97,14 +94,9 @@ def main():
         # (`'Co-Authored-By: Cl''aude'`), written with `$'…'` escapes or in a variable reads whole here (TASK-156)
         texts += [" ".join(expand_known(w, argv, d) for w in argv) for argv, d in commands]
         for argv, d in commands:
+            # a `cat` anywhere, a `$(cat file)`, `$(< file)` or backquoted `cat` too: the walk reads the bodies
             if argv and argv[0] == "cat":
                 texts += [file_text(a, d) for a in argv[1:] if not a.startswith("-")]
-            for m in (m for word in argv for m in SUBST_READ.finditer(word)):
-                try:
-                    names = shlex.split(next(g for g in m.groups() if g is not None))
-                except ValueError:
-                    continue
-                texts += [file_text(a, d) for a in names if not a.startswith("-")]
     if relevant and (PATTERN.search(cmd) or any(PATTERN.search(t) for t in texts)):
         blocked()
     sys.exit(0)
