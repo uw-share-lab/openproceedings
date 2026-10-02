@@ -309,7 +309,7 @@ def iclr_2017(tmp_path: Path, conference: list[dict[str, Any]], workshop: list[d
 def test_a_workshop_copy_and_its_conference_twin_are_linked_both_ways(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """TASK-159 (decision-028): a copy on ICLR 2017's workshop listing whose `_bibtex` names its conference twin,
+    """TASK-159 (decision-029): a copy on ICLR 2017's workshop listing whose `_bibtex` names its conference twin,
     the one main-track submission with its title, stays its own record (different submissions, different
     outcomes); each record gets a `twin` claim naming the other's id. Track, status and content_hash don't change."""
     rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")

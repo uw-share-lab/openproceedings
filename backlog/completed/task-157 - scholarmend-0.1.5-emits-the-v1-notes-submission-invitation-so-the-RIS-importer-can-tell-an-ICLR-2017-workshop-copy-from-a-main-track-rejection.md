@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-02 00:40'
-updated_date: '2026-10-02 06:50'
+updated_date: '2026-10-02 07:25'
 labels:
   - ingest
 milestone: m-4
@@ -52,12 +52,12 @@ AC #3: ris._invitation reads the claim only when every such claim holds one non-
   - two different invitations, or an empty one: none;
   - a v2 invitation: ignored (test_an_invitation_outside_the_v1_years_is_ignored).
 AC #4: test_the_crawler_and_the_ris_importer_read_a_workshop_copy_alike gives the recorded note to the v1 crawler and its scholarmend 0.1.5 claims (row 15) to the RIS importer. Both give workshop/unknown and the same id.
-AC #5: an invitation claim (source ris, evidence scholarmend:openreview_api venueid=<id>) is kept on the record. Updated: spec 01 RIS row, record-schema, openreview-venueids and openreview-api skills, the ris-importer agent. Decision-028 covers this task and TASK-159.
+AC #5: an invitation claim (source ris, evidence scholarmend:openreview_api venueid=<id>) is kept on the record. Updated: spec 01 RIS row, record-schema, openreview-venueids and openreview-api skills, the ris-importer agent. Decision-029 covers this task and TASK-159.
 Real data: the committed cache predates 0.1.5, so no record carries the claim. The RIS reports' parser_version reads 0.1.5 (docs/results/2026-10-02-iclr-2017-twins.md).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-scholarmend 0.1.5 is pinned. The RIS importer reads its invitation claim (a v1 note's submission invitation) through the v1 crawler's own twin rule (openreview_v1.is_twin_outcome, submission_listing): an ICLR 2017 workshop copy of a rejected paper imports as workshop/unknown, as the crawler reads it, not main/rejected. The claim is kept as an invitation claim on the record (record schema 4, decision-028). An entry without the claim reads as before. A test gives the same recorded note to both paths and gets the same track and status. No current record changes: the committed Trust-Evals cache predates 0.1.5.
+scholarmend 0.1.5 is pinned. The RIS importer reads its invitation claim (a v1 note's submission invitation) through the v1 crawler's own twin rule (openreview_v1.is_twin_outcome, submission_listing): an ICLR 2017 workshop copy of a rejected paper imports as workshop/unknown, as the crawler reads it, not main/rejected. The claim is kept as an invitation claim on the record (record schema 4, decision-029). An entry without the claim reads as before. A test gives the same recorded note to both paths and gets the same track and status. No current record changes: the committed Trust-Evals cache predates 0.1.5.
 <!-- SECTION:FINAL_SUMMARY:END -->

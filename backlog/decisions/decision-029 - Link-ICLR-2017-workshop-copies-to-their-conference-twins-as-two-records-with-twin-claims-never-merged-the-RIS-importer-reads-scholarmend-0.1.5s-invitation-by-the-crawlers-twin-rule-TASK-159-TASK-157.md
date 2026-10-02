@@ -1,10 +1,10 @@
 ---
-id: decision-028
+id: decision-029
 title: >-
   Link ICLR 2017 workshop copies to their conference twins as two records with
   twin claims, never merged; the RIS importer reads scholarmend 0.1.5's
   invitation by the crawler's twin rule (TASK-159, TASK-157)
-date: '2026-10-02 06:49'
+date: '2026-10-02 07:24'
 status: accepted
 ---
 ## Context

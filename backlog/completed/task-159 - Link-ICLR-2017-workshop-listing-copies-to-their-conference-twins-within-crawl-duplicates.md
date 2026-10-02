@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-02 00:41'
-updated_date: '2026-10-02 06:50'
+updated_date: '2026-10-02 07:25'
 labels:
   - ingest
   - dedup
@@ -41,7 +41,7 @@ Source: a TASK-152 (PR #63) deferral (`docs/results/2026-10-01-iclr-2017-worksho
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Owner decision 2026-10-02: link, don't merge (option a), recorded as decision-028.
+Owner decision 2026-10-02: link, don't merge (option a), recorded as decision-029.
 
 Built in openreview_v1.link_twins (rule 6, after the collapses):
 - A copy is a record from a non-main submission listing whose dedup title key matches exactly one main-track submission-listing record. With several matches, it is a copy of the one its _bibtex url names.
@@ -86,5 +86,5 @@ Deferred, filed by the lead: a visible see-also in the results and exports, incl
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-ICLR 2017's workshop-listing copies are now linked to their conference twins, never merged (the owner's decision, decision-028). The v1 crawler's link_twins gives each side a twin claim naming the other. A copy is a non-main submission whose dedup title key matches exactly one main-track submission, or several of which its _bibtex names one. _bibtex alone is never trusted: all 35 Invite to Workshop notes name one unrelated forum. On the 2026-09-29 cache this links 53 copies to 51 conference records (104 records, two of them with two copies). op snapshot diff shows exactly those 104 as provenance_only, and merges, conflicts, tracks, statuses, hashes and identified counts are unchanged. twins_linked and twins_ambiguous count the links and refusals in the crawl report. Record schema 4 adds the twin claim field.
+ICLR 2017's workshop-listing copies are now linked to their conference twins, never merged (the owner's decision, decision-029). The v1 crawler's link_twins gives each side a twin claim naming the other. A copy is a non-main submission whose dedup title key matches exactly one main-track submission, or several of which its _bibtex names one. _bibtex alone is never trusted: all 35 Invite to Workshop notes name one unrelated forum. On the 2026-09-29 cache this links 53 copies to 51 conference records (104 records, two of them with two copies). op snapshot diff shows exactly those 104 as provenance_only, and merges, conflicts, tracks, statuses, hashes and identified counts are unchanged. twins_linked and twins_ambiguous count the links and refusals in the crawl report. Record schema 4 adds the twin claim field.
 <!-- SECTION:FINAL_SUMMARY:END -->

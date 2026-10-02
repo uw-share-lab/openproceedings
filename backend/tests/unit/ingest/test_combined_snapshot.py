@@ -37,7 +37,7 @@ BUILT = datetime(2026, 9, 28, tzinfo=UTC)
 # TASK-113 changed FILES_HASH again: every API v1 crawl report gained `authors_split` (decision-019; 0 here). Its
 # records here are unchanged (no fixture in this build has a split author list or a withdrawn twin), so
 # SNAPSHOT_HASH is TASK-101's. TASK-159/157 changed FILES_HASH: record schema v4 (the `twin` and `invitation`
-# claim fields, decision-028) changed the manifest's record_schema_version, and the RIS report's parser_version
+# claim fields, decision-029) changed the manifest's record_schema_version, and the RIS report's parser_version
 # is scholarmend 0.1.5. No record here is a twin or carries an invitation, so SNAPSHOT_HASH is unchanged.
 SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bdd"
 FILES_HASH = "47196ae4c38c7e3bd924a461d91f503f42863959430709e5f22091e4139a2cdb"

@@ -52,7 +52,7 @@ safe direction.
   stays separate (`field = title_key_chain`).
   Dedup never decides that two OpenReview notes are one paper. A v1 workshop copy and its conference twin (ICLR
   2017: 53 copies) are not one: they stay two records, each with a `twin` claim naming the other, added by the
-  crawler (`openreview_v1.link_twins`, TASK-159, decision-028). Dedup keeps the claim in provenance and never
+  crawler (`openreview_v1.link_twins`, TASK-159, decision-029). Dedup keeps the claim in provenance and never
   merges on it. The one case where two notes are one paper, API v1's NeurIPS
   2021 notes that repeat a paper under a second id and number with identical content (300 main-track papers on
   the 2026-09-29 crawl), is collapsed by the crawler before records reach dedup
