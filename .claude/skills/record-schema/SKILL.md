@@ -80,17 +80,20 @@ claim only: an OpenReview venueid claim → its status (in a v1 venue-year, none
 claim's evidence names the record's venueid and the string names the venueid's venue, year and track,
 evidence `scholarmend:openreview_api venueid=… venue_string=…`; else `unknown`, the evidence saying why;
 TASK-098. ICLR 2013/2017's lower-case `conference` venueid names no track, so there the string gives the
-track too, with the same evidence, when it names the venueid's venue and year; TASK-142; its claims don't name the
-note's submission invitation, so it reads a 2017 workshop copy's `Submitted to ICLR 2017` as `main`/`rejected`,
-which the crawl's `workshop`/`unknown` outranks once merged in a snapshot with the ICLR 2017 v1 crawl, TASK-152); a proceedings listing (NeurIPS/ICLR proceedings URL, or a PMLR URL in an ICML volume) → `accepted`, overriding a venueid that agrees on venue, year and track
+track too, with the same evidence, when it names the venueid's venue and year; TASK-142; scholarmend 0.1.5's `invitation`
+claim, the note's submission invitation, gives a 2017 workshop copy's `Submitted to ICLR 2017` the crawler's reading,
+`workshop`/`unknown` (`openreview_v1.is_twin_outcome`; TASK-157), and is kept as an `invitation` claim; an entry
+cached before 0.1.5 has none and reads `main`/`rejected`, which the crawl's record outranks once merged, TASK-152); a proceedings listing (NeurIPS/ICLR proceedings URL, or a PMLR URL in an ICML volume) → `accepted`, overriding a venueid that agrees on venue, year and track
 (one that disagrees is a `conflict` and the record is skipped). A record with neither is never imported,
 so a RIS record is never `unknown` for lack of a claim. It is **never** inferred from the paper appearing
 in Scholar. The abstract is never Scholar's (`null` instead).
 
 ## Versions
 `RECORD_SCHEMA_VERSION` (`record.py`) names this shape: the fields, native-id forms and content_hash
-rule. It is `3` since TASK-118 added the round-qualified `nips-<hash>-round1`/`-round2` form (it was `2` from
-TASK-096, which added the `iclr_archive` provenance source). Change any of them and bump it;
+rule. It is `4` since TASK-159/157 added two provenance-only claim fields, `twin` (a v1 copy's linked twins, a tuple of
+record ids, decision-029) and `invitation` (scholarmend 0.1.5's v1 submission invitation); it was `3` from TASK-118,
+which added the round-qualified `nips-<hash>-round1`/`-round2` form, and `2` from TASK-096, which added the
+`iclr_archive` provenance source. Change any of them and bump it;
 every snapshot manifest records it. A derived field (`DERIVED`, never in `records.jsonl`) is not part of the
 stored shape: adding `venue_name` bumped nothing (TASK-112).
 

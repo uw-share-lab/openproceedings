@@ -19,7 +19,12 @@ never does:
   evidence names the record's venueid and the string names the venueid's venue, year and track (ICLR
   2013/2017's lower-case `conference` venueid names no track, `V1_TRACK_FROM_VENUE`: there only venue and year,
   and the string gives the track too; TASK-142); otherwise, or without one, it is `unknown` and the status
-  evidence says why. Outside v1 years the claim is ignored. A proceedings listing → `accepted`. When both exist they must name the same venue, year and track (else the record is skipped as
+  evidence says why. scholarmend 0.1.5's `invitation` claim (the note's top-level OpenReview invitation, verbatim,
+  evidence `venueid=<id>`; TASK-157) names the listing the note was submitted to: a main-track outcome on a note
+  of a non-main submission listing, where the venueid names no track, is its conference twin's, so the record
+  takes the listing's track and an `unknown` status (the crawler's rule, `openreview_v1.is_twin_outcome`; ICLR
+  2017's 18 workshop copies of rejected papers). The claim is kept as an `invitation` claim; an entry without one
+  (cached before 0.1.5) is read as before. Outside v1 years the claim is ignored. A proceedings listing → `accepted`. When both exist they must name the same venue, year and track (else the record is skipped as
   a `conflict`); the proceedings then decide acceptance (decision-005), counted in `status_overrides`.
 - **Abstract**: OpenReview's, else the proceedings page's, else `None`; never Scholar's or Semantic
   Scholar's (Scholar's is a snippet).

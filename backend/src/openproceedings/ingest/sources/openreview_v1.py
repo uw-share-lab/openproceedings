@@ -59,6 +59,16 @@ The authority rules (never broken):
    non-null `venue` or `venueid` (even `''`) is not, so which of two identical notes has the lower number never
    decides whether the paper's third, accepted note absorbs them.
 
+6. **A copy and its main-track twin are two linked records** (TASK-159, decision-029). A record from a non-main
+   submission listing whose dedup title key is that of exactly one record from the main-track submission listing
+   (or of several, one of which its `_bibtex` url names) is a copy of it: ICLR 2017's workshop listing holds 53,
+   18 saying `Submitted to ICLR 2017` (their `_bibtex` names the twin), 34 `Invite to Workshop` (whose `_bibtex`
+   all name one unrelated forum, so a `_bibtex` counts only when its forum has the copy's title) and 1 with no
+   venue. They link to 51 conference records (two have two copies), 104 records in all.
+   They are different submissions with their own outcomes, so they are never merged; each gets a `twin` claim
+   naming the other's id (`link_twins`, after rule 5), counted in the report's `twins_linked`. No other v1
+   venue-year has such a title match on the 2026-09-29 crawl.
+
 `content.authors` is split into names only by decision-019's count-checked rule (`split_authors`): a list with
 no `and`-joined entry is taken as listed; otherwise the split must give exactly as many names as the note has
 author ids, or the authors stay empty (counted in `authors_unsplit`), the raw value kept in the claim's evidence.
@@ -963,7 +973,8 @@ def link_twins(records: dict[str, PaperRecord], listed: Mapping[str, Listed]) ->
     another title is ignored (ICLR 2017's 35 `Invite to Workshop` copies all name one unrelated forum). Both stay
     records (two forum ids are two submissions, dedup-rules §Never merge); each gets one `twin` claim, its value
     the other records' ids, sorted, its url and fetched_at its own title claim's (the listing page it came from).
-    On the 2026-09-29 crawl only ICLR 2017 has such copies: 53 of its 161 workshop notes. Return the (copy,
+    On the 2026-09-29 crawl only ICLR 2017 has such copies: 53 of its 161 workshop notes
+    (docs/results/2026-10-02-iclr-2017-twins.md). Return the (copy,
     twin) native ids, sorted."""
     mains: defaultdict[str, list[str]] = defaultdict(list)
     for rid, at in listed.items():
