@@ -160,6 +160,9 @@ class _Identity:
     evidence: dict[str, tuple[str, str]]  # venue/year/track/status → (scholarmend source, evidence)
     urls: tuple[tuple[ClaimField, str, str], ...]  # (field, url, scholarmend source)
     status_override: bool = False
+    invitation: str | None = (
+        None  # scholarmend 0.1.5's `invitation` claim, when it names this note (TASK-157)
+    )
 
 
 def _claims(entry: dict[str, Any], fld: str, source: str) -> list[dict[str, Any]]:
@@ -272,6 +275,36 @@ def _v1_status(
     )
 
 
+def _invitation(entry: dict[str, Any], vid: str) -> str | None:
+    """The note's submission invitation from scholarmend 0.1.5's `invitation` claim (OpenReview's top-level
+    `invitation`, verbatim): one string, every such claim's evidence naming this record's venueid. None otherwise,
+    as for every entry scholarmend cached before 0.1.5."""
+    claims = _claims(entry, "invitation", "openreview_api")
+    values = {c["value"] for c in claims}
+    if len(values) != 1 or any(c["evidence"] != f"venueid={vid}" for c in claims):
+        return None
+    value = values.pop()
+    return value if isinstance(value, str) and value else None
+
+
+def _twin_outcome(
+    cls: Classification, vid: str, invitation: str | None, said: tuple[str, str]
+) -> tuple[Classification, tuple[str, str]] | None:
+    """The v1 crawler's twin rule (`openreview_v1.is_twin_outcome`, TASK-152) read off the note's invitation: a
+    main-track outcome on a note of a non-main submission listing, where the venueid names no track, is its
+    conference twin's, so the note takes its listing's track and an unknown status (TASK-157). None when it
+    doesn't apply."""
+    from openproceedings.ingest.sources.openreview_v1 import is_twin_outcome, submission_listing
+
+    if cls.venue is None or cls.year is None or invitation is None:
+        return None
+    listing = submission_listing(cls.venue, cls.year, invitation)
+    if listing is None or not is_twin_outcome(listing.track, cls.track, classify_venueid(vid)):
+        return None
+    why = f" invitation={invitation} (the main track's outcome, not this {listing.track} submission's)"
+    return Classification(listing.track, "unknown", cls.venue, cls.year, vid), (said[0], said[1] + why)
+
+
 def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
     """The record's identity, or the reason it can't be imported (one of SKIP_REASONS)."""
     venueids = {c["value"] for c in _claims(entry, "venue_id", "openreview_api")}
@@ -293,11 +326,16 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
             return "unresolved"
         evidence = dict.fromkeys(four, ("openreview_api", f"venueid={vid}"))
         status_from = "venueid"
+        invitation = None
         if is_v1(venue, year):  # rejected papers carry the bare path too: the venueid never gives status
+            invitation = _invitation(entry, vid)
             cls, evidence["status"], used = _v1_status(entry, vid, cls)
             if used:
                 status_from = "venue_string"
-                if vid in V1_TRACK_FROM_VENUE:  # the venueid names no track: the string gave it
+                if (twin := _twin_outcome(cls, vid, invitation, evidence["status"])) is not None:
+                    cls, evidence["status"] = twin
+                    evidence["track"] = evidence["status"]
+                elif vid in V1_TRACK_FROM_VENUE:  # the venueid names no track: the string gave it
                     evidence["track"] = evidence["status"]
         url_claims: tuple[tuple[ClaimField, str, str], ...] = (
             ("urls.forum", f"https://openreview.net/forum?id={fid}", "openreview_url"),
@@ -313,7 +351,7 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
             evidence["status"] = (l_ev[0], l_ev[1] + note)
             cls = Classification(cls.track, "accepted", venue, year, vid)
             url_claims += _url_fields(l_urls, l_ev[0])
-        return _Identity(venue, year, fid, cls, evidence, url_claims, override)
+        return _Identity(venue, year, fid, cls, evidence, url_claims, override, invitation)
     if isinstance(listing, str):
         return listing
     if listing is not None:
@@ -367,6 +405,12 @@ def _record(
                 "venue_id_raw",
                 ident.cls.venue_id_raw,
                 f"scholarmend:openreview_api venueid={ident.cls.venue_id_raw}",
+            )
+        )
+    if ident.invitation is not None:
+        provenance.append(
+            claim(
+                "invitation", ident.invitation, f"scholarmend:openreview_api venueid={ident.cls.venue_id_raw}"
             )
         )
     urls = {f: u for f, u, _ in ident.urls}

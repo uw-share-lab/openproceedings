@@ -36,9 +36,11 @@ BUILT = datetime(2026, 9, 28, tzinfo=UTC)
 # claim, and the v2 crawl report gained `presentation_unmapped` (0 here). content_hash doesn't cover presentation.
 # TASK-113 changed FILES_HASH again: every API v1 crawl report gained `authors_split` (decision-019; 0 here). Its
 # records here are unchanged (no fixture in this build has a split author list or a withdrawn twin), so
-# SNAPSHOT_HASH is TASK-101's.
+# SNAPSHOT_HASH is TASK-101's. TASK-159/157 changed FILES_HASH: record schema v4 (the `twin` and `invitation`
+# claim fields, decision-029) changed the manifest's record_schema_version, and the RIS report's parser_version
+# is scholarmend 0.1.5. No record here is a twin or carries an invitation, so SNAPSHOT_HASH is unchanged.
 SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bdd"
-FILES_HASH = "f101db2e2fa26859ebe7bd45962b702f7cbaae24b57bb5662a3fc23614ee7174"
+FILES_HASH = "47196ae4c38c7e3bd924a461d91f503f42863959430709e5f22091e4139a2cdb"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:

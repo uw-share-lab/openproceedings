@@ -84,7 +84,7 @@ from typing import Any, Literal
 from pydantic import ValidationError
 
 from openproceedings.ingest.classify import Classification, classify_v1_venue, classify_venueid
-from openproceedings.ingest.dedup import Conflict
+from openproceedings.ingest.dedup import Conflict, title_key
 from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls
 from openproceedings.ingest.sources.common import CrawlError, Crawls, Report
 from openproceedings.ingest.sources.http import CacheMiss
@@ -274,6 +274,30 @@ _PRESENTATION: dict[str, str] = {
 _NOT_A_TRACK = frozenset({"other", "unknown"})  # a venueid track that can't disagree with anything
 
 
+def is_twin_outcome(listing_track: str, outcome_track: str | None, by_id: Classification | None) -> bool:
+    """Is a main-track outcome on a note of a `listing_track` submission listing its conference twin's (TASK-152)?
+    Yes when the listing isn't main and the venueid names no track (ICLR 2017's `conference`): one that names a
+    track keeps the agreement check in `judge`, its disagreement a conflict row. The RIS importer asks the same
+    question of scholarmend's `invitation` claim (TASK-157)."""
+    return (
+        outcome_track == "main"
+        and listing_track != "main"
+        and (by_id is None or not by_id.parsed or by_id.track in _NOT_A_TRACK)
+    )
+
+
+def submission_listing(venue: str, year: int, invitation: str) -> Listing | None:
+    """The v1 submission listing of `venue` `year` whose invitation is exactly `invitation`, or None (another
+    venue-year, a withdrawn or desk-rejected invitation, an invitation no adapter lists)."""
+    ad = ADAPTERS.get((venue, year))
+    found = (
+        [lst for lst in ad.listings if lst.invitation == invitation and lst.role == "submission"]
+        if ad
+        else []
+    )
+    return found[0] if found else None
+
+
 def api_for(venue: str, year: int) -> Literal["v1", "v2"]:
     """Which OpenReview API serves a venue-year; refuses a year OpenReview doesn't hold (its source is the
     proceedings) and an unknown venue."""
@@ -344,6 +368,7 @@ class CrawlReport(Report):
         0  # undecided notes the twin rule made `withdrawn`, no longer in `unmapped` (TASK-139)
     )
     twin_outcome: int = 0  # notes whose main-track outcome was their conference twin's: `unknown` (TASK-152)
+    twins_linked: int = 0  # copies on a non-main listing linked to their main-track twin (TASK-159)
     track_status: dict[str, Counter[str]] = field(default_factory=dict)
     gaps: tuple[str, ...] = ()
     conflicts: list[Conflict] = field(default_factory=list)
@@ -378,6 +403,7 @@ class CrawlReport(Report):
             ),
             **({"withdrawn_by_twin": self.withdrawn_by_twin} if self.withdrawn_by_twin else {}),
             **({"twin_outcome": self.twin_outcome} if self.twin_outcome else {}),
+            **({"twins_linked": self.twins_linked} if self.twins_linked else {}),
             "conflicts": len(self.conflicts),
             "track_status": {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())},
             "coverage_gaps": list(self.gaps),
@@ -530,14 +556,7 @@ def judge(ad: Adapter, listing: Listing, note: Mapping[str, Any], listing_page: 
     else:
         found = _submission_evidence(ad, content, by_venue, note, read_forum)
         conflicts += found.conflicts
-        twin_outcome = (
-            found.outcome is not None
-            and found.outcome[0] == "main"
-            and listing.track != "main"
-            # only where the venueid names no track (ICLR 2017's `conference`): one that names a track keeps the
-            # agreement check below, its disagreement a conflict row
-            and (by_id is None or not by_id.parsed or by_id.track in _NOT_A_TRACK)
-        )
+        twin_outcome = found.outcome is not None and is_twin_outcome(listing.track, found.outcome[0], by_id)
         if twin_outcome:
             # a main-track outcome on a note submitted to another track is its conference twin's, not its own
             # (ICLR 2017's workshop copies of rejected papers say `Submitted to ICLR 2017`; TASK-152)
@@ -741,6 +760,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     records: dict[str, PaperRecord] = {}
     numbers: dict[str, object] = {}  # record id → its note's `number`, for rule 5
     silent: set[str] = set()  # records whose note carries no status evidence (rule 5's silent twin)
+    listed: dict[str, Listed] = {}  # record id → its listing and `_bibtex` forum, for the twin links (rule 6)
     # heartbeats count `imported` before rule 5's collapse, which runs after the listings: NeurIPS 2021's last
     # heartbeat can show up to 3,020 imported where the finished line says 2,720
     progress = Progress(log, client, report.api, venue, year, page_size, lambda: {
@@ -770,7 +790,17 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     for listing in ad.listings:
         try:
             _listing(
-                client, ad, listing, report, records, numbers, silent, read_forum, page_size, progress.tick
+                client,
+                ad,
+                listing,
+                report,
+                records,
+                numbers,
+                silent,
+                read_forum,
+                page_size,
+                progress.tick,
+                listed,
             )
         except CacheMiss as e:
             if not dry_run:
@@ -804,6 +834,10 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     for kept, dropped in collapse_silent_twins(records, silent, exempt):
         report.skipped[DUPLICATE_SUBMISSION] += 1
         log.debug("openreview_duplicate_submission", extra={"forum": dropped, "kept": kept})
+    # rule 6 (TASK-159): link each copy on a non-main listing to its main-track twin, after both collapses
+    for copy, twin in link_twins(records, listed):
+        report.twins_linked += 1
+        log.debug("openreview_v1_twin_linked", extra={"forum": copy, "twin": twin})
     for r in records.values():
         report.track_status.setdefault(r.track, Counter())[r.status] += 1
     report.imported = len(records)
@@ -845,7 +879,8 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
 
 def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: CrawlReport,
              records: dict[str, PaperRecord], numbers: dict[str, object], silent: set[str],
-             read_forum: ForumReader, page_size: int, tick: Callable[[], None]) -> None:  # fmt: skip
+             read_forum: ForumReader, page_size: int, tick: Callable[[], None],
+             listed: dict[str, Listed] | None = None) -> None:  # fmt: skip
     """Page through one invitation's notes into `records` (and the silent ones' ids into `silent`), checking the
     listing is consistent (v1 sends `count` on every page); `tick()` before each note (the crawl's heartbeat)."""
     seen: set[str] = set()
@@ -888,6 +923,8 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
             else:
                 records[got.id] = got
                 numbers[got.id] = note.get("number")
+                if listed is not None:
+                    listed[got.id] = Listed(listing, _bibtex_forum(note))
                 if _says_nothing_of_status(ad, note, got):
                     silent.add(got.id)
     if rows != len(seen) or len(counts) > 1 or (counts and counts.pop() != rows):
@@ -896,6 +933,77 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
             "disagree); re-run with --refresh to fetch it again"
         )
     report.listings[listing.invitation] = rows
+
+
+# --- a copy and its main-track twin (rule 6, TASK-159, decision-029) -------------------------------------------
+
+
+@dataclass(frozen=True)
+class Listed:
+    """Where a record's note was listed, and the forum its `_bibtex` url names (None: no url)."""
+
+    listing: Listing
+    bibtex_forum: str | None
+
+
+_BIBTEX_FORUM = re.compile(r"url=\{https://openreview\.net/forum\?id=([A-Za-z0-9_-]+)\}")
+
+
+def _bibtex_forum(note: Mapping[str, Any]) -> str | None:
+    content = note.get("content")
+    bib = content.get("_bibtex") if isinstance(content, Mapping) else None
+    found = _BIBTEX_FORUM.search(bib) if isinstance(bib, str) else None
+    return found.group(1) if found else None
+
+
+def link_twins(records: dict[str, PaperRecord], listed: Mapping[str, Listed]) -> list[tuple[str, str]]:
+    """Link, in place, each copy (a record from a non-main submission listing) to its twin: the main-track
+    submission listing's record with the same dedup title key. The copy's `_bibtex` decides between several such
+    records when it names one of them; otherwise there must be exactly one. A `_bibtex` naming a record with
+    another title is ignored (ICLR 2017's 35 `Invite to Workshop` copies all name one unrelated forum). Both stay
+    records (two forum ids are two submissions, dedup-rules §Never merge); each gets one `twin` claim, its value
+    the other records' ids, sorted, its url and fetched_at its own title claim's (the listing page it came from).
+    On the 2026-09-29 crawl only ICLR 2017 has such copies: 53 of its 161 workshop notes. Return the (copy,
+    twin) native ids, sorted."""
+    mains: defaultdict[str, list[str]] = defaultdict(list)
+    for rid, at in listed.items():
+        if rid in records and at.listing.role == "submission" and at.listing.track == "main":
+            mains[title_key(records[rid].title)].append(rid)
+    links: defaultdict[str, list[tuple[str, str]]] = defaultdict(list)  # record id → (other id, evidence)
+    pairs = []
+    for rid in sorted(listed):
+        at = listed[rid]
+        if rid not in records or at.listing.role != "submission" or at.listing.track == "main":
+            continue
+        copy = records[rid]
+        same = sorted(mains.get(title_key(copy.title), ()))
+        named = [m for m in same if records[m].native == at.bibtex_forum]
+        if named:
+            [twin] = named
+            why, theirs = (
+                "its _bibtex names that forum, the main-track submission with this title",
+                ("its _bibtex names this forum, the main-track submission with its title"),
+            )
+        elif len(same) == 1:
+            [twin] = same
+            why, theirs = (
+                "the only main-track submission with this title",
+                ("the only main-track submission with its title"),
+            )
+        else:
+            continue
+        track = at.listing.track
+        links[rid].append((twin, f"{track} copy of {records[twin].native}: {why}"))
+        links[twin].append((rid, f"{track} copy {copy.native}: {theirs}"))
+        pairs.append((copy.native, records[twin].native))
+    for rid, named_by in links.items():
+        record = records[rid]
+        [title] = [c for c in record.claims("title") if c.source == SOURCE]
+        named_by.sort()
+        claim = Claim(field="twin", value=tuple(o for o, _ in named_by), source=SOURCE, url=title.url,
+                      fetched_at=title.fetched_at, evidence="; ".join(e for _, e in named_by))  # fmt: skip
+        records[rid] = record.model_copy(update={"provenance": (*record.provenance, claim)})
+    return sorted(pairs)
 
 
 # --- two notes of one paper (rule 5) -------------------------------------------------------------------------

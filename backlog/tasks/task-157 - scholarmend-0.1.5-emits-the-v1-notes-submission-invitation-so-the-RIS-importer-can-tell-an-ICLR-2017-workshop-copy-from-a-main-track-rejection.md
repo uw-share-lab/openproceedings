@@ -3,10 +3,11 @@ id: TASK-157
 title: >-
   scholarmend 0.1.5 emits the v1 note's submission invitation so the RIS
   importer can tell an ICLR 2017 workshop copy from a main-track rejection
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jeevanp03'
 created_date: '2026-10-02 00:40'
-updated_date: '2026-10-02 00:49'
+updated_date: '2026-10-02 04:52'
 labels:
   - ingest
 milestone: m-4

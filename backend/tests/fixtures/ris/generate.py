@@ -3,7 +3,7 @@
 Every title, author, forum id and hash is invented (decision-004). The claim shapes copy real scholarmend
 0.1.3 output: a leading BOM, bare-URL evidence for `proceedings_url`/`pmlr_url` claims (twice when the
 RIS has both the page and the PDF), `venueid=<id>` for `openreview_api`, `openreview:<forum>` for its
-abstract, `clean.ris:TI=<title>` for Scholar. The `venue_string` rows (TASK-098, written to `v1/`) are written by
+abstract, `clean.ris:TI=<title>` for Scholar. The `venue_string` rows (TASK-098, written to `v1/`) and the `invitation` rows (TASK-157) are written by
 hand, since the real corpus has none: the claim copies scholarmend 0.1.4's shape (OpenReview's `content.venue` verbatim,
 source `openreview_api`, tier 2, confidence 0.99, evidence `venueid=<id>`). Run `python backend/tests/fixtures/ris/generate.py` after
 changing a row; the test module documents what each row is for.
@@ -61,15 +61,18 @@ def orv(
 
 
 def v1(title: str, fid: str, vid: str, venue_string: str, evidence: str | None = None,
-       also: tuple[str, str] | None = None) -> None:  # fmt: skip
+       also: tuple[str, str] | None = None, invitation: tuple[str, str] | None = None) -> None:  # fmt: skip
     """An OpenReview record with scholarmend 0.1.4's `venue_string` claim (evidence: its venueid), plus
-    optionally a second one (`also`: string, evidence)."""
+    optionally a second one (`also`: string, evidence), and optionally scholarmend 0.1.5's `invitation` claim
+    (`invitation`: the note's top-level invitation verbatim, evidence)."""
     venue, year, track = vid.split("/", 2)
     venue = venue.removesuffix(".cc")
     add(title, ["Voe, V"], venue, [f"https://openreview.net/pdf?id={fid}"], int(year), "An OpenReview snippet …",
         [*orv(fid, vid, venue, int(year), track),
          c("venue_string", venue_string, "openreview_api", evidence or f"venueid={vid}"),
-         *([c("venue_string", also[0], "openreview_api", also[1])] if also else [])], rows=V1_ROWS)  # fmt: skip
+         *([c("venue_string", also[0], "openreview_api", also[1])] if also else []),
+         *([c("invitation", invitation[0], "openreview_api", invitation[1])] if invitation else [])],
+        rows=V1_ROWS)  # fmt: skip
 
 
 ROWS: list[dict[str, Any]] = []  # mended.ris + resolved.json
@@ -182,6 +185,20 @@ v1(
 )
 # ICLR 2023 blog posts: the venueid's track is `blogpost`, and the string must name it
 v1("A Synthetic ICLR 2023 Blog Post", "V1Blog2301", "ICLR.cc/2023/BlogPosts", "Blogposts @ ICLR 2023")
+# scholarmend 0.1.5's `invitation` claim (TASK-157; appended, so earlier rows keep their index). rkB_5hEKe is the
+# recorded workshop copy (http/openreview/v1/iclr-2017/note-workshop-submitted-to-iclr-live.json): its claims equal
+# a real rejection's but for the invitation, which names the workshop listing
+_IC17 = "ICLR.cc/2017/conference"
+v1("A Synthetic ICLR 2017 Workshop Copy", "rkB_5hEKe", _IC17, "Submitted to ICLR 2017",
+   invitation=("ICLR.cc/2017/workshop/-/submission", f"venueid={_IC17}"))  # fmt: skip
+v1("A Synthetic ICLR 2017 Rejection With Its Invitation", "V1Ic17Inv1", _IC17, "Submitted to ICLR 2017",
+   invitation=("ICLR.cc/2017/conference/-/submission", f"venueid={_IC17}"))  # fmt: skip
+v1("A Synthetic Invitation Of Another Note", "V1Ic17Inv2", _IC17, "Submitted to ICLR 2017",
+   invitation=("ICLR.cc/2017/workshop/-/submission", "venueid=ICLR.cc/2018/Conference"))  # fmt: skip
+v1("A Synthetic Unlisted Invitation", "V1Ic17Inv3", _IC17, "Submitted to ICLR 2017",
+   invitation=("ICLR.cc/2017/workshop/-/Synthetic", f"venueid={_IC17}"))  # fmt: skip
+v1("A Synthetic Workshop Invitation Of A Poster", "V1Ic17Inv4", _IC17, "ICLR 2017 Poster",
+   invitation=("ICLR.cc/2017/workshop/-/submission", f"venueid={_IC17}"))  # fmt: skip
 
 
 def write(rows: list[dict[str, Any]], out: Path) -> None:

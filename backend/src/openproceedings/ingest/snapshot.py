@@ -484,6 +484,8 @@ def render(
     if any(not r.provenance for r in records):
         raise SnapshotError("a record has no provenance claims; every value must say where it came from")
     by_id = {r.id: r for r in records}
+    if any(t not in by_id for r in records for c in r.claims("twin") for t in c.value or ()):  # type: ignore[union-attr]
+        raise SnapshotError("a twin claim names a record this snapshot doesn't hold (TASK-159)")
     if any(i not in by_id or by_id[i].abstract is not None or by_id[i].claims("abstract") for i in withheld):
         raise SnapshotError("a withheld id is not a record whose abstract and abstract claims are gone")
     fetched = [c.fetched_at for r in records for c in r.provenance]
