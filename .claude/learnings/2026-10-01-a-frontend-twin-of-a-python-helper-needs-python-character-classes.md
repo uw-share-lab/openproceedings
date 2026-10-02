@@ -15,7 +15,7 @@ Quote client values in the URL-to-state reducer's refusals and URL notices the w
 - A value the reducer did not write also includes values that are typed but come from untyped data: `clause.field` from `/parse`, or an `action.page` cast from elsewhere. The tests reach them with `as unknown as`.
 
 ## Dead ends — don't repeat these
-- Writing ` `-style escapes into a source file through the agent's file tools, or through a heredoc, put the literal invisible characters in the file. Regex literals then failed to parse ("Unterminated regular expression"), and test tables held raw bidi characters. Check with `od -c` or `grep -nP "[^\x00-\x7f]"`. In tests, write such characters as `String.fromCodePoint(0x202e)`. In source, write the escape text with a script, e.g. `chr(92) + "u2028"`.
+- Writing `\u2028`-style escapes into a source file through the agent's file tools, or through a heredoc, put the literal invisible characters in the file. Regex literals then failed to parse ("Unterminated regular expression"), and test tables held raw bidi characters. Check with `od -c` or `grep -nP "[^\x00-\x7f]"`. In tests, write such characters as `String.fromCodePoint(0x202e)`. In source, write the escape text with a script, e.g. `chr(92) + "u2028"`.
 
 ## Decisions (and what would change them)
 - `clip.test.ts` holds a hand-copied table of the backend's outputs instead of a golden that a backend test generates → this keeps the change frontend-only → generate the golden from the backend (as `help_golden.py` does) if `diagnostics.clip` changes again.
