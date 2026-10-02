@@ -28,3 +28,33 @@ Fit a 50-hit page's highlights inside spec 03's 100 ms page budget without chang
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/token-contract/SKILL.md` (the two shortcuts and their oracle), `.claude/skills/api-contract/SKILL.md` (one `Highlighter` per page), spec 03 §Highlights
 - Test or hook added? — `backend/tests/unit/engine/test_highlight_speed.py`, and the bench row `test_a_50_hit_page_with_highlights`
+
+## Addendum — 2026-10-01 (TASK-088: the loop's fast paths)
+
+**Key lesson:** On real abstracts the loop's cost was the ASCII between the few odd characters, not the odd characters themselves; profile the real corpus before building the fast path a task names, and memoise a function on part of its input only after proving the rest can't change its output.
+
+- **What the profile showed:** of the real corpus's texts that leave the whole-text ASCII path (18%), two thirds
+  do so for a `$` or `\`, and `_fold` didn't reach cProfile's top 12; the time was `close()` and the
+  per-character steps over ASCII (evidence: the profile in `docs/results/2026-10-01-tokenizer-fast-path.md`'s
+  method; `_tokenize_each_char` 0.75 s of 1.97 s, `close()` 0.58 s). Taking each ASCII stretch word by word
+  (one regex search for its end, then `finditer`) gave most of the win: the loop is 1.8× faster on those real
+  texts, 1.7× on the synthetic ones. A "non-ASCII Latin" table alone would have missed the LaTeX texts.
+- **A cache keyed on the character, sound by enumeration:** `_fold(c, base)` reads `base` only through
+  `_folds_marks`, which tells apart five classes, so comparing `_fold` after one base of each proves
+  independence (`_BASES`). Checked by hand once against a base per Unicode-name prefix (5,759) for every
+  code point (no exception), and by a Hypothesis property in the suite.
+- **Hand mutants find what a property's examples don't:** the stretch's base reset survived the property
+  until an `@example` put a Thai base, a `.` stretch, `\-` markup and a combining mark in a row. Two survivors
+  are equivalent (an ASCII letter and no base are one class): say so rather than chase them.
+
+### Dead ends — don't repeat these
+- `pytest -k "not light"` to skip the slow highlight tests deselected the whole `test_highlight_speed.py`
+  (`-k` matches module names too), so every mutant "survived". Check the selected count, or name the tests.
+- Absolute p95 under load: `main-2-pop` on the real corpus read 151–167 ms wall p95 at load 12–65 and 75 ms at
+  load 16–27. Only the alternated old-vs-new differences are comparable across runs.
+
+### Propagated to
+- `.claude/skills/token-contract/SKILL.md` (the three shortcuts and their frozen oracle), spec 03 §Highlights
+  and §Performance budgets.
+- Tests: `tests/unit/tokenize_before_088.py` (frozen loop, tokens and `Tail`), the `LATIN` strategy and the
+  `_fold_char` property in `tests/unit/engine/test_highlight_speed.py`.

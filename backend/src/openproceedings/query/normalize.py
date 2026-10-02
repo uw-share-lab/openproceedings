@@ -140,6 +140,30 @@ def _fold(c: str, base: str | None) -> tuple[list[str | _Op], str | None]:
     return out, base
 
 
+# A base from each class `_folds_marks` tells apart: none, or a letter whose marks all fold (Latin, Greek,
+# Hebrew, digits), Cyrillic (keeps the breve), Arabic (keeps hamza) and any other script (keeps every mark).
+# `_fold` reads its `base` only through `_folds_marks`, and returns it when no piece replaces it (so None and
+# "a" are both here: they fold alike but differ when passed through). A character whose `_fold` is the same
+# after each of these is the same after any base (TASK-088).
+_BASES = (None, "a", "\u0438", "\u0628", "\u0e01")
+# `_fold` of a raw character whose fold doesn't depend on the base; None for one whose fold does
+_FOLDED: dict[str, tuple[list[str | _Op], str | None] | None] = {}
+_FOLDED_MAX = 4096  # bounded: a text can hold any of Unicode's characters
+
+
+def _fold_char(c: str, base: str | None) -> tuple[list[str | _Op], str | None]:
+    """`_fold(c, base)` for one raw character, from `_FOLDED` when its fold is known not to depend on `base`.
+    The result is shared: never mutate it."""
+    if c in _FOLDED:
+        known = _FOLDED[c]
+        return _fold(c, base) if known is None else known
+    folds = [_fold(c, b) for b in _BASES]
+    same = all(f == folds[0] for f in folds)
+    if len(_FOLDED) < _FOLDED_MAX:
+        _FOLDED[c] = folds[0] if same else None
+    return folds[0] if same else _fold(c, base)
+
+
 def _cluster_spans(
     text: str, i: int, j: int, folded: list[str | _Op], base: str | None
 ) -> list[tuple[int, int]]:
@@ -443,6 +467,9 @@ def math_regions(text: str) -> list[tuple[int, int]]:
 # lower-casing, so its tokens are exactly its runs of ASCII letters and digits, lower-cased, each spanning
 # itself (task-073). Most abstracts are such texts; a property pins this path to the loop below.
 _ASCII_WORD = re.compile(r"[A-Za-z0-9]+")
+# In the loop (TASK-088): where a stretch of ASCII characters ends, and where the LaTeX mask next isn't KEEP
+_NON_ASCII = re.compile(r"[^\x00-\x7f]")
+_MARKED = re.compile(rb"[^\x00]")
 
 
 def tokenize(text: str) -> list[Token]:
@@ -485,7 +512,10 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
     """`tokenize`'s definition for any text, one raw character at a time (steps 1-5 above). Given a `tail`
     list, it appends the text's `Tail` to it."""
     subs: dict[int, tuple[str, bool, int, bool]] = {}
-    latex = _latex_mask(text, subs=subs)
+    # LaTeX needs a `\` or a `$`; without either, every character is KEEP (TASK-088)
+    markup = "\\" in text or "$" in text
+    latex = _latex_mask(text, subs=subs) if markup else [KEEP] * len(text)
+    marked = bytes(latex) if markup else b""  # KEEP is 0: `_MARKED` finds the next markup in C
     out: list[Token] = []
     buf: list[str] = []
     start = end = 0
@@ -500,9 +530,11 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
     def close() -> None:
         nonlocal buf, rest
         if buf:
-            word = unicodedata.normalize("NFC", "".join(buf))
+            word = "".join(buf)
+            if not word.isascii():  # NFC leaves ASCII as it is (TASK-088)
+                word = unicodedata.normalize("NFC", word)
             # A run of marks with no letter (a lone vowel sign) is not a word.
-            if not all(unicodedata.category(ch).startswith("M") for ch in word):
+            if word.isascii() or not all(unicodedata.category(ch).startswith("M") for ch in word):
                 out.append(Token(word, start, end))
                 rest = []
             buf = []
@@ -512,6 +544,7 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
     # last slash (the run's start if it has none). A mark inside a run reuses them, so a run is scanned once,
     # not once per mark (quadratic: a `q` or an abstract of a few thousand marks cost seconds).
     run_end = run_slash = 0
+    odd = -1  # the first non-ASCII character at or after the last stretch's start (n: none)
     i = 0
     while i < n:
         c, stop = text[i], i + 1
@@ -549,23 +582,49 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
             i += 1
             continue
         first, lead = lead, None
-        if c < "\x80" and (stop == n or not unicodedata.combining(text[stop])):
-            # an ASCII character with no mark after it (most characters of most texts; task-073): `_fold`
-            # would give it back lower-cased, and it is a word character exactly when it is alphanumeric
-            if c.isalnum():
-                if not buf:
-                    start = i if first is None else first
-                base = c.lower()
-                buf.append(base)
-                end = stop
-            else:
-                close()
-                base = None
-                if not rest:
-                    rest_start = i
-                rest.append(c)
-            i = stop
-            continue
+        if c < "\x80":
+            # A stretch of ASCII characters, all KEEP, with no mark after its last (most of most texts;
+            # task-073, TASK-088): `_fold` would give each back lower-cased, and one is a word character
+            # exactly when it is alphanumeric. The stretch is taken word by word, with the steps one
+            # character at a time would take: a separator closes the open word and joins the tail.
+            if odd < i:  # searched again only once past the last one found, so the searches are linear
+                odd = hit.start() if (hit := _NON_ASCII.search(text, i)) else n
+            k = odd
+            if markup and (at := _MARKED.search(marked, i, k)):
+                k = at.start()
+            if k < n and unicodedata.combining(text[k]):  # the last character goes through `_fold`
+                k -= 1
+            if k > i:
+                pos = i  # where the stretch's next separators begin
+                for hit in _ASCII_WORD.finditer(text, i, k):
+                    w_start, w_end = hit.span()
+                    if w_start > pos:
+                        close()
+                        if not rest:
+                            rest_start = pos
+                        rest.append(text[pos:w_start])
+                    word = hit.group().lower()
+                    if buf:  # it continues the word open before the stretch
+                        buf.append(word)
+                        end = w_end
+                    elif w_end < k:  # a separator follows in the stretch: the word is whole
+                        out.append(Token(word, w_start if w_start > i or first is None else first, w_end))
+                        rest = []
+                    else:  # it may go on after the stretch
+                        start = w_start if w_start > i or first is None else first
+                        buf.append(word)
+                        end = w_end
+                    pos = w_end
+                if pos < k:
+                    close()
+                    base = None
+                    if not rest:
+                        rest_start = pos
+                    rest.append(text[pos:k])
+                else:
+                    base = text[k - 1].lower()
+                i = k
+                continue
         if i + 1 > run_end:  # past the last run found: find where the marks after i end, and the last slash
             run_end = run_slash = i + 1
             while run_end < n and latex[run_end] == KEEP and unicodedata.combining(text[run_end]):
@@ -578,7 +637,7 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
             # a slash among the marks after a character: NFKC the whole cluster, as the whole-string rule
             # would (`∈` + slash is `∉`, full-width `＝` + slash is `≠`, whatever the marks' order)
             c, stop = text[i:j], j
-        folded, folded_base = _fold(c, base)
+        folded, folded_base = _fold(c, base) if cluster else _fold_char(c, base)
         spans = _cluster_spans(text, i, j, folded, base) if cluster else [(i, stop)] * len(folded)
         base = folded_base
         if not folded:  # combining mark or invisible format char: extends an open word, never starts one
