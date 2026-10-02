@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-02 09:27'
+updated_date: '2026-10-02 09:52'
 labels:
   - security
   - tooling
@@ -34,4 +34,5 @@ Source: TASK-156 review (2026-10-02), deferred. Bash deletes a backslash-newline
 - [ ] #2 Case-table rows for each raw-text path: a keyword split by a continuation is blocked, and a backslash-newline inside single quotes or a quoted heredoc body is not joined
 - [ ] #3 Each new branch has a mutant in .claude/scripts/mutants/gates.json; `make tooling` and `python3 .claude/scripts/mutate.py --changed` pass
 - [ ] #4 Probes in the new rows use TASK-169's helper (data only, never an executed shell)
+- [ ] #5 The shared join never raises on input it can't scan, and no fail-closed fallback blocks less than it does today (those fallbacks run after a parse failure and today join every backslash-newline); a case-table row proves it with a stray quote before a split `pu\<newline>sh`
 <!-- AC:END -->
