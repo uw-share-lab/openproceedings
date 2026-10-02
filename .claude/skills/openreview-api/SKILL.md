@@ -90,7 +90,7 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   `main`/`accepted`, so it must never set a v1 note's status (TASK-095). The venueid only confirms venue,
   year and track. **Enforced:** `classify_venueid` returns status `unknown` for any venueid in a v1
   venue-year (`classify.is_v1`), and the RIS importer marks such a status claim `(API v1 venue-year: not
-  status evidence)` unless scholarmend's `venue_string` claim (`content.venue`, scholarmend 0.1.4) gives
+  status evidence)` unless scholarmend's `venue_string` claim (`content.venue`, scholarmend 0.1.4+) gives
   the status through `classify_v1_venue` (TASK-098). ICLR 2017's and 2013's lower-case `conference` venueids
   (`classify.V1_TRACK_FROM_VENUE`) name no track (`other`), so there the string gives the track as well, if
   it names the venueid's venue and year (TASK-142); any other `other` venueid keeps `other`. A v1 adapter
@@ -99,7 +99,14 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   evidence naming the main track on a note of a non-main listing, where the venueid names no track, is its
   conference twin's outcome, not the note's: the note keeps its listing's track and its status is `unknown`
   (`judge`, counted in the report's `twin_outcome`; the 18 ICLR 2017 workshop copies of rejected papers that say
-  `Submitted to ICLR 2017`, TASK-152).
+  `Submitted to ICLR 2017`, TASK-152). The RIS importer applies the same rule (`is_twin_outcome`) to scholarmend
+  0.1.5's `invitation` claim (TASK-157).
+- A copy and its main-track twin stay two records, linked (rule 6, `link_twins`, TASK-159, decision-029). A copy
+  is a record from a non-main submission listing whose dedup title key matches exactly one main-track submission,
+  or several of which its `_bibtex` names one. Each side gets a `twin` claim naming the other's id, counted in the
+  report's `twins_linked` (`twins_ambiguous` counts a copy left unlinked by an ambiguous title). ICLR 2017's 35 `Invite to Workshop` notes' `_bibtex` all name one unrelated forum
+  (`B1akgy9xx`), so `_bibtex` counts only when it names the copy's title. Only ICLR 2017 has copies: 53, linked
+  to 51 conference notes.
 - Status per v1 year (the submission invitation lists what was **submitted**, never what was accepted):
 
 | Year | Submissions | Status from |

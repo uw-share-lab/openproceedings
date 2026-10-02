@@ -38,7 +38,7 @@ from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
 from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
-RECORD_SCHEMA_VERSION = "3"
+RECORD_SCHEMA_VERSION = "4"  # 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-029)
 # Sent with a record, never stored: computed from its fields, so a snapshot line never holds it (`record_line`)
 # and the shape above is unchanged (TASK-112). Output only: a dump that is validated again excludes it.
 DERIVED = frozenset({"venue_name"})
@@ -48,6 +48,9 @@ Presentation = Literal["oral", "spotlight", "poster"]
 ClaimField = Literal[
     "title", "abstract", "authors", "venue", "year", "track", "status", "presentation", "venue_id_raw",
     "keywords", "urls.forum", "urls.pdf", "urls.proceedings", "urls.doi",
+    # provenance only, never a record field: the ids of a v1 note's linked twins (TASK-159), and the OpenReview
+    # submission invitation scholarmend 0.1.5 reads off a v1 note (TASK-157)
+    "twin", "invitation",
 ]  # fmt: skip
 
 _ID = re.compile(r"op:(neurips|iclr|icml):([0-9]{4}):(\S+)")
@@ -89,7 +92,7 @@ def _utf8(v: str) -> str:
 Text = Annotated[StrictStr, AfterValidator(_utf8)]
 type ClaimValue = Text | StrictInt | tuple[Text, ...] | None
 # What each claim field's value must be (a claim with the wrong kind of value says nothing reliable).
-_CLAIM_KINDS: dict[str, type] = {"year": int, "authors": tuple, "keywords": tuple}
+_CLAIM_KINDS: dict[str, type] = {"year": int, "authors": tuple, "keywords": tuple, "twin": tuple}
 
 
 class Claim(BaseModel):

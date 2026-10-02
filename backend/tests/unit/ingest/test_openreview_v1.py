@@ -287,6 +287,193 @@ def test_a_main_track_outcome_against_a_venueid_naming_the_listings_track_stays_
     assert report["conflicts"] == 1 and "twin_outcome" not in report
 
 
+def bibtex(forum: str) -> str:
+    """A `_bibtex` as OpenReview v1 writes it (the recorded fixtures' are scrubbed): its url names a forum."""
+    return f"@misc{{\nsynthetic2017,\ntitle={{Synthetic}},\nyear={{2017}},\nurl={{https://openreview.net/forum?id={forum}}}\n}}"
+
+
+def twins(r: PaperRecord) -> tuple[tuple[str, ...], str | None]:
+    [c] = r.claims("twin")
+    assert c.source == "openreview_v1"
+    return c.value, c.evidence
+
+
+def iclr_2017(tmp_path: Path, conference: list[dict[str, Any]], workshop: list[dict[str, Any]]) -> v1.Crawl:
+    listings = {
+        "ICLR.cc/2017/conference/-/submission": conference,
+        "ICLR.cc/2017/workshop/-/submission": workshop,
+    }
+    return run(FakeOpenReviewV1(listings), tmp_path, "ICLR", 2017)
+
+
+def test_a_workshop_copy_and_its_conference_twin_are_linked_both_ways(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """TASK-159 (decision-029): a copy on ICLR 2017's workshop listing whose `_bibtex` names its conference twin,
+    the one main-track submission with its title, stays its own record (different submissions, different
+    outcomes); each record gets a `twin` claim naming the other's id. Track, status and content_hash don't change."""
+    rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    copy = v1_clone(v1_note(WORKSHOP_COPY), "WsCopy0001", title=rejected["content"]["title"],
+                    _bibtex=bibtex(rejected["id"]))  # fmt: skip
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        crawl = iclr_2017(tmp_path, [rejected], [copy])
+    got = by_forum(crawl)
+    ws, conf = got["WsCopy0001"], got[rejected["id"]]
+    assert twins(ws) == (
+        (conf.id,),
+        f"workshop copy of {rejected['id']}: its _bibtex names that forum, the main-track submission with this title",
+    )
+    assert twins(conf) == (
+        (ws.id,),
+        "workshop copy WsCopy0001: its _bibtex names this forum, the main-track submission with its title",
+    )
+    assert outcome(ws) == ("workshop", "unknown", None) and outcome(conf) == ("main", "rejected", None)
+    assert [c.url for c in ws.claims("twin")] == [
+        c.url for c in ws.claims("title")
+    ]  # the copy's listing page
+    report = crawl.report.to_manifest()
+    assert report["twins_linked"] == 1 and "twins_ambiguous" not in report
+    [line] = [r for r in caplog.records if r.getMessage() == "openreview_v1_twin_linked"]
+    assert (line.levelno, line.__dict__["forum"], line.__dict__["twin"]) == (
+        logging.DEBUG,
+        "WsCopy0001",
+        rejected["id"],
+    )
+
+
+def test_a_title_match_links_a_copy_whose_bibtex_names_another_forum(tmp_path: Path) -> None:
+    """ICLR 2017's 35 `Invite to Workshop` notes all carry a `_bibtex` naming one unrelated conference forum
+    (B1akgy9xx), so a `_bibtex` counts only when it names a submission with the copy's title; otherwise the one
+    main-track submission with that title is the twin, by title alone."""
+    rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    other = v1_clone(rejected, "Unrelated01", title="An unrelated synthetic title")
+    invited = v1_clone(v1_note(WORKSHOP_COPY), "WsInvite01", title=rejected["content"]["title"],
+                       venue="ICLR 2017 Invite to Workshop", _bibtex=bibtex("Unrelated01"))  # fmt: skip
+    got = by_forum(iclr_2017(tmp_path, [rejected, other], [invited]))
+    assert twins(got["WsInvite01"]) == (
+        (got[rejected["id"]].id,),
+        f"workshop copy of {rejected['id']}: the only main-track submission with this title",
+    )
+    assert (
+        twins(got[rejected["id"]])[1]
+        == "workshop copy WsInvite01: the only main-track submission with its title"
+    )
+    assert got["Unrelated01"].claims("twin") == ()
+
+
+def test_no_title_match_or_two_leaves_a_workshop_note_unlinked(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    same = v1_clone(rejected, "SameTitle1", number=999, abstract="Another synthetic abstract.")  # a 2nd one
+    alone = v1_clone(v1_note(WORKSHOP_COPY), "WsAlone001", title="A title no conference note has")
+    ambiguous = v1_clone(v1_note(WORKSHOP_COPY), "WsTwoMatch", title=rejected["content"]["title"])
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        crawl = iclr_2017(tmp_path, [rejected, same], [alone, ambiguous])
+    assert all(r.claims("twin") == () for r in crawl.records)
+    report = crawl.report.to_manifest()
+    assert "twins_linked" not in report and report["twins_ambiguous"] == 1  # auditable without the DEBUG line
+    [line] = [r for r in caplog.records if r.getMessage() == "openreview_v1_twin_ambiguous"]
+    assert (line.__dict__["forum"], line.__dict__["candidates"]) == ("WsTwoMatch", 2)
+
+
+def test_a_title_of_punctuation_only_is_never_matched(tmp_path: Path) -> None:
+    """Review round 1: dedup never matches an empty title key, and neither does the twin rule."""
+    rejected = v1_clone(v1_note("iclr-2017/note-rejected-bare-venueid.json"), "Punct00001", title="???")
+    copy = v1_clone(v1_note(WORKSHOP_COPY), "WsPunct001", title="\u2014!")
+    crawl = iclr_2017(tmp_path, [rejected], [copy])
+    assert len(crawl.records) == 2 and all(r.claims("twin") == () for r in crawl.records)
+
+
+def test_a_twin_the_collapse_dropped_is_never_named(tmp_path: Path) -> None:
+    """Rule 6 runs after rule 5: the copy's `_bibtex` names the higher-numbered of two identical conference notes,
+    which the collapse drops, so the copy links to the survivor, the one record with its title."""
+    rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    dropped = v1_clone(rejected, "Dropped001", number=9_999)
+    copy = v1_clone(
+        v1_note(WORKSHOP_COPY), "WsCopy0001", title=rejected["content"]["title"], _bibtex=bibtex("Dropped001")
+    )
+    crawl = iclr_2017(tmp_path, [rejected, dropped], [copy])
+    got = by_forum(crawl)
+    assert "Dropped001" not in got and crawl.report.skipped["duplicate_submission"] == 1
+    assert twins(got["WsCopy0001"]) == (
+        (got[rejected["id"]].id,),
+        f"workshop copy of {rejected['id']}: the only main-track submission with this title",
+    )
+
+
+def test_a_copy_the_collapse_dropped_is_never_named(tmp_path: Path) -> None:
+    """Two identical workshop copies collapse to the lower-numbered one before linking: the twin names only it."""
+    rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    kept, dropped = (v1_clone(v1_note(WORKSHOP_COPY), nid, number=n, title=rejected["content"]["title"])
+                     for nid, n in (("WsCopyKept", 100), ("WsCopyGone", 200)))  # fmt: skip
+    crawl = iclr_2017(tmp_path, [rejected], [kept, dropped])
+    got = by_forum(crawl)
+    assert "WsCopyGone" not in got and crawl.report.skipped["duplicate_submission"] == 1
+    assert twins(got[rejected["id"]])[0] == ("op:iclr:2017:WsCopyKept",)
+    assert crawl.report.to_manifest()["twins_linked"] == 1
+
+
+def test_a_bibtex_naming_one_of_two_title_matches_picks_it(tmp_path: Path) -> None:
+    rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    same = v1_clone(rejected, "SameTitle1", number=999, abstract="Another synthetic abstract.")
+    copy = v1_clone(
+        v1_note(WORKSHOP_COPY), "WsCopy0001", title=rejected["content"]["title"], _bibtex=bibtex("SameTitle1")
+    )
+    got = by_forum(iclr_2017(tmp_path, [rejected, same], [copy]))
+    assert twins(got["WsCopy0001"])[0] == (got["SameTitle1"].id,)
+    assert got[rejected["id"]].claims("twin") == ()
+
+
+def test_a_conference_note_with_two_copies_names_both(tmp_path: Path) -> None:
+    rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    copies = [v1_clone(v1_note(WORKSHOP_COPY), f"WsCopy000{i}", number=100 + i, title=rejected["content"]["title"],
+                       abstract=f"Synthetic abstract {i}.")
+              for i in (1, 2)]  # fmt: skip
+    got = by_forum(iclr_2017(tmp_path, [rejected], copies))
+    value, evidence = twins(got[rejected["id"]])
+    assert value == ("op:iclr:2017:WsCopy0001", "op:iclr:2017:WsCopy0002")
+    assert evidence == (
+        "workshop copy WsCopy0001: the only main-track submission with its title; "
+        "workshop copy WsCopy0002: the only main-track submission with its title"
+    )
+
+
+def test_twin_claims_survive_dedup_a_ris_merge_and_a_takedown(tmp_path: Path) -> None:
+    """The links are provenance: dedup never merges the pair (two forum ids), a RIS record of the twin merges into
+    it by forum id with the claim kept, a takedown of the copy keeps the claims, and the snapshot renders."""
+    rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    copy = v1_clone(v1_note(WORKSHOP_COPY), "WsCopy0001", title=rejected["content"]["title"])
+    crawl = iclr_2017(tmp_path / "crawl", [rejected], [copy])
+    claims = {r.id: r.claims("twin") for r in crawl.records}
+    alone = dedup(crawl.records)
+    assert not alone.merges  # two forum ids: never merged (dedup-rules §Never merge)
+    assert {r.id: r.claims("twin") for r in alone.records} == claims
+    assert dedup(alone.records).records == alone.records
+    ris = ris_record_of(tmp_path / "ris", 12, rejected["id"])  # the twin's RIS record, merged by forum id
+    result = dedup([*crawl.records, ris])
+    assert [(m.rule, m.key) for m in result.merges] == [("forum_id", rejected["id"])]
+    assert {r.id: tuple(c for c in r.claims("twin")) for r in result.records} == claims
+    withheld = snap.withhold(result, frozenset({"op:iclr:2017:WsCopy0001"}))
+    assert {r.id: r.claims("twin") for r in withheld.result.records} == claims
+    files = snap.render(withheld.result, [], datetime(2026, 10, 2, tzinfo=UTC), withheld=withheld.withheld)
+    assert files["records.jsonl"].count(b'"field":"twin"') == 2
+
+
+def test_a_snapshot_refuses_a_twin_it_doesnt_hold(tmp_path: Path) -> None:
+    rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    copy = v1_clone(v1_note(WORKSHOP_COPY), "WsCopy0001", title=rejected["content"]["title"])
+    crawl = iclr_2017(tmp_path, [rejected], [copy])
+    built = datetime(2026, 10, 2, tzinfo=UTC)
+    assert snap.render(dedup(crawl.records), [], built)["records.jsonl"].count(b'"field":"twin"') == 2
+    alone = [r for r in crawl.records if r.native == "WsCopy0001"]
+    rejected_id = f"op:iclr:2017:{rejected['id']}"
+    with pytest.raises(
+        snap.SnapshotError, match=f"record op:iclr:2017:WsCopy0001's twin claim names {rejected_id}, "
+    ):
+        snap.render(dedup(alone), [], built)
+
+
 def ris_record_of(tmp_path: Path, row: int, forum: str) -> PaperRecord:
     """The RIS v1 fixture's `row`, as scholarmend would resolve it for `forum`: the same claims, that forum id."""
     fixture = Path(__file__).parents[2] / "fixtures" / "ris" / "v1"
@@ -297,8 +484,10 @@ def ris_record_of(tmp_path: Path, row: int, forum: str) -> PaperRecord:
     (tmp_path / "mended.ris").write_bytes((fixture / "mended.ris").read_bytes())
     (tmp_path / "resolved.json").write_text(json.dumps(entries), encoding="utf-8")
     records, _ = import_ris(tmp_path / "mended.ris")
-    [record] = [r for r in records if r.native == forum]
-    return record
+    [record] = [
+        r for r in records if r.native == forum and r.title == " ".join(entries[row]["title"].split())
+    ]
+    return record  # the row itself: row 15 already holds the recorded copy's forum (TASK-157)
 
 
 def test_a_workshop_copy_the_ris_importer_reads_as_main_is_workshop_once_merged_with_the_crawl(
@@ -324,6 +513,20 @@ def test_a_workshop_copy_the_ris_importer_reads_as_main_is_workshop_once_merged_
         ("track", "workshop", "main", "precedence:openreview_v1"),
         ("status", "unknown", "rejected", "precedence:openreview_v1"),
     }
+
+
+def test_the_crawler_and_the_ris_importer_read_a_workshop_copy_alike(tmp_path: Path) -> None:
+    """TASK-157 AC #4: the recorded copy through the v1 crawler, and the claims scholarmend 0.1.5 builds from it
+    (row 15 of the RIS v1 fixture: its venueid, `content.venue` and invitation) through the RIS importer, give the
+    same track and status, without a merge to settle it (TASK-152's was at the snapshot level only)."""
+    copy = v1_note(WORKSHOP_COPY)
+    crawl = run(FakeOpenReviewV1({copy["invitation"]: [copy]}), tmp_path, "ICLR", 2017)
+    ris = ris_record_of(tmp_path / "ris", 15, copy["id"])
+    [crawled] = crawl.records
+    assert [c.value for c in ris.claims("invitation")] == [copy["invitation"]]
+    assert (ris.id, ris.track, ris.status) == (crawled.id, crawled.track, crawled.status) == (
+        crawled.id, "workshop", "unknown"
+    )  # fmt: skip
 
 
 def test_iclr_2017_notes_with_a_null_nonreaders_are_public_and_imported(tmp_path: Path) -> None:

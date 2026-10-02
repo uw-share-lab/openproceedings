@@ -288,7 +288,7 @@ export interface components {
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            field: "title" | "abstract" | "authors" | "venue" | "year" | "track" | "status" | "presentation" | "venue_id_raw" | "keywords" | "urls.forum" | "urls.pdf" | "urls.proceedings" | "urls.doi";
+            field: "title" | "abstract" | "authors" | "venue" | "year" | "track" | "status" | "presentation" | "venue_id_raw" | "keywords" | "urls.forum" | "urls.pdf" | "urls.proceedings" | "urls.doi" | "twin" | "invitation";
             /**
              * Source
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.

@@ -206,7 +206,9 @@
               "urls.forum",
               "urls.pdf",
               "urls.proceedings",
-              "urls.doi"
+              "urls.doi",
+              "twin",
+              "invitation"
             ],
             "title": "Field",
             "type": "string"
