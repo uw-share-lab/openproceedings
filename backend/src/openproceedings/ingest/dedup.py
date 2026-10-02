@@ -20,7 +20,8 @@ a review, a duplicate only shows in the hit count.
    separate records.
 
 The track rule, wherever a listing (a record with a proceedings id or a proceedings source) is involved: every
-record is on a `PROCEEDINGS_TRACKS` track (a listing's own `unknown` included), or every record is NeurIPS
+record is on a `PROCEEDINGS_TRACKS` track (a listing's own `unknown` included, but never one an OpenReview claim
+gives, TASK-174), or every record is NeurIPS
 Creative AI (`is_creative_ai`, TASK-137: track `other` that each claiming source backs with the Creative AI
 venueid or proceedings URL). The two never mix, and nothing else (workshop, tiny papers, blogposts,
 competition, any other `other`, a note's `unknown`) ever merges with a listing.
@@ -75,6 +76,7 @@ CONFLICT_FIELDS: tuple[ClaimField, ...] = ("title", "track", "status")
 # (Education_Program, High_School_Projects_Track, …), so it is not listed here: dedup's track rule admits Creative
 # AI by its own evidence (`is_creative_ai`, TASK-137), and reconcile never judges it.
 PROCEEDINGS_SOURCES: frozenset[str] = frozenset({"iclr_archive", "neurips_proceedings", "pmlr"})
+OPENREVIEW_SOURCES: frozenset[str] = frozenset({"openreview_v2", "openreview_v1"})
 PROCEEDINGS_TRACKS: frozenset[str] = frozenset({"main", "datasets_benchmarks", "position"})
 _URL_FIELDS = ("urls.proceedings", "urls.pdf")
 ABSENT = "unknown"  # the status a crawled listing gives a paper it doesn't hold (`is_absence`)
@@ -441,10 +443,15 @@ def _cluster(members: Sequence[PaperRecord], rid: str | None = None) -> _Cluster
 def _family(c: _Cluster) -> str | None:
     """The cluster's side of the track rule: `creative_ai` (NeurIPS Creative AI, TASK-137), `proceedings` (a
     `PROCEEDINGS_TRACKS` track, or a listing's own `unknown`: a PMLR volume holding main and position papers),
-    or None: a track no listing may merge with (an unknown track waits for evidence)."""
+    or None: a track no listing may merge with (an unknown track waits for evidence). An `unknown` an OpenReview
+    claim gives is the note's, never a listing's own, even in a cluster a RIS row's proceedings URL made a
+    listing (TASK-174)."""
     if is_creative_ai(c.summary):
         return "creative_ai"
-    if c.summary.track in PROCEEDINGS_TRACKS or (c.listed and c.summary.track == "unknown"):
+    if c.summary.track in PROCEEDINGS_TRACKS:
+        return "proceedings"
+    note_says = any(cl.field == "track" and cl.source in OPENREVIEW_SOURCES for cl in c.summary.provenance)
+    if c.listed and c.summary.track == "unknown" and not note_says:
         return "proceedings"
     return None
 

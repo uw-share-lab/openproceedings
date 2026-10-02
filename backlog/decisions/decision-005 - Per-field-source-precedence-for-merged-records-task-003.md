@@ -79,7 +79,9 @@ a listing. Dedup keeps a note on a track outside `PROCEEDINGS_TRACKS` (`workshop
 listing (`track_not_merged`), except a Creative AI note beside its Creative AI listing (amended by task-137, below). So
 wherever both answer, OpenReview's track is in `PROCEEDINGS_TRACKS` too, or is Creative AI's `other`. An
 OpenReview `unknown` never overrules a listing's track, and a listing's `unknown` (a mixed PMLR volume) yields
-to OpenReview's track. This was already the behaviour before the decision (task-072 left it as an open question),
+to OpenReview's track. A note's cluster that is a listing only because a RIS row with the note's id names a
+proceedings paper still has the note's `unknown`, not a listing's own, so it stays apart too (task-174, found by the
+nightly properties; no record of that shape on the 2026-09-29 crawl, so it changes no record). This was already the behaviour before the decision (task-072 left it as an open question),
 so the decision changes no record: tests pin it (`test_dedup.py`, `test_dedup_props.py`, `test_reconcile.py`).
 The real-crawl check is in `docs/results/2026-09-29-reconcile-real-data.md` §Track, decided per track.
 

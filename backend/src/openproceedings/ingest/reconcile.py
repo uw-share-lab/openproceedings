@@ -42,6 +42,7 @@ from typing import cast
 from openproceedings.ingest.dedup import (
     ABSENT,
     ABSENT_EVIDENCE,
+    OPENREVIEW_SOURCES,
     PRECEDENCE,
     PROCEEDINGS_SOURCES,
     PROCEEDINGS_TRACKS,
@@ -58,7 +59,6 @@ from openproceedings.ingest.sources.common import ListingReport, Report
 
 log = logging.getLogger(__name__)
 
-OPENREVIEW_SOURCES: frozenset[str] = frozenset({"openreview_v2", "openreview_v1"})
 
 type Key = tuple[str, str, int]  # (proceedings source, venue, year)
 

@@ -311,6 +311,13 @@ ICLR_2016 = [
     archive(2016),
     paper("AbCd1234", venue="ICLR", year=2016, source="openreview_v1", track="workshop", status="unknown"),
 ]
+# TASK-174 (nightly 37017691575): a RIS row with the note's id and the listing's PDF hash must not carry the note's
+# `unknown` track into the listing as if it were a listing's own
+RIS_BRIDGE = [
+    paper("AbCd1234", source="openreview_v1", track="unknown"),
+    paper("AbCd1234", source="ris", urls_pdf=f"https://papers.nips.cc/paper/2021/file/{H[2]}-Paper.pdf"),
+    paper(f"nips-{H[2]}", source="neurips_proceedings"),
+]
 
 
 @given(pools)
@@ -321,6 +328,7 @@ ICLR_2016 = [
 @example(LINK_OTHER_YEAR)
 @example(LINK_AGAINST_TITLE)
 @example(ICLR_2016)
+@example(RIS_BRIDGE)
 def test_idempotent(xs: list[PaperRecord]) -> None:
     once = dedup(xs)
     note(once)
@@ -442,6 +450,7 @@ OPENREVIEW, OFFICIAL = ("openreview_v2", "openreview_v1"), ("iclr_archive", "neu
 @given(pools)
 @example(ICLR_2016)
 @example(LINK_OTHER_TITLE)
+@example(RIS_BRIDGE)
 def test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings(xs: list[PaperRecord]) -> None:
     """decision-005 §Track, per track (owner, 2026-09-29; TASK-130): a record carrying an OpenReview track claim
     is on a track OpenReview holds, and takes it; one without takes the proceedings' track; RIS only alone."""

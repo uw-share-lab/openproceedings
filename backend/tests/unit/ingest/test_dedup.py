@@ -309,6 +309,20 @@ def test_an_openreview_note_with_no_track_never_merges_into_a_listing() -> None:
     assert resolutions(result) == ["track_not_merged"]
 
 
+def test_a_ris_row_naming_a_listing_does_not_bridge_a_note_with_no_track_into_it() -> None:
+    """TASK-174: a RIS row with the note's id and the listing's PDF hash makes the note's cluster a listing, but its
+    `unknown` is still the note's (an OpenReview track claim), not a listing's own, so it stays apart."""
+    listing = paper(f"nips-{H[2]}", source="neurips_proceedings")
+    note = paper("AbCd1234", source="openreview_v1", track="unknown")
+    ris = paper("AbCd1234", source="ris", urls_pdf=f"https://papers.nips.cc/paper/2021/file/{H[2]}-Paper.pdf")
+    result = dedup([listing, note, ris])
+    assert {r.id: r.track for r in result.records} == {listing.id: "main", note.id: "unknown"}
+    assert [(m.rule, m.merged_id) for m in result.merges] == [("forum_id", note.id)]
+    assert ("title_key", note.id, listing.id, "track_not_merged") in {
+        (c.field, c.value_a, c.value_b, c.resolution) for c in result.conflicts
+    }
+
+
 @pytest.mark.parametrize(
     ("why", "a", "b"),
     [
