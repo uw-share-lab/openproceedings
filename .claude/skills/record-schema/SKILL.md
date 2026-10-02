@@ -133,7 +133,8 @@ canonical reordering is superlinear in a long run of marks with alternating comb
     So every Unicode form of the same text trims alike, and dedup title keys stay equal.
   - This keeps every token's run of non-starters within 8.
 - **Length.** A title keeps at most 1,000 code points (the owner, 2026-10-02; the longest real one is 192), and
-  an abstract at most 20,000, both counted and cut in NFC, so an NFD twin is cut alike. A cut title is collapsed, and a cut abstract is stripped of whitespace and `…`.
+  an abstract at most 20,000, both counted in NFKD. The cut falls before the last space that fits, so every
+  Unicode form keeps the same words, and it runs before the mark cap. A cut title is collapsed, and a cut abstract is stripped of whitespace and `…`.
 - **Where.** The caps run once, in `snapshot.load_sources`, before dedup, on the record's field and on every
   claim of it alike.
 - **Flagged.** Never silent: a trimmed claim's `evidence` carries `trimmed at ingest (decision-026): <what>`,

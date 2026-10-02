@@ -75,10 +75,18 @@ Details:
   is kept as it was. A run within the cap is
   left as it is. So every canonical form of the same text trims to the same characters, whether NFC, NFD or
   marks stored in another order. Two sources whose titles shared a dedup title key still share it after the
-  cap. The length caps likewise count and cut code points in NFC, so an NFD title is cut as its NFC twin is.
-  NFC is linear once the marks are capped. One limit remains, for hostile text only: a source that sends NFKD
-  text has already split each spacing accent into a space and a mark, so it can trim differently from the
-  composed form. The dedup-auditor found both; real titles are at most 192 characters with runs of 1.
+  cap.
+- **Where a length cap cuts.** A text is cut where its NFKD form reaches the cap, before the last space within
+  it. With no space, it is cut before the last base character that fits, and with neither, where it fits. The
+  length cap cuts first, then the mark cap trims what is left. At a space, every form of the same text (NFC,
+  NFD, NFKC, NFKD) has the same NFKD length, so every form keeps the same words. The note gives the stored
+  lengths before and after.
+  - **Why.** The track-classifier review found that a cut counted in code points as stored fell at a different
+    place in each form: 900 of 900 random over-length pairs split their dedup key. Cutting the NFC form still
+    split 24, because U+0F73 and U+0958 never recompose.
+- **Limit.** One remains, for hostile text only. A source that sends NFKD text has already split each spacing
+  accent into a space and a mark, so its marks can trim differently from the composed form (dedup-auditor).
+  Real titles are at most 192 characters, with runs of 1.
   - **Why.** The dedup and track-classifier reviews found that keeping the first 8 marks in stored order split
     such keys. For example, 276 of 500 random marked titles split against their NFD form. That stops dedup
     merging the two records, or reconcile matching a listing, which would turn the record `unknown`.

@@ -42,6 +42,10 @@ Bound the tokenizer's superlinear NFKC reordering on stored text (TASK-067's sec
   NFKD, so a title came out with two spaces. `PaperRecord` refuses that, and one hostile title aborted
   `op snapshot build`. Decompose only the marks and the base, then tidy what dropping marks exposes. A property
   should build the real record from every capped title and abstract.
+- Cutting a length cap in code points as stored, or in NFC. Each Unicode form of one title is a different
+  length, so the cut fell at a different place and split the dedup key: 900 of 900 random pairs, and 24 still
+  with NFC, since U+0F73 and U+0958 never recompose. Count the NFKD length and cut before the last space that
+  fits; at a space, every form has the same NFKD length.
 - Benchmarking the worst case with a Latin base and U+0338. Latin marks fold away and the slash takes the
   short cluster path, so it measures nearly the cheapest input. Use a base whose marks are kept (Thai) and
   classes 220/230.

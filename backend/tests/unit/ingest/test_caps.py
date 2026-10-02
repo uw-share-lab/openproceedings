@@ -229,14 +229,28 @@ def test_a_cut_abstract_never_ends_in_whitespace_or_an_ellipsis() -> None:
     assert note == f"{TRIMMED} cut from 20,011 to 19,997 characters"
 
 
-def test_a_length_cap_counts_and_cuts_the_nfc_form() -> None:
-    # the dedup review's Nit: counted in code points as sent, an NFD title was cut where its NFC twin was not
-    nfc = "Title " + "\u00e9" * 600  # 606 characters
-    nfd = unicodedata.normalize("NFD", nfc)  # 1,206
-    assert cap("title", nfc) == (nfc, None) and cap("title", nfd) == (nfd, None)
-    long_nfc, long_nfd = nfc + "\u00e9" * 900, nfd + "e\u0301" * 900
-    assert cap("title", long_nfc)[0] == cap("title", long_nfd)[0] == ("Title " + "\u00e9" * 994)
-    assert cap("title", long_nfd)[1] == f"{TRIMMED} cut from 1,506 to 1,000 characters"
+def test_every_form_of_a_long_title_is_cut_alike() -> None:
+    # TASK-155 track-classifier review: cut in code points as stored, each form of one title was cut at another
+    # place (900 of 900 random pairs split their dedup key; NFC first still split 24, as U+0F73 and U+0958 never
+    # recompose). Cut at the last space within the NFKD length, every form keeps the same words
+    words = ["Trust", "\u00e9t\u00e9", "\u0915\u093c\u093e", "o\u0f73", "\u1ec7", "na\u0303o"] * 60
+    title = " ".join(words)
+    forms = [unicodedata.normalize(f, title) for f in ("NFC", "NFD", "NFKC", "NFKD")]
+    assert len({title_key(f) for f in forms}) == 1 and max(map(len, forms)) > MAX_TITLE
+    capped = [cap("title", f) for f in forms]
+    assert all(note is not None for _, note in capped)
+    assert len({title_key(c) for c, _ in capped}) == 1
+    assert all(len(unicodedata.normalize("NFKD", c)) <= MAX_TITLE for c, _ in capped)
+
+
+def test_a_length_cut_falls_before_a_word_or_where_it_fits() -> None:
+    nfc = "Title " + "\u00e9" * 600  # the last space within the NFKD length, alike in NFC and NFD
+    nfd = unicodedata.normalize("NFD", nfc)
+    assert cap("title", nfc)[0] == cap("title", nfd)[0] == "Title"
+    word = "\u00e9" * 600  # no space: before the last base that fits
+    assert title_key(cap("title", word)[0]) == title_key(cap("title", unicodedata.normalize("NFD", word))[0])
+    assert cap("title", word)[0] == "\u00e9" * 500
+    assert cap("title", ACUTE * 1_200)[0] == ACUTE * 8  # no base at all: cut where it fits, then the mark cap
 
 
 def test_a_long_title_is_cut_collapsed_and_noted() -> None:
@@ -250,7 +264,7 @@ def test_a_long_title_is_cut_collapsed_and_noted() -> None:
 def test_both_caps_are_noted_together() -> None:
     _, note = cap("abstract", HOSTILE + " x" * MAX_ABSTRACT)
     assert note == (
-        f"{TRIMMED} 92 combining marks dropped past 8 in a run; cut from 40,009 to 19,999 characters"
+        f"{TRIMMED} 92 combining marks dropped past 8 in a run; cut from 40,101 to 19,907 characters"
     )
 
 

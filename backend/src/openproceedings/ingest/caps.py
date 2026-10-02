@@ -21,12 +21,13 @@ A run within the cap is left as it is. One over it has its base (NFD) and its ma
 in canonical order (`_decomposed`), and keeps its first `MAX_MARKS` non-starters (`_trimmed`). Every other
 character is kept as it was. So every canonical form of the same text (NFC, NFD, marks stored in another order)
 trims to the same characters, and two sources whose titles shared a dedup key still share it. The length caps count
-code points in NFC and cut the NFC form, so an NFD title is cut as its NFC twin is. One limit holds, for hostile
+the NFKD length and cut before the last space that fits (`_cut`), so every form keeps the same words. One limit
+holds, for hostile
 text only: an NFKD source, whose spacing accents are already a space and a mark, can trim differently from its
 composed form (`_decomposed` keeps canonical forms alike, NFC and NFD). Trimmed text is then made
 one a record accepts (`_tidy`): dropping marks can leave two spaces together, or a space or `…` at an end. A
 title is whitespace-collapsed, and an abstract is stripped of whitespace and `…` at both ends. A title or
-abstract past its length cap is cut there and tidied the same way. The title cap (the owner, 2026-10-02) bounds
+abstract past its length cap is cut first (before the mark cap) and tidied the same way. The title cap (the owner, 2026-10-02) bounds
 every shape of run the mark rule might miss; real titles are at most 192 characters.
 
 Nothing is trimmed silently: each claim whose value changed says what and why in its evidence (`TRIMMED`, shown
@@ -155,21 +156,43 @@ def _tidy(field: str, text: str) -> str:
     return text
 
 
+def _cut(text: str, most: int) -> str | None:
+    """`text` cut so that its NFKD form holds at most `most` characters, or None when it already does. The cut
+    falls before the last space that fits (or, with none, the last base character that does), where every form
+    of the same text (NFC, NFD, NFKC, NFKD) has the same NFKD length, so every form keeps the same words. A cut
+    counted in code points as stored fell at a different place in each form, and NFC can't fix it (U+0F73 and
+    U+0958 never recompose): the TASK-155 track-classifier review."""
+    length = fits = 0
+    space = base = None
+    for i, ch in enumerate(text):
+        if ch.isspace():
+            space = i
+        elif is_base(ch):
+            base = i
+        length += len(_nfkd(ch))
+        if length > most:
+            break
+        fits = i + 1
+    else:
+        return None
+    # a text with no space or base in reach (marks or punctuation only, hostile) is cut where it fits
+    return text[: space or base or fits]
+
+
 def cap(field: str, text: str) -> tuple[str, str | None]:
-    """`text` as a record's `field` may hold it, and the note saying what was trimmed (None: `text` itself)."""
-    capped, dropped = cap_marks(text)
-    notes = [f"{dropped} combining marks dropped past {MAX_MARKS} in a run"] if dropped else []
-    if dropped:
-        capped = _tidy(field, capped)
-    # measured and cut in NFC, so the same text in NFC and NFD is cut alike (NFC is linear once marks are capped)
-    if (
-        len(capped) > (most := _LENGTH[field])
-        and len(composed := unicodedata.normalize("NFC", capped)) > most
-    ):
-        capped = composed
-        cut = _tidy(field, capped[:most])
-        notes.append(f"cut from {len(capped):,} to {len(cut):,} characters")
+    """`text` as a record's `field` may hold it, and the note saying what was trimmed (None: `text` itself).
+    The length cap cuts first (`_cut`), then the mark cap trims what is left, then `_tidy`."""
+    notes = []
+    capped = text
+    if (cut := _cut(text, _LENGTH[field])) is not None:
         capped = cut
+    capped, dropped = cap_marks(capped)
+    if dropped:
+        notes.append(f"{dropped} combining marks dropped past {MAX_MARKS} in a run")
+    if cut is not None or dropped:
+        capped = _tidy(field, capped)
+    if cut is not None:
+        notes.append(f"cut from {len(text):,} to {len(capped):,} characters")
     return (capped, f"{TRIMMED} {'; '.join(notes)}") if notes else (text, None)
 
 
