@@ -38,7 +38,10 @@ a trailer split by quoting, `~` with HOME '' outside a push, a payload past ARG_
   ended at the subshell's `)`. Each `case` remembers the depth it opened at, and only a `)` at that depth is a
   pattern; a `case` right after a pattern's `)` is in command position (round 4: `case a in a) case b in …`), and an
   `esac` with no `case`, or a `case` open when the body ends, is a parse error. Round 5 found `coproc case …`, `function g case …`
-  and `time -p case …`: a `case` now counts by its shape, `case <word> in`, wherever it starts. And real arithmetic must not be walked (`"$((1<<n))"` read `<<n` as a heredoc): a `$((…))` whose
+  and `time -p case …`: a `case` now counts by its shape, `case <word> in`, wherever it starts. Round 6 found spellings the shape
+  misses (a comment, `${x:- a}`, `\`-newline before `in`), so a body that ends with a `case` and no `esac` while an
+  `esac` follows later in the command is a parse error: a real case cut short always leaves its `esac` after the
+  cut, whatever its spelling. And real arithmetic must not be walked (`"$((1<<n))"` read `<<n` as a heredoc): a `$((…))` whose
   inner `(` closes at its very end is arithmetic; `$((cmd) )` and `$((cmd)|cat)` are not.
 
 ## Dead ends — don't repeat these

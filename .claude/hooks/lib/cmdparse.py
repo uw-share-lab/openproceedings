@@ -804,7 +804,7 @@ def _substitution_end(text: str, k: int, closer: str) -> int:
         elif c == ")" and cases and cases[-1] == depth:
             k += 1  # a pattern's `)`, at the depth its case started (`( case y in y) :;; esac )` too)
         elif c == ")" and depth == 0:
-            if cases:
+            if cases or _case_cut_short(text[start:k], text[k + 1 :]):
                 raise ParseError("a `case` with no `esac` in a command substitution")
             return k + 1
         else:
@@ -815,6 +815,18 @@ def _substitution_end(text: str, k: int, closer: str) -> int:
 
 # `case` and `esac` as words in a substitution body
 CASE_WORD = re.compile(r"(case)(?=\s)|(esac)(?=[\s;&|()]|$)")
+
+
+CASE_ANY = re.compile(r"(?:^|(?<=[\s;&|()]))case(?=\s)")
+ESAC_ANY = re.compile(r"(?:^|(?<=[\s;&|()]))esac(?=[\s;&|()]|$)")
+
+
+def _case_cut_short(body: str, rest: str) -> bool:
+    """Was a case statement cut short at one of its patterns' `)`: a `case` word in the body with no `esac` after
+    it there, and an `esac` later in the command? Whatever way the `case <word> in` is spelt (a comment, `${x:- a}`,
+    a `\\`-newline before `in`), its `esac` comes after the cut (TASK-156 review; fail closed)."""
+    last_case = max((m.start() for m in CASE_ANY.finditer(body)), default=-1)
+    return last_case >= 0 and not ESAC_ANY.search(body, last_case) and ESAC_ANY.search(rest) is not None
 
 
 def _case_shape(text: str, j: int) -> bool:

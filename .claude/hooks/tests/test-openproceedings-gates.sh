@@ -1128,6 +1128,11 @@ check $P block "case form: coproc case …" "$(payload_bash 'x="$(coproc case a 
 check $P block "case form: function g case …" "$(payload_bash 'x="$(function g case a in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
 check $P block "case form: time -p case …" "$(payload_bash 'x="$(time -p case a in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
 check $P block "case form: case $(…) in …" "$(payload_bash 'x="$(case $(echo a) in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: a comment before in" "$(payload_bash 'x="$(case a # c
+in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: \${x:- a} as the word" "$(payload_bash 'x="$(case ${x:- a} in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: \\-newline before in" "$(payload_bash 'x="$(case a \
+in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
 check $R block "coproc git push origin other2"           "$(payload_bash 'coproc git push origin other2')"
 check $P allow "x=\"\$(case \"\$1\" in -h) …;; *) …;; esac)\" (a real case)" "$(payload_bash 'x="$(case "$1" in -h) echo h;; *) echo o;; esac)"; echo "$x"')"
 check $P allow "echo \"\$((1<<n))\" (arithmetic, not a body)"  "$(payload_bash 'echo "$((1<<n))"')"

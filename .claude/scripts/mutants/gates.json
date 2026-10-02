@@ -3272,5 +3272,11 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "    \"coproc\",  # `coproc git push …` runs the push (TASK-156)\n",
   "new": ""
+ },
+ {
+  "label": "cmdparse: a case cut short at a pattern's ) not refused (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if cases or _case_cut_short(text[start:k], text[k + 1 :]):",
+  "new": "            if cases:"
  }
 ]
