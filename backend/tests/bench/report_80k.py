@@ -10,8 +10,10 @@ same generator as the 5k differential corpus, so anyone can reproduce it), build
 string; the `/search` endpoint's whole work (facets and exclusions too), first and later pages, as wall-time
 p95 (the facet aggregation overlaps the page on a worker thread, so wall time is what a client waits) and
 the first page's CPU time per request (what bounds throughput); the widest expansion under the cap and one
-past it; and the position-verified cases spec 03 exempts (stopword NEAR, wildcard phrases), timed cold.
-A report, not a gate: regenerate it with this command, never edit it by hand.
+past it; the position-verified cases spec 03 exempts (stopword NEAR, wildcard phrases), timed cold; and every
+budgeted number past its budget, also printed (a warning annotation in GitHub Actions, where the nightly
+workflow's `benchmarks` job runs it; TASK-057). A report, not a gate: regenerate it with this command, never
+edit it by hand.
 """
 
 from __future__ import annotations
@@ -140,6 +142,17 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
     engine = TantivyEngine(built)
     started_load = os.getloadavg()
 
+    # budgeted numbers past their spec 03 budget: flagged, never failed (a report, not a gate)
+    over: list[str] = []
+
+    def check(label: str, seconds: float, budget: float) -> None:
+        if seconds > budget:
+            over.append(f"{label}: {ms(seconds)} (budget {ms(budget)})")
+
+    check("build time", build_s, 120.0)
+    if size > 500e6:
+        over.append(f"index size: {size / 1e6:,.0f} MB (budget 500 MB)")
+
     rows = []
     for name in STRINGS:
         result = parse(STRINGS[name], "scholar")
@@ -160,6 +173,8 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
         warm, warm99 = p95(warm_runs), quantile(warm_runs, 0.99)
         page = p95(timed(lambda ast=ast: search_with_highlights(engine, ast), WARM_ROUNDS))  # type: ignore[misc]
         exclusions = p95(timed(exclusion_run))
+        if not engine.verified:  # a position-verified clause is exempt when cold (spec 03)
+            check(f"{name}, `match_ids` + exclusions p95 cold", exclusions, 0.300)
 
         def first_page(result: object = result) -> None:
             search_endpoint(engine, result)  # type: ignore[arg-type]
@@ -170,6 +185,9 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
         first = p95(timed(first_page, ENDPOINT_ROUNDS))
         later = p95(timed(later_page, ENDPOINT_ROUNDS))
         cpu = cpu_timed(first_page, ENDPOINT_ROUNDS)
+        check(f"{name}, search p95 warm", warm, 0.100)
+        check(f"{name}, search with highlights p95 warm", page, 0.100)
+        check(f"{name}, `/search` first page p95 wall", first, 0.100)
         total = engine.search(ast, limit=0).total
         rows.append(
             f"| {name} | {total:,} | {ms(cold)} | {ms(warm)} | {ms(warm99)} | {ms(page)} | {ms(first)} | {ms(later)} "
@@ -183,6 +201,8 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
         engine.expanded.clear()
         engine.expand(wide)
 
+    expansion = p95(timed(expand_wide))
+    check(f"`{stem}*` expansion p95", expansion, 0.050)
     past = Wildcard(span=(0, 0), stem="co", op="*")
 
     def expand_past() -> None:
@@ -246,7 +266,7 @@ its cold numbers are the exception's, not a budget miss (task-076 is its warm he
 
 | Stem | Terms | p95 |
 |---|---|---|
-| `{stem}*` | {n} | {ms(p95(timed(expand_wide)))} |
+| `{stem}*` | {n} | {ms(expansion)} |
 | `co*` (past the cap: refused) | {len({t for f in FIELDS for t, _df in engine.searcher.terms_with_prefix(f, "co")})} distinct | {ms(p95(timed(expand_past)))} |
 
 ## Position-verified clauses (the spec 03 exception; one cold run each)
@@ -254,10 +274,16 @@ its cold numbers are the exception's, not a budget miss (task-076 is its warm he
 | Query | Matches | `match_ids` |
 |---|---|---|
 {chr(10).join(verified)}
+
+## Over budget
+
+{chr(10).join(f"- {line}" for line in over) or "Nothing: every budgeted number above is within its budget."}
 """
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO / "docs" / "results" / f"{today}-bench.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report)
+    for line in over:  # in GitHub Actions a warning annotation, so a green nightly still shows it
+        print(f"::warning::80k report, over budget: {line}" if os.environ.get("GITHUB_ACTIONS") else line)
     print(out)
 
 

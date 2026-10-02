@@ -73,20 +73,24 @@ FIELDS: list[TextField | None] = [None, "title", "abstract"]
 @dataclass(frozen=True)
 class Vocab:
     """What trees are drawn from: terms (the rare ones, df 1-3, drawn a third of the time), wildcard stems
-    (one in twenty from `wide`, stems past the 200-term cap, so refusals are exercised), and n-grams that
-    occur (so phrases and NEAR match)."""
+    (one in twenty from `wide`, stems past the 200-term cap, so refusals are exercised; one in ten from `cap`,
+    stems at the cap's edge, when there are any), and n-grams that occur (so phrases and NEAR match)."""
 
     terms: tuple[str, ...]
     stems: tuple[str, ...]
     ngrams: tuple[tuple[str, ...], ...]
     rare: tuple[str, ...] = ()
     wide: tuple[str, ...] = ()
+    cap: tuple[str, ...] = ()
 
     def term(self) -> st.SearchStrategy[str]:
         return _mixed(self.terms, self.rare, 3)
 
     def stem(self) -> st.SearchStrategy[str]:
-        return _mixed(self.stems, self.wide, 20)
+        stems = _mixed(self.stems, self.wide, 20)
+        if not self.cap:
+            return stems
+        return st.integers(0, 9).flatmap(lambda k: st.sampled_from(self.cap) if k == 0 else stems)
 
 
 def _mixed(common: tuple[str, ...], special: tuple[str, ...], one_in: int) -> st.SearchStrategy[str]:

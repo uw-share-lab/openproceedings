@@ -19,8 +19,9 @@ small enough to fix in minutes.
 ## How you work
 1. Scope the change: `git diff --name-only origin/dev...HEAD`. List the AST node kinds and compile rows it
    touches.
-2. Run the suite: `uv run pytest backend/tests/differential -q --hypothesis-profile=ci` (2,000 examples, what
-   nightly's `suite-ci` runs; PR CI runs the `pr` profile, 200). For a release or an
+2. Run the suite: `uv run pytest backend/tests/differential -q --hypothesis-profile=ci` (2,000 examples; PR CI
+   runs the `pr` profile, 200, and the nightly `differential` job 50,000 as 8 seeded parts: a failing part's log
+   prints its rerun command). For a release or an
    `/exactness-check` run, also run the nightly profile with `--hypothesis-profile`.
 3. Make sure the strategies cover what changed. Draw terms from the fixture vocabulary, weighted toward
    rare terms (df 1–3), shared prefixes (for wildcards), multi-token terms (`vision-language`), phrases

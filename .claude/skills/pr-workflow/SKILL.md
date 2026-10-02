@@ -35,7 +35,7 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
 
 ## Local test runs (by risk; owner's rule, 2026-09-29, TASK-121)
 CI's required `test` job runs the full backend and frontend suite on every PR (backend under pytest-xdist, properties
-at 200 examples; nightly reruns it at 2,000), and nothing merges without it. `make test` runs the backend in parallel
+at 200 examples; nightly reruns it at 2,000, the differential at 50,000), and nothing merges without it. `make test` runs the backend in parallel
 too (`-n auto`). The local run is there to catch a failure before the CI round, so it is sized to what the diff can
 break. `make lint` and `make tooling` always run (the pre-push hook runs them too).
 

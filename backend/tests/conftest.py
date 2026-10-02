@@ -7,7 +7,8 @@ whole test session (limits: `pytest_configure`). Crawler tests use recorded HTTP
 
 Select with HYPOTHESIS_PROFILE or `--hypothesis-profile`: `dev` (200 examples, no wall-clock checks: the local
 default), `pr` (200 examples, 2 s deadline: the `test` workflow under pytest-xdist), `ci` (2,000, the `nightly` workflow's whole-suite job) and `nightly` (50,000,
-the `nightly` workflow's property jobs). `print_blob=True` so a CI failure prints a
+the `nightly` workflow's property and differential jobs). `OP_EARLY_FAILURES=1` prints a failure's report when the
+test fails (`_EarlyFailures`, below; tested by `unit/test_early_failures.py`). `print_blob=True` so a CI failure prints a
 `@reproduce_failure` blob; the example database (`.hypothesis/`) is gitignored.
 
 Wall-clock checks run only on CI runners (decision-024, TASK-146): `dev` has no deadline and suppresses
@@ -117,7 +118,33 @@ def _reverse_lookup(sockaddr: Any, flags: int) -> Any:
     raise _refuse(sockaddr)
 
 
+class _EarlyFailures:
+    """OP_EARLY_FAILURES=1 (the nightly workflow's long steps, TASK-057): a failed test's report, Hypothesis's
+    falsifying example and `@reproduce_failure` blob included, is written when the test fails, not only in the
+    end-of-session summary, which a step interrupted at its time limit never reaches. Registered on the
+    pytest-xdist controller (or a plain run), which receives every worker's reports."""
+
+    def __init__(self, config: pytest.Config) -> None:
+        self.config = config
+
+    def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+        if report.failed:
+            terminal = self.config.pluginmanager.get_plugin("terminalreporter")
+            if terminal is None:  # `-p no:terminal`: nowhere to write
+                return
+            # end the progress line (under -q its dots don't), so the annotation starts a line
+            terminal.write("\n")
+            terminal.write_line(f"::error::{report.nodeid} failed ({report.when}); its report follows")
+            terminal.write_line(report.longreprtext)
+
+
 def pytest_configure(config: pytest.Config) -> None:
+    if os.environ.get("OP_EARLY_FAILURES") == "1" and not hasattr(config, "workerinput"):
+        config.pluginmanager.register(_EarlyFailures(config), "op-early-failures")
+    _block_the_network()
+
+
+def _block_the_network() -> None:
     """Installed for the whole session. Covers connect/connect_ex (TCP), sendto/sendmsg (UDP, e.g. DNS) and
     every name lookup. Not covered: subprocesses and `multiprocessing` spawn children (they start a fresh
     interpreter; tests don't spawn network clients), and code calling the C-level `_socket` module directly."""

@@ -8,6 +8,7 @@ parse with the clicked field's clause admitting the new values, so the reducer's
 from __future__ import annotations
 
 import json
+import os
 from collections import Counter
 from itertools import pairwise
 from pathlib import Path
@@ -550,6 +551,13 @@ def _check_year_edit(case: YearEditCase, ranges: list[YearRange]) -> None:
 _WIDEST = list(clauses.WIDEST_YEAR)
 
 
+# The nightly `year-edits` job runs the property below as 4 parallel jobs (TASK-057): unsplit, it ran past 90 min at
+# 50,000 examples and never finished in a 130-min step. With OP_YEAR_EDIT_SHARDS=n each job runs 1/n of the
+# profile's examples under its own `--hypothesis-seed`, as the differential suite's shards do.
+YEAR_EDIT_SHARDS = int(os.environ.get("OP_YEAR_EDIT_SHARDS", "1"))
+assert YEAR_EDIT_SHARDS >= 1, "OP_YEAR_EDIT_SHARDS is a positive count of jobs"
+
+
 # One near miss per reason, pinned (year_edit_cases builds each only now and then); the cap's boundary (1,862
 # code points still fit, 1,863 don't); a year filter nested beside the top-level clause; an OR of year filters as
 # the clause
@@ -574,8 +582,9 @@ _WIDEST = list(clauses.WIDEST_YEAR)
 @example(case=YearEditCase("x (year:2021 OR year:2020..2022)", "scholar", "pinned"), ranges=_WIDEST)
 @example(case=YearEditCase("a" * 1_862, "scholar", "pinned"), ranges=_WIDEST)
 @given(case=year_edit_cases(), ranges=_RANGES)
-# queries padded toward the length and depth caps, parsed with each year edit: no per-example deadline
-@settings(deadline=None)
+# queries padded toward the length and depth caps, parsed with each year edit: no per-example deadline; the nightly
+# `year-edits` job splits the profile's examples across parallel jobs (OP_YEAR_EDIT_SHARDS, above)
+@settings(deadline=None, max_examples=max(1, settings().max_examples // YEAR_EDIT_SHARDS))
 def test_every_year_edit_on_a_toggleable_clause_parses_and_edits_only_that_clause(
     case: YearEditCase, ranges: list[YearRange]
 ) -> None:

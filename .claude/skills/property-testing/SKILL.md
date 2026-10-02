@@ -11,8 +11,8 @@ Register in `backend/tests/conftest.py`:
 |---|---|---|---|
 | `dev` | 200 | `None`, and `too_slow` suppressed | local loop (default), `make test` under pytest-xdist: no wall-clock checks (decision-024, below) |
 | `pr` | 200 | 2 s | `test` workflow on every PR, under pytest-xdist: the dev count with the ci deadline, so a slow example on a shared runner doesn't fail the required check (TASK-127); `derandomize=True` (decision-024) |
-| `ci` | **2,000** | 2 s | `nightly` workflow's `suite-ci` job: the whole backend suite, under pytest-xdist (differential@2k) |
-| `nightly` | **50,000** | `None` | `nightly` workflow's property jobs (differential@50k: task-057) |
+| `ci` | **2,000** | 2 s | `nightly` workflow's `suite-ci` job: the whole backend suite but the differential, under pytest-xdist |
+| `nightly` | **50,000** | `None` | `nightly` workflow's property jobs, under pytest-xdist, and its `differential` job: 50,000 in total, 8 independent parallel runs of 6,250 (`OP_DIFFERENTIAL_SHARDS=8`, each with its own `--hypothesis-seed`; TASK-057) |
 Every profile sets `print_blob=True` (so a CI failure prints a `@reproduce_failure` blob). The
 Hypothesis example database (`.hypothesis/`) is gitignored; CI failures are reproduced from the blob.
 
@@ -90,10 +90,16 @@ digits, Thai, kana, CJK). Import it as `from tests.strategies import …`. Prope
 `tests/unit/test_properties.py` (round-trip without printing-caused warnings, match-set preservation by
 the oracle, all-negative rejection, Scholar mode reads canonical strings identically). PR CI runs the `pr`
 profile (200) in parallel; the nightly workflow runs the whole suite at `ci` (2,000) and every property at
-`nightly` (50,000), the latter split into an
-oracle-backed job and the rest (about 35 and 20 minutes locally). Counterexamples found so
+`nightly` (50,000), the latter as a 5-part matrix under pytest-xdist split by measured time per test (the near-cap
+replay property alone, the other oracle-backed ones, `unit/engine`, `unit/ingest`, the rest), the year-edit
+property's 4-way split (`OP_YEAR_EDIT_SHARDS`, a `year-edits` job), and the differential's own 8-way split. Those steps set `OP_EARLY_FAILURES=1` (`conftest.py`): a failure's falsifying
+example and blob are printed when it fails, so a step later interrupted at its time limit still shows them
+(`backend/tests/unit/test_early_failures.py`, case table `.claude/scripts/tests/test-early-failures.sh`, mutants in
+`gates.json`). Counterexamples found so
 far are golden rows (`("0", "0")` in test_canonical.py; `trust (trust OR track:main)` in test_defaults.py).
-Not yet: stems near the 200-expansion cap (needs the 5k fixture, task-057).
+Stems at the 200-expansion cap: the 5k corpus's stems jump from 117 terms to 278, so `synthetic_5k.cap_records()`
+adds 20 records whose words make `qca*` expand to 199 terms, `qcb*` to 200 and `qcc*` to 201 (refused), and
+`cap_vocab()` (`Vocab.cap`) draws them one stem in ten; the differential suite's engines search both (TASK-057).
 `year_edit_cases()` (TASK-145) builds queries whose year clause is toggleable, in either mode, instead of
 drawing `clause_queries()`/`near_cap_queries()` and `assume()`ing it: the toggleability rules are in its grammar,
 including year filters nested beside the clause and an OR of year filters as the clause (spec 02: neither blocks
