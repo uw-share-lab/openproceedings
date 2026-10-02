@@ -79,10 +79,12 @@ a listing. Dedup keeps a note on a track outside `PROCEEDINGS_TRACKS` (`workshop
 listing (`track_not_merged`), except a Creative AI note beside its Creative AI listing (amended by task-137, below). So
 wherever both answer, OpenReview's track is in `PROCEEDINGS_TRACKS` too, or is Creative AI's `other`. An
 OpenReview `unknown` never overrules a listing's track, and a listing's `unknown` (a mixed PMLR volume) yields
-to OpenReview's track. A note's cluster that is a listing only because a RIS row with the note's id names a
-proceedings paper still has the note's `unknown`, not a listing's own, so it stays apart too (task-174, found by the
-nightly properties; no record of that shape on the 2026-09-29 crawl, so it changes no record). This was already the behaviour before the decision (task-072 left it as an open question),
+to OpenReview's track. This was already the behaviour before the decision (task-072 left it as an open question),
 so the decision changes no record: tests pin it (`test_dedup.py`, `test_dedup_props.py`, `test_reconcile.py`).
+Amended by task-174 (found by the nightly properties): an `unknown` that an OpenReview track claim gives is never a
+listing's own, even where the note's cluster is a listing because a same-id RIS row, or the note itself, names a
+proceedings paper; it stays apart too. Snapshot `2026-09-29-d552baa07aed` holds no record of that shape, and scratch
+builds from the code before and after the fix over one cache hash alike (`8adf9327771a`), so it changes no record.
 The real-crawl check is in `docs/results/2026-09-29-reconcile-real-data.md` §Track, decided per track.
 
 **Creative AI listings merge with their own notes (amended 2026-09-30; task-137).** Decided by the owner,

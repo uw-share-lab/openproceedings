@@ -19,7 +19,6 @@ from openproceedings.ingest.dedup import (
     DedupResult,
     dedup,
     is_creative_ai,
-    proceedings_ids,
 )
 from openproceedings.ingest.record import PaperRecord
 
@@ -460,9 +459,8 @@ def test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings(xs: l
         official = [claims[s] for s in OFFICIAL if s in claims]
         assert r.track == (orv or official or [claims["ris"]])[0]
         event("track:" + ("openreview" if orv else "proceedings" if official else "ris"))
-        # a real OpenReview note names no proceedings paper; such a note merges into a listing only on a
-        # track in PROCEEDINGS_TRACKS, or as NeurIPS Creative AI beside a Creative AI listing (TASK-137)
-        note_urls = [c for c in r.provenance if c.source in OPENREVIEW]
-        if orv and official and not proceedings_ids(note_urls):
+        # a note merges into a listing only on a track in PROCEEDINGS_TRACKS, or as NeurIPS Creative AI beside a
+        # Creative AI listing (TASK-137), even where it, or a same-id RIS row, names the listed paper (TASK-174)
+        if orv and official:
             event("track:openreview-over-proceedings")
             assert orv[0] in PROCEEDINGS_TRACKS or (is_creative_ai(r) and set(official) == {"other"})

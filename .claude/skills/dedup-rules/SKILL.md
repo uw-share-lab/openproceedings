@@ -102,8 +102,10 @@ safe direction.
   exemption is a listing's *own* `unknown`: a PMLR volume that holds both main and position papers (v235,
   v267) can't say which track a paper is in, so it is `proceedings` family and merges with the OpenReview
   record, whose track wins by precedence. An `unknown` that an OpenReview track claim gives is never a listing's
-  own, even in a cluster that is a listing only because a RIS row with the note's id names a proceedings paper
-  (TASK-174: the RIS row would otherwise bridge the note's `unknown` into the listing).
+  own, even in a cluster that is a listing only because a same-id RIS row, or the note itself, names a
+  proceedings paper (TASK-174: the RIS row would otherwise bridge the note's `unknown` into the listing). A RIS
+  row alone with track `unknown` and a proceedings URL is still a listing's own `unknown` (unchanged: RIS has
+  only the listing's word for its track, and the listing's own track claim wins over RIS anyway).
   **Creative AI (TASK-137; decided by the owner, 2026-09-30).** A Creative AI listing merges with its own
   OpenReview note; other `other` tracks still never merge. The NeurIPS proceedings host Creative AI (2025: 64
   listings; 59 merge on the 2026-09-29 crawl, `docs/results/2026-09-30-creative-ai-merge.md`), which the taxonomy
