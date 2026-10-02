@@ -121,9 +121,11 @@ field a string. A forum-id native is 4–64 of `[A-Za-z0-9_-]` with at least one
 canonical reordering is superlinear in a long run of marks with alternating combining classes.
 - **Marks.** A title or abstract keeps at most 8 combining marks in a run, and the extras are dropped.
   - A mark is a character whose NFKD form starts with a non-zero combining class.
-  - A run ends only at a base, meaning a letter or digit that is not a mark. The tokenizer joins a word across
-    the invisible characters it drops (ZWJ, soft hyphen, variation selectors, LaTeX `\-`), so those must not
-    reset the count.
+  - A run ends only at a base: a letter or digit that is not a mark, and that the tokenizer keeps
+    (`normalize.latex_mask`).
+  - The tokenizer joins a word across the invisible characters it drops (ZWJ, soft hyphen, variation selectors)
+    and across LaTeX markup (`\-`, the letter of an accent macro such as `\H{…}`). So none of those may reset
+    the count.
   - A run is counted in NFKD non-starters, the base's own included.
   - A run over the cap is rewritten in its NFKD form, with its marks in canonical order, then keeps its first 8.
     So every Unicode form of the same text trims alike, and dedup title keys stay equal.

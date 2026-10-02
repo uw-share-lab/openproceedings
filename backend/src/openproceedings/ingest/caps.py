@@ -8,10 +8,12 @@ highlights it. A `q` is capped at 2,000 code points; stored text is capped here,
 
 A mark is a character whose NFKD form starts with a non-zero canonical combining class: every combining
 character, and the five that decompose to one (U+0F73, U+0F75, U+0F81, U+FF9E, U+FF9F). A run is the marks
-after one base character (a letter or digit that is not a mark), or at the start of the text, counted in NFKD
-non-starters, the base's own included (a precomposed `ệ` brings 2). Any other character (a space, punctuation,
-an invisible character the tokenizer drops) neither counts nor ends a run. The tokenizer joins a word across the
-invisible ones, so a run split only by them reaches NFC whole. A run split by a space or punctuation is capped
+after one base character, or at the start of the text, counted in NFKD non-starters, the base's own included (a
+precomposed `ệ` brings 2). A base is a letter or digit that is not a mark and that the tokenizer keeps
+(`normalize.latex_mask`: KEEP, or SUB for a math command it spells in Unicode). Any other character neither
+counts nor ends a run: a space, punctuation, an invisible character the tokenizer drops, or a letter of LaTeX
+markup it drops (the `H` of `\\H{…}`). The tokenizer joins a word across the invisible characters and markup,
+so a run split only by them reaches NFC whole. A run split by a space or punctuation is capped
 as one, which real text never needs: its longest run is 1. So no word the tokenizer forms holds more than
 `MAX_MARKS` consecutive non-starters, and its NFC is linear.
 
@@ -34,6 +36,7 @@ from collections.abc import Iterable
 from functools import lru_cache
 
 from openproceedings.ingest.record import Claim, PaperRecord
+from openproceedings.query.normalize import KEEP, SUB, latex_mask
 
 MAX_MARKS = 8  # combining marks (NFKD non-starters) kept per run
 MAX_ABSTRACT = 20_000  # characters (code points) kept of an abstract
@@ -69,8 +72,12 @@ def is_base(ch: str) -> bool:
 
 
 def _segments(text: str) -> list[str]:
-    """`text` split before every base character: each piece is one base (or the text's start) and its run."""
-    cuts = [i for i, ch in enumerate(text) if i and is_base(ch)]
+    """`text` split before every base character the tokenizer keeps: each piece is one base (or the text's
+    start) and its run. A letter of LaTeX markup it drops (the `H` of `\\H{…}`, a command name outside math) is
+    no base: the word goes on across it, as across an invisible character. A math command it reads as its
+    Unicode spelling (`\\alpha`, SUB) is one."""
+    mask = latex_mask(text)
+    cuts = [i for i, ch in enumerate(text) if i and (mask[i] == SUB or (mask[i] == KEEP and is_base(ch)))]
     return [text[i:j] for i, j in zip([0, *cuts], [*cuts, len(text)], strict=True)]
 
 

@@ -176,10 +176,13 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    can cost. That cost is superlinear in a long run of marks with alternating combining classes.
    - **Marks.** A run of combining marks in a title or abstract keeps 8 marks, and the rest are dropped.
      - A mark is a character whose NFKD form starts with a non-zero canonical combining class.
-     - A run is the marks after one base character (a letter or digit that is not a mark), or at the start of
-       the text. It is counted in NFKD non-starters, the base's own included.
+     - A run is the marks after one base character, or at the start of the text. It is counted in NFKD
+       non-starters, the base's own included.
+     - A base is a letter or digit that is not a mark and that the tokenizer keeps (its LaTeX mask,
+       `normalize.latex_mask`).
      - Any other character neither counts nor ends a run, because the tokenizer joins a word across the
-       invisible characters it drops (zero-width joiner, soft hyphen, LaTeX `\-`, …).
+       invisible characters and the LaTeX markup it drops (zero-width joiner, soft hyphen, `\-`, the letter of
+       an accent macro such as `\H{…}`).
      - A run over the cap is rewritten in its NFKD form, its marks in canonical order, and keeps its first 8.
        So every Unicode form of the same text trims alike, and dedup title keys that matched still match.
      - No token holds more than 8 consecutive non-starters, so NFC stays linear.

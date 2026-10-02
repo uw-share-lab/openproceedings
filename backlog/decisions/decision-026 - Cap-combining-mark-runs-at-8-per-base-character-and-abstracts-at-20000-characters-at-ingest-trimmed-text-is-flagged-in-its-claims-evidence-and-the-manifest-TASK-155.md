@@ -49,18 +49,24 @@ Details:
   combining class. That is every combining character (922 in Unicode 15.0), plus five that decompose to one
   (U+0F73, U+0F75, U+0F81, U+FF9E, U+FF9F).
 - **What a run is.** The marks after one base character, or at the start of the text. A base character is a
-  letter or digit that is not a mark. The run is counted in NFKD non-starters, the base's own included: a
+  letter or digit that is not a mark, and that the tokenizer keeps: its LaTeX mask (`normalize.latex_mask`)
+  says KEEP, or SUB for a math command it spells in Unicode. The run is counted in NFKD non-starters, the base's own included: a
   precomposed `ệ` brings 2, so the same text precomposed or decomposed is over the cap alike. Any other
   character neither counts nor ends a run:
   - **Invisible characters** (zero-width joiner, variation selector, grapheme joiner, soft hyphen, enclosing
     mark, LaTeX `\-`). The tokenizer drops these and joins the word across them, so marks on both sides reach
     NFC as one run. The review measured a title of 8-mark runs split by zero-width joiners at 1.3 s for 72k
     characters, growing about 4x per doubling, when each separator still started a new run.
+  - **LaTeX markup the tokenizer drops.** For example, the letter of an accent macro whose braces hold only an
+    invisible character (`\H{` + U+200D + `}`). Round 2 of the security review measured 4,000 of these between
+    8-mark runs: one word with a run of 32,000 marks, at 0.37 s for 52k characters, when the macro's letter
+    still started a new run.
   - **Spaces and punctuation.** Marks after them are capped with the run before. Real text never needs this,
     since its longest run is 1.
 
-  With this rule, no word the tokenizer forms holds more than 8 consecutive non-starters after NFD (tested),
-  so its NFC is linear.
+  With this rule, no word the tokenizer forms holds more than 8 consecutive non-starters after NFD, so its NFC
+  is linear. A Hypothesis property over random mixes of bases, marks, invisible characters and LaTeX macros
+  tests this.
 - **How a run over the cap is trimmed.** It is rewritten in its NFKD form: each character decomposed, and each
   run of non-starters put in canonical order. Then its first 8 non-starters are kept. A run within the cap is
   left as it is. So every form of the same text trims to the same characters, whether NFC, NFD or marks stored
@@ -75,9 +81,9 @@ Details:
   the note, and the manifest names the record.
 - **Cut ends.** A cut abstract is stripped of trailing whitespace and `…`, since a record refuses either. The
   note gives the length kept.
-- **Titles.** They get the mark cap only, which makes their cost linear. A title length cap would only add a
-  backstop. The owner did not decide one, and the TASK-155 security review proposed 1,000 code points. It is
-  left to the owner (TASK-155 notes, deferrals).
+- **Titles.** They get the mark cap only. A title length cap would bound every shape of bypass, including ones
+  not yet found. The security review recommends one (1,000 code points). It is with the owner (asked
+  2026-10-02), and this decision does not add it.
 
 ## Consequences
 

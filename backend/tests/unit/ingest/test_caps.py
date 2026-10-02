@@ -13,7 +13,10 @@ import unicodedata
 from pathlib import Path
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 from openproceedings.ingest.caps import (
+    CAPPED,
     MAX_ABSTRACT,
     MAX_MARKS,
     TRIMMED,
@@ -118,6 +121,42 @@ def test_a_stored_order_and_its_canonical_order_keep_one_title_key_after_the_cap
         canonical = unicodedata.normalize("NFD", text)
         assert title_key(text) == title_key(canonical)
         assert title_key(cap_marks(text)[0]) == title_key(cap_marks(canonical)[0])
+
+
+# what a hostile title or abstract mixes (TASK-155 review): marks of alternating classes, drawn as often as the
+# rest together; bases the fold keeps and drops; the invisible characters, whole LaTeX accent macros and other
+# markup the tokenizer joins a word across; separators and math. Drawn uniformly from one list, a run past the
+# cap almost never formed: the rule before round 2 passed 300 such draws; with these weights it failed 39 of 200
+_MARKS = ["\u0301", "\u0316", "\u0338", "\u0323", "\u0f73", "\uff9e"]
+_OTHER = [
+    "\u0e01", "a", "\u0915", "\u1ec7", "1",  # bases
+    "\u200d", "\u00ad", "\ufe00", "\u034f", "\u20dd",  # invisible: dropped, the word joined across them
+    "\\H{\u200d}", "\\v{\u00ad}", "\\u{\ufe00}", "\\c{\u034f}", '\\"{}', "\\H{", "{", "}", "\\-", "\\",
+    "\\alpha", "$", "H",  # LaTeX
+    " ", "-", ".",  # separators
+]  # fmt: skip
+_PIECE = st.one_of(st.sampled_from(_MARKS), st.sampled_from(_MARKS), st.sampled_from(_OTHER))
+
+
+@given(st.lists(_PIECE, min_size=100, max_size=400).map("".join), st.sampled_from(CAPPED))
+def test_no_token_from_capped_text_holds_a_run_past_the_cap(text: str, field: str) -> None:
+    # the invariant that keeps NFC linear, over random mixes: whatever the tokenizer joins, a word it forms from
+    # capped text holds at most MAX_MARKS consecutive non-starters
+    for token in tokenize(cap(field, text)[0]):
+        run = longest = 0
+        for ch in unicodedata.normalize("NFD", token.text):
+            run = run + 1 if unicodedata.combining(ch) else 0
+            longest = max(longest, run)
+        assert longest <= MAX_MARKS
+
+
+def test_an_accent_macro_doesnt_end_a_run() -> None:
+    # the round-2 security probe: `\H{` + an invisible character + `}` is markup the tokenizer joins across, so
+    # its letter is no base; uncapped, 4,000 of these made one word with a run of 32,000 marks
+    marks = "\u0316\u0301" * 4
+    capped, note = cap("title", "\u0e01" + (marks + "\\H{\u200d}") * 4_000)
+    assert note is not None and len(capped) == 9 + 5 * 4_000  # every mark after the first 8 dropped
+    assert cap_marks("\u0e01" + marks + "\\H{x}" + marks)[1] == 0  # a kept letter inside the braces is a base
 
 
 def test_no_word_the_tokenizer_forms_from_capped_text_holds_a_long_run() -> None:
@@ -243,8 +282,7 @@ def test_a_proceedings_page_evidence_keeps_its_url_first() -> None:
     r = record(provenance=(claim("abstract", HOSTILE, source="ris", evidence=ev),), abstract=HOSTILE)
     [out] = cap_records([r])
     assert (
-        out.claims("abstract")[0].evidence
-        == f"{ev} ({TRIMMED} 92 combining marks dropped past 8 in a run)"
+        out.claims("abstract")[0].evidence == f"{ev} ({TRIMMED} 92 combining marks dropped past 8 in a run)"
     )
 
 

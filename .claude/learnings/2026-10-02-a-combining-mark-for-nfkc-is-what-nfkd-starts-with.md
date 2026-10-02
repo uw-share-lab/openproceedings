@@ -1,6 +1,6 @@
 # A cap on combining marks must count what NFKD starts with, not only combining characters
 
-**Key lesson:** To bound what NFKC's canonical reordering can cost, call a character a mark when its NFKD form starts with a non-zero combining class (all 922 combining characters in Unicode 15.0 plus U+0F73, U+0F75, U+0F81, U+FF9E, U+FF9F), end a run only at a letter or digit (the tokenizer joins words across invisible characters), trim a run over the cap in its NFKD canonical order so every Unicode form of a title trims alike, and flag any trim by appending to the claim's evidence after what the source wrote, since `dedup.attribution` reads an RIS route and url from the evidence's first tokens.
+**Key lesson:** To bound what NFKC's canonical reordering can cost, call a character a mark when its NFKD form starts with a non-zero combining class (all 922 combining characters in Unicode 15.0 plus U+0F73, U+0F75, U+0F81, U+FF9E, U+FF9F), end a run only at a letter or digit the tokenizer keeps (it joins words across invisible characters and LaTeX markup; ask `normalize.latex_mask`), trim a run over the cap in its NFKD canonical order so every Unicode form of a title trims alike, and flag any trim by appending to the claim's evidence after what the source wrote, since `dedup.attribution` reads an RIS route and url from the evidence's first tokens.
 
 - **Date:** 2026-10-02 · **Task:** task-155 · **Area:** ingest
 - **Artifacts:** `backend/src/openproceedings/ingest/caps.py`, `backend/tests/unit/ingest/test_caps.py`, decision-026, spec 01 §Pipeline 2
@@ -30,6 +30,14 @@ Bound the tokenizer's superlinear NFKC reordering on stored text (TASK-067's sec
   one run. The security review measured 1.3 s for a 72k title, growing about 4x per doubling. A run must end
   only at a letter or digit. Test the invariant on the tokens (no token holds more than 8
   non-starters), not on the raw text.
+- Ending a run at any letter. The letter of a LaTeX accent macro whose braces hold an invisible character
+  (`\H{` U+200D `}`) is markup the tokenizer drops. Round 2 of the security review joined 4,000 such runs into
+  one word: 32,000 marks, 0.37 s at 52k characters. Ask the tokenizer which characters it keeps
+  (`normalize.latex_mask`) rather than re-deriving its rules.
+- Testing the run rule with a uniform Hypothesis alphabet. Drawn uniformly from one list of pieces, a run past
+  the cap almost never formed: 300 random draws passed the broken rule. Weight the marks (half the draws),
+  include whole macros as pieces, and require long texts (`min_size=100`). The property then failed the old
+  rule on every run.
 - Benchmarking the worst case with a Latin base and U+0338. Latin marks fold away and the slash takes the
   short cluster path, so it measures nearly the cheapest input. Use a base whose marks are kept (Thai) and
   classes 220/230.
