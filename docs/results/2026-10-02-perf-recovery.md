@@ -137,3 +137,14 @@ reports used different retained caches/aggregation and cannot support a direct b
   (backend **6330 passed, 2 skipped in 137.52 s**; frontend **3209 passed**, 40 files, 6.30 s);
   `make lint` and `make tooling` passed. HEAD and clean tree were unchanged throughout.
   Both tasks were finalized and completed through the Backlog CLI after these checks.
+
+
+## CI comparison protocol correction
+
+PR #91's first bench run compared the historical exclusion benchmark, which retains facet results,
+with a fully cold version under the same test ID. Its 33–91% regression therefore included newly charged
+facet work. Keep `test_match_ids_with_exclusion_accounting`'s historical verified/compiled/expanded-only
+reset for base/head comparisons. The separately named
+`test_match_ids_with_exclusion_accounting_all_engine_caches_cold` also resets faceted and `_ords` and
+retains the 300 ms budget. The full report above continues to reset every engine memo. No regression
+threshold or budget changes; comparable-workload CI evidence must pass before merge.

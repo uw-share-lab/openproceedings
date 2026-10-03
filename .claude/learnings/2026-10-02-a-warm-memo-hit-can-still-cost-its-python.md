@@ -63,3 +63,11 @@ Full stable recovery checks at `f2b50e3c`: make test (backend 6330 passed, 2 ski
 make lint and make tooling passed under the shared heavy lock, Node 22.23.3, four pytest workers.
 Tasks 166/167 were completed through CLI after preserving the original history as a backup and legitimately
 recreating decision 030 via CLI; no task metadata was hand-edited and no real data was changed.
+
+
+### 2026-10-02: cache protocols need distinct comparison IDs
+
+PR #91 exposed a benchmark comparison error: fully clearing facet and ordinal caches under an existing
+benchmark ID compares first-query work against a base that retains facets. Keep the historical ID's
+cache protocol unchanged and add a separately named fully cold benchmark with the same budget. This
+preserves the 20% regression guard while making the newly measured work explicit.
