@@ -162,3 +162,24 @@ def test_the_ordinal_table_is_lazy_reused_and_resettable(pair: Pair) -> None:
     new._ords = None
     assert new.ids_of(new.id_set(ids)) == frozenset(ids)
     assert new._ords is not table
+
+
+@pytest.mark.parametrize(
+    "changed", ("snapshot_hash", "tokenizer_version", "ranking_params", "tantivy_version")
+)
+def test_schema_bench_refuses_different_inputs_even_with_identical_ids(
+    pair: Pair, monkeypatch: pytest.MonkeyPatch, changed: str
+) -> None:
+    from tests.bench import schemas_alternate
+
+    old, new = pair
+    assert old.ids == new.ids
+    manifest = {**MANIFEST, "snapshot_hash": "same-snapshot"}
+    altered = {**manifest, changed: "different-input"}
+    monkeypatch.setattr(
+        schemas_alternate, "verify_index", lambda path: manifest if path.name == "old" else altered
+    )
+    with pytest.raises(AssertionError, match=changed):
+        schemas_alternate.verify_pair_inputs(Path("old"), Path("new"))
+    monkeypatch.setattr(schemas_alternate, "verify_index", lambda path: manifest)
+    schemas_alternate.verify_pair_inputs(Path("old"), Path("new"))

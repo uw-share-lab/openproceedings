@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 
 from openproceedings.engine.exclusions import excluded
+from openproceedings.engine.index import verify_index
 from openproceedings.engine.tantivy_engine import SORTS, TantivyEngine
 
 from tests.bench.report_80k import ms, quantile
@@ -27,7 +28,15 @@ from tests.bench.test_bench import trust_evals
 from tests.golden.test_trust_evals import STRINGS
 
 
+def verify_pair_inputs(old: Path, new: Path) -> None:
+    """Refuse a comparison that changes anything besides the schema, using verified manifests."""
+    manifests = (verify_index(old), verify_index(new))
+    for field in ("snapshot_hash", "tokenizer_version", "ranking_params", "tantivy_version"):
+        assert manifests[0][field] == manifests[1][field], f"schema comparison requires identical {field}"
+
+
 def main() -> None:
+    verify_pair_inputs(Path(sys.argv[1]), Path(sys.argv[2]))
     engines = {"schema 2": TantivyEngine(Path(sys.argv[1])), "schema 3": TantivyEngine(Path(sys.argv[2]))}
     rounds = int(sys.argv[3]) if len(sys.argv) > 3 else 200
     old, new = engines.values()

@@ -23,10 +23,12 @@ from openproceedings.query.ast import Phrase, Wildcard
 from pydantic import TypeAdapter
 
 from tests.bench.report_80k import ms, quantile
+from tests.bench.schemas_alternate import verify_pair_inputs
 from tests.bench.test_bench import trust_evals
 
 
 def main() -> None:
+    verify_pair_inputs(Path(sys.argv[1]), Path(sys.argv[2]))
     old, new = (TantivyEngine(Path(p)) for p in sys.argv[1:3])
     rounds = int(sys.argv[3]) if len(sys.argv) > 3 else 100
     assert rounds > 0

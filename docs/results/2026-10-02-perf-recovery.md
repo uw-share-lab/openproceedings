@@ -5,6 +5,8 @@ They show no measurable end-to-end schema gain. The isolated 11.3 → 6.2 ms cla
 a committed in-index harness separating Python construction from Tantivy collection.
 
 The recovery uses read-only, same-snapshot schema-2/schema-3 indexes and the shared `heavy.sh` lock.
+Both schema-comparison harnesses verify manifests and require identical snapshot_hash, tokenizer_version,
+ranking_params and tantivy_version before loading/timing; matching document IDs alone is insufficient.
 `tests.bench.id_sets OLD_INDEX NEW_INDEX 100` measures the abstract AI-agent wildcard clause's text-id
 and ordinal query construction separately from collection of preconstructed queries. It reports ordinal
 table first/subsequent construction, whole-tree compile with verified/expansion caches warm but compiled

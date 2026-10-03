@@ -43,3 +43,7 @@ the overloaded machine. `tests.bench.id_sets` separates Python query constructio
 on the actual same-snapshot index pair, with lazy ordinal-table first-use, subsequent-use and retained-memory
 measurements. Cold benchmarks reset `_ords` alongside compiled, verified, expansion and facet memos. The
 original broad COMBO benchmark remains; a separate defaults benchmark measures the narrower caller.
+
+A schema-only benchmark also verifies both manifests and compares snapshot, tokenizer, ranking and Tantivy
+inputs before timing: identical IDs do not establish identical titles/abstracts. The negative-control test
+keeps IDs equal while changing each manifest input and proves the benchmark guard refuses it.
