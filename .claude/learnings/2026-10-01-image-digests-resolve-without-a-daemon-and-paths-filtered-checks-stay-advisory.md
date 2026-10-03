@@ -53,3 +53,19 @@ Dependabot from bumping the exact `tantivy==` pin, and record the `v*` tag rules
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/repo-conventions/SKILL.md`, `.claude/skills/index-versioning/SKILL.md`, `.claude/skills/pr-workflow/SKILL.md`, `.claude/agents/ci-engineer.md`, `CLAUDE.md`
 - Test or hook added? — `.claude/scripts/check_digest_pins.py` (run by `make tooling`), its rows in `.claude/scripts/tests/test-tooling-scripts.sh` and mutants in `.claude/scripts/mutants/gates.json`
+
+## 2026-10-03 addendum — verify the changed API image
+
+PR 99 upgrades the API build stage to uv 0.12.22. Registry inspection matched the
+pinned multi-architecture index digest, but the green web-image workflow builds
+only deploy/web.Dockerfile and does not exercise this API stage. A direct build of
+deploy/api.Dockerfile at 3ff54c0b03b7382c02d4a40a1bc9bc3791ba4181 completed
+successfully under the shared test lock. Its CLI help and Python import smoke
+passed with uid/gid 10001 and an owned /data/records directory at mode 0700.
+This source still carries FastAPI 0.141.1 and package metadata 0.0.0; the receipt
+does not claim coverage of the separately updated dependency or release trees.
+
+For a build-tool or API base-image change, verify both the registry digest and
+the actual API build/runtime. Backend CI and a web-only image build cannot
+substitute for exercising the changed Dockerfile. No data directory was mounted,
+and no image was pushed or deployed.

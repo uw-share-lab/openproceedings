@@ -8,7 +8,7 @@
 # Base images are pinned by the digest of their multi-arch index, the tag kept for readers (TASK-149;
 # .claude/scripts/check_digest_pins.py checks it, Dependabot's `docker` entry bumps the FROM digests).
 
-FROM ghcr.io/astral-sh/uv:0.11.18@sha256:78bc42400d77b0678ba95765305c826652ed5431f399257271dda681d0318f03 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.22@sha256:f513a91fc62fe7c17567eee97230dd198e43edb8a9fbecca843714a4358fe1bc AS uv
 
 FROM python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3 AS build
 COPY --from=uv /uv /usr/local/bin/uv
