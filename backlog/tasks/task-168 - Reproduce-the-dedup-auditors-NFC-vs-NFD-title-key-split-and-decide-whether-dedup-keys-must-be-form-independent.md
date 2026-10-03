@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-02 19:17'
+updated_date: '2026-10-03 02:05'
 labels:
   - dedup
   - ingest
@@ -44,4 +44,6 @@ Real data: data/snapshots/2026-09-29-d552baa07aed holds 124,208 title claims, 0 
 
 Scratch rebuild (2026-10-02; data/cache cloned into a mktemp dir, nothing written under data/): op snapshot build with origin/dev's code and with this branch both gave snapshot 2026-09-29-8adf9327771a. The two are byte-identical (records.jsonl, merges.csv, conflicts.csv), so the NFC key changes no merge on the real data. Against data/snapshots/2026-09-29-d552baa07aed: merges.csv and conflicts.csv are identical; op snapshot diff gives added 0, removed 0, rekeyed 0, changed 0, and 104 provenance_only (the TASK-159 twin claims merged since d552, not this change).
 Deferred (reported to team-lead): search's own normalize() reads LaTeX before NFKC, so a non-NFC title with a backslash still indexes other tokens than its NFC form. That needs a TOKENIZER_VERSION bump. Today's impact is 0 (no non-NFC titles).
+
+Tokenizer side (search's normalize, form-dependent before NFKC): per the owner (2026-10-02), fixed on its own branch fix/tokenizer-nfc-form (tokfix agent), not here. This PR changes only the dedup title_key.
 <!-- SECTION:NOTES:END -->
