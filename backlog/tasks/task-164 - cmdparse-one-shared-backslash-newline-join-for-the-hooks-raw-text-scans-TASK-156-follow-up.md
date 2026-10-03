@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-03 04:31'
+updated_date: '2026-10-03 05:29'
 labels:
   - security
   - tooling
@@ -42,6 +42,8 @@ Source: TASK-156 review (2026-10-02), deferred. Bash deletes a backslash-newline
 
 <!-- SECTION:PLAN:BEGIN -->
 Preserve recovered implementation; reproduce regressions, scan sed script files, add deterministic join and case-folding coverage, run lint/tooling/changed mutation checks, update docs and learnings, complete tasks and commit for independent review.
+
+Independent case-position equivalence Should: preserve documented conservative parser policy, add unsupported-shape BLOCK and ordinary-case ALLOW controls; remove false equivalent marker after bounded red proof, run official targeted mutant, then request fresh exact-source review before full417 restart.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -52,4 +54,8 @@ Recovered shared join used by preprocess, cmdparse case cut-short, require-revie
 2026-10-03 independent Must: learning rename mutant label claimed dropping --find-renames but replacement explicitly forced --no-renames. Removed false equivalence and added unchanged-rename BLOCK paired with rename-plus-new-content ALLOW, preserving production hook. Official prior629 Linux run interrupted exit137; never pass evidence. Bounded red/green and official targeted mutant checks underway before new exact-source full417 validation.
 
 Bounded Oct3 regression RED on explicit --no-renames:866passed/1failed, unchanged rename incorrectlyallowed while rename+extension allowed (/tmp/hooks-rename-red.exit1). Production restored; official mutate.py --match learning-rename-detection targeted check baseline passes and mutant KILLED:1 mutants,0 problems,exit0 (/tmp/hooks-rename-official-targeted.log/.exit). Full417 exact-source run and task closure still pending.
+
+Oct3 independent QA Should: case-position equivalent marker changed real protect-data-dir verdicts on benign unsupported syntax (no security bypass). Added data-only controls preserving spec08 conservative shape policy. Replacement RED:868passed/2failed, both unsupported shapes incorrectlyallowed, ordinary case ALLOW control passed (/tmp/hooks-case-red.log/.exit1). Removed false marker and corrected label; production parser unchanged. Prior895 full run stopped only owned container,47kills/exit137 archived as interrupted diagnostic, never PASS. Official targeted mutant proof and fresh exact-source review/full417 pending.
+
+Official GREEN after restoring unchanged production parser: mutate.py --match case-position replacement baseline passed, mutant KILLED;1 mutants,0problems,exit0 (/tmp/hooks-case-official-targeted.log/.exit). Syntax, shellcheck, learning-index and diff checks pass. Full417 and remaining task closure still pending new exact-source independent review.
 <!-- SECTION:NOTES:END -->

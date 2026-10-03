@@ -121,3 +121,20 @@ Run the new review gate on its own tooling: five routed reviewers (code, securit
 - Propagated to `.claude/skills/testing-standards/SKILL.md`: prove the replacement's semantics with an
   isolating negative case and positive control before claiming equivalence. Interrupted official runs
   remain diagnostics, never pass evidence.
+
+## Addendum — 2026-10-03 (case-position equivalence review)
+
+- Supported ordinary case forms were insufficient evidence for a case-position mutant's exemption.
+  Independent QA compared the production protect-data-dir verdicts: benign case-shaped argument data
+  and a comment before `in` are refused by the documented conservative shape policy, but the mutant
+  allows them. This is a mutation-proof defect, with no demonstrated security bypass. The production
+  parser remains unchanged; spec 08 already documents its shape-based refusal policy.
+- Added paired data-only case-table controls: both unsupported shapes BLOCK, while an ordinary benign
+  case substitution ALLOWs. Injecting the replacement produced exactly those two failures
+  (`868 passed, 2 failed`); the positive control stayed allowed. Removed the false equivalent marker
+  and named its actual effect. The previous 47-kill official run was interrupted with exit 137 and is
+  preserved only as diagnostic evidence, never a full pass.
+- Propagated to `.claude/skills/testing-standards/SKILL.md`: check actual hook verdicts for benign
+  unsupported syntax before claiming parser mutants equivalent. Full official verification remains pending.
+- Official targeted mutation verification passed its full table baseline and killed this replacement:
+  `1 mutants: 0 problem(s)`, exit 0. This focused proof does not replace the pending full changed run.

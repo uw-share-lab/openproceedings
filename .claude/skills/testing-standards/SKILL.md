@@ -72,3 +72,5 @@ that fails closed, an unreviewed HEAD) does not count. Isolate the one check the
 An `equivalent` label needs evidence for the actual replacement, including a distinguishing negative case
 and a positive control. Dropping an explicit default and forcing its opposite are different mutations:
 `--no-renames` makes an unchanged learning rename look newly added, even though `--find-renames` gives 0/0.
+Compare actual hook verdicts for benign unsupported syntax too: a conservative parser can intentionally
+block a shape that a mutant allows. Identical destructive-case verdicts alone do not prove equivalence.

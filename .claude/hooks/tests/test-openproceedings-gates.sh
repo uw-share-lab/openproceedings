@@ -1139,6 +1139,11 @@ in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
 check $P block "case form: ca\\-newline-se (split keyword)" "$(payload_bash 'x="$(ca\
 se a in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
 # a case is told by its shape, and an `esac` after a pattern's `)` closes it: real cases stay allowed
+# Conservative shape policy: these commands stay data; unsupported case shapes are refused.
+check $P block "case-shaped argument data without esac is refused" "$(payload_bash 'x="$(echo case x in x)"')"
+check $P block "comment before in stays an unsupported case shape" "$(payload_bash 'x="$(case x #comment
+ in x) :;; esac)"')"
+check $P allow "ordinary benign case substitution stays allowed" "$(payload_bash 'x="$(case x in x) :;; esac)"')"
 check $P allow "x=\"\$(git log --grep case -1)\" (case as an argument)" "$(payload_bash 'x="$(git log --grep case -1)"; echo "$x"')"
 check $P allow "x=\"\$(case a in a) esac)\" (esac after a pattern)" "$(payload_bash 'x="$(case a in a) esac)"; echo ok')"
 check $P allow "x=\"\$(time -p case a in a) echo ok;; esac)\"" "$(payload_bash 'x="$(time -p case a in a) echo ok;; esac)"; echo "$x"')"
