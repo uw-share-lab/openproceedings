@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-02 20:49'
+updated_date: '2026-10-03 04:31'
 labels:
   - security
   - tooling
@@ -48,4 +48,8 @@ Preserve recovered implementation; reproduce regressions, scan sed script files,
 
 <!-- SECTION:NOTES:BEGIN -->
 Recovered shared join used by preprocess, cmdparse case cut-short, require-review parse-failure net, enforce-pr-workflow fallback, and both attribution raw-text scans. Added exact joined-text heredoc boundary rows; isolated mutation checks kill both previous join survivors and the worktree case-comparison survivor. Node22 make lint and initial make tooling passed (839 gate rows, 118 tooling rows); final stable tooling rerun and changed mutation verification pending.
+
+2026-10-03 independent Must: learning rename mutant label claimed dropping --find-renames but replacement explicitly forced --no-renames. Removed false equivalence and added unchanged-rename BLOCK paired with rename-plus-new-content ALLOW, preserving production hook. Official prior629 Linux run interrupted exit137; never pass evidence. Bounded red/green and official targeted mutant checks underway before new exact-source full417 validation.
+
+Bounded Oct3 regression RED on explicit --no-renames:866passed/1failed, unchanged rename incorrectlyallowed while rename+extension allowed (/tmp/hooks-rename-red.exit1). Production restored; official mutate.py --match learning-rename-detection targeted check baseline passes and mutant KILLED:1 mutants,0 problems,exit0 (/tmp/hooks-rename-official-targeted.log/.exit). Full417 exact-source run and task closure still pending.
 <!-- SECTION:NOTES:END -->

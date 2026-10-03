@@ -106,3 +106,18 @@ Run the new review gate on its own tooling: five routed reviewers (code, securit
   a row where it is the only barrier.
 - **Test inputs with trailing whitespace must be built with `printf`.** Files lose trailing spaces, and the
   `'EOF '` row silently tested nothing until it was rebuilt that way.
+
+## Addendum — 2026-10-03 (learning rename equivalence review)
+
+- An equivalence claim must describe the actual mutant. The learning gate mutant's label claimed that it
+  dropped `--find-renames`, but its replacement explicitly set `--no-renames`. Independent evidence showed
+  that a byte-for-byte rename changes from 0/0 with rename detection to an added-file count without it.
+  The latter falsely satisfies the learning gate. The production gate was correct; the equivalence claim
+  concealed missing regression coverage.
+- Pair a negative unchanged rename with a positive rename plus new content, both with approved fixture
+  commits. The previous positive row alone could not distinguish the mutant. The paired rows now live in
+  `.claude/hooks/tests/test-openproceedings-gates.sh`; the renamed mutant in
+  `.claude/scripts/mutants/gates.json` is required to die and no longer carries `equivalent: true`.
+- Propagated to `.claude/skills/testing-standards/SKILL.md`: prove the replacement's semantics with an
+  isolating negative case and positive control before claiming equivalence. Interrupted official runs
+  remain diagnostics, never pass evidence.

@@ -509,10 +509,13 @@ check $R block "sudo --user root git push"            "$(payload_bash 'sudo --us
 check $R block "env -S 'git push'"                    "$(payload_bash "env -S 'git push origin other2'")"
 # --head must be a real branch name even when it resolves (mut@{0} is a reflog entry of an approved sha)
 check $R block "--head mut@{0} is not a branch name"  "$(payload_bash 'gh pr create --base dev --head "mut@{0}" --fill --label no-learning')"
-# learnings: rename + extend counts
+# learnings: an unchanged rename adds no lesson; rename + new content counts
 g switch -q -c mut-rename dev
 git -C "$REPO" mv ".claude/learnings/2026-01-01-old.md" ".claude/learnings/2026-01-01-old-renamed.md"
-printf '\n## Addendum\nmore\n' >> "$REPO/.claude/learnings/2026-01-01-old-renamed.md"; g add -A; g commit -qm rename
+g commit -qm rename-only
+approve
+check $R block "unchanged learning rename adds no lesson" "$(payload_bash 'gh pr create --base dev --fill')"
+printf '\n## Addendum\nmore\n' >> "$REPO/.claude/learnings/2026-01-01-old-renamed.md"; g add -A; g commit -qm extend-renamed
 approve
 check $R allow "rename + extend of an entry counts"   "$(payload_bash 'gh pr create --base dev --fill')"
 g switch -q mut

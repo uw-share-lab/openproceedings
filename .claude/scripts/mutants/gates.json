@@ -462,11 +462,10 @@
   "new": "                path = parts[2]"
  },
  {
-  "label": "learnings --find-renames dropped (EQUIVALENT: git's diff.renames defaults to true; the flag states intent)",
+  "label": "learnings rename detection disabled treats unchanged rename as new content",
   "file": ".claude/hooks/require-review.sh",
   "old": "\"--numstat\", \"--find-renames\", ",
-  "new": "\"--numstat\", \"--no-renames\", ",
-  "equivalent": true
+  "new": "\"--numstat\", \"--no-renames\", "
  },
  {
   "label": "rejection needs only one word",

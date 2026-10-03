@@ -69,3 +69,6 @@ compilation). Anything the frontend or a script depends on → contract. User-vi
 hook or tooling script ships with a mutant in `.claude/scripts/mutants/*.json` (`gates.json`, or a file of its own such as `merge-group.json`), and with a case-table row
 that kills it. A row that passes only because something else fails first (a stale index, a parser crash
 that fails closed, an unreviewed HEAD) does not count. Isolate the one check the row is about.
+An `equivalent` label needs evidence for the actual replacement, including a distinguishing negative case
+and a positive control. Dropping an explicit default and forcing its opposite are different mutations:
+`--no-renames` makes an unchanged learning rename look newly added, even though `--find-renames` gives 0/0.
