@@ -109,13 +109,15 @@ _FORM_PIECES = st.one_of(
 @example("x \u5d69\u0345\U00010376y")  # U+0345 (ypogegrammeni, NFKC ι) before a letter
 # two marks: the swapped order is canonically equivalent, so it is checked too
 @example("Caf\\e\u0301\u0323 x")
+@example("\u0301\u0301\ud800")  # nightly Unicode seed regression: two marks and a lone surrogate
 def test_every_canonically_equivalent_title_has_one_key(title: str) -> None:
     """TASK-168: two copies of one paper that differ only in Unicode form (NFC, NFD, or marks stored in another
     canonical order) share a dedup title key, so they merge."""
     marks = [i for i, ch in enumerate(title) if unicodedata.combining(ch)]
     reordered = list(title)
     if len(marks) >= 2:  # swap two marks: canonically equivalent only when NFC says so
-        i, j = random.Random(title).sample(marks, 2)
+        # Random encodes string seeds with strict UTF-8; keep arbitrary Unicode, including surrogates.
+        i, j = random.Random(title.encode("utf-8", "surrogatepass")).sample(marks, 2)
         reordered[i], reordered[j] = reordered[j], reordered[i]
     forms = {title, unicodedata.normalize("NFC", title), unicodedata.normalize("NFD", title)}
     if unicodedata.normalize("NFC", "".join(reordered)) == unicodedata.normalize("NFC", title):
