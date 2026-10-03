@@ -69,7 +69,7 @@ data/indexes/current            symlink → the served version
 | New snapshot | nothing to bump; `snapshot_hash` changes |
 | Pure refactor proven identical by parity + determinism | none |
 
-## Two served schemas (TASK-167)
+## Two served schemas (TASK-167, decision-030)
 A `SCHEMA_VERSION` bump changes every new `index_version`, but it must not strand the indexes that search records
 pin. So `engine/index.py` maps each served schema to its `SchemaForm` in `SERVED_SCHEMAS` (the current schema
 and the one before it: what differs between them, such as `ord_indexed`), and `unservable` accepts both. The engine

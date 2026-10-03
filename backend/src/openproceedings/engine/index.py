@@ -57,7 +57,7 @@ SCHEMA_VERSION = "3"  # 3: `ord` indexed too, so a verified clause's ids are a u
 # which new indexes are built at, and the one before it, so an index a search record pins keeps replaying
 # (guarantee 4). A schema-2 index filters verified ids by a term set on the text `id`, as it always did
 # (`TantivyEngine.ord_indexed`). Retire "2" (drop it here) only once no record pins a schema-2 index
-# (`op index retire` refuses a pinned one; index-versioning skill).
+# (`op index retire` refuses a pinned one; decision-030).
 @dataclass(frozen=True, slots=True)
 class SchemaForm:
     """What differs between the served schemas, read per index from its manifest's `schema_version`."""

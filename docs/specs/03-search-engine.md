@@ -210,7 +210,7 @@ Measured (`docs/results/2026-10-02-exclusions-and-verified-forms.md`, old and ne
 
 The end-to-end gain is small. Inside a search, the id set is one MUST clause of an intersection that the rarer
 clauses drive, so most of its isolated cost (TASK-076's "about 10 ms a search") never reaches a search. The
-change was kept by owner decision, since it is exact and replay-safe.
+change was kept by owner decision, since it is exact and replay-safe (decision-030).
 
 Schema 2 is retired, and dropped from `SERVED_SCHEMAS` with its path and tests, only once no search record pins
 a schema-2 index. The order is: rebuild every served index at schema 3, repoint `current`, then `op index
