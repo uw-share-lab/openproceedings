@@ -1,0 +1,82 @@
+{
+  "main-1": {
+    "canonical": "((\"large language model\" OR llm OR \"foundation model\" OR \"generative ai\" OR \"vision language model\" OR vlm OR \"multimodal model\" OR \"ai agent\" OR \"text to image model\") AND (trust OR trustworthy OR trustworthiness OR \"trustworthy ai\") AND (benchmark OR dataset OR evaluation OR leaderboard OR \"evaluation framework\" OR \"test suite\") AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+    "canonical_hash": {
+      "2": "eeba876249fdbb9490fb327131f6e944ef7f30f24e26b838161f70df168bb781",
+      "3": "90af1f4f56e54e97180d5dc22e337bddb3a40747b7a1a51e85e88a8286b33be4"
+    },
+    "identification_query": "((\"large language model\" OR llm OR \"foundation model\" OR \"generative ai\" OR \"vision language model\" OR vlm OR \"multimodal model\" OR \"ai agent\" OR \"text to image model\") AND (trust OR trustworthy OR trustworthiness OR \"trustworthy ai\") AND (benchmark OR dataset OR evaluation OR leaderboard OR \"evaluation framework\" OR \"test suite\"))"
+  },
+  "main-2-pop": {
+    "canonical": "((\"large language model$\" OR llm OR \"foundation model$\" OR \"generative ai$\" OR \"vision language model$\" OR vlm OR \"multimodal model$\" OR \"ai agent$\" OR \"text to image model$\") AND (trust OR trustworthy OR trustworthiness OR \"trustworthy ai$\") AND (benchmark OR dataset OR evaluation OR leaderboard OR \"evaluation framework$\" OR \"test suite$\") AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+    "canonical_hash": {
+      "2": "bad35af2385b39312e99ebf02c77eb84b7407fcbd6f7d8f46193b48482d4199a",
+      "3": "b92c9c32052a50b6306212b11628a99102a57ee94ff9bf429f0cca5752b7197b"
+    },
+    "identification_query": "((\"large language model$\" OR llm OR \"foundation model$\" OR \"generative ai$\" OR \"vision language model$\" OR vlm OR \"multimodal model$\" OR \"ai agent$\" OR \"text to image model$\") AND (trust OR trustworthy OR trustworthiness OR \"trustworthy ai$\") AND (benchmark OR dataset OR evaluation OR leaderboard OR \"evaluation framework$\" OR \"test suite$\"))"
+  },
+  "main-3-sources": {
+    "canonical": "((\"large language model\" OR llm OR \"foundation model\" OR \"generative ai\" OR \"vision language model\" OR vlm OR \"multimodal model\" OR \"ai agent\" OR \"text to image model\") AND (trust OR trustworthy OR trustworthiness OR \"trustworthy ai\") AND (benchmark OR dataset OR evaluation OR leaderboard OR \"evaluation framework\" OR \"test suite\") AND venue:(ICLR OR ICML OR NeurIPS) AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+    "canonical_hash": {
+      "2": "7be18f3e9fbb131c24aaad61d68b43998afb870745ae53750a7755226cc747f2",
+      "3": "4de000df012077baca6dd305f54825e3d151d098637b41bfe4bbb749128254f6"
+    },
+    "identification_query": "((\"large language model\" OR llm OR \"foundation model\" OR \"generative ai\" OR \"vision language model\" OR vlm OR \"multimodal model\" OR \"ai agent\" OR \"text to image model\") AND (trust OR trustworthy OR trustworthiness OR \"trustworthy ai\") AND (benchmark OR dataset OR evaluation OR leaderboard OR \"evaluation framework\" OR \"test suite\") AND venue:(ICLR OR ICML OR NeurIPS))"
+  },
+  "main-4-sources": {
+    "canonical": "((\"foundation model\" OR \"large language model\" OR llm OR \"generative ai\") AND (trustworthiness OR trustworthy OR \"trust benchmark\" OR \"trustworthy ai\") AND (benchmark OR dataset OR leaderboard OR \"evaluation framework\") AND venue:(ICLR OR ICML OR NeurIPS) AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+    "canonical_hash": {
+      "2": "6c638b7094b6c64d5114a9578052fe9ab2bae7aa0783dd56f698cf0c9bbc0524",
+      "3": "7055143b38f671129bbdadd0ec539840b14f5807e96b05e4f3de5f7010f6dcc4"
+    },
+    "identification_query": "((\"foundation model\" OR \"large language model\" OR llm OR \"generative ai\") AND (trustworthiness OR trustworthy OR \"trust benchmark\" OR \"trustworthy ai\") AND (benchmark OR dataset OR leaderboard OR \"evaluation framework\") AND venue:(ICLR OR ICML OR NeurIPS))"
+  },
+  "main-5-sources": {
+    "canonical": "((\"foundation model\" OR \"large language model\" OR llm OR \"generative ai\") AND (trustworthiness OR trustworthy OR \"trust benchmark\" OR \"trustworthy ai\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND venue:(ICLR OR ICML OR NeurIPS) AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+    "canonical_hash": {
+      "2": "6bfaee4deaabb7088f7b811a161817b4eedea48302fdb1b2533e76a984333ff6",
+      "3": "f7c0167f48cda0469b68e44c11480210d6200d089c7ba485429400e028811d1b"
+    },
+    "identification_query": "((\"foundation model\" OR \"large language model\" OR llm OR \"generative ai\") AND (trustworthiness OR trustworthy OR \"trust benchmark\" OR \"trustworthy ai\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND venue:(ICLR OR ICML OR NeurIPS))"
+  },
+  "main-6-sources": {
+    "canonical": "((\"foundation model\" OR \"large language model\" OR llm OR \"generative ai\") AND (trustworthiness OR trustworthy OR trust OR \"trustworthy ai\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND venue:(ICLR OR ICML OR NeurIPS) AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+    "canonical_hash": {
+      "2": "7db5a89c5f78230fd8c4ce33fdf18100147f514e7e45d84c653bf699d8fc2e9d",
+      "3": "742f2e8263fd5d79c6e7f624b97841e26aa09514ff5ce939ebcd5427285b37e8"
+    },
+    "identification_query": "((\"foundation model\" OR \"large language model\" OR llm OR \"generative ai\") AND (trustworthiness OR trustworthy OR trust OR \"trustworthy ai\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND venue:(ICLR OR ICML OR NeurIPS))"
+  },
+  "main-7-most-updated": {
+    "canonical": "((\"foundation model\" OR \"large language model\" OR llm OR \"generative ai\") AND (trustworthiness OR trustworthy OR trust OR \"trustworthy ai\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND venue:(ICLR OR ICML OR NeurIPS) AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+    "canonical_hash": {
+      "2": "7db5a89c5f78230fd8c4ce33fdf18100147f514e7e45d84c653bf699d8fc2e9d",
+      "3": "742f2e8263fd5d79c6e7f624b97841e26aa09514ff5ce939ebcd5427285b37e8"
+    },
+    "identification_query": "((\"foundation model\" OR \"large language model\" OR llm OR \"generative ai\") AND (trustworthiness OR trustworthy OR trust OR \"trustworthy ai\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND venue:(ICLR OR ICML OR NeurIPS))"
+  },
+  "narrow": {
+    "canonical": "((\"foundation model\" OR \"large language model\" OR llm OR \"generative ai\") AND (trustworthiness OR trustworthy OR \"trust benchmark\" OR \"trustworthy ai\") AND (benchmark OR dataset OR leaderboard OR \"evaluation framework\") AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+    "canonical_hash": {
+      "2": "025d7cd3a823282461ca9d8ce9461e371d965641dd1a711f572a7ee29b88b8ff",
+      "3": "e0bf79f583dd699434b97c7329f8f70a952b81db347e78cc956405db5fa69f57"
+    },
+    "identification_query": "((\"foundation model\" OR \"large language model\" OR llm OR \"generative ai\") AND (trustworthiness OR trustworthy OR \"trust benchmark\" OR \"trustworthy ai\") AND (benchmark OR dataset OR leaderboard OR \"evaluation framework\"))"
+  },
+  "human-centered": {
+    "canonical": "((\"ai trust\" OR \"human ai trust\" OR \"trust in ai\" OR \"trustworthiness in ai\") AND (benchmark OR evaluation OR dataset OR framework) AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+    "canonical_hash": {
+      "2": "06dd2afffc1b3c1877cfff6d3400a67f829e5073e76a5b6968e87e0c2afc38ca",
+      "3": "4ab56a956f0d16379666a7c7e06c160bdb5cc5fb19844872e7fd88c050678e24"
+    },
+    "identification_query": "((\"ai trust\" OR \"human ai trust\" OR \"trust in ai\" OR \"trustworthiness in ai\") AND (benchmark OR evaluation OR dataset OR framework))"
+  },
+  "llm-as-judge": {
+    "canonical": "((\"llm as a judge\" OR \"model as a judge\" OR \"automated evaluation\") AND (trust OR trustworthiness OR reliability OR bias) AND (benchmark OR evaluation OR dataset) AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+    "canonical_hash": {
+      "2": "59c2f36ab354b6095a7b2ee069670cddeea47f022c79c081f36cb9ba4f06760e",
+      "3": "b2190fb8f25f25444bc3fa8b4548e4ad2ecd6c3f12b469ca8106b31bd1be3fc7"
+    },
+    "identification_query": "((\"llm as a judge\" OR \"model as a judge\" OR \"automated evaluation\") AND (trust OR trustworthiness OR reliability OR bias) AND (benchmark OR evaluation OR dataset))"
+  }
+}

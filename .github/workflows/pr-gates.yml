@@ -1,0 +1,122 @@
+name: pr-gates
+# Mirrors the local hooks for PRs opened any other way: no AI attribution, a learnings entry, and a
+# review attestation for the exact head sha (written by .claude/scripts/record-review.py --attest).
+# The attestation is an honesty check against forgetting to review, not an access control: anyone who
+# can edit the PR body could paste it. The access control is branch protection plus human review.
+# In a merge-queue build (merge_group) there is no PR: .claude/scripts/merge_group_gate.py resolves every PR
+# in the group from the queue's merge commits and runs the same three checks on each, failing closed
+# (decision-027). Its jobs read the PRs through the API, hence pull-requests: read. Each job's first step
+# refuses any other event: unreachable with today's triggers, it stops a future trigger from passing a job
+# whose gate steps all skip. Wiring checked by .claude/scripts/tests/test-merge-group-gate.sh.
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+  merge_group:
+    types: [checks_requested]
+permissions:
+  contents: read
+
+jobs:
+  attribution:
+    runs-on: ubuntu-latest
+    permissions: { contents: read, pull-requests: read }
+    steps:
+      - name: Refuse an event this gate doesn't check (a job whose steps all skip would pass)
+        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
+        env: { EVENT: "${{ github.event_name }}" }
+        run: echo "::error::pr-gates has no check for the $EVENT event" && exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: No AI authorship in commits or PR text
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          re='co-authored-by[:=].*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com'
+          bad=0
+          if git log --format=%B "$BASE_SHA..$HEAD_SHA" | grep -Eiq "$re"; then
+            echo "::error::a commit message carries AI attribution"; bad=1; fi
+          if printf '%s\n%s' "$PR_TITLE" "$PR_BODY" | grep -Eiq "$re"; then
+            echo "::error::the PR title/body carries AI attribution"; bad=1; fi
+          exit $bad
+      - name: No AI authorship in the merge group's commits or any queued PR's text
+        if: github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+          HEAD_REF: ${{ github.event.merge_group.head_ref }}
+        run: python3 .claude/scripts/merge_group_gate.py attribution --base "$BASE_SHA" --head "$HEAD_SHA" --head-ref "$HEAD_REF" --repo "$REPO"
+  learnings:
+    runs-on: ubuntu-latest
+    # A same-repo dev → main promotion carries its constituent PRs' entries. The repo check stops a
+    # fork branch that happens to be named 'dev' from skipping the gate.
+    if: ${{ !(github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    permissions: { contents: read, pull-requests: read }
+    steps:
+      - name: Refuse an event this gate doesn't check (a job whose steps all skip would pass)
+        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
+        env: { EVENT: "${{ github.event_name }}" }
+        run: echo "::error::pr-gates has no check for the $EVENT event" && exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: Branch adds a .claude/learnings/ entry (or is labelled no-learning)
+        if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'no-learning') }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Same rule as .claude/hooks/require-review.sh: an added, modified or renamed entry that ADDS lines.
+          added=$(git diff --numstat --find-renames --diff-filter=AMR "$BASE_SHA...$HEAD_SHA" -- .claude/learnings/ \
+                  | awk -F'\t' '$1 ~ /^[0-9]+$/ && $1 > 0 {print $3}' \
+                  | sed -E 's/\{[^{}]* => ([^{}]*)\}/\1/; s/.* => //' \
+                  | grep -E '^\.claude/learnings/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\.md$' || true)
+          if [ -z "$added" ]; then
+            echo "::error::no added or extended .claude/learnings/ entry — run /record-learnings (or label the PR no-learning if it taught nothing)"; exit 1; fi
+          echo "$added"
+      - name: Each queued PR adds a .claude/learnings/ entry (or is labelled no-learning)
+        if: github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+          HEAD_REF: ${{ github.event.merge_group.head_ref }}
+        run: python3 .claude/scripts/merge_group_gate.py learnings --base "$BASE_SHA" --head "$HEAD_SHA" --head-ref "$HEAD_REF" --repo "$REPO"
+  review-attested:
+    runs-on: ubuntu-latest
+    # Same-repo dev → main promotions are gated by a second person's approval on main instead.
+    if: ${{ !(github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    permissions: { contents: read, pull-requests: read }
+    steps:
+      - name: Refuse an event this gate doesn't check (a job whose steps all skip would pass)
+        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
+        env: { EVENT: "${{ github.event_name }}" }
+        run: echo "::error::pr-gates has no check for the $EVENT event" && exit 1
+      - name: PR body attests an APPROVE review of the head sha
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if printf '%s' "$PR_BODY" | grep -q "<!-- op-review: $HEAD_SHA APPROVE -->"; then
+            echo "attested for $HEAD_SHA"; exit 0; fi
+          echo "::error::no review attestation for head $HEAD_SHA — run /review-gate on the new head, then record-review.py APPROVE <file> --attest"
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'merge_group'
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: Every queued PR's current body attests an APPROVE review of the head it was queued at
+        if: github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+          HEAD_REF: ${{ github.event.merge_group.head_ref }}
+        run: python3 .claude/scripts/merge_group_gate.py review --base "$BASE_SHA" --head "$HEAD_SHA" --head-ref "$HEAD_REF" --repo "$REPO"

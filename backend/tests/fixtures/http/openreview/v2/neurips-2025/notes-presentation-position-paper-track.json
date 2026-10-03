@@ -1,0 +1,151 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-054 authenticated live crawl cache (public projection); extracted for TASK-101",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing trimmed from 40 to 2 notes, one per content.venue string (order kept); count is the listing's"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=NeurIPS.cc/2025/Position_Paper_Track&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "377",
+   "ratelimit-reset": "3379"
+  },
+  "json": {
+   "count": 40,
+   "notes": [
+    {
+     "content": {
+      "_bibtex": {
+       "value": "Synthetic bibtex text 1."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 2."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person3",
+        "~Synthetic_Person4"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 5",
+        "Synthetic Author 6"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 7.",
+        "Synthetic keywords text 8.",
+        "Synthetic keywords text 9.",
+        "Synthetic keywords text 10."
+       ]
+      },
+      "lay_summary": {
+       "value": "Synthetic lay summary text 11."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_12"
+      },
+      "pdf": {
+       "value": "/pdf/7b84c83cc04dd486f7b4f7e2ac524ddc10ef6e7f.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 13."
+      },
+      "venue": {
+       "value": "NeurIPS 2025 Position Paper Track Oral"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2025/Position_Paper_Track"
+      }
+     },
+     "forum": "rdeCalg68L",
+     "id": "rdeCalg68L",
+     "invitations": [
+      "NeurIPS.cc/2025/Position_Paper_Track/-/Submission",
+      "NeurIPS.cc/2025/Position_Paper_Track/-/Post_Submission",
+      "NeurIPS.cc/2025/Position_Paper_Track/-/Edit",
+      "NeurIPS.cc/2025/Position_Paper_Track/Submission34/-/Revision"
+     ],
+     "number": 34,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 14."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 15."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 16."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person17",
+        "~Synthetic_Person18",
+        "~Synthetic_Person19"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 20",
+        "Synthetic Author 21",
+        "Synthetic Author 22"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 23.",
+        "Synthetic keywords text 24.",
+        "Synthetic keywords text 25."
+       ]
+      },
+      "lay_summary": {
+       "value": "Synthetic lay summary text 26."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_27"
+      },
+      "pdf": {
+       "value": "/pdf/c3337519981fb66e5724d199850f28f99537452c.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 28."
+      },
+      "venue": {
+       "value": "NeurIPS 2025 Position Paper Track"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2025/Position_Paper_Track"
+      }
+     },
+     "forum": "SbfjBNlJE7",
+     "id": "SbfjBNlJE7",
+     "invitations": [
+      "NeurIPS.cc/2025/Position_Paper_Track/-/Submission",
+      "NeurIPS.cc/2025/Position_Paper_Track/-/Post_Submission",
+      "NeurIPS.cc/2025/Position_Paper_Track/-/Edit",
+      "NeurIPS.cc/2025/Position_Paper_Track/Submission36/-/Revision"
+     ],
+     "number": 36,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

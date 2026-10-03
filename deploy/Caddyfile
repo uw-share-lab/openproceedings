@@ -1,0 +1,54 @@
+# The reverse proxy in front of `api` and `web` (spec 08 §Deploy; TASK-065). deploy/compose.yml runs it.
+# Every directive below that spec 08 §Deploy requires is there for a reason it gives: the proxy's timeouts are
+# what bound a slow client (uvicorn has none of its own), and no log line may hold a query (`?q=…`, Referer).
+#
+# OP_DOMAIN   the site's name. `localhost` (the default) gets a certificate from Caddy's own local CA, for
+#             trying the stack out; a real domain gets one from Let's Encrypt over ACME, which needs the name's
+#             DNS to point at this host and ports 80 and 443 reachable from the internet.
+# OP_HSTS     the Strict-Transport-Security value, the same as the web app's own (frontend/src/lib/
+#             security-headers.ts) so that every response, the API's included, carries one. No
+#             `includeSubDomains` until the hosting domain is decided (TASK-064): the header would then bind
+#             every subdomain of a domain this project may not control. Once it is, set
+#             OP_HSTS="max-age=63072000; includeSubDomains" if every subdomain serves HTTPS.
+{
+	skip_install_trust # the local CA's root stays in the caddy-data volume; nothing to install inside a container
+	log default {
+		# the runtime logger, which carries `http.log.error`: a 502 logs the request too
+		format filter {
+			request>uri delete
+			request>headers>Referer delete
+		}
+	}
+	servers {
+		timeouts {
+			read_header 5s # a client's request line and headers (default: no timeout)
+			read_body 10s # its body (default: no timeout)
+			idle 2m # a keep-alive connection between requests
+			# no `write` timeout: an export of the whole matched set streams for as long as it takes
+		}
+		max_header_size 64KB # the API's own request-head limit (a 2,000-code-point q fits)
+	}
+}
+
+{$OP_DOMAIN:localhost} {
+	request_body {
+		max_size 64KB # the API's own body cap: refuse larger before forwarding
+	}
+	header {
+		>Strict-Transport-Security "{$OP_HSTS:max-age=63072000}"
+		-Server
+	}
+	# Caddy sets X-Forwarded-For to the client's address (it trusts no proxy in front of it), and the API
+	# believes it only from this proxy's address (`--trusted-proxy` in compose.yml)
+	reverse_proxy /api/* api:8000 {
+		request_buffers 64KB # read the whole (capped) body before opening the upstream request
+	}
+	reverse_proxy web:3000
+	log {
+		format filter {
+			# never the query: GET /api/v1/search?q=… carries it, and so does a Referer
+			request>uri delete
+			request>headers>Referer delete
+		}
+	}
+}

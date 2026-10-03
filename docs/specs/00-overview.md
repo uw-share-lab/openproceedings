@@ -38,11 +38,13 @@ venues.
 - Citation graphs.
 - Any matching that goes beyond the literal query: stemming, synonyms, or embeddings deciding what
   matches.
+- The semantic layer ([06](06-semantic-layer.md): embedding re-sort and the near-miss panel). v1 is
+  Boolean search only; 06 is deferred to phase 2 (decision-017).
 
 ## Guarantees (the invariants every part must uphold)
 
 1. **Exactness.** A document matches a term only if that exact normalized token appears in the
-   searched field. Normalization means case-folding, Unicode NFKC, diacritic folding, and splitting on
+   searched field. Normalization means case-folding, Unicode NFKC, mark folding (02 §Token semantics), and splitting on
    punctuation, as defined in [02](02-query-language.md). No step may add a match that the reference
    matcher in [03](03-search-engine.md) would not.
 2. **Title and abstract only.** No other text field is ever searched by default. Metadata is reachable
@@ -51,7 +53,7 @@ venues.
    the same canonical query. A saved query string fully describes its result set.
 4. **Reproducibility.** Every search response states `index_version`. Re-running a canonical query on
    the same `index_version` returns the identical ID set.
-5. **Ranking never changes membership.** BM25F and the semantic layer only *order* the matched set, or
+5. **Ranking never changes membership.** Field-weighted BM25 and the semantic layer only *order* the matched set, or
    *suggest* papers in a clearly separate panel. They never add to or remove from it, or change `total`.
 6. **Transparency.** Wildcard expansions, parse warnings, and per-filter exclusion counts are shown to
    the user, never applied silently.
@@ -71,7 +73,7 @@ venues.
                     canonicalize                  matcher (test oracle)
                                    │
                                    ▼
-                          backend API (04)  ◄──── semantic layer (06, phase 2)
+                          backend API (04)  ◄──── semantic layer (06, deferred: phase 2)
                           FastAPI: search · parse · export ·        re-sort + near-miss panel
                           search records · coverage
                                    │
@@ -86,11 +88,11 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 
 | Layer | Choice | Why |
 |---|---|---|
-| Ingestion, query, index, API | **Python 3.12**, `uv`, FastAPI, pydantic v2 | Matches the lab's tools. We can reuse scholarmend's OpenReview client and cache patterns. |
+| Ingestion, query, index, API | **Python 3.12**, `uv`, FastAPI, pydantic v2 | Matches the lab's tools. The lab's own PyPI packages are pinned dependencies rather than copied code: `scholarmend` (RIS parsing, OpenReview venueid parsing and client, cache, claim ledger) for ingestion, and `refaudit` (BibTeX parser) for export tests. |
 | Index | **Tantivy** via `tantivy-py` | Rust speed, positional index, phrase/slop/regex queries, BM25, and custom tokenizers with no stemmer. |
 | Frontend | **Next.js (App Router) + TypeScript** | The lab already has Next.js experience. Hosting doesn't depend on Vercel. |
-| Semantic (phase 2) | SPECTER2 + a flat in-memory vector index | Built for scientific papers. About 80k vectors fit in RAM, so no vector database is needed. |
-| Packaging | Docker Compose (`api`, `web`, read-only data volume) | Hosting location is undecided. The index is read-only files, so it can run anywhere. |
+| Semantic (deferred: phase 2, decision-017) | SPECTER2 + a flat in-memory vector index | Built for scientific papers. About 80k vectors fit in RAM, so no vector database is needed. Not in v1. |
+| Packaging | Docker Compose (`api`, `web`, `caddy` for TLS; one-off `ops` and `takedown-check`): data read-only but for the search records and the index lock files (`deploy/`, spec 08 §Deploy) | Hosting location is undecided. The index is read-only files, so it can run anywhere. |
 
 ## Parts and specs
 
@@ -101,7 +103,7 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 | 03 | [Search engine](03-search-engine.md) | Tokenizer, index schema, AST→Tantivy compilation, ranking, reference matcher, versioning |
 | 04 | [Backend API](04-backend-api.md) | HTTP contract, exports, search records, coverage |
 | 05 | [Frontend](05-frontend.md) | Pages, query editor, query builder, filters, results, export |
-| 06 | [Semantic layer](06-semantic-layer.md) | Embeddings, semantic re-sort, near-miss panel (phase 2) |
+| 06 | [Semantic layer](06-semantic-layer.md) | Embeddings, semantic re-sort, near-miss panel (deferred: phase 2, decision-017) |
 | 07 | [Evaluation](07-evaluation.md) | Exactness fixtures, differential tests, Scholar comparison, coverage and performance |
 | 08 | [Ops and tooling](08-ops-and-tooling.md) | Repo layout, CLI, CI, Docker, branch/PR rules, `.claude/` agents and skills roster |
 
@@ -113,19 +115,27 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 | M1 | Query language + tokenizer + reference matcher (02, 03 §oracle) | All exactness fixtures pass. The parser round-trips the review's search strings. |
 | M2 | Index + CLI search over the Trust-Evals corpus (RIS import) (01 §RIS, 03) | `op search "<Most Updated string>"` runs. Differential tests against the oracle are green. |
 | M3 | API + frontend MVP (04, 05) | The team can run the review's queries in a browser and export RIS into Covidence. |
-| M4 | Full crawl of OpenReview and proceedings (01) | Coverage page within ±1% of official accepted counts for each venue-year. |
-| M5 | Semantic layer (06) | Near-miss panel live. The invariant test proves membership never changes. |
+| M4 | Full crawl of OpenReview and proceedings (01) | Every main-track and D&B cell with an official accepted count is within ±1%, or an owner-accepted exception (07 §C). |
+| M5 | Semantic layer (06): **deferred** to phase 2 (decision-017); not on the v1 path | When resumed: near-miss panel live, and the invariant test proves membership never changes. |
 | M6 | Hosting + public release | Licensing question resolved, repo made public, instance deployed. |
 
 ## Open questions (decide before the milestone named)
 
-1. **Abstract redistribution (M6).** Can a public instance serve abstracts? OpenReview's terms and the
-   NeurIPS and PMLR proceedings terms differ. The code is MIT either way. The corpus is never committed
-   to git.
-2. **Rejected and withdrawn ICLR submissions (M4).** They are public on OpenReview. Proposal: index them
-   with `status:rejected` / `status:withdrawn` and apply `status:accepted` by default, the same pattern
-   as workshops.
-3. **Earliest year (M4).** The review uses 2020–2026. Proposal: crawl from 2018 (ICLR's first year on
-   OpenReview) and filter by year in the query.
+1. ~~**Abstract redistribution (M6).**~~ **Closed 2026-09-29 (decision-018):** a public instance serves
+   every abstract, each record attributed to its source with a link to it, and a public instance names a
+   takedown contact (private, local and development deployments may omit it). For the 2024+ conferences
+   OpenReview's terms dedicate the abstracts under CC0; PMLR grants CC BY 4.0, known from ICML 2017 (v70);
+   the years with no licence found (NeurIPS before 2021, ICML 2013–2016, earlier OpenReview years) rest on
+   Canadian fair dealing alone. Consulting the University of Waterloo copyright office before launch is
+   recommended (TASK-135), not a gate: the owner's decision is to show the abstracts whatever the answer.
+   Not legal advice. The code is MIT either way. The corpus is never committed to git.
+2. ~~**Rejected and withdrawn ICLR submissions (M4).**~~ **Closed 2026-09-27 (decision-012):** every
+   public rejected, withdrawn and desk-rejected submission is indexed with `status:rejected`,
+   `status:withdrawn` or `status:desk_rejected` and excluded by the default `status:accepted`, counted
+   in the exclusion banner. ICLR publishes all of them; NeurIPS and ICML only those whose authors opt in.
+3. ~~**Earliest year (M4).**~~ **Closed 2026-09-27 (decision-013):** every venue is crawled from 2013
+   (ICLR's first year, when it was already on OpenReview) wherever a spec 01 source holds the
+   venue-year; the query's `year:` filter narrows it. OpenReview cannot establish conference acceptance
+   for ICLR 2014–2016, so the public ICLR archive supplies those accepted main-track records (TASK-096).
 4. **Planning tool (M0).** Backlog.md CLI (as in Kreate) or GitHub Issues.
 5. **Hosting (M6).** A lab VM, a university server, or a PaaS.

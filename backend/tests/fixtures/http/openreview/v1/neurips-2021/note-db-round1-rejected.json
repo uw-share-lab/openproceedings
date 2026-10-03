@@ -1,0 +1,87 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?id=iBLHqLgbRn",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "iBLHqLgbRn",
+     "original": null,
+     "number": 177,
+     "cdate": 1623153827953,
+     "ddate": null,
+     "tcdate": 1623153827953,
+     "tmdate": 1684951373118,
+     "tddate": null,
+     "forum": "iBLHqLgbRn",
+     "replyto": null,
+     "invitation": "NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round1/-/Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "authorids": [
+       "~Synthetic_Person2",
+       "~Synthetic_Person3",
+       "~Synthetic_Person4",
+       "~Synthetic_Person5"
+      ],
+      "authors": [
+       "Synthetic Author 6",
+       "Synthetic Author 7",
+       "Synthetic Author 8",
+       "Synthetic Author 9"
+      ],
+      "keywords": [
+       "Synthetic keywords text 10.",
+       "Synthetic keywords text 11.",
+       "Synthetic keywords text 12.",
+       "Synthetic keywords text 13."
+      ],
+      "TL;DR": "Synthetic tl;dr text 14.",
+      "abstract": "Synthetic abstract text 15.",
+      "pdf": "/pdf/c2fb86eebc54f2ad68f69121d3346ea483e50d4c.pdf",
+      "supplementary_material": "/attachment/2dfdc513def8dc9994ff36ce44a59aef18ed550a.zip",
+      "URL": "Synthetic url text 16.",
+      "paperhash": "synthetic|synthetic_title_17",
+      "_bibtex": "synthetic.person18@example.org",
+      "venue": "Submitted to NeurIPS 2021 Datasets and Benchmarks Track (Round 1)",
+      "venueid": "NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round1"
+     },
+     "signatures": [
+      "~Synthetic_Person19"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round1",
+      "~Synthetic_Person20",
+      "~Synthetic_Person21",
+      "~Synthetic_Person22",
+      "~Synthetic_Person23",
+      "~Synthetic_Person24"
+     ],
+     "mdate": null,
+     "pdate": null,
+     "odate": 1684951371211,
+     "details": {
+      "writable": false
+     }
+    }
+   ],
+   "count": 1
+  }
+ }
+}

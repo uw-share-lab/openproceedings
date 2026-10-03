@@ -1,0 +1,572 @@
+[
+ {
+  "ast": {
+   "span": [
+    0,
+    18
+   ],
+   "kind": "near",
+   "left": {
+    "span": [
+     0,
+     5
+    ],
+    "kind": "term",
+    "token": "trust",
+    "field": null
+   },
+   "right": {
+    "span": [
+     13,
+     18
+    ],
+    "kind": "term",
+    "token": "trust",
+    "field": null
+   },
+   "distance": 0
+  },
+  "note": "seed: NEAR needs two distinct occurrences of the same term (trust NEAR/0 trust)"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    38
+   ],
+   "kind": "near",
+   "left": {
+    "span": [
+     0,
+     19
+    ],
+    "kind": "phrase",
+    "items": [
+     {
+      "span": [
+       1,
+       6
+      ],
+      "kind": "term",
+      "token": "trust",
+      "field": null
+     },
+     {
+      "span": [
+       7,
+       18
+      ],
+      "kind": "term",
+      "token": "calibration",
+      "field": null
+     }
+    ],
+    "field": null
+   },
+   "right": {
+    "span": [
+     27,
+     38
+    ],
+    "kind": "term",
+    "token": "calibration",
+    "field": null
+   },
+   "distance": 0
+  },
+  "note": "seed: a phrase operand overlapping its NEAR partner (\"trust calibration\" NEAR/0 calibration)"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    32
+   ],
+   "kind": "and",
+   "children": [
+    {
+     "span": [
+      0,
+      12
+     ],
+     "kind": "wildcard",
+     "stem": "trust",
+     "op": "*",
+     "field": "title"
+    },
+    {
+     "span": [
+      13,
+      32
+     ],
+     "kind": "not",
+     "child": {
+      "span": [
+       17,
+       32
+      ],
+      "kind": "wildcard",
+      "stem": "trust",
+      "op": "*",
+      "field": "abstract"
+     }
+    }
+   ]
+  },
+  "note": "seed: fielded wildcard under NOT (title:trust* NOT abstract:trust*)"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    12
+   ],
+   "kind": "phrase",
+   "items": [
+    {
+     "span": [
+      1,
+      4
+     ],
+     "kind": "term",
+     "token": "the",
+     "field": null
+    },
+    {
+     "span": [
+      5,
+      11
+     ],
+     "kind": "wildcard",
+     "stem": "model",
+     "op": "*",
+     "field": null
+    }
+   ],
+   "field": null
+  },
+  "note": "seed: a phrase ending in a wildcard item (\"the model*\")"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    23
+   ],
+   "kind": "phrase",
+   "items": [
+    {
+     "span": [
+      1,
+      6
+     ],
+     "kind": "term",
+     "token": "large",
+     "field": null
+    },
+    {
+     "span": [
+      7,
+      15
+     ],
+     "kind": "term",
+     "token": "language",
+     "field": null
+    },
+    {
+     "span": [
+      16,
+      22
+     ],
+     "kind": "wildcard",
+     "stem": "model",
+     "op": "$",
+     "field": null
+    }
+   ],
+   "field": null
+  },
+  "note": "seed: a `$` item at the end of a three-word phrase (\"large language model$\")"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    34
+   ],
+   "kind": "or",
+   "children": [
+    {
+     "span": [
+      0,
+      21
+     ],
+     "kind": "and",
+     "children": [
+      {
+       "span": [
+        0,
+        5
+       ],
+       "kind": "term",
+       "token": "trust",
+       "field": null
+      },
+      {
+       "span": [
+        6,
+        21
+       ],
+       "kind": "filter",
+       "field": "year",
+       "values": [
+        {
+         "lo": 2019,
+         "hi": 2019
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "span": [
+      25,
+      34
+     ],
+     "kind": "filter",
+     "field": "year",
+     "values": [
+      {
+       "lo": 2026,
+       "hi": 2026
+      }
+     ]
+    }
+   ]
+  },
+  "note": "seed: year ranges at the corpus edges (trust year:2019..2019 OR year:2026)"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    34
+   ],
+   "kind": "and",
+   "children": [
+    {
+     "span": [
+      0,
+      16
+     ],
+     "kind": "or",
+     "children": [
+      {
+       "span": [
+        1,
+        6
+       ],
+       "kind": "term",
+       "token": "trust",
+       "field": null
+      },
+      {
+       "span": [
+        10,
+        15
+       ],
+       "kind": "term",
+       "token": "model",
+       "field": null
+      }
+     ]
+    },
+    {
+     "span": [
+      17,
+      34
+     ],
+     "kind": "not",
+     "child": {
+      "span": [
+       21,
+       34
+      ],
+      "kind": "and",
+      "children": [
+       {
+        "span": [
+         22,
+         27
+        ],
+        "kind": "term",
+        "token": "trust",
+        "field": null
+       },
+       {
+        "span": [
+         28,
+         33
+        ],
+        "kind": "term",
+        "token": "model",
+        "field": null
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "note": "seed: NOT of an AND inside an AND ((trust OR model) NOT (trust model))"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    17
+   ],
+   "kind": "or",
+   "children": [
+    {
+     "span": [
+      0,
+      5
+     ],
+     "kind": "term",
+     "token": "alpha",
+     "field": null
+    },
+    {
+     "span": [
+      9,
+      10
+     ],
+     "kind": "term",
+     "token": "α",
+     "field": null
+    },
+    {
+     "span": [
+      14,
+      17
+     ],
+     "kind": "term",
+     "token": "leq",
+     "field": null
+    }
+   ]
+  },
+  "note": "seed: LaTeX math spelled as Greek and operator tokens (alpha OR α OR leq)"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    23
+   ],
+   "kind": "and",
+   "children": [
+    {
+     "span": [
+      0,
+      11
+     ],
+     "kind": "term",
+     "token": "trustworthy",
+     "field": null
+    },
+    {
+     "span": [
+      12,
+      23
+     ],
+     "kind": "phrase",
+     "items": [
+      {
+       "span": [
+        12,
+        16
+       ],
+       "kind": "term",
+       "token": "fine",
+       "field": null
+      },
+      {
+       "span": [
+        17,
+        23
+       ],
+       "kind": "term",
+       "token": "tuning",
+       "field": null
+      }
+     ],
+     "field": null
+    }
+   ]
+  },
+  "note": "seed: invisible separators and NFKC ligatures (trustworthy fine-tuning)"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    0
+   ],
+   "kind": "not",
+   "child": {
+    "span": [
+     0,
+     0
+    ],
+    "kind": "term",
+    "token": "trust",
+    "field": null
+   }
+  },
+  "note": "seed: an all-negative tree the parser refuses but an engine must evaluate"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    0
+   ],
+   "kind": "or",
+   "children": [
+    {
+     "span": [
+      0,
+      0
+     ],
+     "kind": "term",
+     "token": "model",
+     "field": null
+    },
+    {
+     "span": [
+      0,
+      0
+     ],
+     "kind": "not",
+     "child": {
+      "span": [
+       0,
+       0
+      ],
+      "kind": "term",
+      "token": "trust",
+      "field": null
+     }
+    }
+   ]
+  },
+  "note": "seed: an all-negative tree the parser refuses but an engine must evaluate"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    24
+   ],
+   "kind": "and",
+   "children": [
+    {
+     "span": [
+      0,
+      4
+     ],
+     "kind": "term",
+     "token": "cado",
+     "field": null
+    },
+    {
+     "span": [
+      9,
+      24
+     ],
+     "kind": "filter",
+     "field": "status",
+     "values": [
+      "accepted"
+     ]
+    }
+   ]
+  },
+  "note": "verification (task-028): a typed default is stripped from identification: the oracle branch of brute_excluded (cado AND status:accepted)"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    15
+   ],
+   "kind": "filter",
+   "field": "status",
+   "values": [
+    "accepted"
+   ]
+  },
+  "note": "verification (task-028): only a default: identification is the whole corpus (status:accepted)"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    25
+   ],
+   "kind": "near",
+   "left": {
+    "span": [
+     10,
+     11
+    ],
+    "kind": "term",
+    "token": "2",
+    "field": "abstract"
+   },
+   "right": {
+    "span": [
+     20,
+     24
+    ],
+    "kind": "wildcard",
+    "stem": "age",
+    "op": "*",
+    "field": "abstract"
+   },
+   "distance": 10
+  },
+  "note": "TASK-076: a verified clause most of whose candidates hold it compiles with the failures excluded (94 candidates, 25 fail)"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    30
+   ],
+   "kind": "near",
+   "left": {
+    "span": [
+     10,
+     16
+    ],
+    "kind": "wildcard",
+    "stem": "trust",
+    "op": "*",
+    "field": "abstract"
+   },
+   "right": {
+    "span": [
+     26,
+     29
+    ],
+    "kind": "term",
+    "token": "the",
+    "field": "abstract"
+   },
+   "distance": 100
+  },
+  "note": "TASK-076: a verified clause every candidate holds compiles to its candidate query alone (950 candidates)"
+ }
+]

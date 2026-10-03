@@ -1,0 +1,220 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-054 authenticated live crawl cache (public projection); extracted for TASK-101",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing trimmed from 322 to 3 notes, one per content.venue string (order kept); count is the listing's"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=NeurIPS.cc/2023/Track/Datasets_and_Benchmarks&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "491",
+   "ratelimit-reset": "3590"
+  },
+  "json": {
+   "count": 322,
+   "notes": [
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 1."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 2."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 3."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person4",
+        "~Synthetic_Person5",
+        "~Synthetic_Person6"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 7",
+        "Synthetic Author 8",
+        "Synthetic Author 9"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 10.",
+        "Synthetic keywords text 11.",
+        "Synthetic keywords text 12.",
+        "Synthetic keywords text 13.",
+        "Synthetic keywords text 14."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_15"
+      },
+      "pdf": {
+       "value": "/pdf/e6bb3664cdb56137cec32fcb07e1b2e6ef4e5f40.pdf"
+      },
+      "supplementary_material": {
+       "value": "/attachment/0b71ad725557d113ea4b4d869426ffd88ffc4da8.zip"
+      },
+      "title": {
+       "value": "Synthetic title text 16."
+      },
+      "venue": {
+       "value": "NeurIPS 2023 Datasets and Benchmarks Poster"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks"
+      }
+     },
+     "forum": "VtbKj2xlhI",
+     "id": "VtbKj2xlhI",
+     "invitations": [
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/-/Submission",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/-/Post_Submission",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/Submission3/-/Revision",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/Submission3/-/Supplementary_Material",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/-/Edit",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/Submission3/-/Camera_Ready_Version"
+     ],
+     "number": 3,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 17."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 18."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 19."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person20",
+        "~Synthetic_Person21",
+        "~Synthetic_Person22",
+        "~Synthetic_Person23",
+        "~Synthetic_Person24",
+        "~Synthetic_Person25",
+        "~Synthetic_Person26",
+        "~Synthetic_Person27",
+        "~Synthetic_Person28"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 29",
+        "Synthetic Author 30",
+        "Synthetic Author 31",
+        "Synthetic Author 32",
+        "Synthetic Author 33",
+        "Synthetic Author 34",
+        "Synthetic Author 35",
+        "Synthetic Author 36",
+        "Synthetic Author 37"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 38.",
+        "Synthetic keywords text 39.",
+        "Synthetic keywords text 40."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_41"
+      },
+      "pdf": {
+       "value": "/pdf/3fb8576a222b73aa6bbc2ad986d609349ed942db.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 42."
+      },
+      "venue": {
+       "value": "NeurIPS 2023 Datasets and Benchmarks Oral"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks"
+      }
+     },
+     "forum": "g7OX2sOJtn",
+     "id": "g7OX2sOJtn",
+     "invitations": [
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/-/Submission",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/-/Post_Submission",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/Submission21/-/Revision",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/Submission21/-/Supplementary_Material",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/-/Edit",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/Submission21/-/Camera_Ready_Version"
+     ],
+     "number": 21,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 43."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 44."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 45."
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 46.",
+        "Synthetic keywords text 47.",
+        "Synthetic keywords text 48.",
+        "Synthetic keywords text 49."
+       ]
+      },
+      "pdf": {
+       "value": "/pdf/2b2ec89a0071cde1373eca71e4aa15019222bd3e.pdf"
+      },
+      "supplementary_material": {
+       "value": "/attachment/4f7967948446bdb3464bb63620cb89d247e2251d.zip"
+      },
+      "title": {
+       "value": "Synthetic title text 50."
+      },
+      "venue": {
+       "value": "NeurIPS 2023 Datasets and Benchmarks Spotlight"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks"
+      }
+     },
+     "forum": "JVlWseddak",
+     "id": "JVlWseddak",
+     "invitations": [
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/-/Submission",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/-/Post_Submission",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/Submission102/-/Revision",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/Submission102/-/Supplementary_Material",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/-/Edit",
+      "NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/Submission102/-/Camera_Ready_Version"
+     ],
+     "number": 102,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

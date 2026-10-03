@@ -1,0 +1,11 @@
+{
+  "name": "openproceedings",
+  "private": true,
+  "description": "npm workspace root; the only member is frontend/ (the Python side is the uv workspace in pyproject.toml)",
+  "workspaces": [
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  }
+}

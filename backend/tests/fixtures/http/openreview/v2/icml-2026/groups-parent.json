@@ -1,0 +1,236 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "group trimmed to its venueid, visibility and decision keys (web, members, invitations dropped)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/groups?limit=1000&offset=0&parent=ICML.cc/2026",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "700;w=3600",
+   "ratelimit-remaining": "696",
+   "ratelimit-reset": "3591"
+  },
+  "json": {
+   "count": 4,
+   "groups": [
+    {
+     "domain": "ICML.cc/2026/Conference",
+     "id": "ICML.cc/2026/Conference",
+     "parent": "ICML.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "ICML.cc/2026/Conference/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "ICML.cc/2026/Conference/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "ICML.cc/2026/Conference/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "ICML.cc/2026/Conference/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "ICML.cc/2026/Conference/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "Forty-third International Conference on Machine Learning"
+      },
+      "subtitle": {
+       "value": "ICML 2026"
+      },
+      "website": {
+       "value": "http://icml.cc"
+      },
+      "start_date": {
+       "value": "Jul 06 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "ICML.cc/2026/Conference/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "ICML.cc/2026/Conference/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept (oral)",
+        "Accept (spotlight)",
+        "Accept (regular)"
+       ]
+      }
+     }
+    },
+    {
+     "domain": "ICML.cc/2026/Position_Paper_Track",
+     "id": "ICML.cc/2026/Position_Paper_Track",
+     "parent": "ICML.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "ICML.cc/2026/Position_Paper_Track/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "ICML.cc/2026/Position_Paper_Track/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "ICML.cc/2026/Position_Paper_Track/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "ICML.cc/2026/Position_Paper_Track/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "ICML.cc/2026/Position_Paper_Track/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "Forty-third International Conference on Machine Learning Position Paper Track"
+      },
+      "subtitle": {
+       "value": "ICML 2026 Position Paper Track"
+      },
+      "website": {
+       "value": "http://icml.cc"
+      },
+      "start_date": {
+       "value": "Jul 06 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "ICML.cc/2026/Position_Paper_Track/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "ICML.cc/2026/Position_Paper_Track/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept (oral)",
+        "Accept (spotlight)",
+        "Accept (regular)"
+       ]
+      }
+     }
+    },
+    {
+     "domain": "ICML.cc/2026/Workshop_Proposals",
+     "id": "ICML.cc/2026/Workshop_Proposals",
+     "parent": "ICML.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "ICML.cc/2026/Workshop_Proposals/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "ICML.cc/2026/Workshop_Proposals/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "ICML.cc/2026/Workshop_Proposals/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "ICML.cc/2026/Workshop_Proposals/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "ICML.cc/2026/Workshop_Proposals/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "Forty-third International Conference on Machine Learning (ICML) - Workshop Proposals (2026)"
+      },
+      "subtitle": {
+       "value": "ICML 2026 Workshop Proposals"
+      },
+      "website": {
+       "value": "https://icml.cc/Conferences/2026/CallForWorkshops"
+      },
+      "start_date": {
+       "value": "Jul 07 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "ICML.cc/2026/Workshop_Proposals/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "ICML.cc/2026/Workshop_Proposals/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": ""
+      }
+     }
+    },
+    {
+     "domain": "OpenReview.net",
+     "id": "ICML.cc/2026/Workshop",
+     "parent": "ICML.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {}
+    }
+   ]
+  }
+ }
+}

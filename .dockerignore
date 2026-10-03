@@ -1,0 +1,24 @@
+# The build context of deploy/*.Dockerfile is the repository root: send only what an image copies. Never the
+# data directory (the corpus, indexes, search records and the takedown log with requesters' details), never
+# .env files (credentials), never local builds or node_modules.
+*
+!deploy/web-build-gate.sh
+!deploy/Caddyfile
+!pyproject.toml
+!uv.lock
+!backend/pyproject.toml
+!backend/LICENSE
+!backend/src/
+!package.json
+!package-lock.json
+!frontend/
+frontend/node_modules
+frontend/.next
+frontend/test-results
+frontend/playwright-report
+**/.env
+**/.env.*
+**/data
+**/takedowns
+frontend/tsconfig.tsbuildinfo
+**/__pycache__

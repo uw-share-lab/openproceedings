@@ -1,0 +1,198 @@
+import { describe, expect, it } from "vitest";
+import { readGolden } from "./golden";
+import { constructText, modelOf, readAst, readFitting, type Shape } from "./read";
+
+const spans = (nodes: readonly { span: readonly number[] }[]) => nodes.map((n) => [...n.span]);
+
+function asGolden(shape: Shape) {
+  return {
+    groups: shape.groups.map(spans),
+    exclude: shape.exclude === null ? null : spans(shape.exclude),
+    exclude_at: shape.excludeAt,
+    limits: spans(shape.limits),
+  };
+}
+
+const cases = readGolden();
+
+describe("the fit rule agrees with the backend's reference reading (builder-read-golden.json)", () => {
+  it("has the cases the backend generated", () => {
+    expect(cases.length).toBeGreaterThan(300);
+  });
+
+  it.each(cases.filter((c) => c.ast !== null).map((c) => [`${c.mode}: ${c.q}`, c] as const))("%s", (_, c) => {
+    if (c.ast === null) throw new Error("filtered");
+    const reading = readAst(c.ast);
+    if (c.read === null) throw new Error("a parsed query always has a reading");
+    if ("blocker" in c.read) {
+      expect(reading).toEqual({ kind: "blocked", blocker: c.read.blocker });
+    } else {
+      expect(reading.kind).toBe("fits");
+      if (reading.kind === "fits") expect(asGolden(reading.shape)).toEqual(c.read);
+    }
+  });
+});
+
+function fitting(q: string) {
+  const c = cases.find((x) => x.q === q && x.mode === "native");
+  if (c?.ast == null) throw new Error(`no native golden case ${q}`);
+  const reading = readAst(c.ast);
+  if (reading.kind !== "fits") throw new Error(`${q} doesn't fit`);
+  return modelOf(q, reading.shape);
+}
+
+describe("modelOf", () => {
+  it("reads the design's example: terms as typed, scopes on the chip, limits as written", () => {
+    const model = fitting(
+      '("foundation model" OR LLM) AND (trustworth* OR trust) AND benchmark AND venue:ICLR',
+    );
+    expect(model.groups.map((g) => g.terms.map((t) => t.text))).toEqual([
+      ['"foundation model"', "LLM"],
+      ["trustworth*", "trust"],
+      ["benchmark"],
+    ]);
+    expect(model.limits).toEqual(["venue:ICLR"]);
+    expect(model.exclude).toBeNull();
+  });
+
+  it("takes a leaf's own field prefix into its scope, and a field group's scope onto each leaf", () => {
+    const own = fitting('Title:LLM OR abstract: "trust calibration"');
+    expect(own.groups[0]?.terms.map((t) => [t.scope, t.text])).toEqual([
+      ["title", "LLM"],
+      ["abstract", '"trust calibration"'],
+    ]);
+    const shared = fitting("title:(a OR b) c");
+    expect(shared.groups.map((g) => g.terms.map((t) => [t.scope, t.text]))).toEqual([
+      [
+        ["title", "a"],
+        ["title", "b"],
+      ],
+      [["any", "c"]],
+    ]);
+  });
+
+  it("reads a NOT as the Exclude row and keeps where it was written", () => {
+    const model = fitting("NOT (bias OR fairness) trust");
+    expect(model.exclude?.terms.map((t) => t.text)).toEqual(["bias", "fairness"]);
+    expect(model.excludeAt).toBe(0);
+    expect(fitting("trust -bias").excludeAt).toBe(1);
+  });
+
+  it("parenthesises an OR of limits the query left bare", () => {
+    expect(fitting("venue:ICLR OR venue:ICML").limits).toEqual(["(venue:ICLR OR venue:ICML)"]);
+    expect(fitting("venue:ICLR trust (venue:ICML OR venue:NeurIPS)").limits).toEqual([
+      "venue:ICLR",
+      "(venue:ICML OR venue:NeurIPS)",
+    ]);
+  });
+
+  it("writes a Scholar unquoted phrase as a quoted one (decision-002)", () => {
+    const c = cases.find((x) => x.q === "(large language model$ | LLM) source:ICLR");
+    if (c?.ast == null) throw new Error("missing");
+    const reading = readAst(c.ast);
+    if (reading.kind !== "fits") throw new Error("doesn't fit");
+    const model = modelOf(c.q, reading.shape);
+    expect(model.groups[0]?.terms.map((t) => t.text)).toEqual(['"large language model$"', "LLM"]);
+    expect(model.limits).toEqual(["source:ICLR"]);
+  });
+
+  it("reads main-7-most-updated in Scholar mode: three groups and its source limits as typed", () => {
+    const c = cases.find(
+      (x) => x.mode === "scholar" && x.q.startsWith('("foundation model"') && x.q.includes("PMLR"),
+    );
+    if (c?.ast == null) throw new Error("missing");
+    const reading = readAst(c.ast);
+    if (reading.kind !== "fits") throw new Error("doesn't fit");
+    const model = modelOf(c.q, reading.shape);
+    expect(model.groups).toHaveLength(3);
+    expect(model.limits).toHaveLength(1);
+    expect(model.limits[0]).toMatch(
+      /^\(source:"ICLR" OR .* OR source:"advances in neural information processing systems"\)$/u,
+    );
+  });
+});
+
+describe("constructText", () => {
+  it("names the blocking construct from the query text, clipped to 40 characters", () => {
+    const q = "trust NEAR/5 calibrat*";
+    expect(constructText(q, { kind: "proximity", span: [0, 22] })).toBe("trust NEAR/5 calibrat*");
+    const long = `(${"a".repeat(50)} AND b) OR c`;
+    const text = constructText(long, { kind: "AND inside OR", span: [0, Array.from(long).length] });
+    expect(Array.from(text)).toHaveLength(40);
+    expect(text.endsWith("…")).toBe(true);
+  });
+});
+
+describe("readFitting: the parts of a query that fit (design B2, TASK-111)", () => {
+  const nativeAst = (q: string) => {
+    const c = cases.find((x) => x.q === q && x.mode === "native");
+    if (c?.ast == null) throw new Error(`no native golden case ${q}`);
+    return c.ast;
+  };
+
+  it.each(cases.filter((c) => c.ast !== null).map((c) => [`${c.mode}: ${c.q}`, c] as const))(
+    "is the whole reading of a query that fits: %s",
+    (_, c) => {
+      if (c.ast === null) throw new Error("filtered");
+      const reading = readAst(c.ast);
+      if (reading.kind === "fits") expect(asGolden(readFitting(c.ast))).toEqual(asGolden(reading.shape));
+    },
+  );
+
+  it("keeps the groups and limits around a construct that doesn't fit, and leaves the construct out", () => {
+    const shape = readFitting(
+      nativeAst('("x" | abstract:calibrat*) (venue:ICLR OR venue:ICML) trust NEAR/3 bias'),
+    );
+    expect(asGolden(shape)).toEqual({
+      groups: [
+        [
+          [1, 4],
+          [7, 25],
+        ],
+      ],
+      exclude: null,
+      exclude_at: 1,
+      limits: [[27, 53]],
+    });
+  });
+
+  it("keeps the first NOT as the Exclude row and leaves out a second", () => {
+    const shape = readFitting(nativeAst("trust NOT a NOT b"));
+    expect(asGolden(shape)).toEqual({ groups: [[[0, 5]]], exclude: [[10, 11]], exclude_at: 1, limits: [] });
+  });
+
+  it("has nothing when the whole query is the construct", () => {
+    for (const q of ["trust NEAR/5 calibrat*", "(a AND b) OR c", "track:workshop OR x"]) {
+      expect(asGolden(readFitting(nativeAst(q)))).toEqual({
+        groups: [],
+        exclude: null,
+        exclude_at: 0,
+        limits: [],
+      });
+    }
+  });
+});
+
+describe("readAst names the first of several constructs that don't fit", () => {
+  it("reports the NEAR, not the second NOT after it, and readFitting keeps the first NOT", () => {
+    // trust NEAR/3 bias NOT a NOT b
+    const leaf = (token: string, at: number) =>
+      ({ kind: "term", token, field: null, span: [at, at + token.length] }) as const;
+    const ast = {
+      kind: "and",
+      span: [0, 29],
+      children: [
+        { kind: "near", distance: 3, span: [0, 17], left: leaf("trust", 0), right: leaf("bias", 13) },
+        { kind: "not", span: [18, 23], child: leaf("a", 22) },
+        { kind: "not", span: [24, 29], child: leaf("b", 28) },
+      ],
+    } as unknown as Parameters<typeof readAst>[0];
+    expect(readAst(ast)).toEqual({ kind: "blocked", blocker: { kind: "proximity", span: [0, 17] } });
+    expect(asGolden(readFitting(ast))).toEqual({
+      groups: [],
+      exclude: [[22, 23]],
+      exclude_at: 0,
+      limits: [],
+    });
+  });
+});

@@ -1,0 +1,78 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?id=fG9WttDhAaa",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "fG9WttDhAaa",
+     "original": "caGtlTA_hrH",
+     "number": 4723,
+     "cdate": 1632957578107,
+     "mdate": null,
+     "ddate": null,
+     "tcdate": 1633409687933,
+     "tmdate": 1760257373808,
+     "tddate": null,
+     "forum": "fG9WttDhAaa",
+     "replyto": null,
+     "invitation": "ICLR.cc/2022/Conference/-/Withdrawn_Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "authorids": [
+       "~Synthetic_Person2",
+       "~Synthetic_Person3",
+       "synthetic.person4@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 5",
+       "Synthetic Author 6",
+       "Synthetic Author 7"
+      ],
+      "keywords": [],
+      "abstract": "Synthetic abstract text 8.",
+      "code_of_ethics": "",
+      "submission_guidelines": "",
+      "resubmission": "",
+      "student_author": "",
+      "serve_as_reviewer": "",
+      "paperhash": "synthetic|synthetic_title_9",
+      "pdf": "/pdf/72849308585cb9dc69f46d1e38425935eae1ad96.pdf",
+      "supplementary_material": "/attachment/ace82ca225222534b877a9e958edcaa9ecaba764.zip",
+      "community_implementations": "Synthetic community implementations text 10.",
+      "_bibtex": "synthetic.person11@example.org",
+      "venue": "",
+      "venueid": ""
+     },
+     "signatures": [
+      "ICLR.cc/2022/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2022/Conference"
+     ],
+     "odate": 1633539600000,
+     "details": {
+      "writable": false
+     }
+    }
+   ],
+   "count": 1
+  }
+ }
+}

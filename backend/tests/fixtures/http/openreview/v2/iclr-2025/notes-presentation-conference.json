@@ -1,0 +1,275 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-054 authenticated live crawl cache (public projection); extracted for TASK-101",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing trimmed from 1000 to 3 notes, one per content.venue string (order kept); count is the listing's"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2025/Conference&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "383",
+   "ratelimit-reset": "3424"
+  },
+  "json": {
+   "count": 3703,
+   "notes": [
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 1."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 2."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 3."
+      },
+      "anonymous_url": {
+       "value": "Synthetic anonymous url text 4."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person5",
+        "~Synthetic_Person6",
+        "~Synthetic_Person7",
+        "~Synthetic_Person8",
+        "~Synthetic_Person9"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 10",
+        "Synthetic Author 11",
+        "Synthetic Author 12",
+        "Synthetic Author 13",
+        "Synthetic Author 14"
+       ]
+      },
+      "code_of_ethics": {
+       "value": "Synthetic code of ethics text 15."
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 16.",
+        "Synthetic keywords text 17.",
+        "Synthetic keywords text 18.",
+        "Synthetic keywords text 19.",
+        "Synthetic keywords text 20.",
+        "Synthetic keywords text 21."
+       ]
+      },
+      "no_acknowledgement_section": {
+       "value": "Synthetic no acknowledgement section text 22."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_23"
+      },
+      "pdf": {
+       "value": "/pdf/8fddee1917f5289fe7908965f534e27f36e3f4db.pdf"
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 24."
+      },
+      "submission_guidelines": {
+       "value": "Synthetic submission guidelines text 25."
+      },
+      "title": {
+       "value": "Synthetic title text 26."
+      },
+      "venue": {
+       "value": "ICLR 2025 Spotlight"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2025/Conference"
+      }
+     },
+     "forum": "P42DbV2nuV",
+     "id": "P42DbV2nuV",
+     "invitations": [
+      "ICLR.cc/2025/Conference/-/Submission",
+      "ICLR.cc/2025/Conference/-/Post_Submission",
+      "ICLR.cc/2025/Conference/Submission2/-/Full_Submission",
+      "ICLR.cc/2025/Conference/Submission2/-/Rebuttal_Revision",
+      "ICLR.cc/2025/Conference/-/Edit",
+      "ICLR.cc/2025/Conference/Submission2/-/Camera_Ready_Revision"
+     ],
+     "number": 2,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 27."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 28."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 29."
+      },
+      "anonymous_url": {
+       "value": "Synthetic anonymous url text 30."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person31",
+        "~Synthetic_Person32",
+        "~Synthetic_Person33",
+        "~Synthetic_Person34",
+        "~Synthetic_Person35",
+        "~Synthetic_Person36"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 37",
+        "Synthetic Author 38",
+        "Synthetic Author 39",
+        "Synthetic Author 40",
+        "Synthetic Author 41",
+        "Synthetic Author 42"
+       ]
+      },
+      "code_of_ethics": {
+       "value": "Synthetic code of ethics text 43."
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 44.",
+        "Synthetic keywords text 45."
+       ]
+      },
+      "no_acknowledgement_section": {
+       "value": "Synthetic no acknowledgement section text 46."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_47"
+      },
+      "pdf": {
+       "value": "/pdf/03d740bded99ee328106bfc84811201a1dae6c32.pdf"
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 48."
+      },
+      "submission_guidelines": {
+       "value": "Synthetic submission guidelines text 49."
+      },
+      "title": {
+       "value": "Synthetic title text 50."
+      },
+      "venue": {
+       "value": "ICLR 2025 Oral"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2025/Conference"
+      }
+     },
+     "forum": "Q6a9W6kzv5",
+     "id": "Q6a9W6kzv5",
+     "invitations": [
+      "ICLR.cc/2025/Conference/-/Submission",
+      "ICLR.cc/2025/Conference/-/Post_Submission",
+      "ICLR.cc/2025/Conference/Submission3/-/Full_Submission",
+      "ICLR.cc/2025/Conference/Submission3/-/Rebuttal_Revision",
+      "ICLR.cc/2025/Conference/-/Edit",
+      "ICLR.cc/2025/Conference/Submission3/-/Camera_Ready_Revision"
+     ],
+     "number": 3,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "_bibtex": {
+       "value": "Synthetic bibtex text 51."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 52."
+      },
+      "anonymous_url": {
+       "value": "Synthetic anonymous url text 53."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person54",
+        "~Synthetic_Person55",
+        "~Synthetic_Person56",
+        "~Synthetic_Person57"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 58",
+        "Synthetic Author 59",
+        "Synthetic Author 60",
+        "Synthetic Author 61"
+       ]
+      },
+      "code_of_ethics": {
+       "value": "Synthetic code of ethics text 62."
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 63.",
+        "Synthetic keywords text 64.",
+        "Synthetic keywords text 65."
+       ]
+      },
+      "no_acknowledgement_section": {
+       "value": "Synthetic no acknowledgement section text 66."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_67"
+      },
+      "pdf": {
+       "value": "/pdf/b3a824e7442a98ce85a1eb0e0c1766b565b0da9c.pdf"
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 68."
+      },
+      "submission_guidelines": {
+       "value": "Synthetic submission guidelines text 69."
+      },
+      "supplementary_material": {
+       "value": "/attachment/f43b33fada5da8f362bc9beb644e7718d473dbcf.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 70."
+      },
+      "venue": {
+       "value": "ICLR 2025 Poster"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2025/Conference"
+      }
+     },
+     "forum": "JZLon6cvx8",
+     "id": "JZLon6cvx8",
+     "invitations": [
+      "ICLR.cc/2025/Conference/-/Submission",
+      "ICLR.cc/2025/Conference/-/Post_Submission",
+      "ICLR.cc/2025/Conference/Submission4/-/Full_Submission",
+      "ICLR.cc/2025/Conference/Submission4/-/Rebuttal_Revision",
+      "ICLR.cc/2025/Conference/-/Edit",
+      "ICLR.cc/2025/Conference/Submission4/-/Camera_Ready_Revision"
+     ],
+     "number": 4,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

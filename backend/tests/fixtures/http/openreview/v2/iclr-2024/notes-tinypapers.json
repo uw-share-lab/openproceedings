@@ -1,0 +1,83 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2024/TinyPapers&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "492",
+   "ratelimit-reset": "1045"
+  },
+  "json": {
+   "notes": [
+    {
+     "number": 254,
+     "invitations": [
+      "ICLR.cc/2024/TinyPapers/-/Submission",
+      "ICLR.cc/2024/TinyPapers/-/Post_Submission",
+      "ICLR.cc/2024/TinyPapers/-/Edit",
+      "ICLR.cc/2024/TinyPapers/Submission254/-/Camera_Ready"
+     ],
+     "id": "p8GJzu52XL",
+     "readers": [
+      "everyone"
+     ],
+     "forum": "p8GJzu52XL",
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 2"
+       ]
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person3"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 4.",
+        "Synthetic keywords text 5.",
+        "Synthetic keywords text 6.",
+        "Synthetic keywords text 7."
+       ]
+      },
+      "TLDR": {
+       "value": "Synthetic tldr text 8."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 9."
+      },
+      "pdf": {
+       "value": "/pdf/e818eac7df0626e0687b829112923472bf46584a.pdf"
+      },
+      "venue": {
+       "value": "Tiny Papers @ ICLR 2024 Archive"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2024/TinyPapers"
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 10."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_11"
+      }
+     }
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,94 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-113: trimmed from the 2026-09-29 crawl cache (fetched 2026-09-29T09:05:43.057290+00:00)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "forum listing trimmed from 18 to 3 notes (order kept)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?forum=S1p31z-Ab&limit=1000&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "count": 18,
+   "notes": [
+    {
+     "content": {
+      "TL;DR": "Synthetic tl;dr text 1.",
+      "_bibtex": "Synthetic bibtex text 2.",
+      "abstract": "Synthetic abstract text 3.",
+      "authorids": [
+       "synthetic.person4@example.org",
+       "synthetic.person5@example.org",
+       "synthetic.person6@example.org",
+       "synthetic.person7@example.org",
+       "synthetic.person8@example.org",
+       "synthetic.person9@example.org",
+       "synthetic.person10@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 11",
+       "Synthetic Author 12",
+       "Synthetic Author 13",
+       "Synthetic Author 14",
+       "Synthetic Author 15",
+       "Synthetic Author 16",
+       "Synthetic Author 17"
+      ],
+      "community_implementations": "Synthetic community implementations text 18.",
+      "keywords": [
+       "Synthetic keywords text 19.",
+       "Synthetic keywords text 20."
+      ],
+      "paperhash": "synthetic|synthetic_title_21",
+      "pdf": "/pdf/590cfe03e44b84aea41c1961ad767027bc037dc4.pdf",
+      "title": "Synthetic title text 22.",
+      "withdrawal": "Synthetic withdrawal text 23."
+     },
+     "forum": "S1p31z-Ab",
+     "id": "S1p31z-Ab",
+     "invitation": "ICLR.cc/2018/Conference/-/Blind_Submission",
+     "number": 759,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "comment": "Synthetic comment text 24.",
+      "decision": "Accept (Poster)",
+      "title": "Synthetic title text 25."
+     },
+     "forum": "S1p31z-Ab",
+     "id": "S1HRmJaHM",
+     "invitation": "ICLR.cc/2018/Conference/-/Acceptance_Decision",
+     "number": 248,
+     "readers": [
+      "everyone"
+     ],
+     "replyto": "S1p31z-Ab"
+    },
+    {
+     "content": {
+      "comment": "Synthetic comment text 26.",
+      "title": "Synthetic title text 27."
+     },
+     "forum": "S1p31z-Ab",
+     "id": "SJ96jcfIG",
+     "invitation": "ICLR.cc/2018/Conference/-/Paper759/Official_Comment",
+     "number": 8,
+     "readers": [
+      "everyone"
+     ],
+     "replyto": "S1p31z-Ab"
+    }
+   ]
+  }
+ }
+}

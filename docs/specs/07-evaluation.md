@@ -13,10 +13,26 @@ build). Others are reports (they're regenerated and committed as dated results, 
 |---|---|---|
 | Golden tokens | 02's table plus 100 or more normalization cases | 100% pass |
 | Golden queries | Query → expected ID set on a hand-built 200-record fixture, with the cases written to be tricky (benchmark/benchmarking, trust/trustworthy, hyphens, LaTeX, phrases that span fields, NEAR ordering) | 100% pass |
-| Differential | Hypothesis random ASTs: `TantivyEngine == ReferenceEngine` on the 5k fixture snapshot | 0 counterexamples in 2,000 examples per CI run, 50k nightly |
-| Tokenizer parity | Index tokens == `normalize.py` tokens over the whole corpus | 0 diffs |
-| Semantic invariant | Search results identical with 06 on and off | 0 diffs |
+| Differential | Hypothesis random ASTs: `TantivyEngine == ReferenceEngine` on the synthetic 5k fixture snapshot plus 20 cap-edge records (5,020, both hash-pinned; decision-004) | 0 counterexamples in 200 examples per PR CI run, 50k nightly |
+| Tokenizer parity | Stored text, positions (phrase read-back) and every term's document frequency in the index == `normalize.py`, over the whole corpus (term frequency only as far as the phrases imply) | 0 diffs |
+| Semantic invariant (deferred with 06, decision-017; not a v1 gate) | Search results identical with 06 on and off | 0 diffs, once 06 is built |
 | Determinism | Same canonical query + `index_version` → identical order and scores | 0 diffs |
+
+As built (task-028): the differential is `backend/tests/differential/`, on a synthetic 5k corpus generated
+in memory and hash-pinned (decision-004), with a Zipfian vocabulary: rare terms, hapaxes, and stems that
+pass the 200-term cap. Trees are drawn from the corpus's own dictionary. For any tree an engine may get,
+all-negative ones included, it compares:
+- match sets;
+- wildcard expansions, or the refusal;
+- disjunctive facets;
+- `total` for every sort, and the `year_asc` order;
+- for trees that parse, the exclusion counts.
+
+Shrunk counterexamples are kept in `differential-regressions.json` and replayed on every run. The `nightly`
+workflow's `differential` job runs 50,000 examples in total: 8 independent runs of 6,250 in parallel, each with
+its own seed, not de-duplicated across runs (TASK-057). Wildcard stems include ones at the 200-expansion cap's edge: 20 records added to the corpus the
+engines search give `qca*` 199 terms, `qcb*` 200 and `qcc*` 201 (refused), since the 5k corpus's own stems
+jump from 117 terms to 278.
 
 ## B. Scholar comparison (report, `op eval scholar`)
 
@@ -40,9 +56,59 @@ added, and check the track). The rest goes to `review.csv` for a person to decid
 ## C. Coverage (report plus a soft gate at M4)
 
 For each venue × year × track: indexed accepted count compared with the official accepted count (the table
-of sources lives in `docs/results/coverage-sources.md`, each with a citation). The M4 gate is within ±1%
-per main-track cell. Also report missing-abstract and `unknown`-track counts. `/coverage` in the UI renders
-the same data.
+of sources lives in `docs/results/coverage-sources.md`, each with a citation; `official_counts.py` is its
+machine-readable copy, which `GET /coverage` serves, and a test holds the two equal).
+
+**The M4 gate:** every **main-track and D&B cell for which an official accepted count exists** is within
+±1%, or an owner-accepted exception (below). Cells with no official count are reported but not gated. The same definition appears in 00 and in the
+`coverage-reporting` skill. Also report, per cell: missing-abstract count, `unknown`-track count, and
+**statuses indexed**, meaning which statuses the sources for that venue-year can even contain. For example,
+NeurIPS 2013–2020 and ICML 2013–2022 come from proceedings only, so no rejected papers exist there to
+exclude; NeurIPS and ICML on OpenReview hold only the rejected papers whose authors opted in, while ICLR
+holds every rejected, withdrawn and desk-rejected submission (decision-012). The crawl window is 2013 on
+(decision-013); any venue-year with no source is a reported gap, never a silent zero. ICLR 2014–2016 are
+not gaps: their public archive listings supply accepted main-track records (TASK-096).
+The source of statuses indexed is spec 01's source table as `ingest/statuses.py` holds it (spec 01
+§Pipeline 5); the snapshot manifest records them per venue-year, and the missing abstracts and sources per
+cell (manifest format 2, TASK-082).
+The methods text cites the coverage report (with its snapshot hash) as the database-scope caveat.
+`GET /coverage` serves every column per cell (`venue_years[].tracks`: sources, indexed accepted,
+`official_accepted` with its citation, `delta`, `delta_pct`, `gated`, `within_gate`, missing abstracts) and
+the statuses indexed per venue-year; `/coverage` in the UI renders the same data. A takedown (TASK-136,
+decision-022) adds `abstract_withheld` beside the missing abstracts, which then leave the withheld ones out;
+the served `/coverage` also counts ids the takedown list names since the snapshot was built, while the report
+(`op eval coverage`) keeps the snapshot's own counts and says under its totals how many it withheld: the report
+is the citable figure.
+As built (TASK-054): `op eval coverage` renders `docs/results/<date>-coverage.md` from that same computation
+(`api.coverage.compute` on the index, `eval/coverage_report.py`). It adds the gate verdict over every gated
+official cell, with a cell the snapshot holds no record for as a gap (0 indexed, ✗); a cause note for every
+failing cell, read from `docs/results/coverage-causes.toml` (`["<Venue> <year> <track>"]` with a `cause`) or
+**unclassified**, with the file's sha256 in the header; every proceedings listing whose crawl skipped entries or
+disagreed with its page's count; and every OpenReview crawl that is incomplete or has coverage gaps, conflicts,
+unmapped venues, non-routine skipped groups or non-routine skipped notes; and every **unresolved record**
+(TASK-113): each `conflicts.csv` row a source left unresolved (`unresolved:<source>`, the field `unknown` because
+the source's own signals disagree, decision-020), by record id, with the record's track and status in the snapshot now (flagged when the field
+is no longer `unknown`, e.g. another source decided it after a merge), the cell it would count in were the field
+resolved (for `status`, the record's own track cell; for `track`, the cell of each track a side names) and
+whether that cell is gated, so a reader can see which gated deltas an unresolved record explains (on the
+2026-09-29 crawl: ICLR 2021 `xGZG2kS5bFk` and ICLR 2018 `S1p31z-Ab`, both ICLR main). The report reads
+`conflicts.csv` only after checking its sha256 against the manifest's `files`. `--check` exits 1 when the gate fails or an accepted exception is stale.
+
+**Owner-accepted exceptions.** A gated cell outside ±1% passes the gate only if the project owner accepted its
+gap in a decision record and `coverage-causes.toml` records it under the cell (`["<Venue> <year> <track>".accepted]`:
+`indexed`, `official`, `reason`, `papers` (record ids), `accepted_by` (a role: `project owner`), `accepted_on`,
+`decision`; every key required, no other allowed, no control characters, and the decision record must exist in
+`backlog/decisions/`). It passes only while the cell's indexed and official counts are exactly the accepted ones
+**and** its papers are the gap: exactly |official − indexed| of them, each a record of the index's snapshot, and
+for an under-count a record of the cell's venue-year outside the cell (another track or status), for an
+over-count a record counted in the cell. The over-count check can't prove the named records are the extras,
+only that they are counted: the owner's decision record is what names them as the extras. Anything else fails the cell again
+(`drifted`, the failed check in its cause note); a gap (no records) is never accepted and stays `✗ gap`. The
+report marks the cell `✓ accepted exception`, lists every exception in its own section and counts them in the
+verdict line, and reports an exception whose cell is within ±1% or not gated as stale; `--check` exits 1 on a
+stale exception too. ICLR 2013 main is one (decision-016). The exception is applied by the gate report
+(`op eval coverage`) only: `GET /coverage` and the `/coverage` page report the raw ±1% per cell, so an accepted
+cell is served with `within_gate: false`.
 
 ## D. Classification audit (report)
 
@@ -54,8 +120,50 @@ is the specific failure this project exists to prevent.
 ## E. Performance (CI benchmark)
 
 The 03 budgets are measured with `pytest-benchmark` on the fixture index in CI (a relative regression over
-20% fails) and on the full index nightly.
+20% fails); nightly, the 5k budgets are asserted again and a synthetic ~80k report is produced. Numbers on the
+real (full) index are a local run, since the real corpus is local only (decision-004).
 
-## F. Usefulness of near-misses (report, M5)
+As built (task-031): `backend/tests/bench/test_bench.py` runs on the synthetic 5k index. It covers every
+Trust-Evals string (a 50-hit search and `match_ids` with exclusions, cold cache) and the widest expansion
+under the cap and one past it, and asserts each budget on the p95 of 30 rounds. In ordinary runs benchmarks
+are disabled and run once as tests; the `bench` workflow enables them and compares the head with the base
+(the minimum time, the statistic least moved by runner noise). It also covers every sort, a broad query (thousands of matches),
+the widest wildcard inside a search, a multi-token NEAR, a nested NOT, draining an export, and a 500-record build. The check is advisory until it has proven
+free of false failures on shared runners (spec 08); sub-millisecond calls repeat within a round (≥ ~1 ms each). The search benchmark is warm after one warm-up round; `match_ids` clears every cache
+(verified clauses, expansions, compiled queries) every round, so it is cold.
+The ~80k numbers, and the position-verified cases spec 03 exempts, are a report
+(`backend/tests/bench/report_80k.py` → `docs/results/<date>-bench.md`), from the same synthetic generator at
+80k with abstracts of realistic length. The `nightly` workflow's `benchmarks` job runs the 5k benchmarks with
+their budgets and then this report, into the run summary and a `bench-80k` artifact kept for inspection (a
+citable number is a committed `docs/results/<date>-bench.md`); a budgeted number past its budget is listed in
+the report and shown as a warning annotation, never a failure (TASK-057).
 
-This is 06's recall@25 protocol, using the review's Covidence included set as ground truth.
+The `/search` endpoint rows (`test_search_endpoint_first_page`) run over the 5k corpus as the API serves it
+(`attributed` records: authors and abstract claims) and include each hit's `abstract_source`, a lookup in
+what the snapshot reader computed at load (TASK-134; about 95 µs per 50-hit page on the served snapshot, spec
+03 §Performance budgets).
+
+## F. Usefulness of near-misses (report, M5: deferred)
+
+This is 06's recall@25 protocol, using the review's Covidence included set as ground truth. Deferred with
+06 (decision-017): v1 is Boolean search only, so neither this report nor §A's semantic invariant is a v1
+release gate. Both become required when the semantic layer is built.
+
+## Error handling
+
+- A gate that cannot run (a missing fixture snapshot, a crashed oracle) **fails** the build; it is never
+  skipped or reported as passed.
+- A report whose inputs are missing (no Scholar set, no official count for a cell) says so in the report
+  and leaves that cell unscored; it never fills in an estimate.
+- An **our bug** row in the Scholar comparison (§B) or a differential counterexample (§A) opens a Backlog
+  task with the query and the shrunk AST before the report is committed.
+
+## Testing
+
+The evaluation tooling is tested like any other code:
+- The report generators (`op eval scholar|coverage|audit`, and `near-miss` when 06 is built) have unit tests on fixture inputs
+  with known answers. For example, a coverage fixture with one cell off by 2% must fail the gate.
+- The CI gates in §A are checked for teeth by mutation. Deleting the comparison, or the oracle call, must
+  make the suite fail (`qa-auditor`).
+- Dated reports in `docs/results/` are regenerated from their command, never edited by hand. A report
+  whose command no longer reproduces it is a Should.

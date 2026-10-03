@@ -1,0 +1,247 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-054 authenticated live crawl cache (public projection); extracted for TASK-101",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing trimmed from 459 to 3 notes, one per content.venue string (order kept); count is the listing's"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=NeurIPS.cc/2024/Datasets_and_Benchmarks_Track&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "202",
+   "ratelimit-reset": "3198"
+  },
+  "json": {
+   "count": 459,
+   "notes": [
+    {
+     "content": {
+      "_bibtex": {
+       "value": "Synthetic bibtex text 1."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 2."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person3",
+        "~Synthetic_Person4",
+        "~Synthetic_Person5",
+        "~Synthetic_Person6",
+        "~Synthetic_Person7",
+        "~Synthetic_Person8",
+        "~Synthetic_Person9",
+        "~Synthetic_Person10",
+        "~Synthetic_Person11",
+        "~Synthetic_Person12",
+        "~Synthetic_Person13",
+        "~Synthetic_Person14"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 15",
+        "Synthetic Author 16",
+        "Synthetic Author 17",
+        "Synthetic Author 18",
+        "Synthetic Author 19",
+        "Synthetic Author 20",
+        "Synthetic Author 21",
+        "Synthetic Author 22",
+        "Synthetic Author 23",
+        "Synthetic Author 24",
+        "Synthetic Author 25",
+        "Synthetic Author 26"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 27.",
+        "Synthetic keywords text 28.",
+        "Synthetic keywords text 29."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_30"
+      },
+      "pdf": {
+       "value": "/pdf/55d447eb4e82f5fdf42267d4f1fc9310aa15e9fa.pdf"
+      },
+      "supplementary_material": {
+       "value": "/attachment/e268342cdd44749325ab06aac758d06b30f705ea.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 31."
+      },
+      "venue": {
+       "value": "NeurIPS 2024 Track Datasets and Benchmarks Poster"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track"
+      }
+     },
+     "forum": "FXTeJvHE0k",
+     "id": "FXTeJvHE0k",
+     "invitations": [
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/-/Submission",
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/-/Post_Submission",
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/Submission2/-/Supplementary_Material",
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/-/Edit",
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/Submission2/-/Camera_Ready_Revision"
+     ],
+     "number": 2,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "_bibtex": {
+       "value": "Synthetic bibtex text 32."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 33."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person34",
+        "~Synthetic_Person35",
+        "~Synthetic_Person36",
+        "~Synthetic_Person37",
+        "~Synthetic_Person38"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 39",
+        "Synthetic Author 40",
+        "Synthetic Author 41",
+        "Synthetic Author 42",
+        "Synthetic Author 43"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 44.",
+        "Synthetic keywords text 45.",
+        "Synthetic keywords text 46."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_47"
+      },
+      "pdf": {
+       "value": "/pdf/e65b098cf60cde3f0f79c45df856a04e69ac682b.pdf"
+      },
+      "supplementary_material": {
+       "value": "/attachment/48ca0df36a728f33b3e84bc10734a80dcc1a04a9.zip"
+      },
+      "title": {
+       "value": "Synthetic title text 48."
+      },
+      "venue": {
+       "value": "NeurIPS 2024 Track Datasets and Benchmarks Spotlight"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track"
+      }
+     },
+     "forum": "qmvtDIfbmS",
+     "id": "qmvtDIfbmS",
+     "invitations": [
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/-/Submission",
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/-/Post_Submission",
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/Submission44/-/Supplementary_Material",
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/-/Edit",
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/Submission44/-/Camera_Ready_Revision"
+     ],
+     "number": 44,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 49."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 50."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 51."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person52",
+        "~Synthetic_Person53",
+        "~Synthetic_Person54",
+        "~Synthetic_Person55",
+        "~Synthetic_Person56",
+        "~Synthetic_Person57",
+        "~Synthetic_Person58",
+        "~Synthetic_Person59",
+        "~Synthetic_Person60"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 61",
+        "Synthetic Author 62",
+        "Synthetic Author 63",
+        "Synthetic Author 64",
+        "Synthetic Author 65",
+        "Synthetic Author 66",
+        "Synthetic Author 67",
+        "Synthetic Author 68",
+        "Synthetic Author 69"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 70."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_71"
+      },
+      "pdf": {
+       "value": "/pdf/e707420df0658620d8096c7236099529a6394df0.pdf"
+      },
+      "supplementary_material": {
+       "value": "/attachment/77a9d8dd44a0798cce3d52ed732f003d028707ee.zip"
+      },
+      "title": {
+       "value": "Synthetic title text 72."
+      },
+      "venue": {
+       "value": "NeurIPS 2024 Track Datasets and Benchmarks Oral"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track"
+      }
+     },
+     "forum": "4S8agvKjle",
+     "id": "4S8agvKjle",
+     "invitations": [
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/-/Submission",
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/-/Post_Submission",
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/-/Edit",
+      "NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/Submission313/-/Camera_Ready_Revision"
+     ],
+     "number": 313,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

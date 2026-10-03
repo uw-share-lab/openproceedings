@@ -1,0 +1,64 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-132 NeurIPS 2021 silent twin, from the 2026-09-29 crawl cache",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing page trimmed from 1000 to 1 notes (order kept; `count` is the page's)",
+  "aligned": "free text equal on the two real notes (TL;DR, abstract, authorids, authors, code_of_conduct, keywords, paperhash, title) is the same synthetic text as in notes-main-listing-accepted-silent-twin.json; the rest (_bibtex, checklist, submission_history*, thumbnail) differs, and this note has no venue or venueid"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=NeurIPS.cc/2021/Conference/-/Blind_Submission&limit=1000&offset=1000",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "count": 2768,
+   "notes": [
+    {
+     "content": {
+      "TL;DR": "Synthetic tl;dr text 1.",
+      "_bibtex": "Synthetic bibtex text 2.",
+      "abstract": "Synthetic abstract text 3.",
+      "authorids": [
+       "~Synthetic_Person4",
+       "~Synthetic_Person5",
+       "~Synthetic_Person6"
+      ],
+      "authors": [
+       "Synthetic Author 7",
+       "Synthetic Author 8",
+       "Synthetic Author 9"
+      ],
+      "checklist": "Synthetic checklist text 10.",
+      "code_of_conduct": "Synthetic code of conduct text 10.",
+      "keywords": [
+       "Synthetic keywords text 11.",
+       "Synthetic keywords text 12."
+      ],
+      "paperhash": "synthetic|synthetic_title_13",
+      "pdf": "/pdf/4cb5703c3639565ca5926f2713541fde4cc61818.pdf",
+      "submission_history": "Synthetic submission history text 15.",
+      "submission_history_-_improvements_made": "Synthetic submission history - improvements made text 16.",
+      "submission_history_-_venue_and_year": "Synthetic submission history - venue and year text 17.",
+      "supplementary_material": "/attachment/6e4f7823576bb92beb5369afd5cc92ad109fe8cd.zip",
+      "thumbnail": "Synthetic thumbnail text 18.",
+      "title": "Synthetic title text 14."
+     },
+     "forum": "W6e384Lkjbw",
+     "id": "W6e384Lkjbw",
+     "invitation": "NeurIPS.cc/2021/Conference/-/Blind_Submission",
+     "number": 5999,
+     "readers": [
+      "everyone"
+     ],
+     "replyto": null
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,62 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-113: trimmed from the 2026-09-29 crawl cache (fetched 2026-09-29T10:06:47.299944+00:00)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing page trimmed from 1000 to 1 notes (order kept; `count` is the page's)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2020/Conference/-/Blind_Submission&limit=1000&offset=1000",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "count": 2213,
+   "notes": [
+    {
+     "content": {
+      "TL;DR": "Synthetic tl;dr text 1.",
+      "_bibtex": "Synthetic bibtex text 2.",
+      "abstract": "Synthetic abstract text 3.",
+      "authorids": [
+       "synthetic.person4@example.org",
+       "synthetic.person5@example.org",
+       "synthetic.person6@example.org",
+       "synthetic.person7@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 8 and Synthetic Author 9",
+       "Synthetic Author 10",
+       "Synthetic Author 11"
+      ],
+      "data": "Synthetic data text 12.",
+      "keywords": [
+       "Synthetic keywords text 13.",
+       "Synthetic keywords text 14.",
+       "Synthetic keywords text 15.",
+       "Synthetic keywords text 16.",
+       "Synthetic keywords text 17."
+      ],
+      "original_pdf": "Synthetic original pdf text 18.",
+      "paperhash": "synthetic|synthetic_title_19",
+      "pdf": "/pdf/bf90dcb68aa6dc6a67a1ec7324880ee0ae8f3109.pdf",
+      "title": "Synthetic title text 20."
+     },
+     "forum": "HklCmaVtPS",
+     "id": "HklCmaVtPS",
+     "invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+     "number": 468,
+     "readers": [
+      "everyone"
+     ],
+     "replyto": null
+    }
+   ]
+  }
+ }
+}

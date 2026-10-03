@@ -1,0 +1,217 @@
+"""The one Diagnostic shape and the registry of every code (error-diagnostics skill).
+
+Codes are `AREA_SNAKE_NAME` and stable forever once released: retire a code, never rename or reuse it.
+HTTP statuses for `API_*` codes are exactly spec 04 §Error handling; `PARSE_*` errors are 422.
+`API_REPLAY_MISMATCH` is a log code only: a replay mismatch is a 200 whose `status` field is `mismatch`.
+Adding a code needs: an entry here, a golden test that produces it with its span, and the help table.
+"""
+
+from __future__ import annotations
+
+import re
+import unicodedata
+from enum import StrEnum
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field, Strict, field_validator, model_validator
+
+
+class DiagnosticCode(StrEnum):
+    # grammar (spec 02 §Error handling)
+    PARSE_UNBALANCED_PAREN = "PARSE_UNBALANCED_PAREN"
+    PARSE_EMPTY_GROUP = "PARSE_EMPTY_GROUP"
+    PARSE_ALL_NEGATIVE = "PARSE_ALL_NEGATIVE"
+    PARSE_UNTERMINATED_PHRASE = "PARSE_UNTERMINATED_PHRASE"
+    PARSE_BAD_NEAR = "PARSE_BAD_NEAR"
+    PARSE_WILDCARD_NOT_SUFFIX = "PARSE_WILDCARD_NOT_SUFFIX"
+    PARSE_EXPECTED_TERM = "PARSE_EXPECTED_TERM"
+    PARSE_EMPTY_TERM = "PARSE_EMPTY_TERM"
+    PARSE_NESTED_FIELD = "PARSE_NESTED_FIELD"
+    PARSE_TOO_DEEP = "PARSE_TOO_DEEP"
+    PARSE_WILDCARD_DETACHED = "PARSE_WILDCARD_DETACHED"
+    PARSE_AMBIGUOUS_MINUS = "PARSE_AMBIGUOUS_MINUS"
+    PARSE_STRAY_COLON = "PARSE_STRAY_COLON"
+    PARSE_AMBIGUOUS_QUOTE = "PARSE_AMBIGUOUS_QUOTE"
+    PARSE_PAREN_TOUCHES_WORD = "PARSE_PAREN_TOUCHES_WORD"
+    PARSE_TOO_LONG = "PARSE_TOO_LONG"
+    # wildcard expansion
+    WILDCARD_STEM_TOO_SHORT = "WILDCARD_STEM_TOO_SHORT"
+    WILDCARD_TOO_MANY_EXPANSIONS = "WILDCARD_TOO_MANY_EXPANSIONS"
+    # fields and filters
+    FIELD_UNKNOWN = "FIELD_UNKNOWN"
+    FIELD_UNKNOWN_VALUE = "FIELD_UNKNOWN_VALUE"
+    FIELD_RANGE_INVERTED = "FIELD_RANGE_INVERTED"
+    FIELD_FILTER_SYNTAX = "FIELD_FILTER_SYNTAX"
+    FIELD_COMPAT_ONLY = "FIELD_COMPAT_ONLY"
+    # warnings (shown, never auto-fixed; they do not change what a query means)
+    WARN_LOWERCASE_OPERATOR = "WARN_LOWERCASE_OPERATOR"
+    WARN_MIXED_AND_OR = "WARN_MIXED_AND_OR"
+    WARN_NESTED_FILTER = "WARN_NESTED_FILTER"
+    WARN_FILTER_SCOPE = "WARN_FILTER_SCOPE"
+    WARN_LOOKALIKE_OPERATOR = "WARN_LOOKALIKE_OPERATOR"
+    WARN_SYMBOLS_DROPPED = "WARN_SYMBOLS_DROPPED"
+    WARN_SOURCE_PARTIAL = "WARN_SOURCE_PARTIAL"
+    WARN_CJK_RUN = "WARN_CJK_RUN"
+    WARN_SPELLED_GREEK = "WARN_SPELLED_GREEK"
+    # scholar/PoP compatibility translations
+    COMPAT_SOURCE_ALIAS = "COMPAT_SOURCE_ALIAS"
+    COMPAT_POP_DOLLAR = "COMPAT_POP_DOLLAR"
+    COMPAT_POP_PHRASE = "COMPAT_POP_PHRASE"
+    COMPAT_NO_STEMMING = "COMPAT_NO_STEMMING"
+    # HTTP layer (spec 04 §Error handling)
+    API_BAD_PARAM = "API_BAD_PARAM"
+    API_PAPER_NOT_FOUND = "API_PAPER_NOT_FOUND"
+    API_RECORD_NOT_FOUND = "API_RECORD_NOT_FOUND"
+    API_INDEX_VERSION_UNAVAILABLE = "API_INDEX_VERSION_UNAVAILABLE"
+    API_RECORD_MISMATCH = "API_RECORD_MISMATCH"
+    API_RATE_LIMITED = "API_RATE_LIMITED"
+    API_INDEX_NOT_LOADED = "API_INDEX_NOT_LOADED"
+    API_INTERNAL = "API_INTERNAL"
+    API_NOT_FOUND = "API_NOT_FOUND"  # no such endpoint (task-034)
+    API_METHOD_NOT_ALLOWED = "API_METHOD_NOT_ALLOWED"  # an endpoint that exists, another method (task-034)
+    API_REPLAY_MISMATCH = "API_REPLAY_MISMATCH"  # log code only — never an HTTP error
+    API_RECORDS_STORE_FULL = "API_RECORDS_STORE_FULL"  # a save refused: the record store is full (task-037)
+    API_BODY_TOO_LARGE = "API_BODY_TOO_LARGE"  # a request body over the cap (task-079)
+    API_BUSY = "API_BUSY"  # position verification's slots are all taken: retry shortly (M3a review)
+    # more position-verified clauses than the instance runs in one query (M3a review round 2, decision-010)
+    API_TOO_MANY_VERIFIED_CLAUSES = "API_TOO_MANY_VERIFIED_CLAUSES"
+    # position checks that would read more candidate documents than the instance allows one query
+    API_QUERY_TOO_COSTLY = "API_QUERY_TOO_COSTLY"  # (M3a review round 3, decision-010)
+
+
+_API_STATUS: dict[DiagnosticCode, int] = {
+    DiagnosticCode.API_BAD_PARAM: 422,
+    DiagnosticCode.API_PAPER_NOT_FOUND: 404,
+    DiagnosticCode.API_RECORD_NOT_FOUND: 404,
+    DiagnosticCode.API_INDEX_VERSION_UNAVAILABLE: 409,
+    DiagnosticCode.API_RECORD_MISMATCH: 409,
+    DiagnosticCode.API_RATE_LIMITED: 429,
+    DiagnosticCode.API_INDEX_NOT_LOADED: 503,
+    DiagnosticCode.API_INTERNAL: 500,
+    DiagnosticCode.API_NOT_FOUND: 404,
+    DiagnosticCode.API_METHOD_NOT_ALLOWED: 405,
+    DiagnosticCode.API_RECORDS_STORE_FULL: 503,
+    DiagnosticCode.API_BODY_TOO_LARGE: 413,
+    DiagnosticCode.API_BUSY: 503,
+    DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES: 422,
+    DiagnosticCode.API_QUERY_TOO_COSTLY: 422,
+}
+
+
+def http_status(code: DiagnosticCode) -> int | None:
+    """The HTTP status an error with this code is returned with, or None if it is never an HTTP error."""
+    if code in _API_STATUS:
+        return _API_STATUS[code]
+    if code.startswith(("PARSE_", "FIELD_", "WILDCARD_")):  # a query that can't be run as written
+        return 422
+    return None
+
+
+_WHITESPACE = re.compile(r"\s+")  # exactly the str.isspace() characters, which the lexer splits words on
+_INVISIBLE = frozenset({"Cc", "Cf", "Cs"})  # control, format (bidi overrides, zero-width), lone surrogates
+
+
+def _shown(c: str) -> str:
+    """A character as a message quotes it: a backtick (it would end the quote) or an invisible character as
+    its Python escape (`\\x60`, `\\u202e`), anything else as itself."""
+    if c != "`" and unicodedata.category(c) not in _INVISIBLE:
+        return c
+    n = ord(c)
+    return f"\\x{n:02x}" if n < 0x100 else f"\\u{n:04x}" if n < 0x10000 else f"\\U{n:08x}"
+
+
+def verbatim(text: str) -> bool:
+    """Whether `clip` shows `text` as typed (bar whitespace and shortening), so a fix hint may quote it for the
+    user to type back: an escaped hint (`-foo\\x60bar`) would search something else if copied."""
+    return all(c.isspace() or _shown(c) == c for c in text)
+
+
+def clip(text: str, width: int = 40) -> str:
+    """User text as every message quotes it, between backticks: one line of visible characters (whitespace runs
+    are one space; a backtick or an invisible character is escaped), shortened to at most `width` code points
+    so a diagnostic never grows with the input. An escape is never split. The span, not the message, locates
+    exactly what was typed (error-diagnostics skill, TASK-141)."""
+    pieces: list[str] = []
+    used = 0
+    for c in _WHITESPACE.sub(" ", text):
+        piece = _shown(c)
+        if used + len(piece) > width:  # too long: keep the whole pieces that fit before the ellipsis
+            while pieces and used + 1 > width:
+                used -= len(pieces.pop())
+            return "".join(pieces) + "…"
+        pieces.append(piece)
+        used += len(piece)
+    return "".join(pieces)
+
+
+def by_position(d: Diagnostic) -> tuple[int, int]:
+    """Sort key: diagnostics are reported in the order of the input they point at."""
+    return d.span or (0, 0)
+
+
+# the only codes whose Diagnostic may carry a `reading` (TASK-099): the level as it was read, parenthesised. Even
+# there it can be null: the "… and N more" summary, and a level that has errors (TASK-140).
+READING_CODES = frozenset({DiagnosticCode.WARN_MIXED_AND_OR})
+
+
+class Diagnostic(BaseModel):
+    """A warning, error or translation notice about a query, with a half-open code-point span into `q`.
+    `reading` is only ever set on `WARN_MIXED_AND_OR`, so a client never parses `message` for it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", json_schema_serialization_defaults_required=True)
+
+    code: DiagnosticCode
+    message: str
+    span: tuple[Annotated[int, Strict()], Annotated[int, Strict()]] | None = None
+    reading: str | None = Field(
+        default=None,
+        description="Only ever set on `WARN_MIXED_AND_OR`: the text at `span` as it was read, each `AND` group in "
+        "parentheses and the branches joined with ` OR ` (`a b OR c` → `(a b) OR c`). Replacing `span` in `q` with "
+        "it gives a query with the same canonical form whose level no longer mixes `AND` and `OR`. Never "
+        "shortened, unlike the reading quoted in `message`. Null on every other code, and on a "
+        '`WARN_MIXED_AND_OR` that has none to offer: the "… and N more" summary, or a level that has '
+        "errors (its `message` then quotes the level as typed, not a reading).",
+    )
+
+    @field_validator("message")
+    @classmethod
+    def _message_not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("a diagnostic message must say what is wrong and how to fix it")
+        return v
+
+    @field_validator("span")
+    @classmethod
+    def _half_open(cls, v: tuple[int, int] | None) -> tuple[int, int] | None:
+        if v is not None and not (0 <= v[0] <= v[1]):
+            raise ValueError(f"span must be a half-open [start, end) range with 0 <= start <= end, got {v}")
+        return v
+
+    @model_validator(mode="after")
+    def _reading_only_where_defined(self) -> Diagnostic:
+        if self.reading is not None and self.code not in READING_CODES:
+            raise ValueError(f"{self.code} takes no `reading`")
+        if self.reading is not None and not self.reading.strip():
+            raise ValueError("a reading must not be blank")
+        return self
+
+
+class OpenProceedingsError(Exception):
+    """Base for every typed failure. Each carries a registry code; the API edge maps it to an error envelope
+    with `http_status`. Log the code, never `message`: messages quote user input (logging-standards)."""
+
+    def __init__(self, code: DiagnosticCode, message: str) -> None:
+        super().__init__(code, message)  # both args, so the error pickles across processes
+        self.code = code
+        self.message = message
+
+    def __str__(self) -> str:
+        return f"{self.code}: {self.message}"
+
+
+class UserInputError(OpenProceedingsError):
+    """The request can't be served as asked (a 4xx): logged at DEBUG with its code only."""
+
+
+class InternalError(OpenProceedingsError):
+    """Something broke on our side (a 5xx): logged at ERROR with the traceback, never the message's input."""

@@ -1,0 +1,117 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=NeurIPS.cc/2025/Position_Paper_Track&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-ratelimit-limit": "500",
+   "x-ratelimit-remaining": "259",
+   "x-ratelimit-reset": "1790543172",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-limit": "500",
+   "ratelimit-remaining": "259",
+   "ratelimit-reset": "2234"
+  },
+  "json": {
+   "notes": [
+    {
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 2",
+        "Synthetic Author 3",
+        "Synthetic Author 4",
+        "Synthetic Author 5",
+        "Synthetic Author 6",
+        "Synthetic Author 7",
+        "Synthetic Author 8",
+        "Synthetic Author 9",
+        "Synthetic Author 10"
+       ]
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person11",
+        "~Synthetic_Person12",
+        "~Synthetic_Person13",
+        "~Synthetic_Person14",
+        "~Synthetic_Person15",
+        "~Synthetic_Person16",
+        "~Synthetic_Person17",
+        "~Synthetic_Person18",
+        "~Synthetic_Person19"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 20.",
+        "Synthetic keywords text 21."
+       ]
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 22."
+      },
+      "pdf": {
+       "value": "/pdf/b45f9870d6926f1ee6fd4b11ce47024ccf8b6f4f.pdf"
+      },
+      "venue": {
+       "value": "NeurIPS 2025 Position Paper Track"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2025/Position_Paper_Track"
+      },
+      "_bibtex": {
+       "value": "synthetic.person23@example.org"
+      },
+      "lay_summary": {
+       "value": "Synthetic lay summary text 24."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_25"
+      }
+     },
+     "id": "VZnOKzQ5qW",
+     "forum": "VZnOKzQ5qW",
+     "license": "CC BY 4.0",
+     "signatures": [
+      "NeurIPS.cc/2025/Position_Paper_Track/Submission749/Authors"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "NeurIPS.cc/2025/Position_Paper_Track",
+      "NeurIPS.cc/2025/Position_Paper_Track/Submission749/Authors"
+     ],
+     "number": 749,
+     "invitations": [
+      "NeurIPS.cc/2025/Position_Paper_Track/-/Submission",
+      "NeurIPS.cc/2025/Position_Paper_Track/-/Post_Submission",
+      "NeurIPS.cc/2025/Position_Paper_Track/-/Edit",
+      "NeurIPS.cc/2025/Position_Paper_Track/Submission749/-/Revision"
+     ],
+     "domain": "NeurIPS.cc/2025/Position_Paper_Track",
+     "tcdate": 1748001499333,
+     "cdate": 1748001499333,
+     "tmdate": 1768935227982,
+     "mdate": 1768935227982,
+     "pdate": 1758853797959,
+     "odate": 1761706617099,
+     "version": 2
+    }
+   ]
+  }
+ }
+}

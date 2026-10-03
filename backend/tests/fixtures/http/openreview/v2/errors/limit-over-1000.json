@@ -1,0 +1,30 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2024/Conference&limit=1001",
+  "authenticated": true
+ },
+ "response": {
+  "status": 400,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "name": "ValidationError",
+   "message": "limit must be <= 1000 (2026-09-27-8520693)",
+   "status": 400,
+   "details": {
+    "path": "limit",
+    "comparison": "<=",
+    "limit": 1000,
+    "invalidValue": 1001,
+    "reqId": "2026-09-27-8520693"
+   }
+  }
+ }
+}

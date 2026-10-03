@@ -1,0 +1,97 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "group trimmed to its venueid, visibility and decision keys (web, members, invitations dropped)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/groups?limit=1000&offset=0&parent=ICML.cc/2023",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "700;w=3600",
+   "ratelimit-remaining": "699",
+   "ratelimit-reset": "3600"
+  },
+  "json": {
+   "count": 2,
+   "groups": [
+    {
+     "domain": "ICML.cc/2023/Conference",
+     "id": "ICML.cc/2023/Conference",
+     "parent": "ICML.cc/2023",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "ICML.cc/2023/Conference/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "ICML.cc/2023/Conference/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "ICML.cc/2023/Conference/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "ICML.cc/2023/Conference/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "ICML.cc/2023/Conference/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "Fortieth International Conference on Machine Learning"
+      },
+      "subtitle": {
+       "value": "ICML 2023"
+      },
+      "website": {
+       "value": "https://icml.cc/Conferences/2023"
+      },
+      "withdrawn_submission_id": {
+       "value": "ICML.cc/2023/Conference/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "ICML.cc/2023/Conference/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "start_date": {
+       "value": "Jul 23 2023"
+      }
+     }
+    },
+    {
+     "domain": "OpenReview.net",
+     "id": "ICML.cc/2023/Workshop",
+     "parent": "ICML.cc/2023",
+     "readers": [
+      "everyone"
+     ],
+     "content": {}
+    }
+   ]
+  }
+ }
+}

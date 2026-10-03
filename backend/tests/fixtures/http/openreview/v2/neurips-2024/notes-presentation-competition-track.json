@@ -1,0 +1,129 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-054 authenticated live crawl cache (public projection); extracted for TASK-101",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing trimmed from 16 to 1 notes, one per content.venue string (order kept); count is the listing's"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=NeurIPS.cc/2024/Competition_Track&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "221",
+   "ratelimit-reset": "3221"
+  },
+  "json": {
+   "count": 16,
+   "notes": [
+    {
+     "content": {
+      "Competition_timeline": {
+       "value": "Synthetic competition timeline text 1."
+      },
+      "Participant_contact_email": {
+       "value": "Synthetic participant contact email text 2."
+      },
+      "Preferred_timezone": {
+       "value": "Synthetic preferred timezone text 3."
+      },
+      "Primary_contact_email": {
+       "value": "Synthetic primary contact email text 4."
+      },
+      "TLDR": {
+       "value": "Synthetic tldr text 5."
+      },
+      "Website": {
+       "value": "Synthetic website text 6."
+      },
+      "Workshop_format": {
+       "value": "Synthetic workshop format text 7."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 8."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 9."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person10",
+        "~Synthetic_Person11",
+        "synthetic.person12@example.org",
+        "~Synthetic_Person13",
+        "synthetic.person14@example.org",
+        "~Synthetic_Person15",
+        "~Synthetic_Person16",
+        "synthetic.person17@example.org",
+        "synthetic.person18@example.org",
+        "~Synthetic_Person19",
+        "synthetic.person20@example.org",
+        "synthetic.person21@example.org"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 22",
+        "Synthetic Author 23",
+        "Synthetic Author 24",
+        "Synthetic Author 25",
+        "Synthetic Author 26",
+        "Synthetic Author 27",
+        "Synthetic Author 28",
+        "Synthetic Author 29",
+        "Synthetic Author 30",
+        "Synthetic Author 31",
+        "Synthetic Author 32",
+        "Synthetic Author 33"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 34.",
+        "Synthetic keywords text 35.",
+        "Synthetic keywords text 36.",
+        "Synthetic keywords text 37.",
+        "Synthetic keywords text 38."
+       ]
+      },
+      "logo_image": {
+       "value": "Synthetic logo image text 39."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_40"
+      },
+      "pdf": {
+       "value": "/pdf/7dd5c6284dbda54bae1e8d7f806fa346f5c0a9ff.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 41."
+      },
+      "venue": {
+       "value": "NeurIPS 2024 Competition Track"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2024/Competition_Track"
+      }
+     },
+     "forum": "nZB55Omfc3",
+     "id": "nZB55Omfc3",
+     "invitations": [
+      "NeurIPS.cc/2024/Competition_Track/-/Submission",
+      "NeurIPS.cc/2024/Competition_Track/-/Post_Submission",
+      "NeurIPS.cc/2024/Competition_Track/Submission8/-/Camera_Ready_Submission",
+      "NeurIPS.cc/2024/Competition_Track/-/Edit"
+     ],
+     "number": 8,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

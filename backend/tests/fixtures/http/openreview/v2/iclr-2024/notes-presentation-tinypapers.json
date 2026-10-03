@@ -1,0 +1,207 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-054 authenticated live crawl cache (public projection); extracted for TASK-101",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing trimmed from 192 to 3 notes, one per content.venue string (order kept); count is the listing's"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2024/TinyPapers&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "483",
+   "ratelimit-reset": "3579"
+  },
+  "json": {
+   "count": 192,
+   "notes": [
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 1."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 2."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 3."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person4"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 5"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 6.",
+        "Synthetic keywords text 7."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_8"
+      },
+      "pdf": {
+       "value": "/pdf/15aac4ef531720d02753921b5850c4c4eae160d4.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 9."
+      },
+      "venue": {
+       "value": "Tiny Papers @ ICLR 2024 Archive"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2024/TinyPapers"
+      }
+     },
+     "forum": "FfkW423EmB",
+     "id": "FfkW423EmB",
+     "invitations": [
+      "ICLR.cc/2024/TinyPapers/-/Submission",
+      "ICLR.cc/2024/TinyPapers/-/Post_Submission",
+      "ICLR.cc/2024/TinyPapers/-/Edit",
+      "ICLR.cc/2024/TinyPapers/Submission2/-/Camera_Ready"
+     ],
+     "number": 2,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 10."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 11."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 12."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person13",
+        "~Synthetic_Person14",
+        "~Synthetic_Person15",
+        "~Synthetic_Person16",
+        "~Synthetic_Person17"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 18",
+        "Synthetic Author 19",
+        "Synthetic Author 20",
+        "Synthetic Author 21",
+        "Synthetic Author 22"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 23.",
+        "Synthetic keywords text 24.",
+        "Synthetic keywords text 25.",
+        "Synthetic keywords text 26."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_27"
+      },
+      "pdf": {
+       "value": "/pdf/56f054f956065c15808f55f2e1bb8fe43ed57f0a.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 28."
+      },
+      "venue": {
+       "value": "Tiny Papers @ ICLR 2024 Present"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2024/TinyPapers"
+      }
+     },
+     "forum": "XsWA2y2TyI",
+     "id": "XsWA2y2TyI",
+     "invitations": [
+      "ICLR.cc/2024/TinyPapers/-/Submission",
+      "ICLR.cc/2024/TinyPapers/-/Post_Submission",
+      "ICLR.cc/2024/TinyPapers/-/Edit",
+      "ICLR.cc/2024/TinyPapers/Submission3/-/Camera_Ready"
+     ],
+     "number": 3,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 29."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 30."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 31."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person32",
+        "~Synthetic_Person33"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 34",
+        "Synthetic Author 35"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 36.",
+        "Synthetic keywords text 37."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_38"
+      },
+      "pdf": {
+       "value": "/pdf/016b1616ed8275c0951cf09ece55cb8aec11fda0.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 39."
+      },
+      "venue": {
+       "value": "Tiny Papers @ ICLR 2024 Notable"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2024/TinyPapers"
+      }
+     },
+     "forum": "mTF4OcDnSP",
+     "id": "mTF4OcDnSP",
+     "invitations": [
+      "ICLR.cc/2024/TinyPapers/-/Submission",
+      "ICLR.cc/2024/TinyPapers/-/Post_Submission",
+      "ICLR.cc/2024/TinyPapers/-/Edit",
+      "ICLR.cc/2024/TinyPapers/Submission11/-/Camera_Ready"
+     ],
+     "number": 11,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

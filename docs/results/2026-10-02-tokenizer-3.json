@@ -1,0 +1,123 @@
+{
+  "records": 95877,
+  "changed": {
+    "records": 0
+  },
+  "examples": [],
+  "new_index": "1fd2f5815cfb",
+  "build_s": 45,
+  "replays": {
+    "main-1": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "main-2-pop": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "main-3-sources": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "main-4-sources": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "main-5-sources": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "main-6-sources": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "main-7-most-updated": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "narrow": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "human-centered": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "llm-as-judge": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "nfd-erdos": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "nfc-erdos": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "nfd-cafe": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    },
+    "trust-calibrat": {
+      "own": "reproduced",
+      "own_index": "05a0541717f6",
+      "alone": "drifted",
+      "changed": [["tokenizer_version", "2", "3"]],
+      "added": 0,
+      "removed": 0
+    }
+  }
+}

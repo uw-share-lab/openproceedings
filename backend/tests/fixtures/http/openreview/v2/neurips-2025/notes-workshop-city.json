@@ -1,0 +1,86 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "491",
+   "ratelimit-reset": "1044"
+  },
+  "json": {
+   "notes": [
+    {
+     "number": 145,
+     "invitations": [
+      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/-/Submission",
+      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/-/Post_Submission",
+      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/-/Edit",
+      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/Submission145/-/Camera_Ready_Revision"
+     ],
+     "id": "8fG56eJTnG",
+     "readers": [
+      "everyone"
+     ],
+     "forum": "8fG56eJTnG",
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 2",
+        "Synthetic Author 3",
+        "Synthetic Author 4",
+        "Synthetic Author 5",
+        "Synthetic Author 6"
+       ]
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person7",
+        "~Synthetic_Person8",
+        "~Synthetic_Person9",
+        "~Synthetic_Person10",
+        "~Synthetic_Person11"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 12.",
+        "Synthetic keywords text 13."
+       ]
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 14."
+      },
+      "pdf": {
+       "value": "/pdf/36b399ac567840ae596c3ca0e058835e4c5a8448.pdf"
+      },
+      "venue": {
+       "value": "ResponsibleFM @ NeurIPS 2025"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM"
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 15."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_16"
+      }
+     }
+    }
+   ]
+  }
+ }
+}

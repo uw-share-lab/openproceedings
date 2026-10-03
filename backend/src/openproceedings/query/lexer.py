@@ -1,0 +1,878 @@
+"""The query lexer (spec 02 §Grammar; decision-001): `q` → lexemes with half-open code-point spans.
+
+Lexical rules, in the order they are tried at the start of each lexeme:
+
+- Whitespace (any Unicode space) separates. `(`, `)` and `|` are single-character lexemes (`|` is `OR`).
+- A double quote (`"`, `“`, `”`, `„`, `‟`, `＂`, `«`, `»`, `「`, `」`, `『`, `』`, `〝`, `〞`, `〟`, `″`) opens a phrase
+  that runs to the next unescaped quote of the same family (English-style double quotes are one family;
+  `«…»`/`»…«`, `「…」`, `『…』`, `〝…〞`/`〝…〟`/`〞…〟` and `″…″` pair only with themselves), so a foreign quote inside
+  a phrase is punctuation. Its parts are split on whitespace, and operators inside it are ordinary words.
+  With no closing quote the phrase runs to the end of `q` and PARSE_UNTERMINATED_PHRASE is raised.
+  A quote touching a letter, mark or number on the outside (`a"b c"`, `"trust in "AI"`, a possessive
+  `"GPT-4"'s`, a decomposed accent) is PARSE_AMBIGUOUS_QUOTE, once per unbroken run; a `(` glued to a
+  preceding word, phrase or range, or a `)` to a following word or phrase (`model(s)`, `year:2020..2022(x)`), is
+  PARSE_PAREN_TOUCHES_WORD; a `)` glued to a field prefix (`(x)year:2021`) splits nothing and is fine
+  (decision-028).
+- `-` is `NOT` when it starts the query or follows whitespace, `(`, `|` or a field's `:`, and a primary
+  follows it directly. Any other word that starts with `-` (`a - b`, `"x"-based`, `--x`) is
+  PARSE_AMBIGUOUS_MINUS: it would otherwise silently mean either NOT or a literal hyphen.
+- A letter, then letters/digits/underscores, then `:` is a field (case-insensitive). An unknown name is
+  FIELD_UNKNOWN but is still emitted as a field so the parser can go on. `title: trust` (a space after
+  the colon) is accepted; `title :trust` is PARSE_STRAY_COLON.
+- Anything else runs to the next whitespace, parenthesis, `|` or double quote, except that LaTeX math
+  (`$f(x)$`, found exactly as the tokenizer finds it) keeps its parentheses and bars. A backslash keeps
+  the character after it in the word (`G\\"odel`). The words `AND`, `OR`, `NOT` (uppercase only) are
+  operators; `NEAR/n` (n ≤ 100) is proximity, and a bare `NEAR` between terms is PARSE_BAD_NEAR;
+  `2020..2026` is a range; everything else is a WORD.
+- A WORD (or phrase part) ending in `*` or in a `$` outside math is a wildcard. Its stem must keep at
+  least 3 letters or digits after normalisation, counting the words before it in a phrase (decision-001;
+  `"generative AI$"` is fine, as `generative-AI$` is), and the wildcard must directly follow a
+  letter or digit (`vision-*` is PARSE_WILDCARD_DETACHED), judged on the stem's folded pieces
+  (decision-008), so `abcd⒈*` (`⒈` is `1.`) is detached like `abcd1.*`. A `*` or `$` anywhere else outside math is
+  PARSE_WILDCARD_NOT_SUFFIX, except a `$` before a digit (currency, `US$5`).
+
+Characters whose NFKC form is one of these syntax characters (full-width `（`, `－`, `＂`, `＊`, …) act as
+that character, since the tokenizer applies NFKC too. Super/subscript parentheses (math notation) are
+deliberately excluded; a test re-derives this table from the Unicode database. LaTeX is found as the tokenizer
+the query is read with finds it (`lex(q, tokenizer)`, the index's version): tokenizer 3 reads the NFKC form of
+the text, so the full-width and small `＄`, `﹩`, `＼`, `﹨` are `$` and `\\` there (`LATEX_LOOKALIKES`), and
+Pandoc's space and digit tests read a character's NFKC form (a spacing accent `´` is a space and a mark);
+tokenizer 2 read them as ordinary text.
+
+Warnings, raised where an operator would have made sense: a lowercase `and`/`or`/`not`/`near/n` between
+two terms (WARN_LOWERCASE_OPERATOR); a word that starts with a dash or single quote that only looks like
+an operator (`−bias`, `‘trust`, a paired `’…’`: WARN_LOOKALIKE_OPERATOR); a word or phrase part that loses
+something to the tokenizer (`C++` → `c`, `.NET` → `net`, a bare `\\epsilon` or an empty `\\alpha{}` outside
+math: WARN_SYMBOLS_DROPPED); CJK text, which is not split into words (WARN_CJK_RUN); a logic sign (`∨`,
+`∧`, `¬`), which is searched as its word, not as an operator (WARN_LOOKALIKE_OPERATOR); a spelled Greek
+name (`alpha`), which finds only the word since abstracts' `$\\alpha$` and `α` are indexed as `α`
+(WARN_SPELLED_GREEK; not for wildcards or when the query already has the letter). A filter field's value, bare,
+negated or in its group, is never searched as text, so it gets none of the warnings about how text is searched
+(WARN_SYMBOLS_DROPPED, WARN_CJK_RUN, WARN_SPELLED_GREEK, a logic sign's WARN_LOOKALIKE_OPERATOR: `year:..2022`,
+`venue:(pi)`); its own value check refuses it. A
+wildcard straight after an operator (`vision×*`, `$\\le$*`) is PARSE_WILDCARD_DETACHED (decision-006).
+Bad input is a diagnostic, never an exception.
+"""
+
+from __future__ import annotations
+
+import bisect
+import re
+import unicodedata
+from dataclasses import dataclass
+from enum import StrEnum
+
+from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip, verbatim
+from openproceedings.query.mathsyms import GREEK, OPERATORS
+from openproceedings.query.normalize import (
+    SERVED_TOKENIZERS,
+    TOKENIZER_VERSION,
+    Tail,
+    Token,
+    first_math_end,
+    math_regions,
+    tokenize,
+    tokenize_with_tail,
+)
+from openproceedings.vocab import QUERY_FILTER_FIELDS, TEXT_FIELDS
+
+FIELDS = TEXT_FIELDS + QUERY_FILTER_FIELDS  # incl. Scholar's `source:` (vocab.py)
+OPERATOR_WORDS = frozenset({"and", "or", "not"})  # lowercase: searched as words, with a warning
+MIN_STEM = 3  # letters or digits a wildcard stem keeps after normalisation (spec 02, decision-001)
+MAX_NEAR = 100
+QUOTES = frozenset('"“”„‟＂«»「」『』〝〞〟″')
+_ENGLISH_QUOTES = frozenset('"“”„‟＂')
+# A phrase closes only with a quote of its opener's family, so a foreign quote inside it (`"trust 「in」 AI"`)
+# is ordinary punctuation. English-style double quotes are one family (pasted text mixes them freely).
+CLOSERS = {q: _ENGLISH_QUOTES for q in _ENGLISH_QUOTES} | {
+    "«": frozenset("»"),
+    "»": frozenset("«»"),  # Danish/Swedish »…« and »…»
+    "「": frozenset("」"),
+    "」": frozenset("」"),
+    "『": frozenset("』"),
+    "』": frozenset("』"),
+    "〝": frozenset("〞〟"),  # CJK double prime quotation marks
+    "〞": frozenset("〞〟"),
+    "〟": frozenset("〟"),
+    "″": frozenset("″"),  # double prime used as a quote
+}
+LPARENS = frozenset("(（﹙︵")
+RPARENS = frozenset(")）﹚︶")
+PIPES = frozenset("|｜")
+COLONS = frozenset(":：﹕︓")
+MINUSES = frozenset("-－﹣")
+STARS = frozenset("*＊﹡")
+DOLLARS = frozenset("$＄﹩")
+# Tokenizer 3 reads the NFKC form of the text, so the characters whose NFKC form is `$` or `\` are LaTeX syntax
+# there (`＄x＄` is math); tokenizer 2 read only the ASCII ones as LaTeX. The lexer finds math as the
+# tokenizer it parses for does (`_Lexer.scan`).
+LATEX_LOOKALIKES = {"＄": "$", "﹩": "$", "＼": "\\", "﹨": "\\"}
+_LATEX_TRANSLATION = str.maketrans(LATEX_LOOKALIKES)
+# Every dash (Unicode category Pd) that is not an ASCII-equivalent MINUSES entry, plus the minus sign
+# U+2212: not operators, but easily meant as `-`. A test re-derives this set from the Unicode database.
+_LOOKALIKE_MINUS = frozenset(
+    "\u058a\u05be\u1400\u1806\u2010\u2011\u2012\u2013\u2014\u2015\u2e17\u2e1a\u2e3a\u2e3b\u2e40\u2e5d"
+    "\u301c\u3030\u30a0\ufe31\ufe32\ufe58\U00010ead\u2212"
+)
+_SINGLE_QUOTES = ("‘", "’", "`")
+_BREAKS = LPARENS | RPARENS | PIPES
+_FIELD = re.compile(r"([^\W\d_]\w*)[:：﹕︓]")
+_NEAR = re.compile(r"NEAR/([0-9]+)")
+_RANGE = re.compile(r"([0-9]+)\.\.([0-9]+)")
+
+
+class Kind(StrEnum):
+    LPAREN = "LPAREN"
+    RPAREN = "RPAREN"
+    AND = "AND"
+    OR = "OR"
+    NOT = "NOT"
+    NEAR = "NEAR"
+    FIELD = "FIELD"
+    WORD = "WORD"
+    PHRASE = "PHRASE"
+    RANGE = "RANGE"
+
+
+# what a glued parenthesis would silently AND with: a `(` after a word, a phrase or a range (`year:2020..2022(x)`),
+# a `)` before a word or a phrase; not a `)` before a field prefix (`(x)year:2021`), which splits nothing (spec 02
+# §Grammar, decision-028)
+_BEFORE_LPAREN = frozenset({Kind.WORD, Kind.PHRASE, Kind.RANGE})
+_AFTER_RPAREN = frozenset({Kind.WORD, Kind.PHRASE})
+_OPERATORS = {"AND": Kind.AND, "OR": Kind.OR, "NOT": Kind.NOT}
+_ENDS_A_TERM = frozenset({Kind.WORD, Kind.PHRASE, Kind.RPAREN, Kind.RANGE})
+_STARTS_A_TERM = frozenset({Kind.WORD, Kind.PHRASE, Kind.LPAREN, Kind.FIELD, Kind.NOT, Kind.RANGE})
+
+
+@dataclass(frozen=True, slots=True)
+class Lexeme:
+    """One lexeme. `text` is always `q[start:end]`; the other fields are set only for their kinds."""
+
+    kind: Kind
+    start: int
+    end: int
+    text: str
+    stem: str | None = None  # WORD: `text` without its wildcard
+    wildcard: str | None = None  # WORD: "*" or "$"
+    field: str | None = None  # FIELD: the lowercased name, known or not
+    near: int | None = None  # NEAR: the distance n
+    range: tuple[int, int] | None = None  # RANGE: (start, end) as written
+    parts: tuple[Lexeme, ...] = ()  # PHRASE: its WORDs, in order
+    closed: bool = True  # PHRASE: False when the closing quote is missing
+
+
+@dataclass(frozen=True, slots=True)
+class LexResult:
+    lexemes: tuple[Lexeme, ...]
+    warnings: tuple[Diagnostic, ...]
+    errors: tuple[Diagnostic, ...]
+
+
+def _diag(code: DiagnosticCode, message: str, start: int, end: int) -> Diagnostic:
+    return Diagnostic(code=code, message=message, span=(start, end))
+
+
+def _is_cjk(c: str) -> bool:
+    cp = ord(c)
+    return (
+        0x3040 <= cp <= 0x30FF  # hiragana, katakana
+        or 0x3400 <= cp <= 0x4DBF  # CJK extension A
+        or 0x4E00 <= cp <= 0x9FFF  # CJK unified ideographs
+        or 0xAC00 <= cp <= 0xD7AF  # hangul syllables
+        or 0xF900 <= cp <= 0xFAFF  # CJK compatibility ideographs
+        or 0x20000 <= cp <= 0x3134F  # CJK extensions B–H
+    )
+
+
+_COMMAND = re.compile(r"\\([A-Za-z]+)")
+_EMPTY_BRACES = re.compile(r"\{[{}]*\}")  # `{}`, `{{}}`: braces that keep nothing
+
+
+_FILTER_FIELDS = frozenset((*QUERY_FILTER_FIELDS, "source"))
+_GREEK_NAMES = frozenset(
+    name for name in GREEK if name.islower() and not name.startswith("var") and name != "ell"
+)
+
+
+def _wordy(c: str) -> bool:
+    """A letter, mark or number (incl. a decomposed accent, `e` + U+0301): what a quote may not touch."""
+    return unicodedata.category(c)[0] in "LMN"
+
+
+def letters(text: str, tokenizer: str = TOKENIZER_VERSION) -> int:
+    """How many letters and digits `text` keeps after the token contract (the wildcard stem measure)."""
+    return sum(len(t.text) for t in tokenize(text, tokenizer))
+
+
+def _small_int(digits: str, max_len: int) -> int | None:
+    """`int(digits)` if it has at most `max_len` significant digits, else None (never a 4,300-digit int)."""
+    significant = digits.lstrip("0") or "0"
+    return int(significant) if len(significant) <= max_len else None
+
+
+def _step(q: str, j: int) -> int:
+    """The index after the character at `j`; a backslash also takes the (non-space) character after it."""
+    return j + 2 if q[j] == "\\" and j + 1 < len(q) and not q[j + 1].isspace() else j + 1
+
+
+class _Lexer:
+    def __init__(self, q: str, tokenizer: str) -> None:
+        self.q = q
+        self.tokenizer = tokenizer
+        self.nfkc = SERVED_TOKENIZERS[tokenizer].nfkc_first  # LaTeX look-alikes are LaTeX (tokenizer 3)
+        # `q` with each LaTeX look-alike as the `$` or `\\` its tokenizer reads it as (the same length, so offsets
+        # hold): every test for LaTeX syntax reads it, every other test reads `q`
+        self.scan = q.translate(_LATEX_TRANSLATION) if self.nfkc else q
+        scan = self.scan
+        # next_quote[k]: index of the first quote at or after k (len(q) if none), computed once so lexing
+        # stays linear however many words the query has
+        self._chunk: tuple[int, int, dict[int, int]] | None = None  # see chunk()
+        self.next_space = [len(q)] * (len(q) + 1)  # the first whitespace at or after k
+        for k in range(len(q) - 1, -1, -1):
+            self.next_space[k] = k if q[k].isspace() else self.next_space[k + 1]
+        self.next_quote = [len(q)] * (len(q) + 1)
+        for k in range(len(q) - 1, -1, -1):
+            self.next_quote[k] = k if q[k] in QUOTES else self.next_quote[k + 1]
+        # next_stop[k]: the first whitespace, quote, parenthesis or `|` at or after k; next_mathish[k]: the first
+        # `$` or backslash. When no `$`/backslash comes before the stop, a word simply ends there (word_end's
+        # fast path, which keeps space-free text such as `a(b)a(b)…` linear).
+        self.next_stop = [len(q)] * (len(q) + 1)
+        self.next_mathish = [len(q)] * (len(q) + 1)
+        for k in range(len(q) - 1, -1, -1):
+            c = q[k]
+            self.next_stop[k] = k if c.isspace() or c in QUOTES or c in _BREAKS else self.next_stop[k + 1]
+            self.next_mathish[k] = k if scan[k] in "$\\" else self.next_mathish[k + 1]
+        # Every unescaped `$` that ends an inline-math scan, found once so math_run is a lookup, not a scan:
+        # one followed by `$` stops it without closing (`$$` inside inline math); one preceded by a non-space
+        # and not followed by a digit closes it (Pandoc). normalize.first_math_end is the one-scan reference
+        # a property test holds this to.
+        self.dollar_stops: list[int] = []
+        self.dollar_closes: list[bool] = []
+        backslashes = 0
+        for k, c in enumerate(scan):
+            if c == "$" and backslashes % 2 == 0:
+                nxt = scan[k + 1] if k + 1 < len(q) else ""
+                if nxt == "$":
+                    self.dollar_stops.append(k)
+                    self.dollar_closes.append(False)
+                elif k > 0 and not self.space(q[k - 1], last=True) and not (nxt and self.digit(nxt)):
+                    self.dollar_stops.append(k)
+                    self.dollar_closes.append(True)
+            backslashes = backslashes + 1 if c == "\\" else 0
+        self.out: list[Lexeme] = []
+        self.errors: list[Diagnostic] = []
+        self.warnings: list[Diagnostic] = []
+        self.groups: list[
+            str | None
+        ] = []  # per open `(`: the filter field whose values it holds (`year:(…)`)
+        self.filter_values: dict[int, str] = {}  # index in `out` of each filter value → its field
+
+    def space(self, c: str, *, last: bool = False) -> bool:
+        """Is `c` a space as its tokenizer's math rule (Pandoc) reads it? Under tokenizer 3 that is the first
+        (or `last`) character of its NFKC form: a spacing accent (`´`) is a space and a mark there."""
+        if not self.nfkc or c.isascii():
+            return c.isspace()
+        folded = unicodedata.normalize("NFKC", c)
+        return (folded[-1] if last else folded[0]).isspace()
+
+    def digit(self, c: str) -> bool:
+        """Is `c` a digit as its tokenizer's math rule reads it (the first character of its NFKC form under
+        tokenizer 3: `½` is `1⁄2`)?"""
+        if not self.nfkc or c.isascii():
+            return c.isdigit()
+        return unicodedata.normalize("NFKC", c)[0].isdigit()
+
+    def error(self, code: DiagnosticCode, message: str, start: int, end: int) -> None:
+        self.errors.append(_diag(code, message, start, end))
+
+    def warn(self, code: DiagnosticCode, message: str, start: int, end: int) -> None:
+        self.warnings.append(_diag(code, message, start, end))
+
+    def run(self) -> None:
+        q, n, i = self.q, len(self.q), 0
+        while i < n:
+            c = q[i]
+            field, emitted = self.filter_field(), len(self.out)
+            if c.isspace():
+                i += 1
+            elif c in _BREAKS:
+                kind = Kind.LPAREN if c in LPARENS else Kind.RPAREN if c in RPARENS else Kind.OR
+                if kind is Kind.LPAREN:
+                    self.groups.append(field)
+                elif kind is Kind.RPAREN and self.groups:
+                    self.groups.pop()
+                self.out.append(Lexeme(kind, i, i + 1, c))
+                i += 1
+            elif c in QUOTES:
+                if i and _wordy(q[i - 1]) and not self.quote_flagged_since(i):
+                    self.ambiguous_quote(i, "follows a letter or digit directly")
+                i = self.phrase(i)
+            elif c in MINUSES and self.negates(i):
+                self.out.append(Lexeme(Kind.NOT, i, i + 1, c))
+                i += 1
+            elif m := _FIELD.match(q, i):
+                self.field(i, m)
+                i = m.end()
+            else:
+                i = self.word_or_operator(i)
+            if field is not None:
+                for k in range(emitted, len(self.out)):
+                    if self.out[k].kind in _BEFORE_LPAREN:
+                        self.filter_values[k] = field
+        self.after_pass()
+
+    def filter_field(self) -> str | None:
+        """The filter field whose value a word lexed now would be (`year:..2022`, `year:-..2022`,
+        `venue:(pi OR x)`), else None. A filter value is never searched as text, so the warnings about how
+        text is searched don't apply to it."""
+        before = self.out[-2:]
+        if before and before[-1].kind is Kind.NOT:
+            before = before[:-1]  # `year:-x`: the value is still the field's
+        if before and before[-1].kind is Kind.FIELD:
+            field = before[-1].field
+            return field if field in _FILTER_FIELDS else None
+        return self.groups[-1] if self.groups else None
+
+    def negates(self, i: int) -> bool:
+        """Whether the `-` at `i` is NOT: at a primary's start, directly followed by what it excludes."""
+        q = self.q
+        prev = q[i - 1] if i else " "
+        nxt = q[i + 1] if i + 1 < len(q) else " "
+        starts = prev.isspace() or prev in LPARENS or prev in PIPES or prev in COLONS
+        return starts and not nxt.isspace() and nxt not in RPARENS and nxt not in PIPES and nxt not in MINUSES
+
+    def field(self, i: int, m: re.Match[str]) -> None:
+        name = m.group(1).lower()
+        if name not in FIELDS:
+            valid = ", ".join(f"`{f}:`" for f in FIELDS)
+            hint = " (Scholar's `intitle:` is `title:` here)" if name in ("intitle", "allintitle") else ""
+            self.error(
+                DiagnosticCode.FIELD_UNKNOWN,
+                f"`{clip(m.group())}` is not a field{hint} — use one of {valid}, or quote the text to search for it.",
+                i,
+                m.end(),
+            )
+        self.out.append(Lexeme(Kind.FIELD, i, m.end(), m.group(), field=name))
+
+    def phrase(self, i: int) -> int:
+        q, n = self.q, len(self.q)
+        j = i + 1
+        closers = CLOSERS[q[i]]
+        while j < n and q[j] not in closers:
+            j = _step(self.scan, j)
+        j = min(j, n)
+        closed = j < n
+        if not closed:
+            self.error(
+                DiagnosticCode.PARSE_UNTERMINATED_PHRASE,
+                f'The phrase starting `{clip(q[i:n], 20)}` has no closing quote — add a closing `"`.',
+                i,
+                n,
+            )
+        end = j + 1 if closed else n
+        possessive = end + 1 < n and q[end] in "'’" and _wordy(q[end + 1])  # `"GPT-4"'s`
+        if closed and end < n and (_wordy(q[end]) or possessive) and not self.quote_flagged_since(j):
+            follower = q[end : self.next_stop[end]]
+            operator = unicodedata.normalize("NFKC", follower)
+            if operator in _OPERATORS:
+                self.ambiguous_quote(j, f"is glued to `{operator}`", hint=f"put a space before `{operator}`")
+            else:
+                self.ambiguous_quote(j, "is followed directly by a letter or digit")
+        parts: list[Lexeme] = []
+        counted = 0
+        k = i + 1
+        while k < j:
+            if q[k].isspace():
+                k += 1
+                continue
+            m = self.math_run(k, j)
+            if m < 0:
+                m = k
+                while m < j and not q[m].isspace():
+                    m += 1
+            before = counted  # letters and digits of the earlier words (a running total: linear)
+            part = self.word(k, m, in_phrase=True, before=before)
+            if (
+                not part.wildcard
+                and any(c.isalnum() for c in part.text)
+                and not tokenize(part.text, self.tokenizer)
+            ):
+                self.warn(  # `"\\epsilon greedy"` must not silently become the single word `greedy`
+                    DiagnosticCode.WARN_SYMBOLS_DROPPED,
+                    f"`{clip(part.text)}` in this phrase has nothing searchable (LaTeX commands outside math and "
+                    "symbols are not indexed), so the phrase is searched without it.",
+                    k,
+                    m,
+                )
+            else:
+                self.check_dropped(part.text, part.stem or "", k, m)
+            parts.append(part)
+            counted += letters(part.text, self.tokenizer)
+            k = m
+        self.out.append(Lexeme(Kind.PHRASE, i, end, q[i:end], parts=tuple(parts), closed=closed))
+        return end
+
+    def math_run(self, i: int, limit: int) -> int:  # precondition: limit is next_quote[i] (a quote or len(q))
+        """If LaTeX math opens at `i` and closes before `limit` at the end of a word (`$\\alpha + \\beta$`),
+        the index after it; else -1. So math with spaces stays one word, while `behavio$r colo$r` (the `$`
+        not at a word's start) never pairs across words."""
+        q, scan = self.q, self.scan
+        if scan[i] != "$":
+            return -1
+        if i + 1 < limit and scan[i + 1] == "$":  # `$$…$$` (rare): the one-scan rule
+            found = first_math_end(q[i:limit], self.tokenizer)
+            if found < 0:
+                return -1
+            end = i + found
+        else:
+            if i + 1 >= limit or self.space(q[i + 1]):  # Pandoc: an opener is followed by a non-space
+                return -1
+            k = bisect.bisect_right(self.dollar_stops, i)
+            if k == len(self.dollar_stops) or self.dollar_stops[k] >= limit or not self.dollar_closes[k]:
+                return -1
+            end = self.dollar_stops[k] + 1
+        at_boundary = end == limit or self.q[end].isspace() or self.q[end] in _BREAKS | QUOTES
+        return end if at_boundary else -1
+
+    def chunk(self, i: int) -> tuple[int, int, dict[int, int]]:
+        """The whitespace- and quote-delimited run holding word start `i`: its start, end and LaTeX math
+        regions (start → end), computed once per run and reused by every word in it, so that text like
+        `\\((\\((…` stays linear. Words are lexed left to right, so the last run is the only one to cache."""
+        # A word never starts at a run's end or before its start, so either bound alone would do; both keep
+        # the check obviously right.
+        if self._chunk is not None and self._chunk[0] <= i < self._chunk[1]:
+            return self._chunk
+        q, n = self.q, len(self.q)
+        end = i
+        while end < n and not q[end].isspace() and q[end] not in QUOTES:
+            end = _step(self.scan, end)
+        end = min(end, n)
+        self._chunk = (i, end, {i + a: i + b for a, b in math_regions(q[i:end], self.tokenizer)})
+        return self._chunk
+
+    def word_end(self, i: int) -> int:
+        """End of the word at `i`: a whole LaTeX math run, or the next break (except inside LaTeX math within
+        the same chunk)."""
+        q = self.q
+        stop, mathish = self.next_stop[i], self.next_mathish[i]
+        if mathish >= stop:  # fast path: no `$` or `\\` before the next break, so no math and no escapes
+            return stop
+        limit = self.next_quote[i]
+        if (end := self.math_run(i, limit)) > 0:
+            return end
+        _, chunk_end, math_ends = self.chunk(i)
+        j = i
+        while j < chunk_end:
+            if j in math_ends:
+                j = math_ends[j]
+            elif q[j] in _BREAKS:
+                break
+            else:
+                j = _step(self.scan, j)
+        return min(j, chunk_end)
+
+    def word_or_operator(self, i: int) -> int:
+        j = self.word_end(i)
+        raw = self.q[i:j]
+        key = unicodedata.normalize("NFKC", raw)  # `ＯＲ` is `OR`, as the tokenizer would read it
+        if key in _OPERATORS:
+            self.out.append(Lexeme(_OPERATORS[key], i, j, raw))
+        elif (
+            (near := _NEAR.fullmatch(key))
+            and (n := _small_int(near.group(1), 3)) is not None
+            and n <= MAX_NEAR
+        ):
+            self.out.append(Lexeme(Kind.NEAR, i, j, raw, near=n))
+        elif key.startswith("NEAR/"):
+            self.error(
+                DiagnosticCode.PARSE_BAD_NEAR,
+                f"`{clip(raw)}` needs a whole-number distance up to {MAX_NEAR} — write e.g. `NEAR/3` (at most 3 words "
+                "apart).",
+                i,
+                j,
+            )
+        elif rng := _RANGE.fullmatch(key):
+            lo, hi = _small_int(rng.group(1), 9), _small_int(rng.group(2), 9)
+            bounds = (lo, hi) if lo is not None and hi is not None else None  # None: too long to be a year
+            self.out.append(Lexeme(Kind.RANGE, i, j, raw, range=bounds))
+        else:
+            self.out.append(self.word(i, j, in_phrase=False))
+        return j
+
+    def word(self, start: int, end: int, *, in_phrase: bool, before: int = 0) -> Lexeme:
+        """A WORD over `q[start:end]`, with its wildcard split off and checked. `before` is the number of
+        letters and digits of the phrase words before it, which count toward a wildcard's stem."""
+        raw = self.q[start:end]
+        regions = math_regions(raw, self.tokenizer)
+        wild: list[int] = []  # offsets in `raw` of `*`/`$` that act as wildcards (outside math, not currency)
+        k = 0
+        while k < len(raw):
+            c = raw[k]
+            if self.scan[start + k] == "\\":
+                k += 2
+                continue
+            in_math = any(a <= k < b for a, b in regions)
+            currency = c in DOLLARS and k + 1 < len(raw) and raw[k + 1].isdigit()
+            if (c in STARS or c in DOLLARS) and not in_math and not currency:
+                wild.append(k)
+            k += 1
+        wildcard = None
+        if wild and wild[-1] == len(raw) - 1:
+            wildcard = "*" if raw[-1] in STARS else "$"
+            wild.pop()
+        stem = raw[:-1] if wildcard else raw
+        if wild:
+            s = wild[0]
+            self.error(
+                DiagnosticCode.PARSE_WILDCARD_NOT_SUFFIX,
+                f"`{clip(raw)}` has a `{clip(raw[s])}` that is neither a wildcard at the end of a word (e.g. `bench*`, "
+                "`model$`) nor closed LaTeX math (`$x$`) — search the whole word, or close the math.",
+                start + s,
+                start + s + 1,
+            )
+        elif wildcard:
+            self.check_stem(raw, stem, wildcard, start, end, before, in_phrase=in_phrase)
+        # a filter value is never searched as text, so how text is searched doesn't apply (its own check refuses it)
+        if not wildcard and any(_is_cjk(c) for c in stem) and not self.filter_field():
+            self.warn(
+                DiagnosticCode.WARN_CJK_RUN,
+                f"`{clip(raw)}`: Chinese, Japanese and Korean text is not split into words, so this matches only "
+                "the exact run"
+                + (
+                    f" — `{clip(stem)}*` also finds longer runs that start with it"
+                    if letters(stem, self.tokenizer) >= MIN_STEM
+                    else "; search the whole run as written in the abstract"
+                )
+                + ".",
+                start,
+                end,
+            )
+        if not in_phrase:
+            self.check_math_words(raw, stem, wildcard, start, end)
+            self.check_word(raw, stem, start, end)
+            self.check_dropped(raw, stem, start, end)
+        return Lexeme(Kind.WORD, start, end, raw, stem=stem, wildcard=wildcard)
+
+    def check_stem(
+        self, raw: str, stem: str, wildcard: str, start: int, end: int, before: int, *, in_phrase: bool
+    ) -> None:
+        toks, tail = tokenize_with_tail(stem, self.tokenizer)
+        if not toks or before + len("".join(t.text for t in toks)) < MIN_STEM:
+            self.error(
+                DiagnosticCode.WILDCARD_STEM_TOO_SHORT,
+                f"The wildcard `{clip(raw)}` keeps fewer than {MIN_STEM} letters or digits before `{wildcard}`, so it "
+                "would match too many words — use a longer stem (e.g. `bench*`, not `be*`).",
+                start,
+                end,
+            )
+        elif toks[-1].op:
+            self.error(
+                DiagnosticCode.PARSE_WILDCARD_DETACHED,
+                f"The `{wildcard}` in `{clip(raw)}` follows an operator (searched as `{clip(toks[-1].text)}`), not a "
+                "letter or digit — a wildcard extends a word, so put it straight after one.",
+                start,
+                end,
+            )
+        # Judged on the folded pieces (spec 02, decision-008): `abcd⒈*` is `abcd1.*`, so its `*` follows `.`,
+        # whatever the raw character looked like or whether a U+0338 sits on it
+        elif tail.pieces:
+            fixed = self.attached(stem, toks, tail, wildcard, in_phrase=in_phrase, tokenizer=self.tokenizer)
+            self.error(
+                DiagnosticCode.PARSE_WILDCARD_DETACHED,
+                f"The `{wildcard}` in `{clip(raw)}` follows {self.tail_name(stem, tail)}, not a letter or digit, so "
+                f"it would match any word starting `{clip(toks[-1].text)}` — put it straight after the stem"
+                + (f", e.g. `{clip(fixed)}`." if verbatim(fixed) else "."),
+                start,
+                end,
+            )
+
+    @staticmethod
+    def tail_name(stem: str, tail: Tail) -> str:
+        """How a detached wildcard's message names what it follows: the folded pieces, and the raw text
+        they came from when that looks different (`.` from `⒈`)."""
+        written = stem[tail.start :]
+        shown = tail.pieces if tail.pieces.strip() else written
+        return f"`{clip(shown)}`" + (f" (from `{clip(written)}`)" if written != shown else "")
+
+    @staticmethod
+    def attached(
+        stem: str, toks: list[Token], tail: Tail, wildcard: str, *, in_phrase: bool, tokenizer: str
+    ) -> str:
+        """The fix hint: the wildcard on the stem without its tail, as written when the tail is whole
+        characters outside LaTeX math (`vision-*` → `vision*`), else from its tokens (`abcd⒈*` → `abcd1*`,
+        `abcd⑴*` → `"abcd 1*"`, `abcd$x$*` → `"abcd x*"`: cutting before the closing `$` would leave the
+        math open). Several tokens are quoted as a phrase, except inside a phrase already (`"x y⑴*"` →
+        `y 1*`), where the words simply replace the word."""
+        cut = tail.start
+        if cut >= toks[-1].end and not any(a < cut < b for a, b in math_regions(stem, tokenizer)):
+            return stem[:cut] + wildcard
+        words = " ".join(t.text for t in toks) + wildcard
+        return words if len(toks) == 1 or in_phrase else f'"{words}"'
+
+    def colon_context(self, raw: str, end: int) -> str:
+        """A stray colon on its own is quoted with the word after it (`: model`), so the message says which
+        colon; a colon already joined to its word (`:model`) is quoted as written."""
+        if raw.strip("".join(COLONS)):
+            return raw
+        after = re.match(r"\s*[^\s()]+", self.q[end:])
+        return raw + after.group() if after else raw
+
+    def check_word(self, raw: str, stem: str, start: int, end: int) -> None:
+        """Checks for a top-level WORD (not a phrase part, where these characters are plainly literal)."""
+        if raw[0] in MINUSES:
+            self.error(
+                DiagnosticCode.PARSE_AMBIGUOUS_MINUS,
+                f"`{clip(raw)}`: to exclude a word, put one `-` straight before it after a space (`trust -bias`); to "
+                "search a hyphenated term, quote it.",
+                start,
+                end,
+            )
+        elif raw[0] in COLONS:
+            self.error(
+                DiagnosticCode.PARSE_STRAY_COLON,
+                f"`{clip(self.colon_context(raw, end))}` starts with a colon, so no field is named — a field name "
+                "must touch its colon, e.g. `title:trust`.",
+                start,
+                end,
+            )
+        elif raw[0] in _LOOKALIKE_MINUS:
+            self.warn(
+                DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+                f"`{clip(raw)}` starts with `{clip(raw[0])}`, which is not an operator, so the word is searched — to exclude "
+                + (
+                    f"it, type an ASCII hyphen: `-{clip(raw[1:])}`."
+                    if verbatim(raw)
+                    else "it, type an ASCII hyphen `-` in its place."
+                ),
+                start,
+                end,
+            )
+        elif raw.startswith(_SINGLE_QUOTES) and (raw[0] != "’" or self.closing_apostrophe_after(start)):
+            # `’` alone at a word start is usually an elision (`’80s`); it looks like a quote only when paired
+            self.warn(
+                DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+                f'`{clip(raw)}` starts with a single quote, which does not make a phrase — use double quotes: `"…"`.',
+                start,
+                end,
+            )
+
+    def check_math_words(self, raw: str, stem: str, wildcard: str | None, start: int, end: int) -> None:
+        """A logic sign looks like an operator but is searched as a word (decision-006); a spelled Greek
+        name finds only the word, since abstracts' `$\\alpha$` and `α` are indexed as `α`. Both are read
+        after NFKC (`￢` is `¬`, `ａｌｐｈａ` is `alpha`). Neither applies to a filter value (`venue:pi`,
+        `track:(a∨b)`), which is never searched as text."""
+        if self.filter_field():
+            return
+        folded = unicodedata.normalize("NFKC", stem)
+        prev = self.out[-1] if self.out else None
+        if any(c in "∨∧" for c in folded):
+            sign = next(c for c in folded if c in "∨∧")
+            op, example = {"∨": ("OR", "a OR b"), "∧": ("AND", "a AND b")}[sign]
+            self.warn(
+                DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+                f"`{sign}` in `{clip(raw)}` is searched as the word `{OPERATORS[sign]}`, not as {op} — write "
+                f"`{example}` for that.",
+                start,
+                end,
+            )
+        elif "¬" in folded:
+            rest = folded.split("¬", 1)[1] or "word"
+            self.warn(
+                DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+                f"`¬` in `{clip(raw)}` is searched as the word `neg`, not NOT — to exclude, "
+                + (f"write `-{clip(rest)}`." if verbatim(rest) else "type `-` in place of `¬`."),
+                start,
+                end,
+            )
+        elif wildcard is None and folded.casefold() in _GREEK_NAMES:
+            name = folded.casefold()
+            letter = GREEK[name]
+            if letter in unicodedata.normalize("NFKC", self.q).casefold():
+                return  # the query already searches the letter
+            negated = prev is not None and prev.kind is Kind.NOT and prev.end == start
+            advice = f"add `-{letter}` to exclude it too" if negated else f"search `{clip(stem)} OR {letter}`"
+            self.warn(
+                DiagnosticCode.WARN_SPELLED_GREEK,
+                f"`{clip(raw)}` finds the word only: abstracts' `$\\{name}$` and `{letter}` are indexed as "
+                f"`{letter}`, so {advice}.",
+                start,
+                end,
+            )
+
+    def check_dropped(self, raw: str, stem: str, start: int, end: int) -> None:
+        """WARN_SYMBOLS_DROPPED when part of a word or phrase part silently disappears: leading or trailing
+        symbols (`C++`, `.NET`), or a bare LaTeX command outside math (`\\epsilon-greedy` → `greedy`)."""
+        symbols = stem.endswith(("+", "#")) or stem.startswith((".", "#", "+", "@"))
+        if not symbols and not _COMMAND.search(self.latex(stem)):
+            return  # the common case: no tokenizing at all (it is a full LaTeX scan)
+        if self.filter_field():
+            return  # a filter value (`year:..2022`) is never searched as text: its own check refuses it
+        toks = tokenize(stem, self.tokenizer)
+        if not toks:
+            return  # nothing left at all: an error or the phrase-part warning says so
+        searched = " ".join(t.text for t in toks)
+        if symbols:
+            dropped = "symbols such as `+`, `#` and `.` are not indexed"
+        elif self.bare_command(stem, self.tokenizer):
+            dropped = (
+                "a LaTeX command outside math is not indexed (type the character itself, or put a math command "
+                "inside `$…$` to search it)"
+            )
+        else:
+            return
+        self.warn(
+            DiagnosticCode.WARN_SYMBOLS_DROPPED,
+            f"`{clip(raw)}` is searched as `{clip(searched)}`: {dropped}, so it matches every `{clip(searched)}`.",
+            start,
+            end,
+        )
+
+    def closing_apostrophe_after(self, start: int) -> bool:
+        """Whether a later `’` ends a word (the next character is not a letter, mark or number), i.e. could
+        close a `’…’` quote; a `’` inside a word (`AI’s`) is an apostrophe."""
+        q = self.q
+        return any(
+            q[k] == "’" and (k + 1 == len(q) or not _wordy(q[k + 1])) for k in range(start + 1, len(q))
+        )
+
+    def latex(self, text: str) -> str:
+        """`text` as its tokenizer reads LaTeX syntax in it (`self.scan`'s rule)."""
+        return text.translate(_LATEX_TRANSLATION) if self.nfkc else text
+
+    @staticmethod
+    def bare_command(stem: str, tokenizer: str) -> bool:
+        """A `\\cmd` outside math that isn't an accent macro or `\\cmd{…}` with content (which is kept);
+        `\\cmd{}` keeps nothing, so it counts as bare (`\\alpha{}-divergence` → `divergence`)."""
+        regions: list[tuple[int, int]] | None = None  # computed only once a command is found
+        scan = stem.translate(_LATEX_TRANSLATION) if SERVED_TOKENIZERS[tokenizer].nfkc_first else stem
+        for m in _COMMAND.finditer(scan):
+            accent = len(m.group(1)) == 1 and m.group(1) in "uvHcdbrkij"
+            braced = stem[m.end() : m.end() + 1] == "{" and not _EMPTY_BRACES.match(stem, m.end())
+            if accent or braced:
+                continue
+            regions = math_regions(stem, tokenizer) if regions is None else regions
+            if not any(a <= m.start() < b for a, b in regions):
+                return True
+        return False
+
+    def quote_flagged_since(self, i: int) -> bool:
+        """Whether an ambiguous quote was already reported in the unbroken run of text that ends at `i`
+        (`"x “trust” y"` is one mistake, however many of its quotes touch a word)."""
+        start = i
+        while start > 0 and not self.q[start - 1].isspace():
+            start -= 1
+        return any(
+            e.code is DiagnosticCode.PARSE_AMBIGUOUS_QUOTE and e.span is not None and start <= e.span[0] < i
+            for e in self.errors
+        )
+
+    def ambiguous_quote(self, k: int, why: str, hint: str = "") -> None:
+        """One error per unbroken run: its span reaches the end of the run, so follow-on errors inside it
+        (an empty phrase between two glued quotes) are recognised as the same mistake."""
+        end = self.next_space[k]
+        self.error(
+            DiagnosticCode.PARSE_AMBIGUOUS_QUOTE,
+            f"The quote `{clip(self.q[k])}` {why}, so it is unclear whether it opens or closes a phrase — "
+            + (
+                hint
+                or "put a space between them, or drop the inner quotes (a phrase cannot contain the same kind "
+                "of quote)"
+            )
+            + ".",
+            k,
+            max(end, k + 1),
+        )
+
+    def glued_value_message(self, k: int, field: str, glued: str) -> str:
+        """PARSE_PAREN_TOUCHES_WORD for the filter value `out[k]` glued to a `(`, with a fix that parses: a bare
+        value gets its clause rewritten (`year:2021 AND (…)`), a negated one only where the space goes, and one
+        inside its group (`year:(2021(x))`) is told to close the group first, since a group takes only values
+        joined by OR."""
+        before = [t.kind for t in self.out[max(k - 3, 0) : k]]
+        bare = before[-1:] == [Kind.FIELD] or before[-2:] == [Kind.FIELD, Kind.NOT]
+        lead = f"`{clip(glued)}`: a parenthesis touching a `{field}:` value would be read as AND"
+        if not bare:
+            return (
+                f"{lead}, and a `{field}:(…)` group takes only values joined by OR (`{field}:(… OR …)`) — end the "
+                "group with `)` before the `(`."
+            )
+        # `-year:2021(x)`, `year:-2021(x)`: a rewrite would drop the `-`
+        negated = before[-2:] in ([Kind.FIELD, Kind.NOT], [Kind.NOT, Kind.FIELD])
+        x = self.out[k]
+        # `source:` is Scholar mode's only, and the lexer has no mode: a rewrite could itself be refused
+        # the value is quoted as typed only when `clip` would leave it whole: no escape, no whitespace run to
+        # collapse (`venue:"a<newline>b"(x)`), no cut
+        if negated or field == "source" or clip(x.text) != x.text:
+            return (
+                f"{lead} — put a space before the `(`; for several values write a group, `{field}:(… OR …)`."
+            )
+        return (
+            f"{lead} — if you meant `{field}:{x.text} AND (…)`, put a space before the `(`; for several values "
+            f"write a group, `{field}:({x.text} OR …)`."
+        )
+
+    def after_pass(self) -> None:
+        """Diagnostics that depend on the neighbouring lexemes: words that look like operators, and a
+        parenthesis glued to a word, which would silently mean AND (`model(s)` → `model AND s`), or a `(` to a
+        field's value (`year:2020..2022(x)` → `year:2020..2022 AND x`)."""
+        for k, (x, y) in enumerate(zip(self.out, self.out[1:], strict=False)):
+            if x.end != y.start:
+                continue
+            if x.kind in _BEFORE_LPAREN and y.kind is Kind.LPAREN and x.text[0] not in MINUSES:
+                field = self.filter_values.get(k)  # x is a filter field's value
+            elif x.kind is Kind.RPAREN and y.kind in _AFTER_RPAREN and y.text[0] not in MINUSES:
+                field = None
+            else:
+                continue
+            glued = self.q[x.start : y.end]
+            if field is None:
+                message = (
+                    f"`{clip(glued)}`: a parenthesis touching a word would be read as AND (`model(s)` means `model "
+                    "AND s`) — for a plural write `model$`, for a group put a space: `model (s)`."
+                )
+            else:
+                message = self.glued_value_message(k, field, glued)
+            self.error(DiagnosticCode.PARSE_PAREN_TOUCHES_WORD, message, x.start, y.end)
+        for x in self.out:
+            if x.kind is Kind.WORD and unicodedata.normalize("NFKC", x.text) == "NEAR":
+                self.error(
+                    DiagnosticCode.PARSE_BAD_NEAR,
+                    "`NEAR` needs a distance — write e.g. `NEAR/3` (Web of Science's bare `NEAR` means `NEAR/15`); "
+                    'to search the word, write `near` or `"NEAR"`.',
+                    x.start,
+                    x.end,
+                )
+        for before, x, after in zip(self.out, self.out[1:], self.out[2:], strict=False):
+            if x.kind is not Kind.WORD or before.kind not in _ENDS_A_TERM or after.kind not in _STARTS_A_TERM:
+                continue
+            upper = unicodedata.normalize("NFKC", x.text).upper()
+            if upper == "NEAR":
+                continue
+            if upper in _OPERATORS:
+                self.warn(
+                    DiagnosticCode.WARN_LOWERCASE_OPERATOR,
+                    f"`{clip(x.text)}` is searched as a word — write `{upper}` to combine terms (operators are uppercase "
+                    "only).",
+                    x.start,
+                    x.end,
+                )
+            elif _NEAR.fullmatch(upper):
+                self.warn(
+                    DiagnosticCode.WARN_LOWERCASE_OPERATOR,
+                    f"`{clip(x.text)}` is searched as words — write `{upper}` for a proximity search (operators are "
+                    "uppercase only).",
+                    x.start,
+                    x.end,
+                )
+
+
+def lex(q: str, tokenizer: str = TOKENIZER_VERSION) -> LexResult:
+    """Split `q` into lexemes, finding LaTeX math and measuring wildcard stems as `tokenizer` (a served
+    tokenizer version) reads them. Never raises: problems come back as `errors` and `warnings`, in order."""
+    lexer = _Lexer(q, tokenizer)
+    lexer.run()
+    return LexResult(
+        tuple(lexer.out),
+        tuple(sorted(lexer.warnings, key=by_position)),
+        tuple(sorted(lexer.errors, key=by_position)),
+    )

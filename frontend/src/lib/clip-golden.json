@@ -1,0 +1,360 @@
+{
+ "_generated": "by (cd backend && uv run python -m tests.contract.test_frontend_clip_golden --write); do not edit",
+ "cases": [
+  {
+   "input": [
+    97,
+    96,
+    98
+   ],
+   "width": null,
+   "output": "a\\x60b"
+  },
+  {
+   "input": [
+    97,
+    10,
+    98,
+    9,
+    9,
+    99
+   ],
+   "width": null,
+   "output": "a b c"
+  },
+  {
+   "input": [
+    0,
+    27
+   ],
+   "width": null,
+   "output": "\\x00\\x1b"
+  },
+  {
+   "input": [
+    120,
+    8238,
+    121
+   ],
+   "width": null,
+   "output": "x\\u202ey"
+  },
+  {
+   "input": [
+    97,
+    8232,
+    98
+   ],
+   "width": null,
+   "output": "a b"
+  },
+  {
+   "input": [
+    65279
+   ],
+   "width": null,
+   "output": "\\ufeff"
+  },
+  {
+   "input": [
+    97,
+    28,
+    98
+   ],
+   "width": null,
+   "output": "a b"
+  },
+  {
+   "input": [
+    97,
+    133,
+    98
+   ],
+   "width": null,
+   "output": "a b"
+  },
+  {
+   "input": [
+    55296
+   ],
+   "width": null,
+   "output": "\\ud800"
+  },
+  {
+   "input": [
+    917505
+   ],
+   "width": null,
+   "output": "\\U000e0001"
+  },
+  {
+   "input": [
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107,
+    107
+   ],
+   "width": null,
+   "output": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\u2026"
+  },
+  {
+   "input": [
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    97,
+    96
+   ],
+   "width": null,
+   "output": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\u2026"
+  },
+  {
+   "input": [
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512,
+    128512
+   ],
+   "width": null,
+   "output": "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\u2026"
+  },
+  {
+   "input": [
+    92,
+    97,
+    108,
+    112,
+    104,
+    97
+   ],
+   "width": null,
+   "output": "\\alpha"
+  },
+  {
+   "input": [
+    32,
+    108,
+    101,
+    97,
+    100,
+    32,
+    32,
+    116,
+    114,
+    97,
+    105,
+    108,
+    32
+   ],
+   "width": null,
+   "output": " lead trail "
+  },
+  {
+   "input": [
+    97,
+    160,
+    98,
+    12288,
+    99,
+    8203,
+    100
+   ],
+   "width": null,
+   "output": "a b c\\u200bd"
+  },
+  {
+   "input": [
+    127,
+    159,
+    1564,
+    8294,
+    8297
+   ],
+   "width": null,
+   "output": "\\x7f\\x9f\\u061c\\u2066\\u2069"
+  },
+  {
+   "input": [
+    109,
+    97,
+    105,
+    110,
+    96,
+    10,
+    0,
+    27,
+    8238
+   ],
+   "width": null,
+   "output": "main\\x60 \\x00\\x1b\\u202e"
+  },
+  {
+   "input": [
+    97,
+    98,
+    96
+   ],
+   "width": 5,
+   "output": "ab\u2026"
+  },
+  {
+   "input": [
+    97,
+    98,
+    96
+   ],
+   "width": 6,
+   "output": "ab\\x60"
+  },
+  {
+   "input": [
+    97,
+    98,
+    99
+   ],
+   "width": 3,
+   "output": "abc"
+  },
+  {
+   "input": [
+    97,
+    98,
+    99,
+    100
+   ],
+   "width": 3,
+   "output": "ab\u2026"
+  },
+  {
+   "input": [
+    128512,
+    128512,
+    128512
+   ],
+   "width": 2,
+   "output": "\ud83d\ude00\u2026"
+  },
+  {
+   "input": [],
+   "width": null,
+   "output": ""
+  }
+ ]
+}

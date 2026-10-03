@@ -1,0 +1,11 @@
+*,
+*::before,
+*::after {
+  caret-color: transparent !important;
+}
+
+/* The site footer (the takedown contact, TASK-133) is left out of the /search baselines: its text comes from
+   the build's NEXT_PUBLIC_TAKEDOWN_CONTACT, and accessibility.spec.ts checks it on every page. */
+body > footer {
+  display: none !important;
+}

@@ -1,0 +1,84 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-107 authenticated OpenReview v1 fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2020/Conference/-/Blind_Submission&limit=1&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "ryxyCeHtPB",
+     "original": "SkltbEzFwS",
+     "number": 2594,
+     "cdate": 1569439942705,
+     "ddate": null,
+     "tcdate": 1569439942705,
+     "tmdate": 1683306602738,
+     "tddate": null,
+     "forum": "ryxyCeHtPB",
+     "replyto": null,
+     "invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+     "content": {
+      "authorids": [
+       "synthetic.person1@example.org",
+       "synthetic.person2@example.org",
+       "synthetic.person3@example.org",
+       "synthetic.person4@example.org",
+       "synthetic.person5@example.org",
+       "synthetic.person6@example.org"
+      ],
+      "title": "Synthetic title text 7.",
+      "authors": [
+       "Synthetic Author 8",
+       "Synthetic Author 9",
+       "Synthetic Author 10",
+       "Synthetic Author 11",
+       "Synthetic Author 12",
+       "Synthetic Author 13"
+      ],
+      "pdf": "/pdf/6e6abb55b83a1b41eaa6f0c9d191b89c2bfeb7c4.pdf",
+      "TL;DR": "Synthetic tl;dr text 14.",
+      "abstract": "Synthetic abstract text 15.",
+      "keywords": [
+       "Synthetic keywords text 16.",
+       "Synthetic keywords text 17.",
+       "Synthetic keywords text 18."
+      ],
+      "paperhash": "synthetic|synthetic_title_19",
+      "data": "Synthetic data text 20.",
+      "_bibtex": "Synthetic bibtex text 21.",
+      "full_presentation_video": "",
+      "original_pdf": "Synthetic original pdf text 22.",
+      "appendix": "",
+      "poster": "",
+      "spotlight_video": "",
+      "slides": ""
+     },
+     "signatures": [
+      "ICLR.cc/2020/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2020/Conference"
+     ],
+     "pdate": 1576800882416,
+     "odate": 1569439942952
+    }
+   ],
+   "count": 2213
+  }
+ }
+}

@@ -1,0 +1,69 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2016/workshop/-/submission&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "tddate": null,
+     "number": null,
+     "replyto": null,
+     "ddate": null,
+     "cdate": null,
+     "active": true,
+     "tmdate": 1455827909740,
+     "tcdate": 1455827909740,
+     "id": "3QxgDBPQxIp7y9wltPq9",
+     "invitation": "ICLR.cc/2016/workshop/-/submission",
+     "forum": "3QxgDBPQxIp7y9wltPq9",
+     "signatures": [
+      "~Synthetic_Person1"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "~Synthetic_Person2"
+     ],
+     "content": {
+      "CMT_id": "",
+      "title": "Synthetic title text 3.",
+      "abstract": "Synthetic abstract text 4.",
+      "pdf": "/pdf/3QxgDBPQxIp7y9wltPq9.pdf",
+      "paperhash": "synthetic|synthetic_title_5",
+      "conflicts": [
+       "Synthetic conflicts text 6.",
+       "Synthetic conflicts text 7.",
+       "Synthetic conflicts text 8.",
+       "Synthetic conflicts text 9."
+      ],
+      "authors": [
+       "Synthetic Author 10",
+       "Synthetic Author 11",
+       "Synthetic Author 12"
+      ],
+      "authorids": [
+       "synthetic.person13@example.org",
+       "synthetic.person14@example.org",
+       "synthetic.person15@example.org"
+      ]
+     },
+     "nonreaders": []
+    }
+   ],
+   "count": 125
+  }
+ }
+}

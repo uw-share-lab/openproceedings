@@ -1,0 +1,91 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2025/Workshop/ICBINB/Rejected_Submission&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-ratelimit-limit": "500",
+   "x-ratelimit-remaining": "264",
+   "x-ratelimit-reset": "1790543172",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-limit": "500",
+   "ratelimit-remaining": "264",
+   "ratelimit-reset": "2246"
+  },
+  "json": {
+   "notes": [
+    {
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "Track": {
+       "value": "Synthetic track text 2."
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 3.",
+        "Synthetic keywords text 4.",
+        "Synthetic keywords text 5."
+       ]
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 6."
+      },
+      "pdf": {
+       "value": "/pdf/676556ae7332c2cdd4cc8621c636aa0de3c0bdac.pdf"
+      },
+      "Anonymization": {
+       "value": "Synthetic anonymization text 7."
+      },
+      "venue": {
+       "value": "Submitted to ICLR 2025 Workshop ICBINB"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2025/Workshop/ICBINB/Rejected_Submission"
+      },
+      "_bibtex": {
+       "value": "synthetic.person8@example.org"
+      }
+     },
+     "id": "14BmcWqqXC",
+     "forum": "14BmcWqqXC",
+     "license": "CC BY 4.0",
+     "signatures": [
+      "ICLR.cc/2025/Workshop/ICBINB/Submission43/Authors"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "ICLR.cc/2025/Workshop/ICBINB",
+      "ICLR.cc/2025/Workshop/ICBINB/Submission43/Authors"
+     ],
+     "number": 43,
+     "invitations": [
+      "ICLR.cc/2025/Workshop/ICBINB/-/Submission",
+      "ICLR.cc/2025/Workshop/ICBINB/-/Post_Submission",
+      "ICLR.cc/2025/Workshop/ICBINB/-/PC_Revision",
+      "ICLR.cc/2025/Workshop/ICBINB/-/Edit"
+     ],
+     "domain": "ICLR.cc/2025/Workshop/ICBINB",
+     "tcdate": 1738929232037,
+     "cdate": 1738929232037,
+     "tmdate": 1741194430241,
+     "mdate": 1741194430241,
+     "odate": 1741194430230,
+     "version": 2
+    }
+   ]
+  }
+ }
+}
