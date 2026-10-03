@@ -78,6 +78,8 @@ block a shape that a mutant allows. Identical destructive-case verdicts alone do
 Case tables must also parse on the developer platform's Bash. Stock macOS Bash 3.2 can misparse a
 case-pattern `)` inside command substitution; compute the case result in a variable outside `$(...)`
 and keep the same assertion. Run the table with stock Bash as well as the CI version when available.
+Capture controlled runner output on the line before a `check` call and pass the variable as data;
+`lint_probes.py` forbids command substitutions inside assertion arguments even for tooling tables.
 
 ## CPU growth checks
 

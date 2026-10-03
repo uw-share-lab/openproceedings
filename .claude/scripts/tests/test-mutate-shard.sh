@@ -39,17 +39,28 @@ refused() {  # refused <label> <shard> <expected message> — exits 1 with that 
   else fail=$((fail+1)); printf '  FAIL refused: %s: rc=%s out=[%s] err=[%s]\n' "$1" "$rc" "$out" "$err"; fi
 }
 
+# Capture controlled runner output before assertions: check arguments stay data for lint_probes.
 echo "== the split (fixture of 7)"
-check "no --shard: every mutant"            "$(labels "$FIX")"               "a1 b2 c1 d2 e1 f2 g1"
-check "1/1 is every mutant"                 "$(labels "$FIX" --shard 1/1)"   "a1 b2 c1 d2 e1 f2 g1"
-check "1/3: every 3rd from the 1st"         "$(labels "$FIX" --shard 1/3)"   "a1 d2 g1"
-check "2/3: every 3rd from the 2nd"         "$(labels "$FIX" --shard 2/3)"   "b2 e1"
-check "3/3: every 3rd from the 3rd"         "$(labels "$FIX" --shard 3/3)"   "c1 f2"
-check "7/7: the last mutant alone"          "$(labels "$FIX" --shard 7/7)"   "g1"
-check "9/9: more shards than mutants, empty" "$(labels "$FIX" --shard 9/9)"  ""
-check "leading zeros: 02/03 is 2/3"         "$(labels "$FIX" --shard 02/03)" "b2 e1"
-check "--match first, then the split"       "$(labels "$FIX" --match 1 --shard 2/2)" "c1 g1"
-check "--list prints no shard header"       "$(python3 "$FIX" --list --shard 1/3 2>&1 | head -1)" "a1"
+got=$(labels "$FIX")
+check "no --shard: every mutant"            "$got"               "a1 b2 c1 d2 e1 f2 g1"
+got=$(labels "$FIX" --shard 1/1)
+check "1/1 is every mutant"                 "$got"   "a1 b2 c1 d2 e1 f2 g1"
+got=$(labels "$FIX" --shard 1/3)
+check "1/3: every 3rd from the 1st"         "$got"   "a1 d2 g1"
+got=$(labels "$FIX" --shard 2/3)
+check "2/3: every 3rd from the 2nd"         "$got"   "b2 e1"
+got=$(labels "$FIX" --shard 3/3)
+check "3/3: every 3rd from the 3rd"         "$got"   "c1 f2"
+got=$(labels "$FIX" --shard 7/7)
+check "7/7: the last mutant alone"          "$got"   "g1"
+got=$(labels "$FIX" --shard 9/9)
+check "9/9: more shards than mutants, empty" "$got"  ""
+got=$(labels "$FIX" --shard 02/03)
+check "leading zeros: 02/03 is 2/3"         "$got" "b2 e1"
+got=$(labels "$FIX" --match 1 --shard 2/2)
+check "--match first, then the split"       "$got" "c1 g1"
+got=$(python3 "$FIX" --list --shard 1/3 2>&1 | head -1)
+check "--list prints no shard header"       "$got" "a1"
 
 echo "== the real mutant set: n shards partition it, the same way on every runner"
 # The reference order, computed here and not by mutate.py: the files sorted by name, each in file order. Every
@@ -59,25 +70,31 @@ for f in sorted(pathlib.Path(sys.argv[1]).glob("*.json")):
     for m in json.loads(f.read_text()):
         print(m["label"])' "$SRC/.claude/scripts/mutants" > "$TMP/ref"
 total=$(grep -c . "$TMP/ref")
-check "the reference is not empty"             "$([ "$total" -gt 0 ] && echo yes)" "yes"
+got=$([ "$total" -gt 0 ] && echo yes)
+check "the reference is not empty"             "$got" "yes"
 python3 "$REAL" --list > "$TMP/all"; rc=$?
 check "--list: exit 0"                         "$rc" "0"
-check "--list: every mutant, in sorted-file order" "$(cat "$TMP/all")" "$(cat "$TMP/ref")"
+got=$(cat "$TMP/all")
+want=$(cat "$TMP/ref")
+check "--list: every mutant, in sorted-file order" "$got" "$want"
 for n in 3 8; do
   : > "$TMP/union"; bad=0
   for i in $(seq 1 "$n"); do python3 "$REAL" --list --shard "$i/$n" >> "$TMP/union" || bad=1; done
   check "$n shards: every one exits 0"           "$bad" "0"
   # one multiset comparison: each label as often as in the reference, so complete and disjoint
-  check "$n shards: complete and disjoint"       "$(sort "$TMP/union")" "$(sort "$TMP/ref")"
+  got=$(sort "$TMP/union")
+  want=$(sort "$TMP/ref")
+  check "$n shards: complete and disjoint" "$got" "$want"
 done
-check "8 shards: sizes differ by at most 1" \
-  "$(for i in $(seq 1 8); do python3 "$REAL" --list --shard "$i/8" | grep -c .; done | sort -n | sed -n '1p;$p' | paste -sd' ' - \
-     | awk '{print ($2 - $1 <= 1) ? "yes" : "no"}')" "yes"
+got=$(for i in $(seq 1 8); do python3 "$REAL" --list --shard "$i/8" | grep -c .; done | sort -n | sed -n '1p;$p' | paste -sd' ' - \
+     | awk '{print ($2 - $1 <= 1) ? "yes" : "no"}')
+check "8 shards: sizes differ by at most 1" "$got" "yes"
 first=$(labels "$REAL" --shard 5/8)
 # Bash 3.2 can misparse a case-pattern ')' inside $(...); keep the assertion outside it.
 case "$first" in ''|rc=*) listed=no;; *) listed=yes;; esac
 check "stable: shard 5/8 lists mutants"        "$listed" "yes"
-check "stable: shard 5/8 twice is the same"    "$(labels "$REAL" --shard 5/8)" "$first"
+got=$(labels "$REAL" --shard 5/8)
+check "stable: shard 5/8 twice is the same"    "$got" "$first"
 
 echo "== a bad i/n is refused"
 form="expected i/n, e.g. 2/8"; range="need 1 <= i <= n"

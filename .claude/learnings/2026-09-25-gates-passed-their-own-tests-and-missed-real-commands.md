@@ -162,3 +162,15 @@ Run the new review gate on its own tooling: five routed reviewers (code, securit
 - Propagated to: `.claude/scripts/tests/test-mutate-shard.sh` and the case-table portability guidance
   in `.claude/skills/testing-standards/SKILL.md`. Verify on stock Bash and the CI version when available;
   ShellCheck passed while stock Bash execution failed.
+
+## Addendum — 2026-10-03 (TASK-171: runner captures follow the probe-linter contract)
+
+- After rebasing onto the actually merged hooks, `make tooling` correctly refused the sharding table's
+  command substitutions inside `check` arguments. These were controlled runner captures rather than hostile
+  probes, but the shared linter intentionally requires assertion arguments to stay data. Do not exempt the
+  table or weaken that rule: capture each result on the preceding line and pass the variable to the same
+  assertion. All inputs, expected results and 33 checks remain unchanged.
+- The updated table passes `lint_probes.py` and stock Bash 3.2 (33 passed, 0 failed). Raw RED:
+  `/tmp/task171-actual-tooling.log`; focused GREEN: `/tmp/task171-probe-capture-bash32.log`.
+  Full integration gates and corrected remote proof remain pending. Propagated to
+  `.claude/scripts/tests/test-mutate-shard.sh` and the testing standard's case-table guidance.
