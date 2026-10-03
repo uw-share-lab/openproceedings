@@ -35,7 +35,7 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 | [`review-gates`](skills/review-gates/SKILL.md) | The openproceedings review standard and routing table |
 | [`learnings`](skills/learnings/SKILL.md) | How openproceedings records and reuses process lessons |
 | [`repo-conventions`](skills/repo-conventions/SKILL.md) | Where things live in the openproceedings monorepo and the naming rules for branches, commits, results, plans and data |
-| [`pr-workflow`](skills/pr-workflow/SKILL.md) | The openproceedings branch and PR flow (feature → PR → dev → PR → main), the per-sha review records that gate push and PR creation, the order of /review-gate then /open-pr, the six required CI checks, and the second-approval rule for main. |
+| [`pr-workflow`](skills/pr-workflow/SKILL.md) | The openproceedings branch and PR flow (feature → PR → dev → PR → main), the per-sha review records that gate push and PR creation, the order of /review-gate then /open-pr, the six required CI checks, and the solo-maintainer approval policy for main. |
 | [`no-ai-attribution`](skills/no-ai-attribution/SKILL.md) | The openproceedings authorship rule |
 | [`spec-writing`](skills/spec-writing/SKILL.md) | The house format and voice of docs/specs/NN-*.md |
 | [`decision-records`](skills/decision-records/SKILL.md) | How openproceedings records architectural and methodological decisions as Backlog.md decisions |

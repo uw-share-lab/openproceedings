@@ -87,3 +87,14 @@ The MINOR-bump rule and fresh current-index verification/deployment requirement 
 Spec 08, the release-manager guidance and generated changelog now distinguish those operational release
 requirements from the reader's support for retained pins. The first tagged release also makes no claim
 that development search records do not exist.
+
+
+## 2026-10-03 solo-maintainer promotion policy
+
+At the repository owner's explicit request, main's required approving-review count changed from one
+to zero because there is only one developer. This supersedes the earlier second-person requirement
+for future promotions; PRs, required CI checks, strict up-to-date protection, resolved conversations,
+admin enforcement and tag protection remain in place. The before/after protection comparison
+confirmed that only the review count changed. PR #101 then merged normally as
+`87b7dea321df3ad73045d6214158a284d7b797e2`; no self-approval or CI bypass was used.
+Tagging and public deployment remain separate actions.
