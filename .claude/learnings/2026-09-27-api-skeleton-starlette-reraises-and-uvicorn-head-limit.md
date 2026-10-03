@@ -73,3 +73,14 @@ request with no query text, per-client rate limit, CORS allowlist, and the query
   verifying pass, then byte ranges by id. A deploy must ship the snapshot beside the index (spec 04, as
   built for task-035).
 - Propagated to: `.claude/skills/fastapi-conventions/SKILL.md` (App shape), spec 04 as built (task-035).
+
+## Addendum — 2026-10-03: framework telemetry dependencies
+
+FastAPI 0.142.2 adds `opentelemetry-api` to the locked graph. The API dependency alone supplies
+proxy/no-op providers; this application does not lock an OpenTelemetry SDK or exporter. Inspection
+of the hash-verified wheels and a socket-blocked probe confirmed telemetry stays inactive with
+the shipped configuration, including when an endpoint is present without the optional SDK.
+Adding an SDK/exporter later would require a separate privacy review: framework spans can include
+`url.query`, which could expose the search query even though our application access logs redact it.
+Keep this distinction in the logging standards rather than assuming an API dependency enables
+network export or that existing access-log redaction also protects third-party spans.
