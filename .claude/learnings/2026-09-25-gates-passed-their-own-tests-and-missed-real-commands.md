@@ -174,3 +174,16 @@ Run the new review gate on its own tooling: five routed reviewers (code, securit
   `/tmp/task171-actual-tooling.log`; focused GREEN: `/tmp/task171-probe-capture-bash32.log`.
   Full integration gates and corrected remote proof remain pending. Propagated to
   `.claude/scripts/tests/test-mutate-shard.sh` and the testing standard's case-table guidance.
+
+## Addendum — 2026-10-03 (TASK-171: full nightly coverage proven)
+
+The corrected eight-shard run37115476175 at source8d273d6118f410857c8098ca01678ecf466d12f2
+completed all773 mutants in exact partition order with zero problems, and all27 nightly jobs succeeded.
+Mutation job durations93:42–123:59 remain under150minutes; steps93:34–123:47 remain under140minutes.
+The initial seven-green-shards run was not completion evidence, nor was the subsequent run whose ingest
+property crashed in its Unicode seed. Preserve failed histories and require both allshards and entireworkflow
+results before closing coverage work. Task171 was completed viaCLI only after this complete proof.
+The docs/task closure commit is later than tested source8d273 and requires fresh local gates and exact-head
+review; do not claim the earlier remote run tested the closure SHA. Evidence and exact shard table:
+`docs/results/2026-10-02-mutation-sharding-recovery.md`. Propagated to the existing nightly/mutation
+contracts in spec08 and the as-built results; no new runner behavior introduced by closure.

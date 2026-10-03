@@ -120,3 +120,24 @@ Shard 6 retained `protect-data-dir: worktree paths compared case-sensitively`, b
 coverage skipped Linux. The hooks recovery owns the deterministic Linux coverage fix. The survivor
 remains a real failure; it is not marked equivalent. Corrected proof and final gate results are pending
 integration of that fix.
+
+## Complete corrected nightly proof — 2026-10-03
+
+[Run37115476175](https://github.com/uw-share-lab/openproceedings/actions/runs/37115476175), attempt1, tested exact source `8d273d6118f410857c8098ca01678ecf466d12f2` on `chore/task-171-mutation-final`. All27 jobs completed successfully, including suite-ci, all property/year-edit/differential jobs and benchmarks. The collector returned PASS with no problems; actual logs/metadata/ordered exact-source partitions are preserved in `/tmp/task171-unicode-proof-37115476175-final` and manifest `/tmp/task171-unicode-proof-manifest/manifest.json`.
+
+| Shard | Mutants | Job min:sec | Mutation step min:sec | Result |
+| --- | ---: | ---: | ---: | --- |
+| 1/8 | 97 | 122:46 | 122:38 | success / 0 problems |
+| 2/8 | 97 | 121:10 | 120:59 | success / 0 problems |
+| 3/8 | 97 | 93:42 | 93:34 | success / 0 problems |
+| 4/8 | 97 | 122:04 | 121:54 | success / 0 problems |
+| 5/8 | 97 | 120:47 | 120:37 | success / 0 problems |
+| 6/8 | 96 | 122:37 | 122:30 | success / 0 problems |
+| 7/8 | 96 | 120:28 | 120:17 | success / 0 problems |
+| 8/8 | 96 | 123:59 | 123:47 | success / 0 problems |
+
+All773 complete row labels match the immutable source partition in order. Every shard has zero unexpected survivors/stale patterns; documented equivalent survivors retain the audited annotations. Job and mutation-step durations stay below150 and140minutes respectively, with headroom under the original6hour GitHub cap. Effective exit0 follows from successful mutation steps plus complete zero-problem summaries; GitHub does not print a separate successful process exit code. These are actual results, not predictions from earlier partial runs. The actual nightly suite-ci summary is6752passed4skipped in807.55s; benchmark job72passed2skipped in31.60s. These remote summaries are distinct from the local full-test totals.
+
+Merged hooks fixed the initial Linuxcasefold survivor. Integration also required controlled shard outputs captured before assertion calls to satisfy the merged probe linter without exemptions. Run37112111841 then exposed a property-fixture Unicode seed crash before any production assertion; an explicit surrogate example and surrogatepass seed fixed it while preserving arbitraryUnicode and canonical checks. That failed run remains historical evidence, not completion proof. Source8d273 local full test/lint/tooling passed (6757backend,3skips;4724frontend in41files;870hook and118tooling cases). Official14runner mutations passed at2a39; runner/mutant definitions are identical at8d273.
+
+This closure changes only task metadata, results and dated learning. Its commit does not claim the nightly ran on the later closure SHA: proof remains pinned to source8d273. Fresh closing full test/lint/tooling and independent exact-head review are required before publication.
