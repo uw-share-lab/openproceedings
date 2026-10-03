@@ -1,0 +1,20 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "6 of 116 paper entries kept (2 per section); surrounding archive page removed"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://iclr.cc/archive/www/doku.php%3Fid=iclr2015:accepted-main.html",
+  "authenticated": false
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "text/html"
+  },
+  "text": "<!doctype html><html><head><title>Accepted Papers (Conference Track)</title></head><body><h1>Accepted Papers (Conference Track)</h1><h3 class=\"sectionedit1\" id=\"main_conference_-_oral_presentations\">Main Conference - Oral Presentations</h3><ol data-fixture-section=\"main_conference_-_oral_presentations\"><li class=\"level1\"><div class=\"li\"> <a href=\"http://arxiv.org/abs/1412.6623\" class=\"urlextern\" target=\"_blank\" title=\"http://arxiv.org/abs/1412.6623\"  rel=\"nofollow\">Synthetic title 1</a><br/>\nSynthetic Author 2; Synthetic Author 3</div></li>\n<li class=\"level1\"><div class=\"li\"> <a href=\"http://arxiv.org/abs/1412.6632\" class=\"urlextern\" target=\"_blank\" title=\"http://arxiv.org/abs/1412.6632\"  rel=\"nofollow\">Synthetic title 4</a><br/>\nSynthetic Author 5; Synthetic Author 6</div></li></ol>\n<h3 class=\"sectionedit2\" id=\"main_conference_-_poster_presentations\">Main Conference - Poster Presentations</h3><ol data-fixture-section=\"main_conference_-_poster_presentations\"><li class=\"level1\"><div class=\"li\"> <a href=\"http://arxiv.org/abs/1412.6550\" class=\"urlextern\" target=\"_blank\" title=\"http://arxiv.org/abs/1412.6550\"  rel=\"nofollow\">Synthetic title 7</a><br/>\nSynthetic Author 8; Synthetic Author 9</div></li>\n<li class=\"level1\"><div class=\"li\"> <a href=\"http://arxiv.org/abs/1406.2989\" class=\"urlextern\" target=\"_blank\" title=\"http://arxiv.org/abs/1406.2989\"  rel=\"nofollow\">Synthetic title 10</a><br/>\nSynthetic Author 11; Synthetic Author 12</div></li></ol>\n<h3 class=\"sectionedit3\" id=\"workshop_papers\">Workshop Papers</h3><ol data-fixture-section=\"workshop_papers\"><li class=\"level1\"><div class=\"li\"> <a href=\"http://arxiv.org/abs/1412.7272\" class=\"urlextern\" target=\"_blank\" title=\"http://arxiv.org/abs/1412.7272\"  rel=\"nofollow\">Synthetic title 13</a><br/>\nSynthetic Author 14; Synthetic Author 15</div></li>\n<li class=\"level1\"><div class=\"li\"> <a href=\"http://arxiv.org/abs/1412.7063\" class=\"urlextern\" target=\"_blank\" title=\"http://arxiv.org/abs/1412.7063\"  rel=\"nofollow\">Synthetic title 16</a><br/>\nSynthetic Author 17; Synthetic Author 18</div></li></ol></body></html>\n"
+ }
+}

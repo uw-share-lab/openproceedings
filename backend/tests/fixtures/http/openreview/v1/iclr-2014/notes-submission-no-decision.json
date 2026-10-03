@@ -1,0 +1,60 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2014/conference/-/submission&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "replyto": null,
+     "ddate": null,
+     "legacy_migration": true,
+     "tmdate": 1387780620000,
+     "tcdate": 1387780620000,
+     "number": 26,
+     "id": "bSaT4mmQt84Lx",
+     "invitation": "ICLR.cc/2014/conference/-/submission",
+     "forum": "bSaT4mmQt84Lx",
+     "signatures": [
+      "synthetic.person1@example.org"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "title": "Synthetic title text 2.",
+      "decision": "submitted, no decision",
+      "abstract": "Synthetic abstract text 3.",
+      "pdf": "https://arxiv.org/abs/1312.6098",
+      "paperhash": "synthetic|synthetic_title_4",
+      "keywords": [],
+      "conflicts": [],
+      "authors": [
+       "Synthetic Author 5",
+       "Synthetic Author 6",
+       "Synthetic Author 7"
+      ],
+      "authorids": [
+       "synthetic.person8@example.org",
+       "synthetic.person9@example.org",
+       "synthetic.person10@example.org"
+      ]
+     },
+     "writers": []
+    }
+   ],
+   "count": 69
+  }
+ }
+}

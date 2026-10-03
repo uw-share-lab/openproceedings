@@ -1,0 +1,128 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "forum listing trimmed from 8 to 3 notes (order kept)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?forum=pAj7zLJK05U",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "gCxKzOZl2UF",
+     "original": null,
+     "number": 1,
+     "cdate": 1610040518003,
+     "ddate": null,
+     "tcdate": 1610040518003,
+     "tmdate": 1610474126387,
+     "tddate": null,
+     "forum": "pAj7zLJK05U",
+     "replyto": "pAj7zLJK05U",
+     "invitation": "ICLR.cc/2021/Conference/Paper2915/-/Decision",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "decision": "Reject",
+      "comment": "Synthetic comment text 2."
+     },
+     "signatures": [
+      "ICLR.cc/2021/Conference/Program_Chairs"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2021/Conference/Program_Chairs"
+     ]
+    },
+    {
+     "id": "euiuHQe4h16",
+     "original": null,
+     "number": 7,
+     "cdate": 1606197082148,
+     "ddate": null,
+     "tcdate": 1606197082148,
+     "tmdate": 1606197082148,
+     "tddate": null,
+     "forum": "pAj7zLJK05U",
+     "replyto": "v4-wHTr_aZW",
+     "invitation": "ICLR.cc/2021/Conference/Paper2915/-/Official_Comment",
+     "content": {
+      "title": "Synthetic title text 3.",
+      "comment": "Synthetic comment text 4."
+     },
+     "signatures": [
+      "ICLR.cc/2021/Conference/Paper2915/Authors"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2021/Conference",
+      "ICLR.cc/2021/Conference/Paper2915/Authors"
+     ]
+    },
+    {
+     "id": "pAj7zLJK05U",
+     "original": "VUWPQtIEpb",
+     "number": 2915,
+     "cdate": 1601308323344,
+     "ddate": null,
+     "tcdate": 1601308323344,
+     "tmdate": 1683307334153,
+     "tddate": null,
+     "forum": "pAj7zLJK05U",
+     "replyto": null,
+     "invitation": "ICLR.cc/2021/Conference/-/Blind_Submission",
+     "content": {
+      "title": "Synthetic title text 5.",
+      "authorids": [
+       "~Synthetic_Person6",
+       "~Synthetic_Person7",
+       "~Synthetic_Person8",
+       "~Synthetic_Person9",
+       "synthetic.person10@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 11",
+       "Synthetic Author 12",
+       "Synthetic Author 13",
+       "Synthetic Author 14",
+       "Synthetic Author 15"
+      ],
+      "keywords": [],
+      "abstract": "Synthetic abstract text 16.",
+      "code_of_ethics": "Synthetic code of ethics text 17.",
+      "paperhash": "synthetic|synthetic_title_18",
+      "pdf": "/pdf/44b02f034a3259917a79f05861ebc5bd6d5f8570.pdf",
+      "reviewed_version_(pdf)": "Synthetic reviewed version (pdf) text 19.",
+      "_bibtex": "synthetic.person20@example.org"
+     },
+     "signatures": [
+      "ICLR.cc/2021/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2021/Conference"
+     ],
+     "odate": 1601660524636
+    }
+   ],
+   "count": 8
+  }
+ }
+}

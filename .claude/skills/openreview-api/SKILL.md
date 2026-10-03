@@ -1,0 +1,271 @@
+---
+name: openreview-api
+description: How openproceedings talks to OpenReview — which venue-years live on API v2 vs v1 (spec 01 §Sources, verified live 2026-09-27), authentication from .env credentials and the HTML challenge anonymous callers get, rate-limit headers, pagination (limit ≤ 1000, count only with offset), why the submission note's content.venueid decides track and status in v2 but not in v1, how v1 decisions arrive, and the recorded fixtures. Use when writing, reviewing or debugging anything under backend/src/openproceedings/ingest/sources/ that calls api.openreview.net or api2.openreview.net.
+---
+
+# OpenReview API (spec 01 §Sources, §Track taxonomy)
+
+Every fact here was checked live on 2026-09-27 (TASK-002). The evidence, counts and example ids are in
+`docs/research/2026-09-27-openreview-and-proceedings-facts.md`; one recorded response per shape is under
+`backend/tests/fixtures/http/openreview/` (§Fixtures).
+
+## Which host holds which venue-year
+| Host | Venue-years | Shape |
+|---|---|---|
+| `api2.openreview.net` (v2) | ICLR 2024+ (incl. Tiny Papers 2024, Blogposts 2024+), NeurIPS 2023+ (incl. D&B 2023), ICML 2023+ | every content value is wrapped: `content.title.value`, `content.venueid.value` |
+| `api.openreview.net` (v1) | ICLR 2013, 2014, 2016–2023 (2016: workshop track only; Tiny Papers and Blogposts 2023), NeurIPS 2021–2022 (main and D&B) | content values are bare strings; schema differs per year, so one adapter per venue-year |
+
+- Not on OpenReview: ICLR 2015 (no group), the ICLR 2016 conference track, NeurIPS before 2021, ICML
+  before 2023 (`ICML.cc/2020/Conference` exists but has no public notes). Use
+  `.claude/skills/neurips-proceedings/SKILL.md` and `.claude/skills/pmlr-proceedings/SKILL.md`; the public
+  ICLR archive source in `ingest/sources/iclr.py` supplies accepted main papers for 2014–2016 (spec 01).
+- `GET /groups?id=<venue>` on api2 tells the version of any venue: a v2 group has `domain = <its id>` and
+  a `content` block naming its venueids; a v1 group has `domain = null` and a `web` script. A note is only
+  on its own host: the other one answers `404 NotFoundError` by id, and an empty list (not an error) to a
+  venueid query. Pick the host from this table; never "try v2, fall back to v1".
+- `GET /groups?parent=<Org>.cc/<Y>` maps a year's groups (tracks, `Workshop`, `Workshop_<City>`, proposal
+  groups). The crawler intentionally does not use `select=id`: it needs each group's `readers` ACL before
+  its public cache projection may retain the id.
+
+## Authentication
+- **Anonymous access does not work.** api2 and api1 `/notes` answer an anonymous request with **HTTP 200
+  and an HTML "Verifying your browser" page** (a Turnstile challenge), not JSON and not 429. Check the
+  `content-type` is JSON before parsing, and treat HTML as an authentication failure, never as an empty
+  page.
+- `POST https://api2.openreview.net/login` with `{"id": <user>, "password": <password>}` returns
+  `{"token": …}`; send `Authorization: Bearer <token>`. The same token works on api1.
+- Credentials come only from `.env` (gitignored, spec 08) as **`OPENREVIEW_USERNAME`** and
+  **`OPENREVIEW_PASSWORD`** (`.env.example`, `scripts/setup-dev.sh`, `CONTRIBUTING.md`). scholarmend's
+  `SCHOLARMEND_OPENREVIEW_*` names are not read; pass our values to its `login(user, password)`. Never
+  from a CLI flag, a fixture or a log line.
+- Log in lazily: a fully cached (warm) run must make zero network calls and need no credentials.
+- Fixtures never contain the token or the `Authorization` header (the scrubber keeps only the content-type
+  and rate-limit headers).
+
+## Rate limits and retries
+- api2 budgets per resource: `/notes` `ratelimit-policy: 500;w=3600`, `/groups` `700;w=3600`, with
+  `ratelimit-remaining` and `ratelimit-reset` (**seconds from now**). It also sends `x-ratelimit-reset`, an
+  epoch timestamp: don't mix them up. When `remaining` hits 0, sleep until `reset` (capped at about an hour).
+- api1 sends `180;w=60` to anonymous callers and no rate-limit headers to authenticated ones; pace it the
+  same way (one request every one or two seconds was never throttled).
+- On 429 honour `Retry-After` or `ratelimit-reset`. Exponential backoff of 1s, 2s, 4s on a one-hour window
+  just fails the run.
+- Retry 429 and 5xx; raise immediately on any other 4xx (retrying a refusal spends budget).
+- Validate the body (JSON, not the challenge page) inside the retry loop so a truncated response is retried.
+- Every call goes through the disk cache keyed by URL + params, written atomically (temp file + rename),
+  so the wait is paid once ever and a crawl resumes where it stopped.
+
+## Pagination
+- `limit` ≤ **1000** on both hosts: `limit=1001` is `400 ValidationError` "limit must be <= 1000".
+- v2 returns `count` **only when the request has an `offset` parameter** (`offset=0` is enough); v1
+  returns it on every `/notes` response. Page with `limit=1000&offset=…`, stop on a short page, and then
+  check distinct ids == rows fetched == `count`.
+- Both hosts accept `select=` (`select=id,content.venueid`) for manual counting. Do not use it in the crawler
+  when it would omit the `readers` ACL required by the cache boundary.
+- Sort explicitly (for example by `number`) so offsets are stable if notes are added mid-crawl.
+- Cache each page under its own key (URL + params), never one blob per venue-year.
+- v1 `invitation=` must be a **prefix** regex: `ICLR.cc/2020/Conference/Paper.*/-/Decision` is refused
+  (400). Get v1 decisions per forum (`?forum=<id>`) or with `details=directReplies` on the submission
+  listing. A `?forum=` listing is not ordered: find the submission by `id == forum`.
+
+## The authority rule
+**In v2, only `content.venueid` on the submission note decides track and status.** The submission note is
+the note whose `id` equals its `forum`. Two traps, both seen live:
+1. Querying "any note in the forum" returned a Decision note on 25 of 96 forums. Deriving the venue from
+   that note's **invitation** turned a rejected ICLR paper into ICLR main track (`zkNCWtw2fd`). Look notes up
+   by `id=<forum>` and check `note.id == forum` before reading anything.
+2. A note without its own `venueid` produces **no** track claim: `track=unknown`, logged, shown on
+   coverage. Unresolved goes to a person; derived never ships.
+
+Each v2 venue's group names its four venueids (`submission_venue_id`, `rejected_venue_id`,
+`withdrawn_venue_id`, `desk_rejected_venue_id`) and whether rejected/withdrawn/desk-rejected submissions
+are public (`public_submissions`, `public_withdrawn_submissions`, `public_desk_rejected_submissions`: true
+for ICLR, false for NeurIPS and ICML, whose rejected papers are public only on the authors' opt-in).
+Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
+
+## API v1: the venueid is not status evidence
+- **v1 puts the bare venue path on rejected papers too**: ICLR 2017 (`ICLR.cc/2017/conference`, lower
+  case, also on workshop invitations), ICLR 2022 and 2023, NeurIPS 2021–2022, NeurIPS 2021 D&B
+  (`…/Round1`), ICLR 2023 Tiny Papers and Blogposts. `classify_venueid("ICLR.cc/2022/Conference")` says
+  `main`/`accepted`, so it must never set a v1 note's status (TASK-095). The venueid only confirms venue,
+  year and track. **Enforced:** `classify_venueid` returns status `unknown` for any venueid in a v1
+  venue-year (`classify.is_v1`), and the RIS importer marks such a status claim `(API v1 venue-year: not
+  status evidence)` unless scholarmend's `venue_string` claim (`content.venue`, scholarmend 0.1.4+) gives
+  the status through `classify_v1_venue` (TASK-098). ICLR 2017's and 2013's lower-case `conference` venueids
+  (`classify.V1_TRACK_FROM_VENUE`) name no track (`other`), so there the string gives the track as well, if
+  it names the venueid's venue and year (TASK-142); any other `other` venueid keeps `other`. A v1 adapter
+  takes status from `classify_v1_venue(content.venue)` (exact strings from the table below; an unlisted one
+  is `unknown`), the decision note, or the withdrawn / desk-rejected invitation (decision-012). Status
+  evidence naming the main track on a note of a non-main listing, where the venueid names no track, is its
+  conference twin's outcome, not the note's: the note keeps its listing's track and its status is `unknown`
+  (`judge`, counted in the report's `twin_outcome`; the 18 ICLR 2017 workshop copies of rejected papers that say
+  `Submitted to ICLR 2017`, TASK-152). The RIS importer applies the same rule (`is_twin_outcome`) to scholarmend
+  0.1.5's `invitation` claim (TASK-157).
+- A copy and its main-track twin stay two records, linked (rule 6, `link_twins`, TASK-159, decision-029). A copy
+  is a record from a non-main submission listing whose dedup title key matches exactly one main-track submission,
+  or several of which its `_bibtex` names one. Each side gets a `twin` claim naming the other's id, counted in the
+  report's `twins_linked` (`twins_ambiguous` counts a copy left unlinked by an ambiguous title). ICLR 2017's 35 `Invite to Workshop` notes' `_bibtex` all name one unrelated forum
+  (`B1akgy9xx`), so `_bibtex` counts only when it names the copy's title. Only ICLR 2017 has copies: 53, linked
+  to 51 conference notes.
+- Status per v1 year (the submission invitation lists what was **submitted**, never what was accepted):
+
+| Year | Submissions | Status from |
+|---|---|---|
+| ICLR 2013 | `ICLR.cc/2013/conference/-/submission` | `content.decision` on the submission: `conference{Oral,Poster}-iclr2013-{conference,workshop}`, `reject` (track too) |
+| ICLR 2014 | `ICLR.cc/2014/{conference,workshop}/-/submission` | none: `submitted, no decision` → `unknown` |
+| ICLR 2016 | `ICLR.cc/2016/workshop/-/submission` | none → `unknown` (workshop track) |
+| ICLR 2017 | `ICLR.cc/2017/{conference,workshop}/-/submission` | `content.venue`: `ICLR 2017 {Oral,Poster}`, `ICLR 2017 Invite to Workshop`, `Submitted to ICLR 2017` (on a workshop-listing note: its conference twin's, so `workshop`/`unknown`, TASK-152) |
+| ICLR 2018 | `ICLR.cc/2018/Conference/-/Blind_Submission` | decision note `ICLR.cc/2018/Conference/-/Acceptance_Decision`, `content.decision` (`Accept (Oral)`, `Accept (Poster)`, `Invite to Workshop Track`, `Reject`) |
+| ICLR 2019 | `…/2019/Conference/-/Blind_Submission` | meta-review `ICLR.cc/2019/Conference/-/Paper<N>/Meta_Review`, `content.recommendation` |
+| ICLR 2020–2021 | `…/-/Blind_Submission` | `ICLR.cc/<Y>/Conference/Paper<N>/-/Decision`, `content.decision`: 2020 has `Accept (Poster)`, `Accept (Spotlight)`, `Accept (Talk)` (an oral) and `Reject` (the full crawl's tally, TASK-123); 2021 decides from `venue`/`venueid` first and reads a decision note only for a forum `venue` leaves open, so the crawl's tally sees only those (`Reject`); `Accept (Poster)` is verified on paper 2910, and other 2021 accept forms are unseen |
+| ICLR 2022–2023, NeurIPS 2021–2022 | `…/-/Blind_Submission` | `content.venue` (`ICLR 2022 Submitted`, `Submitted to ICLR 2023`, `NeurIPS 2022 Accept`, …) or the decision note |
+| NeurIPS 2021 D&B | `NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round{1,2}/-/Submission` | `content.venue` (`Submitted to …` = rejected) |
+| NeurIPS 2022 D&B | `NeurIPS.cc/2022/Track/Datasets_and_Benchmarks/-/Submission` | only accepted papers are public |
+
+- Withdrawn and desk-rejected papers live under their own invitations
+  (`…/-/Withdrawn_Submission`, `…/-/Desk_Rejected_Submission`); crawl them explicitly or they are silently
+  missing from the counts. Their `venue`/`venueid` are empty or absent, and one ICLR 2021 withdrawn-invitation
+  note (`xGZG2kS5bFk`) says `ICLR 2021 Poster`: that disagreement is a `conflicts.csv` row, never resolved
+  by the invitation. The NeurIPS 2021 and 2022 main-track invitations are valid and public but all four
+  withdrawn/desk-rejected listings had count 0 on 2026-09-29; query and record those zeroes.
+- Record the decision note id (or the venue string) as the status claim's evidence, and a
+  `presentation` claim when the decision states one.
+
+## The v2 crawler as built (TASK-050)
+- `ingest/sources/openreview_client.py`: `OpenReviewClient`, the shared `http.HttpClient` (TASK-103: one
+  transport, allowlist, pacing, retry and cache for every crawler) with OpenReview's `POLICY` and its login on
+  top, over a swappable `transport` (default: urllib, **no redirects**, 60 s timeout, 64 MiB body cap, a body over
+  it refused at once) and `clock` (tests use a fake one). Hosts are an allowlist
+  (the base URL is fixed; nothing is fetched from a URL a response names). Login lazily through the same
+  transport (not scholarmend's `login`, which bypasses it and would read the challenge page as a JSON error);
+  a 401 or a 200 HTML page logs in again once, then `OpenReviewAuthError`. Pacing `min_interval` (1 s),
+  budget wait on `ratelimit-remaining: 0`, 429 → `Retry-After` (seconds or HTTP date) → `ratelimit-reset` →
+  backoff, 5xx / network / truncated JSON → `min(2^n, 60) s + jitter`, `max_attempts` 6, every wait capped at
+  3,701 s. Cache: `http.ResponseCache` under `<data-dir>/cache/openreview/v2/http/`, keyed by the canonical URL
+  (parameters sorted). Before persistence, every top-level note/group must be readable by `everyone`
+  (`readers` a list of strings naming `everyone`; `nonreaders` absent, `null` or a list of strings not naming
+  `everyone`; API v1 writes `null` on public notes, e.g. 59 of the 161 ICLR 2017 workshop submissions, TASK-119; any other
+  non-list ACL is refused), only crawler-used top-level fields remain, and restricted v2 content fields are removed; all remaining
+  world-readable content keys are retained for the venue-year adapters. The payload carries a
+  `public_projection` version; older raw entries are rejected offline and purged/refetched by a live run. A
+  refusal (`OpenReviewPublicDataError`) names the ACL's shape and the canonical request (`GET <url>`: host,
+  path and sorted parameters, the cache key), never the response's data, the token or a credential (TASK-116).
+  Other malformed entries or entries naming another URL are `CacheError`s. Errors are the shared
+  `http.SourceError` family (`CacheMiss`, `RetriesExhausted`, `HTTPRefused`; `OpenReviewAuthError` on top).
+- Cache expiry (TASK-102; spec 01 §Pipeline, Cache expiry): `openreview_client.ttl` is `POLICY.ttl`. A live
+  client re-fetches an API v2 entry past its TTL (accepted listing 7 days while its venue-year is open, 365
+  after; status listings and groups 1 day, then 90; API v1 never) and logs `openreview_cache_expired`
+  (`openreview_client.EVENTS`, with `openreview_retry_wait` and `openreview_budget_wait`: fixed constants,
+  `http.PolicyEvents`, never built from a prefix); an
+  offline client (`--offline`, a dry run, `snapshot build`) never expires anything. Once one page of a
+  listing expires, `_pages` re-fetches every later page too, so a listing's pages never mix two moments.
+- `ingest/sources/openreview_v2.py`: `crawl` (groups → venueids → pages → records), `note_record` (the
+  authority rule), `ingest` (writes `…/v2/crawls/<Venue>-<Year>.json` for a finished crawl) and `replay`
+  (what `op snapshot build` calls). The group-tree enumeration (`?parent=` listings, containers, the
+  `proposal` skip) is built from the research run's description; no `?parent=` listing is recorded yet, so
+  record one per venue before the first full crawl.
+- Presentation (TASK-101; spec 01 §Presentation): `note_record` reads `content.venue` only for an accepted,
+  non-workshop note, through `classify.classify_v2_presentation` (exact strings per venue-year in
+  `classify.V2_PRESENTATION`, each with the track its venueid must give). An unlisted string is `null` and
+  counted (`presentation_unmapped` in the report, the finished line and the attention WARNING; a DEBUG
+  `openreview_presentation_unmapped` per note, forum id only). A new venue-year's strings get table rows and
+  a recorded note each (`notes-presentation-*.json`, trimmed from the crawl cache and scrubbed).
+- Logs (TASK-116; logging-standards skill §Crawl lines), the same for v1 and v2: `openreview_crawl_started`
+  (`api`, `venue`, `year`, `offline`, `page_size`), `openreview_crawl_progress` at most every 30 s of the
+  client's monotonic clock (`common.Heartbeat`; notes read, `forums` on v1, imported, skipped, `requests`,
+  `cached`), `openreview_crawl_finished`, and at most one `openreview_crawl_attention` WARNING with the
+  anomaly counts (v1 and v2 both count `duplicate`, v1 also `duplicate_submission`; both report `cache_incompatible`, the pre-projection
+  entries the client purged and re-fetched). Per-note anomalies (`openreview_unknown_track`,
+  `openreview_v1_unmapped`, `openreview_v1_conflict`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `openreview_presentation_unmapped`) and
+  each `openreview_cache_incompatible` are DEBUG.
+- A record id repeated byte-for-byte across status listings is counted as a duplicate. If its parsed
+  non-provenance fields differ, the crawl refuses the mixed cache and asks for `--refresh`, rather than
+  silently keeping whichever status listing happened to run first. The v1 crawler applies the same rule.
+
+## The v1 crawler as built (TASK-051)
+- `ingest/sources/openreview_v1.py`: `ADAPTERS`, one `Adapter` per venue-year (ICLR 2013–2023 including an
+  empty 2015, NeurIPS 2021–2022). Each names its exact listing invitations (with the track submitted to and
+  the role: `submission`, `withdrawn`, `desk_rejected`), where status comes from (`decision_field`, `none`,
+  `venue`, `decision_note`, `venue_then_decision_note`), its decision table and its `coverage_gaps`.
+  `api_for(venue, year)` picks v1 or v2; `op ingest openreview` sends each year to its API.
+- `make_client` points the shared client at `https://api.openreview.net`, logs in on api2
+  (`login_base`), and caches under `<data-dir>/cache/openreview/v1/http/`; crawl files go to
+  `…/v1/crawls/<Venue>-<Year>.json` and `replay` rebuilds them offline for `op snapshot build`.
+- Listings use `?invitation=<exact>` with `limit`/`offset` and no `sort` (the v1 sort parameter isn't verified;
+  rows == distinct ids == `count` catches a listing that moved). Decision notes come from `?forum=<id>`, only
+  for years whose status needs one and notes without a deciding venue string: a note counts as the decision
+  only if its invitation is the year's exact one (with `Paper<number>` of this submission), its `forum` is
+  the submission and its `replyto` is the submission.
+- Status strings are exact-match tables (`classify_v1_venue` for `content.venue`, the adapter's tables for
+  `content.decision` and decision notes). Only strings seen live are listed, and "seen" must mean the tally
+  over a **whole** venue-year's crawl, not one recorded forum: ICLR 2020's table once held only `Accept
+  (Poster)` from a single forum, and its 108 `Accept (Spotlight)` and 48 `Accept (Talk)` papers went unknown
+  until the first full crawl's coverage report showed 156 missing (TASK-123). A crawl report's `unmapped`
+  count is where a missing string shows up. The v1
+  venueid confirms venue and year and must agree with the decided track.
+- A note's own disagreement (withdrawn invitation vs an accepted `content.venue`, two decision notes, a
+  venueid naming another track) makes that field `unknown` and adds an `unresolved:openreview_v1` row that
+  `snapshot.with_crawl_conflicts` writes to `conflicts.csv` (following merges to the surviving record).
+- **Two notes of one paper collapse** (TASK-125). NeurIPS 2021 lists 300 main-track papers twice: two
+  Blind_Submission notes with different ids and numbers (e.g. `-K4tIyQLaY` #292 and `BW2Z6B7S9KZ` #8244) whose
+  content is identical but for `_bibtex`, which embeds the id. After the listings, `collapse_duplicate_submissions`
+  keeps the lowest-numbered note of records identical in everything but id, forum URL and provenance (exact
+  title, authors, abstract, keywords, pdf, track, status, presentation, venueid), when each has a pdf, an
+  integer `number` and no crawl conflict; the others are `skipped.duplicate_submission` (non-routine in `op eval
+  coverage`), a DEBUG `openreview_duplicate_submission` line (`forum`, `kept`) and a count in
+  `openreview_crawl_attention`. **A silent twin** (TASK-132) collapses too, after them: in a `status_from="venue"`
+  year, a note with status `unknown` and no non-null `venue` or `venueid` is dropped when its paper's only other
+  record is accepted, conflict-free and identical to it but for status, presentation and venueid; that record is
+  kept whatever the numbers (`collapse_silent_twins`, same counter and log line). A note the identical-note
+  collapse kept is silent only if every note it absorbed was (TASK-147: an absorbed `venue: ''` is a value, so
+  not silence), or rule 5's number tie-break would decide the silent collapse. NeurIPS 2021 `W6e384Lkjbw` #5999
+  into `rDdb26AQ0SO` #11021 (same pdf, supplementary, title, authors, abstract, keywords; the proceedings link
+  `W6e384Lkjbw`), the only case on the 2026-09-29 crawl. Other differing notes stay apart: ICLR 2018 lists 24 pdfs
+  as a blind and a withdrawn note; the 11 NeurIPS 2021 D&B title pairs are Round 1 rejections resubmitted to
+  Round 2 with another pdf. v2 has no identical-pdf notes and doesn't run the rule.
+- Authors are split only when the split can be checked (decision-019, `split_authors`): early ICLR 2017 notes give
+  `content.authors` as one string, and 33 list-typed notes of 2016–2021 carry `and Name` or `A and B` entries.
+  A list with neither is kept as listed; otherwise the pieces (split at `, and `, `,`, ` and `, a leading `and `
+  dropped) must number exactly the note's `authorids` (or `author_emails`), else the authors stay empty
+  (`authors_unsplit`; e.g. ICLR 2017 `H1JBMVpdx`, whose `authors` is its title). The raw value stays in the
+  claim's evidence; `authors_split` counts the splits kept.
+- An accepted note whose pdf a withdrawn note of the crawl in the same track shares is `unknown` with an
+  `unresolved:openreview_v1` row naming every twin (decision-020; ICLR 2018 `S1p31z-Ab` and `SJTCsqMUf`); the
+  twins keep their status. A note with no decision at all (no decision note in its forum) and such a twin is
+  `withdrawn`, with no row, its claim citing the twin (`no decision note in the forum; withdrawn twin <id> shares
+  the pdf (…)`; the owner, TASK-139: ICLR 2018's 12), counted in the report's `withdrawn_by_twin` (manifest key
+  only when non-zero) instead of `unmapped`. A rejected note with a twin stays `rejected`. Desk-rejected
+  twins and twins in another track don't count, and a record the rule touched is never collapsed (rule 5).
+- ICLR 2023 BlogPosts uses the verified
+  `ICLR.cc/2023/BlogPosts/-/Blind_Submission` listing. NeurIPS 2021–2022 main-track withdrawn and
+  desk-rejected invitations are crawled even though their verified listings are empty.
+
+## Fixtures
+`backend/tests/fixtures/http/openreview/{v1,v2}/<venue>-<year>/*.json`, one file per exchange:
+`{"_recorded", "request": {"method", "url", "authenticated"}, "response": {"status", "headers", "json" |
+"text"}}`. They cover each v2 status suffix, D&B, position, competition, Creative AI, Tiny Papers,
+Blogposts, workshop and city-workshop forms, a group's venueid block, the `count`/`offset` shape, the
+`limit` error, the cross-host 404, the anonymous challenge page and a public v1 note with `nonreaders: null`
+(`v1/iclr-2017/note-workshop-null-nonreaders-live.json`, TASK-119) and a 2017 workshop-listing copy of a rejected
+paper (`v1/iclr-2017/note-workshop-submitted-to-iclr-live.json`, TASK-152); and each v1 year's status carrier
+above, including one invitation listing per v1 venue-year with a group; and (TASK-113, trimmed from the
+2026-09-29 crawl cache) ELMo's accepted blind note, withdrawn twin and forum (`v1/iclr-2018/*withdrawn-twin*`)
+and the v1 author shapes (`v1/iclr-20{17,18,20,21}/notes-*-authors-*.json`). `backend/tests/fixtures/http/scrub.py` turns a raw capture into a fixture (titles, abstracts,
+authors, ids of people and free text become synthetic, keeping an authors value's separators and an email
+string's count; a capture's `keep_ids` trims a listing page to those notes; decision-004). Recording is a manual run, never a
+test: add a capture for every new shape, scrub it, and read the diff before committing. A transport wrapper
+sees a raw response before `OpenReviewClient` applies its public projection; if the client raises
+`OpenReviewPublicDataError`, delete that raw capture immediately. Scrubbing text does not make a
+non-world-readable note safe to commit.
+
+`content.venue` is controlled source evidence even when it contains a spaced `@` (for example,
+`Tiny Papers @ ICLR 2024 Archive`), not an email. After scrubbing, table-test the exact retained venue
+label as well as the authoritative `content.venueid`; TASK-097's two regression rows prevent the Tiny
+Papers and Mexico City workshop labels from silently becoming synthetic email addresses again.
+
+TASK-050's v2 inventory test requires at least one note fixture for every supported venue-year through
+2026. The authenticated 2026-09-29 follow-up fills ICML 2023 and ICLR/NeurIPS/ICML 2026, and records
+the root `?parent=` response for each of those four venue-years. Each new exchange is run once through the
+real cache codec and then requested again by an offline client with no credentials or transport call. A root
+group fixture retains the returned public group documents (not merely `select=id`) so tests cover the ACL
+boundary the crawler depends on.

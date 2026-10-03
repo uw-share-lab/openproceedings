@@ -1,0 +1,166 @@
+---
+name: snapshots
+description: The corpus snapshot standard — the immutable data/snapshots/<date>-<shorthash>/ layout, records.jsonl and manifest.json contents, the determinism rules that make the same inputs give byte-identical output, how snapshot_hash feeds index_version, op snapshot build/diff semantics, and the protect-data-dir.sh hook. Use when writing or reviewing backend/src/openproceedings/ingest/snapshot.py, building or comparing snapshots, or when a hook blocks a write under data/.
+---
+
+# Snapshots (spec 01 §Pipeline 5, spec 03 §Versioning)
+
+A snapshot is the **only** input to the index build. Its hash is folded into `index_version`
+(`sha256(snapshot_hash, TOKENIZER_VERSION, SCHEMA_VERSION, ranking_params)[:12]`, spec 03). So a snapshot
+that changes after the fact would break every search record that cites it (guarantee 4).
+
+## Layout
+```
+data/snapshots/<YYYY-MM-DD>-<shorthash>/
+  records.jsonl     # one PaperRecord per line, sorted by id
+  manifest.json
+  merges.csv        # .claude/skills/dedup-rules/SKILL.md
+  conflicts.csv
+```
+`data/` is gitignored and **never committed**, because corpus licensing is unresolved (spec 00 §Open
+questions 1).
+
+## records.jsonl: determinism rules
+- Sort by `id` using plain code-point order.
+- One line per record: `json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`,
+  followed by `\n`, UTF-8, with no BOM.
+- Sort lists with no natural order: `provenance` by `Claim.sort_key()`, which is `(field, source, url or "",
+  fetched_at)` (a missing url sorts first); `PaperRecord` enforces this order on load. Keep `authors` in display
+  order.
+- Take `fetched_at` from the cache entry, **not** the build clock. Take no values from the environment
+  (hostname, cwd, locale).
+- `snapshot_hash = sha256(records.jsonl bytes)`, and `<shorthash>` is a fixed-length prefix of it. The
+  same cache gives the same bytes and the same hash. `backend/tests/unit/ingest/test_snapshot.py`
+  builds twice from fixtures and compares the bytes.
+
+## manifest.json
+As built (`backend/src/openproceedings/ingest/snapshot.py`, `render`): `format_version`,
+`record_schema_version` (`record.py`), `tokenizer_version` (dedup's title keys use it) and
+`openproceedings_version`; `snapshot_hash`; `crawl_date` (the newest claim's fetch date, which also names
+the directory) and `crawl_window` (the oldest and newest fetch times); `built_at` (the only build-time
+value); `record_count`; `counts` nested venue → year → track → status; `abstract_missing` and
+`unknown_track` per venue → year; since format 2 (TASK-082), `abstract_missing_by_track` (venue → year →
+track, 0 included), `sources_by_track` (venue → year → track → the claim sources of its records),
+`statuses_indexed` (venue → year → the statuses its sources can contain, from `ingest/statuses.py`, plus any
+its records hold) and `crawl_windows` (per claim source, its first and last `fetched_at`: the window
+`crawl_dates` uses, and narrower than the source's own `crawl_window`, which spans every response fetched,
+records or not; TASK-122); `query_dates` (with any RIS report, TASK-077, decision-025: `{"ris": "utc"}` when every
+RIS report's `utc_offset` converted its Publish or Perish query dates, else `{"ris": "local"}`; absent in a
+manifest built before it, which reads as local; additive, no format bump); `merges` (a `total` plus a count per rule) and `conflicts` (a `total` plus one count
+per resolution kind present, the part before any `:`: `precedence`, `newest`, `tie`, `ambiguous_not_merged`,
+`track_not_merged`, `venue_year_not_merged`, `unresolved`; an absent kind means 0; spec 01 §Pipeline 5); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
+cover); and `sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256,
+the installed scholarmend `parser_version`, read / imported / skipped by reason, abstract_missing,
+unknown_track, status_overrides, track × status) under `ris` (present whenever no other source is); once
+`op ingest openreview` has finished a venue-year, `openreview_v2`: its own `crawl_window` (which search records'
+`crawl_dates` and `/coverage` read) and one `CrawlReport.to_manifest()` per venue-year (groups crawled and skipped
+with the reason, each group's `public_*` flags, notes per venueid, read / imported / skipped by reason,
+unknown_track, abstract_missing, track × status, page size); likewise `openreview_v1` for API v1 years
+(TASK-051: its `crawl_window`, absent when its crawls fetched nothing such as ICLR 2015 alone, and one v1
+`CrawlReport.to_manifest()` per venue-year: notes per invitation, forums read, read / imported / skipped by
+reason, `unmapped` status strings by evidence kind, unknown_track, unknown_status, `authors_split` and `authors_unsplit` (decision-019; `authors_unsplit_ids` when any were refused), `withdrawn_by_twin` when any undecided note was made withdrawn by its twin (decision-020, TASK-139), `twin_outcome` when any note's main-track outcome was read as its conference twin's (TASK-152), `twins_linked` when any copy was linked to its main-track twin by a `twin` claim (and `twins_ambiguous` when a copy matched several and stayed unlinked) (TASK-159, decision-029; `render` refuses a `twin` claim naming a record the snapshot doesn't hold), the
+number of conflicts, track × status and the year's `coverage_gaps`); and the proceedings crawlers
+(task-052/053) add `neurips_proceedings` and `pmlr`: each `{crawl_window, listings}`, one report per listing
+(venue, year, volume, listing URL, role, `stated` vs `listed` and `count_ok`, records, skipped by reason,
+tracks, abstract_missing with `abstract_title_mismatch` and `page_missing`, unknown_track, `see_also`, its own
+crawl window); `coverage.crawl_dates` picks up each `crawl_window`. `build` (`load_sources`) replays every
+finished crawl offline through one mechanism (`sources/crawl.replay_all` over each source's `common.Crawls`:
+OpenReview v2, v1, NeurIPS, PMLR, in that order; every source's reports share `common.Report`, whose fetch
+times make each `crawl_window`; `op ingest` writes each source's markers through the same `Crawls.ingest`, so a
+marker lands where the replay reads it), and adds the conflicts a v1 crawl found inside one source to
+`conflicts.csv` (`with_crawl_conflicts`). **Ingest caps** (TASK-155, decision-026): `load_sources` runs every
+record through `caps.cap_records` before dedup. A run of combining marks in a title or abstract keeps 8 marks
+(only a letter or digit ends a run), a title keeps 1,000 characters and an abstract 20,000. Each trimmed claim's evidence
+carries the note `trimmed at ingest (decision-026): …`, after any source evidence in parentheses. The manifest's
+`trimmed` lists, sorted, the records with any trimmed title or abstract claim left after withholding. The key is
+written only when there is one, so a corpus within the caps has the manifest and `records.jsonl` it had.
+`snapshot_built` / `snapshot_exists` carry the `trimmed` count, and a non-zero count adds one WARNING
+`snapshot_trimmed`. **Takedowns** (TASK-136, decision-022): `build` withholds every
+abstract on the takedown list (`--takedowns`, default `<data-dir>/takedowns/withheld.txt`; `takedowns.py`)
+after dedup and reconcile (`snapshot.withhold`: `abstract` null, the abstract claims dropped, those records'
+abstract `conflicts.csv` values replaced by `(withheld: takedown)`, repeated rows collapsed), so
+`snapshot_hash` covers the effect and a recrawl can't restore one. A listed id the build holds under another id
+(merged: `merges.csv`; rekeyed: the one record with its native id, when that native id is globally unique, a
+forum id or PMLR key: `takedowns.global_native`; a `nips-`/`iclr-` hash never rekeys, TASK-067) is followed, its successor withheld too
+(`takedowns_followed`); a listed id with no record at all is reported (`takedowns_unmatched`), never refused
+(both on stderr and in the build's JSON). A twin of a withheld record (its `twin` claim, decision-029) is withheld
+too and reported (`takedowns_twins`: twin → the id it is the twin of; on stderr with what to list and log;
+TASK-163). When something is withheld the manifest adds `withheld` (the sorted
+ids whose record lost an abstract or an abstract claim: listing a record with none changes nothing),
+`abstract_withheld` (venue → year, 0
+included) and `abstract_withheld_by_track` (venue → year → track, 0 included), and `abstract_missing` (both
+maps) leaves those records out; with nothing withheld the keys are absent, so the manifest (still format 2) is
+what it was. `withheld` is in `AUDITED`: an existing directory with these very records whose manifest names
+other withheld ids is refused as `takedown_differs` (serve it as it is; the API applies the list), never with
+the advice to retire it.
+`RecordFile` checks each withheld id is a record with no abstract and no abstract claim, and counts them. The manifest may hold build times; `records.jsonl` may not. `/coverage`
+(spec 04) and `coverage-auditor` read these counts directly. A format-1 manifest (built before TASK-082)
+still loads: `/coverage` then takes the per-track facts from the records the load verified, and the statuses
+indexed from the source table. A rebuild of the same inputs finds the format-1 directory "not in the current
+format" and is refused, as for any format change: keep serving it, or retire it and rebuild.
+
+## The cache
+`op ingest ris <mended.ris>...` checks each scholarmend output imports cleanly, then copies it and the
+`resolved.json` beside it to `<data-dir>/cache/ris/<its directory name>/`. Re-ingesting identical files is
+a no-op; different files under a cached name are refused (a snapshot may already cite them).
+
+`op ingest neurips|pmlr` fills a page cache, `<data-dir>/cache/{neurips,pmlr}/pages/<sha256[:2]>/<sha256>.json`
+(one fixture-shaped entry per URL with its `fetched_at`, each written atomically; a 404 paper page is
+cached as a stable absence), and writes `<data-dir>/cache/<source>/crawls/<year|vN>.json` once a listing's
+pages are all cached. `op snapshot build` re-mines only marked listings, from the cache with no network; a
+marked listing whose pages have gone is a refusal, never a smaller snapshot. An empty cache (no RIS and no
+marked crawl) is refused.
+
+## Immutability
+- A build or ingest holds an exclusive `flock` on `<dir>/.lock` in the directory it writes into, so
+  concurrent runs take turns and a sweep never touches a live run's staging directory.
+- Build into a `.tmp-` directory next to the target, fsync the files and the directory (`F_FULLFSYNC` on
+  macOS), rename it into place, check it holds what was written, then make it read-only (files 0444,
+  directory 0555: a read-only directory can't be renamed). To delete a cache or scratch copy by hand,
+  `chmod -R u+w` it first. A
+  crash never leaves a half snapshot under the final name; the next build sweeps `.tmp-` leftovers, and
+  a hidden or `.tmp-` cache entry is never read as a source. The cache (`op ingest ris`) is written the
+  same way, all inputs or none, as the exact bytes that were checked; a cache name that differs from
+  another only in case or Unicode form is refused (macOS folds both), and a symlinked input is read from
+  where it points. `resolved.json`'s shape is checked, so bad input is a one-line refusal.
+- If the target exists, is complete, its `records.jsonl` re-hashes to this snapshot's hash (never
+  trusting the manifest) and its manifest names that hash and the current `format_version`, report it
+  and exit 0 with no rewrite (`created: false`), re-locking it if a crash left it writable; otherwise
+  **refuse** and say to retire it (an old-format snapshot is retired and rebuilt, never patched). A target that
+  appears while building is judged the same way.
+- Reading a snapshot (`load_records`, used by `diff`) requires a manifest whose `snapshot_hash` matches
+  `records.jsonl`, unique ids and valid records; errors name the line and the error kind, never text.
+- `.claude/hooks/protect-data-dir.sh` blocks Write/Edit under `data/snapshots/` and `data/indexes/`,
+  blocks `rm`/`mv`/`truncate`/`sed -i` there, blocks `git add -f data/`, and blocks `git add` of any path
+  through a `takedowns/` directory (the takedown list and the operator's log). A block is correct
+  behaviour, not an obstacle. Build a new snapshot instead.
+- Old snapshots are retired only through the documented prune path (`release-manager`), never deleted by
+  hand while a search record references them. There is no `op snapshot` prune or delete command yet (`build`
+  and `diff` only). **Keep the snapshot of every index a search record pins** (the indexes
+  `op index retire` refuses to retire): an export of that record, or of that `index_version`, reads the
+  snapshot to name each abstract's source, and without it withholds every abstract (decision-021; the replay
+  itself needs only the index). A future prune command must refuse while a record pins an index built from the
+  snapshot.
+
+## CLI
+- `op [--data-dir data] snapshot build [--from <cache>] [--out <snapshots>] [--takedowns <list>]` imports all
+  cached sources, then dedup → reconcile → withhold the takedown list's abstracts → write (it prints
+  `withheld_ids`, `takedowns_followed`, `takedowns_unmatched` and `takedowns_twins` too; a list that doesn't parse is refused before anything is read). It never fetches, so it works offline, and an offline cache never expires (TASK-102),
+  so the same cache rebuilds the same bytes at any date. It prints `{path, snapshot_hash, created,
+  unexpected_statuses}`; `created: false` means a snapshot with that hash already existed and nothing was
+  written. `unexpected_statuses` (TASK-109, `ingest/status_check.py`) lists each (venue, year, status) whose
+  records hold a status none of the venue-year's claim sources can supply, with the record ids: a
+  classification error to chase, never written into the snapshot.
+- `op snapshot diff <a> <b>` prints (JSON) the ids **added**, **removed**, **rekeyed** (the same globally
+  unique native id, a forum id or PMLR key, under a new venue or year, with the fields that differ; a
+  `nips-`/`iclr-` hash never rekeys: in another year it is another paper, TASK-067) and **changed** (where `content_hash`
+  differs, with the changed fields named), plus separate counts of **display-only** changes (`authors`,
+  `urls`, `keywords`, `presentation` or `venue_id_raw` differ but the hash doesn't) and provenance-only
+  changes, and `abstract_withheld` (`added`: ids the second withholds and the first didn't; `lifted`: the
+  reverse; from the manifests' `withheld`). Every
+  snapshot promotion needs one: a removed id in a stable venue-year is a regression until explained.
+
+## Checklist
+- [ ] build twice from the same cache and get byte-identical `records.jsonl`
+- [ ] manifest totals equal the `records.jsonl` line count
+- [ ] `op snapshot diff` against the current snapshot reviewed and attached to the PR

@@ -1,0 +1,70 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-107 authenticated OpenReview v1 fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2020/Conference/-/Withdrawn_Submission&limit=1&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "S1xD6xHKDr",
+     "original": "Byxe7-bYPB",
+     "number": 2576,
+     "cdate": 1569439934755,
+     "ddate": null,
+     "tcdate": 1569439934755,
+     "tmdate": 1683306637359,
+     "tddate": null,
+     "forum": "S1xD6xHKDr",
+     "replyto": null,
+     "invitation": "ICLR.cc/2020/Conference/-/Withdrawn_Submission",
+     "content": {
+      "authorids": [
+       "synthetic.person1@example.org",
+       "synthetic.person2@example.org",
+       "synthetic.person3@example.org"
+      ],
+      "title": "Synthetic title text 4.",
+      "authors": [
+       "Synthetic Author 5",
+       "Synthetic Author 6",
+       "Synthetic Author 7"
+      ],
+      "pdf": "/pdf/0e5d11ce110aa9b936bef7950eeaa7064a8a346b.pdf",
+      "TL;DR": "Synthetic tl;dr text 8.",
+      "abstract": "Synthetic abstract text 9.",
+      "keywords": [
+       "Synthetic keywords text 10.",
+       "Synthetic keywords text 11.",
+       "Synthetic keywords text 12."
+      ],
+      "paperhash": "synthetic|synthetic_title_13",
+      "original_pdf": "Synthetic original pdf text 14."
+     },
+     "signatures": [
+      "ICLR.cc/2020/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2020/Conference"
+     ],
+     "odate": 1569439934996
+    }
+   ],
+   "count": 369
+  }
+ }
+}

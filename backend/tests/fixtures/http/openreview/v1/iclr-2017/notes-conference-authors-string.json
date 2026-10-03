@@ -1,0 +1,49 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-113: trimmed from the 2026-09-29 crawl cache (fetched 2026-09-29T06:08:06.157521+00:00)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing page trimmed from 490 to 1 notes (order kept; `count` is the page's)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2017/conference/-/submission&limit=1000&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "count": 490,
+   "notes": [
+    {
+     "content": {
+      "TL;DR": "Synthetic tl;dr text 1.",
+      "_bibtex": "Synthetic bibtex text 2.",
+      "abstract": "Synthetic abstract text 3.",
+      "author_emails": "synthetic.person4@example.org, synthetic.person5@example.org",
+      "authors": "Synthetic Author 6, Synthetic Author 7",
+      "community_implementations": "Synthetic community implementations text 8.",
+      "conflicts": "Synthetic conflicts text 9.",
+      "keywords": [],
+      "paperhash": "synthetic|synthetic_title_10",
+      "pdf": "/pdf/2caad8143d962dd837f7ea1a54b95aba2b12993a.pdf",
+      "title": "Synthetic title text 11.",
+      "venue": "Submitted to ICLR 2017",
+      "venueid": "ICLR.cc/2017/conference"
+     },
+     "forum": "S1HEBe_Jl",
+     "id": "S1HEBe_Jl",
+     "invitation": "ICLR.cc/2017/conference/-/submission",
+     "number": 6,
+     "readers": [
+      "everyone"
+     ],
+     "replyto": null
+    }
+   ]
+  }
+ }
+}

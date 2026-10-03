@@ -1,0 +1,64 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?id=S1J0E-71l",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "tddate": null,
+     "replyto": null,
+     "ddate": null,
+     "active": true,
+     "tmdate": 1658433097410,
+     "tcdate": 1476756679535,
+     "number": 2,
+     "id": "S1J0E-71l",
+     "invitation": "ICLR.cc/2017/conference/-/submission",
+     "forum": "S1J0E-71l",
+     "signatures": [
+      "~Synthetic_Person1"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "title": "Synthetic title text 2.",
+      "abstract": "Synthetic abstract text 3.",
+      "authors": "Synthetic Author 4",
+      "author_emails": "synthetic.person5@example.org",
+      "conflicts": "Synthetic conflicts text 6.",
+      "pdf": "/pdf/2c4a40726fd9c87df0bea025fc4b56729323c30b.pdf",
+      "TL;DR": "Synthetic tl;dr text 7.",
+      "keywords": [
+       "Synthetic keywords text 8.",
+       "Synthetic keywords text 9.",
+       "Synthetic keywords text 10."
+      ],
+      "venue": "Submitted to ICLR 2017",
+      "venueid": "ICLR.cc/2017/conference",
+      "_bibtex": "synthetic.person11@example.org",
+      "paperhash": "synthetic|synthetic_title_12"
+     },
+     "writers": [],
+     "nonreaders": [],
+     "details": {
+      "writable": false
+     }
+    }
+   ],
+   "count": 1
+  }
+ }
+}

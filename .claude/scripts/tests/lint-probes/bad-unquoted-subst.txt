@@ -1,0 +1,1 @@
+check $A allow "l" "$(payload_bash x$(echo y))"

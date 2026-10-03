@@ -1,0 +1,172 @@
+"""Shared pytest configuration: no network, and Hypothesis profiles (testing-standards, property-testing).
+
+Tests never call real APIs (OpenReview, Semantic Scholar, PMLR, …). Every TCP connection and UDP send other
+than a Unix socket or loopback, and every non-loopback name lookup, fails with NetworkBlockedError, for the
+whole test session (limits: `pytest_configure`). Crawler tests use recorded HTTP fixtures (01 §Testing); there is no opt-out marker.
+
+
+Select with HYPOTHESIS_PROFILE or `--hypothesis-profile`: `dev` (200 examples, no wall-clock checks: the local
+default), `pr` (200 examples, 2 s deadline: the `test` workflow under pytest-xdist), `ci` (2,000, the `nightly` workflow's whole-suite job) and `nightly` (50,000,
+the `nightly` workflow's property and differential jobs). `OP_EARLY_FAILURES=1` prints a failure's report when the
+test fails (`_EarlyFailures`, below; tested by `unit/test_early_failures.py`). `print_blob=True` so a CI failure prints a
+`@reproduce_failure` blob; the example database (`.hypothesis/`) is gitignored.
+
+Wall-clock checks run only on CI runners (decision-024, TASK-146): `dev` has no deadline and suppresses
+`too_slow`, because local runs share the machine with parallel worktrees (load 90 to 340 on 8 CPUs) and those
+checks then time the machine, not the code. `pr`, `ci` and `nightly` keep the deadline (`nightly`: none, so
+`too_slow` allows 30 s) and every health check, so a slow strategy or example still fails the PR's `test` job.
+Checks that don't depend on load (`data_too_large`, `filter_too_much`, `large_base_example`, ...) are on in
+every profile. On a quiet machine, `HYPOTHESIS_PROFILE=pr` reproduces the PR gate's timing locally. Each
+profile's parent is Hypothesis's `default`, so `CI` being set (which loads Hypothesis's built-in `ci` profile)
+changes nothing.
+"""
+
+import logging
+import os
+import socket
+from collections.abc import Iterator
+from typing import Any
+
+import pytest
+from hypothesis import HealthCheck, settings
+
+# Every profile's parent is Hypothesis's own `default`, not whichever profile is loaded: where CI is set (GitHub
+# Actions), Hypothesis loads its built-in `ci` profile at import (too_slow suppressed, derandomized, no database),
+# and a profile registered without a parent inherits all of it (TASK-146)
+BASE = settings.get_profile("default")
+# dev: no wall-clock checks; they fail under local load and pr's are the gate (decision-024)
+settings.register_profile(
+    "dev",
+    BASE,
+    max_examples=200,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+    print_blob=True,
+)
+# pr: the dev example count with the ci deadline, so a slow example on a shared runner under pytest-xdist
+# doesn't fail the required check (TASK-127); derandomized, so the required check runs the same examples on every
+# PR and never fails a PR for a counterexample in code it didn't touch; ci and nightly explore (decision-024)
+settings.register_profile("pr", BASE, max_examples=200, deadline=2_000, derandomize=True, print_blob=True)
+settings.register_profile("ci", BASE, max_examples=2_000, deadline=2_000, print_blob=True)
+settings.register_profile("nightly", BASE, max_examples=50_000, deadline=None, print_blob=True)
+settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
+
+
+class NetworkBlockedError(RuntimeError):
+    """A test tried to reach the network."""
+
+
+_LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+_real_connect = socket.socket.connect
+_real_connect_ex = socket.socket.connect_ex
+_real_sendto = socket.socket.sendto
+_real_sendmsg = socket.socket.sendmsg
+_real_getaddrinfo = socket.getaddrinfo
+_real_gethostbyname = socket.gethostbyname
+_real_gethostbyname_ex = socket.gethostbyname_ex
+_real_gethostbyaddr = socket.gethostbyaddr
+_real_getnameinfo = socket.getnameinfo
+
+
+def _refuse(what: object) -> NetworkBlockedError:
+    return NetworkBlockedError(
+        f"tests never call real APIs (tried {what!r}); use a recorded fixture — testing-standards skill"
+    )
+
+
+def _allowed(sock: socket.socket, address: Any) -> bool:
+    return sock.family == socket.AF_UNIX or (isinstance(address, tuple) and address[0] in _LOOPBACK)
+
+
+def _connect(self: socket.socket, address: Any) -> None:
+    if not _allowed(self, address):
+        raise _refuse(address)
+    _real_connect(self, address)
+
+
+def _connect_ex(self: socket.socket, address: Any) -> int:
+    if not _allowed(self, address):
+        raise _refuse(address)
+    return _real_connect_ex(self, address)
+
+
+def _sendto(self: socket.socket, data: Any, *rest: Any) -> int:
+    address = rest[-1]  # sendto(data, address) or sendto(data, flags, address)
+    if not _allowed(self, address):
+        raise _refuse(address)
+    return _real_sendto(self, data, *rest)
+
+
+def _sendmsg(self: socket.socket, buffers: Any, *rest: Any) -> int:
+    if len(rest) >= 3 and not _allowed(self, rest[2]):  # sendmsg(buffers, ancdata, flags, address)
+        raise _refuse(rest[2])
+    return _real_sendmsg(self, buffers, *rest)
+
+
+def _lookup(real: Any) -> Any:
+    def guarded(host: Any, *args: Any, **kwargs: Any) -> Any:
+        if host in _LOOPBACK or host is None:
+            return real(host, *args, **kwargs)
+        raise _refuse(host)
+
+    return guarded
+
+
+def _reverse_lookup(sockaddr: Any, flags: int) -> Any:
+    if isinstance(sockaddr, tuple) and sockaddr[0] in _LOOPBACK:
+        return _real_getnameinfo(sockaddr, flags)
+    raise _refuse(sockaddr)
+
+
+class _EarlyFailures:
+    """OP_EARLY_FAILURES=1 (the nightly workflow's long steps, TASK-057): a failed test's report, Hypothesis's
+    falsifying example and `@reproduce_failure` blob included, is written when the test fails, not only in the
+    end-of-session summary, which a step interrupted at its time limit never reaches. Registered on the
+    pytest-xdist controller (or a plain run), which receives every worker's reports."""
+
+    def __init__(self, config: pytest.Config) -> None:
+        self.config = config
+
+    def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+        if report.failed:
+            terminal = self.config.pluginmanager.get_plugin("terminalreporter")
+            if terminal is None:  # `-p no:terminal`: nowhere to write
+                return
+            # end the progress line (under -q its dots don't), so the annotation starts a line
+            terminal.write("\n")
+            terminal.write_line(f"::error::{report.nodeid} failed ({report.when}); its report follows")
+            terminal.write_line(report.longreprtext)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    if os.environ.get("OP_EARLY_FAILURES") == "1" and not hasattr(config, "workerinput"):
+        config.pluginmanager.register(_EarlyFailures(config), "op-early-failures")
+    _block_the_network()
+
+
+def _block_the_network() -> None:
+    """Installed for the whole session. Covers connect/connect_ex (TCP), sendto/sendmsg (UDP, e.g. DNS) and
+    every name lookup. Not covered: subprocesses and `multiprocessing` spawn children (they start a fresh
+    interpreter; tests don't spawn network clients), and code calling the C-level `_socket` module directly."""
+    socket.socket.connect = _connect  # type: ignore[method-assign]
+    socket.socket.connect_ex = _connect_ex  # type: ignore[method-assign]
+    socket.socket.sendto = _sendto  # type: ignore[method-assign, assignment]
+    socket.socket.sendmsg = _sendmsg  # type: ignore[method-assign]
+    socket.getaddrinfo = _lookup(_real_getaddrinfo)
+    socket.gethostbyname = _lookup(_real_gethostbyname)
+    socket.gethostbyname_ex = _lookup(_real_gethostbyname_ex)
+    socket.gethostbyaddr = _lookup(_real_gethostbyaddr)
+    socket.getnameinfo = _reverse_lookup
+
+
+@pytest.fixture(autouse=True)
+def _reset_openproceedings_logging() -> Iterator[None]:
+    """`cli.main` binds the `openproceedings` logger to the stream it runs with (a test's captured stderr).
+    Undo that after every test, so no later test logs into a closed capture."""
+    yield
+    logger = logging.getLogger("openproceedings")
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
+    logger.propagate = True
+    logger.setLevel(logging.NOTSET)

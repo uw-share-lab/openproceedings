@@ -1,0 +1,131 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-054 authenticated live crawl cache (public projection); extracted for TASK-101",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing trimmed from 1000 to 2 notes, one per content.venue string (order kept); count is the listing's"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICML.cc/2023/Conference&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "37",
+   "ratelimit-reset": "2975"
+  },
+  "json": {
+   "count": 1828,
+   "notes": [
+    {
+     "content": {
+      "abstract": {
+       "value": "Synthetic abstract text 1."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person2",
+        "~Synthetic_Person3"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 4",
+        "Synthetic Author 5"
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_6"
+      },
+      "pdf": {
+       "value": "/pdf/964c4751c0a44182bdf9f4e762aa2c26c171036d.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 7."
+      },
+      "venue": {
+       "value": "ICML 2023 Poster"
+      },
+      "venueid": {
+       "value": "ICML.cc/2023/Conference"
+      }
+     },
+     "forum": "mY8KXsRNQv",
+     "id": "mY8KXsRNQv",
+     "invitations": [
+      "ICML.cc/2023/Conference/-/Submission",
+      "ICML.cc/2023/Conference/-/Edit",
+      "ICML.cc/2023/Conference/Submission6/-/Camera_Ready_Revision"
+     ],
+     "number": 6,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "abstract": {
+       "value": "Synthetic abstract text 8."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person9",
+        "~Synthetic_Person10",
+        "~Synthetic_Person11",
+        "~Synthetic_Person12",
+        "~Synthetic_Person13",
+        "~Synthetic_Person14",
+        "~Synthetic_Person15",
+        "~Synthetic_Person16",
+        "~Synthetic_Person17"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 18",
+        "Synthetic Author 19",
+        "Synthetic Author 20",
+        "Synthetic Author 21",
+        "Synthetic Author 22",
+        "Synthetic Author 23",
+        "Synthetic Author 24",
+        "Synthetic Author 25",
+        "Synthetic Author 26"
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_27"
+      },
+      "pdf": {
+       "value": "/pdf/8765e5d3b8ea50fa8c5dd1b78a32d041c36fcbc4.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 28."
+      },
+      "venue": {
+       "value": "ICML 2023 OralPoster"
+      },
+      "venueid": {
+       "value": "ICML.cc/2023/Conference"
+      }
+     },
+     "forum": "31H0gfU8Ar",
+     "id": "31H0gfU8Ar",
+     "invitations": [
+      "ICML.cc/2023/Conference/-/Submission",
+      "ICML.cc/2023/Conference/-/Edit",
+      "ICML.cc/2023/Conference/Submission20/-/Camera_Ready_Revision"
+     ],
+     "number": 20,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,135 @@
+---
+id: decision-010
+title: >-
+  Cap position-verified clauses per query: API_TOO_MANY_VERIFIED_CLAUSES, an API
+  code that carries located diagnostics
+date: '2026-09-27 12:22'
+status: accepted
+---
+## Context
+
+A position-verified clause (spec 03: a phrase with a wildcard item, a NEAR that isn't two distinct terms) is
+verified in pure Python on a cache miss, holding one of `ApiConfig.verification_slots` (default 1) while it
+runs. The M3a round-2 security review found that one request of many such clauses held the only slot clause
+after clause: 66 NEAR clauses took about 2.4 s on the 5k fixture and would take a minute or more on 80k
+records, while every other user's verified query got 503 `API_BUSY`. The rate limit charged such a query one
+`verified_weight` whatever its size.
+
+The refusal needs a code. Options considered:
+1. A `PARSE_` code. Its prefix gives 422 and located diagnostics for free, but `PARSE_` codes are the
+   grammar's (spec 02): `POST /parse` and `op search` would not report it, and a query that parses would
+   carry a "parse" error.
+2. A `WILDCARD_` code, by analogy with `WILDCARD_TOO_MANY_EXPANSIONS`. That cap is the engine's and `op search`
+   applies it too; this one is a serving policy of the API, and it counts NEAR clauses that hold no wildcard.
+3. An `API_` code, 422, that carries diagnostics like a query refusal. Chosen.
+
+## Decision
+
+`ApiConfig.max_verified_clauses` (default 8; 16 since round 3, see Consequences) caps the position-verified clauses of one query. The API counts
+them from the AST (`engine.compile.verified_clauses`, by `verifies`'s rule; a test holds the count equal to
+the compiler's) after the parse and before anything compiles, on every route that runs a query (`/search`,
+`/export`, `POST /records`) and on a replay's re-parsed canonical (`GET /records/{id}`, `/diff`,
+`/export?record_id=`). More than the cap is **422 `API_TOO_MANY_VERIFIED_CLAUSES`**, whose envelope carries
+one diagnostic per verified clause spanning it in `q` (a replay over it is withheld instead: see
+Consequences, round 3). Within the cap the query costs `ApiConfig.verified_cost` per clause, and the cap
+times that cost fits the smaller bucket (round 3), so a query within the cap can always run and one at the
+cap empties the client's bucket.
+
+`op search` has no such cap: it is the API's serving policy, like the rate limit and `API_BUSY`, not a
+change to what a query means. The same query and `index_version` give the same ids through both whenever the
+API runs it.
+
+## Consequences
+
+- The registry gains `API_TOO_MANY_VERIFIED_CLAUSES` (422); spec 04 §Error handling has its row, and
+  `ErrorBody.diagnostics` is documented as present on it as on `PARSE_*`, `FIELD_*` and `WILDCARD_*`.
+  `ErrorCode` is an open enum (decision-009), so this is additive within `/api/v1`.
+- The frontend draws its diagnostics as squiggles, as for a parse error (spec 05 §Error handling).
+- **A replay over a limit is withheld, not refused (M3a review gate round 3).** A record saved before an
+  operator lowered the cap (or the candidate ceiling below) is not re-run on this instance, but it stays
+  readable: `GET /records/{id}` and `/diff` answer 200 with `replay.refused` set to the code, every count
+  null, nothing compiled and nothing charged for its clauses, and `replay.verified_clauses` giving the
+  count (the record page reads "could not be re-run: `API_TOO_MANY_VERIFIED_CLAUSES` — this instance's limit
+  is below the record's N position-verified clauses"). It is never presented as reproduced or as
+  membership-identical, and the withholding itself is never a `mismatch` and logs no `replay_mismatch`. On the
+  record's own index under its own query version the status is `drifted` with `changed: []`; the checks that
+  need no run (the canonical re-parse, the index's inputs, the stored list's hash and total) still apply,
+  and one failing is a `mismatch`, logged as always. Elsewhere it is `drifted` with its changed inputs. A new
+  status value (`withheld`) was considered and rejected: the replay `status` is a closed enum in `/api/v1`
+  (decision-009), so a new value would be a breaking change, while `refused` (an open error-code enum)
+  already says why nothing was compared. `/export?record_id=` still streams the stored ids (it hands over
+  the stored list from the pinned index and never re-runs the query; only a `mismatch` blocks it). Raising
+  the limit replays the record in full.
+- **The clause count is not the cost; candidates are (M3a review gate round 3).** A clause's cold
+  verification reads every candidate document (each holding all its items in the field, 37-56 µs each by shape), so
+  8 clauses of a common word NEAR itself (`(a NEAR/50 a) OR … (4o NEAR/49 4o)`) held the only slot for
+  63 s on the synthetic 80k index while costing 60 tokens against a 60 s refill. `ApiConfig.
+  max_verification_candidates` (default 300,000: up to about 16 s of verification idle at 80k, the dearest shape being NEARs of wide
+  wildcard phrases; more under load, which `max_verification_seconds` bounds) bounds the candidates of one
+  query, summed over its verified clauses and their fields, counted from the inverted index before any is
+  verified (`TantivyEngine.candidates`, every clause counted cached or not, so a refusal never depends on
+  the memos). Over it is **422 `API_QUERY_TOO_COSTLY`**, a new registry code carrying one located diagnostic
+  per clause with its counts. A new code rather than `API_TOO_MANY_VERIFIED_CLAUSES` with a reason: the two
+  have different remedies (fewer clauses, versus narrower clauses: longer stems, rarer words), a client
+  branches on the code, not on a message, and `ErrorCode` is open (decision-009), so it is additive.
+  Measured on the synthetic 80k index (candidates summed; cold verification): the exploit 686,684 (refused,
+  counted in 4 ms); 8 × `model NEAR/k model*` 543,208 (refused); `"calibrat* trust" OR trust NEAR/3 trust`
+  137,933 (5.4 s, served); `a NEAR/50 a` 96,580 (3.7 s); `trust NEAR/5 model*` 66,720 (2.9 s);
+  `"large language model*"` 57,516 (2.3 s); `trust NEAR/5 model` none (not verified). The heaviest real
+  review query, the published Trust-Evals `main-2-pop` string in Scholar mode, reads 247,793 (10.2 s) there
+  (2,251 on the real 1,805-paper corpus, about 100,000 scaled to 80k), so the default sits above it and
+  below the exploit shapes: 300,000. `backend/tests/contract/test_verification_scale.py` holds this at a
+  5k-scaled ceiling in CI and at the true defaults on a built 80k index (`OP_BENCH_80K=1`): the exploit (8
+  and 16 clauses) refused before any verification, every Trust-Evals string served in both modes (the one
+  that doesn't parse in native mode, `main-2-pop`'s `AI$`, is the parser's 422, not a limit's).
+- **The clause cap is a backstop, raised to 16 (round 3).** With the candidate ceiling bounding the actual
+  cost, the clause cap only has to stop a query of absurdly many clauses before anything is counted. At 8 it
+  refused `main-2-pop` (10 verified clauses in Scholar mode), a systematic reviewer's real, published
+  search string, and the API must not refuse a real review query. 16 admits every Trust-Evals string with
+  room to spare; a 16-clause exploit is refused by the candidate ceiling instead. The per-clause cost falls
+  to 60 / 16 = 3.75 at the default bucket, so a query at the cap still costs the whole bucket (60).
+- **Every clause up to the cap costs its share.** Capping a charge at the bucket made clauses past
+  capacity ÷ weight free (at the then defaults, 8 cost what 6 did). A configured `verified_weight` × the cap
+  must now fit the smaller bucket (the config refuses it otherwise), and without one the per-clause cost is
+  the export weight lowered to fit (default min(10, 60 / 16) = 3.75). `op serve` takes `--max-verified-clauses`
+  and `--max-verification-candidates`.
+- A refusal after the verified charge was taken (`API_QUERY_TOO_COSTLY`, or `API_BUSY` from a slot) gives
+  the charge back; within a request every compile shares the ids it verified (`tantivy_engine.Scope`), so no
+  clause is verified twice however the memos are trimmed, and the facet worker never verifies (no slot).
+- **Width is free; candidates stay the bound (round 4).** A wildcard phrase's position check rebuilt each
+  item's allowed-token set (up to 200 expansions) per candidate document, so its cost grew as width ×
+  expansions × candidates while the candidate count stayed flat: a `rel*` phrase at 80k (186 expansions,
+  83,017 candidates at any width) took 3.8 s at 2 items, 5.9 s at 20, 15.4 s at 100 and 84 s at 300 (the
+  reviewer's run: 3.8, 6.0, 15.9, 27.4 s at 2, 20, 100, 200), all admitted as one clause. The sets are now
+  built once per clause (`Compiler.holder`), and the same clauses take 3.3, 3.3, 3.2, 3.3 and 3.1 s at 2,
+  20, 100, 200 and 300 items: about 38-40 µs per candidate whatever the width. So the candidate count
+  measures the work again and no weighting by items or expansions, nor a cap on a phrase's wildcard items,
+  is needed. What remains width-sensitive is only a run of consecutive matching tokens in one document
+  (each start is checked until an item fails), bounded by the document's length, which the corpus sets,
+  not the query. Identical ids are held by the differential suite and ReferenceEngine on wide and mixed
+  clauses (`tests/unit/engine/test_verification_cost.py`).
+- **Slot time is charged after the fact (round 4).** The up-front charge prices a clause, not the seconds
+  it holds the one slot: a cold one-clause query cost 4.75 tokens and held it 4-6 s at 80k, and a client
+  refilling 1 token a second (4 a network) could keep it busy by varying a NEAR distance (each variant is
+  cold). A request is now also debited one token per `verify_token_ms` (default 100 ms) of the slot time it
+  used, when it finishes, to its client's and network's buckets, which may go below zero; the client then
+  waits (429, `Retry-After`) until the debt is repaid. Any one client's share of the slot is thus at most
+  refill × `verify_token_ms`: 10% at the defaults, 40% for a network. The per-clause charge stays as the
+  admission cost; a refused query's per-clause charge is refunded, but the time it used is still debited.
+- **A wall-clock deadline, and CPU time for the debit (round 5).** The candidate ceiling bounds work, not
+  wall time: verification is pure Python competing for the GIL, so one admitted near-ceiling query
+  (287.5k candidates) held the slot 15.5 s idle, 22 s beside 2 busy clients, 35 s beside 4 and 109 s beside
+  8, every other cold verified query getting `API_BUSY` meanwhile. A request's cold verifications now get
+  `max_verification_seconds` (default 30) of wall time from its first slot, checked every 1,000 candidates
+  and before each clause; past it the loop stops and the request is **503 `API_BUSY`** with `Retry-After`
+  (not a new code: the client's move is the same, retry later, and the message names the limit). Nothing
+  partial is kept (the list dies with the loop's frame: no memo, scope or compiled query), the per-clause
+  charge is refunded, and the CPU used is debited. A replay past it is that 503 too, not a withheld replay:
+  it depends on the moment's load, so it is transient. 30 s: main-2-pop needs 10.2 s idle at 80k and is served
+  under paced load (idle 9.8 s; two clients at 1–2 requests/s each: 13.8 s and 21.1 s), but two clients paging
+  as fast as their own rate limit allows pushed it past 30 s in 2 of 3 runs (round 6); a retry then finishes,
+  since the clauses verified before the deadline were kept; no query holds the slot for minutes. The slot-time
+  debit now charges the verifying thread's CPU (`time.thread_time`), not
+  wall time: by wall time one main-2-pop query was debited 155 tokens idle and 1,090 under contention,
+  billing a reviewer for other people's load. A verified clause with no candidates takes no slot.
+- Revisit if cold verification gets cheaper (task-080's successors) or runs outside the request.

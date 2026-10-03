@@ -1,0 +1,78 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-107 authenticated OpenReview v1 fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2019/Conference/-/Blind_Submission&limit=1&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "rJl0r3R9KX",
+     "original": "HkeaLA39Ym",
+     "number": 1592,
+     "cdate": 1538088006157,
+     "ddate": null,
+     "tcdate": 1538088006157,
+     "tmdate": 1770510177289,
+     "tddate": null,
+     "forum": "rJl0r3R9KX",
+     "replyto": null,
+     "invitation": "ICLR.cc/2019/Conference/-/Blind_Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "abstract": "Synthetic abstract text 2.",
+      "keywords": [
+       "Synthetic keywords text 3.",
+       "Synthetic keywords text 4.",
+       "Synthetic keywords text 5.",
+       "Synthetic keywords text 6.",
+       "Synthetic keywords text 7."
+      ],
+      "authorids": [
+       "synthetic.person8@example.org",
+       "synthetic.person9@example.org",
+       "synthetic.person10@example.org",
+       "synthetic.person11@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 12",
+       "Synthetic Author 13",
+       "Synthetic Author 14",
+       "Synthetic Author 15"
+      ],
+      "TL;DR": "Synthetic tl;dr text 16.",
+      "pdf": "/pdf/c208d9ebf9a9e827c96b8052567fe6c5878f4b3e.pdf",
+      "paperhash": "synthetic|synthetic_title_17",
+      "code": "Synthetic code text 18.",
+      "data": "Synthetic data text 19.",
+      "community_implementations": "Synthetic community implementations text 20.",
+      "_bibtex": "Synthetic bibtex text 21."
+     },
+     "signatures": [
+      "ICLR.cc/2019/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2019/Conference"
+     ],
+     "pdate": 1545354483474,
+     "odate": 1538088006180
+    }
+   ],
+   "count": 1419
+  }
+ }
+}

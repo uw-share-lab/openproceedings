@@ -1,0 +1,318 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-054 authenticated live crawl cache (public projection); extracted for TASK-101",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing trimmed from 73 to 3 notes, one per content.venue string (order kept); count is the listing's"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICML.cc/2025/Position_Paper_Track&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "241",
+   "ratelimit-reset": "3229"
+  },
+  "json": {
+   "count": 73,
+   "notes": [
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 1."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 2."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 3."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person4",
+        "~Synthetic_Person5",
+        "~Synthetic_Person6",
+        "~Synthetic_Person7",
+        "~Synthetic_Person8",
+        "~Synthetic_Person9",
+        "~Synthetic_Person10",
+        "~Synthetic_Person11",
+        "~Synthetic_Person12",
+        "~Synthetic_Person13",
+        "~Synthetic_Person14",
+        "~Synthetic_Person15"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 16",
+        "Synthetic Author 17",
+        "Synthetic Author 18",
+        "Synthetic Author 19",
+        "Synthetic Author 20",
+        "Synthetic Author 21",
+        "Synthetic Author 22",
+        "Synthetic Author 23",
+        "Synthetic Author 24",
+        "Synthetic Author 25",
+        "Synthetic Author 26",
+        "Synthetic Author 27"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 28.",
+        "Synthetic keywords text 29.",
+        "Synthetic keywords text 30.",
+        "Synthetic keywords text 31."
+       ]
+      },
+      "latest_style_file": {
+       "value": true
+      },
+      "lay_summary": {
+       "value": "Synthetic lay summary text 32."
+      },
+      "link_to_code": {
+       "value": "Synthetic link to code text 33."
+      },
+      "no_additional_revisions": {
+       "value": true
+      },
+      "paper_verification_code": {
+       "value": "Synthetic paper verification code text 34."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_35"
+      },
+      "pdf": {
+       "value": "/pdf/eead2d911e72ad0cc9cc88ccd58e394b984502d6.pdf"
+      },
+      "pdf_appendices": {
+       "value": true
+      },
+      "permissions_form": {
+       "value": "Synthetic permissions form text 36."
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 37."
+      },
+      "title": {
+       "value": "Synthetic title text 38."
+      },
+      "venue": {
+       "value": "ICML 2025 Position Paper Track poster"
+      },
+      "venueid": {
+       "value": "ICML.cc/2025/Position_Paper_Track"
+      },
+      "verify_author_names": {
+       "value": true
+      }
+     },
+     "forum": "nDFpl2lhoH",
+     "id": "nDFpl2lhoH",
+     "invitations": [
+      "ICML.cc/2025/Position_Paper_Track/-/Submission",
+      "ICML.cc/2025/Position_Paper_Track/-/Post_Submission",
+      "ICML.cc/2025/Position_Paper_Track/Submission5/-/Full_Submission",
+      "ICML.cc/2025/Position_Paper_Track/-/Edit",
+      "ICML.cc/2025/Position_Paper_Track/Submission5/-/Camera_Ready_Revision"
+     ],
+     "number": 5,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 39."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 40."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 41."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person42",
+        "~Synthetic_Person43",
+        "~Synthetic_Person44",
+        "~Synthetic_Person45",
+        "~Synthetic_Person46",
+        "~Synthetic_Person47",
+        "~Synthetic_Person48"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 49",
+        "Synthetic Author 50",
+        "Synthetic Author 51",
+        "Synthetic Author 52",
+        "Synthetic Author 53",
+        "Synthetic Author 54",
+        "Synthetic Author 55"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 56.",
+        "Synthetic keywords text 57.",
+        "Synthetic keywords text 58.",
+        "Synthetic keywords text 59.",
+        "Synthetic keywords text 60."
+       ]
+      },
+      "latest_style_file": {
+       "value": true
+      },
+      "lay_summary": {
+       "value": "Synthetic lay summary text 61."
+      },
+      "no_additional_revisions": {
+       "value": true
+      },
+      "paper_verification_code": {
+       "value": "Synthetic paper verification code text 62."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_63"
+      },
+      "pdf": {
+       "value": "/pdf/fb840f0c48709d1673fd7e68ca7b604d08a54852.pdf"
+      },
+      "pdf_appendices": {
+       "value": true
+      },
+      "permissions_form": {
+       "value": "Synthetic permissions form text 64."
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 65."
+      },
+      "title": {
+       "value": "Synthetic title text 66."
+      },
+      "venue": {
+       "value": "ICML 2025 Position Paper Track spotlightposter"
+      },
+      "venueid": {
+       "value": "ICML.cc/2025/Position_Paper_Track"
+      },
+      "verify_author_names": {
+       "value": true
+      }
+     },
+     "forum": "HuvAM5x2xG",
+     "id": "HuvAM5x2xG",
+     "invitations": [
+      "ICML.cc/2025/Position_Paper_Track/-/Submission",
+      "ICML.cc/2025/Position_Paper_Track/-/Post_Submission",
+      "ICML.cc/2025/Position_Paper_Track/Submission13/-/Full_Submission",
+      "ICML.cc/2025/Position_Paper_Track/-/Edit",
+      "ICML.cc/2025/Position_Paper_Track/Submission13/-/Camera_Ready_Revision"
+     ],
+     "number": 13,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 67."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 68."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 69."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person70",
+        "~Synthetic_Person71",
+        "~Synthetic_Person72"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 73",
+        "Synthetic Author 74",
+        "Synthetic Author 75"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 76.",
+        "Synthetic keywords text 77.",
+        "Synthetic keywords text 78.",
+        "Synthetic keywords text 79."
+       ]
+      },
+      "latest_style_file": {
+       "value": true
+      },
+      "lay_summary": {
+       "value": "Synthetic lay summary text 80."
+      },
+      "no_additional_revisions": {
+       "value": true
+      },
+      "paper_verification_code": {
+       "value": "Synthetic paper verification code text 81."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_82"
+      },
+      "pdf": {
+       "value": "/pdf/49ee9f9ce35d227a364cbe8b495affedc2e56f5a.pdf"
+      },
+      "pdf_appendices": {
+       "value": true
+      },
+      "permissions_form": {
+       "value": "Synthetic permissions form text 83."
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 84."
+      },
+      "title": {
+       "value": "Synthetic title text 85."
+      },
+      "venue": {
+       "value": "ICML 2025 Position Paper Track oral"
+      },
+      "venueid": {
+       "value": "ICML.cc/2025/Position_Paper_Track"
+      },
+      "verify_author_names": {
+       "value": true
+      }
+     },
+     "forum": "l8QemUZaIA",
+     "id": "l8QemUZaIA",
+     "invitations": [
+      "ICML.cc/2025/Position_Paper_Track/-/Submission",
+      "ICML.cc/2025/Position_Paper_Track/-/Post_Submission",
+      "ICML.cc/2025/Position_Paper_Track/Submission53/-/Full_Submission",
+      "ICML.cc/2025/Position_Paper_Track/-/Edit",
+      "ICML.cc/2025/Position_Paper_Track/Submission53/-/Camera_Ready_Revision"
+     ],
+     "number": 53,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

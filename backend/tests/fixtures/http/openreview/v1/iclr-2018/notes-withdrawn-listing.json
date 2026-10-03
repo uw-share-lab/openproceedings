@@ -1,0 +1,72 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-107 authenticated OpenReview v1 fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2018/Conference/-/Withdrawn_Submission&limit=1&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "H1x5K0mSnQ",
+     "original": "rkXfjG-RZ",
+     "number": 89,
+     "cdate": 1540861570506,
+     "ddate": null,
+     "tcdate": 1540861570506,
+     "tmdate": 1683306080457,
+     "tddate": null,
+     "forum": "H1x5K0mSnQ",
+     "replyto": null,
+     "invitation": "ICLR.cc/2018/Conference/-/Withdrawn_Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "abstract": "Synthetic abstract text 2.",
+      "pdf": "/pdf/a4dda24d9732db9586f3c057d60d7c0882de68dc.pdf",
+      "TL;DR": "Synthetic tl;dr text 3.",
+      "paperhash": "synthetic|synthetic_title_4",
+      "authors": [
+       "Synthetic Author 5",
+       "Synthetic Author 6",
+       "Synthetic Author 7",
+       "Synthetic Author 8"
+      ],
+      "keywords": [
+       "Synthetic keywords text 9.",
+       "Synthetic keywords text 10.",
+       "Synthetic keywords text 11.",
+       "Synthetic keywords text 12."
+      ],
+      "authorids": [
+       "synthetic.person13@example.org",
+       "synthetic.person14@example.org",
+       "synthetic.person15@example.org",
+       "synthetic.person16@example.org"
+      ]
+     },
+     "signatures": [
+      "ICLR.cc/2018/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2018/Conference"
+     ],
+     "odate": 1540861570480
+    }
+   ],
+   "count": 83
+  }
+ }
+}

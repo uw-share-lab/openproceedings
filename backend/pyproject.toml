@@ -1,0 +1,24 @@
+[project]
+name = "openproceedings"
+version = "0.1.0"
+description = "Exact, reproducible Boolean search over NeurIPS, ICLR and ICML titles and abstracts."
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+    "fastapi>=0.141.1",
+    "pydantic>=2.8",
+    "scholarmend==0.1.5",
+    "tantivy==0.26.2",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+op = "openproceedings.cli:main_entry"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openproceedings"]

@@ -1,0 +1,91 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICML.cc/2026/Conference&limit=1&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "493",
+   "ratelimit-reset": "3591"
+  },
+  "json": {
+   "count": 6341,
+   "notes": [
+    {
+     "forum": "oiMjaUbSWp",
+     "number": 1,
+     "id": "oiMjaUbSWp",
+     "readers": [
+      "everyone"
+     ],
+     "invitations": [
+      "ICML.cc/2026/Conference/-/Submission",
+      "ICML.cc/2026/Conference/-/Post_Submission",
+      "ICML.cc/2026/Conference/Submission1/-/Full_Submission",
+      "ICML.cc/2026/Conference/Submission1/-/Ready_For_Llm_Feedback",
+      "ICML.cc/2026/Conference/-/Edit",
+      "ICML.cc/2026/Conference/Submission1/-/Camera_Ready_Revision"
+     ],
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 2"
+       ]
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person3"
+       ]
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 4."
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 5."
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 6.",
+        "Synthetic keywords text 7.",
+        "Synthetic keywords text 8."
+       ]
+      },
+      "pdf": {
+       "value": "/pdf/ebd7e996cb6db3c2a56f0d0fd115914c744d14b8.pdf"
+      },
+      "venue": {
+       "value": "ICML 2026 regular"
+      },
+      "venueid": {
+       "value": "ICML.cc/2026/Conference"
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 9."
+      },
+      "lay_summary": {
+       "value": "Synthetic lay summary text 10."
+      },
+      "originally_submitted_PDF": {
+       "value": "Synthetic originally submitted pdf text 11."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_12"
+      }
+     }
+    }
+   ]
+  }
+ }
+}

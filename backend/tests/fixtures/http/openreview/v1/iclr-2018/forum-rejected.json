@@ -1,0 +1,127 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "forum listing trimmed from 8 to 3 notes (order kept)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?forum=rJLTTe-0W",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "tddate": null,
+     "ddate": null,
+     "tmdate": 1515177924038,
+     "tcdate": 1513213336473,
+     "number": 1,
+     "cdate": 1513213336473,
+     "id": "BJljaSkzf",
+     "invitation": "ICLR.cc/2018/Conference/-/Paper632/Official_Comment",
+     "forum": "rJLTTe-0W",
+     "replyto": "HJ0Hc82gM",
+     "signatures": [
+      "ICLR.cc/2018/Conference/Paper632/Authors"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "ICLR.cc/2018/Conference/Paper632/Authors"
+     ],
+     "content": {
+      "title": "Synthetic title text 1.",
+      "comment": "Synthetic comment text 2."
+     },
+     "nonreaders": []
+    },
+    {
+     "tddate": null,
+     "ddate": null,
+     "original": null,
+     "tmdate": 1517260086572,
+     "tcdate": 1517249812151,
+     "number": 524,
+     "cdate": 1517249812135,
+     "id": "BJ2zBJ6Hf",
+     "invitation": "ICLR.cc/2018/Conference/-/Acceptance_Decision",
+     "forum": "rJLTTe-0W",
+     "replyto": "rJLTTe-0W",
+     "signatures": [
+      "ICLR.cc/2018/Conference/Program_Chairs"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "ICLR.cc/2018/Conference/Program_Chairs"
+     ],
+     "content": {
+      "decision": "Reject",
+      "title": "Synthetic title text 3.",
+      "comment": "Synthetic comment text 4."
+     },
+     "nonreaders": []
+    },
+    {
+     "tddate": null,
+     "ddate": null,
+     "tmdate": 1518730170591,
+     "tcdate": 1509129661548,
+     "number": 632,
+     "cdate": 1518730170580,
+     "id": "rJLTTe-0W",
+     "invitation": "ICLR.cc/2018/Conference/-/Blind_Submission",
+     "forum": "rJLTTe-0W",
+     "original": "SJSp6x-Cb",
+     "signatures": [
+      "ICLR.cc/2018/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "ICLR.cc/2018/Conference"
+     ],
+     "content": {
+      "title": "Synthetic title text 5.",
+      "abstract": "Synthetic abstract text 6.",
+      "pdf": "/pdf/4f53203f9e2b36bd8d5d651b8289c9909dd3132a.pdf",
+      "TL;DR": "Synthetic tl;dr text 7.",
+      "paperhash": "synthetic|synthetic_title_8",
+      "_bibtex": "synthetic.person9@example.org",
+      "keywords": [
+       "Synthetic keywords text 10.",
+       "Synthetic keywords text 11.",
+       "Synthetic keywords text 12.",
+       "Synthetic keywords text 13.",
+       "Synthetic keywords text 14."
+      ],
+      "authors": [
+       "Synthetic Author 15",
+       "Synthetic Author 16",
+       "Synthetic Author 17",
+       "Synthetic Author 18"
+      ],
+      "authorids": [
+       "synthetic.person19@example.org",
+       "synthetic.person20@example.org",
+       "synthetic.person21@example.org",
+       "synthetic.person22@example.org"
+      ]
+     },
+     "nonreaders": []
+    }
+   ],
+   "count": 8
+  }
+ }
+}

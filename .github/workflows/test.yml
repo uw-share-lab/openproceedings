@@ -1,0 +1,63 @@
+name: test
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+  merge_group:  # the merge queue's builds must report this required check too (decision-027)
+    types: [checks_requested]
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # Properties run at the pr profile (200 examples, 2 s deadline) across the runner's CPUs, so the backend step takes a
+    # few minutes; the ci profile (2,000) runs nightly (TASK-127). The limit leaves room for the frontend build.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        if: hashFiles('backend/pyproject.toml') != ''
+      - name: Backend — unit, golden, differential, contract (properties at 200 examples, parallel)
+        if: hashFiles('backend/pyproject.toml') != ''
+        env:
+          # The additive OpenAPI check compares against the commit this change builds on: the PR's base commit,
+          # or the pushed branch's previous tip. The shallow checkout lacks it, so fetch it by SHA, and make an
+          # unreadable baseline fail rather than skip (TASK-129). A merge-queue build compares against the commit
+          # its group is built on (decision-027).
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          OPENAPI_BASELINE_REQUIRED: "1"
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA" \
+              || { echo "::error::could not fetch $BASE_SHA, the OpenAPI baseline"; exit 1; }
+            export OPENAPI_BASELINE_REF="$BASE_SHA"
+          else
+            export OPENAPI_BASELINE_REQUIRED=0  # a new branch's first push has no previous tip
+          fi
+          uv sync --locked
+          uv run --locked pytest -q -n auto --hypothesis-profile=pr
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: hashFiles('frontend/package.json') != ''
+        with: { node-version-file: .nvmrc, cache: npm, cache-dependency-path: package-lock.json }
+      - name: Install the npm workspace (root package-lock.json)
+        if: hashFiles('frontend/package.json') != ''
+        run: npm ci --ignore-scripts
+      - name: OpenAPI snapshot and TS types are fresh (make openapi)
+        # Unconditional: regenerate backend/tests/contract/openapi.json and frontend/src/api/schema.ts from
+        # the app, and fail if either differs from the committed file (api-contract skill; TASK-040).
+        run: |
+          make openapi
+          git diff --exit-code -- backend/tests/contract/openapi.json frontend/src/api/schema.ts \
+            || { echo "::error::the API contract is stale: run 'make openapi' and commit both files"; exit 1; }
+      - name: Frontend — vitest
+        if: hashFiles('frontend/package.json') != ''
+        run: npm test --workspace frontend
+      - name: Frontend — production build (output standalone)
+        if: hashFiles('frontend/package.json') != ''
+        env: { NEXT_TELEMETRY_DISABLED: "1" }
+        run: |
+          npm run build --workspace frontend
+          test -f frontend/.next/standalone/frontend/server.js

@@ -1,0 +1,92 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-054 authenticated live crawl cache (public projection); extracted for TASK-101",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing trimmed from 22 to 1 notes, one per content.venue string (order kept); count is the listing's"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2024/BlogPosts&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "499",
+   "ratelimit-reset": "3600"
+  },
+  "json": {
+   "count": 22,
+   "notes": [
+    {
+     "content": {
+      "_bibtex": {
+       "value": "Synthetic bibtex text 1."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 2."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person3",
+        "~Synthetic_Person4",
+        "~Synthetic_Person5"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 6",
+        "Synthetic Author 7",
+        "Synthetic Author 8"
+       ]
+      },
+      "blogpost_url": {
+       "value": "Synthetic blogpost url text 9."
+      },
+      "conflict_of_interest": {
+       "value": "Synthetic conflict of interest text 10."
+      },
+      "id_of_the_authors_of_the_papers": {
+       "value": "~Synthetic_Person11"
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 12."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_13"
+      },
+      "ref_papers": {
+       "value": "Synthetic ref papers text 14."
+      },
+      "title": {
+       "value": "Synthetic title text 15."
+      },
+      "venue": {
+       "value": "BT@ICLR2024"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2024/BlogPosts"
+      }
+     },
+     "forum": "CPFCkB2OGt",
+     "id": "CPFCkB2OGt",
+     "invitations": [
+      "ICLR.cc/2024/BlogPosts/-/Submission",
+      "ICLR.cc/2024/BlogPosts/-/Post_Submission",
+      "ICLR.cc/2024/BlogPosts/-/Edit",
+      "ICLR.cc/2024/BlogPosts/-/PC_Revision"
+     ],
+     "number": 2,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

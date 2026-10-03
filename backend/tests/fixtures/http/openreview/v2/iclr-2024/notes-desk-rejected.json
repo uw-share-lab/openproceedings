@@ -1,0 +1,113 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2024/Conference/Desk_Rejected_Submission&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-ratelimit-limit": "500",
+   "x-ratelimit-remaining": "268",
+   "x-ratelimit-reset": "1790543172",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-limit": "500",
+   "ratelimit-remaining": "268",
+   "ratelimit-reset": "2255"
+  },
+  "json": {
+   "notes": [
+    {
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 2"
+       ]
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person3"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 4.",
+        "Synthetic keywords text 5.",
+        "Synthetic keywords text 6.",
+        "Synthetic keywords text 7."
+       ]
+      },
+      "TLDR": {
+       "value": "Synthetic tldr text 8."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 9."
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 10."
+      },
+      "code_of_ethics": {
+       "value": "Synthetic code of ethics text 11."
+      },
+      "submission_guidelines": {
+       "value": "Synthetic submission guidelines text 12."
+      },
+      "anonymous_url": {
+       "value": "Synthetic anonymous url text 13."
+      },
+      "no_acknowledgement_section": {
+       "value": "Synthetic no acknowledgement section text 14."
+      },
+      "venue": {
+       "value": "ICLR 2024 Conference Desk Rejected Submission"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2024/Conference/Desk_Rejected_Submission"
+      },
+      "_bibtex": {
+       "value": "synthetic.person15@example.org"
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_16"
+      }
+     },
+     "id": "mnyXZBa5dP",
+     "signatures": [
+      "ICLR.cc/2024/Conference/Submission9489/Authors"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "ICLR.cc/2024/Conference",
+      "ICLR.cc/2024/Conference/Submission9489/Authors"
+     ],
+     "forum": "mnyXZBa5dP",
+     "number": 9489,
+     "invitations": [
+      "ICLR.cc/2024/Conference/-/Submission",
+      "ICLR.cc/2024/Conference/-/Post_Submission",
+      "ICLR.cc/2024/Conference/-/Desk_Rejected_Submission",
+      "ICLR.cc/2024/Conference/-/Edit"
+     ],
+     "domain": "ICLR.cc/2024/Conference",
+     "tcdate": 1695557135790,
+     "cdate": 1695557135790,
+     "tmdate": 1711386309623,
+     "mdate": 1711386309623,
+     "odate": 1711386309514,
+     "version": 2
+    }
+   ]
+  }
+ }
+}

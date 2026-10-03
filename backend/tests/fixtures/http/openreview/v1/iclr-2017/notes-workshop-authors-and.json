@@ -1,0 +1,128 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-113: trimmed from the 2026-09-29 crawl cache (fetched 2026-09-29T09:04:25.786906+00:00)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing page trimmed from 161 to 3 notes (order kept; `count` is the page's)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2017/workshop/-/submission&limit=1000&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "count": 161,
+   "notes": [
+    {
+     "content": {
+      "TL;DR": "Synthetic tl;dr text 1.",
+      "abstract": "Synthetic abstract text 2.",
+      "authorids": [
+       "synthetic.person3@example.org",
+       "synthetic.person4@example.org",
+       "synthetic.person5@example.org",
+       "synthetic.person6@example.org",
+       "synthetic.person7@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 8",
+       "Synthetic Author 9",
+       "Synthetic Author 10",
+       "Synthetic Author 11",
+       "and Synthetic Author 12"
+      ],
+      "conflicts": [
+       "Synthetic conflicts text 13."
+      ],
+      "keywords": [
+       "Synthetic keywords text 14.",
+       "Synthetic keywords text 15.",
+       "Synthetic keywords text 16."
+      ],
+      "paperhash": "synthetic|synthetic_title_17",
+      "pdf": "/pdf/6a720648546d2209dd351e9bd75d07b1e9742573.pdf",
+      "title": "Synthetic title text 18."
+     },
+     "forum": "HkXKUTVFl",
+     "id": "HkXKUTVFl",
+     "invitation": "ICLR.cc/2017/workshop/-/submission",
+     "number": 109,
+     "readers": [
+      "everyone"
+     ],
+     "replyto": null
+    },
+    {
+     "content": {
+      "TL;DR": "",
+      "_bibtex": "Synthetic bibtex text 19.",
+      "abstract": "Synthetic abstract text 20.",
+      "authorids": [
+       "synthetic.person21@example.org",
+       "synthetic.person22@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 23 and Synthetic Author 24 and Synthetic Author 25"
+      ],
+      "conflicts": [
+       "Synthetic conflicts text 26."
+      ],
+      "keywords": [
+       "Synthetic keywords text 27.",
+       "Synthetic keywords text 28."
+      ],
+      "paperhash": "synthetic|synthetic_title_29",
+      "pdf": "/pdf/c60010308fc6c380c3082c3b6c2a291cfafc2139.pdf",
+      "title": "Synthetic title text 30.",
+      "venue": "ICLR 2017 Invite to Workshop",
+      "venueid": "ICLR.cc/2017/conference"
+     },
+     "forum": "H1JBMVpdx",
+     "id": "H1JBMVpdx",
+     "invitation": "ICLR.cc/2017/workshop/-/submission",
+     "number": 16,
+     "readers": [
+      "everyone"
+     ],
+     "replyto": null
+    },
+    {
+     "content": {
+      "TL;DR": "Synthetic tl;dr text 31.",
+      "abstract": "Synthetic abstract text 32.",
+      "authorids": [
+       "synthetic.person33@example.org",
+       "synthetic.person34@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 35 and Synthetic Author 36"
+      ],
+      "conflicts": [
+       "Synthetic conflicts text 37."
+      ],
+      "keywords": [
+       "Synthetic keywords text 38.",
+       "Synthetic keywords text 39."
+      ],
+      "paperhash": "synthetic|synthetic_title_40",
+      "pdf": "/pdf/f758115396b362441b85a43f5cf9fe83eec76944.pdf",
+      "title": "Synthetic title text 41."
+     },
+     "forum": "Hynn8SHOx",
+     "id": "Hynn8SHOx",
+     "invitation": "ICLR.cc/2017/workshop/-/submission",
+     "number": 4,
+     "readers": [
+      "everyone"
+     ],
+     "replyto": null
+    }
+   ]
+  }
+ }
+}

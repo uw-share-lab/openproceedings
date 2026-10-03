@@ -1,0 +1,72 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-107 authenticated OpenReview v1 fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2021/Conference/-/Blind_Submission&limit=1&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "trPMYEn1FCX",
+     "original": "mVImz0-gFe",
+     "number": 3828,
+     "cdate": 1601758676573,
+     "ddate": null,
+     "tcdate": 1601758676573,
+     "tmdate": 1760256898219,
+     "tddate": null,
+     "forum": "trPMYEn1FCX",
+     "replyto": null,
+     "invitation": "ICLR.cc/2021/Conference/-/Blind_Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "abstract": "Synthetic abstract text 2.",
+      "authors": [
+       "Synthetic Author 3",
+       "Synthetic Author 4",
+       "Synthetic Author 5",
+       "Synthetic Author 6",
+       "Synthetic Author 7"
+      ],
+      "authorids": [
+       "synthetic.person8@example.org",
+       "synthetic.person9@example.org",
+       "synthetic.person10@example.org",
+       "synthetic.person11@example.org",
+       "synthetic.person12@example.org"
+      ],
+      "code_of_ethics": "Synthetic code of ethics text 13.",
+      "pdf": "/pdf/2a7974bc06dd078e4cd1115d6cb317c92b4d2f1e.pdf",
+      "paperhash": "synthetic|synthetic_title_14",
+      "keywords": [],
+      "community_implementations": "Synthetic community implementations text 15.",
+      "reviewed_version_(pdf)": "Synthetic reviewed version (pdf) text 16.",
+      "_bibtex": "Synthetic bibtex text 17."
+     },
+     "signatures": [
+      "ICLR.cc/2021/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2021/Conference"
+     ],
+     "odate": 1601758676628
+    }
+   ],
+   "count": 2594
+  }
+ }
+}

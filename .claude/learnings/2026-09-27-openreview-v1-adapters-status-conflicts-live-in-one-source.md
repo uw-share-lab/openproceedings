@@ -1,0 +1,77 @@
+# A v1 note can contradict itself, so conflicts.csv needs rows that dedup never makes
+
+**Key lesson:** In OpenReview API v1 one submission note can carry two status signals that disagree (a withdrawn invitation and an accepted `content.venue`, or two decision notes), and a record allows one claim per field and source, so the v1 crawler sets that field to `unknown` and hands an `unresolved:openreview_v1` row to `snapshot.with_crawl_conflicts`: a disagreement inside one source never reaches dedup, which only compares sources.
+
+- **Date:** 2026-09-27 · **Task:** TASK-051 · **Area:** ingest
+- **Artifacts:** `backend/src/openproceedings/ingest/sources/openreview_v1.py`,
+  `backend/src/openproceedings/ingest/snapshot.py` (`with_crawl_conflicts`),
+  `backend/tests/unit/ingest/test_openreview_v1.py`
+  (`test_iclr_2021_venue_first_then_the_decision_note_and_the_withdrawn_conflict`,
+  `test_the_snapshot_build_replays_v1_crawls_and_writes_their_conflicts`)
+
+## What we set out to do
+Build the API v1 adapters (ICLR 2013–2023, NeurIPS 2021–2022), wire them into `op ingest openreview` and the
+snapshot replay, and test them only against the TASK-002 recorded fixtures.
+
+## What we learned
+- **dedup's conflicts are cross-source only.** `PaperRecord` refuses two claims for one (field, source), and
+  `dedup` writes rows only when sources disagree, so `xGZG2kS5bFk` (withdrawn invitation, `ICLR 2021 Poster`)
+  had no way into `conflicts.csv`. The crawl report now carries its own `Conflict` rows, and the snapshot
+  build adds them after dedup, re-pointed along `merges.csv` to the surviving id.
+- **A decision string often names no track.** `Reject` and `Accept (Poster)` say nothing about the track, so a
+  v1 outcome's track is optional and falls back to the listing the note was submitted under; `Invite to
+  Workshop Track` and ICLR 2013's `…-workshop` do name one.
+- **A decision note must be tied to its paper three ways:** the exact per-year invitation with this
+  submission's `Paper<number>`, `forum == submission id`, and `replyto == submission id`. The ICLR 2019 test
+  shows a meta-review copied into another forum is ignored.
+- **Scrubbed fixtures share titles.** Every recorded note is "Synthetic title text 1.", so a snapshot built
+  from several fixtures gets `ambiguous_not_merged` rows; assert on the rows you mean, not on the total.
+- **Early ICLR 2017 notes give `authors` as one string** (with `author_emails`); splitting it would be a guess.
+
+## Dead ends — don't repeat these
+- Treating ICLR 2020's accept strings as known: only `Reject` is recorded. The adapter leaves the others
+  unmapped (`unknown`, counted) until a live accepted forum is recorded.
+- Complex inline `python3 - <<EOF` patches in a worktree agent: the sandbox refuses them as unverifiable;
+  write the script to the scratchpad and run it.
+
+## Decisions (and what would change them)
+- Within-source disagreement → field `unknown` + `unresolved:openreview_v1` row, never one side picked
+  (openreview-api skill) → a decision that one v1 signal outranks another.
+- Only live-verified invitations and strings are in `ADAPTERS` → a recorded fixture for each missing one
+  (ICLR 2023 Blogposts, NeurIPS withdrawn/desk-rejected, ICLR 2020/2021 accept decisions).
+
+## Follow-ups
+- [ ] (proposed, no task yet: parallel-branch ids) record live fixtures for the v1 gaps listed in the TASK-051
+  notes, then extend `ADAPTERS`.
+- [x] decide how to split early ICLR 2017 `authors` strings (`authors_unsplit`): TASK-113, decision-019.
+
+## Propagated to
+- Skill / agent / CLAUDE.md updated? — `.claude/skills/openreview-api/SKILL.md` §The v1 crawler as built;
+  `.claude/skills/dedup-rules/SKILL.md` (the new resolution); `.claude/skills/snapshots/SKILL.md`
+  (`sources.openreview_v1`); `.claude/skills/record-schema/SKILL.md`; `.claude/agents/openreview-crawler.md`;
+  `CLAUDE.md` layout; spec 01 §CLI; spec 08 layout.
+- Test or hook added? — `backend/tests/unit/ingest/test_openreview_v1.py` (one replay test per adapter).
+
+## Addendum — 2026-09-29 (TASK-113)
+
+**Key lesson:** A v1 contradiction can span two notes of one paper, and then each record looks consistent on its
+own: ICLR 2018 `S1p31z-Ab` (decision note `Accept (Poster)`) and `SJTCsqMUf` (withdrawn invitation, same pdf) were
+two clean records until a pdf join across the crawl's records found them, so the per-note check never could.
+
+- **Evidence.** The 2026-09-29 cache has 24 blind/withdrawn pdf pairs, all ICLR 2018 (accepted 1, rejected 10,
+  `Invite to Workshop Track` 1, undecided 12); ICLR 2018 main counted 337 vs 336 official, within ±1%, so the gate
+  never flagged it. `withdrawn_twins` makes the accepted one `unknown` (decision-020); the rebuilt scratch report
+  shows 336 of 336 and lists both unresolved records by id (spec 07 §C).
+- **No ranking fits both known cases.** `xGZG2kS5bFk` (ICLR 2021) was withdrawn yet presented; ELMo accepted yet
+  not presented. Keep `unknown` and list the record; an outside source (accepted list, overrides) is the fix.
+- **A scrub can erase the structure a parser reads.** `scrub.py` replaced a whole authors value with one
+  `Synthetic Author N` and a comma-separated email string with one email, so no recorded fixture could exercise
+  author splitting. It now keeps separators and counts (decision-004 still holds: no real names).
+- **A regex without `^` in `re.sub(count=1)` removes the first match anywhere.** The first splitter draft dropped
+  the ` and ` inside an entry `"<name> and <name>"` (`Hk6a8N5xe`) instead of a leading `and `, turning a split into a refusal; the
+  real-cache dry run over all v1 notes (before any fixture) caught it.
+- **Count-checking makes splitting safe.** Against `authorids` the rule splits 34 notes and refuses one
+  (`H1JBMVpdx`, whose `authors` is its title: three pieces for two ids), where an unchecked split would have
+  indexed title fragments as people.
+- Propagated to: spec 01 (§Sources v1 as-built, §Pipeline 5, §Testing), spec 04, spec 07 §C, the openreview-api,
+  dedup-rules, snapshots and coverage-reporting skills.

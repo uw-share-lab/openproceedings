@@ -1,0 +1,48 @@
+{
+  "_comment": "Golden cases for writing an applied default out explicitly: (q) AND field:(...). Read by frontend/src/lib/search-state.test.ts (the reducer's output) and backend/tests/contract/test_frontend_wrap_golden.py (the server parser accepts q and every expected string, and rejects the wrapped form of every refused q). A backslash escapes the next non-space character (spec 02), so a q ending in an odd run of backslashes would escape the closing parenthesis.",
+  "cases": [
+    {
+      "q": "trust",
+      "field": "track",
+      "values": ["main", "datasets_benchmarks", "position"],
+      "add": "workshop",
+      "expected": "(trust) AND track:(main OR datasets_benchmarks OR position OR workshop)"
+    },
+    {
+      "q": "llm OR (foundation model)",
+      "field": "track",
+      "values": ["main", "datasets_benchmarks", "position"],
+      "add": "workshop",
+      "expected": "(llm OR (foundation model)) AND track:(main OR datasets_benchmarks OR position OR workshop)"
+    },
+    {
+      "q": "foo\\\\",
+      "field": "status",
+      "values": ["accepted"],
+      "add": "rejected",
+      "expected": "(foo\\\\) AND status:(accepted OR rejected)"
+    },
+    {
+      "q": "foo\\\\ ",
+      "field": "status",
+      "values": ["accepted"],
+      "add": "rejected",
+      "expected": "(foo\\\\ ) AND status:(accepted OR rejected)"
+    },
+    {
+      "q": "foo\\ ",
+      "field": "status",
+      "values": ["accepted"],
+      "add": "rejected",
+      "expected": "(foo\\ ) AND status:(accepted OR rejected)"
+    },
+    { "q": "foo\\", "field": "status", "values": ["accepted"], "add": "rejected", "refused": "backslash" },
+    {
+      "q": "foo\\\\\\",
+      "field": "status",
+      "values": ["accepted"],
+      "add": "rejected",
+      "refused": "backslash"
+    }
+  ]
+}
