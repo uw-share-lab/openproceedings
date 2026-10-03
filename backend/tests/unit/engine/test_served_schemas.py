@@ -42,12 +42,13 @@ def oracle() -> ReferenceEngine:
     return ReferenceEngine(list(records()))
 
 
-@pytest.fixture(scope="module")
-def pair(tmp_path_factory: pytest.TempPathFactory) -> Pair:
+@pytest.fixture(scope="module", params=["2", "3"])
+def pair(tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest) -> Pair:
     """The 5k corpus indexed at schema 2 and at schema 3."""
     corpus = list(records())
-    old = tantivy_of(corpus, tmp_path_factory.mktemp("schema2"), "2")
-    new = tantivy_of(corpus, tmp_path_factory.mktemp("schema3"))
+    old = tantivy_of(corpus, tmp_path_factory.mktemp("schema2"), "2", request.param)
+    new = tantivy_of(corpus, tmp_path_factory.mktemp("schema3"), "3", request.param)
+    assert old.tokenizer_version == new.tokenizer_version == request.param
     assert (old.ord_indexed, new.ord_indexed) == (False, True)
     assert old.index_version != new.index_version  # the schema is an index_version input
     return old, new

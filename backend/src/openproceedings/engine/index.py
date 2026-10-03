@@ -422,7 +422,7 @@ def build_index(
     tokenizer = TOKENIZER_VERSION if tokenizer_version is None else tokenizer_version  # read when called
     if tokenizer not in SERVED_TOKENIZERS:
         raise IndexBuildError(f"tokenizer version {tokenizer} is not one this code builds")
-    version_id = index_version(snapshot_hash, tokenizer, schema_version)
+    version_id = index_version(snapshot_hash, tokenizer_version=tokenizer, schema_version=schema_version)
     target = indexes / version_id
     with storage.exclusive(indexes):
         storage.sweep(indexes)

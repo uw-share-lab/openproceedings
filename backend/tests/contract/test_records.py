@@ -693,7 +693,10 @@ FORMS_CORPUS = [
 ]
 
 
-def test_a_record_saved_on_a_tokenizer_2_index_reproduces_after_the_tokenizer_3_build(tmp_path: Path) -> None:
+@pytest.mark.parametrize("schema_version", ["2", "3"])
+def test_a_record_saved_on_a_tokenizer_2_index_reproduces_after_the_tokenizer_3_build(
+    tmp_path: Path, schema_version: str
+) -> None:
     """Guarantee 4 across the tokenizer 3 bump: this code serves the tokenizer-2 index a record pins beside a
     tokenizer-3 build of the same snapshot. On each, a query is parsed (and its canonical hashed) with the index's
     own tokenizer, so records saved on the tokenizer-2 index replay `reproduced` on it after `current` moves to
@@ -701,8 +704,15 @@ def test_a_record_saved_on_a_tokenizer_2_index_reproduces_after_the_tokenizer_3_
     With the tokenizer-2 index gone, the replay is `drifted`, naming the tokenizer as the changed input."""
     data_dir = tmp_path / "data"
     corpus = [*records(), *FORMS_CORPUS]
-    old = build(corpus, data_dir / "snapshots", "snap", data_dir / "indexes", tokenizer_version="2")
-    new = build(corpus, data_dir / "snapshots", "snap", data_dir / "indexes")
+    old = build(
+        corpus,
+        data_dir / "snapshots",
+        "snap",
+        data_dir / "indexes",
+        tokenizer_version="2",
+        schema_version=schema_version,
+    )
+    new = build(corpus, data_dir / "snapshots", "snap", data_dir / "indexes", schema_version=schema_version)
     assert old != new  # the tokenizer is an index_version input
     point_current(data_dir, old)
     nfd = "Erd\\H{ő}s"  # typed in NFD: `erd o s` to tokenizer 2, `erdos` to tokenizer 3
@@ -757,15 +767,27 @@ def test_a_record_saved_on_a_tokenizer_2_index_reproduces_after_the_tokenizer_3_
 
 
 # --- replay across a schema bump (TASK-167): a record pinned to a schema-2 index still reproduces ----------
-def test_a_record_saved_on_a_schema_2_index_reproduces_after_the_schema_3_build(tmp_path: Path) -> None:
+@pytest.mark.parametrize("tokenizer_version", ["2", "3"])
+def test_a_record_saved_on_a_schema_2_index_reproduces_after_the_schema_3_build(
+    tmp_path: Path, tokenizer_version: str
+) -> None:
     """Guarantee 4 across TASK-167's SCHEMA_VERSION bump: this code serves the schema-2 index a record pins (its
     verified ids still filtered by a text-`id` term set) beside a schema-3 build of the same snapshot (a u64
     term set on `ord`). Records saved on the schema-2 index replay `reproduced` on it after `current` moves
     to the schema-3 one, and both indexes match the same ids for every query, verified clauses included."""
     data_dir = tmp_path / "data"
     corpus = list(records())
-    old = build(corpus, data_dir / "snapshots", "snap", data_dir / "indexes", schema_version="2")
-    new = build(corpus, data_dir / "snapshots", "snap", data_dir / "indexes")
+    old = build(
+        corpus,
+        data_dir / "snapshots",
+        "snap",
+        data_dir / "indexes",
+        schema_version="2",
+        tokenizer_version=tokenizer_version,
+    )
+    new = build(
+        corpus, data_dir / "snapshots", "snap", data_dir / "indexes", tokenizer_version=tokenizer_version
+    )
     assert old != new
     point_current(data_dir, old)
     queries = [

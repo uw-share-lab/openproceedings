@@ -42,14 +42,20 @@ QUERIES = [
 ]
 
 
-def tantivy_of(records: list[Rec], root: Path, schema_version: str | None = None) -> TantivyEngine:
+def tantivy_of(
+    records: list[Rec], root: Path, schema_version: str | None = None, tokenizer_version: str | None = None
+) -> TantivyEngine:
     """An engine over a fresh index of `records` (at `schema_version`, the current one by default)."""
     snap = root / "snap"
     snap.mkdir(parents=True)
     papers = tuple(sorted((as_paper(r) for r in records), key=lambda p: p.id))
     for name, data in render(DedupResult(papers, (), ()), [], BUILT).items():
         (snap / name).write_bytes(data)
-    return TantivyEngine(build_index(snap, root / "indexes", BUILT, schema_version=schema_version).path)
+    return TantivyEngine(
+        build_index(
+            snap, root / "indexes", BUILT, schema_version=schema_version, tokenizer_version=tokenizer_version
+        ).path
+    )
 
 
 @pytest.fixture(scope="module")

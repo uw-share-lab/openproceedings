@@ -120,12 +120,16 @@ def build(
     when it exists); the index_version."""
     snap = snapshots / name
     if snap.exists():
-        return build_index(snap, indexes, BUILT, tokenizer_version=tokenizer_version, schema_version=schema_version).index_version
+        return build_index(
+            snap, indexes, BUILT, tokenizer_version=tokenizer_version, schema_version=schema_version
+        ).index_version
     snap.mkdir(parents=True)
     papers = tuple(sorted((paper(r) for r in corpus), key=lambda p: p.id))
     for file, data in render(DedupResult(papers, (), ()), [], BUILT).items():
         (snap / file).write_bytes(data)
-    return build_index(snap, indexes, BUILT, tokenizer_version=tokenizer_version, schema_version=schema_version).index_version
+    return build_index(
+        snap, indexes, BUILT, tokenizer_version=tokenizer_version, schema_version=schema_version
+    ).index_version
 
 
 @pytest.fixture(scope="session")
