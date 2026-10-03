@@ -137,6 +137,13 @@ def test_a_counted_field_must_be_aggregated(engines: Engines) -> None:
     assert ast is not None
     with pytest.raises(EngineInternalError):
         tantivy.facets(ast, ("venue",), over=ORDER)
+    for over in ((), ("venue", "nope")):  # nothing to aggregate, or a field outside the combos
+        with pytest.raises(EngineInternalError):
+            tantivy.facets(ast, (), over=over)
+        with pytest.raises(EngineInternalError):
+            tantivy.combos([], over=over)
+    # any order of the same fields is the same aggregation (one memo entry)
+    assert tantivy.combos([], over=("status", "track")) == tantivy.combos([], over=ORDER)
 
 
 def test_the_combo_fields_are_the_facet_fields() -> None:

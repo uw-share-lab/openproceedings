@@ -12,7 +12,6 @@ from __future__ import annotations
 import dataclasses
 import heapq
 import json
-from bisect import bisect_left
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
@@ -47,7 +46,8 @@ from openproceedings.query.normalize import TOKENIZER_VERSION
 SORTS = ("relevance", "year_desc", "year_asc", "title")
 # a document's facet values, in this order: what every filter and facet depends on (task-086)
 COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
-# a document's values of the aggregated fields (`facets`' `over`; all of COMBO unless narrowed), in COMBO order
+# a document's values of the aggregated fields (`facets`' `over`; all of COMBO unless narrowed), in COMBO order:
+# each a str, but `year`, an int; as many values as `over` has fields
 type Combo = tuple[str | int, ...]
 # (field, clause) → the ids that clause verified: the engine's memo, or one request's own (`Overlay`)
 type Verified = dict[tuple[str, str], list[str]]
@@ -198,7 +198,17 @@ class TantivyEngine:
         # names its ids as a u64 term set; a schema-2 index (one a record may pin) keeps the term set on the text
         # `id` it was served with (TASK-167, `id_set`)
         self.form: SchemaForm = SERVED_SCHEMAS[manifest["schema_version"]]
-        self.ord_indexed: bool = self.form.ord_indexed
+        if self.form.ord_indexed and not _indexes_ord(self.index.schema, self.searcher):
+            # a manifest that names a schema its files don't have: refused here, not query by query
+            raise IndexUnservable(
+                DiagnosticCode.API_INTERNAL,
+                f"index {self.index_version} claims schema {manifest['schema_version']} but `ord` isn't indexed: "
+                "build a new index",
+                reason="schema_version_mismatch",
+            )
+        # id → ord (its position in `ids.txt`), built on the first verified clause a schema-3 compile names
+        # (`id_set`), then kept: one dict entry per record (a few MB at 80k), never changed after
+        self._ords: dict[str, int] | None = None
         self.compiled: dict[str, Compiled] = {}  # per tree (bounded), see compile()
         self.verified: Verified = {}  # position-verified clauses, per engine
         # each wildcard's terms, or just the count of an over-cap one
@@ -211,6 +221,11 @@ class TantivyEngine:
         # entered around each cold position verification (`Compiler.gate`); the API sets its own, which
         # bounds how many run at once (spec 04 §Rate limit)
         self.verification_gate: Callable[[], AbstractContextManager[object]] = nullcontext
+
+    @property
+    def ord_indexed(self) -> bool:
+        """Whether this index names a verified clause's ids by the indexed `ord` (schema 3) or the text `id`."""
+        return self.form.ord_indexed
 
     @property
     def universe(self) -> frozenset[str]:
@@ -360,7 +375,7 @@ class TantivyEngine:
         unknown = [f for f in fields if f not in FACET_FIELDS]
         if unknown:
             raise EngineInputError(DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {FACET_FIELDS}")
-        over = tuple(f for f in COMBO if f in over)  # COMBO's order: one memo key per set of fields
+        over = _aggregated(over)
         if not set(fields) <= set(over):
             raise EngineInternalError(
                 DiagnosticCode.API_INTERNAL, f"facet fields {fields} must be among the aggregated {over}"
@@ -396,6 +411,7 @@ class TantivyEngine:
         """How many matches of `base`'s conjunction (every document when empty) have each combination of the
         `over` fields' values (a subsequence of COMBO: (venue, year, track, status) unless narrowed), from one
         collection; memoised per base and fields under task-080's rules."""
+        over = _aggregated(over)
         key = "\x00".join((",".join(over), *sorted(_spanless(c) for c in base)))
         hit = self.faceted.get(key)  # one read (task-080)
         if hit is not None:
@@ -546,14 +562,15 @@ class TantivyEngine:
         """The documents with these ids, as a verified clause names them (`Compiler.exact`): a term set on the
         indexed `ord` (schema 3; each id's position in `ids.txt`, which is in id order), or on the text `id`
         for a schema-2 index. The same documents either way; Tantivy resolves the u64 set faster (TASK-167)."""
-        if not self.ord_indexed:
+        if not self.form.ord_indexed:
             return id_set(self.index.schema, ids)
-        ords = []
-        for i in ids:
-            at = bisect_left(self.ids, i)
-            if at == len(self.ids) or self.ids[at] != i:
-                raise EngineInternalError(DiagnosticCode.API_INTERNAL, "a verified id is not in the index")
-            ords.append(at)
+        table = self._ords  # one read (task-080); built whole, then stored with one assignment
+        if table is None:
+            table = {i: at for at, i in enumerate(self.ids)}
+            self._ords = table  # a race only builds the same table twice
+        ords = [table.get(i, -1) for i in ids]
+        if -1 in ords:
+            raise EngineInternalError(DiagnosticCode.API_INTERNAL, "a verified id is not in the index")
         return tantivy.Query.term_set_query(self.index.schema, "ord", ords)
 
     def hits(self, query: tantivy.Query) -> list[tantivy.DocAddress]:
@@ -572,6 +589,25 @@ class TantivyEngine:
             doc = self.searcher.doc(address).to_dict()
             text = doc[field][0] if doc.get(field) else ""
             yield doc["id"][0], text.split(" ") if text else []
+
+
+def _aggregated(over: tuple[str, ...]) -> tuple[str, ...]:
+    """`over` as the combos aggregate it: in COMBO's order (one memo key per set of fields), refused when empty
+    or naming a field outside COMBO (a caller's bug: an internal error, never a silent drop)."""
+    if not over or not set(over) <= set(COMBO):
+        raise EngineInternalError(
+            DiagnosticCode.API_INTERNAL, f"the aggregated fields {over} must be some of {COMBO}"
+        )
+    return tuple(f for f in COMBO if f in over)
+
+
+def _indexes_ord(schema: tantivy.Schema, searcher: tantivy.Searcher) -> bool:
+    """Whether the opened index really indexes `ord` (Tantivy says so only when a query on it runs)."""
+    try:
+        searcher.search(tantivy.Query.term_set_query(schema, "ord", [0]), 1)
+    except ValueError:
+        return False
+    return True
 
 
 def _ord(value: object) -> int:

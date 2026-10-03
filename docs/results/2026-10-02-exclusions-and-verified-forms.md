@@ -1,5 +1,14 @@
 # Exclusion accounting without facets, and a verified clause's id set (2026-10-02, TASK-166, TASK-167)
 
+> Recovery correction: the historical runs below were overloaded (1-minute load 30–155 on 8 CPUs).
+> They show no measurable end-to-end difference from schema 3; the apparent 0–3% change is noise,
+> not a demonstrated gain. The 11.3 → 6.2 ms isolated claim did not preserve its harness and did not
+> separate Python query construction from Tantivy collection. It is historical context, not fresh proof.
+> The committed `tests.bench.id_sets` harness now measures those phases separately on the same index pair,
+> including first-use lazy-table cost and retained memory. Fresh recovery evidence is recorded separately.
+> Cold report methodology now clears all engine caches, including facet combinations and the ordinal table;
+> old cold reports retained caches and cannot be compared directly.
+
 TASK-166: a caller that needs only the exclusion counts (`op search`, a record's save or replay) paid for
 every (venue, year, track, status) facet combination. TASK-167: the synthetic `"AI agent$"` clause's id set
 was said to cost about 10 ms a search (`2026-10-02-wildcard-phrases.md`, What stays).
@@ -177,8 +186,7 @@ synthetic corpus and 26.4 vs 25.6 ms on the real one. Every other string is equa
 one MUST clause of an intersection that the rarer clauses drive, so most of its isolated cost (what "about
 10 ms a search" measured) never lands on a search.
 
-Schema 3 was kept by owner decision (2026-10-02) because it is exact and replay-safe, though its end-to-end gain is
-this small. Schema 2 stays served until no record pins a schema-2 index (spec 03 §Versioning).
+Schema 3 was kept by owner decision (2026-10-02) because it is exact and replay-safe, with no measurable end-to-end gain. Schema 2 stays served until no record pins a schema-2 index (spec 03 §Versioning).
 
 ### Guarantee 4 across the schema bump
 

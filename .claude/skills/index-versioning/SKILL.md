@@ -93,3 +93,11 @@ a systematic review.
 - [ ] the manifest records all four inputs and the tantivy-py version
 - [ ] responses carry `index_version`, `tokenizer_version` and `query_version` (spec 04)
 - [ ] a record replay test covers the path the change touched
+
+## Measuring a schema optimization
+
+Separate query construction (including any lazy lookup's first-use cost and retained memory) from Tantivy
+collection on the same-snapshot indexes. Also time the complete search with alternating old/new rounds.
+Record machine load and rerun on a quiet machine before claiming a gain; an isolated improvement does not
+establish an end-to-end improvement. A cold engine benchmark resets every engine memo, including lazy
+id-to-ordinal lookup, and states that index and OS page caches remain warm.

@@ -73,12 +73,14 @@ def main() -> None:
         warm: dict[str, list[float]] = {k: [] for k in PATHS}
         cpu: dict[str, list[float]] = {k: [] for k in PATHS}
         cold: dict[str, list[float]] = {k: [] for k in PATHS}
+        print(f"load before warm {name}: {os.getloadavg()[0]:.1f}", flush=True)
         for r in range(rounds):
             for which in tuple(PATHS) if r % 2 == 0 else tuple(reversed(PATHS)):
                 t, c = time.perf_counter(), time.process_time()
                 runs[which]()
                 warm[which].append(time.perf_counter() - t)
                 cpu[which].append(time.process_time() - c)
+        print(f"load before cold {name}: {os.getloadavg()[0]:.1f}", flush=True)
         for r in range(rounds):
             for which in tuple(PATHS) if r % 2 == 0 else tuple(reversed(PATHS)):
                 engine.faceted.clear()

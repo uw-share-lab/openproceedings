@@ -206,9 +206,11 @@ Measured (`docs/results/2026-10-02-exclusions-and-verified-forms.md`, old and ne
 |---|---|---|
 | `"AI agent$"` id set alone (20,752 ids, synthetic 80k), CPU median | 11.3 ms | 6.2 ms |
 | `main-2-pop` warm search, synthetic 80k, CPU p50 | 29.4 ms | 29.7 ms |
-| `main-2-pop` warm search, real M4 corpus, CPU p50 | 26.4 ms | 25.6 ms (about 3%) |
+| `main-2-pop` warm search, real M4 corpus, CPU p50 | 26.4 ms | 25.6 ms (no measurable gain under load) |
 
-The end-to-end gain is small. Inside a search, the id set is one MUST clause of an intersection that the rarer
+These overloaded measurements show no measurable end-to-end gain. The isolated claim is historical;
+`tests.bench.id_sets` now separates construction and collection, including lazy lookup first-use and memory
+(`docs/results/2026-10-02-perf-recovery.md`). Inside a search, the id set is one MUST clause of an intersection that the rarer
 clauses drive, so most of its isolated cost (TASK-076's "about 10 ms a search") never reaches a search. The
 change was kept by owner decision, since it is exact and replay-safe (decision-030).
 

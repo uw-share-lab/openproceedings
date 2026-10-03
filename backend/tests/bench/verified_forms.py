@@ -51,7 +51,12 @@ def clauses(engine: TantivyEngine, rounds: int) -> None:
     assert ast is not None
     compiled = engine.compile(ast)
     compiler = Compiler(
-        engine.index.schema, engine.expansions(ast), engine.read, count=engine._count, members=engine.ids_of
+        engine.index.schema,
+        engine.expansions(ast),
+        engine.read,
+        count=engine._count,
+        members=engine.ids_of,
+        id_query=engine.id_set,
     )
     nodes: TypeAdapter[Node] = TypeAdapter(Node)
     print(

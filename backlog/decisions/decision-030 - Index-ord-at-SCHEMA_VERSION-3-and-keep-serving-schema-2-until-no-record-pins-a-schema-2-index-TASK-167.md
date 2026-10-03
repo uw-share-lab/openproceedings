@@ -20,7 +20,7 @@ could then never replay `reproduced` again (guarantee 4).
 
 Measured (`docs/results/2026-10-02-exclusions-and-verified-forms.md`, old and new alternated, load 30–155):
 - The `"AI agent$"` id set alone: 11.3 ms CPU on the text `id`, 6.2 ms on the indexed `ord`.
-- `main-2-pop`'s warm search, CPU p50: 29.4 vs 29.7 ms on the synthetic 80k, and 26.4 vs 25.6 ms (about 3%)
+- `main-2-pop`'s warm search, CPU p50: 29.4 vs 29.7 ms on the synthetic 80k, and 26.4 vs 25.6 ms (no measurable gain under load)
   on the real M4 corpus. Every other Trust-Evals string is unchanged. Inside a search the id set is one MUST
   clause of an intersection the rarer clauses drive, so most of its isolated cost never reaches a search.
 - The one form with no id list that tantivy-py offers, a constant-0 `regex_phrase_query`, matched the same ids
@@ -54,3 +54,10 @@ Measured (`docs/results/2026-10-02-exclusions-and-verified-forms.md`, old and ne
   `SERVED_SCHEMAS` holds (index-versioning skill).
 - The same pattern serves two `TOKENIZER_VERSION`s if a tokenizer change must keep old indexes replayable: a
   per-index form, read from the manifest, that the engine branches on.
+
+
+## Recovery measurement correction
+The historical load 30–155 on 8 CPUs does not demonstrate an end-to-end improvement. The isolated
+11.3 → 6.2 ms claim did not separate query construction from Tantivy collection. Fresh evidence uses the
+committed `tests.bench.id_sets` harness, including first-use ordinal-table cost and retained memory;
+see `docs/results/2026-10-02-perf-recovery.md`. The schema decision remains unchanged.

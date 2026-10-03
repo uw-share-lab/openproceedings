@@ -166,6 +166,8 @@ def test_match_ids_with_exclusion_accounting(benchmark: Any, engine: TantivyEngi
         engine.verified.clear()  # cold, as for a new query: every cache cleared
         engine.compiled.clear()
         engine.expanded.clear()
+        engine.faceted.clear()
+        engine._ords = None
         ids = engine.match_ids(ast)
         return excluded(engine, result, len(ids))
 
@@ -201,7 +203,16 @@ def test_match_ids_with_exclusions_on_a_broad_query(benchmark: Any, engine: Tant
     result = parse(BROAD)  # exclusions need the default filters, so the effective tree
     ast = result.effective_ast
     assert ast is not None
-    # what a search without facets runs (`search.run`): only the default fields aggregated (TASK-166)
+    measure(benchmark, lambda: excluded(engine, result, len(engine.match_ids(ast))))
+    time_ = p95(benchmark)
+    assert time_ is None or time_ < 0.300, f"p95 {time_ * 1000:.1f} ms"
+
+
+def test_match_ids_with_exclusions_on_a_broad_query_defaults(benchmark: Any, engine: TantivyEngine) -> None:
+    """The exclusion-only caller beside the original all-facets benchmark (TASK-166)."""
+    result = parse(BROAD)
+    ast = result.effective_ast
+    assert ast is not None
     count = partial(engine.facets, over=ORDER)
     measure(benchmark, lambda: excluded(engine, result, len(engine.match_ids(ast)), facets=count))
     time_ = p95(benchmark)
