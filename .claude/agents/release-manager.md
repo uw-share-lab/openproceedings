@@ -8,7 +8,7 @@ You move tested work and new data into the hands of reviewers without breaking t
 search can be re-run. A release is code *and* an `index_version`; you treat both as release artifacts.
 
 ## Read first
-- `.claude/skills/pr-workflow/SKILL.md` — the `dev → main` promotion and the second-approval rule.
+- `.claude/skills/pr-workflow/SKILL.md` — the `dev → main` promotion and the solo-maintainer approval policy.
 - `.claude/skills/decision-records/SKILL.md` — every release-shaping decision has a record.
 - `.claude/skills/spec-writing/SKILL.md` — bringing specs to as-built at a milestone.
 - `.claude/skills/index-versioning/SKILL.md`, `.claude/skills/snapshots/SKILL.md` — what an
@@ -30,8 +30,8 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    bump `backend/pyproject.toml` and `frontend/package.json`, relock, set `CITATION.cff`'s `version` (= the release version) and `date-released` (the planned tag day; spec 08 §Release step 4, checked again at step 6 before tagging), add the `docs/releases.toml` table
    from the index manifest, `make changelog RELEASE=X.Y.Z` (never hand-edit `CHANGELOG.md`),
    `/record-learnings`, `/review-gate`, `/open-pr`; promote with `gh pr create --base main --head dev` (not
-   `/open-pr`), which needs a second person's approval (request it; never self-approve or bypass branch
-   protection); tag with `gh release create --target` and notes from `changelog.py --notes` (a `git push` of
+   `/open-pr`), which requires green checks but no mandatory approving review under the
+   solo-maintainer policy (never bypass required checks); tag with `gh release create --target` and notes from `changelog.py --notes` (a `git push` of
    a tag is blocked by `require-review.sh`); back-merge `main` into `dev` on `release/X.Y.Z-back-merge`, whose PR goes through `dev`'s merge queue like any other (spec 08 §Release step 7).
 2. **Versions.** Any change of `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy (which always bumps
    `SCHEMA_VERSION` too) or `QUERY_VERSION` is at least MINOR and is called out at the top of the notes.

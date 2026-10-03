@@ -189,7 +189,8 @@ Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
 ## Git and PR rules
 
 - `feature → PR → dev → PR → main`. No direct commits, pushes or merges on `dev` or `main`
-  (`enforce-pr-workflow.sh`, from Kreate). `main` also needs a second person's approval.
+  (`enforce-pr-workflow.sh`, from Kreate). `main` requires green checks but no mandatory approving
+  review under the solo-maintainer policy applied on 2026-10-03.
 - **Merging into `dev` goes through the merge queue** (active since 2026-10-02; §Branch protection). Once a PR's
   checks are green, add it to the queue with `gh pr merge <n> --auto`. That needs the repository's
   "Allow auto-merge" setting. Without it, enqueue with GraphQL: `gh api graphql -f query='mutation($id:
@@ -590,8 +591,10 @@ retention (step 8) matter (guarantee 4).
 5. **Promotion.** `gh pr create --base main --head dev --title "chore: promote dev to main for X.Y.Z"
    --body-file <the readiness evidence>`, not `/open-pr` (it pushes and attests, and a promotion does
    neither; `require-review.sh` exempts exactly this command, and CI exempts a same-repo promotion from
-   `learnings` and `review-attested`). `main`'s branch protection needs one approving review from a second
-   person (never self-approved, never bypassed; admins included) and `dev` up to date with `main` (step 7).
+   `learnings` and `review-attested`). `main`'s branch protection requires green checks and `dev` up to date
+   with `main` (step 7).
+   Its approving-review count is zero under the owner's solo-maintainer policy applied on 2026-10-03;
+   reviews remain optional, and required checks are never bypassed.
    Merge with a merge commit.
 6. **Tag and notes.** First, the `v*` tag rulesets (§Branch protection; applied 2026-10-01) must be in place:
    `gh api repos/<owner>/<name>/rulesets --jq '.[] | select(.target == "tag") | .name'` lists them, one name
@@ -779,8 +782,11 @@ Never hand-roll a serial loop.
 
 `dev` and `main` require a PR, with these checks green: `lint`, `test`, `claude-tooling`, `attribution`,
 `learnings`, `review-attested`. No force-push, no deletion, admins included, and conversations must be
-resolved. `main` additionally requires 1 approving review and the branch up to date with it (so each
-promotion is followed by §Release step 7's back-merge). This protection was applied on 2026-09-25, after
+resolved. `main` additionally requires the branch up to date with it (so each
+promotion is followed by §Release step 7's back-merge). The owner changed only `main`'s required
+approving-review count from 1 to 0 on 2026-10-03 for the solo-maintainer workflow; optional reviews remain
+available. Required checks and all other protection settings were preserved. This protection was
+applied on 2026-09-25, after
 the repo was made public (free-plan orgs can't protect private repos). `dev` is the default branch, and
 merged feature branches are deleted automatically.
 

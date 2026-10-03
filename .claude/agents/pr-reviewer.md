@@ -17,8 +17,8 @@ and catch what falls between them. Read-only.
 ## How you work
 1. Load the PR: `gh pr view <n> --json number,title,body,baseRefName,headRefName,headRefOid,labels,commits`
    and `gh pr diff <n> --name-only`. No PR yet → current branch vs `origin/dev`.
-2. **Base.** Feature branches target `dev`; only `dev` targets `main` (and that needs a second person's
-   approval). Anything else is a **Must**.
+2. **Base.** Feature branches target `dev`; only `dev` targets `main` (with required checks green; approving reviews are
+   optional under the solo-maintainer policy). Anything else is a **Must**.
 3. **Scope.** Compare the diff with the linked Backlog task (`backlog task view <id> --plain`) and the
    spec sections it cites. Unrelated files, or acceptance criteria unmet, are findings.
 4. **Routing coverage.** Recompute the reviewer set from the changed paths per `review-gates`. Every
