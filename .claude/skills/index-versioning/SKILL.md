@@ -92,9 +92,10 @@ must be read with the tokenizer its index was built with. `query/normalize.py` m
 reads its index's version from the manifest (`TantivyEngine.tokenizer_version`), and everything that reads text
 for that index takes it: `parse` (so `ParseResult.tokenizer_version`), the lexer, `canonical_hash`, the
 highlighter, the reference oracle, `freeze` (a record stores the index's version) and `replay`, which parses the
-record's canonical with the tokenizer of the index it runs on. The API parses with the served engine's version
-(an export pinned to another index re-parses with that one's, `searchable_on`), and `search.run` refuses a parse
-made for another tokenizer (an internal error). So a record saved on a tokenizer-2 index replays `reproduced`
+record's canonical with the tokenizer of the index it runs on. The API parses with the served engine's
+version. A query export checks raw length before index I/O,
+resolves its target index, then calls `searchable` once with `engine.tokenizer_version`. `search.run` refuses
+a parse made for another tokenizer (an internal error). So a record saved on a tokenizer-2 index replays `reproduced`
 on it after the bump, its canonical_hash included (`test_records.py::…tokenizer_2…`, and against the real
 `05a0541717f6` index, `docs/results/2026-10-02-tokenizer-3.md`); with only a tokenizer-3 index here it is
 `drifted`, naming `tokenizer_version`. Version 2 is held byte-stable by a frozen copy of its code

@@ -70,7 +70,9 @@ span), even if the input fits: the defaults, ` AND ` per juxtaposition and per-l
 identity. A change that alters any existing canonical string changes every saved record's hash: treat it as
 a breaking change with a decision record.
 
-`canonical_hash = sha256(canonical + "\0" + TOKENIZER_VERSION + "\0" + QUERY_VERSION)` (decision-003).
+`canonical_hash = sha256(canonical + "\0" + tokenizer_version + "\0" + QUERY_VERSION)` (decision-003).
+Here `tokenizer_version` is the selected index's version, recorded in `ParseResult.tokenizer_version`
+and passed to `query/canonical.py::canonical_hash`.
 
 ## Diagnostics
 `{code, message, span:[start,end]}` in `warnings`, `errors` (non-empty ⇒ no search) or `translations`.
