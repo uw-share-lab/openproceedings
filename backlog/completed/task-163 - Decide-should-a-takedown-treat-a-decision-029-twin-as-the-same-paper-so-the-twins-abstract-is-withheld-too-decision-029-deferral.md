@@ -3,10 +3,10 @@ id: TASK-163
 title: >-
   Decide: should a takedown treat a decision-029 twin as the same paper, so the
   twin's abstract is withheld too? (decision-029 deferral)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-03 01:41'
+updated_date: '2026-10-03 02:13'
 labels:
   - decision
   - ops
@@ -34,14 +34,14 @@ Source: decision-029 (TASK-159), Consequences, Deferred: owner decision needed. 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The owner picks an option; a decision record (`backlog decision create`) states it with the options considered and cites decision-022 and decision-029
-- [ ] #2 The owner chose option 2 (follow the twin claim), so the behaviour is implemented in this task's PR (the owner asked for one PR, 2026-10-02): `takedowns.same_paper` follows twin pairs (API serve time on every loaded version, `op export`), `op snapshot build` withholds twins (`takedowns_twins`), `op takedown check` asks for each twin to be listed and logged, with tests, and spec 08 §Deploy describes it
+- [x] #1 The owner picks an option; a decision record (`backlog decision create`) states it with the options considered and cites decision-022 and decision-029
+- [x] #2 The owner chose option 2 (follow the twin claim), so the behaviour is implemented in this task's PR (the owner asked for one PR, 2026-10-02): `takedowns.same_paper` follows twin pairs (API serve time on every loaded version, `op export`), `op snapshot build` withholds twins (`takedowns_twins`), `op takedown check` asks for each twin to be listed and logged, with tests, and spec 08 §Deploy describes it
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-Final review correction: retain the title/authors fallback while collecting the independent union of twin links from served /papers and every pinned JSONL export; verify older-link/current-no-link and multiple-pinned cases.
+Follow twin identities at API and CLI export time and snapshot withholding; independently union served and all pinned twin links in the checker; preserve preferred metadata; verify cross-version tests and document decision-032.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -52,4 +52,12 @@ Built: takedowns.same_paper(listed, merges, ids, twins=pairs) links (record, twi
 Tests: tests/contract/test_twins.py (every twin withheld in /papers, /search and all four exports, plus op export, for any listed twin; pinned older version, record export and op export --index on a snapshot without claims; the unreadable-current warning; the check), tests/unit/test_takedowns.py, test_snapshot_takedowns.py. Spec 08 §Deploy and the op rows, spec 01, spec 04, and the snapshots and logging-standards skills are updated.
 
 Final production review Should fixed: the checker now unions every served and pinned twin link independently of the preferred title/authors record. Regressions cover current metadata without links, an older version with links, and two pinned versions with distinct and repeated links. Focused pytest test_takedown_check.py and test_takedowns.py: 82 passed; focused ruff format/check and git diff --check passed. Spec 08 clarified; learning addendum records the fallback-versus-union trap. Full final gates remain required before closure.
+
+Final integration cdb68cdb6fc12bd0ae9c23bed1788e1fd1c78511 on merged dev9152ecb: make test PASS6386backend/2optional skips and3217frontend; make lint/tooling PASS; make e2e PASS19. Fresh focused index/dedup/twins/checker/takedown tests PASS289. Logs /tmp/twins-finalization-{test,lint,tooling,e2e,focused}.log. Independent integrated all-role review APPROVE /tmp/twins-integrated-all-role-review.md. Final metadata commit and its fresh fulltest/lint/tooling remain required before publication.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Owner option2 recorded by CLI as decision-032: takedowns follow all twin links and require both ids listed/logged. Served/pinned API, CLI export, snapshot and checker paths verified by cross-version contracts and full suite; checker unions links independently of metadata fallback.
+<!-- SECTION:FINAL_SUMMARY:END -->
