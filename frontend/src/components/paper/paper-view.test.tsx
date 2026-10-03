@@ -5,7 +5,7 @@ import type { Schemas } from "@/api/client";
 import PaperPage from "@/app/paper/[id]/page";
 import { json, META, renderWithApi, type Call, type Handler } from "@/test/api-stub";
 import { fetchedText, PaperView } from "./paper-view";
-import { ABSTRACT_WITHHELD } from "../search/hit-item";
+import { ABSTRACT_WITHHELD, seeAlsoLead } from "../search/hit-item";
 
 afterEach(cleanup);
 
@@ -52,6 +52,7 @@ function answer(over: Partial<Paper> = {}): Paper {
     matched: null,
     highlights: null,
     abstract_withheld: false,
+    twins: [],
     ...over,
   };
 }
@@ -157,6 +158,68 @@ describe("a withheld abstract (TASK-136, decision-022, PA-8)", () => {
     );
     await screen.findByRole("heading", { level: 1 });
     expect(document.body.textContent).not.toContain("removed abstract");
+  });
+});
+
+describe("a record's twins (TASK-162, decision-029, PA-10)", () => {
+  const COPY = "op:iclr:2024:Hy-Copy01";
+  const COPY2 = "op:iclr:2024:Hy-Copy02";
+  const seeAlso = () =>
+    [...document.querySelectorAll("p")].find((p) => p.textContent?.startsWith("See also"));
+
+  it("says nothing for a paper with no twin", async () => {
+    draw(
+      null,
+      api(() => json(answer())),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(seeAlso()).toBeUndefined();
+  });
+
+  it("links one twin's paper page; from a direct link, without a query", async () => {
+    draw(
+      null,
+      api(() => json(answer({ twins: [COPY] }))),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(seeAlso()?.textContent).toBe(`${seeAlsoLead(1)} ${COPY}`);
+    expect(within(seeAlso()!).getByRole("link", { name: COPY }).getAttribute("href")).toBe(
+      `/paper/${encodeURIComponent(COPY)}`,
+    );
+  });
+
+  it("links each of two twins, keeping the query and mode", async () => {
+    draw(
+      "trust*",
+      api(() =>
+        json(answer({ twins: [COPY, COPY2], matched: true, highlights: { title: [], abstract: [] } })),
+      ),
+      "scholar",
+    );
+    await screen.findByRole("heading", { level: 1 });
+    const links = within(seeAlso()!).getAllByRole("link");
+    expect(links.map((a) => a.textContent)).toEqual([COPY, COPY2]);
+    expect(links[1]?.getAttribute("href")).toBe(
+      `/paper/${encodeURIComponent(COPY2)}?${new URLSearchParams({ q: "trust*", mode: "scholar" }).toString()}`,
+    );
+  });
+});
+
+describe("a record's twins when the link's query was refused (PA-10, PA-4)", () => {
+  it("links the twin without the refused query", async () => {
+    const twin = "op:iclr:2024:Hy-Copy01";
+    draw(
+      "tr*",
+      api((call) =>
+        call.query.has("q")
+          ? json({ error: { code: "WILDCARD_TOO_MANY_EXPANSIONS", message: "m" } }, 422)
+          : json(answer({ twins: [twin] })),
+      ),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.getByRole("link", { name: twin }).getAttribute("href")).toBe(
+      `/paper/${encodeURIComponent(twin)}`,
+    );
   });
 });
 

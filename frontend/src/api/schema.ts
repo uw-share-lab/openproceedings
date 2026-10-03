@@ -550,6 +550,11 @@ export interface components {
              * @enum {string}
              */
             track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "other" | "unknown";
+            /**
+             * Twins
+             * @description The ids of this paper's twins (decision-029): another record of the same paper that the index keeps separate, never merged, such as an ICLR 2017 workshop-listing copy and its conference submission. Each is a paper on this same index (`GET /papers/{id}`), and each record keeps matching on its own text, so both can be hits. Usually empty; one or two ids otherwise, sorted.
+             */
+            twins: string[];
             urls: components["schemas"]["Urls"];
             /**
              * Venue
@@ -737,6 +742,11 @@ export interface components {
             query_version: string;
             /** Tokenizer Version */
             tokenizer_version: string;
+            /**
+             * Twins
+             * @description The ids of this paper's twins (decision-029): another record of the same paper that the index keeps separate, never merged, such as an ICLR 2017 workshop-listing copy and its conference submission. Each is a paper on this same index (`GET /papers/{id}`), and each record keeps matching on its own text, so both can be hits. Usually empty; one or two ids otherwise, sorted.
+             */
+            twins: string[];
         };
         /** ParseRequest */
         ParseRequest: {

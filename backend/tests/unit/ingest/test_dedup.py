@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import random
+import unicodedata
 from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from hypothesis import example, given
+from hypothesis import strategies as st
 from openproceedings.ingest import urls
 from openproceedings.ingest.dedup import (
     CONFLICT_FIELDS,
@@ -85,6 +89,46 @@ def test_title_key_is_the_token_contract() -> None:
         == "trust in ai"
     )
     assert title_key("—") == ""
+
+
+# TASK-168: the pieces that split a title's NFC and NFD keys before the fix (a backslash, so LaTeX reads a command
+# name, before a letter whose NFD starts with an ASCII one; an accent macro's braces around one), among letters
+# whose canonical forms differ, marks in any order (U+0345 reorders), and plain text
+_SPLITTERS = ["\\", "\\H{", "\\'{", "{", "}", "$", " ", "-"]
+_ACCENTED = [chr(c) for c in range(0xC0, 0x250) if unicodedata.decomposition(chr(c))] + list("ḡǘṩẫệőŉǰ가각")
+_MARKS = ["\u0301", "\u0308", "\u030b", "\u0323", "\u0345", "\u05b7", "\u0e48", "\u3099"]
+_FORM_PIECES = st.one_of(
+    st.sampled_from(_SPLITTERS), st.sampled_from(_ACCENTED), st.sampled_from(_MARKS), st.characters()
+)
+
+
+@given(st.lists(_FORM_PIECES, max_size=30).map("".join))
+@example("Caf\\é")  # NFD dropped the e: `\e` was a command
+@example("Erd\\H{ő}s")  # NFD's `{o\u030b}` was no accent macro
+@example("\\ḡx")
+@example("x \u5d69\u0345\U00010376y")  # U+0345 (ypogegrammeni, NFKC ι) before a letter
+# two marks: the swapped order is canonically equivalent, so it is checked too
+@example("Caf\\e\u0301\u0323 x")
+def test_every_canonically_equivalent_title_has_one_key(title: str) -> None:
+    """TASK-168: two copies of one paper that differ only in Unicode form (NFC, NFD, or marks stored in another
+    canonical order) share a dedup title key, so they merge."""
+    marks = [i for i, ch in enumerate(title) if unicodedata.combining(ch)]
+    reordered = list(title)
+    if len(marks) >= 2:  # swap two marks: canonically equivalent only when NFC says so
+        i, j = random.Random(title).sample(marks, 2)
+        reordered[i], reordered[j] = reordered[j], reordered[i]
+    forms = {title, unicodedata.normalize("NFC", title), unicodedata.normalize("NFD", title)}
+    if unicodedata.normalize("NFC", "".join(reordered)) == unicodedata.normalize("NFC", title):
+        forms.add("".join(reordered))
+    assert len({title_key(f) for f in forms}) == 1
+
+
+@pytest.mark.parametrize(
+    ("title", "key"),
+    [("Caf\\é", "caf e"), ("Erd\\H{ő}s", "erdos"), ('Na\\"ive', "naive")],
+)
+def test_a_decomposed_title_keys_as_its_composed_form(title: str, key: str) -> None:
+    assert title_key(title) == title_key(unicodedata.normalize("NFD", title)) == key
 
 
 def test_the_precedence_table_is_decision_005() -> None:

@@ -43,7 +43,8 @@ index, re-reads the takedown list (`<data_dir>/takedowns/withheld.txt`, `openpro
 bundle (`Served.listed`) and recomputes its coverage with it, so a listed abstract is withheld from every
 response of every index version this instance loads from the next reload on: the served one and each pinned one
 (`Served.withheld_in`), under the listed id or any other id a version holds the paper under (every snapshot's
-merges and the native id, read with the list: `takedowns.same_paper`, TASK-067). A list that can't be read or
+merges and the native id, read with the list: `takedowns.same_paper`, TASK-067), and its twin's (a `twin` claim
+of the served snapshot or of that version's: decision-029, TASK-163). A list that can't be read or
 parsed fails the load as a bad index does (the old bundle, and its list, kept). A missing list fails it too
 when the list is required (`op serve` off loopback), a list is already applied, or any snapshot on disk
 withheld an abstract; otherwise it withholds nothing (TASK-067).
@@ -128,14 +129,20 @@ class Served:
     def withheld_in(self, records: RecordFile | None) -> Withheld:
         """The ids whose abstracts a response from the index whose snapshot records are `records` withholds:
         the takedown list; each id of `records` that is a listed paper under another id (an older version's
-        id before a rekey, or a duplicate a later build merged: `takedowns.same_paper`, TASK-067); and the ids
+        id before a rekey, or a duplicate a later build merged: `takedowns.same_paper`, TASK-067; or its twin,
+        by the `twin` claims of the served snapshot and of `records`: decision-029, TASK-163); and the ids
         that snapshot itself withheld (so they are marked withheld, not missing). `records` None (a pinned
         snapshot that can't be verified): the list alone."""
         if records is None:
             return self.listed
         aliases = self._aliases.get(records)
         if aliases is None:  # once per bundle and version: one pass over its ids
-            aliases = self._aliases[records] = takedowns.same_paper(self.listed, self.merges, records.ids())
+            aliases = self._aliases[records] = takedowns.same_paper(
+                self.listed,
+                self.merges,
+                records.ids(),
+                twins=(*self.records.twin_pairs(), *records.twin_pairs()),
+            )
         return self.listed | aliases | records.withheld
 
 
@@ -536,7 +543,7 @@ class IndexState:
             )
 
         merges = merges_on_disk(self._data_dir / "snapshots", on_damaged=damaged) if listed else ()
-        aliases = takedowns.same_paper(listed, merges, records.ids())
+        aliases = takedowns.same_paper(listed, merges, records.ids(), twins=records.twin_pairs())
         served = Served(engine, records, coverage_of(engine, records, listed | aliases), listed, merges)
         served._aliases[records] = aliases
         return served

@@ -83,7 +83,9 @@ abstract `conflicts.csv` values replaced by `(withheld: takedown)`, repeated row
 (merged: `merges.csv`; rekeyed: the one record with its native id, when that native id is globally unique, a
 forum id or PMLR key: `takedowns.global_native`; a `nips-`/`iclr-` hash never rekeys, TASK-067) is followed, its successor withheld too
 (`takedowns_followed`); a listed id with no record at all is reported (`takedowns_unmatched`), never refused
-(both on stderr and in the build's JSON). When something is withheld the manifest adds `withheld` (the sorted
+(both on stderr and in the build's JSON). A twin of a withheld record (its `twin` claim, decision-029) is withheld
+too and reported (`takedowns_twins`: twin → the id it is the twin of; on stderr with what to list and log;
+TASK-163). When something is withheld the manifest adds `withheld` (the sorted
 ids whose record lost an abstract or an abstract claim: listing a record with none changes nothing),
 `abstract_withheld` (venue → year, 0
 included) and `abstract_withheld_by_track` (venue → year → track, 0 included), and `abstract_missing` (both
@@ -143,7 +145,7 @@ marked crawl) is refused.
 ## CLI
 - `op [--data-dir data] snapshot build [--from <cache>] [--out <snapshots>] [--takedowns <list>]` imports all
   cached sources, then dedup → reconcile → withhold the takedown list's abstracts → write (it prints
-  `withheld_ids`, `takedowns_followed` and `takedowns_unmatched` too; a list that doesn't parse is refused before anything is read). It never fetches, so it works offline, and an offline cache never expires (TASK-102),
+  `withheld_ids`, `takedowns_followed`, `takedowns_unmatched` and `takedowns_twins` too; a list that doesn't parse is refused before anything is read). It never fetches, so it works offline, and an offline cache never expires (TASK-102),
   so the same cache rebuilds the same bytes at any date. It prints `{path, snapshot_hash, created,
   unexpected_statuses}`; `created: false` means a snapshot with that hash already existed and nothing was
   written. `unexpected_statuses` (TASK-109, `ingest/status_check.py`) lists each (venue, year, status) whose

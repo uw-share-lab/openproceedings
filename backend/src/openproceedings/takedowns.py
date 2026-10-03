@@ -9,7 +9,8 @@ directory and never in git (`data/` is gitignored, and `protect-data-dir.sh` ref
   service user may read it (mode 0644 or 0640 with the API's group). `op snapshot build` withholds each listed
   abstract from the snapshot it writes (`ingest/snapshot.py::withhold`), and the API withholds each one at
   serve time from every index version it loads, under any id that version holds the paper under (`same_paper`,
-  TASK-067; `api/state.py`: the list is re-read on every load and SIGHUP).
+  TASK-067; `api/state.py`: the list is re-read on every load and SIGHUP), and on its twins (a `twin` claim,
+  decision-029: two records of one paper, never merged; TASK-163, owner decision 2026-10-02).
   A missing file is an empty list, unless the path was named (`required`), or the API already applies a list or
   loads a snapshot that withheld abstracts (`api/state.py`): then it is `takedowns_missing`. A line that isn't a
   record id makes the whole list unusable (`TakedownError`): a build is refused, and the API keeps what it
@@ -119,18 +120,35 @@ def global_native(rid: str) -> str | None:
     return None if native.startswith(_LOCAL_NATIVE) else native
 
 
-def same_paper(listed: Withheld, merges: Iterable[tuple[str, str]], ids: Iterable[str]) -> Withheld:
+def twin_ids(record: PaperRecord) -> tuple[str, ...]:
+    """The ids a record's `twin` claims name (decision-029, TASK-159: an ICLR 2017 workshop copy and its
+    conference twin), sorted, without its own."""
+    return tuple(
+        sorted(
+            {t for c in record.claims("twin") if isinstance(c.value, tuple) for t in c.value} - {record.id}
+        )
+    )
+
+
+def same_paper(
+    listed: Withheld,
+    merges: Iterable[tuple[str, str]],
+    ids: Iterable[str],
+    twins: Iterable[tuple[str, str]] = (),
+) -> Withheld:
     """Which of `ids` (one index version's records) are a listed paper, under its listed id or any other
     (TASK-067): linked to a listed id by `merges` ((survivor, merged) pairs, from any build: the same paper
-    found twice), or holding its globally unique native id (`global_native`: the same paper rekeyed by a
-    corrected venue or year), transitively. The list names one id; an older version may hold the paper under
-    an id it had before, or as a duplicate a later build merged, and a newer one under the id it has now: each
-    is withheld. A proceedings hash links nothing by itself: in another year it is another paper."""
+    found twice), or by `twins` ((record, twin) pairs of `twin` claims: decision-029's two records of one
+    paper, never merged, which a takedown follows too, TASK-163), or holding its globally unique native id
+    (`global_native`: the same paper rekeyed by a corrected venue or year), transitively. The list names one
+    id; an older version may hold the paper under an id it had before, or as a duplicate a later build merged,
+    and a newer one under the id it has now: each is withheld. A proceedings hash links nothing by itself: in
+    another year it is another paper."""
     if not listed:
         return NONE
     held = list(ids)
     linked: dict[str, set[str]] = {}
-    for survivor, merged in merges:
+    for survivor, merged in (*merges, *twins):
         linked.setdefault(survivor, set()).add(merged)
         linked.setdefault(merged, set()).add(survivor)
     by_native: dict[str, set[str]] = {}

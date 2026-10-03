@@ -2,7 +2,14 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Schemas } from "@/api/client";
-import { ABSTRACT_WITHHELD, attributionText, HitItem, shownAuthors, WITHHELD_SEARCH_TERMS } from "./hit-item";
+import {
+  ABSTRACT_WITHHELD,
+  attributionText,
+  HitItem,
+  seeAlsoLead,
+  shownAuthors,
+  WITHHELD_SEARCH_TERMS,
+} from "./hit-item";
 
 afterEach(cleanup);
 
@@ -24,6 +31,7 @@ const HIT: Hit = {
   urls: { forum: null, pdf: null, proceedings: PMLR_PAGE, doi: null },
   abstract_source: { source: "pmlr", origin: "pmlr", url: PMLR_PAGE },
   abstract_withheld: false,
+  twins: [],
 };
 
 function show(over: Partial<Hit> = {}) {
@@ -173,5 +181,39 @@ describe("a withheld abstract (TASK-136, decision-022, RH-15)", () => {
     const article = show({ abstract_withheld: true, abstract_source: null });
     expect(within(article).getByText(`${ABSTRACT_WITHHELD}. ${WITHHELD_SEARCH_TERMS}`)).toBeTruthy();
     expect(article.textContent).not.toContain(HIT.abstract);
+  });
+});
+
+describe("a record's twins (TASK-162, decision-029, RH-18)", () => {
+  const COPY = "op:iclr:2017:Hy-Copy01";
+  const COPY2 = "op:iclr:2017:Hy-Copy02";
+  const seeAlso = (article: HTMLElement) =>
+    [...article.querySelectorAll("p")].find((p) => p.textContent?.startsWith("See also"));
+
+  it("says nothing for a record with no twin", () => {
+    expect(seeAlso(show())).toBeUndefined();
+  });
+
+  it("names one twin, a link to its paper page that keeps the query", () => {
+    const line = seeAlso(show({ twins: [COPY] }));
+    expect(line?.textContent).toBe(`${seeAlsoLead(1)} ${COPY}`);
+    const link = within(line!).getByRole("link", { name: COPY });
+    expect(link.getAttribute("href")).toBe(`/paper/${encodeURIComponent(COPY)}?q=trust&mode=native`);
+  });
+
+  it("names two twins, each its own link, in the API's order", () => {
+    const line = seeAlso(show({ twins: [COPY, COPY2] }));
+    expect(line?.textContent).toBe(`${seeAlsoLead(2)} ${COPY}, ${COPY2}`);
+    expect(
+      within(line!)
+        .getAllByRole("link")
+        .map((a) => a.textContent),
+    ).toEqual([COPY, COPY2]);
+    expect(seeAlsoLead(2)).toContain("other records");
+  });
+
+  it("names the twins of a record whose abstract is withheld too", () => {
+    const article = show({ abstract: null, abstract_source: null, abstract_withheld: true, twins: [COPY] });
+    expect(within(seeAlso(article)!).getByRole("link", { name: COPY })).toBeTruthy();
   });
 });

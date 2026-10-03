@@ -9,7 +9,6 @@ time); a replay prints the API's replay block, and exits 0 on `reproduced` or `d
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -49,6 +48,15 @@ def saved(capsys: Capsys, data_dir: Path, q: str, *argv: str) -> dict[str, Any]:
 def replay_json(capsys: Capsys, data_dir: Path, record_id: str) -> tuple[int, dict[str, Any], str]:
     code, out, err = op(capsys, data_dir, "record", "replay", record_id, "--json")
     return code, json.loads(out), err
+
+
+def take_away(data_dir: Path, path: Path) -> None:
+    """Remove an index directory as one atomic rename out of the data directory (TASK-165). An earlier
+    in-process `op` call's Tantivy reader can still be finishing the reload its meta.json watcher thread starts
+    at open, which creates `.tantivy-meta.lock` again (`engine.index.open_index`); landing inside an `rmtree`
+    it failed it with "Directory not empty". After a rename it lands in the moved directory, which the test's
+    tmp_path cleanup removes."""
+    path.rename(data_dir.parent / f"gone-{path.name}")
 
 
 # --- save -------------------------------------------------------------------------------------------------
@@ -166,7 +174,7 @@ def test_replay_with_the_pinned_index_gone_is_drifted_and_exits_0(
     """Spec 08: zero on `drifted`, so a script can tell a bug (mismatch) from drift."""
     record_id = saved(capsys, data_dir, "year:1900..2100")["record_id"]
     point_current(data_dir, store.small)
-    shutil.rmtree(data_dir / "indexes" / store.big)
+    take_away(data_dir, data_dir / "indexes" / store.big)
     code, body, _err = replay_json(capsys, data_dir, record_id)
     assert code == 0 and body["status"] == "drifted" and body["index_version"] == store.small
     assert [c["input"] for c in body["changed"]] == ["snapshot_hash"]
@@ -234,7 +242,7 @@ def test_an_unknown_or_malformed_record_exits_1(capsys: Capsys, data_dir: Path, 
 
 def test_replay_needs_an_index_when_its_own_is_gone(capsys: Capsys, data_dir: Path, store: Store) -> None:
     record_id = saved(capsys, data_dir, "trust")["record_id"]
-    shutil.rmtree(data_dir / "indexes")
+    take_away(data_dir, data_dir / "indexes")
     (data_dir / "indexes").mkdir()
     code, out, err = op(capsys, data_dir, "record", "replay", record_id)
     assert code == 1 and out == "" and "op record replay:" in err and "--index" in err
@@ -315,7 +323,7 @@ def test_replay_skips_an_alias_named_like_the_records_index(
     `IndexState.pinned`): absent, one DEBUG line, and the replay runs on `current` as drift."""
     record_id = saved(capsys, data_dir, "trust")["record_id"]
     point_current(data_dir, store.small)
-    shutil.rmtree(data_dir / "indexes" / store.big)
+    take_away(data_dir, data_dir / "indexes" / store.big)
     (data_dir / "indexes" / store.big).symlink_to(store.small)
     code, out, err = op(capsys, data_dir, "--log-level", "debug", "record", "replay", record_id, "--json")
     assert code == 0 and json.loads(out)["index_version"] == store.small

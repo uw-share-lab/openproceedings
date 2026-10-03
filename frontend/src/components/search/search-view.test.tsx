@@ -87,6 +87,7 @@ const HIT: Hit = {
     url: "https://openreview.net/forum?id=abc",
   },
   abstract_withheld: false,
+  twins: [],
 };
 
 function body(over: Partial<Body> = {}): Body {

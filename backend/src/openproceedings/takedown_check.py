@@ -16,6 +16,8 @@ each id on the takedown list:
   true with reason `takedown`); a paper found in one format of a version must be in all four (a format the
   check can no longer read is a problem, never a silent pass).
 
+- each listed paper's twins (decision-029, its `twins` on `/papers` or in a JSONL export): the API withholds
+  them as the same paper (`takedowns.same_paper`, TASK-163), and each must be listed (and so logged) too;
 - `GET /export` (JSONL) of each listed paper's title in every venue and year, for every index version
   (TASK-067): a record under another id with the same title and authors that carries an abstract is the paper
   served under an id it had before (a rekey) or as a duplicate a later build merged; the API withholds those
@@ -101,6 +103,7 @@ def check(fetch: Fetch, listed: Withheld, merges: Iterable[tuple[str, str]] = ()
     versions = tuple(json.loads(body)["index_versions"])
     # each listed paper's title and authors, from the served index or any version's export of it
     papers = {rid: paper for rid in sorted(listed) if (paper := _served(fetch, rid, problems)) is not None}
+    twins = {rid: set(paper.get("twins") or ()) for rid, paper in papers.items()}
     found = set(papers)
     cells: dict[str, list[str]] = {}
     for rid in sorted(listed):
@@ -118,10 +121,11 @@ def check(fetch: Fetch, listed: Withheld, merges: Iterable[tuple[str, str]] = ()
                     continue
                 answered.add(fmt)
                 for rid in ids:
-                    if fmt == "jsonl" and rid not in papers:
-                        papers.update(
-                            (o["id"], o) for o in map(json.loads, text.splitlines()) if o["id"] == rid
-                        )
+                    if fmt == "jsonl":
+                        for paper in map(json.loads, text.splitlines()):
+                            if paper["id"] == rid:
+                                papers.setdefault(rid, paper)
+                                twins.setdefault(rid, set()).update(paper.get("twins") or ())
                     verdict = _in_export(fmt, text, rid)
                     if verdict is None:
                         continue
@@ -139,6 +143,7 @@ def check(fetch: Fetch, listed: Withheld, merges: Iterable[tuple[str, str]] = ()
         exports += _other_ids(fetch, version, papers, problems)
     # after the versions: a listed paper only a pinned version holds is checked too
     _merged_elsewhere(fetch, papers, tuple(merges), problems)
+    problems += _twins_unlisted({rid: {"twins": sorted(links)} for rid, links in twins.items()}, listed)
     problems += [
         f"{rid}: no index this instance loads holds it; check the id on the list"
         for rid in sorted(listed - found)
@@ -168,6 +173,19 @@ def _merged_elsewhere(
                     f"{other}: withheld as {rid}'s paper (a snapshot's merges.csv links them), but its title "
                     "differs; check that merge"
                 )
+
+
+def _twins_unlisted(papers: Mapping[str, Mapping[str, Any]], listed: Withheld) -> list[str]:
+    """TASK-163 (decision-029): a takedown follows a twin link, so the API withholds a listed paper's twin too;
+    the twin must be listed and logged as well, so the operator's log names both ids. Each twin of a listed
+    paper (its `/papers` or JSONL export `twins`) that the list doesn't name is a problem."""
+    return [
+        f"{twin}: the twin of listed {rid} (decision-029, the same paper), withheld with it; list it too and "
+        "log a `withheld` entry for it"
+        for rid, paper in sorted(papers.items())
+        for twin in paper.get("twins") or ()
+        if twin not in listed
+    ]
 
 
 def _other_ids(
@@ -206,7 +224,7 @@ def _served(fetch: Fetch, rid: str, problems: list[str]) -> dict[str, Any] | Non
         problems.append(f"{rid}: GET /papers answered {status}")
         return None
     page = json.loads(body)
-    paper: dict[str, Any] = page["paper"]
+    paper: dict[str, Any] = {**page["paper"], "twins": page.get("twins") or []}  # its twins: TASK-163
     version = page["index_version"]
     if paper["abstract"] is not None or any(c["field"] == "abstract" for c in paper["provenance"]):
         problems.append(f"{rid}: /papers on index {version} serves its abstract or an abstract claim")

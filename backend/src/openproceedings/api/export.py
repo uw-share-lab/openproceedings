@@ -48,7 +48,7 @@ from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.engine.tantivy_engine import TantivyEngine
-from openproceedings.export import Provenance, Sources, check_count, entries, header, utc_date
+from openproceedings.export import Provenance, Sources, Twins, check_count, entries, header, utc_date
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode, ParseResult
@@ -90,17 +90,22 @@ def pinned_engine(request: Request, served: TantivyEngine, index_version: str | 
     return pinned.engine
 
 
-def sources_of(request: Request, served: Served, engine: TantivyEngine) -> tuple[Sources | None, Withheld]:
+def sources_of(
+    request: Request, served: Served, engine: TantivyEngine
+) -> tuple[Sources | None, Withheld, Twins | None]:
     """Each record's abstract attribution in `engine`'s snapshot: the served bundle's when `engine` is the
     served one, else the pinned index's; None when that snapshot can't be verified, and the export then
     withholds every abstract (decision-021: an abstract never goes out without attribution, decision-018).
     With it, the ids whose abstracts a takedown withholds (TASK-136): the bundle's list, whatever index is
-    exported, plus the ids that index's snapshot withheld."""
+    exported, plus the ids that index's snapshot withheld. And each record's twins (TASK-162), from the same
+    snapshot (None when it can't be verified: no twins are named)."""
     if engine is served.engine:
-        return served.records.attributions, served.withheld_in(served.records)
+        return served.records.attributions, served.withheld_in(served.records), served.records.twins
     state: IndexState = request.app.state.index
     records = state.pinned_records(engine.index_version)
-    return (None if records is None else records.attributions), served.withheld_in(records)
+    if records is None:
+        return None, served.withheld_in(None), None
+    return records.attributions, served.withheld_in(records), records.twins
 
 
 def _bad(message: str) -> ApiError:
@@ -198,7 +203,9 @@ def export(
             raise ApiError(
                 DiagnosticCode.API_RECORD_MISMATCH, "This search record's stored ids don't match it."
             )
-        sources, withheld = sources_of(request, bundle, engine)  # once nothing about the record can refuse
+        sources, withheld, twins = sources_of(
+            request, bundle, engine
+        )  # once nothing about the record can refuse
         # the cited set exactly: the record's stored ids, from the index it names (never a re-run query)
         canonical_hash = record.canonical_hash
         total, documents = len(ids), stored_documents(engine, ids)
@@ -219,7 +226,9 @@ def export(
         pinned_by = {}
         expanded(engine, ast)  # an over-cap wildcard is a located 422 before anything is compiled
         check_candidates(request, engine, ast)  # 422 API_QUERY_TOO_COSTLY before any verification
-        sources, withheld = sources_of(request, bundle, engine)  # once nothing about the query can refuse
+        sources, withheld, twins = sources_of(
+            request, bundle, engine
+        )  # once nothing about the query can refuse
         total, documents = engine.documents(ast)  # the one collection; records are read as they stream
         removed = matched_among(engine, result, withheld)
     abstract_source: AbstractSource = "unavailable" if sources is None else "attributed"
@@ -228,7 +237,7 @@ def export(
     media, ext = MEDIA[fmt]
     name = filename(engine.index_version, canonical_hash, ext)
     return StreamingResponse(
-        _body(fmt, documents, provenance, total, sources, withheld),
+        _body(fmt, documents, provenance, total, sources, withheld, twins),
         media_type=media,
         headers={
             "X-Total": str(total),
@@ -290,12 +299,13 @@ def _body(
     total: int,
     sources: Sources | None,
     withheld: Withheld = NONE,
+    twins: Twins | None = None,
 ) -> Iterator[bytes]:
     """`header(fmt)` then every entry, UTF-8, in chunks of at most `CHUNK` characters plus one entry;
     counted against `total` at the end (a shortfall or an excess raises, after the last byte it has)."""
     first = header(fmt)
     parts, size, n = [first], len(first), 0
-    for entry in entries(fmt, documents, provenance, sources=sources, withheld=withheld):
+    for entry in entries(fmt, documents, provenance, sources=sources, withheld=withheld, twins=twins):
         n += 1
         parts.append(entry)
         size += len(entry)

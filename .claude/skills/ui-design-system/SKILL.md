@@ -62,7 +62,10 @@ Title (link to `/paper/[id]`) with highlights → authors (first 3 + "et al.", a
 the rest; none when the record has no authors) → badges → abstract excerpt with highlights → the abstract's
 attribution, `Abstract: <site>` in `text-xs` muted text with the site an underlined link to the paper's page
 there, and ` (via RIS import)` after it for an RIS-imported abstract (the hit's `abstract_source`, decision-018;
-its `aria-label` is the visible text plus ", abstract source for <title>") → links (OpenReview · PDF · proceedings). Highlights are `<mark>` with bold + `--hl-*`; spans come from the API.
+its `aria-label` is the visible text plus ", abstract source for <title>") → for a record with twins (the hit's
+`twins`, decision-029), "See also (the same paper's other record): <id>" in `text-sm`, each id a monospace
+underlined link to its paper page carrying the query (copy RH-18; the paper page shows the same line after its
+status and match lines, PA-10) → links (OpenReview · PDF · proceedings). Highlights are `<mark>` with bold + `--hl-*`; spans come from the API.
 
 ## Copy rules
 Say what happened, with the number: "412 papers match". Errors quote the server message and hint. Methods

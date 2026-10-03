@@ -1,22 +1,57 @@
 """Serve the synthetic 5k fixture index for Playwright (TASK-046; spec 05 §Testing). Its records carry authors
-and each abstract's source claim (`attributed`, TASK-134), so the results list's attribution is exercised."""
+and each abstract's source claim (`attributed`, TASK-134), so the results list's attribution is exercised. The
+first two results of the default `trust` search are made twins (a `twin` claim each, decision-029; TASK-162),
+so the "See also" line is drawn on the first results page and the first result's paper page: a claim is
+provenance only, so the ranking that picks them is the final index's."""
 
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 from openproceedings.api import ApiConfig, RateLimit
 from openproceedings.api.server import serve
+from openproceedings.engine.tantivy_engine import TantivyEngine
+from openproceedings.ingest.record import Claim, PaperRecord
+from openproceedings.query.parser import parse
+from openproceedings.search import run
 
 from tests.contract.conftest import attributed, build
+from tests.corpus import Rec
 from tests.fixtures.corpus.synthetic_5k import records
+
+BUILT = datetime(2026, 9, 26, tzinfo=UTC)  # the twin claims' fetch time (the fixture's build time)
+TWINNED_QUERY = "trust"  # frontend/e2e/accessibility.spec.ts searches it and opens its first result
+
+
+def _twinned(data: Path) -> dict[str, str]:
+    """The first two hits of the default `TWINNED_QUERY` search, each → the other, from a scratch build."""
+    version = build(
+        list(records()), data / "scratch-snapshots", "fixture", data / "scratch-indexes", attributed
+    )
+    engine = TantivyEngine(data / "scratch-indexes" / version)
+    first, second = (h.id for h in run(engine, parse(TWINNED_QUERY), limit=2).hits)
+    return {first: second, second: first}
+
+
+def _with_twins(twins: dict[str, str]) -> Callable[[Rec], PaperRecord]:
+    def paper(r: Rec) -> PaperRecord:
+        p = attributed(r)
+        if p.id not in twins:
+            return p
+        claim = Claim(field="twin", value=(twins[p.id],), source="openreview_v1", fetched_at=BUILT)
+        return p.model_copy(update={"provenance": (*p.provenance, claim)})
+
+    return paper
 
 
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="openproceedings-e2e-") as raw:
         data = Path(raw)
-        version = build(list(records()), data / "snapshots", "fixture", data / "indexes", attributed)
+        twins = _twinned(data)
+        version = build(list(records()), data / "snapshots", "fixture", data / "indexes", _with_twins(twins))
         (data / "indexes" / "current").symlink_to(version)
         config = ApiConfig(
             data_dir=data,

@@ -2234,7 +2234,8 @@
               "doi": null
             },
             "abstract_source": null,
-            "abstract_withheld": false
+            "abstract_withheld": false,
+            "twins": []
           }
         ]
       },
@@ -2423,7 +2424,8 @@
               "doi": null
             },
             "abstract_source": null,
-            "abstract_withheld": false
+            "abstract_withheld": false,
+            "twins": []
           }
         ]
       },
@@ -2628,7 +2630,8 @@
               "doi": null
             },
             "abstract_source": null,
-            "abstract_withheld": false
+            "abstract_withheld": false,
+            "twins": []
           }
         ]
       },
@@ -2834,7 +2837,8 @@
               "doi": null
             },
             "abstract_source": null,
-            "abstract_withheld": false
+            "abstract_withheld": false,
+            "twins": []
           }
         ]
       },

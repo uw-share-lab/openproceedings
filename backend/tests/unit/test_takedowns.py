@@ -189,6 +189,45 @@ def test_merges_chain_and_other_papers_are_left_alone() -> None:
     assert takedowns.same_paper(frozenset({far}), merges, [NEW, OLD, A, B]) == {NEW, OLD}
 
 
+# a workshop-listing copy, its conference twin, and that twin's other copy (decision-029; ICLR 2017 forum ids)
+COPY, CONF, COPY2 = "op:iclr:2017:Hy-Copy01", "op:iclr:2017:Hy-Conf01", "op:iclr:2017:Hy-Copy02"
+TWINS = [(COPY, CONF), (CONF, COPY), (CONF, COPY2), (COPY2, CONF)]  # each record's claim names the other
+
+
+@pytest.mark.parametrize("listed", [COPY, CONF, COPY2])
+def test_a_takedown_follows_twin_links_both_ways_and_transitively(listed: str) -> None:
+    """TASK-163 (owner decision 2026-10-02): a takedown of either twin withholds both; a twin's twin too."""
+    assert takedowns.same_paper(frozenset({listed}), (), [COPY, CONF, COPY2, A], twins=TWINS) == {
+        COPY, CONF, COPY2
+    }  # fmt: skip
+    assert takedowns.same_paper(frozenset({listed}), (), [COPY, CONF, COPY2, A]) == {
+        listed
+    }  # without the links
+
+
+def test_one_direction_of_a_twin_claim_is_enough() -> None:
+    """An older snapshot's records may carry no claim: the served snapshot's pair links the ids alone."""
+    assert takedowns.same_paper(frozenset({CONF}), (), [COPY], twins=[(COPY, CONF)]) == {COPY}
+    assert takedowns.same_paper(frozenset({COPY}), (), [CONF], twins=[(COPY, CONF)]) == {CONF}
+
+
+def test_twin_links_and_merges_chain() -> None:
+    """A twin of a paper a build merged (or rekeyed) is still that paper's twin."""
+    merged = "op:iclr:2017:Hy-Merged1"
+    assert takedowns.same_paper(frozenset({merged}), [(CONF, merged)], [COPY, CONF], twins=TWINS[:2]) == {
+        COPY, CONF
+    }  # fmt: skip
+
+
+def test_twin_ids_are_its_claims_ids_sorted_without_its_own() -> None:
+    from tests.unit.ingest.test_record import claim, record
+
+    plain = record(id=CONF, year=2017)
+    r = plain.model_copy(update={"provenance": (*plain.provenance, claim("twin", (COPY2, COPY, CONF)))})
+    assert takedowns.twin_ids(r) == (COPY, COPY2)
+    assert takedowns.twin_ids(plain) == ()
+
+
 def test_an_id_the_log_withholds_but_the_list_dropped_is_a_problem(tmp_path: Path) -> None:
     """TASK-067: a line deleted from the list lifts a takedown the log still records as `withheld`."""
     path = log_file(tmp_path, entry(), entry(B), entry(B, "lifted"))
