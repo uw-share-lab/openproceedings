@@ -19,8 +19,9 @@ Grouped by the Conventional Commits type in the title, else the head branch's `<
 A release's Data section comes from its `[releases."X.Y.Z"]` table in `docs/releases.toml`. With
 `--release`, that table must match the code at HEAD (TOKENIZER_VERSION, SCHEMA_VERSION, QUERY_VERSION and the
 locked Tantivy) and the manifest of the index it names under `--data-dir`. A release whose versions differ
-from the previous release's makes saved search records replay as `drifted`: it is called out at the top of
-its section, and may not be a patch release.
+from the previous release's names changed replay inputs at the top of its section, and may not be a
+patch release. Retained supported pins can still reproduce when QUERY_VERSION matches; release tables
+alone cannot determine an individual record's replay status.
 Refuses (exit 1, nothing written) on bad input; on a PR title or note that carries an AI-attribution marker,
 an @-mention or a URL; and on any AI-attribution marker in the output.
 """
@@ -374,7 +375,10 @@ def data_block(version: str, data: dict[str, dict[str, str]]) -> tuple[list[str]
     earlier = sorted((v for v in data if version_key(v) < version_key(version)), key=version_key)
     callout: list[str] = []
     if not earlier:
-        replay = "First release: no earlier search records."
+        replay = (
+            "First tagged release. Development records can reproduce on retained supported pins "
+            "when QUERY_VERSION matches."
+        )
     else:
         prev = earlier[-1]
         changed = [k for k in COMPAT if data[prev][k] != d[k]]
@@ -390,11 +394,15 @@ def data_block(version: str, data: dict[str, dict[str, str]]) -> tuple[list[str]
                 )
             moves = ", ".join(f"{COMPAT[k]} {data[prev][k]} → {d[k]}" for k in changed)
             callout = [
-                f"**Search records saved under {prev} or earlier replay as `drifted`: {moves}. To reproduce "
-                "one, run the release it was saved under on the index it pins.**",
+                f"**Changed replay inputs since {prev}: {moves}. Replay against changed inputs reports "
+                "`drifted`; retained supported pins reproduce when QUERY_VERSION matches. "
+                "Incompatible pins require the matching historical release.**",
                 "",
             ]
-            replay = f"Search records saved under {prev} or earlier replay as `drifted` ({moves})."
+            replay = (
+                f"Replay against changed inputs reports `drifted` ({moves}). Retained supported pins "
+                "reproduce when QUERY_VERSION matches; incompatible pins require the matching historical release."
+            )
         else:
             run: list[str] = []  # the releases just before this one with the same versions, oldest first
             for v in reversed(earlier):
@@ -404,9 +412,13 @@ def data_block(version: str, data: dict[str, dict[str, str]]) -> tuple[list[str]
             span = run[0] if len(run) == 1 else f"{run[0]} to {run[-1]}"
             replay = (
                 f"Search records saved under {span} replay as `reproduced` on the index_version they pin, "
-                "while it is kept"
+                "while it is kept and supported and QUERY_VERSION matches."
             )
-            replay += "; those saved earlier replay as `drifted`." if len(run) < len(earlier) else "."
+            if len(run) < len(earlier):
+                replay += (
+                    " Earlier records also require a supported retained pin and matching QUERY_VERSION; "
+                    "release tables alone do not determine replay status."
+                )
     lines = [
         "### Data",
         "",

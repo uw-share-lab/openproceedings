@@ -139,7 +139,7 @@ fresh; expect ok "writes CHANGELOG.md"
 
 - index_version `0123456789ab`, snapshot `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
 - TOKENIZER_VERSION 2 · SCHEMA_VERSION 2 · Tantivy 0.26.2 · QUERY_VERSION 2
-- First release: no earlier search records.
+- First tagged release. Development records can reproduce on retained supported pins when QUERY_VERSION matches.
 EOF
 } > "$TMP/want"
 if head -1 "$TMP/want" | grep -qx '# Changelog' && diff -u "$TMP/want" "$R/CHANGELOG.md" > "$TMP/diff"; then ok "matches the golden"; else bad "differs from the golden"; cat "$TMP/diff"; fi
@@ -181,7 +181,7 @@ fresh; data 0.2.0 2 2 2
 expect ok  "versions, code and index agree with the table"              --release 0.2.0
 has   "the untagged PRs are titled 0.2.0"                               "## 0.2.0"
 lacks "no Unreleased section"                                           "## Unreleased"
-has   "unchanged versions replay reproduced"                            "Search records saved under 0.1.0 replay as \`reproduced\` on the index_version they pin, while it is kept."
+has   "unchanged versions replay reproduced"                            "Search records saved under 0.1.0 replay as \`reproduced\` on the index_version they pin, while it is kept and supported and QUERY_VERSION matches."
 fresh; data 0.2.0 2 2 2; "${G[@]}" checkout -q "$C3"
 expect ok  "on a HEAD behind dev"                                       --release 0.2.0
 under "a PR in HEAD is titled 0.2.0"                                    0.2.0 3
@@ -253,10 +253,12 @@ said  "names the missing bump"                                          "without
 fresh; data 0.2.0 2 3 2 0.27.0; code 2 3 2 0.27.0; manifest "$IDX" 2 3 0.27.0
 expect ok  "a Tantivy upgrade with its SCHEMA_VERSION bump, minor"      --release 0.2.0
 has   "both are named"                                                  "(SCHEMA_VERSION 2 → 3, Tantivy 0.26.2 → 0.27.0)."
+has   "changed inputs do not imply every retained pin drifts"            "Retained supported pins reproduce when QUERY_VERSION matches; incompatible pins require the matching historical release."
+lacks "no universal prior-record drift claim"                           "Search records saved under 0.1.0 or earlier replay as"
 fresh; data 0.2.0 2 2 3; code 2 2 3 0.26.2
 expect ok  "a QUERY_VERSION change in a minor release"                  --release 0.2.0
-has   "the Data line names the change"                                  "- Search records saved under 0.1.0 or earlier replay as \`drifted\` (QUERY_VERSION 2 → 3)."
-if [ "$(grep -A2 '^## 0.2.0' "$R/CHANGELOG.md" | tail -1)" = "**Search records saved under 0.1.0 or earlier replay as \`drifted\`: QUERY_VERSION 2 → 3. To reproduce one, run the release it was saved under on the index it pins.**" ]; then
+has   "the Data line names the change"                                  "- Replay against changed inputs reports \`drifted\` (QUERY_VERSION 2 → 3). Retained supported pins reproduce when QUERY_VERSION matches; incompatible pins require the matching historical release."
+if [ "$(grep -A2 '^## 0.2.0' "$R/CHANGELOG.md" | tail -1)" = "**Changed replay inputs since 0.1.0: QUERY_VERSION 2 → 3. Replay against changed inputs reports \`drifted\`; retained supported pins reproduce when QUERY_VERSION matches. Incompatible pins require the matching historical release.**" ]; then
   ok "the callout is the section's first line"; else bad "the callout is not the section's first line"; cat "$R/CHANGELOG.md"; fi
 fresh; data 0.2.0 3 2 3; code 3 2 3 0.26.2; manifest "$IDX" 3 2 0.26.2
 expect ok  "two versions change"                                        --release 0.2.0
@@ -265,10 +267,10 @@ fresh; data 0.1.1 2 2 2; versions 0.1.1 0.1.1
 expect ok  "a patch release with unchanged versions"                    --release 0.1.1
 fresh; data 0.1.1 2 2 2; data 0.2.0 2 2 3; data 0.3.0 2 2 3; code 2 2 3 0.26.2; versions 0.3.0 0.3.0
 expect ok  "three earlier tables"                                       --release 0.3.0
-has   "compared with the latest earlier release, not the oldest"        "- Search records saved under 0.2.0 replay as \`reproduced\` on the index_version they pin, while it is kept; those saved earlier replay as \`drifted\`."
+has   "compared with the latest earlier release, not the oldest"        "- Search records saved under 0.2.0 replay as \`reproduced\` on the index_version they pin, while it is kept and supported and QUERY_VERSION matches. Earlier records also require a supported retained pin and matching QUERY_VERSION; release tables alone do not determine replay status."
 fresh; data 0.1.1 2 2 2; data 0.2.0 2 2 2
 expect ok  "a run of unchanged releases"                                --release 0.2.0
-has   "the whole run reproduces"                                        "Search records saved under 0.1.0 to 0.1.1 replay as \`reproduced\` on the index_version they pin, while it is kept."
+has   "the whole run reproduces"                                        "Search records saved under 0.1.0 to 0.1.1 replay as \`reproduced\` on the index_version they pin, while it is kept and supported and QUERY_VERSION matches."
 fresh; data 0.1.1 2 2 3; data 0.2.0 2 2 4; code 2 2 4 0.26.2
 expect ok  "a change against the latest earlier release only"           --release 0.2.0
 has   "the move is from the latest earlier release"                     "QUERY_VERSION 3 → 4"

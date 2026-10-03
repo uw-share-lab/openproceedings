@@ -478,9 +478,10 @@ table in `docs/releases.toml`: the index it was verified on. It holds no data: s
 committed or attached to a release (00 §Open questions 1, closed by decision-018: the corpus is never
 committed). **Code and data ship separately:** a release never changes which `index_version` an instance
 serves, and promoting an index is the §Deploy runbook, run on its own and recorded in the next release's Data
-section. The one exception is a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy: its
-code can't serve an index built with the old ones (spec 03; `engine/tantivy_engine.py` `unservable`), so it is
-verified on, and deployed with, an index its own code built. Nothing here depends on where an instance is
+section. The one exception is a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy: it is
+verified on, and deployed with, a new index built using its current versions. Supported older tokenizer/schema
+indexes remain available for pinned-record replay (spec 03 §Versioning); unsupported versions or an
+incompatible Tantivy build are refused by `engine/tantivy_engine.py` `unservable`. Nothing here depends on where an instance is
 hosted (00, question 5). The first release is tagged once TASK-065 (deploy) is done.
 
 **Versioning.** One semver version for the app, `MAJOR.MINOR.PATCH`:
@@ -496,8 +497,8 @@ hosted (00, question 5). The first release is tagged once TASK-065 (deploy) is d
 - **MAJOR:** a breaking change to the `/api/v1` contract (that is a new `/api/v2`), the `op` CLI, an export
   format or the search-record store. Before 1.0.0 these bump MINOR.
 - **MINOR:** new features, and any change of `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy or
-  `QUERY_VERSION`: search records saved under the previous release then replay as `drifted`, never
-  `reproduced` (guarantee 4 is kept by saying so, never by hiding it).
+  `QUERY_VERSION`. Records replay as `reproduced` on retained supported pins while their query inputs match;
+  replay against changed inputs reports `drifted`, naming those changes (guarantee 4).
 - **PATCH:** fixes that change none of those four.
 - The first tag is `v0.1.0`. Versions stay `0.y.z` until the owner declares the v1 release (M6), `1.0.0`.
 
@@ -513,10 +514,12 @@ skill).
 
 The app version never enters `index_version` or `canonical_hash`. A search record pins `index_version`,
 `tokenizer_version` and `query_version`, not the app version. It replays as `reproduced` while its index is
-kept, the running code can serve that index (same `TOKENIZER_VERSION`, `SCHEMA_VERSION` and Tantivy) and its
-`QUERY_VERSION` matches; otherwise as `drifted`, naming the changed inputs (04 §Search records). So a record
-saved under an earlier release with other versions is reproduced by running that release's tag on the index
-the record pins, which is why tags and retention (step 8) matter (guarantee 4).
+kept, the running code can serve that index (supported tokenizer/schema versions and compatible Tantivy) and its
+`QUERY_VERSION` matches. Replay using changed inputs reports `drifted`, naming those changes; an unavailable
+or unsupported index with no usable fallback is refused (04 §Search records). So a record
+saved under an earlier release can reproduce on the current reader when its pin is supported and its query
+inputs match. An incompatible pin requires the matching historical release's tag, which is why tags and
+retention (step 8) matter (guarantee 4).
 
 **`CHANGELOG.md`** is generated, never hand-edited: `make changelog` (on a release branch,
 `make changelog RELEASE=X.Y.Z`) runs `.claude/scripts/changelog.py`, whose case table is
@@ -535,9 +538,10 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
   types takes its head branch's `<type>/` prefix instead, else Changed. A known `type!:` is marked
   **Breaking**. Each line is the title's description (a scope first) and a link to the PR, in merge order.
 - **Data:** each release's section ends with its `docs/releases.toml` table (`index_version`,
-  `snapshot_hash`, `tokenizer_version`, `schema_version`, `tantivy_version`, `query_version`) and which
-  saved search records still reproduce. A release whose four versions differ from the previous release's
-  starts with a `drifted` callout, and is refused as a PATCH.
+  `snapshot_hash`, `tokenizer_version`, `schema_version`, `tantivy_version`, `query_version`) and its
+  replay compatibility conditions. A release whose four versions differ from the previous release's
+  starts with a changed-input callout and is refused as a PATCH. The table alone does not classify older
+  pins: retained supported indexes can reproduce when `QUERY_VERSION` matches.
 - **With `--release`**, a Tantivy change without a `SCHEMA_VERSION` change is refused, and the table must
   match the code at `HEAD` (the three constants and the Tantivy `uv.lock`
   pins) and the manifest of the index it names, `<--data-dir>/indexes/<index_version>/manifest.json`
@@ -568,9 +572,10 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    (so no report lands in the tree); and `op record replay <id> --json` on a sample of search records from a
    copy of the target instance's `records/records.sqlite`, only records whose pinned index is present in the
    local data dir (copy it, or leave the record out: replay runs a record on the index it pins when that
-   index is present, else falls back to `--index` and reports `drifted` for no real change). Required: with the four versions
-   unchanged, every sampled record whose index is kept reports `reproduced`; with any changed, `drifted`,
-   naming exactly the changed inputs; a `mismatch` (exit 3, `API_REPLAY_MISMATCH`) blocks the release.
+   index is present and supported, else falls back to a usable `--index`, potentially reporting `drifted`
+   because of that fallback). Required: every sampled record on a retained supported pin with matching
+   query inputs reports `reproduced`; replay against changed inputs reports `drifted`, naming exactly those
+   changes. A refused replay must be resolved; a `mismatch` (exit 3, `API_REPLAY_MISMATCH`) blocks the release.
 4. **Release branch.** From here until the tag exists, nothing else merges into `dev`. `git switch -c
    release/X.Y.Z origin/dev`; set `version` to `X.Y.Z` in `backend/pyproject.toml` and
    `frontend/package.json`, then `uv lock` and `npm install --package-lock-only --ignore-scripts`; in
@@ -580,7 +585,7 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    (`data/indexes/<v>/manifest.json`) and the code's `QUERY_VERSION` (never edit a released table); `make
    changelog RELEASE=X.Y.Z`, which checks the table against that manifest (so run it in the checkout that
    holds `data/`, or set `OP_DATA_DIR` (read as by `op`) or `DATA_DIR=<dir>` to step 3's data dir; a fresh
-   worktree has no `data/`), and read the section (a `drifted` callout, a Breaking
+   worktree has no `data/`), and read the section (a changed-input callout, a Breaking
    line). Then `/record-learnings`, `/review-gate` and `/open-pr` into `dev`, and merge it.
 5. **Promotion.** `gh pr create --base main --head dev --title "chore: promote dev to main for X.Y.Z"
    --body-file <the readiness evidence>`, not `/open-pr` (it pushes and attests, and a promotion does
@@ -613,9 +618,10 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    `git fetch origin && git merge-base --is-ancestor origin/main origin/dev`. On `dev`,
    `python3 .claude/scripts/changelog.py --check` then passes.
 8. **Retention.** Keep every index and snapshot a search record pins (`op index retire` refuses a pinned
-   index; §CLI). After a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy, its code
-   can't serve the older pinned indexes (after a `QUERY_VERSION`-only change it still serves them, and
-   replay reports `drifted`), but the release each record was saved under still can: keep them. To find that release for a
+   index; §CLI). Supported older tokenizer/schema pins can still reproduce when `QUERY_VERSION` matches.
+   Unsupported versions or incompatible Tantivy require the matching historical release; a changed
+   `QUERY_VERSION` reports `drifted` even when the index remains supported. Keep the pinned data in all
+   cases. To find the historical release for a
    record, match its pinned index's manifest (`tokenizer_version`, `schema_version`, `tantivy_version`) and the
    record's `query_version` against the releases' Data sections.
 9. **After.** Deploying the release, and promoting an index, follow §Deploy and its runbook, `deploy/README.md` (together, for a release that

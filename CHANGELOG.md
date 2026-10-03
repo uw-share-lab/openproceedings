@@ -118,5 +118,5 @@ names the index it was verified on and which saved records still reproduce.
 
 - index_version `5cc8e14c2f9a`, snapshot `d552baa07aed6bd754720c7ef17bc7d9ef7a645531fb95d6bc4174c2eacf91b8`
 - TOKENIZER_VERSION 3 · SCHEMA_VERSION 3 · Tantivy 0.26.2 · QUERY_VERSION 2
-- First release: no earlier search records.
+- First tagged release. Development records can reproduce on retained supported pins when QUERY_VERSION matches.
 - First release candidate, verified on a copied 95,877-paper snapshot; promotion does not deploy data.

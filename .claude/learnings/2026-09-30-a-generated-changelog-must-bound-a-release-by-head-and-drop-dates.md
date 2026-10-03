@@ -88,3 +88,31 @@ do not drop the manifest from its strict byte check or refresh hashes without di
 Evidence: `backend/tests/unit/ingest/test_combined_snapshot.py` and the release-preparation report.
 Propagated to `.claude/agents/release-manager.md` §Versions so the next release diagnoses this metadata
 change before updating the golden.
+
+## Addendum — 2026-10-03: release versions do not classify every retained pin
+
+The copied-record replay proof exposed an inherited assumption in spec 08, spec 03's short engine
+summary, the release-manager guidance and `changelog.py`: a version-changing release was said to make
+all earlier records drift. Decisions 030/033 now preserve independently supported older schema/tokenizer
+pins. Fourteen actual development records reproduced on their retained old index; they drifted only
+when that pin was absent and replay fell back to the new tokenizer/schema inputs. A release table names
+its verified current index, not every older index the reader supports.
+
+Describe changed inputs and the retained-pin/query compatibility conditions separately. Do not infer
+universal record status from adjacent release tables, and do not claim that a first tag means no
+pre-release records exist. The MINOR-bump, Tantivy/schema-bump and fresh current-index verification
+requirements still apply. Preserve decision 023's original rationale and append the dated compatibility
+clarification rather than silently rewriting accepted history.
+
+Regression proof: the revised real changelog case table failed ten assertions against the old generator,
+then passed all 133 cases with the conditional output. Five additional mutants restore the former false
+claims, including the unchanged-version support/query qualification and older-table caveat. Propagated
+to specs 03/08, decision 023's clarification, release-manager guidance, generated `CHANGELOG.md`, and
+`.claude/scripts/{changelog.py,tests/test-changelog.sh,mutants/changelog.json}`. Existing release work owns
+final verification and promotion; no new task or compatibility policy is introduced.
+
+The official changed-file mutation run subsequently killed all 48 changelog mutants with exit 0,
+including the five new regressions; every failure was in the real changelog case table. Complete
+post-correction `make test` also exited 0 (6,757 backend passes, three optional skips, 4,724 frontend
+passes). Keep the earlier nightly's 773-mutant result tied to its original source; five new definitions
+make the current repository total 778, not evidence that the older nightly tested them.

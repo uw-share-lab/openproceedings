@@ -4,7 +4,7 @@ title: 'Release process, versioning and changelog'
 status: In Progress
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-03 14:44'
+updated_date: '2026-10-03 15:52'
 labels:
   - ops
 milestone: m-6
@@ -55,4 +55,8 @@ Left for the release itself (not tasks; the main session decides): the first rel
 2026-10-03 verification: current copied index 5cc8e14c2f9a passed parity over 95,877 records, 133,865 terms and 191,123 phrases with zero differences; coverage --check passed M4 (43/44 plus the existing accepted ICLR 2013 exception). The copied snapshot diff is empty. Local source data has no saved-search store/current pointer and hosting is not configured, so this is first-instance code preparation. Supplementary development-store replay preserved 14 actual records: all reproduced with retained pins; all drifted on the new-only index naming exactly tokenizer 2-to-3 and schema 2-to-3 with zero membership changes. This is explicitly not a target-instance backup. The first full suite exposed only the app-version metadata golden: reverting that one manifest value in memory restored its prior exact files hash. Updated the deliberate 0.1.0 golden, preserved strict byte checks, and the targeted test passed; fresh full suite is running.
 
 2026-10-03 local closure: full backend suite passed 6,757 tests with three optional skips (205.46s), including golden/contract suites. Vitest startup in that aggregate make run failed because the temporary local lockfile regeneration had omitted native optional bindings; the tracked npm lockfile is restored unchanged. A fresh npm ci --ignore-scripts --include=optional repaired the installation and all 4,724 frontend tests in 41 files then passed (7.22s, exit 0). Both full suites are green; the aggregate failed command is retained honestly in the release report. Final local lint/tooling and changelog --check --release 0.1.0 passed. No tag, deployment, target-store backup claim or second-person approval is implied; final exact-head review and PR CI precede promotion.
+
+Pre-merge compatibility audit: fixed spec03 unsupported-version summary, spec08 older-pin/replay statements, release-manager guidance and changelog universal drift/first-tag claims. Decision023 has a dated clarification referencing decisions030/033; accepted history and MINOR/fresh-index requirements retained. Changelog real case table RED 10 expected failures, GREEN 133/0; five mutants added. Final checks and exact-head review pending; no tag or deployment claimed.
+
+2026-10-03 compatibility verification completed: official make mutate-changed killed all 48 expected changelog mutants, including five new regression cases, with zero survivors/stale patterns and exit 0. Complete post-correction make test exited 0: backend 6,757 passed/three optional skips in 192.77s; frontend 4,724 passed/41 files in 6.35s. Lint and generated changelog --check --release 0.1.0 exited 0. Current definitions total 778; the earlier 773-mutant nightly proof remains tied to its original source. Final tooling, verification of evidence/task edits, exact-head review and protected PR checks remain closing gates; no tag, hosting or target-store backup is claimed.
 <!-- SECTION:NOTES:END -->

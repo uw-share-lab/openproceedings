@@ -256,5 +256,35 @@
   "file": ".claude/scripts/changelog.py",
   "old": "    text = plain(unicodedata.normalize(\"NFKC\", plain(text)))",
   "new": "    text = plain(text)"
+ },
+ {
+  "label": "changelog: first release incorrectly excludes development records",
+  "file": ".claude/scripts/changelog.py",
+  "old": "\"First tagged release. Development records can reproduce on retained supported pins \"\n            \"when QUERY_VERSION matches.\"",
+  "new": "\"First release: no earlier search records.\""
+ },
+ {
+  "label": "changelog: unchanged versions ignore pin support and query version",
+  "file": ".claude/scripts/changelog.py",
+  "old": "\"while it is kept and supported and QUERY_VERSION matches.\"",
+  "new": "\"while it is kept.\""
+ },
+ {
+  "label": "changelog: changed inputs incorrectly force all retained pins to drift",
+  "file": ".claude/scripts/changelog.py",
+  "old": "f\"Replay against changed inputs reports `drifted` ({moves}). Retained supported pins \"\n                \"reproduce when QUERY_VERSION matches; incompatible pins require the matching historical release.\"",
+  "new": "f\"Search records saved under {prev} or earlier replay as `drifted` ({moves}).\""
+ },
+ {
+  "label": "changelog: callout incorrectly forces all earlier records to drift",
+  "file": ".claude/scripts/changelog.py",
+  "old": "f\"**Changed replay inputs since {prev}: {moves}. Replay against changed inputs reports \"\n                \"`drifted`; retained supported pins reproduce when QUERY_VERSION matches. \"\n                \"Incompatible pins require the matching historical release.**\"",
+  "new": "f\"**Search records saved under {prev} or earlier replay as `drifted`: {moves}.**\""
+ },
+ {
+  "label": "changelog: earlier release tables incorrectly determine replay status",
+  "file": ".claude/scripts/changelog.py",
+  "old": "\" Earlier records also require a supported retained pin and matching QUERY_VERSION; \"\n                    \"release tables alone do not determine replay status.\"",
+  "new": "\" Those saved earlier replay as `drifted`.\""
  }
 ]

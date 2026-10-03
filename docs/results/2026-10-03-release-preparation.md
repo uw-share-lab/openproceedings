@@ -131,3 +131,39 @@ The citation's `2026-10-03` date is provisional release metadata. Before any lat
 requires its version and date to match the actual tag day on `main`, with another bookkeeping PR and
 promotion if necessary. Promotion requires a second person's approving GitHub review; no self-approval
 or branch-protection bypass. Tagging, public hosting and deployed checks remain separate work.
+
+## Compatibility wording correction before merge
+
+Final documentation audit found three Should findings: spec 03's short engine summary refused all
+non-current schema/tokenizer versions, and spec 08 said version-changing code could not serve older
+indexes and all older records must drift. Related release-manager and generated changelog wording
+shared that obsolete assumption. Decisions 030/033 and the actual retained-pin replay proof establish
+support for older schema/tokenizer forms when query inputs match.
+
+The specs and release guidance now distinguish retained supported pins from replay against changed
+inputs. Decision 023 retains its original accepted history with a dated clarification. The generator
+no longer claims a first tag excludes development records or infers every older record's status from
+release tables. MINOR-bump, Tantivy/schema-bump and fresh current-index verification rules are unchanged.
+The revised real generator case table first failed ten expected assertions, then passed all 133;
+five additional mutants restore the former incorrect claims. Raw logs are
+`/tmp/main-promotion-compatibility-{red,green}.log`. These corrections do not change application runtime
+or index data.
+
+The official `make mutate-changed` run completed with **48 killed, zero survivors, zero stale patterns,
+exit 0**. All 48 expected labels occur in order and every regression was detected by `test-changelog.sh`;
+the final implementation, case table and mutant definitions match the recorded verification-input hashes.
+Raw evidence: `/tmp/main-promotion-compatibility-mutation.log`, its `.exit` file and
+`/tmp/main-promotion-compatibility-mutation-summary.json`. The older nightly's 773-mutant proof remains
+historical evidence for its pinned source; the five new cases bring the repository definitions to 778.
+
+A complete post-correction `make test` exited 0: **6,757 backend tests passed, three optional skips**, in
+192.77 seconds, and **4,724 frontend tests passed in 41 files**, in 6.35 seconds. This completed aggregate
+run follows the earlier installation repair; it does not erase those earlier failed commands. Raw
+evidence: `/tmp/main-promotion-compatibility-test.log` and its `.exit` file. Lint and generated-changelog
+freshness checks also exited 0 (`/tmp/main-promotion-compatibility-lint.log` and
+`/tmp/main-promotion-compatibility-changelog-check.log`, each with an `.exit` file).
+
+Closing gates before merge also include final tooling, verification of the resulting evidence/task edits,
+exact-commit review and PR checks. The main PR triggers fresh private/public image builds; its API
+additivity check explicitly permits main's pre-backend scaffold to lack a released contract, while
+still refusing an unavailable baseline or a backend whose contract snapshot is missing.
