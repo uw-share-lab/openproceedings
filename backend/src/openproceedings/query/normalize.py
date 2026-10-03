@@ -622,6 +622,17 @@ def _view(text: str, version: str) -> _View | None:
     segments: list[tuple[int, int, str]] = []
     n, i = len(text), 0
     while i < n:
+        # ASCII runs retain identity owners. Leave their last character for the cluster path when a
+        # combining mark follows, so composition/reordering still sees that mark's base.
+        if text[i] < "\x80":
+            hit = _NON_ASCII.search(text, i)
+            stop = hit.start() if hit is not None else n
+            if stop < n and unicodedata.combining(text[stop]):
+                stop -= 1
+            if stop > i:
+                segments.append((i, stop, text[i:stop]))
+                i = stop
+                continue
         j = i + 1
         while j < n and unicodedata.combining(text[j]):
             j += 1
@@ -638,9 +649,13 @@ def _view(text: str, version: str) -> _View | None:
     if "".join(p for _, _, p in segments) != norm:  # never seen: every character spans the whole text
         return _View(text, norm, [0] * len(norm), [n] * len(norm))
     for a, b, piece in segments:
-        owners = _owners(text[a:b], a, piece)
-        lo.extend(o[0] for o in owners)
-        hi.extend(o[1] for o in owners)
+        if text[a:b].isascii():
+            lo.extend(range(a, b))
+            hi.extend(range(a + 1, b + 1))
+        else:
+            owners = _owners(text[a:b], a, piece)
+            lo.extend(o[0] for o in owners)
+            hi.extend(o[1] for o in owners)
     return _View(text, norm, lo, hi)
 
 
@@ -855,4 +870,9 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
 
 def normalize(text: str, version: str = TOKENIZER_VERSION) -> list[str]:
     """The tokens of `text` (spec 02 §Token semantics). The index is fed `" ".join(normalize(field))`."""
-    return [t.text for t in tokenize(text, version)]
+    # Index terms need no raw offsets. Read exactly the same whole-text form as tokenize(), without
+    # reconstructing owners that are only needed by query diagnostics and highlights.
+    _plain_ascii(text, version)  # validate the requested served version
+    if SERVED_TOKENIZERS[version].nfkc_first:
+        text = unicodedata.normalize("NFKC", text)
+    return [t.text for t in tokenize(text, "2")]

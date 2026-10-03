@@ -64,7 +64,11 @@ inside a U+0338 cluster each piece spans the raw characters it came from, except
 raw U+0345 end at it even if a later mark belongs to them, task-075; a Token is text, span and `op` only,
 since task-075's `reach` was retired after decision-008; no span decides what parses: the lexer's detached-wildcard check reads
 the folded pieces after the last word, `tokenize_with_tail(text) -> (tokens, Tail)`, decision-008) and
-`normalize(text, version) -> list[str]`. Tokenizer 3 runs the loop below on the NFKC form of the text (`_view`;
+`normalize(text, version) -> list[str]`. Text-only normalization reads the same whole-text NFKC form
+without constructing raw owners; a property checks equality with `tokenize`'s texts for both served versions.
+Raw-span mapping groups unchanged ASCII runs into identity ranges, keeping a final ASCII base with any
+following combining marks; Hangul composition and reordered marks retain the cluster mapping below.
+Tokenizer 3 runs the loop below on the NFKC form of the text (`_view`;
 a text already in NFKC, every ASCII one included, is its own form, so it costs one `is_normalized` check) and maps
 each token's span back to the raw characters its characters came from (`_View.tokens`: a composed character
 spans the raw ones it came from, an expanded one's pieces each span it; when interleaved marks would make spans

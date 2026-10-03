@@ -227,6 +227,9 @@ built with any other tokenizer is `tokenizer_version_mismatch` (unservable). A s
 tokenizer-2 index therefore replays `reproduced` on it after the bump; on a tokenizer-3 index it is `drifted` in
 `tokenizer_version`. The impact on the real corpus, and the replay check against the real index, are in
 `docs/results/2026-10-02-tokenizer-3.md`. Retiring version 2 follows the index-versioning skill.
+Text-only indexing normalization uses the same whole-text form without reconstructing raw offsets;
+highlighting retains raw ownership, mapping unchanged ASCII runs in bulk while preserving adjacent
+combining-mark and Hangul boundaries. Versioned properties and raw-span goldens pin their agreement.
 
 ## Performance budgets (for the M4 corpus, about 80k docs; CI benchmarks the 5k fixture and nightly reports a synthetic 80k, 07 §E)
 

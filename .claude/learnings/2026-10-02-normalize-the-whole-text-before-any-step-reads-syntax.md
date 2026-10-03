@@ -55,3 +55,20 @@ sorts before `current`. The exact full run exposed this assumption (6,751 passed
 isolated retirement case reproduced it. Compare both name collections in the same order, preserving
 all assertions about the retired version, remaining index contents and current symlink. Propagated to
 `backend/tests/contract/test_index_retire_cli.py::test_an_unpinned_version_is_retired`.
+
+## Addendum — 2026-10-03: sparse normalization changes need sparse mapping work
+
+PR93's unchanged 20% CI gate caught a 33% small-build regression and 22–33% highlight/endpoint regressions.
+A profile of 500 synthetic records found 76 NFKC-changing fields among 1,000 fields, yet raw mapping called
+`_owners` 97,065 times across five passes, including every unchanged ASCII character. Batch unchanged
+ASCII runs into identity owner ranges, retaining the last ASCII base with following combining marks.
+Text-only index normalization needs the same whole-text NFKC form but no reconstructed raw spans.
+
+The focused four-form, frozen-v2, lexer golden and highlight controls passed 1,077 tests with two optional
+skips. New explicit raw-span rows cover ASCII adjacent to combining marks, reordered marks, Hangul jamo
+and full-width text; an independent property compares text-only normalization with raw-span token texts
+for both versions. Local matched base/head benchmark runs retained the 20% minimum guard and all budgets:
+72 passed on each side; small-build minimum149.48→148.32ms, narrow highlights4.46→4.88ms,
+narrow endpoint6.58→6.89ms. These local numbers are distinct from Linux CI and do not certify an 80k budget.
+Propagated to token-contract, spec03 and versioned tokenizer tests. Profiling call counts identify the
+cause; frequency/noise makes the profile's total time unsuitable as a benchmark comparison.

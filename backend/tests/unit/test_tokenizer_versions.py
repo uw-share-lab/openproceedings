@@ -133,12 +133,21 @@ def test_version_3_tails_read_the_nfkc_form(text: str) -> None:
         ("$x^²$", [(1, 4)]),  # `x2`: the script joins, as `$x^2$`
         ("＼emph{x}", [(6, 7)]),
         ("가 b", [(0, 2), (3, 4)]),  # jamo compose into one syllable: one word over both
+        ("ASCII café tail", [(0, 5), (6, 11), (12, 16)]),
+        ("ASCII 가 tail", [(0, 5), (6, 8), (9, 13)]),
+        ("ASCII ẹ́ tail", [(0, 5), (6, 9), (10, 14)]),
+        ("ASCII Ａ tail", [(0, 5), (6, 7), (8, 12)]),
         ("≠ͅ", [(0, 1), (1, 3)]),  # interleaved marks: as version 2 (task-075)
     ],
     ids=ascii,
 )
 def test_version_3_spans_are_raw(text: str, spans: list[tuple[int, int]]) -> None:
     assert [(t.start, t.end) for t in tokenize(text)] == spans
+
+
+@given(ANY_TEXT, st.sampled_from(["2", "3"]))
+def test_text_only_normalization_agrees_with_raw_span_tokens(text: str, version: str) -> None:
+    assert normalize(text, version) == [token.text for token in tokenize(text, version)]
 
 
 # --- the query side: a query typed in NFC or NFD means the same --------------------------------------------
