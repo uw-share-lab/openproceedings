@@ -1,6 +1,6 @@
 # A warm facet-memo hit still pays for its Python, and a clause's isolated cost isn't its cost in a search
 
-**Key lesson:** Profile the warm path before blaming a collection: TASK-166's +31% was the Python loop over hundreds of memoised facet combos, not Tantivy. Time a clause inside the whole search, alternated old against new, before you estimate a schema change: the `"AI agent$"` id set's isolated cost fell from 11.3 to 6.2 ms with an indexed u64 `ord`, but the overloaded warm-search measurements show no measurable end-to-end difference.
+**Key lesson:** Profile warm Python facet loops and measure first/subsequent query construction, retained memory and Tantivy collection separately, then time the whole search. Narrowing aggregation reduced Python work; faster isolated ordinal collection showed no end-to-end speedup, and its first-use lookup had a measurable cost.
 
 - **Date:** 2026-10-02 · **Task:** TASK-166, TASK-167 · **Area:** engine
 - **Artifacts:** `backend/src/openproceedings/engine/tantivy_engine.py` (`facets`/`combos` `over`), `backend/src/openproceedings/search.py`, `backend/tests/bench/exclusions_alternate.py`, `backend/tests/bench/verified_forms.py`, `docs/results/2026-10-02-exclusions-and-verified-forms.md`
@@ -58,3 +58,8 @@ its recorded CPU-idle-qualified baseline; pre-existing and increased swap usage 
 Correction to the historical wording above: a compiled-memo hit retains the Tantivy query and skips Python
 term-set construction. Tantivy still resolves that preconstructed query during each collection. Compare
 construction and collection separately before attributing their costs to each search.
+
+Full stable recovery checks at `f2b50e3c`: make test (backend 6330 passed, 2 skipped; frontend 3209 passed),
+make lint and make tooling passed under the shared heavy lock, Node 22.23.3, four pytest workers.
+Tasks 166/167 were completed through CLI after preserving the original history as a backup and legitimately
+recreating decision 030 via CLI; no task metadata was hand-edited and no real data was changed.

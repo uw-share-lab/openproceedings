@@ -133,4 +133,7 @@ reports used different retained caches/aggregation and cannot support a direct b
 
 - `uv run pytest backend/tests/unit/engine/test_served_schemas.py backend/tests/unit/engine/test_facets_equal.py backend/tests/bench/test_bench.py -q --benchmark-disable`: 99 passed in 85.49 s at `bea16ca9`.
 - Negative manifest-input controls: `uv run pytest backend/tests/unit/engine/test_served_schemas.py -q -k schema_bench`: 4 passed, 20 deselected in 10.84 s at `ace8a1de`.
-- Full test/lint/tooling evidence is recorded in the task summaries after history reconstruction.
+- Full stable `f2b50e3c`, shared heavy lock, Node 22.23.3, four pytest workers: `make test` passed
+  (backend **6330 passed, 2 skipped in 137.52 s**; frontend **3209 passed**, 40 files, 6.30 s);
+  `make lint` and `make tooling` passed. HEAD and clean tree were unchanged throughout.
+  Both tasks were finalized and completed through the Backlog CLI after these checks.

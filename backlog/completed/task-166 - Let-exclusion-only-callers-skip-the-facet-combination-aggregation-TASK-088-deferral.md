@@ -3,10 +3,10 @@ id: TASK-166
 title: >-
   Let exclusion-only callers skip the facet-combination aggregation (TASK-088
   deferral)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-03 01:26'
+updated_date: '2026-10-03 01:33'
 labels:
   - engine
   - performance
@@ -40,11 +40,15 @@ Preserve exclusion narrowing and broad COMBO coverage; validate identical counts
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Recovery restored original broad COMBO benchmark and added separate ORDER benchmark. Shared-lock alternating 5k200 run, load3.2, broad warm wall/CPU p50 1.5ms COMBO versus0.6ms ORDER,1080 versus45 combos; every protocol string and broad-query exclusion result equal before timing. Focused engine/facet/benchmark checks99passed85.49s. Current schema-3 full80k report every budgeted number within budget (CPU-idle-qualified baseline explicitly documented, with memory-pressure limitations). Fresh evidence docs/results/2026-10-02-perf-recovery.md; older cold reports retained caches and are not directly comparable. Full stable suite pending after reversible CLI history reconstruction; no real data writes.
+Exclusion-only callers aggregate track/status (ORDER); sidebar callers retain full COMBO. The original broad COMBO benchmark is restored and the ORDER caller has a separate benchmark. Fresh alternating 5k run (200 rounds, load 3.2) gave broad warm wall/CPU p50 1.5 ms COMBO versus 0.6 ms ORDER, with 1,080 versus 45 combos and exactly equal exclusion counts for every protocol string and the broad query. COMBO remains about the historic 1.46 ms target; no speedup is attributed to its unchanged all-facet scope.
+
+Focused schema/facet/benchmark checks: 99 passed in 85.49 s. Fresh default schema-3 80k report: every budgeted number within budget, with CPU-idle-qualified baseline and memory-pressure limits recorded. Cold runs reset every engine memo including ordinal lookup; older cold columns retained caches and are not comparable. Evidence: docs/results/2026-10-02-perf-recovery.md and 2026-10-02-schema-3-bench.md.
+
+Stable f2b50e3c, shared heavy lock, Node 22.23.3, PYTEST_XDIST_AUTO_NUM_WORKERS=4: make test passed (backend 6330 passed, 2 skipped in 137.52 s; frontend 3209 passed, 40 files in 6.30 s); make lint passed; make tooling passed (49 agents, 53 skills, 17 commands, zero errors, all case tables passed). HEAD and clean tree unchanged throughout. No real data modified.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Exclusion-only callers aggregate ORDER(track,status); all-facet callers retain COMBO. Separate broad benchmarks preserve coverage; paired broad5k median1.5ms versus0.6ms with equal counts. Fresh schema-3 report within budget under recorded conditions. Full stable checks pending before terminal status.
+Exclusion-only callers count ORDER (track/status), with equal results and separate COMBO/ORDER benchmarks. Quiet broad 5k warm median 1.5 ms versus 0.6 ms, 1,080 versus 45 combos. Fresh schema-3 report and full make test/lint/tooling pass; source and measured conditions documented in docs/results/2026-10-02-perf-recovery.md.
 <!-- SECTION:FINAL_SUMMARY:END -->
