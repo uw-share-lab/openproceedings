@@ -47,3 +47,23 @@ match, and whatever the titles say. A link across venue-years must become a conf
   `.claude/agents/dedup-auditor.md` (Musts); spec 01 §Pipeline 4 and §Testing.
 - Test or hook added? `test_dedup_forum_link.py` (fixture table), forum-link unit tests in
   `test_dedup.py`, and the `links` strategy with its pinned examples in `test_dedup_props.py`.
+
+## Addendum — 2026-10-03: arbitrary Unicode also reaches property-test seeds
+
+The corrected nightly run37112111841 failed its ingest property before checking production behavior:
+`random.Random(title)` uses strict UTF-8 to encode a string seed, but the Unicode strategy deliberately
+includes lone surrogates. The shrunk input U+0301, U+0301, U+D800 enters the two-mark shuffle and raises
+UnicodeEncodeError. Keep the arbitrary Unicode domain; filtering surrogates would hide a fixture defect.
+Use deterministic `title.encode("utf-8", "surrogatepass")` seed bytes instead and retain that exact input
+as an explicit example. Ordinary Unicode seeds keep the same encoded bytes; surrogate code points are
+represented without replacement or loss. The canonical forms, mark-shuffle condition and title-key
+assertion remain unchanged; production code is untouched.
+
+The explicit example reproduced RED (1 failed,0.30s) at the original Random seed; all138 dedup tests
+then passed (0.53s). A test-local raw-title-key replacement failed the unchanged canonical-equivalence
+assertion on the existing Caf\é example, confirming the property still checks canonical equality. An
+attempt to remove only title_key's NFC step did not fail: the current underlying normalizer also handles
+that normalization, so that diagnostic is not claimed as a distinguishing negative control. Raw evidence:
+/tmp/task171-unicode-seed-red.log, /tmp/task171-unicode-seed-green.log,
+/tmp/task171-unicode-canonical-negative.log and /tmp/task171-unicode-no-nfc-control-pass.log.
+Propagated to backend/tests/unit/ingest/test_dedup.py. Full final gates and corrected remote proof remain pending.

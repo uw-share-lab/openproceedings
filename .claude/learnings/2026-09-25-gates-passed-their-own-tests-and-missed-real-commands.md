@@ -149,3 +149,41 @@ Run the new review gate on its own tooling: five routed reviewers (code, securit
 - Fresh Node 22 `make lint` and `make tooling` passed. Tasks 164, 170, 172 and 173 were completed through
   the Backlog CLI only after this proof. The final task/learning commit changes metadata only; fresh full
   tests and final lint/tooling plus exact-head review remain required before publication.
+## Addendum — 2026-10-02 (TASK-171: stock Bash parses the case table too)
+
+- **A green Linux table can still fail to parse on stock macOS Bash.** The sharding table's
+  nonempty/nonerror check put `case` inside command substitution. Bash 3.2.57 interpreted a case-pattern
+  `)` as the substitution's end: `make tooling` reported a syntax error and 32 passed/1 failed.
+  Move that same case outside the substitution, store its result and assert the same value; keep the
+  condition and expectation intact. Evidence: the red table in `/tmp/latex-timing-focused.log` and
+  [recovery results](../../docs/results/2026-10-02-mutation-sharding-recovery.md).
+- The same 33-row table then passed on both Bash 3.2.57 and Bash 5.3.9, with ShellCheck green.
+  Evidence: `/tmp/mutation-tooling-recovery.log`.
+- Propagated to: `.claude/scripts/tests/test-mutate-shard.sh` and the case-table portability guidance
+  in `.claude/skills/testing-standards/SKILL.md`. Verify on stock Bash and the CI version when available;
+  ShellCheck passed while stock Bash execution failed.
+
+## Addendum — 2026-10-03 (TASK-171: runner captures follow the probe-linter contract)
+
+- After rebasing onto the actually merged hooks, `make tooling` correctly refused the sharding table's
+  command substitutions inside `check` arguments. These were controlled runner captures rather than hostile
+  probes, but the shared linter intentionally requires assertion arguments to stay data. Do not exempt the
+  table or weaken that rule: capture each result on the preceding line and pass the variable to the same
+  assertion. All inputs, expected results and 33 checks remain unchanged.
+- The updated table passes `lint_probes.py` and stock Bash 3.2 (33 passed, 0 failed). Raw RED:
+  `/tmp/task171-actual-tooling.log`; focused GREEN: `/tmp/task171-probe-capture-bash32.log`.
+  Full integration gates and corrected remote proof remain pending. Propagated to
+  `.claude/scripts/tests/test-mutate-shard.sh` and the testing standard's case-table guidance.
+
+## Addendum — 2026-10-03 (TASK-171: full nightly coverage proven)
+
+The corrected eight-shard run37115476175 at source8d273d6118f410857c8098ca01678ecf466d12f2
+completed all773 mutants in exact partition order with zero problems, and all27 nightly jobs succeeded.
+Mutation job durations93:42–123:59 remain under150minutes; steps93:34–123:47 remain under140minutes.
+The initial seven-green-shards run was not completion evidence, nor was the subsequent run whose ingest
+property crashed in its Unicode seed. Preserve failed histories and require both allshards and entireworkflow
+results before closing coverage work. Task171 was completed viaCLI only after this complete proof.
+The docs/task closure commit is later than tested source8d273 and requires fresh local gates and exact-head
+review; do not claim the earlier remote run tested the closure SHA. Evidence and exact shard table:
+`docs/results/2026-10-02-mutation-sharding-recovery.md`. Propagated to the existing nightly/mutation
+contracts in spec08 and the as-built results; no new runner behavior introduced by closure.

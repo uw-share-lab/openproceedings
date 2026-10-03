@@ -16,7 +16,7 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 | Frontend unit | `frontend/**/*.test.ts(x)` (Vitest) | mocked API from generated types | builder↔AST, URL reducer |
 | e2e | Playwright | `backend/tests/e2e/fixture_server.py` builds/serves the temporary 5k index; production frontend build | the 05 §Testing flow end to end |
 | Bench | pytest-benchmark | fixture index (`bench` workflow, advisory), 80k report (`report_80k.py`) | >20% regression of the minimum fails the `bench` check |
-| Nightly | property/golden fixtures and exhaustive Unicode inputs | no full corpus | the whole backend suite at the `ci` profile (2,000), every property at 50k as a 5-part `properties` matrix, the year-edit property as 4 seeded `year-edits` jobs, exhaustive tokenizer check, differential@50k (8 parallel jobs), spec 03 benchmarks with their budgets plus the ~80k report (`benchmarks` job), gate/tooling mutation run time-boxed to 140 min, a warned partial run until it can be sharded (TASK-057) |
+| Nightly | property/golden fixtures and exhaustive Unicode inputs | no full corpus | the whole backend suite at the `ci` profile (2,000), every property at 50k as a 5-part `properties` matrix, the year-edit property as 4 seeded `year-edits` jobs, exhaustive tokenizer check, differential@50k (8 parallel jobs), spec 03 benchmarks with their budgets plus the ~80k report (`benchmarks` job), gate/tooling mutation run of every mutant as 8 `mutate` shards (`mutate.py --shard i/8`; TASK-057, TASK-171) |
 
 ## Fixtures (`backend/tests/fixtures/`)
 - **Golden 200:** hand-built records whose text is written to be tricky (benchmark/benchmarking,
@@ -74,3 +74,19 @@ and a positive control. Dropping an explicit default and forcing its opposite ar
 `--no-renames` makes an unchanged learning rename look newly added, even though `--find-renames` gives 0/0.
 Compare actual hook verdicts for benign unsupported syntax too: a conservative parser can intentionally
 block a shape that a mutant allows. Identical destructive-case verdicts alone do not prove equivalence.
+
+Case tables must also parse on the developer platform's Bash. Stock macOS Bash 3.2 can misparse a
+case-pattern `)` inside command substitution; compute the case result in a variable outside `$(...)`
+and keep the same assertion. Run the table with stock Bash as well as the CI version when available.
+Capture controlled runner output on the line before a `check` call and pass the variable as data;
+`lint_probes.py` forbids command substitutions inside assertion arguments even for tooling tables.
+
+## CPU growth checks
+
+For adversarial algorithmic scaling checks, keep the input sizes and growth cutoff fixed. Measure
+thread CPU time in batches, pair the small and large measurements in each round, alternate their order,
+and compare the median paired growth ratio. Independent fastest calls at each size can compare unlike
+CPU/allocation phases even though thread CPU time excludes preemption. Keep allocation and GC costs in
+the measurement. Before changing a sampling method, demonstrate that the former quadratic behavior
+still fails the same cutoff; a green optimized implementation alone does not prove the check works.
+`backend/tests/unit/test_latex_scan.py` applies this to unclosed math openers (TASK-171 recovery).

@@ -2,7 +2,8 @@ name: nightly
 # The whole backend suite at the ci profile (2,000 examples; PRs run it at 200, TASK-127), every property test
 # at 50,000 examples, the differential suite at 50,000 split across parallel jobs, the exhaustive tokenizer check,
 # the benchmarks with their budgets plus the ~80k report, and the full mutation run of every gate and tooling
-# check (make mutate). Reviews run only `make mutate-changed`; this catches anything that slipped (TASK-057).
+# check (make mutate's mutants, as 8 `--shard` jobs). Reviews run only `make mutate-changed`; this catches
+# anything that slipped (TASK-057).
 # Not a PR check: a failure shows as a red run on `dev`. Every Hypothesis failure prints its `@reproduce_failure`
 # blob. A long pytest step runs verbose (`-v` prints each test as it starts, and its result when it ends) and is
 # interrupted a few minutes before its job's limit, so an overrun fails with an ::error:: and the log shows which
@@ -180,22 +181,31 @@ jobs:
           path: ${{ runner.temp }}/bench-80k.md
           if-no-files-found: warn  # the report step failed, and said why
           retention-days: 30
-  # make mutate, time-boxed: the full run (548 mutants) needs ~6.5 h on a 4-CPU runner, past GitHub's 6 h job cap (63
-  # in 45 min in 36972065571), until mutate.py can be sharded across jobs (TASK-171). mutate.py runs mutants in a
-  # fixed order, so until then only about the first 190 of 548 are checked each night; the rest only by reviews'
-  # `make mutate-changed`. A surviving or stale mutant still fails the job; a run cut off at 140 min with none is a
-  # pass with a "partial run" warning giving about how many mutants it checked. A first step checks every mutant's
-  # pattern still exists, so a stale mutant past the time-box is still reported each night.
+  # make mutate as 8 jobs (TASK-171): `mutate.py --shard i/n` runs every n-th mutant from the i-th, so the shards
+  # check every mutant every night. n is the matrix size (strategy.job-total), so adding a shard is one edit to the
+  # matrix list. Estimate: 188 mutants took 140 min in 37017691575, so the 694 at TASK-171 need ~8.5 h of one
+  # 4-CPU runner, ~65 min a shard of its 140 (shard 1's first step prints tonight's count); add shards before a
+  # shard nears 140 min. A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min (its
+  # unchecked mutants would go unchecked). Shard 1's first step checks every mutant's pattern still exists, in
+  # seconds; a stale mutant also fails its own shard.
   mutate:
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    name: mutate (${{ matrix.shard }}/${{ strategy.job-total }})
+    env:
+      SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
-      - name: Every mutant's pattern still exists (all of them, in seconds; the time-box below reaches only about the first 190)
+      - name: Every mutant's pattern still exists (all of them, in seconds)
+        if: matrix.shard == 1
         run: |
           python3 -c '
           import glob, json, pathlib, sys
@@ -206,25 +216,23 @@ jobs:
           print(f"{len(ms)} mutants, {len(stale)} stale")
           sys.exit(1 if stale else 0)
           '
-      - name: mutate.py (make mutate), time-boxed to 140 min (every mutant checked killed, or documented as equivalent)
+      - name: mutate.py --shard (every mutant in this shard killed, or documented as equivalent; 140 min limit)
         if: ${{ !cancelled() }}  # a stale mutant above doesn't hide tonight's survivors
         shell: bash  # -eo pipefail, so the pipe through tee keeps mutate.py's status (the default bash -e has no pipefail)
         run: |
           git config --global user.email ci@example.invalid
           git config --global user.name ci
+          echo "rerun: python3 .claude/scripts/mutate.py --shard $SHARD"
           log="$RUNNER_TEMP/mutate.log"
           status=0
-          timeout --signal=INT --kill-after=2m 140m python3 .claude/scripts/mutate.py 2>&1 | tee "$log" \
+          timeout --signal=INT --kill-after=2m 140m python3 .claude/scripts/mutate.py --shard "$SHARD" 2>&1 | tee "$log" \
             || status=${PIPESTATUS[0]}
           if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
-            if grep -q '^  FAIL ' "$log"; then
-              echo "::error::a mutant survived or is stale (FAIL above); the run was then cut off at 140 min"
-              exit 1
-            fi
             checked=$(grep -cE '^  (ok  |FAIL) ' "$log" || true)
-            total=$(python3 -c 'import glob, json; print(sum(len(json.load(open(f))) for f in glob.glob(".claude/scripts/mutants/*.json")))')
+            failed=$(grep -c '^  FAIL ' "$log" || true)
             # "about": a table interrupted by the time limit can report the mutant it was testing as killed
-            echo "::warning::partial run: about $checked of $total mutants checked in 140 min, every one killed or documented"
-            exit 0
+            if [ "$status" -eq 124 ]; then why="ran past 140 min"; else why="killed (exit 137): past 140 min plus the 2 min grace, or out of memory"; fi
+            echo "::error::shard $SHARD $why after about $checked of its mutants ($failed FAIL above): add shards to the matrix"
+            exit 1
           fi
           exit "$status"

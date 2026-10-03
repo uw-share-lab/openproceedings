@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Mutation-test the gates and tooling: every mutant must make at least one case table fail.
 
-    python3 .claude/scripts/mutate.py              # all mutants (nightly CI, or after changing a gate)
+    python3 .claude/scripts/mutate.py              # all mutants (after changing a gate)
     python3 .claude/scripts/mutate.py --changed    # only mutants in files changed vs origin/dev (reviews)
     python3 .claude/scripts/mutate.py --jobs 8     # parallelism (default: CPU count, max 8)
     python3 .claude/scripts/mutate.py --match glob # only mutants whose label contains "glob"
+    python3 .claude/scripts/mutate.py --shard 2/8  # every 8th selected mutant from the 2nd (nightly CI runs 1/8..8/8)
+    python3 .claude/scripts/mutate.py --list       # print the selected mutants' labels; run nothing
 
 Mutants live in .claude/scripts/mutants/*.json as {label, file, old, new[, equivalent]}: `old` is replaced
 by `new` once in `file`. A mutant marked "equivalent" is expected to survive (documented reason in the
@@ -71,11 +73,29 @@ def changed_files() -> set[str]:
     return set((r.stdout + s.stdout).split())
 
 
+def parse_shard(spec: str) -> tuple[int, int]:
+    """`i/n` with 1 <= i <= n, else exit with a clear error (TASK-171)."""
+    parts = spec.split("/")
+    if len(parts) != 2 or not all(p.isascii() and p.isdigit() for p in parts):
+        sys.exit(f"--shard {spec!r}: expected i/n, e.g. 2/8")
+    i, n = int(parts[0]), int(parts[1])
+    if not 1 <= i <= n:
+        sys.exit(f"--shard {spec!r}: need 1 <= i <= n")
+    return i, n
+
+
+def shard(mutants: list[dict], i: int, n: int) -> list[dict]:
+    """Shard i of n: every n-th mutant from the i-th. Deterministic, and the n shards partition the list."""
+    return mutants[i - 1 :: n]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--changed", action="store_true")
     ap.add_argument("--jobs", type=int, default=min(8, os.cpu_count() or 4))
     ap.add_argument("--match", help="only mutants whose label contains this text (case-insensitive)")
+    ap.add_argument("--shard", help="i/n: run only shard i of n of the selected mutants (1 <= i <= n)")
+    ap.add_argument("--list", action="store_true", help="print the selected mutants' labels and exit")
     a = ap.parse_args()
     mutants = [
         m
@@ -92,7 +112,18 @@ def main() -> None:
             )
         mutants = [m for m in mutants if m["file"] in files]
         if not mutants:
-            print("no mutants cover the changed files — if you changed gate logic, add mutants", flush=True)
+            msg = "no mutants cover the changed files — if you changed gate logic, add mutants"
+            print(msg, file=sys.stderr if a.list else sys.stdout, flush=True)
+    if a.shard is not None:
+        i, n = parse_shard(a.shard)
+        selected = len(mutants)
+        mutants = shard(mutants, i, n)
+        if not a.list:
+            print(f"shard {i}/{n}: {len(mutants)} of {selected} mutants", flush=True)
+    if a.list:
+        for m in mutants:
+            print(m["label"])
+        return
     work = Path(tempfile.mkdtemp(prefix="op-mutate-"))
     try:
         base = work / "baseline"
