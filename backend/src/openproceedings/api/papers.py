@@ -68,7 +68,8 @@ def get_paper(
         raise ApiError(
             DiagnosticCode.API_BAD_PARAM, "`mode` applies to `q`: give `q` too, or leave `mode` out."
         )
-    result = searchable(request, q, mode) if q is not None else None  # refused before the index is asked
+    # refused before the index is asked
+    result = searchable(request, q, mode, engine.tokenizer_version) if q is not None else None
     # the pattern admits any venue (an open enum); one this code doesn't know is no paper here: 404
     shown = engine.display([id]).get(id) if is_paper_id(id) else None  # read once: highlight reuses it
     if shown is None:
@@ -89,7 +90,7 @@ def get_paper(
     twins = list(served.records.twins.get(id, ()))  # its `twin` claims' ids (TASK-162)
     if result is None:
         return PaperResponse(
-            **versions(engine.index_version),
+            **versions(engine.index_version, engine.tokenizer_version),
             paper=record,
             matched=None,
             highlights=None,
@@ -100,7 +101,7 @@ def get_paper(
     check_candidates(request, engine, result.effective_ast)  # 422 API_QUERY_TOO_COSTLY, as /search
     spans = highlight(engine, result, shown)  # on the text the index holds: `matched` is the index's answer
     return PaperResponse(
-        **versions(engine.index_version),
+        **versions(engine.index_version, engine.tokenizer_version),
         paper=record,
         matched=spans is not None,
         highlights=Highlights(title=[], abstract=[])

@@ -32,6 +32,7 @@ from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from importlib.metadata import version
 from pathlib import Path
 from types import MappingProxyType
@@ -43,7 +44,7 @@ from openproceedings import storage
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import DISPLAY, iter_records
 from openproceedings.logs import elapsed_ms
-from openproceedings.query.normalize import TOKENIZER_VERSION, normalize
+from openproceedings.query.normalize import SERVED_TOKENIZERS, TOKENIZER_VERSION, normalize
 from openproceedings.vocab import TEXT_FIELDS
 
 log = logging.getLogger(__name__)
@@ -195,8 +196,8 @@ PARALLEL_FROM = 2_000  # below this many records, normalizing in one process is 
 CHUNK = 4_096
 
 
-def _normalize_pair(pair: tuple[str, str]) -> tuple[list[str], list[str]]:
-    return normalize(pair[0]), normalize(pair[1])
+def _normalize_pair(pair: tuple[str, str], tokenizer: str) -> tuple[list[str], list[str]]:
+    return normalize(pair[0], tokenizer), normalize(pair[1], tokenizer)
 
 
 def _cpus() -> int:
@@ -325,11 +326,15 @@ def _title_ranks(snapshot: Path) -> dict[str, int]:
     return {rid: rank for rank, (_, rid) in enumerate(sorted(keys))}
 
 
-def normalized(snapshot: Path, workers: int) -> Iterator[tuple[PaperRecord, dict[str, list[str]]]]:
+def normalized(
+    snapshot: Path, workers: int, tokenizer: str = TOKENIZER_VERSION
+) -> Iterator[tuple[PaperRecord, dict[str, list[str]]]]:
     """The snapshot's records (in id order, verified), each with its `normalize()`d title and abstract (a
-    missing abstract is ""), a chunk at a time, across `workers` processes once the corpus is big enough to
-    repay starting them. Shared by the build and the parity check, so both normalize alike."""
+    missing abstract is ""; by tokenizer version `tokenizer`), a chunk at a time, across `workers` processes
+    once the corpus is big enough to repay starting them. Shared by the build and the parity check, so both
+    normalize alike."""
     pool = None
+    each = partial(_normalize_pair, tokenizer=tokenizer)
     try:
         for chunk in _chunks(iter_records(snapshot)):
             pairs = [(r.title, r.abstract or "") for r in chunk]
@@ -337,10 +342,8 @@ def normalized(snapshot: Path, workers: int) -> Iterator[tuple[PaperRecord, dict
                 pool = ProcessPoolExecutor(
                     max_workers=workers, mp_context=multiprocessing.get_context("spawn")
                 )
-            if pool is None:
-                results = [_normalize_pair(p) for p in pairs]
-            else:  # results come back in order: deterministic
-                results = list(pool.map(_normalize_pair, pairs, chunksize=64))
+            # a pool's results come back in order: deterministic
+            results = [each(p) for p in pairs] if pool is None else list(pool.map(each, pairs, chunksize=64))
             for r, (title, abstract) in zip(chunk, results, strict=True):
                 yield r, {"title": title, "abstract": abstract}
     except BrokenProcessPool:
@@ -357,12 +360,13 @@ def _add_all(
     workers: int,
     ids: Any,
     commit_every: int | None = None,
+    tokenizer: str = TOKENIZER_VERSION,
 ) -> int:
     """Stream the snapshot's records through normalize() into the writer."""
     ranks = _title_ranks(snapshot)
     added = 0
     started = time.perf_counter()
-    for r, fields in normalized(snapshot, workers):
+    for r, fields in normalized(snapshot, workers, tokenizer):
         _check_tokens(r, fields, exact)
         if r.id not in ranks:  # can't happen for a valid line; refuse rather than guess a rank
             raise IndexBuildError(f"{r.id}: no title rank (the snapshot's lines didn't read the same twice)")
@@ -402,6 +406,7 @@ def build_index(
     workers: int | None = None,
     commit_every: int | None = None,  # tests only: commit every N documents, to build several segments
     schema_version: str | None = None,  # tests only: build at an older served schema (a pinned index)
+    tokenizer_version: str | None = None,  # tests only: build with an older served tokenizer (a pinned index)
 ) -> IndexBuildResult:
     """Build `indexes/<index_version>/` from a snapshot, or verify and report the one that exists. Records
     stream through in chunks, never all loaded at once."""
@@ -414,7 +419,10 @@ def build_index(
     schema_version = SCHEMA_VERSION if schema_version is None else schema_version  # read when called
     if schema_version not in SERVED_SCHEMAS:
         raise IndexBuildError(f"schema version {schema_version} is not one this code builds")
-    version_id = index_version(snapshot_hash, schema_version=schema_version)
+    tokenizer = TOKENIZER_VERSION if tokenizer_version is None else tokenizer_version  # read when called
+    if tokenizer not in SERVED_TOKENIZERS:
+        raise IndexBuildError(f"tokenizer version {tokenizer} is not one this code builds")
+    version_id = index_version(snapshot_hash, tokenizer_version=tokenizer, schema_version=schema_version)
     target = indexes / version_id
     with storage.exclusive(indexes):
         storage.sweep(indexes)
@@ -438,7 +446,13 @@ def build_index(
             writer = index.writer(num_threads=1)  # one thread: documents keep id order, deterministically
             with (tmp / IDS).open("w", encoding="utf-8") as ids:
                 added = _add_all(
-                    snapshot, writer, exact, workers if workers is not None else _cpus(), ids, commit_every
+                    snapshot,
+                    writer,
+                    exact,
+                    workers if workers is not None else _cpus(),
+                    ids,
+                    commit_every,
+                    tokenizer,
                 )
             writer.commit()
             writer.wait_merging_threads()
@@ -450,7 +464,7 @@ def build_index(
                 "index_version": version_id,
                 "snapshot": snapshot.name,
                 "snapshot_hash": snapshot_hash,
-                "tokenizer_version": TOKENIZER_VERSION,
+                "tokenizer_version": tokenizer,
                 "schema_version": schema_version,
                 "ranking_params": RANKING_PARAMS,
                 "tantivy_version": version("tantivy"),

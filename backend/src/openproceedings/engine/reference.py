@@ -43,7 +43,7 @@ from openproceedings.query.ast import (
     Wildcard,
     YearRange,
 )
-from openproceedings.query.normalize import normalize
+from openproceedings.query.normalize import TOKENIZER_VERSION, normalize
 
 # its own copy: the oracle imports only the AST, the token contract and the protocol (a test pins it to vocab)
 TEXT_FIELDS: tuple[TextField, ...] = ("title", "abstract")
@@ -66,12 +66,21 @@ def _matches_wildcard(token: str, w: Wildcard) -> bool:
 
 
 class ReferenceEngine:
-    def __init__(self, records: Iterable[Searchable], index_version: str = "reference") -> None:
+    def __init__(
+        self,
+        records: Iterable[Searchable],
+        index_version: str = "reference",
+        tokenizer: str = TOKENIZER_VERSION,
+    ) -> None:
         self.index_version = index_version
+        self.tokenizer_version = tokenizer  # the version its records are read with, as an index's
         self.docs = tuple(
             _Doc(
                 r.id,
-                {"title": tuple(normalize(r.title)), "abstract": tuple(normalize(r.abstract or ""))},
+                {
+                    "title": tuple(normalize(r.title, tokenizer)),
+                    "abstract": tuple(normalize(r.abstract or "", tokenizer)),
+                },
                 r.venue,
                 r.year,
                 r.track,

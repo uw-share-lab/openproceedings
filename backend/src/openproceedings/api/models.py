@@ -19,7 +19,6 @@ from openproceedings.ingest.record import PaperRecord, Presentation, Source, Url
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import MIN_YEAR, FilterField, Node, TextField
 from openproceedings.query.clauses import ParsedFilters
-from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode
 from openproceedings.records import Excluded as Excluded  # one schema for the exclusion accounting
 from openproceedings.records import SearchRecord
@@ -67,11 +66,12 @@ class Versioned(Model):
     query_version: str
 
 
-def versions(index_version: str) -> dict[str, str]:
-    """The three versions a response carries: the served index's, and this code's tokenizer and query."""
+def versions(index_version: str, tokenizer_version: str) -> dict[str, str]:
+    """The three versions a response carries: the index's it ran on and the tokenizer that index was built with
+    (the query was read with it), and this code's query version."""
     return {
         "index_version": index_version,
-        "tokenizer_version": TOKENIZER_VERSION,
+        "tokenizer_version": tokenizer_version,
         "query_version": QUERY_VERSION,
     }
 

@@ -62,6 +62,11 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 | `op eval coverage [--index <v>] [--out <dir>] [--date YYYY-MM-DD] [--check]` (TASK-054) · `op eval scholar [--query <name>]` (planned, task-056) · `op eval audit` (planned, task-055) · `op eval near-miss` (deferred with 06, decision-017; task-061) | the 07 reports; `coverage` writes `docs/results/<date>-coverage.md` and `--check` exits 1 when the M4 gate fails; `near-miss` is 06's recall@25 |
 | `op openapi [--out <file>]` | print the OpenAPI document, sorted and stable, without loading an index (task-040); `make openapi` writes it to `backend/tests/contract/openapi.json` and regenerates `frontend/src/api/schema.ts` from it |
 
+`op search`, `op export` and `op record save` check raw query length before index I/O, then parse
+with the selected index's tokenizer. Basic argument errors remain early. An unavailable index is
+reported before semantic query errors because those errors depend on its tokenizer; diagnostics and
+canonical hashes always describe the selected index's interpretation.
+
 The CLI and the API call the same functions, so the CLI alone is enough to run a whole review.
 
 ## Error handling

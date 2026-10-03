@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, clip
 from openproceedings.query.lexer import MIN_STEM, OPERATOR_WORDS, Kind, Lexeme, letters
-from openproceedings.query.normalize import normalize
+from openproceedings.query.normalize import TOKENIZER_VERSION, normalize
 
 # normalised `source:` value → venue (every source value of the Trust-Evals corpus exports)
 SOURCE_ALIASES = {
@@ -32,16 +32,20 @@ SOURCE_ALIASES = {
 PARTIAL_SOURCES = frozenset({"pmlr", "proceedings of machine learning research"})
 
 
-def source_key(text: str) -> str:
+def source_key(text: str, tokenizer: str = TOKENIZER_VERSION) -> str:
     """A `source:` value as the alias table keys it: the token contract, tokens joined by one space."""
-    return " ".join(normalize(text))
+    return " ".join(normalize(text, tokenizer))
 
 
-def _joins(x: Lexeme) -> bool:
+def _joins(x: Lexeme, tokenizer: str) -> bool:
     """Whether a word can be part of a `|` item phrase: a plain word with something to search. A lowercase
     operator word (whose own warning says it is searched as a word) or a word with no letters or digits
     (`&`, an error of its own) ends the run instead of silently vanishing into a phrase."""
-    return x.kind is Kind.WORD and x.text.casefold() not in OPERATOR_WORDS and bool(normalize(x.stem or ""))
+    return (
+        x.kind is Kind.WORD
+        and x.text.casefold() not in OPERATOR_WORDS
+        and bool(normalize(x.stem or "", tokenizer))
+    )
 
 
 def _is_or(x: Lexeme | None) -> bool:
@@ -52,25 +56,26 @@ def _bounds(x: Lexeme | None, edge: Kind) -> bool:
     return x is None or x.kind in (Kind.OR, edge)
 
 
-def _cleared(run: tuple[Lexeme, ...]) -> set[tuple[int, int]]:
+def _cleared(run: tuple[Lexeme, ...], tokenizer: str) -> set[tuple[int, int]]:
     """Spans of wildcard words whose stem is long enough once the phrase's earlier words count."""
     cleared, before = set(), 0
     for w in run:
-        if w.wildcard and before + letters(w.stem or "") >= MIN_STEM:
+        if w.wildcard and before + letters(w.stem or "", tokenizer) >= MIN_STEM:
             cleared.add((w.start, w.end))
-        before += letters(w.stem or "")
+        before += letters(w.stem or "", tokenizer)
     return cleared
 
 
 def group_phrases(
-    q: str, lexemes: tuple[Lexeme, ...]
+    q: str, lexemes: tuple[Lexeme, ...], tokenizer: str = TOKENIZER_VERSION
 ) -> tuple[tuple[Lexeme, ...], list[Diagnostic], set[tuple[int, int]]]:
     """Decision-002: juxtaposed words that form one `|`-separated item become a phrase. Also returns the
-    spans whose WILDCARD_STEM_TOO_SHORT (judged by the lexer on the lone word) the phrase context clears."""
+    spans whose WILDCARD_STEM_TOO_SHORT (judged by the lexer on the lone word) the phrase context clears.
+    `tokenizer` is the version `q` was lexed with."""
     out: list[Lexeme] = []
     notices: list[Diagnostic] = []
     cleared: set[tuple[int, int]] = set()
-    joins = [_joins(x) for x in lexemes]  # once per lexeme: the loop below is linear
+    joins = [_joins(x, tokenizer) for x in lexemes]  # once per lexeme: the loop below is linear
     i = 0
     while i < len(lexemes):
         j = i
@@ -88,7 +93,7 @@ def group_phrases(
             start, end = run[0].start, run[-1].end
             text = q[start:end]
             out.append(Lexeme(Kind.PHRASE, start, end, text, parts=tuple(run)))
-            cleared |= _cleared(run)
+            cleared |= _cleared(run, tokenizer)
             notices.append(
                 Diagnostic(
                     code=DiagnosticCode.COMPAT_POP_PHRASE,

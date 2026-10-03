@@ -21,7 +21,7 @@ import {
   setDiagnostics,
   type Diagnostic as EditorDiagnostic,
 } from "@codemirror/lint";
-import { EditorSelection, EditorState } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import { queryCompletions, type Meta } from "./complete";
@@ -103,6 +103,9 @@ const diagnosticTheme = EditorView.theme({
 export function QueryEditor(props: QueryEditorProps) {
   const parent = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  const language = useRef(new Compartment());
+  // Absent metadata (and placeholder versions in offline stubs) use the current lexer.
+  const tokenizer = props.meta?.tokenizer_version === "2" ? "2" : "3";
   // The latest callbacks, read by the editor's listeners, which are created once.
   const latest = useRef(props);
   useEffect(() => {
@@ -133,7 +136,7 @@ export function QueryEditor(props: QueryEditorProps) {
         doc: latest.current.value,
         extensions: [
           history(),
-          query(),
+          language.current.of(query(latest.current.meta?.tokenizer_version === "2" ? "2" : "3")),
           bracketMatching(),
           lintGutter(),
           autocompletion({
@@ -168,6 +171,11 @@ export function QueryEditor(props: QueryEditorProps) {
       view.current = null;
     };
   }, []);
+
+  // A served-index hot swap changes highlighting without replacing the editor or its history/selection.
+  useEffect(() => {
+    view.current?.dispatch({ effects: language.current.reconfigure(query(tokenizer)) });
+  }, [tokenizer]);
 
   // A value set from outside (Revert edits, an example, Load with parentheses): one undoable change.
   useEffect(() => {

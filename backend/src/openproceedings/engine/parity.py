@@ -40,6 +40,7 @@ from openproceedings.engine.index import (
     verify_index,
 )
 from openproceedings.logs import elapsed_ms
+from openproceedings.query.normalize import SERVED_TOKENIZERS
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +68,11 @@ def check_parity(
         raise IndexBuildError(  # operator error, not a broken guarantee: a WARNING, not a ParityError
             f"index {manifest['index_version']} was built from another snapshot than {snapshot.name}"
         )
+    if manifest["tokenizer_version"] not in SERVED_TOKENIZERS:  # this code can't normalize as it was built
+        raise IndexBuildError(
+            f"index {manifest['index_version']} was built with tokenizer {manifest['tokenizer_version']}, which "
+            f"this code no longer has (it serves {', '.join(SERVED_TOKENIZERS)})"
+        )
     tantivy_index = open_index(index)
     searcher = tantivy_index.searcher()
     exact = analyzer()
@@ -74,7 +80,9 @@ def check_parity(
     stored = _stored(searcher)  # in id order, like the snapshot
     n = phrases = 0
     # a tampered snapshot may stop this loop with ParityError before iter_records reaches its own hash check
-    for record, fields in normalized(snapshot, workers if workers is not None else _cpus()):
+    # by the tokenizer the index was built with (an older served one, for an index a record pins)
+    workers = workers if workers is not None else _cpus()
+    for record, fields in normalized(snapshot, workers, manifest["tokenizer_version"]):
         n += 1
         doc_id, doc = next(stored, (None, {}))
         if doc_id != record.id:

@@ -219,6 +219,18 @@ a schema-2 index. The order is: rebuild every served index at schema 3, repoint 
 retire` each schema-2 version, which `op index retire` refuses while a record pins it. Any other schema is
 refused (`unservable`).
 
+**Served tokenizers (decision-033).** An index's terms are its tokenizer's, so a query is parsed, its canonical
+hashed and its hits highlighted with the tokenizer its index was built with (`TantivyEngine.tokenizer_version`,
+from the manifest). This code serves the current `TOKENIZER_VERSION` ("3", which new indexes are built with) and
+the one before it ("2"): `normalize.SERVED_TOKENIZERS`, each a `TokenizerForm` that code branches on. An index
+built with any other tokenizer is `tokenizer_version_mismatch` (unservable). A search record pinned to a
+tokenizer-2 index therefore replays `reproduced` on it after the bump; on a tokenizer-3 index it is `drifted` in
+`tokenizer_version`. The impact on the real corpus, and the replay check against the real index, are in
+`docs/results/2026-10-02-tokenizer-3.md`. Retiring version 2 follows the index-versioning skill.
+Text-only indexing normalization uses the same whole-text form without reconstructing raw offsets;
+highlighting retains raw ownership, mapping unchanged ASCII runs in bulk while preserving adjacent
+combining-mark and Hangul boundaries. Versioned properties and raw-span goldens pin their agreement.
+
 ## Performance budgets (for the M4 corpus, about 80k docs; CI benchmarks the 5k fixture and nightly reports a synthetic 80k, 07 §E)
 
 - Index build: under 2 minutes. Index size: under 500 MB.

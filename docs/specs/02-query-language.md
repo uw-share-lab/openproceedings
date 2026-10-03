@@ -11,9 +11,14 @@ records hash and replay. This spec is the contract for guarantees 1, 3 and 6.
 ## Token semantics (shared with the index tokenizer, 03)
 
 The query side and the index side run the **same** normalization function (`normalize.py`, versioned as
-`TOKENIZER_VERSION`):
+`TOKENIZER_VERSION`; this is version 3, decision-033). A query is always read with the version its index was
+built with: this code serves version 3 and, for the indexes built with it and the search records pinned to them,
+version 2 (`SERVED_TOKENIZERS`; 03 §Versioning).
 
-1. Unicode NFKC, then case-fold (`LLM` ≡ `llm`).
+1. Unicode NFKC of the **whole text, before any other step**, then case-fold (`LLM` ≡ `llm`). So a text and its
+   NFC, NFD, NFKC and NFKD forms give the same tokens (`Caf\é` is `caf e` with a precomposed `é` or with `e` +
+   U+0301). Version 2 applied NFKC one character at a time after step 3 had read the raw text, so an accent
+   written as `e` + U+0301 after a backslash read as the command `\e` (dropped).
 2. Fold marks that only decorate a word: NFD, drop combining marks (canonical combining class ≠ 0)
    whose base character's Unicode name begins with LATIN, GREEK, CYRILLIC, HEBREW, ARABIC or EXTENDED
    ARABIC, or which is an ASCII digit, then recompose with NFC. (By name, so Coptic, IPA and phonetic letters
@@ -38,7 +43,9 @@ The query side and the index side run the **same** normalization function (`norm
    - Accent macros join the word: `G\"odel`, `G\"{o}del`, `Erd\H{o}s`, `na\"{\i}ve` → `godel`, `erdos`, `naive`
      (BibTeX's dotless `{\i}`/`{\j}` inside an accent is the letter). `\-` (the
      discretionary hyphen) joins: `bench\-mark` → `benchmark`.
-   - Full-width `＄` and `＼` are ordinary text, not LaTeX.
+   - Step 3 reads the NFKC form, so full-width `＄` and `＼` (and small `﹩`, `﹨`) are `$` and `\`, and the Pandoc
+     tests see a spacing accent (`´`, NFKC ` ́`) as a space and `½` (`1⁄2`) as a digit. (Version 2: full-width
+     `＄` and `＼` were ordinary text.)
 4. Split on anything that is not a letter, digit or (non-combining) mark, except that a Unicode operator
    or relation (`×`, `≤`, `→`, `∈`, …; the table is in decision-006) is a token of its own, its LaTeX name
    (`5×3` → `5` `times` `3`). `vision-language` → `vision`
@@ -171,7 +178,9 @@ Rules:
     a logic sign's `WARN_LOOKALIKE_OPERATOR`): `year:..2022` is `FIELD_UNKNOWN_VALUE` only.
     A backslash keeps the next character in the word
     (`G\"odel`). Characters whose NFKC form is a syntax character (full-width `（ ）｜：－＊＂`, …) act as
-    it, because the tokenizer applies NFKC too; super/subscript parentheses are notation, not grouping.
+    it, because the tokenizer applies NFKC too; super/subscript parentheses are notation, not grouping. LaTeX
+    math is found as the query's tokenizer finds it, so under version 3 `＄f(x)＄` is one word, its `＼` keeps the
+    next character, and a query typed in NFC or NFD parses to the same canonical string.
   - `-` is `NOT` when it starts a primary (after whitespace, `(`, `|` or a field's `:`) and touches what
     it excludes. A word that starts with `-` anywhere else (`a - b`, `"x"-based`, `--x`) is
     `PARSE_AMBIGUOUS_MINUS`. A word starting with a look-alike dash (any Unicode dash other than the
@@ -395,7 +404,8 @@ filter_clauses(q, parse(q, mode)) -> ParsedFilters | None   # `query/clauses.py`
 ```
 
 `canonical` is deterministic: `parse(canonical).canonical == canonical`. That idempotence is tested with
-property tests. `canonical_hash = sha256(canonical + "\0" + TOKENIZER_VERSION + "\0" + QUERY_VERSION)` (decision-003):
+property tests. `canonical_hash = sha256(canonical + "\0" + tokenizer_version + "\0" + QUERY_VERSION)` (decision-003),
+`tokenizer_version` being the one the query was parsed with (the index's; `ParseResult.tokenizer_version`):
 NUL separators keep the parts apart, and a query-semantics bump changes the hash. `canonical` and `canonical_hash` are None when there are errors.
 
 Canonical form (`query/canonical.py`) is a normal form: nested `AND`/`OR` are flattened; in every `AND`,

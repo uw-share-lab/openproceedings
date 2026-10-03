@@ -13,7 +13,9 @@ reviews without the UI.
 - Base path `/api/v1`. JSON. Pydantic v2 models are the contract. The OpenAPI schema is exported to
   `frontend/src/api/schema.ts` via codegen, so the two sides can't drift. CI fails if the generated file is
   stale.
-- Every response carries `index_version`, `tokenizer_version` and `query_version`. A JSON response carries
+- Every response carries `index_version`, `tokenizer_version` and `query_version`; `tokenizer_version` is the one
+  the response's index was built with, which its query was read with (03 §Versioning: a pinned older index keeps
+  its own; `/healthz` gives this code's current one until an index loads). A JSON response carries
   them in the body. A non-JSON response (an export) carries them as `X-Index-Version`, `X-Tokenizer-Version`
   and `X-Query-Version` headers, exposed to CORS. `query_version` versions
   the query *semantics* that live outside the index: the parser, the compiler (NEAR/slop, wildcard rules),
@@ -188,6 +190,12 @@ and `unclassified_total` is `excluded.track.unknown + excluded.status.unknown`. 
 rewrites the query (guarantee 3). No hidden facet state exists.
 
 ## Exports (built to be imported into Covidence)
+
+Query exports check the raw query-length cap before opening a pin, then validate semantics with the
+selected index's tokenizer and charge its position-verified clauses once. An unavailable target is
+therefore reported before a semantic query error: a query rejected by tokenizer 3 may be valid on a
+pinned tokenizer-2 index (`＼alpha`, for example). Mode and basic parameter validation still precede
+route execution.
 
 - **RIS:** `TY  - CPAPER`, `TI`, `AB` (full), `AU` (one line each), `PY`, `T2` (the venue string below), `UR` (forum, then pdf, then proceedings; each only if present), `DO` if present, `ID` (the openproceedings paper id, so exports round-trip), two `KW`
   lines (the track, then `status:<status>`), and the provenance `N1` = `openproceedings <index_version> · query

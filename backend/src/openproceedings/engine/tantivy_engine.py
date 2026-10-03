@@ -41,7 +41,7 @@ from openproceedings.engine.protocol import (
     SearchResult,
 )
 from openproceedings.query.ast import And, Filter, Near, Node, Not, Phrase, TextField, Wildcard, YearRange
-from openproceedings.query.normalize import TOKENIZER_VERSION
+from openproceedings.query.normalize import SERVED_TOKENIZERS
 
 SORTS = ("relevance", "year_desc", "year_asc", "title")
 # a document's facet values, in this order: what every filter and facet depends on (task-086)
@@ -80,8 +80,16 @@ def unservable(manifest: dict[str, Any]) -> tuple[str, str] | None:
             "schema_version_mismatch",
             f"index {name} has schema_version {schema}, this code serves {served}: build a new index",
         )
+    tokenizer = manifest.get("tokenizer_version")
+    if (
+        not isinstance(tokenizer, str) or tokenizer not in SERVED_TOKENIZERS
+    ):  # the current one and the one before it (guarantee 4: pinned indexes)
+        served = ", ".join(SERVED_TOKENIZERS)
+        return (
+            "tokenizer_version_mismatch",
+            f"index {name} has tokenizer_version {tokenizer}, this code serves {served}: build a new index",
+        )
     stale = {
-        "tokenizer_version": (manifest.get("tokenizer_version"), TOKENIZER_VERSION),
         "tantivy_version": (manifest.get("tantivy_version"), version("tantivy")),  # scoring may differ
     }
     for field, (built, current) in stale.items():
@@ -188,6 +196,9 @@ class TantivyEngine:
         manifest = verify_index(path)
         self.index_version: str = manifest["index_version"]
         self.ranking: dict[str, Any] = manifest["ranking_params"]  # the params this index's id was built with
+        # the tokenizer the index was built with: queries on it are parsed, and its hits highlighted, with it
+        # (a served older one, for an index a search record pins; `normalize.SERVED_TOKENIZERS`)
+        self.tokenizer_version: str = manifest["tokenizer_version"]
         why = unservable(manifest)
         if why is not None:
             raise IndexUnservable(DiagnosticCode.API_INTERNAL, why[1], reason=why[0])

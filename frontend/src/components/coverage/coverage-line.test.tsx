@@ -28,8 +28,7 @@ async function line(handler: Handler): Promise<string> {
 describe("CoverageLine", () => {
   it("writes the fixture's GET /coverage answer", async () => {
     expect(await line(serve(COVERAGE))).toBe(
-      `Index ${fixture.index_version} · ` +
-        "39 records indexed · ICLR, ICML, NeurIPS · " +
+      `Index ${COVERAGE.index_version} · 39 records indexed · ICLR, ICML, NeurIPS · ` +
         "Google Scholar searches run on 2026-09-26 (local time) · Coverage ▸",
     );
     expect(screen.getByRole("link", { name: "Coverage ▸" }).getAttribute("href")).toBe("/coverage");
@@ -49,8 +48,7 @@ describe("CoverageLine", () => {
     data.snapshot.crawl_dates_kind["*"] = "crawl";
     data.totals.records = 1805; // not what venue_years add up to: the line shows the field as served
     expect(await line(serve(data))).toBe(
-      `Index ${fixture.index_version} · ` +
-        "1,805 records indexed · ICLR, ICML, NeurIPS · " +
+      `Index ${data.index_version} · 1,805 records indexed · ICLR, ICML, NeurIPS · ` +
         "Crawled 2026-09-20 to 2026-09-26 · Coverage ▸",
     );
   });
@@ -59,7 +57,7 @@ describe("CoverageLine", () => {
     const noWindow = structuredClone(COVERAGE);
     delete noWindow.snapshot.crawl_dates["*"];
     expect(await line(serve(noWindow))).toBe(
-      `Index ${fixture.index_version} · ` + "39 records indexed · ICLR, ICML, NeurIPS · Coverage ▸",
+      `Index ${noWindow.index_version} · 39 records indexed · ICLR, ICML, NeurIPS · Coverage ▸`,
     );
   });
 

@@ -13,7 +13,10 @@ import type {
 import { syntaxTree } from "@codemirror/language";
 import type { Schemas } from "@/api/client";
 
-export type Meta = Pick<Schemas["MetaResponse"], "text_fields" | "filter_fields" | "values">;
+export type Meta = Pick<
+  Schemas["MetaResponse"],
+  "text_fields" | "filter_fields" | "values" | "tokenizer_version"
+>;
 type ValueField = keyof Schemas["Vocabularies"];
 
 const isValueField = (name: string): name is ValueField =>

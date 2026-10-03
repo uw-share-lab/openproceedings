@@ -8,6 +8,10 @@ Two differentials, each against a frozen copy of the code as it was before (`tes
   every record it matches, every Trust-Evals protocol string on the 5k corpus, and generated trees, and
   refuses a non-hit the same way.
 Then exact spans for NEAR, phrases and wildcards through each path of the new occurrence lookup.
+
+The tokenizer differentials run tokenizer 2, which the frozen copies are copies of. Tokenizer 3 is the same loop
+run on the NFKC form of the text (`tests/unit/test_tokenizer_versions.py` holds it to tokenizer 2 there), so
+these pin its fast paths too.
 """
 
 from __future__ import annotations
@@ -91,7 +95,7 @@ LATIN = st.lists(
 @example("\u0301\u0301\u0338\u0301 a\u0301\u0301=\u0301\u0338")  # marks before a slash in one run (TASK-067)
 @example("\\\"{O}del \\'etude \\-x $^2x$")  # markup that opens a word: its span starts there (task-074)
 def test_tokenize_gives_exactly_the_old_tokens(text: str) -> None:
-    assert full(tokenize(text)) == full(tokenize_before(text))
+    assert full(tokenize(text, "2")) == full(tokenize_before(text))
     now, before = against_088(text)
     assert now == before
 
@@ -106,13 +110,13 @@ def against_088(text: str) -> tuple[tuple[Tokenized, Tokenized], tuple[Tokenized
     before = (full(each_char_before_088(text, old)), old)
     new: list[Tail] = []
     looped = full(normalize._tokenize_each_char(text, new))
-    tokens, tail = tokenize_with_tail(text)
+    tokens, tail = tokenize_with_tail(text, "2")
     return ((looped, new), (full(tokens), [tail])), (before, before)
 
 
 def test_tokenize_gives_exactly_the_old_tokens_on_every_fixture_text() -> None:
     texts = [t for r in [*RECORDS, *SYNTHETIC] for t in (r.title, r.abstract or "")]
-    assert [full(tokenize(t)) for t in texts] == [full(tokenize_before(t)) for t in texts]
+    assert [full(tokenize(t, "2")) for t in texts] == [full(tokenize_before(t)) for t in texts]
     assert [t for t in texts if (pair := against_088(t))[0] != pair[1]] == []
 
 
@@ -181,7 +185,7 @@ def test_only_plain_ascii_takes_the_whole_text_path(monkeypatch: pytest.MonkeyPa
     assert calls == []
     for text in ("$x$ y", "a \\emph{b}", "na\u00efve", "a\u0301"):
         tokenize(text)
-    assert calls == ["$x$ y", "a \\emph{b}", "na\u00efve", "a\u0301"]
+    assert calls == ["$x$ y", "a \\emph{b}", "na\u00efve", "\u00e1"]  # tokenizer 3 loops over the NFKC form
 
 
 # --- highlights --------------------------------------------------------------------------------------------
@@ -297,7 +301,7 @@ def test_highlights_over_text_the_ascii_path_and_the_loop_both_tokenize() -> Non
 
 def test_a_field_no_leaf_reads_is_never_tokenized(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[str] = []
-    monkeypatch.setattr(highlight, "tokenize", lambda t: seen.append(t) or tokenize(t))
+    monkeypatch.setattr(highlight, "tokenize", lambda t, v: seen.append(t) or tokenize(t, v))
     r = Rec("fx:001", "trust in ai", "an abstract no leaf reads")  # type: ignore[call-arg]
     ast = parse("title:trust").ast
     assert ast is not None

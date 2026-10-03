@@ -1544,7 +1544,7 @@ export interface operations {
                     "X-Index-Version"?: string;
                     /** @description This code's query_version (on a `record_id` export too, whatever the record's own) */
                     "X-Query-Version"?: string;
-                    /** @description This code's tokenizer_version */
+                    /** @description The tokenizer_version of the index the export ran on */
                     "X-Tokenizer-Version"?: string;
                     /** @description How many records the body holds: `/search`'s `total` for the same query and index (for a search record, the number of its stored ids, which its `total` must equal: 409 `API_RECORD_MISMATCH` otherwise) */
                     "X-Total"?: number;

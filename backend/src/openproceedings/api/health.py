@@ -35,6 +35,7 @@ def get_healthz(request: Request) -> Health:
     return Health(
         index_loaded=engine is not None,
         index_version=engine.index_version if engine is not None else None,
-        tokenizer_version=TOKENIZER_VERSION,
+        # the loaded index's (what its queries are read with), else this code's current one
+        tokenizer_version=engine.tokenizer_version if engine is not None else TOKENIZER_VERSION,
         query_version=QUERY_VERSION,
     )

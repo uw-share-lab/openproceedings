@@ -65,6 +65,7 @@ from openproceedings.query.ast import (
 )
 from openproceedings.query.canonical import canonicalize
 from openproceedings.query.defaults import DEFAULT_CLAUSES
+from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode, ParseResult, parse
 from openproceedings.vocab import STATUSES, TRACKS, VENUES
 
@@ -211,10 +212,12 @@ def _widest_clause(field: FilterField) -> str:
     return _WIDEST_YEAR if field == "year" else _format(field, VOCABULARY[field])
 
 
-def _edit_reason(edited: str, mode: Mode, fields: tuple[FilterField, ...]) -> ClauseReason | None:
+def _edit_reason(
+    edited: str, mode: Mode, fields: tuple[FilterField, ...], tokenizer: str = TOKENIZER_VERSION
+) -> ClauseReason | None:
     """Why `edited` (q after the widest click on each of `fields`) can't be written, or None if it can: it
     parses in the query's mode and has exactly one top-level clause of each field, the widest one written."""
-    parsed = parse(edited, mode)
+    parsed = parse(edited, mode, tokenizer)
     codes = {e.code for e in parsed.errors}
     if DiagnosticCode.PARSE_TOO_DEEP in codes:
         return "too_deep"
@@ -233,19 +236,23 @@ def _edit_reason(edited: str, mode: Mode, fields: tuple[FilterField, ...]) -> Cl
     return None
 
 
-def _check_splice(q: str, mode: Mode, field: FilterField, span: Span) -> ClauseReason | None:
+def _check_splice(
+    q: str, mode: Mode, field: FilterField, span: Span, tokenizer: str = TOKENIZER_VERSION
+) -> ClauseReason | None:
     """Why the widest click on the typed clause of `field` at `span` can't be made, or None if it can."""
     start, end = span
-    return _edit_reason(q[:start] + _widest_clause(field) + q[end:], mode, (field,))
+    return _edit_reason(q[:start] + _widest_clause(field) + q[end:], mode, (field,), tokenizer)
 
 
-def _check_wrap(q: str, mode: Mode, fields: tuple[FilterField, ...]) -> ClauseReason | None:
+def _check_wrap(
+    q: str, mode: Mode, fields: tuple[FilterField, ...], tokenizer: str = TOKENIZER_VERSION
+) -> ClauseReason | None:
     """Why writing each of `fields` out as `(q) AND field:(…)`, all at once, can't be done, or None if it can."""
-    return _edit_reason(" AND ".join((f"({q})", *map(_widest_clause, fields))), mode, fields)
+    return _edit_reason(" AND ".join((f"({q})", *map(_widest_clause, fields))), mode, fields, tokenizer)
 
 
 def _check_wraps(
-    q: str, mode: Mode, fields: tuple[FilterField, ...]
+    q: str, mode: Mode, fields: tuple[FilterField, ...], tokenizer: str = TOKENIZER_VERSION
 ) -> dict[FilterField, ClauseReason | None]:
     """The reason for each field with no clause (a zero-width span), from as few parses as the answer allows.
 
@@ -257,17 +264,17 @@ def _check_wraps(
     (`test_clauses.py` compares them over generated queries)."""
     if not fields:
         return {}
-    together = _check_wrap(q, mode, fields)
+    together = _check_wrap(q, mode, fields, tokenizer)
     if together is None or together == "too_deep" or len(fields) == 1:
         return dict.fromkeys(fields, together)
-    return {f: _check_wrap(q, mode, (f,)) for f in fields}
+    return {f: _check_wrap(q, mode, (f,), tokenizer) for f in fields}
 
 
 _Report = tuple[bool, Span | None, tuple[str | YearRange, ...] | None, ClauseReason | None]
 
 
 def _report(
-    q: str, mode: Mode, typed: list[tuple[Node, Node]], canon: list[Node], field: FilterField
+    q: str, mode: Mode, typed: list[tuple[Node, Node]], canon: list[Node], field: FilterField, tokenizer: str
 ) -> _Report | None:
     """(negated, span, values, reason) for `field`; reason None = toggleable. None when the field has no
     clause at all, so its report is the wrap's (`_check_wraps`). `typed`: the written top-level conjuncts,
@@ -287,7 +294,7 @@ def _report(
         span = written[0].span
         if negated:
             return True, span, clause.values, "negated"
-        reason = _check_splice(q, mode, field, span)
+        reason = _check_splice(q, mode, field, span, tokenizer)
         if reason == "multiple_clauses":  # another written copy survives the splice: no single clause
             return False, None, None, reason
         return False, span, clause.values, reason
@@ -312,8 +319,13 @@ def filter_clauses(q: str, result: ParseResult) -> ParsedFilters | None:
         return None
     canon = _conjuncts(canonicalize(result.ast))
     typed = [(c, canonicalize(c)) for c in _written(result.ast)]
-    found = {field: _report(q, result.mode, typed, canon, field) for field in FILTER_FIELDS}
-    wraps = _check_wraps(q, result.mode, tuple(f for f, r in found.items() if r is None))
+    found = {
+        field: _report(q, result.mode, typed, canon, field, result.tokenizer_version)
+        for field in FILTER_FIELDS
+    }
+    wraps = _check_wraps(
+        q, result.mode, tuple(f for f, r in found.items() if r is None), result.tokenizer_version
+    )
     end = (len(q), len(q))
     written = _written(result.ast)
     reports: dict[str, ParsedClause | ParsedYearClause] = {}

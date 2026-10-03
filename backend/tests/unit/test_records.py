@@ -740,9 +740,10 @@ def test_changed_inputs_name_each_input_and_its_kind(field: str, value: Any, kin
 
 @dataclass(frozen=True)
 class NoEngine:
-    """Only an index_version: `freeze` must refuse before it ever searches."""
+    """Only an index_version (and the tokenizer it claims): `freeze` must refuse before it ever searches."""
 
     index_version: str
+    tokenizer_version: str = TOKENIZER_VERSION
 
 
 def test_freeze_refuses_a_query_that_did_not_parse(data_dir: Path) -> None:

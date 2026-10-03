@@ -185,6 +185,7 @@ def render(n: Node, quote: frozenset[str] = frozenset()) -> str:
     return "(" + " OR ".join(render(c, siblings) for c in n.children) + ")"
 
 
-def canonical_hash(canonical: str) -> str:
-    """sha256 over the canonical string and both versions it depends on (decision-003)."""
-    return hashlib.sha256(f"{canonical}\x00{TOKENIZER_VERSION}\x00{QUERY_VERSION}".encode()).hexdigest()
+def canonical_hash(canonical: str, tokenizer: str = TOKENIZER_VERSION) -> str:
+    """sha256 over the canonical string and both versions it depends on (decision-003): `tokenizer` is the
+    version it was parsed with (the index's), so a record pinned to an older index re-hashes as it was saved."""
+    return hashlib.sha256(f"{canonical}\x00{tokenizer}\x00{QUERY_VERSION}".encode()).hexdigest()

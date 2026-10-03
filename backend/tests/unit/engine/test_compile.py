@@ -303,7 +303,15 @@ def test_cli_search_index_precedence_and_errors(
     assert cli.main(["--data-dir", str(data), "search", "alpha", "--ids", "--index", index.name]) == 0
     assert len(capsys.readouterr().out.split()) == 5
     assert cli.main(["--data-dir", str(tmp_path / "none"), "search", "trust NOT", "--ids"]) == 1
-    assert "PARSE_" in capsys.readouterr().err  # the query's error first, whatever the index
+    err = capsys.readouterr().err
+    assert "API_BAD_PARAM" in err and "pass --index" in err and "PARSE_" not in err
+    # Semantic errors need the selected index's tokenizer; they are still refused once it is available.
+    assert cli.main(["--data-dir", str(data), "search", "trust NOT", "--ids", "--index", index.name]) == 1
+    assert "PARSE_EXPECTED_TERM" in capsys.readouterr().err
+    # Raw length is version-independent and remains ahead of all index I/O.
+    assert cli.main(["--data-dir", str(tmp_path / "none"), "search", "a" * 2001, "--ids"]) == 1
+    err = capsys.readouterr().err
+    assert "PARSE_TOO_LONG" in err and "pass --index" not in err
     assert cli.main(["--data-dir", str(tmp_path / "none"), "search", "trust", "--ids"]) == 1
     assert "pass --index" in capsys.readouterr().err  # a usage error: the log line is at DEBUG
     assert (

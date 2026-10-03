@@ -18,8 +18,12 @@ from openproceedings.query.normalize import (
     tokenize_with_tail,
 )
 
-# Text without LaTeX syntax: the whole-string reference below doesn't model LaTeX.
-PLAIN = st.text(alphabet=st.characters(blacklist_characters="\\$", blacklist_categories=("Cs",)), max_size=60)
+# Text without LaTeX syntax: the whole-string reference below doesn't model LaTeX. Tokenizer 3 reads the NFKC
+# form, so the characters whose NFKC form is `\` or `$` (full-width, small) are LaTeX syntax too.
+LATEX_SYNTAX = "\\$\uff3c\uff04\ufe68\ufe69"
+PLAIN = st.text(
+    alphabet=st.characters(blacklist_characters=LATEX_SYNTAX, blacklist_categories=("Cs",)), max_size=60
+)
 
 
 # The per-script mark rule, computed a different way from the implementation: the implementation checks a

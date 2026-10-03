@@ -691,18 +691,27 @@ def _command(ns: argparse.Namespace) -> str:
     return " ".join(filter(None, (ns.command, getattr(ns, "source", None), getattr(ns, "action", None))))
 
 
-def _parsed(ns: argparse.Namespace) -> ParseResult | None:
-    """The query's parse, its diagnostics printed to stderr as user output (never logged: they quote the
-    query); None when it doesn't parse."""
+def _query_within_cap(ns: argparse.Namespace) -> bool:
+    """Check raw length before index I/O; only the selected tokenizer can validate query semantics."""
+    from openproceedings.query.parser import too_long
+
+    over = too_long(ns.query)
+    if over is not None:
+        print(f"{over.code}: {over.message}", file=sys.stderr)
+        log.debug("cli_refused", extra={"command": _command(ns), "error": "parse"})
+        return False
+    return True
+
+
+def _parsed(ns: argparse.Namespace, tokenizer: str) -> ParseResult | None:
+    """The selected index's parse, with diagnostics printed to stderr as user output (never logged)."""
     from openproceedings.query.parser import parse
 
-    result = parse(ns.query, ns.mode)
+    result = parse(ns.query, ns.mode, tokenizer)
     for d in [*result.errors, *result.warnings, *result.translations]:
         print(f"{d.code}: {d.message}", file=sys.stderr)
     if result.effective_ast is None:
-        log.debug(
-            "cli_refused", extra={"command": _command(ns), "error": "parse"}
-        )  # user input: DEBUG at most
+        log.debug("cli_refused", extra={"command": _command(ns), "error": "parse"})
         return None
     return result
 
@@ -886,20 +895,24 @@ def _search(ns: argparse.Namespace) -> int:
 
     started = time.perf_counter()
     _utf8_stdout()
-    result = _parsed(ns)  # a bad query is reported first, whatever the index
-    if result is None:
+    if not _query_within_cap(ns):
         return 1
-    ast = result.effective_ast
-    assert ast is not None
     if ns.engine == "reference" and not ns.ids:
         raise _usage("--engine reference needs --ids: the oracle has no ranking and no compiled query")
     if ns.limit < 0:
         raise _usage("--limit must be ≥ 0")
     path = _index_path(ns)
     engine = TantivyEngine(path)
+    result = _parsed(ns, engine.tokenizer_version)
+    if result is None:
+        return 1
+    ast = result.effective_ast
+    assert ast is not None
     if ns.ids:
         ids = sorted(
-            _reference(ns, path).match_ids(ast) if ns.engine == "reference" else engine.match_ids(ast)
+            _reference(ns, path, engine.tokenizer_version).match_ids(ast)
+            if ns.engine == "reference"
+            else engine.match_ids(ast)
         )
         print("\n".join(ids))
         _search_run(ns, started, engine.index_version, result, len(ids))
@@ -959,7 +972,6 @@ def _report(
 
     from openproceedings.engine.exclusions import identified_total
     from openproceedings.query import QUERY_VERSION
-    from openproceedings.query.normalize import TOKENIZER_VERSION
 
     searched = datetime.now(UTC).strftime("%Y-%m-%dT%H:%MZ")
     window = (snapshot or {}).get("crawl_window")
@@ -976,7 +988,7 @@ def _report(
         else str(snapshot.get("crawl_date", "unknown"))
     )
     lines = [
-        f"searched {searched} · index {engine.index_version} · crawl {crawl} · tokenizer {TOKENIZER_VERSION} "
+        f"searched {searched} · index {engine.index_version} · crawl {crawl} · tokenizer {engine.tokenizer_version} "
         f"· query {QUERY_VERSION}"
     ]
     sources = sorted((snapshot or {}).get("sources") or {})
@@ -1021,8 +1033,8 @@ def _snapshot_of(ns: argparse.Namespace, index: Path) -> dict[str, Any] | None:
     return snap
 
 
-def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
-    """The oracle over the snapshot an index was built from."""
+def _reference(ns: argparse.Namespace, index: Path, tokenizer: str) -> ReferenceEngine:
+    """The oracle over the snapshot an index was built from, read with the tokenizer it was built with."""
     from openproceedings.engine.index import IndexBuildError
     from openproceedings.engine.reference import ReferenceEngine
     from openproceedings.ingest.snapshot import load_records
@@ -1037,7 +1049,7 @@ def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
         raise IndexBuildError(
             f"{snapshot.name} isn't the snapshot index {manifest['index_version']} was built from"
         )
-    return ReferenceEngine(load_records(snapshot).values())
+    return ReferenceEngine(load_records(snapshot).values(), tokenizer=tokenizer)
 
 
 def _export(ns: argparse.Namespace) -> int:
@@ -1050,20 +1062,22 @@ def _export(ns: argparse.Namespace) -> int:
     from openproceedings.takedowns import load as load_takedowns
 
     started = time.perf_counter()
-    result = _parsed(ns)
-    if result is None:
+    if not _query_within_cap(ns):
         return 1
     # as the API withholds them (TASK-136); a bad list refuses, and so does a missing one once a snapshot has
     # withheld an abstract (TASK-067: an older index would otherwise export the listed abstracts)
     listed = load_takedowns(list_path(ns.data_dir), required=any_withheld(ns.data_dir / "snapshots"))
-    ast = result.effective_ast
-    assert ast is not None and result.canonical_hash is not None
     if ns.out is not None and ns.out.is_dir():
         raise _usage(f"--out {ns.out} is a directory; name a file")
     if ns.out is not None and not ns.out.parent.is_dir():
         raise _usage(f"--out {ns.out}: no directory {ns.out.parent}")
     path = _index_path(ns)
     engine = TantivyEngine(path)
+    result = _parsed(ns, engine.tokenizer_version)
+    if result is None:
+        return 1
+    ast = result.effective_ast
+    assert ast is not None and result.canonical_hash is not None
     # each abstract's source (decision-018, TASK-138), from the verified snapshot, as the server loads it;
     # without it every abstract is withheld and each record says so (decision-021), with a warning
     sources: Sources | None
@@ -1232,12 +1246,14 @@ def _record_save(ns: argparse.Namespace) -> int:
 
     started = time.perf_counter()
     _utf8_stdout()
-    result = _parsed(ns)  # refused as POST /records refuses it (the parse checks the length cap first)
-    if result is None:
+    if not _query_within_cap(ns):
         return 1
     engine = _selected_index(
         ns, ns.index or "current", "pass --index current or an index_version under <data-dir>/indexes"
     )
+    result = _parsed(ns, engine.tokenizer_version)
+    if result is None:
+        return 1
     fields, found = freeze(engine, result, ns.query, ns.data_dir)
     record = _record_store(ns.data_dir).insert(fields, found.ids)
     page = RECORD_PAGE.format(record_id=record.record_id)
@@ -1310,7 +1326,6 @@ def _record_replay(ns: argparse.Namespace) -> int:
     from openproceedings.api.records import replay_info
     from openproceedings.diagnostics import DiagnosticCode, UserInputError
     from openproceedings.engine.compile import verified_clauses
-    from openproceedings.query.parser import parse
     from openproceedings.records import replay, valid_record_id
 
     started = time.perf_counter()
@@ -1331,9 +1346,10 @@ def _record_replay(ns: argparse.Namespace) -> int:
         f"the record's own index {record.index_version} isn't here either: pass --index <index_version> to "
         "replay it on another",
     )
-    parsed = parse(record.canonical, "native")  # never `input`: translations that changed can't alter it
-    result = replay(record, served, pinned, ns.data_dir, parsed=parsed)  # no `admit`: never withheld here
-    ast = parsed.effective_ast
+    # the canonical, never `input` (translations that changed can't alter it), parsed by `replay` with the
+    # tokenizer of the index it runs on; no `admit`: never withheld here
+    result = replay(record, served, pinned, ns.data_dir)
+    ast = result.parsed.effective_ast
     info = replay_info(result, len(verified_clauses(ast)) if ast is not None else None)
     if ns.json:
         _print(

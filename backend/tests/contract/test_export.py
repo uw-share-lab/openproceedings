@@ -478,9 +478,11 @@ def test_a_copied_index_directory_is_refused_as_tampered_409(
 def stale(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     """An index built by an older tokenizer, in the instance's data directory: its version."""
     import openproceedings.engine.index as index_module
+    from openproceedings.query.normalize import SERVED_TOKENIZERS, TokenizerForm
 
     with monkeypatch.context() as m:
         m.setattr(index_module, "TOKENIZER_VERSION", "0-old")
+        m.setitem(SERVED_TOKENIZERS, "0-old", TokenizerForm(nfkc_first=True))  # served while it is built only
         return build(list(records())[:50], data_dir / "snapshots", "old", data_dir / "indexes")
 
 

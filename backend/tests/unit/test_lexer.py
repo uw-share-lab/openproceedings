@@ -6,11 +6,12 @@ import sys
 import unicodedata
 
 import pytest
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.query import lexer
 from openproceedings.query.lexer import MAX_NEAR, Kind, Lexeme, lex
+from openproceedings.query.normalize import SERVED_TOKENIZERS
 from openproceedings.query.parser import parse
 
 C = DiagnosticCode
@@ -468,18 +469,28 @@ def test_words_can_still_touch_parentheses_that_hold_math() -> None:
     assert lex("$f(x)$ trust").errors == ()
 
 
-@given(st.text(alphabet='$ \\ax1"(', max_size=24))
-def test_math_run_lookup_agrees_with_the_one_scan_rule(q: str) -> None:
-    """The lexer's precomputed closers must give exactly normalize.first_math_end's answer (M1 gate)."""
+# LaTeX syntax and, for tokenizer 3 (which reads the NFKC form), the characters whose NFKC form is `$` or `\`
+# or begins or ends with a space or a digit: full-width and small `$` and `\`, a spacing accent (` ́`), `½`
+# (`1⁄2`), `¹`, a no-break space
+@given(
+    st.text(alphabet='$ \\ax1"(\uff04\ufe69\uff3c\ufe68\u00b4\u00bd\u00b9\u00a0', max_size=24),
+    st.sampled_from(list(SERVED_TOKENIZERS)),
+)
+@example("$\u00b4x$", "3")  # a spacing accent after the opener is a space to tokenizer 3: no math
+@example("$x$\u00bd", "3")  # `½` is `1⁄2`: a closer before it is followed by a digit
+@example("\uff04x\uff04", "3")
+def test_math_run_lookup_agrees_with_the_one_scan_rule(q: str, version: str) -> None:
+    """The lexer's precomputed closers must give exactly normalize.first_math_end's answer (M1 gate), under
+    each served tokenizer."""
     from openproceedings.query.lexer import _Lexer
     from openproceedings.query.normalize import first_math_end
 
-    lexer = _Lexer(q)
+    lexer = _Lexer(q, version)
     for i in range(len(q)):
         limit = lexer.next_quote[i]
-        if i >= limit or q[i] != "$":
+        if i >= limit or lexer.scan[i] != "$":
             continue
-        ref = first_math_end(q[i:limit])
+        ref = first_math_end(q[i:limit], version)
         end = i + ref if ref >= 0 else -1
         at_boundary = (
             end < 0 or end == limit or q[end].isspace() or q[end] in "()|" or q[end] in lexer_quotes()
@@ -594,3 +605,28 @@ def test_spelled_greek_advice_fits_a_negation() -> None:
     assert "add `-α` to exclude it too" in w.message
     [w] = [d for d in parse("alpha").warnings if d.code is C.WARN_SPELLED_GREEK]
     assert "search `alpha OR α`" in w.message
+
+
+def test_the_latex_lookalikes_are_every_character_whose_nfkc_form_is_a_dollar_or_backslash() -> None:
+    """Re-derived from the Unicode database: what tokenizer 3 reads as `$` or `\\` (it reads the NFKC form)."""
+    import sys
+    import unicodedata
+
+    from openproceedings.query.lexer import LATEX_LOOKALIKES
+
+    derived = {
+        chr(cp): unicodedata.normalize("NFKC", chr(cp))
+        for cp in range(sys.maxunicode + 1)
+        if not 0xD800 <= cp <= 0xDFFF
+        and chr(cp) not in "$\\"
+        and unicodedata.normalize("NFKC", chr(cp)) in ("$", "\\")
+    }
+    assert derived == LATEX_LOOKALIKES
+    # nor does any character's NFKC form hold one among other characters (the lexer maps one to one)
+    assert not [
+        cp
+        for cp in range(sys.maxunicode + 1)
+        if not 0xD800 <= cp <= 0xDFFF
+        and len(unicodedata.normalize("NFKC", chr(cp))) > 1
+        and any(c in "$\\" for c in unicodedata.normalize("NFKC", chr(cp)))
+    ]

@@ -62,8 +62,8 @@ def test_a_token_that_differs_names_the_first_record_field_and_token(
 ) -> None:
     title = next(r.title for r in records() if r.id == "fx:0003")
 
-    def skewed(text: str) -> list[str]:
-        tokens = normalize(text)
+    def skewed(text: str, version: str) -> list[str]:
+        tokens = normalize(text, version)
         return [*tokens[:1], "zzz", *tokens[2:]] if text == title else tokens
 
     monkeypatch.setattr(index_module, "normalize", skewed)  # what the check normalizes with, in-process
@@ -193,7 +193,9 @@ def test_a_failure_prints_the_token_but_never_logs_it(
     capsys: pytest.CaptureFixture[str],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    monkeypatch.setattr(index_module, "normalize", lambda text: [*normalize(text), "leakedtoken"])
+    monkeypatch.setattr(
+        index_module, "normalize", lambda text, version: [*normalize(text, version), "leakedtoken"]
+    )
     monkeypatch.setattr(parity, "_cpus", lambda: 1)  # in-process, so the patched normalize is used
     index, snapshot = built
     args = [
@@ -219,8 +221,8 @@ def test_check_parity_reads_positions_back(built: tuple[Path, Path], monkeypatch
     # slop 0) can tell, so the stored-text step is silenced to reach it
     title = next(r.title for r in records() if len(set(normalize(r.title))) >= 4)
 
-    def swapped(text: str) -> list[str]:
-        tokens = normalize(text)
+    def swapped(text: str, version: str) -> list[str]:
+        tokens = normalize(text, version)
         return [tokens[0], tokens[2], tokens[1], *tokens[3:]] if text == title else tokens
 
     monkeypatch.setattr(index_module, "normalize", swapped)

@@ -4,7 +4,7 @@
  * `lex.ts` sees code points, as `lexer.py` does, and the token's end is converted back to UTF-16 units here.
  */
 import { ExternalTokenizer, type InputStream } from "@lezer/lr";
-import { isSpace, lexemeAt, type LexemeKind, type Source } from "./lex";
+import { isSpace, lexemeAt, type LexemeKind, type Source, type TokenizerVersion } from "./lex";
 import * as terms from "./parser.terms";
 
 const TERM: Readonly<Record<LexemeKind, number>> = {
@@ -35,7 +35,10 @@ class StreamSource implements Source {
   private readonly units: number[] = [0];
   private done = false;
 
-  constructor(private readonly input: InputStream) {}
+  constructor(
+    private readonly input: InputStream,
+    readonly tokenizer: TokenizerVersion,
+  ) {}
 
   at(k: number): string | undefined {
     if (k === -1) return this.previous();
@@ -71,15 +74,20 @@ class StreamSource implements Source {
   }
 }
 
-export const queryTokens = new ExternalTokenizer((input) => {
-  if (input.next < 0) return;
-  const q = new StreamSource(input);
-  if (isSpace(q.at(0))) {
-    let k = 1;
-    while (isSpace(q.at(k))) k++;
-    input.acceptToken(terms.space, q.offset(k));
-    return;
-  }
-  const { kind, end } = lexemeAt(q, 0);
-  input.acceptToken(TERM[kind], q.offset(end));
-});
+function queryTokensFor(tokenizer: TokenizerVersion): ExternalTokenizer {
+  return new ExternalTokenizer((input) => {
+    if (input.next < 0) return;
+    const q = new StreamSource(input, tokenizer);
+    if (isSpace(q.at(0))) {
+      let k = 1;
+      while (isSpace(q.at(k))) k++;
+      input.acceptToken(terms.space, q.offset(k));
+      return;
+    }
+    const { kind, end } = lexemeAt(q, 0);
+    input.acceptToken(TERM[kind], q.offset(end));
+  });
+}
+
+export const queryTokens = queryTokensFor("3");
+export const queryTokensV2 = queryTokensFor("2");

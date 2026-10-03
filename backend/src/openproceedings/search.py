@@ -38,7 +38,7 @@ from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.engine.compile import wildcards
 from openproceedings.engine.exclusions import ORDER, Excluded, excluded
 from openproceedings.engine.highlight import Highlighter
-from openproceedings.engine.protocol import EngineInputError, Expansions
+from openproceedings.engine.protocol import EngineInputError, EngineInternalError, Expansions
 from openproceedings.engine.tantivy_engine import COMBO, Scope, TantivyEngine, WouldVerify
 from openproceedings.query.ast import Node, TextField
 from openproceedings.query.parser import ParseResult
@@ -99,9 +99,7 @@ def run(
     """One page of `parsed`'s search on `engine`, with its total, exclusion accounting and expansions (and,
     when asked, the disjunctive facets and each hit's code-point highlight spans). `parsed` must have
     parsed: a query with errors never reaches an engine (spec 03 §Error handling)."""
-    ast = parsed.effective_ast
-    if ast is None:
-        raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "a search needs a query that parses.")
+    ast = _runnable(engine, parsed)
     expansions = expanded(engine, ast)
     scope = Scope()  # the ids this request verifies, for its every compile (module docstring)
     faceting: Future[dict[str, dict[str, int]]] | None = None
@@ -115,7 +113,8 @@ def run(
         # one collection: ids and scores
         total, page = engine.page(ast, sort=sort, offset=offset, limit=limit, scope=scope)
         shown = engine.display([i for i, _score in page])
-        lit = Highlighter(ast, expansions) if highlight else None  # one per page: the query's work done once
+        # one per page: the query's work done once
+        lit = Highlighter(ast, expansions, engine.tokenizer_version) if highlight else None
         hits = tuple(
             Hit(
                 id=i,
@@ -154,11 +153,25 @@ def highlight(engine: TantivyEngine, parsed: ParseResult, shown: Mapping[str, An
     know the paper is there), with the same expansions and `Highlighter` (`GET /papers/{id}?q=`, task-087). None when the query doesn't match the paper (its effective tree, default filters included):
     no collection is run and nothing is position-verified; the evaluation is the highlighter's, which a test
     holds to ReferenceEngine's verdict on every record."""
+    ast = _runnable(engine, parsed)
+    expansions = expanded(engine, ast)
+    return Highlighter(ast, expansions, engine.tokenizer_version).match(Shown.of(shown))
+
+
+def _runnable(engine: TantivyEngine, parsed: ParseResult) -> Node:
+    """`parsed`'s effective tree, if it can run on `engine`: it parsed (a query with errors never reaches an
+    engine, spec 03 §Error handling), and with the tokenizer `engine`'s index was built with (its terms are
+    that tokenizer's; a caller that parsed with another one is a bug, never the client's)."""
     ast = parsed.effective_ast
     if ast is None:
         raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "a search needs a query that parses.")
-    expansions = expanded(engine, ast)
-    return Highlighter(ast, expansions).match(Shown.of(shown))
+    if parsed.tokenizer_version != engine.tokenizer_version:
+        raise EngineInternalError(
+            DiagnosticCode.API_INTERNAL,
+            f"a query parsed with tokenizer {parsed.tokenizer_version} can't run on an index built with "
+            f"tokenizer {engine.tokenizer_version}",
+        )
+    return ast
 
 
 def expanded(engine: TantivyEngine, ast: Node) -> Expansions:

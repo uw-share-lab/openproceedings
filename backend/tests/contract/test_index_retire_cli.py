@@ -147,7 +147,9 @@ def test_an_unpinned_version_is_retired(capsys: Capsys, data_dir: Path, store: S
     }
     indexes = data_dir / "indexes"
     assert not (indexes / store.small).exists()
-    assert sorted(p.name for p in indexes.iterdir() if not p.name.startswith(".")) == [store.big, "current"]
+    assert sorted(p.name for p in indexes.iterdir() if not p.name.startswith(".")) == sorted(
+        [store.big, "current"]
+    )
     assert not list(indexes.glob(".tmp-*"))
     assert tree(indexes / store.big) == big and (indexes / "current").resolve().name == store.big
     [line] = [x for x in log_lines(err) if x["event"].startswith("index_retire")]

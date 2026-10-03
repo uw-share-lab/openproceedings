@@ -37,7 +37,14 @@ from typing import Annotated, Any, Literal, get_args
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
-from openproceedings.api.deps import AbstractSource, ServedDep, annotate, check_candidates, searchable
+from openproceedings.api.deps import (
+    AbstractSource,
+    ServedDep,
+    annotate,
+    check_candidates,
+    checked_query,
+    searchable,
+)
 from openproceedings.api.errors import ApiError
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import MODE_DOC, Q_DOC, VERSION_PARAM
@@ -50,7 +57,6 @@ from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.export import Provenance, Sources, Twins, check_count, entries, header, utc_date
 from openproceedings.query import QUERY_VERSION
-from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode, ParseResult
 from openproceedings.records import RECORD_ID, ids_hash
 from openproceedings.search import Shown, expanded
@@ -127,7 +133,9 @@ def _bad(message: str) -> ApiError:
                     {"type": "integer", "minimum": 0},
                 ),
                 "X-Index-Version": response_header("The index the records were read from"),
-                "X-Tokenizer-Version": response_header("This code's tokenizer_version"),
+                "X-Tokenizer-Version": response_header(
+                    "The tokenizer_version of the index the export ran on"
+                ),
                 "X-Query-Version": response_header(
                     "This code's query_version (on a `record_id` export too, whatever the record's own)"
                 ),
@@ -215,8 +223,9 @@ def export(
     else:
         if q is None:
             raise _bad("Pass q (the query to export) or record_id (a saved search record).")
-        result = searchable(request, q, mode)
+        checked_query(q)  # raw length cap before opening a pin; semantic validation needs its tokenizer
         engine = pinned_engine(request, served, index_version)
+        result = searchable(request, q, mode, engine.tokenizer_version)
         ast = result.effective_ast
         if ast is None or result.canonical_hash is None:  # searchable refuses a query that didn't parse
             raise EngineInternalError(
@@ -242,7 +251,7 @@ def export(
         headers={
             "X-Total": str(total),
             "X-Index-Version": engine.index_version,
-            "X-Tokenizer-Version": TOKENIZER_VERSION,
+            "X-Tokenizer-Version": engine.tokenizer_version,
             "X-Query-Version": QUERY_VERSION,
             "Content-Disposition": f'attachment; filename="{name}"',
             "X-Abstract-Source": abstract_source,
@@ -265,7 +274,7 @@ def matched_among(engine: TantivyEngine, result: ParseResult, withheld: Withheld
         raise EngineInternalError(
             DiagnosticCode.API_INTERNAL, "an export counted withheld records of no query"
         )
-    lit = Highlighter(result.effective_ast, expanded(engine, result.effective_ast))
+    lit = Highlighter(result.effective_ast, expanded(engine, result.effective_ast), engine.tokenizer_version)
     return sum(lit.match(Shown.of(record)) is not None for record in shown.values())
 
 
