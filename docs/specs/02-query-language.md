@@ -11,7 +11,7 @@ records hash and replay. This spec is the contract for guarantees 1, 3 and 6.
 ## Token semantics (shared with the index tokenizer, 03)
 
 The query side and the index side run the **same** normalization function (`normalize.py`, versioned as
-`TOKENIZER_VERSION`; this is version 3, decision-031). A query is always read with the version its index was
+`TOKENIZER_VERSION`; this is version 3, decision-033). A query is always read with the version its index was
 built with: this code serves version 3 and, for the indexes built with it and the search records pinned to them,
 version 2 (`SERVED_TOKENIZERS`; 03 §Versioning).
 

@@ -26,11 +26,11 @@ Make every Unicode form of a text tokenize alike (NFD `Caf\é` gave `caf`, NFC `
 
 ## Decisions (and what would change them)
 
-- Tokenizer 3 = NFKC first; serve 2 and 3 (decision-031). Retire 2 once no record pins a tokenizer-2 index.
+- Tokenizer 3 = NFKC first; serve 2 and 3 (decision-033). Retire 2 once no record pins a tokenizer-2 index.
 
 ## Follow-ups
 
-- Allocate the final tokenizer decision ID after the controller resolves the provisional decision-031 collision; the reference above remains provisional until then.
+- Final tokenizer boundary recorded in decision-033 after performance and twins merged; dedup decision-031 and takedown decision-032 remain separate.
 
 ## Propagated to
 

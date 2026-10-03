@@ -219,7 +219,7 @@ a schema-2 index. The order is: rebuild every served index at schema 3, repoint 
 retire` each schema-2 version, which `op index retire` refuses while a record pins it. Any other schema is
 refused (`unservable`).
 
-**Served tokenizers (decision-031).** An index's terms are its tokenizer's, so a query is parsed, its canonical
+**Served tokenizers (decision-033).** An index's terms are its tokenizer's, so a query is parsed, its canonical
 hashed and its hits highlighted with the tokenizer its index was built with (`TantivyEngine.tokenizer_version`,
 from the manifest). This code serves the current `TOKENIZER_VERSION` ("3", which new indexes are built with) and
 the one before it ("2"): `normalize.SERVED_TOKENIZERS`, each a `TokenizerForm` that code branches on. An index

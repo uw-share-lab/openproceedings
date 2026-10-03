@@ -7,7 +7,7 @@ description: The exact normalization contract shared by the query parser and the
 
 ## The pipeline — in this order, and nothing else
 1. Unicode **NFKC** (`ﬁ` → `fi`, full-width → ASCII forms), of the **whole text, before any other step reads it**
-   (tokenizer 3, decision-031). So a text and its NFC, NFD, NFKC and NFKD forms give the same tokens: `Caf\é`
+   (tokenizer 3, decision-033). So a text and its NFC, NFD, NFKC and NFKD forms give the same tokens: `Caf\é`
    is `caf`, `e` whether the `é` is one code point or `e` + U+0301, and full-width `＄`/`＼` (and small `﹩`/`﹨`)
    are `$`/`\`, so LaTeX. Tokenizer 2 ran NFKC one raw character at a time *after* step 4 had read the raw
    text, so an NFD accent after a backslash made a command (`\e`) and NFC didn't (TASK-168's finding).

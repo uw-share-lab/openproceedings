@@ -92,7 +92,7 @@ real index, checked locally. Retiring the old schema: rebuild every served index
 A tantivy-py upgrade is different: the engine refuses an index built by another Tantivy, so it strands old
 indexes whatever `SERVED_SCHEMAS` holds.
 
-## Two served tokenizers (decision-031)
+## Two served tokenizers (decision-033)
 
 A `TOKENIZER_VERSION` bump changes every new `index_version`, and an index's terms are its tokenizer's, so a query
 must be read with the tokenizer its index was built with. `query/normalize.py` maps each served version to its
