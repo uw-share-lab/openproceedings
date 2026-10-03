@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-02 18:39'
+updated_date: '2026-10-03 01:26'
 labels:
   - engine
   - performance
@@ -31,14 +31,20 @@ Source: TASK-088, PR #6 bench note, deferred. Exclusion accounting reads its buc
 - [x] #2 Exclusion counts are identical to the facet path for every Trust-Evals string (test_facets_equal or a new equality test); no ID set or count changes
 <!-- AC:END -->
 
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Preserve exclusion narrowing and broad COMBO coverage; validate identical counts against oracle/generated trees; measure COMBO versus ORDER on quiet paired runs; document changed cold-cache method; run full stable test/lint/tooling, then complete via CLI.
+<!-- SECTION:PLAN:END -->
+
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-TantivyEngine.facets/combos take over (the aggregated fields; only their top-level filters set aside, the others stay in the collected query). search.run without facets (op search, record save and replay) passes exclusions.ORDER (track, status): 45 combos instead of up to 1,080. Measured in docs/results/2026-10-02-exclusions-and-verified-forms.md with tests/bench/exclusions_alternate.py (old and new alternated, load 30-155 recorded): the bench's broad query on 5k went from 1.7 to 0.7 ms warm p50, below the pre-PR #6 1.46 ms; 1-2 ms saved warm on the synthetic 80k, nothing measurable on the real corpus (at most 32 combos). test_bench's exclusion bench and report_80k's exclusion column now run the search-without-facets path; report_80k's cold rounds also clear the facet memo, as its comment says they clear every cache.
+Recovery restored original broad COMBO benchmark and added separate ORDER benchmark. Shared-lock alternating 5k200 run, load3.2, broad warm wall/CPU p50 1.5ms COMBO versus0.6ms ORDER,1080 versus45 combos; every protocol string and broad-query exclusion result equal before timing. Focused engine/facet/benchmark checks99passed85.49s. Current schema-3 full80k report every budgeted number within budget (CPU-idle-qualified baseline explicitly documented, with memory-pressure limitations). Fresh evidence docs/results/2026-10-02-perf-recovery.md; older cold reports retained caches and are not directly comparable. Full stable suite pending after reversible CLI history reconstruction; no real data writes.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Exclusion accounting for a search without facets now aggregates only the two default fields (TantivyEngine.facets over=ORDER), the same counts (test_facets_equal: generated trees, every Trust-Evals string, ReferenceEngine; test_search_overlap). The 5k bench's broad query is 0.7 ms warm p50 (was 1.7 ms; pre-PR #6 1.46 ms). Results: docs/results/2026-10-02-exclusions-and-verified-forms.md.
+Exclusion-only callers aggregate ORDER(track,status); all-facet callers retain COMBO. Separate broad benchmarks preserve coverage; paired broad5k median1.5ms versus0.6ms with equal counts. Fresh schema-3 report within budget under recorded conditions. Full stable checks pending before terminal status.
 <!-- SECTION:FINAL_SUMMARY:END -->

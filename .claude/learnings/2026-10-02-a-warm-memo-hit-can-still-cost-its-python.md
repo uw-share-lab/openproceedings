@@ -47,3 +47,14 @@ original broad COMBO benchmark remains; a separate defaults benchmark measures t
 A schema-only benchmark also verifies both manifests and compares snapshot, tokenizer, ranking and Tantivy
 inputs before timing: identical IDs do not establish identical titles/abstracts. The negative-control test
 keeps IDs equal while changing each manifest input and proves the benchmark guard refuses it.
+
+Fresh recovery evidence (`docs/results/2026-10-02-perf-recovery.md`): the 80k ordinal table retains about
+4.16 MB and adds about 3.6 ms to compilation on first use, with verified/expansion memos warm. Query
+construction calls cost 3.7 ms text / 4.7 ms ordinal; preconstructed-query collection costs 9.7 / 5.6 ms
+CPU median. Whole warm main-2-pop search has no demonstrated speedup (25.2 / 26.0 ms CPU median,
+27.6 / 27.5 ms wall p95). The default full schema-3 report has every budgeted number within budget under
+its recorded CPU-idle-qualified baseline; pre-existing and increased swap usage limits wall-time inference.
+
+Correction to the historical wording above: a compiled-memo hit retains the Tantivy query and skips Python
+term-set construction. Tantivy still resolves that preconstructed query during each collection. Compare
+construction and collection separately before attributing their costs to each search.

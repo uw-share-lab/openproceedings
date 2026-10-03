@@ -4,7 +4,7 @@ title: Remove the ~10 ms cost of the synthetic "AI agent$" clause (TASK-076 defe
 status: In Progress
 assignee: []
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-02 18:43'
+updated_date: '2026-10-03 01:26'
 labels:
   - engine
   - performance
@@ -30,14 +30,20 @@ Source: TASK-076, deferred (docs/results/2026-10-02-wildcard-phrases.md, What st
 - [x] #2 The clause's per-search cost is re-measured at 80k before and after (docs/results/); no ID set, score or count changes (differential, golden)
 <!-- AC:END -->
 
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Serve schemas2/3 without pinned-record regressions; preserve lazy ordinal lookup; measure first/subsequent construction, compile, memo hit, retained memory, and independent collection; verify same-snapshot inputs and all IDs/scores/facets/exclusions before paired timing; regenerate full80k report; run full stable checks then CLI completion.
+<!-- SECTION:PLAN:END -->
+
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Owner decision 2026-10-02: do the schema change without breaking guarantee 4; after the end-to-end numbers below, kept (option a). SCHEMA_VERSION 3 indexes ord; a verified clause's ids are a u64 term set on it (TantivyEngine.id_set). index.SERVED_SCHEMAS maps each served schema (2 and 3) to its SchemaForm, and unservable accepts both, so a schema-2 index keeps the text-id term set and its pinned records still replay reproduced: 10/10 Trust-Evals records saved by the pre-change code (origin/dev 433399a9) on the real 05a0541717f6 replayed reproduced with a schema-3 build served, and test_records checks the same through the API. Identical ids and float scores on both schemas (test_served_schemas, test_verified_exclusion on both, the Trust-Evals strings in every sort before every timing). Measured (docs/results/2026-10-02-exclusions-and-verified-forms.md, alternated, load 30-155): the AI agent$ id set alone 11.3 -> 6.2 ms CPU; main-2-pop warm search CPU p50 29.4 vs 29.7 ms on the synthetic 80k and 26.4 vs 25.6 ms (about 3%) on the real corpus. The end-to-end gain is small because inside a search the id set is one MUST clause driven by the rarer clauses; TASK-076's ~10 ms was the clause resolved alone. A const-0 regex_phrase_query matched the same ids but cost 2-4x the id set. Schema 2 is retired (dropped from SERVED_SCHEMAS) once no record pins a schema-2 index: rebuild at schema 3, repoint current, op index retire each schema-2 version.
+Schema3 indexes ord; schema2 retains text-id term sets so pinned records remain reproducible. Historical10/10 real pinned records replayed reproduced; fresh contract/schema/differential checks run on immutable synthetic indexes. Same-snapshot verified manifest pair27659e65468c/83f44f4eb82f: all10 whole ID/float-score orders every4sorts/facets/exclusions equal.100round phase-separated CPU p50: text construction3.7ms/collection9.7ms; ordinal first construction8.2ms/subsequent4.7ms/collection5.6ms; whole-tree compile verified/expansion warm first lookup25.4ms/retained21.8ms/memo hit0.1ms. Retained table4,162,480bytes excluding existing strings, not RSS.200round whole warm main2 CPU p50 25.2ms(schema2) versus26.0ms(schema3), wall p95 27.6 versus27.5ms: no demonstrated E2E gain, slightly slower median. Historical0-3% and11.3->6.2 claims superseded by phase-separated evidence docs/results/2026-10-02-perf-recovery.md. Full schema3 report every budgeted number within budget under explicit CPU-idle-qualified baseline and memory pressure; cold verified queries are exceptions. Owner retains exact/replay-safe schema decision030. Focused99passed plus input-guard4passed; full stable checks pending. No real indexes/snapshots modified.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Schema 3 indexes ord, and a verified clause's ids are a u64 term set on it; schema 2 stays served (SERVED_SCHEMAS -> SchemaForm) so pinned records replay reproduced, which was checked on the real index with records saved by the pre-change code. Same ids and scores on both schemas. The measured end-to-end gain is small (0 on the synthetic 80k, about 3% on the real corpus); the clause alone went 11.3 -> 6.2 ms. Kept by owner decision. Results: docs/results/2026-10-02-exclusions-and-verified-forms.md.
+Schema3 applies verified IDs as ordinal term sets; schema2 remains served for pinned replay. Fresh paired80k membership/scores/facets/exclusions equal; collection9.7->5.6ms but construction3.7->4.7ms, first lookup adds~3.6ms compile/4.16MB retained. No demonstrated E2E speedup. Fresh report within budget; full stable checks pending before terminal status.
 <!-- SECTION:FINAL_SUMMARY:END -->
