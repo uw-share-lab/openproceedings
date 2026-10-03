@@ -149,3 +149,16 @@ Run the new review gate on its own tooling: five routed reviewers (code, securit
 - Fresh Node 22 `make lint` and `make tooling` passed. Tasks 164, 170, 172 and 173 were completed through
   the Backlog CLI only after this proof. The final task/learning commit changes metadata only; fresh full
   tests and final lint/tooling plus exact-head review remain required before publication.
+## Addendum — 2026-10-02 (TASK-171: stock Bash parses the case table too)
+
+- **A green Linux table can still fail to parse on stock macOS Bash.** The sharding table's
+  nonempty/nonerror check put `case` inside command substitution. Bash 3.2.57 interpreted a case-pattern
+  `)` as the substitution's end: `make tooling` reported a syntax error and 32 passed/1 failed.
+  Move that same case outside the substitution, store its result and assert the same value; keep the
+  condition and expectation intact. Evidence: the red table in `/tmp/latex-timing-focused.log` and
+  [recovery results](../../docs/results/2026-10-02-mutation-sharding-recovery.md).
+- The same 33-row table then passed on both Bash 3.2.57 and Bash 5.3.9, with ShellCheck green.
+  Evidence: `/tmp/mutation-tooling-recovery.log`.
+- Propagated to: `.claude/scripts/tests/test-mutate-shard.sh` and the case-table portability guidance
+  in `.claude/skills/testing-standards/SKILL.md`. Verify on stock Bash and the CI version when available;
+  ShellCheck passed while stock Bash execution failed.

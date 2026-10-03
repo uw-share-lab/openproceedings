@@ -74,7 +74,9 @@ check "8 shards: sizes differ by at most 1" \
   "$(for i in $(seq 1 8); do python3 "$REAL" --list --shard "$i/8" | grep -c .; done | sort -n | sed -n '1p;$p' | paste -sd' ' - \
      | awk '{print ($2 - $1 <= 1) ? "yes" : "no"}')" "yes"
 first=$(labels "$REAL" --shard 5/8)
-check "stable: shard 5/8 lists mutants"        "$(case "$first" in ''|rc=*) echo no;; *) echo yes;; esac)" "yes"
+# Bash 3.2 can misparse a case-pattern ')' inside $(...); keep the assertion outside it.
+case "$first" in ''|rc=*) listed=no;; *) listed=yes;; esac
+check "stable: shard 5/8 lists mutants"        "$listed" "yes"
 check "stable: shard 5/8 twice is the same"    "$(labels "$REAL" --shard 5/8)" "$first"
 
 echo "== a bad i/n is refused"

@@ -109,3 +109,24 @@ form whose hash identifies a query.
   false when written: that shape was only in a probe script, and disabling the run cache left every unit
   test green. It is in the timing test now, and a mutant check proved it fails without the cache. Verify
   "the test covers X" by breaking X, not by reading the test.
+
+## Addendum — 2026-10-02 (TASK-171 recovery: CPU growth sampling)
+
+- **Pair CPU measurements before comparing input sizes.** Nightly run 37053299707 failed the
+  unclosed `\\(` check with 0.000808408 CPU seconds for 2,000 characters and 0.006696267 for 8,000,
+  ratio 8.283277 against the existing `<8` cutoff. Independent minima from consecutive timing phases
+  can reflect CPU/allocation drift; CPU time only removes time spent preempted. The exact host cause
+  could not be recovered, and the original check passed locally, so do not claim to have reproduced it.
+- **Keep the boundary and break the optimization.** The test now uses eight-call batches, nine paired
+  rounds in alternating order and a median ratio. Current ratios were 4.049418, 4.052738, 4.043592 for
+  `$1`, `\\(`, `\\[`; replacing `_Closers` lookups with the former oracle scans made the actual test
+  fail at 16.023047, 16.016399, 15.903574. Inputs, the `<8` cutoff, allocation/GC costs and query-cap
+  CPU budget are retained. Evidence and a reproducible negative control:
+  [recovery results](../../docs/results/2026-10-02-mutation-sharding-recovery.md).
+- A controlled phase-drift model (two extra real tokenizer calls after invocation nine, clocks
+  untouched) made the original estimator report 12.515577 for linear behavior while paired batches
+  reported 4.063655. This proves susceptibility to changing CPU cost without claiming that the
+  CI host experienced that particular condition; see the recovery results for the method.
+- Propagated to: `.claude/skills/testing-standards/SKILL.md` §CPU growth checks and
+  `backend/tests/unit/test_latex_scan.py`. Corrected all-eight-shard GitHub proof is still required
+  before Task 171 is complete; initial proof has a genuine Linux casefold survivor owned by hooks.

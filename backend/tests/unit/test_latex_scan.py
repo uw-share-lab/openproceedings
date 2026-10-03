@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from statistics import median
 
 import pytest
 from hypothesis import given
@@ -36,11 +37,33 @@ def fastest(f: Callable[[str], object], arg: str) -> float:
     return best
 
 
+def cpu_batch(f: Callable[[str], object], arg: str) -> float:
+    """Amortize the CPU clock over eight calls without excluding allocation or GC cost."""
+    t = time.thread_time()
+    for _ in range(8):
+        f(arg)
+    return (time.thread_time() - t) / 8
+
+
 @pytest.mark.parametrize("unit", ["$1", "\\(", "\\["])  # `$$` never was quadratic: it closes at the next `$$`
 def test_unclosed_openers_are_linear(unit: str) -> None:
-    # quadratic before task-070. Quadrupling the text costs ~4x when linear, ~16x when quadratic; the
-    # ratio doesn't depend on the machine, and the old scan fails it in about 4 s per opener
-    small, large = (fastest(tokenize, unit * (n // len(unit))) for n in (2_000, 8_000))
-    assert large / small < 8, (unit, small, large)
+    # Quadratic before task-070: quadrupling the input costs ~4x when linear and ~16x when
+    # quadratic. Keep the <8 boundary, but pair nearby CPU measurements: independent minima
+    # can compare a fast small-input phase with a slower large-input phase (nightly 37053299707).
+    small_arg, large_arg = (unit * (n // len(unit)) for n in (2_000, 8_000))
+    tokenize(small_arg)
+    tokenize(large_arg)
+    pairs = []
+    for round_number in range(9):
+        # Alternate order to reduce size-correlated CPU frequency and allocation drift.
+        if round_number % 2:
+            large = cpu_batch(tokenize, large_arg)
+            small = cpu_batch(tokenize, small_arg)
+        else:
+            small = cpu_batch(tokenize, small_arg)
+            large = cpu_batch(tokenize, large_arg)
+        pairs.append((small, large))
+    ratio = median(large / small for small, large in pairs)
+    assert ratio < 8, (unit, ratio, pairs)
     # at the query cap: ~10 ms now, 0.3-0.8 s quadratic; 1 s leaves slow CI runners room (the ratio is the check)
     assert fastest(parse, unit * (2_000 // len(unit))) < 1.0, unit

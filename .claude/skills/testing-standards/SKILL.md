@@ -74,3 +74,17 @@ and a positive control. Dropping an explicit default and forcing its opposite ar
 `--no-renames` makes an unchanged learning rename look newly added, even though `--find-renames` gives 0/0.
 Compare actual hook verdicts for benign unsupported syntax too: a conservative parser can intentionally
 block a shape that a mutant allows. Identical destructive-case verdicts alone do not prove equivalence.
+
+Case tables must also parse on the developer platform's Bash. Stock macOS Bash 3.2 can misparse a
+case-pattern `)` inside command substitution; compute the case result in a variable outside `$(...)`
+and keep the same assertion. Run the table with stock Bash as well as the CI version when available.
+
+## CPU growth checks
+
+For adversarial algorithmic scaling checks, keep the input sizes and growth cutoff fixed. Measure
+thread CPU time in batches, pair the small and large measurements in each round, alternate their order,
+and compare the median paired growth ratio. Independent fastest calls at each size can compare unlike
+CPU/allocation phases even though thread CPU time excludes preemption. Keep allocation and GC costs in
+the measurement. Before changing a sampling method, demonstrate that the former quadratic behavior
+still fails the same cutoff; a green optimized implementation alone does not prove the check works.
+`backend/tests/unit/test_latex_scan.py` applies this to unclosed math openers (TASK-171 recovery).
