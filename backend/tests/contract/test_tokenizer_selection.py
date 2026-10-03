@@ -1,12 +1,16 @@
 """Queries are validated on the selected index's tokenizer, including export pins and CLI saves."""
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from openproceedings import cli
 from openproceedings.api import RateLimit
+from openproceedings.api.middleware import RateLimit as RateLimiter
+from openproceedings.api.middleware import TokenBucket
 from openproceedings.query.parser import parse
 
 from tests.contract.conftest import build, make_app, point_current
@@ -96,13 +100,43 @@ def test_parse_filter_edits_follow_the_served_tokenizer(versions: tuple[Path, st
         assert all(clause["toggleable"] and clause["reason"] is None for clause in body["filters"].values())
 
 
-def test_pinned_export_charges_target_verification_once(versions: tuple[Path, str, str]) -> None:
+def test_pinned_export_charges_target_verification_once(
+    versions: tuple[Path, str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Admission and actual verification CPU are separate debits. Freeze bucket refill and give the
+    # export a controlled positive CPU measurement, so the result cannot depend on platform timing.
+    initial = RateLimiter.__init__
+    debit = RateLimiter.debit_verification
+    cpu_debits: list[float] = []
+    token_debits: list[float] = []
+    token_debit = TokenBucket.debit
+
+    def frozen(self: RateLimiter, *args: Any, **kwargs: Any) -> None:
+        initial(self, *args, **kwargs)
+        self.buckets.clock = self.networks.clock = lambda: 0.0
+
+    def measured(
+        self: RateLimiter, held: Sequence[tuple[TokenBucket, str]], fields: dict[str, object]
+    ) -> None:
+        if fields.get("verified_clauses") == 1:
+            fields["verify_cpu_ms"] = 1.0
+            cpu_debits.append(1.0)
+        debit(self, held, fields)
+
+    def charged(self: TokenBucket, key: str, cost: float) -> None:
+        token_debits.append(cost)
+        token_debit(self, key, cost)
+
+    monkeypatch.setattr(TokenBucket, "debit", charged)
+    monkeypatch.setattr(RateLimiter, "__init__", frozen)
+    monkeypatch.setattr(RateLimiter, "debit_verification", measured)
     data, old, _ = versions
     app = make_app(
         data,
         max_verified_clauses=1,
         rate_limit=RateLimit(
-            capacity=3,
+            # 0.1 reserve admits the tiny CPU debit but cannot conceal another admission token.
+            capacity=3.1,
             refill_per_second=0.000001,
             export_weight=1,
             verified_weight=2,
@@ -120,7 +154,10 @@ def test_pinned_export_charges_target_verification_once(versions: tuple[Path, st
         )
         assert response.status_code == 200, response.text
         assert response.headers["x-total"] == "0"
-        # The verified admission cost is two total tokens (including the base); one search token remains.
+        assert cpu_debits == [1.0]
+        assert token_debits == [0.000001, 0.000001]  # client and network both pay the real CPU debit
+        # The verified admission costs two total tokens (including the base), plus 1/1,000,000 CPU
+        # tokens. One search fits in the remaining 1.099999 tokens; the next is refused.
         assert [client.get("/api/v1/search", params={"q": "trust"}).status_code for _ in range(2)] == [
             200,
             429,

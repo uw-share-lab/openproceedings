@@ -72,3 +72,14 @@ for both versions. Local matched base/head benchmark runs retained the 20% minim
 narrow endpoint6.58→6.89ms. These local numbers are distinct from Linux CI and do not certify an 80k budget.
 Propagated to token-contract, spec03 and versioned tokenizer tests. Profiling call counts identify the
 cause; frequency/noise makes the profile's total time unsuitable as a benchmark comparison.
+
+## Addendum — 2026-10-03: admission assertions need room for the separate CPU debit
+
+PR93's Linux test found that an exactly three-token bucket could not always fund a two-token verified
+export followed by a one-token search: the correct post-request verification CPU debit leaves slightly
+less than one token. A local deterministic RED freezes only limiter bucket clocks and injects a positive
+1ms CPU measurement while delegating the real debit. The admission test now uses capacity3.1, checks
+that both buckets paid exactly0.000001 CPU tokens, permits one search and refuses the second.
+The0.1 reserve is below another admission token; a scratch control that debits an extra token in each
+bucket fails the same assertion. Production CPU charging is unchanged. Focused selection plus CPU/rate
+controls passed27 tests. Propagated to `test_pinned_export_charges_target_verification_once`.
