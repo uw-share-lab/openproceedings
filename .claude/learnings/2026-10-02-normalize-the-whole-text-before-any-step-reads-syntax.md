@@ -46,3 +46,12 @@ clause tests run for each tokenizer; tokenizer-pinned replay runs for each schem
 runs for each tokenizer. The integration focused run passed 227 tests (`/tmp/tokenizer-perf-integration-focused.log`).
 Propagated to the index-versioning skill and the parametrized engine/record tests. Historical real-corpus
 figures above describe the earlier replay run; this integration result uses synthetic snapshots.
+
+## Addendum — 2026-10-03
+
+Final integration changed the synthetic fixture's index hash to `d6a1476ee48b`. The retirement contract
+sorted actual directory names but compared them with an unsorted expected list, assuming that every hash
+sorts before `current`. The exact full run exposed this assumption (6,751 passed, one failure); the
+isolated retirement case reproduced it. Compare both name collections in the same order, preserving
+all assertions about the retired version, remaining index contents and current symlink. Propagated to
+`backend/tests/contract/test_index_retire_cli.py::test_an_unpinned_version_is_retired`.
