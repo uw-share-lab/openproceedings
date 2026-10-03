@@ -19,6 +19,7 @@ from __future__ import annotations
 import time
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,7 @@ from openproceedings import search
 from openproceedings.api.search import page_attributions
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.compile import FIELDS
-from openproceedings.engine.exclusions import excluded
+from openproceedings.engine.exclusions import ORDER, excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import MAX_EXPANSIONS, EngineInputError
 from openproceedings.engine.tantivy_engine import TantivyEngine
@@ -157,14 +158,38 @@ def test_the_endpoint_bench_builds_attributions(served: tuple[TantivyEngine, Rec
 
 @pytest.mark.parametrize("name", list(STRINGS))
 def test_match_ids_with_exclusion_accounting(benchmark: Any, engine: TantivyEngine, name: str) -> None:
+    """Historical comparison protocol: verified/compiled/expanded cold, facets retained."""
     result = trust_evals(name)
     ast = result.effective_ast
     assert ast is not None
 
     def run() -> object:
-        engine.verified.clear()  # cold, as for a new query: every cache cleared
+        engine.verified.clear()
         engine.compiled.clear()
         engine.expanded.clear()
+        ids = engine.match_ids(ast)
+        return excluded(engine, result, len(ids))
+
+    measure(benchmark, run)
+    time = p95(benchmark)
+    assert time is None or time < 0.300, f"p95 {time * 1000:.1f} ms"
+
+
+@pytest.mark.parametrize("name", list(STRINGS))
+def test_match_ids_with_exclusion_accounting_all_engine_caches_cold(
+    benchmark: Any, engine: TantivyEngine, name: str
+) -> None:
+    """First-query protocol, separately named because the historical benchmark retains facets."""
+    result = trust_evals(name)
+    ast = result.effective_ast
+    assert ast is not None
+
+    def run() -> object:
+        engine.verified.clear()
+        engine.compiled.clear()
+        engine.expanded.clear()
+        engine.faceted.clear()
+        engine._ords = None
         ids = engine.match_ids(ast)
         return excluded(engine, result, len(ids))
 
@@ -201,6 +226,17 @@ def test_match_ids_with_exclusions_on_a_broad_query(benchmark: Any, engine: Tant
     ast = result.effective_ast
     assert ast is not None
     measure(benchmark, lambda: excluded(engine, result, len(engine.match_ids(ast))))
+    time_ = p95(benchmark)
+    assert time_ is None or time_ < 0.300, f"p95 {time_ * 1000:.1f} ms"
+
+
+def test_match_ids_with_exclusions_on_a_broad_query_defaults(benchmark: Any, engine: TantivyEngine) -> None:
+    """The exclusion-only caller beside the original all-facets benchmark (TASK-166)."""
+    result = parse(BROAD)
+    ast = result.effective_ast
+    assert ast is not None
+    count = partial(engine.facets, over=ORDER)
+    measure(benchmark, lambda: excluded(engine, result, len(engine.match_ids(ast)), facets=count))
     time_ = p95(benchmark)
     assert time_ is None or time_ < 0.300, f"p95 {time_ * 1000:.1f} ms"
 

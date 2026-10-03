@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from hypothesis import given, settings
 from openproceedings import logs, search
-from openproceedings.engine.exclusions import excluded
+from openproceedings.engine.exclusions import ORDER, excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInputError, EngineInternalError
 from openproceedings.engine.tantivy_engine import SORTS, Scope, TantivyEngine
@@ -86,6 +86,20 @@ def test_the_trust_evals_strings_give_the_sequential_search(
         got = search.run(overlapped, parsed, offset=offset, limit=50, facets=True, highlight=True)
         assert got == sequential(reference, parsed, offset=offset, limit=50, facets=True, highlight=True)
         assert got.facets is not None
+
+
+@pytest.mark.parametrize("name", [n for n in STRINGS if STRINGS[n].strip()])
+def test_a_search_without_facets_aggregates_only_the_default_fields(
+    pair: tuple[TantivyEngine, TantivyEngine], name: str
+) -> None:
+    """TASK-166: `op search` and a record's save read no facet, so their exclusion accounting collects only
+    track and status, and its `Search` is still the sequential one (whose exclusions read every facet combo)."""
+    overlapped, reference = pair
+    parsed = parse(STRINGS[name], "scholar")
+    overlapped.faceted.clear()
+    got = search.run(overlapped, parsed, limit=50)
+    assert got == sequential(reference, parsed, limit=50)
+    assert {key.split("\x00")[0] for key in overlapped.faceted} <= {",".join(ORDER)}
 
 
 # the overlapped and the sequential search, at two offsets, over the 5k corpus: no per-example deadline

@@ -16,7 +16,9 @@ never verifying a clause twice however the engine's memos are trimmed meanwhile;
 view (`Scope.reader`) and never verifies, so it never takes a verification slot, and a caller that fails while
 the worker runs leaves no slot held (M3a review gate round 3). Then exclusion accounting reuses `total`
 and the facet memo. The result is the sequential one, field for field
-(`tests/unit/test_search_overlap.py`); only wall time changes, not CPU time.
+(`tests/unit/test_search_overlap.py`); only wall time changes, not CPU time. A search without facets (`op search`,
+a record's save or replay) doesn't pay for every facet combination its exclusion accounting would never read:
+it aggregates only the two default fields (`TantivyEngine.facets`' `over`; TASK-166), the same counts.
 """
 
 from __future__ import annotations
@@ -34,10 +36,10 @@ from typing import Any
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.engine.compile import wildcards
-from openproceedings.engine.exclusions import Excluded, excluded
+from openproceedings.engine.exclusions import ORDER, Excluded, excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInputError, Expansions
-from openproceedings.engine.tantivy_engine import Scope, TantivyEngine, WouldVerify
+from openproceedings.engine.tantivy_engine import COMBO, Scope, TantivyEngine, WouldVerify
 from openproceedings.query.ast import Node, TextField
 from openproceedings.query.parser import ParseResult
 
@@ -140,7 +142,9 @@ def run(
         counted = engine.facets(
             ast, scope=scope
         )  # no worker (the pool is shutting down): counted here instead
-    gone = excluded(engine, parsed, total, facets=partial(engine.facets, scope=scope))
+    # with facets, the combos the worker just collected; without, only the default fields' (TASK-166)
+    over = COMBO if facets else ORDER
+    gone = excluded(engine, parsed, total, facets=partial(engine.facets, scope=scope, over=over))
     return Search(total, hits, gone, expansions, counted)
 
 

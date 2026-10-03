@@ -58,6 +58,8 @@ never logged. It runs on the synthetic 5k corpus in CI; on the real corpus it ru
 | `abstract` | text, positions | ✓ | ✓ | |
 | `venue`, `track`, `status` | text (raw, facet) | ✓ | ✓ | ✓ |
 | `year` | u64 | ✓ | ✓ | ✓ |
+| `ord` | u64: the record's position in id order (`ids.txt` maps it back) | ✓ from schema 3 | | ✓ |
+| `title_rank` | u64: the record's position in display-title order (`sort=title`) | | | ✓ |
 | `record` | bytes: compact JSON of the display fields (original title and abstract, authors, urls, presentation, keywords, venue_id_raw); stored, never indexed (a JSON field would be) | | ✓ | |
 
 ## AST → Tantivy compilation
@@ -165,7 +167,10 @@ Counting rules (so the PRISMA number is never double-counted):
   `|identified|` is the first default's facet total, and `total` is the search's own count, passed in, so
   the query runs no third time (no default applied: 0, with no evaluation). Buckets that don't sum to
   `|identified| − total` are an `EngineInternalError` (`API_INTERNAL`, a 5xx), never a silent report. Tested against a brute-force count on the 200-record fixture,
-  for both engines, including an `identification_query` of `""` and an all-negative one.
+  for both engines, including an `identification_query` of `""` and an all-negative one. A search that
+  shows facets reads both buckets from the facet combos it already collected; one that doesn't (`op search`,
+  a record's save or replay) aggregates only track and status (`TantivyEngine.facets(over=…)`; TASK-166), so
+  it reads a few dozen combos rather than hundreds. The counts are the same (`test_facets_equal.py`).
 
 ## Error handling
 
@@ -186,6 +191,33 @@ index_version = sha256( snapshot_hash, TOKENIZER_VERSION, SCHEMA_VERSION, rankin
 
 Indexes live at `data/indexes/<index_version>/`, are immutable, and several can be kept. The API serves one
 as "current" and can load a pinned older version to replay a search record.
+
+As built (TASK-167, SCHEMA_VERSION 3): new indexes index `ord`, and a position-verified clause names its ids
+as a u64 term set on `ord` rather than on the text `id`. The code serves both schemas: `index.SERVED_SCHEMAS`
+maps each served `schema_version` to its `SchemaForm`, and an index takes the form its manifest names. A
+schema-2 index keeps the text-`id` path, so a record pinned to one still replays `reproduced` on it (guarantee
+4). Records saved by the pre-change code on the real M4 index replayed 10/10 `reproduced`, and a contract test
+checks the same through the API. Every query gets the same ids and the same float scores on either schema:
+the differential suite, the Trust-Evals strings in every sort, and each verified clause's form.
+
+Measured (`docs/results/2026-10-02-exclusions-and-verified-forms.md`, old and new alternated, load 30–155):
+
+| Measurement | Schema 2 | Schema 3 |
+|---|---|---|
+| `"AI agent$"` id set alone (20,752 ids, synthetic 80k), CPU median | 11.3 ms | 6.2 ms |
+| `main-2-pop` warm search, synthetic 80k, CPU p50 | 29.4 ms | 29.7 ms |
+| `main-2-pop` warm search, real M4 corpus, CPU p50 | 26.4 ms | 25.6 ms (no measurable gain under load) |
+
+These overloaded measurements show no measurable end-to-end gain. The isolated claim is historical;
+`tests.bench.id_sets` now separates construction and collection, including lazy lookup first-use and memory
+(`docs/results/2026-10-02-perf-recovery.md`). Inside a search, the id set is one MUST clause of an intersection that the rarer
+clauses drive, so most of its isolated cost (TASK-076's "about 10 ms a search") never reaches a search. The
+change was kept by owner decision, since it is exact and replay-safe (decision-030).
+
+Schema 2 is retired, and dropped from `SERVED_SCHEMAS` with its path and tests, only once no search record pins
+a schema-2 index. The order is: rebuild every served index at schema 3, repoint `current`, then `op index
+retire` each schema-2 version, which `op index retire` refuses while a record pins it. Any other schema is
+refused (`unservable`).
 
 ## Performance budgets (for the M4 corpus, about 80k docs; CI benchmarks the 5k fixture and nightly reports a synthetic 80k, 07 §E)
 

@@ -28,6 +28,7 @@ import sys
 import tempfile
 import time
 from datetime import UTC, datetime
+from functools import partial
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -112,7 +113,7 @@ def _remove(root: Path) -> None:
 
 def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
     from openproceedings.engine.compile import FIELDS
-    from openproceedings.engine.exclusions import excluded
+    from openproceedings.engine.exclusions import ORDER, excluded
     from openproceedings.engine.protocol import EngineInputError
     from openproceedings.engine.tantivy_engine import TantivyEngine
     from openproceedings.query.ast import Wildcard
@@ -163,11 +164,17 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
             engine.verified.clear()
             engine.compiled.clear()  # the compiled query holds verified results too
             engine.expanded.clear()
-            excluded(engine, result, len(engine.match_ids(ast)))  # type: ignore[arg-type]
+            engine.faceted.clear()
+            engine._ords = None
+            # as a search without facets counts them (`search.run`): the default fields only (TASK-166)
+            count = partial(engine.facets, over=ORDER)
+            excluded(engine, result, len(engine.match_ids(ast)), facets=count)  # type: ignore[arg-type]
 
         engine.verified.clear()
         engine.compiled.clear()  # the compiled query holds verified results too
         engine.expanded.clear()
+        engine.faceted.clear()
+        engine._ords = None
         cold = timed(lambda ast=ast: engine.search(ast, limit=50), rounds=1)[0]  # type: ignore[misc]
         warm_runs = timed(lambda ast=ast: engine.search(ast, limit=50), WARM_ROUNDS)  # type: ignore[misc]
         warm, warm99 = p95(warm_runs), quantile(warm_runs, 0.99)
@@ -217,6 +224,8 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
         engine.verified.clear()
         engine.compiled.clear()  # the compiled query holds verified results too
         engine.expanded.clear()
+        engine.faceted.clear()
+        engine._ords = None
         t = time.perf_counter()
         total = len(engine.match_ids(ast))
         verified.append(f"| `{q}` | {total:,} | {ms(time.perf_counter() - t)} |")
@@ -246,7 +255,8 @@ when cold (spec 03), so they are reported, not gated.
 
 ## Trust-Evals protocol strings, Scholar mode (budgets: 100 ms, 300 ms)
 
-Cold is the first run after every cache is cleared (verified clauses, expansions, compiled queries); warm is the
+Cold is the first run after every engine cache is cleared (verified clauses, expansions, compiled queries,
+facet combinations and the lazy id-to-ordinal table); the open index and OS page cache stay warm. Warm is the
 p95 and the p99 of the {WARM_ROUNDS} runs after it, with the caches an engine keeps; "with highlights" is the p95 of
 {WARM_ROUNDS} warm runs of the same search with its display records and every hit's highlights, as
 `search.run` assembles them (`test_bench.search_with_highlights`; no cache holds them; task-073); the two
@@ -255,7 +265,9 @@ highlights and exclusion accounting; its facet aggregation on a worker thread, o
 {ENDPOINT_ROUNDS} runs in wall time: the first page with the facet memo forgotten each run, and a later page
 (offset 50) that reads it; then the first page's mean CPU time per request over {ENDPOINT_ROUNDS} more runs (all
 threads: the overlap saves wall time, not CPU); the exclusions column is the p95 of
-{ROUNDS} runs, each clearing every cache first. `main-2-pop` holds wildcard phrases (`model$`), which take the position-verified path spec 03 exempts, so
+{ROUNDS} runs, each clearing those engine caches first, using only track/status aggregation (`over=ORDER`),
+as exclusion-only callers do. Older reports aggregated every facet and retained some caches; their cold column
+is not directly comparable. `main-2-pop` holds wildcard phrases (`model$`), which take the position-verified path spec 03 exempts, so
 its cold numbers are the exception's, not a budget miss (task-076 is its warm headroom).
 
 | String | Matches | Search, first 50 hits: cold | Search: p95 warm | Search: p99 warm | Search with highlights: p95 warm | `/search`, first page: p95 wall | `/search`, a later page: p95 wall | `/search`, first page: CPU per request | `match_ids` + exclusions: p95 cold |

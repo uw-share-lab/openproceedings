@@ -124,6 +124,9 @@ uv tool run --from scholarmend==0.1.5 scholarmend --input /path/to/scholar-expor
 ```
 
 This preparation can fetch metadata; see scholarmend's README for credentials, caching and `--offline`.
+Keep the original Publish or Perish `M1` metadata, `Query date: YYYY-MM-DD HH:MM:SS`, through
+preparation. Entries missing a stable identity or this query date are skipped (`no_id` or
+`no_query_date` in the import report); do not invent dates to make an entry importable.
 If you already have its outputs, skip preparation. Then, from the OpenProceedings checkout:
 
 ```bash

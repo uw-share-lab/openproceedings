@@ -22,8 +22,16 @@ from typing import Any
 import tantivy
 
 from openproceedings.diagnostics import DiagnosticCode, clip
-from openproceedings.engine.compile import FIELDS, Compiled, Compiler, Expansions, verified_clauses, wildcards
-from openproceedings.engine.index import IDS, SCHEMA_VERSION, open_index, record_of, verify_index
+from openproceedings.engine.compile import (
+    FIELDS,
+    Compiled,
+    Compiler,
+    Expansions,
+    id_set,
+    verified_clauses,
+    wildcards,
+)
+from openproceedings.engine.index import IDS, SERVED_SCHEMAS, SchemaForm, open_index, record_of, verify_index
 from openproceedings.engine.protocol import (
     FACET_FIELDS,
     MAX_EXPANSIONS,
@@ -38,7 +46,9 @@ from openproceedings.query.normalize import TOKENIZER_VERSION
 SORTS = ("relevance", "year_desc", "year_asc", "title")
 # a document's facet values, in this order: what every filter and facet depends on (task-086)
 COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
-type Combo = tuple[str, int, str, str]
+# a document's values of the aggregated fields (`facets`' `over`; all of COMBO unless narrowed), in COMBO order:
+# each a str, but `year`, an int; as many values as `over` has fields
+type Combo = tuple[str | int, ...]
 # (field, clause) → the ids that clause verified: the engine's memo, or one request's own (`Overlay`)
 type Verified = dict[tuple[str, str], list[str]]
 # the Tantivy TANTIVY_BM25 was confirmed on; test_rank.py fails if the installed one drifts
@@ -60,12 +70,20 @@ def unservable(manifest: dict[str, Any]) -> tuple[str, str] | None:
     """Why this code can't serve an index with `manifest` (another schema, tokenizer or Tantivy version, or
     BM25 parameters Tantivy doesn't apply), as `(reason, message)`, or None. Read from the manifest alone,
     without re-hashing, so the API's `/meta` can leave such versions out (task-036 review)."""
+    name = manifest.get("index_version")
+    schema = manifest.get("schema_version")
+    # the current schema and the one before it (guarantee 4: pinned indexes); a manifest is read here before
+    # it is re-hashed (`/meta`), so a value of any JSON type is refused, never looked up
+    if not isinstance(schema, str) or schema not in SERVED_SCHEMAS:
+        served = ", ".join(SERVED_SCHEMAS)
+        return (
+            "schema_version_mismatch",
+            f"index {name} has schema_version {schema}, this code serves {served}: build a new index",
+        )
     stale = {
-        "schema_version": (manifest.get("schema_version"), SCHEMA_VERSION),
         "tokenizer_version": (manifest.get("tokenizer_version"), TOKENIZER_VERSION),
         "tantivy_version": (manifest.get("tantivy_version"), version("tantivy")),  # scoring may differ
     }
-    name = manifest.get("index_version")
     for field, (built, current) in stale.items():
         if built != current:  # queries are normalized and compiled for the current versions
             return (
@@ -176,6 +194,21 @@ class TantivyEngine:
         self.index = open_index(path)
         self.searcher = self.index.searcher()
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
+        # what this index's schema differs in (`SERVED_SCHEMAS`): schema 3 indexes `ord`, so a verified clause
+        # names its ids as a u64 term set; a schema-2 index (one a record may pin) keeps the term set on the text
+        # `id` it was served with (TASK-167, `id_set`)
+        self.form: SchemaForm = SERVED_SCHEMAS[manifest["schema_version"]]
+        if self.form.ord_indexed and not _indexes_ord(self.index.schema, self.searcher):
+            # a manifest that names a schema its files don't have: refused here, not query by query
+            raise IndexUnservable(
+                DiagnosticCode.API_INTERNAL,
+                f"index {self.index_version} claims schema {manifest['schema_version']} but `ord` isn't indexed: "
+                "build a new index",
+                reason="schema_version_mismatch",
+            )
+        # id → ord (its position in `ids.txt`), built on the first verified clause a schema-3 compile names
+        # (`id_set`), then kept: one dict entry per record (a few MB at 80k), never changed after
+        self._ords: dict[str, int] | None = None
         self.compiled: dict[str, Compiled] = {}  # per tree (bounded), see compile()
         self.verified: Verified = {}  # position-verified clauses, per engine
         # each wildcard's terms, or just the count of an over-cap one
@@ -188,6 +221,11 @@ class TantivyEngine:
         # entered around each cold position verification (`Compiler.gate`); the API sets its own, which
         # bounds how many run at once (spec 04 §Rate limit)
         self.verification_gate: Callable[[], AbstractContextManager[object]] = nullcontext
+
+    @property
+    def ord_indexed(self) -> bool:
+        """Whether this index names a verified clause's ids by the indexed `ord` (schema 3) or the text `id`."""
+        return self.form.ord_indexed
 
     @property
     def universe(self) -> frozenset[str]:
@@ -310,7 +348,12 @@ class TantivyEngine:
         }
 
     def facets(
-        self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS, *, scope: Scope | None = None
+        self,
+        ast: Node,
+        fields: tuple[str, ...] = FACET_FIELDS,
+        *,
+        scope: Scope | None = None,
+        over: tuple[str, ...] = COMBO,
     ) -> dict[str, dict[str, int]]:
         """Disjunctive facets (spec 04, decision-001 rule 6): field F is counted over the matches of the
         query without F's own top-level conjuncts (a filter on F, or NOT of one; nested ones stay).
@@ -322,27 +365,38 @@ class TantivyEngine:
         those passing every set-aside filter not on F, summed by their F value. The combos are memoised per
         base (`faceted`, by its span-less, sorted conjuncts), so another page, exclusion accounting (whose
         trees differ only in top-level filters) and a later query with the same base never collect again.
-        Proved equal to one collection per kept set, and to ReferenceEngine (`test_facets_equal.py`)."""
+        Proved equal to one collection per kept set, and to ReferenceEngine (`test_facets_equal.py`).
+
+        `over` narrows the aggregation to some of those fields (each counted field among them): only their
+        top-level filters are set aside, and every other field's stay in the collected query, so the combos
+        are fewer. Exclusion accounting without facets passes the two default fields (`exclusions.ORDER`,
+        `search.run`): a few combos to read instead of hundreds, and the base it collects is no wider than the
+        query's (TASK-166). The counts are the same either way (`test_facets_equal.py`)."""
         unknown = [f for f in fields if f not in FACET_FIELDS]
         if unknown:
             raise EngineInputError(DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {FACET_FIELDS}")
+        over = _aggregated(over)
+        if not set(fields) <= set(over):
+            raise EngineInternalError(
+                DiagnosticCode.API_INTERNAL, f"facet fields {fields} must be among the aggregated {over}"
+            )
         self.expansions(ast)  # the cap applies even when no facet field is asked for
         conjuncts = _conjuncts(ast)
-        filters = [c for c in conjuncts if _filter_field(c) in FACET_FIELDS]
-        base = [c for c in conjuncts if _filter_field(c) not in FACET_FIELDS]
-        combos = self.combos(base, scope)
+        filters = [c for c in conjuncts if _filter_field(c) in over]
+        base = [c for c in conjuncts if _filter_field(c) not in over]
+        combos = self.combos(base, scope, over)
         # per field, whether each value that occurs passes every set-aside filter on that field
         ok = [
             {
                 v: all(_passes(c, v) for c in filters if _filter_field(c) == g)
                 for v in {c[i] for c, _n in combos}
             }
-            for i, g in enumerate(COMBO)
+            for i, g in enumerate(over)
         ]
         out: dict[str, dict[str, int]] = {}
         for f in fields:
-            at = COMBO.index(f)
-            others = [i for i in range(len(COMBO)) if i != at]  # every other field's filters apply; F's don't
+            at = over.index(f)
+            others = [i for i in range(len(over)) if i != at]  # every other field's filters apply; F's don't
             counts: dict[str, int] = {}
             for combo, n in combos:
                 if all(ok[i][combo[i]] for i in others):
@@ -351,20 +405,24 @@ class TantivyEngine:
             out[f] = dict(sorted(counts.items()))
         return out
 
-    def combos(self, base: list[Node], scope: Scope | None = None) -> tuple[tuple[Combo, int], ...]:
-        """How many matches of `base`'s conjunction (every document when empty) have each (venue, year,
-        track, status), from one collection; memoised per base under task-080's rules."""
-        key = "\x00".join(sorted(_spanless(c) for c in base))
+    def combos(
+        self, base: list[Node], scope: Scope | None = None, over: tuple[str, ...] = COMBO
+    ) -> tuple[tuple[Combo, int], ...]:
+        """How many matches of `base`'s conjunction (every document when empty) have each combination of the
+        `over` fields' values (a subsequence of COMBO: (venue, year, track, status) unless narrowed), from one
+        collection; memoised per base and fields under task-080's rules."""
+        over = _aggregated(over)
+        key = "\x00".join((",".join(over), *sorted(_spanless(c) for c in base)))
         hit = self.faceted.get(key)  # one read (task-080)
         if hit is not None:
             return hit
         node = base[0] if len(base) == 1 else And(span=(0, 0), children=tuple(base)) if base else None
         query = tantivy.Query.all_query() if node is None else self.compile(node, scope).query
         aggs: dict[str, Any] = {}
-        for f in reversed(COMBO):  # venue → year → track → status, innermost last
+        for f in reversed(over):  # venue → year → track → status, innermost last
             aggs = {f: {"terms": {"field": f, "size": 100_000}, **({"aggs": aggs} if aggs else {})}}
         found: list[tuple[Combo, int]] = []
-        _walk(self.searcher.aggregate(query, aggs), (), found)
+        _walk(self.searcher.aggregate(query, aggs), over, (), found)
         combos = tuple(sorted(found))
         self._trim("faceted", self.faceted, self.MAX_FACET_COMBOS)
         self.faceted[key] = combos  # stored complete (an immutable tuple), never changed after
@@ -438,6 +496,7 @@ class TantivyEngine:
             store=store,
             count=self._count,
             members=self.ids_of,
+            id_query=self.id_set,
         ).compile(ast)
         self.compiled[key] = compiled
         self.charges["compiled"].append(compiled.held + 1)
@@ -499,6 +558,21 @@ class TantivyEngine:
         return "\n".join(lines)
 
     # --- reading the index ---------------------------------------------------------------------------
+    def id_set(self, ids: list[str]) -> tantivy.Query:
+        """The documents with these ids, as a verified clause names them (`Compiler.exact`): a term set on the
+        indexed `ord` (schema 3; each id's position in `ids.txt`, which is in id order), or on the text `id`
+        for a schema-2 index. The same documents either way; Tantivy resolves the u64 set faster (TASK-167)."""
+        if not self.form.ord_indexed:
+            return id_set(self.index.schema, ids)
+        table = self._ords  # one read (task-080); built whole, then stored with one assignment
+        if table is None:
+            table = {i: at for at, i in enumerate(self.ids)}
+            self._ords = table  # a race only builds the same table twice
+        ords = [table.get(i, -1) for i in ids]
+        if -1 in ords:
+            raise EngineInternalError(DiagnosticCode.API_INTERNAL, "a verified id is not in the index")
+        return tantivy.Query.term_set_query(self.index.schema, "ord", ords)
+
     def hits(self, query: tantivy.Query) -> list[tantivy.DocAddress]:
         limit = max(1, self.searcher.num_docs)
         return [address for _score, address in self.searcher.search(query, limit).hits]
@@ -517,6 +591,25 @@ class TantivyEngine:
             yield doc["id"][0], text.split(" ") if text else []
 
 
+def _aggregated(over: tuple[str, ...]) -> tuple[str, ...]:
+    """`over` as the combos aggregate it: in COMBO's order (one memo key per set of fields), refused when empty
+    or naming a field outside COMBO (a caller's bug: an internal error, never a silent drop)."""
+    if not over or not set(over) <= set(COMBO):
+        raise EngineInternalError(
+            DiagnosticCode.API_INTERNAL, f"the aggregated fields {over} must be some of {COMBO}"
+        )
+    return tuple(f for f in COMBO if f in over)
+
+
+def _indexes_ord(schema: tantivy.Schema, searcher: tantivy.Searcher) -> bool:
+    """Whether the opened index really indexes `ord` (Tantivy says so only when a query on it runs)."""
+    try:
+        searcher.search(tantivy.Query.term_set_query(schema, "ord", [0]), 1)
+    except ValueError:
+        return False
+    return True
+
+
 def _ord(value: object) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise EngineInternalError(
@@ -530,15 +623,15 @@ def _conjuncts(n: Node) -> list[Node]:
     return [x for c in n.children for x in _conjuncts(c)] if isinstance(n, And) else [n]
 
 
-def _walk(result: dict[str, Any], prefix: tuple[str | int, ...], out: list[tuple[Combo, int]]) -> None:
-    """The leaves of a nested terms aggregation over COMBO, as ((venue, year, track, status), count)."""
-    field = COMBO[len(prefix)]
+def _walk(result: dict[str, Any], over: tuple[str, ...], prefix: Combo, out: list[tuple[Combo, int]]) -> None:
+    """The leaves of a nested terms aggregation over the `over` fields, as (their values, count)."""
+    field = over[len(prefix)]
     for bucket in result[field]["buckets"]:
         key = (*prefix, int(bucket["key"]) if field == "year" else str(bucket["key"]))
-        if len(key) == len(COMBO):
-            out.append((key, int(bucket["doc_count"])))  # type: ignore[arg-type]
+        if len(key) == len(over):
+            out.append((key, int(bucket["doc_count"])))
         else:
-            _walk(bucket, key, out)
+            _walk(bucket, over, key, out)
 
 
 def _passes(n: Node, value: str | int) -> bool:

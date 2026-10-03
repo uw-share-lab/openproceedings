@@ -62,12 +62,27 @@ data/indexes/current            symlink → the served version
 | Change | Bump |
 |---|---|
 | Any input could tokenize differently (`normalize.py`, LaTeX rules, the analyzer) | `TOKENIZER_VERSION` (rule in `.claude/skills/token-contract/SKILL.md`) |
-| Index field set, field type, index options (positions, freqs), stored layout, analyzer registration, how a field is populated (e.g. missing abstract → `""`) | `SCHEMA_VERSION` |
+| Index field set, field type, index options (positions, freqs), stored layout, analyzer registration, how a field is populated (e.g. missing abstract → `""`) | `SCHEMA_VERSION`, and keep serving the previous one (§Two served schemas) |
 | Weights, k1, b, sort definitions | nothing to bump. They are in `ranking_params` already, so `index_version` changes |
 | A tantivy-py upgrade | `SCHEMA_VERSION`, always: Tantivy is not an `index_version` input, and the engine refuses an index built with another Tantivy (`unservable`), so without the bump the new code could neither serve the old index nor build a new id (`op index build` finds the id and keeps the old directory). `changelog.py --release` refuses a release that changes Tantivy alone (spec 08 §Release). Upgraded by hand only: Dependabot's `uv` entry ignores `tantivy` (TASK-150), because a bump merged alone would leave `dev` unable to serve or build an index; an `ignore` was chosen over a CI check as the simpler gate for a rare, hand-verified upgrade. The path: bump the `tantivy==` pin in `backend/pyproject.toml`, `uv lock`, bump `SCHEMA_VERSION` in `engine/index.py`, rebuild and verify an index (spec 08 §Deploy runbook) |
 | Parser, compiler (NEAR/slop, wildcard rules), default-filter set, `source:` alias table: any change that could make some query mean something different | `query_version` (not part of `index_version`) |
 | New snapshot | nothing to bump; `snapshot_hash` changes |
 | Pure refactor proven identical by parity + determinism | none |
+
+## Two served schemas (TASK-167, decision-030)
+A `SCHEMA_VERSION` bump changes every new `index_version`, but it must not strand the indexes that search records
+pin. So `engine/index.py` maps each served schema to its `SchemaForm` in `SERVED_SCHEMAS` (the current schema
+and the one before it: what differs between them, such as `ord_indexed`), and `unservable` accepts both. The engine
+reads its index's form once (`TantivyEngine.form`) and branches on it, never on a version string. New builds use the current schema. An index of the previous schema is opened as it was built, and
+the engine takes that schema's path for it (schema 2: a verified clause's ids as a term set on the text `id`;
+schema 3: on the indexed `ord`; `TantivyEngine.ord_indexed`). The two paths must give the same ids and the same
+float scores for every query (`test_served_schemas.py`). A record saved on the old schema must replay
+`reproduced` on its own index after the bump (`test_records.py::…schema_2…`), and the same holds against a
+real index, checked locally. Retiring the old schema: rebuild every served index at the new schema, repoint
+`current`, and `op index retire` each old version once no record pins it. Only then drop the schema from
+`SERVED_SCHEMAS`, with its path and its tests. A third schema while two are served first retires the oldest.
+A tantivy-py upgrade is different: the engine refuses an index built by another Tantivy, so it strands old
+indexes whatever `SERVED_SCHEMAS` holds.
 
 When in doubt, bump. A needless bump makes an old record report `drifted` when it didn't have to. A missed
 bump makes a record claim `reproduced` when its results changed, which is the one failure that invalidates
@@ -78,3 +93,11 @@ a systematic review.
 - [ ] the manifest records all four inputs and the tantivy-py version
 - [ ] responses carry `index_version`, `tokenizer_version` and `query_version` (spec 04)
 - [ ] a record replay test covers the path the change touched
+
+## Measuring a schema optimization
+
+Separate query construction (including any lazy lookup's first-use cost and retained memory) from Tantivy
+collection on the same-snapshot indexes. Also time the complete search with alternating old/new rounds.
+Record machine load and rerun on a quiet machine before claiming a gain; an isolated improvement does not
+establish an end-to-end improvement. A cold engine benchmark resets every engine memo, including lazy
+id-to-ordinal lookup, and states that index and OS page caches remain warm.

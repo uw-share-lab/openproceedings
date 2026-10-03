@@ -139,7 +139,7 @@ def test_build_writes_a_verified_manifest(built: Path) -> None:
     assert (
         manifest["doc_count"] == 3
         and manifest["tokenizer_version"] == "2"
-        and manifest["schema_version"] == "2"
+        and manifest["schema_version"] == "3"
     )
     assert manifest["ranking_params"] == RANKING_PARAMS and manifest["tantivy_version"] == "0.26.2"
     assert manifest["built_at"] == "2026-09-26T12:00:00+00:00"

@@ -2,7 +2,9 @@
 task-028). The oracle is the definition of correct, so every generated tree must give the same match set,
 the same wildcard expansions (or the same refusal), the same disjunctive facets, the same `total` for every
 sort (and, for `year_asc`, the (year, id) order), and, for trees that parse, the same exclusion counts as a
-brute-force count. Trees draw on the corpus's own term dictionary (`synthetic_5k.vocab()`), rare terms
+brute-force count, through the facet combos and through the default fields alone (a search without facets,
+TASK-166). The engine is built at the current SCHEMA_VERSION; the previous schema a pinned index may hold is
+held to the oracle in `tests/unit/engine/test_served_schemas.py` (TASK-167). Trees draw on the corpus's own term dictionary (`synthetic_5k.vocab()`), rare terms
 weighted up, and stems at the 200-expansion cap's edge (`cap_records()`, 20 records added to the corpus the
 engines search, 5,020 in all, both parts hash-pinned: `qca*` expands to 199 terms, `qcb*` to 200, `qcc*` to 201
 and is refused; TASK-057). 200 examples per PR (`pr` profile); 50,000 in total in the nightly workflow's own
@@ -20,12 +22,13 @@ import dataclasses
 import hashlib
 import json
 import os
+from functools import partial
 from pathlib import Path
 
 import pytest
 from hypothesis import given, settings
 from openproceedings.diagnostics import DiagnosticCode
-from openproceedings.engine.exclusions import excluded
+from openproceedings.engine.exclusions import ORDER, excluded
 from openproceedings.engine.protocol import FACET_FIELDS, MAX_EXPANSIONS, EngineInputError
 from openproceedings.engine.reference import ReferenceEngine, _conjuncts, _own_field
 from openproceedings.engine.tantivy_engine import SORTS, TantivyEngine
@@ -95,7 +98,11 @@ def agree(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     if parsed.effective_ast is not None:  # a tree the parser accepts: its exclusion counts agree too
         total = len(tantivy.match_ids(parsed.effective_ast))
         got_json = json.dumps(excluded(tantivy, parsed, total).to_json())  # order-sensitive: spec 04 pins it
-        assert got_json == json.dumps(brute_excluded(reference, parsed, got, ast)), q
+        expected_json = json.dumps(brute_excluded(reference, parsed, got, ast))
+        assert got_json == expected_json, q
+        # what a search without facets counts (`search.run`: the default fields only, TASK-166)
+        narrow = excluded(tantivy, parsed, total, facets=partial(tantivy.facets, over=ORDER))
+        assert json.dumps(narrow.to_json()) == expected_json, q
 
 
 def brute_excluded(
