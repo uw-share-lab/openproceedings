@@ -106,3 +106,46 @@ Run the new review gate on its own tooling: five routed reviewers (code, securit
   a row where it is the only barrier.
 - **Test inputs with trailing whitespace must be built with `printf`.** Files lose trailing spaces, and the
   `'EOF '` row silently tested nothing until it was rebuilt that way.
+
+## Addendum — 2026-10-03 (learning rename equivalence review)
+
+- An equivalence claim must describe the actual mutant. The learning gate mutant's label claimed that it
+  dropped `--find-renames`, but its replacement explicitly set `--no-renames`. Independent evidence showed
+  that a byte-for-byte rename changes from 0/0 with rename detection to an added-file count without it.
+  The latter falsely satisfies the learning gate. The production gate was correct; the equivalence claim
+  concealed missing regression coverage.
+- Pair a negative unchanged rename with a positive rename plus new content, both with approved fixture
+  commits. The previous positive row alone could not distinguish the mutant. The paired rows now live in
+  `.claude/hooks/tests/test-openproceedings-gates.sh`; the renamed mutant in
+  `.claude/scripts/mutants/gates.json` is required to die and no longer carries `equivalent: true`.
+- Propagated to `.claude/skills/testing-standards/SKILL.md`: prove the replacement's semantics with an
+  isolating negative case and positive control before claiming equivalence. Interrupted official runs
+  remain diagnostics, never pass evidence.
+
+## Addendum — 2026-10-03 (case-position equivalence review)
+
+- Supported ordinary case forms were insufficient evidence for a case-position mutant's exemption.
+  Independent QA compared the production protect-data-dir verdicts: benign case-shaped argument data
+  and a comment before `in` are refused by the documented conservative shape policy, but the mutant
+  allows them. This is a mutation-proof defect, with no demonstrated security bypass. The production
+  parser remains unchanged; spec 08 already documents its shape-based refusal policy.
+- Added paired data-only case-table controls: both unsupported shapes BLOCK, while an ordinary benign
+  case substitution ALLOWs. Injecting the replacement produced exactly those two failures
+  (`868 passed, 2 failed`); the positive control stayed allowed. Removed the false equivalent marker
+  and named its actual effect. The previous 47-kill official run was interrupted with exit 137 and is
+  preserved only as diagnostic evidence, never a full pass.
+- Propagated to `.claude/skills/testing-standards/SKILL.md`: check actual hook verdicts for benign
+  unsupported syntax before claiming parser mutants equivalent. Full official verification remains pending.
+- Official targeted mutation verification passed its full table baseline and killed this replacement:
+  `1 mutants: 0 problem(s)`, exit 0. This focused proof does not replace the pending full changed run.
+
+## Addendum — 2026-10-03 (complete recovered-hooks verification)
+
+- The reviewed source `9d035a18` completed the official `make mutate-changed` run in isolated Linux:
+  `417 mutants: 0 problem(s)`, exit 0. All 413 behavior-changing mutants were killed, including both
+  corrected equivalence labels; the four surviving equivalent replacements were independently audited
+  against their actual hook predicates. No stale pattern or unexpected survivor remained. Source bytes
+  stayed unchanged throughout. Earlier interrupted runs remain diagnostic history, not pass evidence.
+- Fresh Node 22 `make lint` and `make tooling` passed. Tasks 164, 170, 172 and 173 were completed through
+  the Backlog CLI only after this proof. The final task/learning commit changes metadata only; fresh full
+  tests and final lint/tooling plus exact-head review remain required before publication.

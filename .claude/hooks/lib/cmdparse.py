@@ -64,7 +64,7 @@ import re
 import shlex
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 SEP_CHARS = set(";&|()\n")
 PUNCT = ";&|()\n<>"
@@ -401,6 +401,11 @@ class Argv(list):
     # word as written, before it was basenamed (`/op-revie?s/x` after an unquoted `$(…)` split the word)
     env_empty: bool = False
     head_word: str = ""
+    # `in_subst`: it runs inside a command substitution, so what it prints may be a word of the command it's in
+    # (`git commit -m "$(awk 1 msg.txt)"`: TASK-170)
+    in_subst: bool = False
+    # `cd_stayed`: the directory is where it is because a `cd ~/…` failed in the HOME '' reading (`_change_dir`)
+    cd_stayed: bool = False
 
     def __init__(self, words: list[str], via_xargs: bool = False, assigns: dict[str, str] | None = None):
         super().__init__(words)
@@ -436,6 +441,166 @@ def read_payload() -> tuple[str, str]:
     return cmd, cwd
 
 
+@functools.lru_cache(maxsize=256)
+def join_continuations(text: str) -> str:
+    """`text` with each backslash-newline bash deletes deleted (line continuation): THE join, which `preprocess`
+    and every raw-text scan in the gates use (TASK-164). Bash deletes one outside single quotes and `$'…'`, outside
+    a comment, and outside the body of a heredoc whose delimiter is quoted (`<<'EOF'`, `<<\\EOF`); inside a
+    command substitution as in its own text; and in an unquoted delimiter's body, where a joined line can be the
+    delimiter (`E\\<newline>OF`) but a body line ending in `\\` never swallows the delimiter line after it (a
+    heredoc ends no later than it did before TASK-164). A heredoc's body starts after its `<<` line, once that
+    line's continuations are joined. A lone backslash at the very end is dropped, as `preprocess` always read it.
+    Never raises: text it can't scan to the end (an unclosed quote, substitution, arithmetic or heredoc, or nesting
+    too deep) has every backslash-newline deleted, quoted or not, which is what the gates' fail-closed fallbacks
+    read before TASK-164, and joins at least as much as bash would."""
+    try:
+        return _join(text)
+    except (ParseError, RecursionError):
+        return text.replace("\\\n", "")
+
+
+def _join(text: str) -> str:
+    """`join_continuations`, raising ParseError where it can't scan the text."""
+    out: list[str] = []
+    last = ""  # the last character written: where a word, a comment or `((` can start
+    n, k = len(text), 0
+    dq = False
+    arith = inner = 0  # $(( … )) / (( … )) depth, and plain ( ) inside it, as `preprocess` counts them
+    pending: list[tuple[str, bool, bool]] = []  # heredocs started on this line: (delimiter, <<-, quoted)
+
+    def emit(s: str) -> None:
+        nonlocal last
+        out.append(s)
+        last = s[-1] if s else last
+
+    def substitution(k: int) -> int:
+        """Write the `$(…)` or backquoted substitution at `text[k]` with its body joined as its own text."""
+        backquote = text[k] == "`"
+        end = _substitution_end(text, k + (1 if backquote else 2), "`" if backquote else ")")
+        opener, body = ("`", text[k + 1 : end - 1]) if backquote else ("$(", text[k + 2 : end - 1])
+        emit(opener + _join(body) + text[end - 1])
+        return end
+
+    while k < n:
+        c = text[k]
+        if text.startswith("\\\n", k):
+            k += 2  # bash deletes it and inserts nothing (review round 6)
+            continue
+        if c == "\n":
+            emit(c)
+            k += 1
+            if pending:
+                k = _heredoc_bodies(text, k, pending, emit)
+                pending = []
+            continue
+        if dq:
+            if c == "\\":
+                emit(text[k : k + 2])
+                k += 2
+            elif c == '"':
+                dq = False
+                emit(c)
+                k += 1
+            elif c == "`" or text.startswith("$(", k):
+                k = substitution(k)
+            else:
+                emit(c)
+                k += 1
+            continue
+        if c == "\\":
+            emit(text[k : k + 2] if k + 1 < n else "")  # a lone backslash at the end is dropped
+            k += 2
+        elif c == "'":
+            e = text.find("'", k + 1)
+            if e < 0:
+                raise ParseError("unterminated single quote")
+            emit(text[k : e + 1])
+            k = e + 1
+        elif text.startswith("$'", k):
+            e = k + 2
+            while e < n and text[e] != "'":
+                e += 2 if text[e] == "\\" else 1
+            if e >= n:
+                raise ParseError("unterminated $'…'")
+            emit(text[k : e + 1])
+            k = e + 1
+        elif c == '"':
+            dq = True
+            emit(c)
+            k += 1
+        elif c == "`":
+            k = substitution(k)
+        elif c == "#" and last in ("", " ", "\t", ";", "&", "|", "(", ")", "\n") and not arith:
+            e = text.find("\n", k)
+            e = n if e < 0 else e
+            emit(text[k:e])  # a comment: a backslash at its end continues nothing
+            k = e
+        elif text.startswith("$((", k) or (
+            text.startswith("((", k) and last in ("", " ", "\t", ";", "&", "|", "(", "\n")
+        ):
+            step = 3 if c == "$" else 2
+            arith += 1
+            emit(text[k : k + step])
+            k += step
+        elif arith and c == "(":
+            inner += 1
+            emit(c)
+            k += 1
+        elif arith and c == ")" and inner:
+            inner -= 1
+            emit(c)
+            k += 1
+        elif arith and text.startswith("))", k):
+            arith -= 1
+            emit("))")
+            k += 2
+        elif text.startswith("<<<", k):
+            emit("<<<")
+            k += 3
+        elif not arith and text.startswith("<<", k) and (m := HEREDOC.match(text, k)):
+            quoted = bool(m.group("q")) or "\\" in m.group(0)
+            pending.append((m.group("delim"), m.group("dash") == "-", quoted))
+            emit(m.group(0))
+            k = m.end()
+        else:
+            emit(c)
+            k += 1
+    if dq or arith or pending:
+        raise ParseError("unterminated double quote, arithmetic or heredoc")
+    return "".join(out)
+
+
+def _heredoc_bodies(
+    text: str, k: int, pending: list[tuple[str, bool, bool]], emit: Callable[[str], None]
+) -> int:
+    """Write the bodies of the heredocs in `pending`, which start at `text[k]`, each through its delimiter line,
+    joined as `join_continuations` says; return where the command goes on."""
+    n = len(text)
+    for delim, dash, quoted in pending:
+        logical = None  # a body line still being joined
+        while True:
+            if k >= n:
+                raise ParseError(f"heredoc {delim!r} never ends")
+            e = text.find("\n", k)
+            line, k = text[k : e if e >= 0 else n], (e + 1 if e >= 0 else n)
+            newline = "\n" if e >= 0 else ""
+            if (line.lstrip("\t") if dash else line) == delim:
+                if logical is not None:
+                    emit(logical + "\\\n")  # a body line ending in `\` doesn't swallow the delimiter line
+                emit(line + newline)
+                break
+            trailing = len(line) - len(line.rstrip("\\"))
+            if not quoted and trailing % 2 == 1 and newline:
+                logical = (logical or "") + line[:-1]
+                continue
+            whole = (logical or "") + line
+            logical = None
+            emit(whole + newline)
+            if (whole.lstrip("\t") if dash else whole) == delim:
+                break  # `E\<newline>OF` is the delimiter once joined
+    return k
+
+
 def preprocess(cmd: str, subs: list[tuple[list[str], str]] | None = None) -> str:
     """One pass over the whole command, the way bash reads it, returning the text to tokenize:
     - quote state is carried ACROSS lines, so a multi-line quoted message stays one string (review round 3);
@@ -444,8 +609,8 @@ def preprocess(cmd: str, subs: list[tuple[list[str], str]] | None = None) -> str
       dropped (after its command substitutions are recorded, for an unquoted DELIM), and it ends only at a line
       that is exactly DELIM (leading tabs allowed for `<<-`);
       `<<<` (herestring) and `<<` inside `$(( … ))` / `(( … ))` arithmetic are not heredocs (review round 4);
-    - a backslash-newline outside single quotes and outside heredoc bodies joins the next line (bash line
-      continuation) — done here, not before, so a heredoc body ending in `\\` can't swallow its delimiter;
+    - first, each backslash-newline bash deletes is deleted (`join_continuations`, the one join every raw-text
+      scan in the gates uses too: TASK-164); a heredoc body ending in `\\` still can't swallow its delimiter;
     - a `<<` inside quotes is text (the usual `-m "$(cat <<'EOF' …)"` stays inside its quoted argument).
     With `subs` (TASK-156), the command substitutions bash runs that the words would hide are recorded there:
     a `$(…)` inside double quotes, a backquoted one anywhere outside single quotes, and those in the body of a
@@ -464,6 +629,7 @@ def preprocess(cmd: str, subs: list[tuple[list[str], str]] | None = None) -> str
     joining = False
     if subs is not None and SUBST_MARK in cmd:
         raise ParseError("the command holds the character this parser marks substitutions with")
+    cmd = join_continuations(cmd)
     lines = cmd.split("\n")
     starts = [0]  # where each line starts in `cmd`
     for line in lines[:-1]:
@@ -632,16 +798,11 @@ def preprocess(cmd: str, subs: list[tuple[list[str], str]] | None = None) -> str
             kept.append(BRACE_MARK.get(c, c))
             i += 1
         text = "".join(kept)
-        # line continuation: a trailing unescaped backslash outside single quotes, not starting a heredoc
-        trailing = len(text) - len(text.rstrip("\\"))
-        continues = trailing % 2 == 1 and quote not in ("'", "$'") and not pending
-        if continues:
-            text = text[:-1]
         if joining and out_lines:
-            out_lines[-1] += text  # bash deletes backslash-newline and inserts nothing (review round 6)
+            out_lines[-1] += text
         else:
             out_lines.append(text)
-        joining = continues or carried  # the rest of a substitution's last line joins this one
+        joining = carried  # the rest of a substitution's last line joins this one
     if arith or pending:
         # Unclosed arithmetic or a heredoc that never ends: the scan's model of this command has diverged
         # from bash's, so every later line may be misread. Raise; every gate treats that as BLOCK when the
@@ -825,9 +986,11 @@ def _case_cut_short(body: str, rest: str) -> bool:
     """Was a case statement cut short at one of its patterns' `)`: a `case` word in the body with no `esac` after
     it there, and an `esac` later in the command? Whatever way the `case <word> in` is spelt (a comment, `${x:- a}`,
     a `\\`-newline before `in`), its `esac` comes after the cut (TASK-156 review; fail closed)."""
-    body, rest = body.replace("\\\n", ""), rest.replace("\\\n", "")  # `ca\<newline>se` is `case` to bash
+    body = join_continuations(body)  # `ca\<newline>se` is `case` to bash (TASK-164: the one shared join)
     last_case = max((m.start() for m in CASE_ANY.finditer(body)), default=-1)
-    return last_case >= 0 and not ESAC_ANY.search(body, last_case) and ESAC_ANY.search(rest) is not None
+    if last_case < 0 or ESAC_ANY.search(body, last_case):
+        return False
+    return ESAC_ANY.search(join_continuations(rest)) is not None  # the rest is joined only when it decides
 
 
 def _case_shape(text: str, j: int) -> bool:
@@ -1382,6 +1545,7 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
     # `X=/tmp cd "$X"` to `cd ""` before the prefix applies (TASK-067 final re-check)
     builtin_vars = {**variables, **(assigns or {})}
     env_empty = state.get("env_empty", False)
+    state.pop("cd_stayed", None)
     target: str | None = None
     if head == "popd":
         if stack and not words:
@@ -1424,7 +1588,9 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
             and not os.path.isdir(target)
         ):
             # read with HOME '', `~/x` is `/x`, at the root, which this command can't have made: the cd fails and
-            # the shell stays where it was (TASK-156 review: `cd ~/<repo> && git commit` was refused)
+            # the shell stays where it was (TASK-156 review: `cd ~/<repo> && git commit` was refused); a gate that
+            # refuses what runs here says so (TASK-173)
+            state["cd_stayed"] = True
             return
     if head == "pushd" and target is not None:
         stack.append((cur, unknown))
@@ -1579,6 +1745,8 @@ def _context(argv: Argv, state: dict) -> Argv:
     argv.olddir = None if state.get("olddir_unknown") else state.get("olddir")
     argv.dir_unknown = state.get("dir_unknown", False)
     argv.env_empty = state.get("env_empty", False)
+    argv.in_subst = state.get("subst", 0) > 0
+    argv.cd_stayed = state.get("cd_stayed", False)
     return argv
 
 
@@ -1689,9 +1857,11 @@ def _subshell(body: str, state: dict) -> Iterator[tuple[Argv, str, list[tuple[st
     state["exports"] = dict(state.get("exports", {}))
     state["vars"] = dict(state.get("vars", {}))
     state["dirstack"] = list(state.get("dirstack", []))
+    state["subst"] = state.get("subst", 0) + 1
     try:
         yield from _walk(tokenize(body, state["subs"]), state)
     finally:
+        state["subst"] -= 1
         for key in SUBSHELL_STATE:
             state.pop(key, None)
         state.update(saved)
@@ -1699,6 +1869,8 @@ def _subshell(body: str, state: dict) -> Iterator[tuple[Argv, str, list[tuple[st
 
 def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tuple[str, str]]]]:
     i = 0
+    depth = state.get("subst", 0)  # the command substitutions this walk is inside (`Argv.in_subst`)
+    parens: list[bool] = []  # the `(`s open here: True for an unquoted `$(`
     while i < len(tokens):
         j = i
         while j < len(tokens) and not is_separator(tokens[j]):
@@ -1707,6 +1879,13 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             tokens = unrolled
             continue
         raw, i = tokens[i:j], j + 1
+        # inside an unquoted `$(…)`, which splits into `$` ending the word before it, then `(` (TASK-170)
+        state["subst"] = depth + any(parens)
+        for n, ch in enumerate(tokens[j] if j < len(tokens) else ""):
+            if ch == "(":
+                parens.append(n == 0 and bool(raw) and raw[-1].endswith("$"))
+            elif ch == ")" and parens:
+                parens.pop()
         if any(SUBST_MARK in t for t in raw):
             # the command substitutions in this command run first, each in a subshell (TASK-156)
             subs = state["subs"]
@@ -1786,6 +1965,7 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             yield from _walk(rest if plain else tokenize(" ".join(rest), state["subs"]), state)
             continue
         yield _context(argv, state), state["dir"], redirects
+    state["subst"] = depth
 
 
 def _git_options(argv: list[str], directory: str) -> tuple[int, str, dict[str, str], str | None, bool]:

@@ -50,8 +50,8 @@
 #    are text, not paths: a commit message may mention `.git/op-reviews/<sha>`.
 #
 # An unparseable command that mentions a push, gh, or a review record is blocked (fail closed; line
-# continuations joined first), and so is a push run by xargs, whose appended refspecs this gate can't see
-# (TASK-067). A command this gate can't check at all (an internal error) is blocked: exit 2, never a crash's 1,
+# continuations joined first, by cmdparse.join_continuations: TASK-164), and so is a push run by xargs, whose
+# appended refspecs this gate can't see (TASK-067). A command this gate can't check at all (an internal error) is blocked: exit 2, never a crash's 1,
 # which Claude Code would let through.
 #
 # Writing/deleting main or dev directly is enforce-pr-workflow.sh's job; this gate adds the review
@@ -63,8 +63,8 @@ IFS= read -r -d '' PROG <<'PY' || true
 import glob, os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
 from cmdparse import (ASSIGNMENT, FailClosed, ParseError, expand_known, expand_word, gh_subcommand, git, git_anchored,
-                      git_bool, git_config, git_config_opaque, git_dir, git_subcommand, opt_value, opt_values,
-                      push_config, push_config_risk, read_payload, tokenize, walk, xargs_hides_args)
+                      git_bool, git_config, git_config_opaque, git_dir, git_subcommand, join_continuations, opt_value,
+                      opt_values, push_config, push_config_risk, read_payload, tokenize, walk, xargs_hides_args)
 from cmdparse import payload as hook_payload
 
 ENTRY_NAME = re.compile(r"^\.claude/learnings/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$")  # same rule as learnings_index.py
@@ -233,8 +233,9 @@ def main():
                "own call; refusing rather than guessing what it pushes."])
     except ParseError:
         # Fail CLOSED (review round 3): a command the parser can't read may still be a push or a PR; the text is
-        # searched with its line continuations joined (`gi\<newline>t pu\<newline>sh`: review gate round 3)
-        if re.search(r"push|\bgh\b|op-?rev|review", cmd.replace("\\\n", ""), re.IGNORECASE):
+        # searched with its line continuations joined as bash joins them (`gi\<newline>t pu\<newline>sh`: review gate
+        # round 3), by cmdparse's one join, which joins every one in text it can't scan (TASK-164)
+        if re.search(r"push|\bgh\b|op-?rev|review", join_continuations(cmd), re.IGNORECASE):
             block(["Review gate: this command could not be parsed (unbalanced quotes?) and may push, open a PR or",
                    "touch a review record — refusing rather than letting it through unexamined. Fix the quoting, or",
                    "write the command more plainly, and retry."])

@@ -1,0 +1,7 @@
+# probes in single quotes and $'…', escaped substitutions in double quotes, and the row's own "$(payload_… …)"
+payload_bash() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$REPO" "$1"; }
+checks=$((checks + 1))
+check $A allow 'single-quoted' "$(payload_bash 'x $(echo y) `z`')"
+check $A allow 'ANSI-C' "$(payload_bash $'x $(echo y)\n`z` \' $(w)')"
+check $A allow "escaped \$(…) and \`…\`" "$(payload_bash "x \$(echo y) \`z\` $TRAILER")"
+echo "an empty payload $(date) is not a call"

@@ -39,6 +39,11 @@ minutes; a missed one costs a wrong search result in someone's systematic review
 | any `src/**` change > 150 changed lines, or any change claiming "exact"/"reproducible"/"fixed" | `qa-auditor` |
 | a PR as a whole (after the above) | `pr-reviewer` folds all verdicts together |
 
+**Probing a hook** (every reviewer, TASK-169): probes are hostile strings, so they stay data. Write each with the
+Write tool and feed it with `python3 .claude/scripts/probe_hook.py <hook>.sh --file <probe>` (or `cmdparse --file`);
+never through a shell heredoc or a double-quoted string. Real execution only via `probe_hook.py sandbox` (a removed
+mktemp directory that is HOME and the working directory). Put this rule verbatim in every reviewer prompt.
+
 ## Severity
 - **Must** — blocks. Wrong results, a violated guarantee (00 §Guarantees), a security hole, a failing or
   missing test for new behaviour, a broken contract, AI attribution, data committed.

@@ -182,7 +182,7 @@
  {
   "label": "robot footer dropped",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "|🤖 generated",
+  "old": "|\ud83e\udd16 generated",
   "new": ""
  },
  {
@@ -212,14 +212,14 @@
  {
   "label": "stdin redirect not read",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "            texts += [file_text(target, d) for op, target in redirects if \"<\" in op and target]",
-  "new": "            texts += [file_text(target, d) for op, target in redirects if False]"
+  "old": "              if \"<\" in op and not op.startswith(\"<<\") and target]",
+  "new": "              if False]"
  },
  {
   "label": "cat pipe not read",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        if argv and argv[0] == \"cat\":",
-  "new": "        if False:"
+  "old": "        if argv[0] in READERS:\n            named += [(a, argv, d) for a in reader_files(argv)]",
+  "new": "        if False:\n            named += [(a, argv, d) for a in reader_files(argv)]"
  },
  {
   "label": "dd branch removed",
@@ -306,7 +306,7 @@
   "new": "(root / \"nowhere\").glob(\"x\")"
  },
  {
-  "label": "record: must→task counted fixed",
+  "label": "record: must\u2192task counted fixed",
   "file": ".claude/scripts/record-review.py",
   "old": "if level == \"must\" and not disp.lower().startswith(\"fixed\"):",
   "new": "if level == \"must\" and disp.lower().startswith(\"rejected\"):"
@@ -416,8 +416,8 @@
  {
   "label": "require-review fails open on parse error",
   "file": ".claude/hooks/require-review.sh",
-  "old": "    if re.search(r\"push|\\bgh\\b|op-?rev|review\", cmd.replace(\"\\\\\\n\", \"\"), re.IGNORECASE):",
-  "new": "    if False:"
+  "old": "        if re.search(r\"push|\\bgh\\b|op-?rev|review\", join_continuations(cmd), re.IGNORECASE):",
+  "new": "        if False:"
  },
  {
   "label": "protect-data-dir fails open on parse error",
@@ -462,11 +462,10 @@
   "new": "                path = parts[2]"
  },
  {
-  "label": "learnings --find-renames dropped (EQUIVALENT: git's diff.renames defaults to true; the flag states intent)",
+  "label": "learnings rename detection disabled treats unchanged rename as new content",
   "file": ".claude/hooks/require-review.sh",
   "old": "\"--numstat\", \"--find-renames\", ",
-  "new": "\"--numstat\", \"--no-renames\", ",
-  "equivalent": true
+  "new": "\"--numstat\", \"--no-renames\", "
  },
  {
   "label": "rejection needs only one word",
@@ -561,8 +560,8 @@
  {
   "label": "<<- tab rule applied to plain <<",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "            if (line.lstrip(\"\\t\") if dash else line) == delim:",
-  "new": "            if line.strip() == delim:"
+  "old": "            if (line.lstrip(\"\\t\") if dash else line) == delim:\n                pending.pop(0)",
+  "new": "            if line.strip() == delim:\n                pending.pop(0)"
  },
  {
   "label": "git clean -e cluster read as flags",
@@ -591,14 +590,14 @@
  {
   "label": "continuation by trailing \\\\ parity ignored",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        continues = trailing % 2 == 1 and quote not in (\"'\", \"$'\") and not pending",
-  "new": "        continues = trailing >= 1 and quote not in (\"'\", \"$'\") and not pending"
+  "old": "            emit(text[k : k + 2] if k + 1 < n else \"\")  # a lone backslash at the end is dropped\n            k += 2",
+  "new": "            emit(text[k : k + 1])\n            k += 1"
  },
  {
   "label": "continuation joined with a space",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "            out_lines[-1] += text  # bash deletes backslash-newline and inserts nothing (review round 6)",
-  "new": "            out_lines[-1] += \" \" + text"
+  "old": "            k += 2  # bash deletes it and inserts nothing (review round 6)",
+  "new": "            emit(\" \")\n            k += 2"
  },
  {
   "label": "require-review raw-text git prefilter restored",
@@ -801,7 +800,7 @@
  {
   "label": "release notes file not read",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        texts += [file_text(f, d) for f in opt_values(h[2], \"--notes-file\", \"-F\")]\n",
+  "old": "            named += [(f, argv, d) for f in opt_values(h[2], \"--notes-file\", \"-F\")]\n",
   "new": ""
  },
  {
@@ -1209,8 +1208,8 @@
  {
   "label": "record guard: unparseable write allowed",
   "file": ".claude/hooks/require-review.sh",
-  "old": "|op-?rev|review\", cmd.replace(",
-  "new": "\", cmd.replace("
+  "old": "|op-?rev|review\", join_continuations(",
+  "new": "\", join_continuations("
  },
  {
   "label": "backlog: path not normalised",
@@ -1887,31 +1886,31 @@
   "new": "if false; then popt=(--config \"$root/$pcfg\");"
  },
  {
-  "label": "cmdparse: $'…' not decoded",
+  "label": "cmdparse: $'\u2026' not decoded",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "            if line.startswith(\"$'\", i):",
   "new": "            if False:"
  },
  {
-  "label": "cmdparse: $'…' octal escape not decoded",
+  "label": "cmdparse: $'\u2026' octal escape not decoded",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "        elif d in \"01234567\":",
   "new": "        elif False:"
  },
  {
-  "label": "cmdparse: $'…' \\u escape not decoded",
+  "label": "cmdparse: $'\u2026' \\u escape not decoded",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "ANSI_C_NUMERIC = {\"x\": (16, 2), \"u\": (16, 4), \"U\": (16, 8)}",
   "new": "ANSI_C_NUMERIC = {\"x\": (16, 2)}"
  },
  {
-  "label": "cmdparse: a NUL doesn't end a $'…' value",
+  "label": "cmdparse: a NUL doesn't end a $'\u2026' value",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "value.partition(\"\\0\")",
   "new": "(value, \"\", \"\")"
  },
  {
-  "label": "cmdparse: $\"…\" not read as \"…\"",
+  "label": "cmdparse: $\"\u2026\" not read as \"\u2026\"",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "            if line.startswith('$\"', i):\n                i += 1",
   "new": "            if False:\n                i += 1"
@@ -2349,10 +2348,10 @@
   "new": "RECORD_PATH_HINT = re.compile(r\"(op-?rev"
  },
  {
-  "label": "cmdparse: a $'…' string not carried across lines",
+  "label": "cmdparse: a $'\u2026' string not carried across lines",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "    return \"\".join(out), n, False",
-  "new": "    raise ParseError(\"a $'…' string doesn't close on its line\")"
+  "new": "    raise ParseError(\"a $'\u2026' string doesn't close on its line\")"
  },
  {
   "label": "cmdparse: an over-large brace expansion truncated",
@@ -3007,7 +3006,7 @@
   "new": "        elif False:"
  },
  {
-  "label": "cmdparse: a $(…) in double quotes not read (TASK-156)",
+  "label": "cmdparse: a $(\u2026) in double quotes not read (TASK-156)",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "                (quote == '\"' and line.startswith(\"$(\", i)) or (quote in (None, '\"') and c == \"`\")",
   "new": "                False or (quote in (None, '\"') and c == \"`\")"
@@ -3057,8 +3056,8 @@
  {
   "label": "block-ai: parsed words not scanned (TASK-156)",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        texts += [\" \".join(expand_known(w, argv, d) for w in argv) for argv, d in commands]",
-  "new": "        pass"
+  "old": "    texts += [\" \".join(expand_known(w, argv, d) for w in argv) for argv, d in commands]",
+  "new": "    pass"
  },
  {
   "label": "block-ai: HOME '' pass skipped (TASK-156)",
@@ -3219,7 +3218,7 @@
  {
   "label": "block-ai: an unparseable command's text not scanned without quotes (TASK-156)",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        if PATTERN.search(re.sub(r\"[\\\"'\\\\]\", \"\", cmd)):",
+  "old": "        if PATTERN.search(re.sub(r\"[\\\"'\\\\]\", \"\", join_continuations(cmd))):",
   "new": "        if False:"
  },
  {
@@ -3241,16 +3240,15 @@
   "new": "    if not before or before[-1] in \";&|(\\n\":"
  },
  {
-  "label": "cmdparse: a case counted by its position, not its shape (equivalent since TASK-156: with coproc, function NAME and time -p as leaders, position finds every case statement shape does, and _case_cut_short, whose own mutant is killed, refuses any case either misses; 12 legitimate case forms give the same verdict either way)",
+  "label": "cmdparse: case position replaces conservative shape detection and allows unsupported shapes",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "(_case_shape(text, m.end()) if m.group(1) else _command_position(text, start, k))",
-  "new": "_command_position(text, start, k)",
-  "equivalent": true
+  "new": "_command_position(text, start, k)"
  },
  {
   "label": "cmdparse: coproc not a reserved word (TASK-156)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"coproc\",  # `coproc git push …` runs the push (TASK-156)\n",
+  "old": "    \"coproc\",  # `coproc git push \u2026` runs the push (TASK-156)\n",
   "new": ""
  },
  {
@@ -3262,7 +3260,7 @@
  {
   "label": "cmdparse: a \\-newline inside case hides it from the cut-short check (TASK-156)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    body, rest = body.replace(\"\\\\\\n\", \"\"), rest.replace(\"\\\\\\n\", \"\")",
+  "old": "    body = join_continuations(body)  # `ca\\<newline>se` is `case` to bash (TASK-164: the one shared join)",
   "new": "    pass"
  },
  {
@@ -3288,5 +3286,479 @@
   "file": "backend/tests/conftest.py",
   "old": "terminal.write(\"\\n\")",
   "new": "terminal.write(\"\")"
+ },
+ {
+  "label": "cmdparse: preprocess doesn't join first (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    cmd = join_continuations(cmd)\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: the join deletes no backslash-newline (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if text.startswith(\"\\\\\\n\", k):\n            k += 2  # bash",
+  "new": "        if False:\n            k += 2  # bash"
+ },
+ {
+  "label": "cmdparse: text the join can't scan isn't joined at all (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        return text.replace(\"\\\\\\n\", \"\")",
+  "new": "        return text"
+ },
+ {
+  "label": "cmdparse: the join skips no heredoc body (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if pending:\n                k = _heredoc_bodies(text, k, pending, emit)",
+  "new": "            if False:\n                k = _heredoc_bodies(text, k, pending, emit)"
+ },
+ {
+  "label": "cmdparse: the join reads \\\" as a closing quote (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if c == \"\\\\\":\n                emit(text[k : k + 2])\n                k += 2\n            elif c == '\"':\n                dq = False",
+  "new": "            if c == \"\\\\\":\n                emit(c)\n                k += 1\n            elif c == '\"':\n                dq = False"
+ },
+ {
+  "label": "cmdparse: the join reads a quoted $(\u2026) as text (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            elif c == \"`\" or text.startswith(\"$(\", k):\n                k = substitution(k)\n            else:",
+  "new": "            elif False:\n                k = substitution(k)\n            else:"
+ },
+ {
+  "label": "cmdparse: the join joins inside single quotes (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif c == \"'\":\n            e = text.find(\"'\", k + 1)\n            if e < 0:\n                raise ParseError(\"unterminated single quote\")",
+  "new": "        elif False:\n            e = text.find(\"'\", k + 1)\n            if e < 0:\n                raise ParseError(\"unterminated single quote\")"
+ },
+ {
+  "label": "cmdparse: the join reads $'\u2026' as '\u2026' (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif text.startswith(\"$'\", k):\n            e = k + 2",
+  "new": "        elif False:\n            e = k + 2"
+ },
+ {
+  "label": "cmdparse: the join reads \" as text outside quotes (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif c == '\"':\n            dq = True",
+  "new": "        elif False:\n            dq = True"
+ },
+ {
+  "label": "cmdparse: the join never leaves double quotes (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            elif c == '\"':\n                dq = False\n",
+  "new": "            elif c == '\"':\n                dq = True\n"
+ },
+ {
+  "label": "cmdparse: the join reads a backquoted body as text (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif c == \"`\":\n            k = substitution(k)\n        elif c == \"#\"",
+  "new": "        elif False:\n            k = substitution(k)\n        elif c == \"#\""
+ },
+ {
+  "label": "cmdparse: the join reads a comment as words (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif c == \"#\" and last in",
+  "new": "        elif False and last in"
+ },
+ {
+  "label": "cmdparse: the join counts no arithmetic (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif text.startswith(\"$((\", k) or (",
+  "new": "        elif False and (text.startswith(\"$((\", k) or ("
+ },
+ {
+  "label": "cmdparse: the join counts no parens inside arithmetic (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif arith and c == \"(\":\n            inner += 1",
+  "new": "        elif False:\n            inner += 1"
+ },
+ {
+  "label": "cmdparse: the join never ends arithmetic (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            arith -= 1\n            emit(\"))\")",
+  "new": "            emit(\"))\")"
+ },
+ {
+  "label": "cmdparse: the join reads <<< as a heredoc (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif text.startswith(\"<<<\", k):\n            emit(\"<<<\")",
+  "new": "        elif False:\n            emit(\"<<<\")"
+ },
+ {
+  "label": "cmdparse: the join finds a heredoc inside arithmetic (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif not arith and text.startswith(\"<<\", k) and (m := HEREDOC.match(text, k)):",
+  "new": "        elif text.startswith(\"<<\", k) and (m := HEREDOC.match(text, k)):"
+ },
+ {
+  "label": "cmdparse: the join reads every heredoc as unquoted (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            quoted = bool(m.group(\"q\")) or \"\\\\\" in m.group(0)",
+  "new": "            quoted = False"
+ },
+ {
+  "label": "cmdparse: the join joins no unquoted heredoc body line (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if not quoted and trailing % 2 == 1 and newline:",
+  "new": "            if False:"
+ },
+ {
+  "label": "cmdparse: a body line ending in \\ swallows its delimiter (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if (line.lstrip(\"\\t\") if dash else line) == delim:\n                if logical is not None:",
+  "new": "            if (line.lstrip(\"\\t\") if dash else line) == delim and logical is None:\n                if logical is not None:"
+ },
+ {
+  "label": "cmdparse: a joined body line is never the delimiter (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if (whole.lstrip(\"\\t\") if dash else whole) == delim:\n                break",
+  "new": "            if False:\n                break"
+ },
+ {
+  "label": "cmdparse: the cut-short check joins no rest (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return ESAC_ANY.search(join_continuations(rest)) is not None",
+  "new": "    return ESAC_ANY.search(rest) is not None"
+ },
+ {
+  "label": "cmdparse: the cut-short check joins inside single quotes (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    body = join_continuations(body)  # `ca\\<newline>se`",
+  "new": "    body = body.replace(\"\\\\\\n\", \"\")  # `ca\\<newline>se`"
+ },
+ {
+  "label": "require-review: the parse-failure net joins nothing (TASK-164)",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "        if re.search(r\"push|\\bgh\\b|op-?rev|review\", join_continuations(cmd), re.IGNORECASE):",
+  "new": "        if re.search(r\"push|\\bgh\\b|op-?rev|review\", cmd, re.IGNORECASE):"
+ },
+ {
+  "label": "require-review: the parse-failure net joins every one (TASK-164)",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "        if re.search(r\"push|\\bgh\\b|op-?rev|review\", join_continuations(cmd), re.IGNORECASE):",
+  "new": "        if re.search(r\"push|\\bgh\\b|op-?rev|review\", cmd.replace(\"\\\\\\n\", \"\"), re.IGNORECASE):"
+ },
+ {
+  "label": "enforce: the parse-failure text check joins nothing (TASK-164)",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "print(join_continuations(read_payload()[0]))",
+  "new": "print(read_payload()[0])"
+ },
+ {
+  "label": "enforce: the parse-failure text check joins every one (TASK-164)",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "print(join_continuations(read_payload()[0]))",
+  "new": "print(read_payload()[0].replace(\"\\\\\\n\", \"\"))"
+ },
+ {
+  "label": "block-ai: the unparseable-text scan joins nothing (TASK-164)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if PATTERN.search(re.sub(r\"[\\\"'\\\\]\", \"\", join_continuations(cmd))):",
+  "new": "        if PATTERN.search(re.sub(r\"[\\\"'\\\\]\", \"\", cmd)):"
+ },
+ {
+  "label": "block-ai: the raw-text scan joins nothing (TASK-164)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if PATTERN.search(join_continuations(cmd)) or",
+  "new": "    if PATTERN.search(cmd) or"
+ },
+ {
+  "label": "block-ai: the raw-text scan joins every one (TASK-164)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if PATTERN.search(join_continuations(cmd)) or",
+  "new": "    if PATTERN.search(cmd.replace(\"\\\\\\n\", \"\")) or"
+ },
+ {
+  "label": "lint_probes: a $( in double quotes passes (TASK-169)",
+  "file": ".claude/scripts/lint_probes.py",
+  "old": "                elif c == \"`\" or text.startswith(\"$(\", k):\n                    out.append(k)\n                    break\n                k += 1",
+  "new": "                elif c == \"`\":\n                    out.append(k)\n                    break\n                k += 1"
+ },
+ {
+  "label": "lint_probes: a backquote in double quotes passes (TASK-169)",
+  "file": ".claude/scripts/lint_probes.py",
+  "old": "                elif c == \"`\" or text.startswith(\"$(\", k):\n                    out.append(k)\n                    break\n                k += 1",
+  "new": "                elif text.startswith(\"$(\", k):\n                    out.append(k)\n                    break\n                k += 1"
+ },
+ {
+  "label": "lint_probes: an unquoted $( passes (TASK-169)",
+  "file": ".claude/scripts/lint_probes.py",
+  "old": "            elif c == \"`\" or text.startswith(\"$(\", k):\n                out.append(k)\n                break\n            elif c == \"(\"",
+  "new": "            elif False:\n                out.append(k)\n                break\n            elif c == \"(\""
+ },
+ {
+  "label": "lint_probes: single quotes not skipped (TASK-169)",
+  "file": ".claude/scripts/lint_probes.py",
+  "old": "            elif c == \"'\":\n                k = _single_end(text, k + 1)\n                continue\n            elif text.startswith(\"$'\", k):",
+  "new": "            elif False:\n                k = _single_end(text, k + 1)\n                continue\n            elif text.startswith(\"$'\", k):"
+ },
+ {
+  "label": "lint_probes: $'\u2026' not skipped (TASK-169)",
+  "file": ".claude/scripts/lint_probes.py",
+  "old": "            elif text.startswith(\"$'\", k):\n                k = _ansi_end(text, k + 2)\n                continue\n            elif c == \"`\"",
+  "new": "            elif False:\n                k = _ansi_end(text, k + 2)\n                continue\n            elif c == \"`\""
+ },
+ {
+  "label": "lint_probes: a row's $(payload \u2026) wrapper flagged (TASK-169)",
+  "file": ".claude/scripts/lint_probes.py",
+  "old": "            if WRAPPER.match(text, k):",
+  "new": "            if False:"
+ },
+ {
+  "label": "lint_probes: rows not linted, only payload calls (TASK-169)",
+  "file": ".claude/scripts/lint_probes.py",
+  "old": "CALL = re.compile(r\"(?<![\\w-])(?:payload|check)\\w*",
+  "new": "CALL = re.compile(r\"(?<![\\w-])(?:payload)\\w*"
+ },
+ {
+  "label": "block-ai: an unknown variable in a file word reads nothing (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if value is None or (argv.dir_unknown and not os.path.isabs(value)):\n        raise Unresolved(word)",
+  "new": "    if value is None:\n        return []\n    if argv.dir_unknown and not os.path.isabs(value):\n        raise Unresolved(word)"
+ },
+ {
+  "label": "block-ai: a relative file after an unfollowed cd is read (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if value is None or (argv.dir_unknown and not os.path.isabs(value)):",
+  "new": "    if value is None:"
+ },
+ {
+  "label": "block-ai: a glob in a file word isn't expanded (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if any(ch in value for ch in \"*?[\"):",
+  "new": "    if False:"
+ },
+ {
+  "label": "block-ai: head/tail/sed not readers (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "READERS = {\"cat\", \"head\", \"tail\", \"sed\"}",
+  "new": "READERS = {\"cat\"}"
+ },
+ {
+  "label": "block-ai: head -n's count read as a file (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if argv[0] in (\"head\", \"tail\") and a in COUNT_OPTS or argv[0] == \"sed\" and a in SED_SCRIPT_OPTS:",
+  "new": "        if argv[0] == \"sed\" and a in SED_SCRIPT_OPTS:"
+ },
+ {
+  "label": "block-ai: sed -e's script read as a file (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if argv[0] in (\"head\", \"tail\") and a in COUNT_OPTS or argv[0] == \"sed\" and a in SED_SCRIPT_OPTS:",
+  "new": "        if argv[0] in (\"head\", \"tail\") and a in COUNT_OPTS:"
+ },
+ {
+  "label": "block-ai: sed's attached -e leaves the first file a script (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if argv[0] == \"sed\" and a.startswith((\"-e\", \"--expression=\", \"-f\", \"--file=\")):",
+  "new": "        if False:"
+ },
+ {
+  "label": "block-ai: sed's first word read as a file (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    words, k, script = [], 1, argv[0] == \"sed\"",
+  "new": "    words, k, script = [], 1, False"
+ },
+ {
+  "label": "block-ai: a program on a file in a substitution passes (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            if any(os.path.isfile(p) for p in files_named(a, argv, d)):\n                return True",
+  "new": "            if False:\n                return True"
+ },
+ {
+  "label": "block-ai: a program on an unresolved word in a substitution passes (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        except Unresolved:\n            return True\n    return False",
+  "new": "        except Unresolved:\n            return False\n    return False"
+ },
+ {
+  "label": "block-ai: echo/printf words read as files (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "TEXT_COMMANDS = {\"echo\", \"printf\"}",
+  "new": "TEXT_COMMANDS = set()"
+ },
+ {
+  "label": "block-ai: a program outside any substitution read as a file reader (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        elif argv.in_subst and reads_unmodeled_file(argv, d):",
+  "new": "        elif reads_unmodeled_file(argv, d):"
+ },
+ {
+  "label": "block-ai: no program in a substitution checked (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        elif argv.in_subst and reads_unmodeled_file(argv, d):",
+  "new": "        elif False:"
+ },
+ {
+  "label": "block-ai: a herestring read as a file (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "              if \"<\" in op and not op.startswith(\"<<\") and target]",
+  "new": "              if \"<\" in op and target]"
+ },
+ {
+  "label": "block-ai: an unresolved file word passes (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    except Unresolved as exc:\n        unresolved(exc.args[0])",
+  "new": "    except Unresolved as exc:\n        texts = []"
+ },
+ {
+  "label": "cmdparse: a quoted $(\u2026) is no substitution to in_subst (TASK-170)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    state[\"subst\"] = state.get(\"subst\", 0) + 1\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: an unquoted $(\u2026) is no substitution to in_subst (TASK-170)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                parens.append(n == 0 and bool(raw) and raw[-1].endswith(\"$\"))",
+  "new": "                parens.append(False)"
+ },
+ {
+  "label": "cmdparse: the walk leaves in_subst set after it (TASK-170)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        yield _context(argv, state), state[\"dir\"], redirects\n    state[\"subst\"] = depth\n",
+  "new": "        yield _context(argv, state), state[\"dir\"], redirects\n"
+ },
+ {
+  "label": "cmdparse: Argv.in_subst never set (TASK-170)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    argv.in_subst = state.get(\"subst\", 0) > 0\n",
+  "new": ""
+ },
+ {
+  "label": "enforce: the payload in an environment variable again (TASK-172)",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "verdict=$(printf '%s' \"$input\" | python3 -c \"$PROG\" \"$HOOK_LIB\" \"$hook_cwd\" 2>/dev/null)",
+  "new": "verdict=$(printf '%s' \"$input\" | env HOOK_INPUT=\"$input\" python3 -c \"$PROG\" \"$HOOK_LIB\" \"$hook_cwd\" 2>/dev/null)"
+ },
+ {
+  "label": "cmdparse: a failed cd ~/\u2026 under HOME '' not marked (TASK-173)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            state[\"cd_stayed\"] = True\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: a later cd leaves the failed-cd mark (TASK-173)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    state.pop(\"cd_stayed\", None)\n",
+  "new": ""
+ },
+ {
+  "label": "enforce: no absolute-path hint (TASK-173)",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "            if v == \"protected\" and argv.cd_stayed:",
+  "new": "            if False:"
+ },
+ {
+  "label": "enforce: the hint verdict lets the commit through (TASK-173)",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "  protected|protected-cd)",
+  "new": "  protected)"
+ },
+ {
+  "label": "enforce: the hint verdict prints no hint (TASK-173)",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if [ \"$verdict\" = protected-cd ]; then",
+  "new": "    if false; then"
+ },
+ {
+  "label": "cmdparse: the join's <<- strips no tabs from the delimiter line (TASK-164)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if (line.lstrip(\"\\t\") if dash else line) == delim:\n                if logical is not None:",
+  "new": "            if line == delim:\n                if logical is not None:"
+ },
+ {
+  "label": "block-ai: sed -f skips its script file (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            if argv[0] == \"sed\" and a in (\"-f\", \"--file\") and k + 1 < len(argv):",
+  "new": "            if False:"
+ },
+ {
+  "label": "block-ai: sed -fFILE skips its script file (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            if a.startswith(\"-f\") and len(a) > 2:",
+  "new": "            if False:"
+ },
+ {
+  "label": "block-ai: sed --file=FILE skips its script file (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            elif a.startswith(\"--file=\"):",
+  "new": "            elif False:"
+ },
+ {
+  "label": "lint_probes: the wrapper scan reads no substitution in its double quotes (TASK-169)",
+  "file": ".claude/scripts/lint_probes.py",
+  "old": "                if text.startswith(\"$(\", k):\n                    k = _wrapper_end(text, k)",
+  "new": "                if False:\n                    k = _wrapper_end(text, k)"
+ },
+ {
+  "label": "block-ai: sed bundles never parsed (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if argv[0] == \"sed\" and a.startswith(\"-\") and not a.startswith(\"--\") and len(a) > 2 and a[1] not in \"ef\":",
+  "new": "        if False:"
+ },
+ {
+  "label": "block-ai: sed bundle e/f not consumed (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "                if flag in \"ef\":",
+  "new": "                if False:"
+ },
+ {
+  "label": "block-ai: sed bundle f script not scanned (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "                    if flag == \"f\":",
+  "new": "                    if False:"
+ },
+ {
+  "label": "block-ai: sed bundle attached script ignored (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "                        if value:\n                            words.append(value)",
+  "new": "                        if False:\n                            words.append(value)"
+ },
+ {
+  "label": "block-ai: sed bundle separate script ignored (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "                        elif k + 1 < len(argv):\n                            words.append(argv[k + 1])",
+  "new": "                        elif False:\n                            words.append(argv[k + 1])"
+ },
+ {
+  "label": "block-ai: sed bundle leaves input as implicit script (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "                    script = False\n                    k += 1 if value else 2",
+  "new": "                    script = True\n                    k += 1 if value else 2"
+ },
+ {
+  "label": "block-ai: sed bundle i suffix read as further flags (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "                if flag == \"i\":",
+  "new": "                if False:"
+ },
+ {
+  "label": "block-ai: sed unknown bundle accepted (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "                if flag not in \"nErsuz\":",
+  "new": "                if False:"
+ },
+ {
+  "label": "block-ai: reader -- ignored (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if a == \"--\" and not end_options:",
+  "new": "        if False:"
+ },
+ {
+  "label": "block-ai: reader -- does not end option parsing (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            end_options = True",
+  "new": "            end_options = False"
+ },
+ {
+  "label": "block-ai: reader filenames after -- not collected (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if end_options:",
+  "new": "        if False:"
+ },
+ {
+  "label": "block-ai: sed implicit expression after -- read as filename (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            if script:\n                script = False  # sed still",
+  "new": "            if False:\n                script = False  # sed still"
  }
 ]

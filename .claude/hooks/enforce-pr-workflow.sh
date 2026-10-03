@@ -99,22 +99,26 @@ except Exception:
 [ -n "$hook_cwd" ] || hook_cwd="$PWD"
 branch=$(git -C "$hook_cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)
 
-verdict=$(HOOK_INPUT="$input" HOOK_CWD="$hook_cwd" HOOK_LIB="$(cd "$(dirname "$0")" && pwd)/lib" python3 <<'PY' 2>/dev/null
+HOOK_LIB="$(cd "$(dirname "$0")" && pwd)/lib"
+# The program goes to Python as an argument and the payload on stdin, never in an environment variable: past
+# ARG_MAX (about 1 MB) exec would fail, and the text check below would refuse a command it could have parsed
+# (TASK-172). An empty verdict (no python3, a crash, a program that couldn't be read) falls back to it too.
+IFS= read -r -d '' PROG <<'PY' || true
 import json, os, re, shlex, subprocess, sys
 
 # openproceedings: the command is read by the shared cmdparse walk, as the other gates read it (review gate round
 # 3): separators with or without spaces, redirects apart from the words (`git checkout main 2>/dev/null`),
 # `cd`/`pushd`/`popd` (a target it can't resolve leaves the directory unknown), `$` words, exports and the
 # assignments before `bash -c`, `bash -c`/`eval`, git aliases, and command names by basename (`/usr/bin/git`).
-sys.path.insert(0, os.environ.get("HOOK_LIB", ""))
+sys.path.insert(0, sys.argv[1])
 from cmdparse import (Argv, FailClosed, ParseError, base as _base, expand_git_alias, expand_word, git as _git,
-                      git_anchored, git_config, git_config_opaque, git_dir, git_subcommand, push_config,
+                      git_anchored, git_config, git_config_opaque, git_dir, git_subcommand, payload, push_config,
                       push_config_risk, walk, xargs_hides_args)
 
-HOOK_CWD = os.environ.get("HOOK_CWD") or os.getcwd()
+HOOK_CWD = sys.argv[2] or os.getcwd()
 
 try:
-    cmd = json.loads(os.environ.get("HOOK_INPUT", "")).get("tool_input", {}).get("command", "")
+    cmd = (payload().get("tool_input") or {}).get("command") or ""  # the payload, read from stdin (TASK-172)
 except Exception:
     cmd = ""
 
@@ -550,6 +554,10 @@ def analyze_pass(cmd, cwd, env_empty):
             # in the second pass a push word that is empty when HOME/TMPDIR/USER are unset names no refspec at all
             # (`git push origin $TMPDIR`: TASK-067 final review gate)
             v = git_verdict(resolved(call, cd_, env_empty), cd_, state)
+            if v == "protected" and argv.cd_stayed:
+                # it stayed in this checkout because a `cd ~/…` fails with HOME '': say how to name the target
+                # plainly (TASK-173)
+                v = "protected-cd"
             if v != "allow":
                 return v
     return "allow"
@@ -564,14 +572,17 @@ else:
     else:
         print(result)
 PY
-)
+verdict=$(printf '%s' "$input" | python3 -c "$PROG" "$HOOK_LIB" "$hook_cwd" 2>/dev/null)
 
 # Fail closed: if the command can't be parsed (or the parser crashed), refuse any command whose text has git and
 # a write word in it (TASK-067 final review gate: `git push origin HEAD:d''ev <<EOF`, an unclosed heredoc bash
 # still runs, passed a plain-text match); line continuations are joined first.
 if [ "$verdict" = "parse-fail" ] || { [ -z "$verdict" ] && command -v python3 >/dev/null 2>&1; }; then
-  joined=$(printf '%s' "$input" | python3 -c 'import json, sys
-print((json.load(sys.stdin).get("tool_input") or {}).get("command", "").replace("\\\n", ""))' 2>/dev/null) || joined=$input
+  # cmdparse's one join, which joins every continuation in text it can't scan (TASK-164)
+  joined=$(printf '%s' "$input" | python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+from cmdparse import join_continuations, read_payload
+print(join_continuations(read_payload()[0]))' "$HOOK_LIB" 2>/dev/null) || joined=$input
   if printf '%s' "$joined" | grep -Eq 'git' \
      && printf '%s' "$joined" | grep -Eq 'push|commit|merge|reset|rebase|cherry-pick|revert|[^a-z]am[^a-z]|branch|update-ref|checkout|switch|worktree|fetch|pull'; then
     verdict="opaque"
@@ -614,7 +625,7 @@ if [ -z "$verdict" ]; then
 fi
 
 case "$verdict" in
-  protected)
+  protected|protected-cd)
     echo "Review gate: protected branches (main, dev) take no direct commits/pushes/merges. Open a PR:" >&2
     echo "  git switch -c <branch>" >&2
     echo "  git commit ...   then, in its own call:   git push -u origin <branch>" >&2
@@ -623,6 +634,11 @@ case "$verdict" in
     echo "Review is not required (you may merge your own PR once checks pass) — but the PR is mandatory." >&2
     echo "(Deleting a remote feature branch is allowed — it cannot rewrite a protected branch's history.)" >&2
     echo "(Syncing a local protected branch with origin is fine: 'git pull' or 'git merge --ff-only <ref>'.)" >&2
+    if [ "$verdict" = protected-cd ]; then
+      # TASK-173: read with HOME '' (the agent's shell may have it), the `cd ~/…` fails and git runs here
+      echo "If this commit is meant for another checkout, name it with an absolute path, not 'cd ~/…':" >&2
+      echo "  git -C /absolute/path/to/worktree commit ...   (with HOME unset or empty, 'cd ~/x' fails and stays here)" >&2
+    fi
     exit 2
     ;;
   protected-merge)
