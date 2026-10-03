@@ -66,3 +66,13 @@ autofix and CI, and write the URL↔state reducer.
 - A toggle's accessible name must contain its visible text (WCAG 2.5.3): "Light" shown with the name
   "Switch to dark theme" fails. Stable text "Dark theme" plus `aria-pressed`, tested with Testing Library
   under jsdom (which needs a `matchMedia` stub for next-themes).
+
+## Addendum — 2026-10-03: exact workspace pins and lock metadata
+
+The dependency update's functional CI passed with Vitest resolved to 5.0.3 even though the frontend
+manifest pinned exactly `5.0.3` and the root lockfile's frontend workspace recorded `^5.0.3`.
+Successful installation proves the resolved version works, but not that the workspace metadata
+records the intended exact pin. Correct that single metadata field without regenerating unrelated
+platform-specific optional packages, and keep the as-built frontend stack description synchronized
+with its manifest. PR #100 updates Next/eslint-config-next to 16.3.7 and Vitest to 5.0.3;
+`docs/specs/05-frontend.md` now also corrects the inherited stale React description to 19.3.0.
