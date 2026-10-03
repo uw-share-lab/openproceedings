@@ -187,3 +187,11 @@ The docs/task closure commit is later than tested source8d273 and requires fresh
 review; do not claim the earlier remote run tested the closure SHA. Evidence and exact shard table:
 `docs/results/2026-10-02-mutation-sharding-recovery.md`. Propagated to the existing nightly/mutation
 contracts in spec08 and the as-built results; no new runner behavior introduced by closure.
+
+## Addendum — 2026-10-03 (quickstart branch selection)
+
+A plain clone follows the repository default branch, while completed pre-release work currently lives
+on `dev`. The README now explicitly clones `dev` and distinguishes that moving pre-release branch from
+a future fixed release tag. Verify the documented clone against the remote instead of assuming that a
+local clean checkout proves a new reader receives the same version. This is a documentation-only
+follow-up; it does not promote `dev` to `main` or perform a release.
