@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-02 19:21'
+updated_date: '2026-10-03 14:36'
 labels:
   - ops
   - security
@@ -49,4 +49,6 @@ Full-tree security-reviewer pass before going public with an instance.
 - CORS: compose passes no --cors-origin (the web app is on the same origin behind Caddy), so a foreign Origin gets no access-control-allow-origin.
 - Rate limit: keyed on X-Forwarded-For, which the API believes only from Caddy's fixed address (--trusted-proxy 172.30.80.2 by default). Caddy replaces an incoming X-Forwarded-For, so a client can't spoof it through the proxy. Check that Caddy's access log shows real client addresses on the host, IPv6 included (deploy/README.md, First start, step 4).
 - New privileged surface for security-reviewer: the ops one-off (root, CHOWN, DAC_OVERRIDE, FOWNER, no network; the record store and indexes/). It was reviewed in the TASK-065 PR.
+
+2026-10-03 code-only main promotion: fresh whole-application security review of main 0b31ebc425c3b27611550c116f1e3907330ff878 to dev 07fe70f0fb6b18202f819149088cfcc54b75ef00 approved with no Must/Should/Nit findings. Fresh make tooling exited 0 and 404 focused security tests passed. The report is summarized in docs/results/2026-10-03-release-preparation.md; full local report and raw evidence are /tmp/main-promotion-security-review.md and /tmp/main-promotion-security-{tooling,tests}.log. This refreshes AC#1 evidence only: AC#2 remains unchecked until rate limits and CORS are verified on an actual deployed instance. No public instance or tag was created.
 <!-- SECTION:NOTES:END -->

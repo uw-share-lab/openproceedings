@@ -13,3 +13,12 @@
 # tantivy_version = "0.26.2"
 # query_version = "2"
 # notes = "optional: one line on the data, e.g. a new crawl or a changed default filter"
+
+[releases."0.1.0"]
+index_version = "5cc8e14c2f9a"
+snapshot_hash = "d552baa07aed6bd754720c7ef17bc7d9ef7a645531fb95d6bc4174c2eacf91b8"
+tokenizer_version = "3"
+schema_version = "3"
+tantivy_version = "0.26.2"
+query_version = "2"
+notes = "First release candidate, verified on a copied 95,877-paper snapshot; promotion does not deploy data."
