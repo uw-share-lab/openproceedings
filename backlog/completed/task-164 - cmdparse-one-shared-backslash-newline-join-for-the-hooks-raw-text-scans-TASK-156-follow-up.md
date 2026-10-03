@@ -3,11 +3,11 @@ id: TASK-164
 title: >-
   cmdparse: one shared backslash-newline join for the hooks' raw-text scans
   (TASK-156 follow-up)
-status: In Progress
+status: Done
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-03 05:29'
+updated_date: '2026-10-03 08:06'
 labels:
   - security
   - tooling
@@ -33,7 +33,7 @@ Source: TASK-156 review (2026-10-02), deferred. Bash deletes a backslash-newline
 <!-- AC:BEGIN -->
 - [x] #1 cmdparse exposes one backslash-newline join (outside single quotes and heredoc bodies) that preprocess() uses; every raw-text scan in the hooks (list them in the notes) calls it instead of its own join
 - [x] #2 Case-table rows for each raw-text path: a keyword split by a continuation is blocked, and a backslash-newline inside single quotes or a quoted heredoc body is not joined
-- [ ] #3 Each new branch has a mutant in .claude/scripts/mutants/gates.json; `make tooling` and `python3 .claude/scripts/mutate.py --changed` pass
+- [x] #3 Each new branch has a mutant in .claude/scripts/mutants/gates.json; `make tooling` and `python3 .claude/scripts/mutate.py --changed` pass
 - [x] #4 Probes in the new rows use TASK-169's helper (data only, never an executed shell)
 - [x] #5 The shared join never raises on input it can't scan, and no fail-closed fallback blocks less than it does today (those fallbacks run after a parse failure and today join every backslash-newline); a case-table row proves it with a stray quote before a split `pu\<newline>sh`
 <!-- AC:END -->
@@ -53,9 +53,17 @@ Recovered shared join used by preprocess, cmdparse case cut-short, require-revie
 
 2026-10-03 independent Must: learning rename mutant label claimed dropping --find-renames but replacement explicitly forced --no-renames. Removed false equivalence and added unchanged-rename BLOCK paired with rename-plus-new-content ALLOW, preserving production hook. Official prior629 Linux run interrupted exit137; never pass evidence. Bounded red/green and official targeted mutant checks underway before new exact-source full417 validation.
 
-Bounded Oct3 regression RED on explicit --no-renames:866passed/1failed, unchanged rename incorrectlyallowed while rename+extension allowed (/tmp/hooks-rename-red.exit1). Production restored; official mutate.py --match learning-rename-detection targeted check baseline passes and mutant KILLED:1 mutants,0 problems,exit0 (/tmp/hooks-rename-official-targeted.log/.exit). Full417 exact-source run and task closure still pending.
+Bounded Oct3 regression RED on explicit --no-renames:866passed/1failed, unchanged rename incorrectlyallowed while rename+extension allowed (/tmp/hooks-rename-red.exit contains 1). Production restored; official mutate.py --match learning-rename-detection targeted check baseline passes and mutant KILLED:1 mutants,0 problems,exit0 (/tmp/hooks-rename-official-targeted.log/.exit). Full417 exact-source run and task closure still pending.
 
-Oct3 independent QA Should: case-position equivalent marker changed real protect-data-dir verdicts on benign unsupported syntax (no security bypass). Added data-only controls preserving spec08 conservative shape policy. Replacement RED:868passed/2failed, both unsupported shapes incorrectlyallowed, ordinary case ALLOW control passed (/tmp/hooks-case-red.log/.exit1). Removed false marker and corrected label; production parser unchanged. Prior895 full run stopped only owned container,47kills/exit137 archived as interrupted diagnostic, never PASS. Official targeted mutant proof and fresh exact-source review/full417 pending.
+Oct3 independent QA Should: case-position equivalent marker changed real protect-data-dir verdicts on benign unsupported syntax (no security bypass). Added data-only controls preserving spec08 conservative shape policy. Replacement RED:868passed/2failed, both unsupported shapes incorrectlyallowed, ordinary case ALLOW control passed (/tmp/hooks-case-red.log; /tmp/hooks-case-red.exit contains 1). Removed false marker and corrected label; production parser unchanged. Prior895 full run stopped only owned container,47kills/exit137 archived as interrupted diagnostic, never PASS. Official targeted mutant proof and fresh exact-source review/full417 pending.
 
 Official GREEN after restoring unchanged production parser: mutate.py --match case-position replacement baseline passed, mutant KILLED;1 mutants,0problems,exit0 (/tmp/hooks-case-official-targeted.log/.exit). Syntax, shellcheck, learning-index and diff checks pass. Full417 and remaining task closure still pending new exact-source independent review.
+
+Complete official make mutate-changed on reviewed source 9d035a1877e806e8ea11b5c9fde7ca3cc557812a: 417 mutants: 0 problem(s), exit 0; 413 killed and four independently audited equivalent survivors, no stale patterns. Raw /tmp/hooks-official-linux-9d.log, exact .head, .exit contains 0; post-run host/container tracked-byte hashes unchanged. Fresh Node22 make lint and make tooling both passed exit 0 (/tmp/hooks-lint-9d.log and /tmp/hooks-tooling-9d.log). Interrupted earlier runs remain diagnostic only. Final metadata commit gates and exact-head review follow.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Shared continuation joining now drives preprocess and raw scans, preserving single-quote/heredoc boundaries and conservative parse-failure refusal. Exact boundary controls, Linux case-comparison coverage, and corrected rename/case equivalence regressions are proven by complete official 417-mutant validation and make tooling, both exit 0.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -3,11 +3,11 @@ id: TASK-172
 title: >-
   enforce-pr-workflow reads its payload from stdin, not the HOOK_INPUT env var
   (TASK-156 follow-up)
-status: In Progress
+status: Done
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-02 10:33'
-updated_date: '2026-10-02 20:49'
+updated_date: '2026-10-03 08:06'
 labels:
   - security
   - tooling
@@ -29,7 +29,7 @@ Source: TASK-156 review (PR #83, 2026-10-02), deferred. TASK-156 moved the other
 <!-- AC:BEGIN -->
 - [x] #1 enforce-pr-workflow.sh passes the hook payload to Python on stdin (or a temp file), with no HOOK_INPUT variable
 - [x] #2 A case-table row with a payload over ARG_MAX is parsed and judged normally (allowed when it should be), and the existing rows pass
-- [ ] #3 `make tooling` and `python3 .claude/scripts/mutate.py --changed` pass
+- [x] #3 `make tooling` and `python3 .claude/scripts/mutate.py --changed` pass
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -42,4 +42,12 @@ Preserve recovered implementation; reproduce regressions, scan sed script files,
 
 <!-- SECTION:NOTES:BEGIN -->
 Recovered stdin payload transport and oversized allow row verified by make tooling; changed mutation verification pending.
+
+Complete official make mutate-changed on reviewed source 9d035a1877e806e8ea11b5c9fde7ca3cc557812a: 417 mutants: 0 problem(s), exit 0; 413 killed and four independently audited equivalent survivors, no stale patterns. Raw /tmp/hooks-official-linux-9d.log, exact .head, .exit contains 0; post-run host/container tracked-byte hashes unchanged. Fresh Node22 make lint and make tooling both passed exit 0 (/tmp/hooks-lint-9d.log and /tmp/hooks-tooling-9d.log). Interrupted earlier runs remain diagnostic only. Final metadata commit gates and exact-head review follow.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Workflow hook payload travels through stdin so oversized safe commands are judged normally. Oversized payload controls, complete official 417-mutant validation and make tooling passed exit 0.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -138,3 +138,14 @@ Run the new review gate on its own tooling: five routed reviewers (code, securit
   unsupported syntax before claiming parser mutants equivalent. Full official verification remains pending.
 - Official targeted mutation verification passed its full table baseline and killed this replacement:
   `1 mutants: 0 problem(s)`, exit 0. This focused proof does not replace the pending full changed run.
+
+## Addendum — 2026-10-03 (complete recovered-hooks verification)
+
+- The reviewed source `9d035a18` completed the official `make mutate-changed` run in isolated Linux:
+  `417 mutants: 0 problem(s)`, exit 0. All 413 behavior-changing mutants were killed, including both
+  corrected equivalence labels; the four surviving equivalent replacements were independently audited
+  against their actual hook predicates. No stale pattern or unexpected survivor remained. Source bytes
+  stayed unchanged throughout. Earlier interrupted runs remain diagnostic history, not pass evidence.
+- Fresh Node 22 `make lint` and `make tooling` passed. Tasks 164, 170, 172 and 173 were completed through
+  the Backlog CLI only after this proof. The final task/learning commit changes metadata only; fresh full
+  tests and final lint/tooling plus exact-head review remain required before publication.
