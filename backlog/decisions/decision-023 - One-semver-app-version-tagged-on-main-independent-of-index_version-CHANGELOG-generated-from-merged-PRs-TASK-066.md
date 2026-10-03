@@ -74,3 +74,16 @@ code and the index's manifest. The process and checklist are spec 08 §Release.
   agent, `/open-pr` (a promotion doesn't use it), the `pr-workflow`, `repo-conventions` and
   `no-ai-attribution` skills, the Makefile's `changelog` target, `.claude/hooks/block-ai-attribution.sh`,
   `.claude/scripts/tests/test-changelog.sh` and `.claude/scripts/mutants/changelog.json`.
+
+## Compatibility clarification — 2026-10-03
+
+Decisions 030 and 033 subsequently added compatibility readers for independently supported schema 2/3
+and tokenizer 2/3 indexes. The original same-version assumption above is historical: supported retained
+pins can reproduce on the current reader when `QUERY_VERSION` matches, while unsupported versions or
+incompatible Tantivy require the matching historical release. Replay against changed inputs reports
+`drifted`; release tables alone cannot classify an individual older record.
+
+The MINOR-bump rule and fresh current-index verification/deployment requirement remain unchanged.
+Spec 08, the release-manager guidance and generated changelog now distinguish those operational release
+requirements from the reader's support for retained pins. The first tagged release also makes no claim
+that development search records do not exist.

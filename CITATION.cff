@@ -4,6 +4,8 @@ message: >-
   search as a search record and report the record's link, its index_version and the openproceedings release
   (`op --version`): a saved record keeps its index from being retired, so the search can be replayed.
 type: software
+version: 0.1.0
+date-released: 2026-10-03
 title: "openproceedings: exact, reproducible Boolean search over NeurIPS, ICLR and ICML titles and abstracts"
 abstract: >-
   openproceedings is exact, reproducible Boolean search over the titles and abstracts of NeurIPS, ICLR and

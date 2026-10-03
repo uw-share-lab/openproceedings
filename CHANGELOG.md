@@ -10,7 +10,7 @@ papers a query matches: a search record pins its `index_version`, `tokenizer_ver
 it with the same QUERY_VERSION; otherwise as `drifted`, naming what changed. Each release's Data section
 names the index it was verified on and which saved records still reproduce.
 
-## Unreleased
+## 0.1.0
 
 ### Added
 
@@ -38,6 +38,11 @@ names the index it was verified on and which saved records still reproduce.
 - exports name each abstract's source (TASK-138) ([#49](https://github.com/uw-share-lab/openproceedings/pull/49))
 - builder expansions per group and the parts that fit when read-only (TASK-111) ([#50](https://github.com/uw-share-lab/openproceedings/pull/50))
 - venue_name on PaperRecord for the paper page status line (TASK-112) ([#51](https://github.com/uw-share-lab/openproceedings/pull/51))
+- release process, versioning and a generated changelog (TASK-066) ([#54](https://github.com/uw-share-lab/openproceedings/pull/54))
+- takedown tooling across snapshots, index versions and exports (TASK-136) ([#55](https://github.com/uw-share-lab/openproceedings/pull/55))
+- ingest: link ICLR 2017 workshop copies to their conference twins; read scholarmend 0.1.5's invitation (TASK-159, TASK-157) ([#82](https://github.com/uw-share-lab/openproceedings/pull/82))
+- add tested deployment setup and release runbook ([#89](https://github.com/uw-share-lab/openproceedings/pull/89))
+- Show twin records and follow their takedowns; stabilize dedup and reader tests ([#92](https://github.com/uw-share-lab/openproceedings/pull/92))
 
 ### Changed
 
@@ -45,6 +50,11 @@ names the index it was verified on and which saved records still reproduce.
 - Defer the semantic layer: v1 is boolean search only (TASK-131) ([#30](https://github.com/uw-share-lab/openproceedings/pull/30))
 - Commit the first real coverage report: the M4 gate passes (TASK-054) ([#31](https://github.com/uw-share-lab/openproceedings/pull/31))
 - Serve every abstract on public instances (decision-018, TASK-063) ([#33](https://github.com/uw-share-lab/openproceedings/pull/33))
+- query: tokenizer loop fast paths; /search re-measured on the real corpus (TASK-088) ([#77](https://github.com/uw-share-lab/openproceedings/pull/77))
+- engine: verified clauses name the shorter id list; warm p99 in report_80k (TASK-076) ([#78](https://github.com/uw-share-lab/openproceedings/pull/78))
+- explain importing and filtering existing Scholar RIS collections ([#90](https://github.com/uw-share-lab/openproceedings/pull/90))
+- narrow exclusion aggregation and index ordinal membership with measured evidence ([#91](https://github.com/uw-share-lab/openproceedings/pull/91))
+- make pre-release quickstart branch explicit ([#96](https://github.com/uw-share-lab/openproceedings/pull/96))
 
 ### Fixed
 
@@ -64,6 +74,20 @@ names the index it was verified on and which saved records still reproduce.
 - query: diagnostic quotes escape control characters and backticks (TASK-141) ([#48](https://github.com/uw-share-lab/openproceedings/pull/48))
 - ICLR 2013/2017 conference venueids take track from the venue string (TASK-142) ([#47](https://github.com/uw-share-lab/openproceedings/pull/47))
 - keep a v1 rule-5 survivor that absorbed a speaking note out of the silent-twin collapse (TASK-147) ([#53](https://github.com/uw-share-lab/openproceedings/pull/53))
+- correct the reconcile property's conflicts oracle for a demoted note with disagreeing OpenReview sources (TASK-154) ([#59](https://github.com/uw-share-lab/openproceedings/pull/59))
+- ux-writer review of TASK-041-044's new strings (TASK-100) ([#60](https://github.com/uw-share-lab/openproceedings/pull/60))
+- convert Publish or Perish query dates to UTC with a recorded offset (TASK-077) ([#62](https://github.com/uw-share-lab/openproceedings/pull/62))
+- ICLR 2017 workshop copies of rejected papers keep their listing's track (TASK-152) ([#63](https://github.com/uw-share-lab/openproceedings/pull/63))
+- TASK-067 pre-release security review (AC#1) ([#64](https://github.com/uw-share-lab/openproceedings/pull/64))
+- api: quote 422 request locations through diagnostics.clip ([#71](https://github.com/uw-share-lab/openproceedings/pull/71))
+- frontend: quote reducer and URL-notice values through clip ([#72](https://github.com/uw-share-lab/openproceedings/pull/72))
+- ingest: cap combining-mark runs, title and abstract length at ingest, flagged (TASK-155) ([#79](https://github.com/uw-share-lab/openproceedings/pull/79))
+- refuse a filter value glued to a parenthesis; clip API values in the banner and replay lines (TASK-158, TASK-160) ([#81](https://github.com/uw-share-lab/openproceedings/pull/81))
+- tests: a letter after a lone vowel sign joins it in the tail property ([#86](https://github.com/uw-share-lab/openproceedings/pull/86))
+- hooks: close the TASK-156 cmdparse bypasses ([#83](https://github.com/uw-share-lab/openproceedings/pull/83))
+- ingest: a RIS row naming a listing never bridges a note's unknown track into it (TASK-174) ([#87](https://github.com/uw-share-lab/openproceedings/pull/87))
+- serve tokenizer 3 while preserving pinned tokenizer 2 queries ([#93](https://github.com/uw-share-lab/openproceedings/pull/93))
+- hooks: complete parser and attribution gate follow-ups ([#94](https://github.com/uw-share-lab/openproceedings/pull/94))
 
 ### Internal
 
@@ -76,3 +100,23 @@ names the index it was verified on and which saved records still reproduce.
 - Run the additive OpenAPI check on PRs against the base commit (TASK-129) ([#27](https://github.com/uw-share-lab/openproceedings/pull/27))
 - Open follow-up tasks from the 2026-09-29 reviews (TASK-137 to 140) ([#39](https://github.com/uw-share-lab/openproceedings/pull/39))
 - open follow-up tasks from the 2026-09-30 reviews (TASK-143 to 147) ([#52](https://github.com/uw-share-lab/openproceedings/pull/52))
+- build the year-edit property's inputs instead of assume()ing them (TASK-145) ([#56](https://github.com/uw-share-lab/openproceedings/pull/56))
+- open follow-up tasks from the 2026-09-30 work (TASK-148 to 153) ([#57](https://github.com/uw-share-lab/openproceedings/pull/57))
+- Hypothesis wall-clock checks gate only on CI runners (TASK-146) ([#58](https://github.com/uw-share-lab/openproceedings/pull/58))
+- clause properties build parseable inputs instead of assume() (TASK-153) ([#61](https://github.com/uw-share-lab/openproceedings/pull/61))
+- open follow-up tasks from the 2026-10-01 work (TASK-157 to 160) ([#74](https://github.com/uw-share-lab/openproceedings/pull/74))
+- build the web image in CI, digest-pin deploy/ base images, keep Dependabot off tantivy ([#73](https://github.com/uw-share-lab/openproceedings/pull/73))
+- bump the npm-minor-patch group with 3 updates ([#75](https://github.com/uw-share-lab/openproceedings/pull/75))
+- bump hypothesis from 6.168.1 to 6.168.3 in the uv-minor-patch group across 1 directory ([#76](https://github.com/uw-share-lab/openproceedings/pull/76))
+- merge queue for dev that keeps the review gate (TASK-161) ([#80](https://github.com/uw-share-lab/openproceedings/pull/80))
+- fail on duplicate backlog ids in the queue; decision-027 live notes; file TASK-162..169 ([#85](https://github.com/uw-share-lab/openproceedings/pull/85))
+- nightly: differential@50k, benchmarks with the 80k report, properties matrix, loud failures (TASK-057) ([#84](https://github.com/uw-share-lab/openproceedings/pull/84))
+- task-057: AC #1 met by proof run 3, task complete ([#88](https://github.com/uw-share-lab/openproceedings/pull/88))
+- ci: cover every mutant with eight nightly shards ([#95](https://github.com/uw-share-lab/openproceedings/pull/95))
+
+### Data
+
+- index_version `5cc8e14c2f9a`, snapshot `d552baa07aed6bd754720c7ef17bc7d9ef7a645531fb95d6bc4174c2eacf91b8`
+- TOKENIZER_VERSION 3 · SCHEMA_VERSION 3 · Tantivy 0.26.2 · QUERY_VERSION 2
+- First tagged release. Development records can reproduce on retained supported pins when QUERY_VERSION matches.
+- First release candidate, verified on a copied 95,877-paper snapshot; promotion does not deploy data.
