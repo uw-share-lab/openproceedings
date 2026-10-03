@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-02 19:17'
+updated_date: '2026-10-03 01:41'
 labels:
   - decision
   - ops
@@ -38,10 +38,18 @@ Source: decision-029 (TASK-159), Consequences, Deferred: owner decision needed. 
 - [ ] #2 The owner chose option 2 (follow the twin claim), so the behaviour is implemented in this task's PR (the owner asked for one PR, 2026-10-02): `takedowns.same_paper` follows twin pairs (API serve time on every loaded version, `op export`), `op snapshot build` withholds twins (`takedowns_twins`), `op takedown check` asks for each twin to be listed and logged, with tests, and spec 08 §Deploy describes it
 <!-- AC:END -->
 
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Final review correction: retain the title/authors fallback while collecting the independent union of twin links from served /papers and every pinned JSONL export; verify older-link/current-no-link and multiple-pinned cases.
+<!-- SECTION:PLAN:END -->
+
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Owner decision 2026-10-02 (via team-lead): option 2. A takedown follows twin links: listing either twin (ICLR 2017 workshop copy or conference submission, and any decision-029 twin, not only the 18 bibtex pairs) withholds the abstract on both, and both ids are listed and logged in the operator log.
 Built: takedowns.same_paper(listed, merges, ids, twins=pairs) links (record, twin) pairs both ways and transitively, together with merges and native ids. RecordFile.twins/twin_pairs read the claims at load. API Served.withheld_in uses the served snapshot's pairs plus the version's own, so an older snapshot without claims is covered. op export uses the exported snapshot's pairs plus the current index's (_current_twin_pairs; if that snapshot can't be read: one ERROR takedown_twins_unavailable and a stderr warning). snapshot.withhold withholds twins of listed/followed ids (Withholding.twins, BuildResult.takedowns_twins, JSON and stderr). op takedown check reports a listed paper's twin the list lacks, so both ids get listed and logged.
 Tests: tests/contract/test_twins.py (every twin withheld in /papers, /search and all four exports, plus op export, for any listed twin; pinned older version, record export and op export --index on a snapshot without claims; the unreadable-current warning; the check), tests/unit/test_takedowns.py, test_snapshot_takedowns.py. Spec 08 §Deploy and the op rows, spec 01, spec 04, and the snapshots and logging-standards skills are updated.
+
+Final production review Should fixed: the checker now unions every served and pinned twin link independently of the preferred title/authors record. Regressions cover current metadata without links, an older version with links, and two pinned versions with distinct and repeated links. Focused pytest test_takedown_check.py and test_takedowns.py: 82 passed; focused ruff format/check and git diff --check passed. Spec 08 clarified; learning addendum records the fallback-versus-union trap. Full final gates remain required before closure.
 <!-- SECTION:NOTES:END -->

@@ -103,6 +103,7 @@ def check(fetch: Fetch, listed: Withheld, merges: Iterable[tuple[str, str]] = ()
     versions = tuple(json.loads(body)["index_versions"])
     # each listed paper's title and authors, from the served index or any version's export of it
     papers = {rid: paper for rid in sorted(listed) if (paper := _served(fetch, rid, problems)) is not None}
+    twins = {rid: set(paper.get("twins") or ()) for rid, paper in papers.items()}
     found = set(papers)
     cells: dict[str, list[str]] = {}
     for rid in sorted(listed):
@@ -120,10 +121,11 @@ def check(fetch: Fetch, listed: Withheld, merges: Iterable[tuple[str, str]] = ()
                     continue
                 answered.add(fmt)
                 for rid in ids:
-                    if fmt == "jsonl" and rid not in papers:
-                        papers.update(
-                            (o["id"], o) for o in map(json.loads, text.splitlines()) if o["id"] == rid
-                        )
+                    if fmt == "jsonl":
+                        for paper in map(json.loads, text.splitlines()):
+                            if paper["id"] == rid:
+                                papers.setdefault(rid, paper)
+                                twins.setdefault(rid, set()).update(paper.get("twins") or ())
                     verdict = _in_export(fmt, text, rid)
                     if verdict is None:
                         continue
@@ -141,7 +143,7 @@ def check(fetch: Fetch, listed: Withheld, merges: Iterable[tuple[str, str]] = ()
         exports += _other_ids(fetch, version, papers, problems)
     # after the versions: a listed paper only a pinned version holds is checked too
     _merged_elsewhere(fetch, papers, tuple(merges), problems)
-    problems += _twins_unlisted(papers, listed)
+    problems += _twins_unlisted({rid: {"twins": sorted(links)} for rid, links in twins.items()}, listed)
     problems += [
         f"{rid}: no index this instance loads holds it; check the id on the list"
         for rid in sorted(listed - found)

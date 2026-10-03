@@ -318,3 +318,34 @@ def test_a_listed_paper_only_a_pinned_version_holds_has_its_merges_checked() -> 
         f"{other}: withheld as {RID}'s paper (a snapshot's merges.csv links them), but its title differs; "
         "check that merge" in problems
     )
+
+
+@pytest.mark.parametrize("pinned_twins", [((TWIN,),), ((TWIN,), ("op:iclr:2024:OldCopy", TWIN))])
+def test_twin_links_from_every_pinned_version_survive_served_empty_links(
+    pinned_twins: tuple[tuple[str, ...], ...],
+) -> None:
+    api = FakeApi()
+    versions = tuple(f"pinned-{i}" for i in range(len(pinned_twins)))
+
+    def fetch(path: str, params: Mapping[str, str]) -> tuple[int, str]:
+        if path.endswith("/meta"):
+            return 200, json.dumps({"index_versions": versions})
+        status, body = api.fetch(path, params)
+        if path == f"/api/v1/papers/{RID}" and "q" not in params:
+            obj = json.loads(body)
+            obj["paper"]["twins"] = []
+            return status, json.dumps(obj)
+        if path.endswith("/export") and params["format"] == "jsonl":
+            rows = [json.loads(line) for line in body.splitlines()]
+            for row in rows:
+                row["twins"] = pinned_twins[versions.index(params["index_version"])]
+            return status, "".join(json.dumps(row) + "\n" for row in rows)
+        return status, body
+
+    report = takedown_check.check(fetch, frozenset({RID}))
+    expected = sorted({twin for links in pinned_twins for twin in links})
+    assert report.problems == tuple(
+        f"{twin}: the twin of listed {RID} (decision-029, the same paper), withheld with it; list it too and "
+        "log a `withheld` entry for it"
+        for twin in expected
+    )
