@@ -162,3 +162,11 @@ chmod's errno name) and carries on.
 5. Is `logging` configured anywhere other than `logs.py`, or is `print` used for diagnostics?
 6. Are expected conditions (a 404 for an unknown paper id, a parse error) being logged as ERROR? A user's
    parse error is not a server error. It's DEBUG at most.
+
+## Framework instrumentation
+
+FastAPI's locked `opentelemetry-api` dependency does not include an SDK or exporter; telemetry is
+inactive in the shipped configuration. Adding an SDK/exporter or enabling automatic framework
+instrumentation requires a separate privacy review. Framework spans can include `url.query` and
+therefore raw search text; our access-log redaction does not automatically sanitize those spans.
+Use the existing safe structured fields and verify span attributes before enabling export.

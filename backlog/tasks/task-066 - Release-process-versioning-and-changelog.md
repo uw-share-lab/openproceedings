@@ -4,7 +4,7 @@ title: 'Release process, versioning and changelog'
 status: In Progress
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-03 15:52'
+updated_date: '2026-10-03 17:23'
 labels:
   - ops
 milestone: m-6
@@ -59,4 +59,6 @@ Left for the release itself (not tasks; the main session decides): the first rel
 Pre-merge compatibility audit: fixed spec03 unsupported-version summary, spec08 older-pin/replay statements, release-manager guidance and changelog universal drift/first-tag claims. Decision023 has a dated clarification referencing decisions030/033; accepted history and MINOR/fresh-index requirements retained. Changelog real case table RED 10 expected failures, GREEN 133/0; five mutants added. Final checks and exact-head review pending; no tag or deployment claimed.
 
 2026-10-03 compatibility verification completed: official make mutate-changed killed all 48 expected changelog mutants, including five new regression cases, with zero survivors/stale patterns and exit 0. Complete post-correction make test exited 0: backend 6,757 passed/three optional skips in 192.77s; frontend 4,724 passed/41 files in 6.35s. Lint and generated changelog --check --release 0.1.0 exited 0. Current definitions total 778; the earlier 773-mutant nightly proof remains tied to its original source. Final tooling, verification of evidence/task edits, exact-head review and protected PR checks remain closing gates; no tag, hosting or target-store backup is claimed.
+
+2026-10-03: Owner requested solo-maintainer main promotion (zero mandatory approving reviews). GitHub protection before/after comparison proved only the review count changed; all CI and other guards remain. PR101 merged normally as 87b7dea321df3ad73045d6214158a284d7b797e2. Workflow/spec/agent guidance and decision023 receive dated clarification with the protected back-merge. No tag or deployment; those acceptance criteria remain open.
 <!-- SECTION:NOTES:END -->

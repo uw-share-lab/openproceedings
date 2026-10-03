@@ -1,6 +1,6 @@
 ---
 name: pr-workflow
-description: The openproceedings branch and PR flow (feature → PR → dev → PR → main), the per-sha review records that gate push and PR creation, the order of /review-gate then /open-pr, the six required CI checks, and the second-approval rule for main. Use when starting a branch, preparing to push, opening or promoting a PR, or diagnosing a push/PR the hooks blocked.
+description: The openproceedings branch and PR flow (feature → PR → dev → PR → main), the per-sha review records that gate push and PR creation, the order of /review-gate then /open-pr, the six required CI checks, and the solo-maintainer approval policy for main. Use when starting a branch, preparing to push, opening or promoting a PR, or diagnosing a push/PR the hooks blocked.
 ---
 
 # PR workflow
@@ -14,8 +14,9 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
   where type is `feat`, `fix`, `chore`, `docs` or `test` (e.g. `feat/wildcard-expansion`); a release's own
   bookkeeping uses `release/X.Y.Z` and `release/X.Y.Z-back-merge` (spec 08 §Release).
 - Feature PRs target `dev`. `main` is only updated by a `dev → main` promotion PR (`release-manager`,
-  spec 08 §Release), which needs **a second person's approving review** (branch protection) on top of green
-  checks, and `dev` up to date with `main`: after each promotion, `main` is merged back into `dev`.
+  spec 08 §Release), which requires green checks but **no mandatory approving review** under the
+  solo-maintainer policy applied on 2026-10-03, and `dev` up to date with `main`: after each promotion,
+  `main` is merged back into `dev`.
 - Branch protection: both `dev` and `main` accept only PRs whose required checks are green. `dev` merges
   through a **merge queue** (TASK-161, decision-027; §Merge method).
 

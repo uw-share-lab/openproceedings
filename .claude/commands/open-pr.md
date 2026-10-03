@@ -18,5 +18,5 @@ Open a pull request for the current branch. Base: ${ARGUMENTS:-dev}.
 5. `python3 .claude/scripts/record-review.py APPROVE <dispositions.md> --attest` to add the
    `<!-- op-review: <sha> APPROVE -->` line that CI's `review-attested` check reads.
 6. A `dev → main` promotion doesn't use this command (steps 1, 2 and 5 don't apply to it): spec 08 §Release
-   step 5 opens it with `gh pr create --base main --head dev`, and it needs a second person's approval.
+   step 5 opens it with `gh pr create --base main --head dev`, with required checks green and no mandatory approving review under the solo-maintainer policy.
 Report the PR URL and which CI checks it must pass.

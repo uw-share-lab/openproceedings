@@ -116,3 +116,12 @@ including the five new regressions; every failure was in the real changelog case
 post-correction `make test` also exited 0 (6,757 backend passes, three optional skips, 4,724 frontend
 passes). Keep the earlier nightly's 773-mutant result tied to its original source; five new definitions
 make the current repository total 778, not evidence that the older nightly tested them.
+
+## 2026-10-03 solo-maintainer protection configuration
+
+GitHub's admin merge option does not override an enforced approving-review requirement, and a PR
+author cannot approve their own PR. When the owner explicitly chooses a solo-maintainer policy,
+change only the required approving-review count through its dedicated API endpoint. Compare the
+complete before/after branch protection objects to prove CI and other protections were preserved.
+Keep release instructions and agent guidance synchronized with the configured policy, and append
+a dated decision clarification rather than silently rewriting the earlier accepted requirement.

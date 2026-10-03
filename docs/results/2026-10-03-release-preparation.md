@@ -167,3 +167,17 @@ Closing gates before merge also include final tooling, verification of the resul
 exact-commit review and PR checks. The main PR triggers fresh private/public image builds; its API
 additivity check explicitly permits main's pre-backend scaffold to lack a released contract, while
 still refusing an unavailable baseline or a backend whose contract snapshot is missing.
+
+## Owner-authorized main promotion
+
+After the readiness checks above passed, the owner requested a solo-maintainer GitHub workflow.
+The attempted admin merge was rejected by GitHub's enforced review requirement; self-approval was
+also rejected. At the owner's explicit request, main's required approving-review count was changed
+from one to zero. A full before/after protection comparison confirmed that every other setting,
+including all six required CI checks, was preserved. This supersedes this report's earlier pending
+second-person approval requirement.
+
+PR #101 merged normally at 2026-10-03T17:22:13Z as
+`87b7dea321df3ad73045d6214158a284d7b797e2`. Its tree equals the reviewed dev candidate
+`78ce9c99a9ec203b24ca2fb2280e1cfb6a1d45c8`; no tag or deployment was performed.
+The protected back-merge and documentation synchronization follow through dev's PR workflow.
