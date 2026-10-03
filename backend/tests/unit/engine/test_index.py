@@ -157,8 +157,16 @@ def test_a_rebuild_verifies_and_reports_the_existing_index(built: Path, tmp_path
 
 def test_a_changed_index_is_refused(built: Path, tmp_path: Path) -> None:
     victim = next(p for p in built.iterdir() if p.suffix == ".store")
+    before = victim.stat()
+    original = victim.read_bytes()
     victim.chmod(0o644)
-    victim.write_bytes(victim.read_bytes() + b"x")
+    # Tantivy may still map this inode: write_bytes truncates it to zero before writing, which can
+    # SIGBUS a live reader on Linux. Append the same corruption without shrinking the mapped file.
+    with victim.open("ab") as store:
+        store.write(b"x")
+    assert victim.stat().st_ino == before.st_ino
+    assert victim.stat().st_size == before.st_size + 1
+    assert victim.read_bytes() == original + b"x"
     with pytest.raises(IndexBuildError, match="don't match its manifest"):
         verify_index(built)
     with pytest.raises(IndexBuildError, match="don't match its manifest"):
