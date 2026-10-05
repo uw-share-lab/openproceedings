@@ -1,8 +1,8 @@
 # Compare with your records — design
 
 Status: **built; heuristic pass done** (the batch review gate's usability-auditor and ux-reviewer, 2026-10-05;
-dispositions in §Heuristic pass) · Ethics: no study with people has been run; any (TASK-032, TASK-047) needs
-University of Waterloo ORE clearance first (`hci-methods`) · Backlog: TASK-177, follow-ups TASK-183–186 and
+dispositions in §Heuristic pass) · Ethics: cleared (owner-reported 2026-09-27, TASK-032; file # not recorded); no
+session on this panel yet · Backlog: TASK-177, follow-ups TASK-183–186 and
 TASK-195 · Spec: 04 §Comparing with a RIS file; 05 §Components 9; 07 §B · Index:
 [search workspace](2026-09-27-search-workspace.md) · Copy deck pointer: [copy deck §10](2026-09-27-copy-deck.md)
 
