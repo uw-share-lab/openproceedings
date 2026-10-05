@@ -21,6 +21,9 @@ const LIMITS = {
   max_query_depth: 64,
   max_verified_clauses: 3,
   max_verification_candidates: 12345,
+  max_counted_groups: 4,
+  max_counted_terms: 777,
+  max_counted_ids: 8888,
 };
 
 function page(
@@ -114,6 +117,50 @@ describe("the sections", () => {
       expect(links.map((l) => l.getAttribute("href"))).toContain(exampleHref(e.q, e.mode));
       expect(document.body.textContent).toContain(e.canonical);
     }
+  });
+
+  it("describes Add $ as an edit of the query that adds at most one character, not Scholar's stemming", () => {
+    page();
+    const text = document.getElementById("scholar")?.textContent ?? "";
+    expect(text).toContain("offers Add $: it writes $ after every listed term that can take one");
+    expect(text).toContain("A phrase gets it on its last word.");
+    expect(text).toContain(
+      `terms with fewer than ${golden.constants.min_wildcard_stem} letters or digits, terms that end in a symbol or have another $ beside them, a lowercase and, or or not, and filter values are left as typed`,
+    );
+    expect(text).toContain("the notice says so and offers nothing");
+    expect(text).toContain("Nothing is searched until you press Search");
+    expect(text).toContain("benchmark$ matches benchmark and benchmarks, not benchmarking");
+    expect(text).toContain("fewer forms than Google Scholar counts");
+  });
+
+  it("gives the full-text figure the diagnostics row's ED-19 sentence points to, with its index and source", () => {
+    page();
+    const text = document.getElementById("scholar")?.textContent ?? "";
+    expect(text).toContain("can come from full text, which $ does not recover");
+    expect(text).toContain("index fd13d8d27535 (2026-10-05)");
+    expect(text).toContain("1,752 (96.6%) match the string nowhere in their title or abstract");
+    expect(text).toContain("docs/results/2026-10-05-scholar-comparison.md");
+  });
+
+  it("names the three tools for a lower count than Google Scholar's, in the order to use them", () => {
+    page();
+    const text = document.getElementById("scholar")?.textContent ?? "";
+    const at = [
+      "First, Add $",
+      "Then, after a search, the group counts",
+      "Last, where this instance offers it, Compare with your records",
+    ].map((s) => text.indexOf(s));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(text).toContain("the group whose removal adds the most papers is the one narrowing the search");
+    expect(text).toContain(
+      "For what titles and abstracts can explain, three tools can help you find out why",
+    );
+    expect(text).toContain(
+      "First, Add $ matches one more letter or digit on the terms its notice names (benchmark$: benchmarks); it is not Google Scholar's stemming.",
+    );
+    expect(text).not.toContain("show why");
+    expect(text).not.toContain("stemming would have matched");
   });
 
   it("takes every number and value list from the golden, none written into the page", () => {

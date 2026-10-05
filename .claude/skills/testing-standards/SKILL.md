@@ -36,10 +36,28 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
   that needs a response gets a recorded fixture; there is no marker to opt out. Recording fixtures is a
   manual `op ingest` run by a person, never part of `make test` or CI.
 - **Frontend stubs answer with the API's own fixtures**, not hand-typed partial bodies: a `GET /coverage`
-  stub serves `src/components/coverage/coverage-fixture.json`, a record stub `record-fixture.json` (both kept
-  equal to the served API by backend contract tests). A partial body typed as the response is a lie the
+  stub serves `src/components/coverage/coverage-fixture.json`, a record stub `record-fixture.json`, a
+  comparison stub `src/components/compare/compare-fixture.json` (all kept equal to the served API by backend
+  contract tests). A partial body typed as the response is a lie the
   compiler can't see: the next component that reads one more field crashes in an unrelated test file
   (TASK-110, `concept-builder.test.tsx`).
+
+- **e2e instances.** `fixture_server.py` serves one index from three configurations (API port: default;
+  +1 `tight`: low group-count bounds, rate limit and comparison cooldown on, a tiny comparison file cap; +2
+  `plain`: comparisons off). A spec reaches a state only another configuration gives with
+  `useInstance(page, "tight")` (`frontend/e2e/instances.ts`, which re-addresses the page's API calls), never by
+  writing the answer in the browser. Tests on `tight` share one client network, so one that needs a
+  comparison waits out another's cooldown through the panel's own Retry. Add a configuration there rather
+  than a second fixture server.
+- **A test of CodeMirror's parse reads the whole tree.** `syntaxTree(state)` is what CodeMirror parsed within
+  its start-up time budget (wall clock), so under load it can be the tree of a prefix: use
+  `ensureSyntaxTree(state, length, timeout)` in a test (`grammar.test.ts`; it failed about once a run at load
+  100 before, and a test there now pins it with a clock that outruns the budget). A test that passes only
+  when the machine is quick is waiting on a time budget somewhere: find it before raising a timeout.
+- **e2e ports.** Playwright's fixture API and web server listen on 8000 and 3000 unless `OP_E2E_API_PORT` /
+  `OP_E2E_WEB_PORT` are set (`playwright.config.ts`, `fixture_server.py`, and every spec that calls the API
+  directly read the same two). Locally the config reuses a server already on its port, so with another
+  instance on 8000/3000 an unset run would test *that* instance: set both variables.
 
 ## Rules
 1. **TDD.** Write the failing test first, watch it fail for the right reason, then implement. A bug fix

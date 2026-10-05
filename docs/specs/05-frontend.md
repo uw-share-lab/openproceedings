@@ -157,7 +157,41 @@ warnings, the save's index check), the design doc says so; its open questions li
    `/meta`. The **server's parser is authoritative.** The client grammar only highlights, it never
    decides. A `WARN_MIXED_AND_OR` line offers **Load with parentheses**, which splices the warning's
    `reading` field over its span in the draft (never searching); with no `reading` it isn't offered. The
-   client never parses a diagnostic's `message` (TASK-099).
+   client never parses a diagnostic's `message` (TASK-099); it only draws the message's backticked runs as
+   code (`Coded`; a backtick inside quoted text is clipped to `\x60`, so the runs are the server's own). The
+   Scholar-mode `COMPAT_POP_DOLLAR` notices (one per `$`) are one line, "`$` is read as a wildcard in N
+   places: …", which says the widening is what `$` is for and so counts differ from a Google Scholar run,
+   with the server's notices, unchanged, behind "Show all N notices" (gate review, USAB-N4): after Add `$`
+   they would otherwise read as N warnings about what the tool wrote.
+
+   The Scholar-mode `COMPAT_NO_STEMMING` line offers **Add `$`** (TASK-175; 02 §Word forms), because a
+   Scholar string run as typed identifies fewer records than it means in Scholar (the review's primary string:
+   27 as typed, 67 with `$` on six terms on index `05a0541717f6`; 33 and 101 on `fd13d8d27535`, 2026-10-05;
+   `docs/results/2026-10-05-scholar-comparison.md`). "Add $ to all N terms" writes `$` at every place
+   `/parse` reported in `word_forms`; **Choose terms** (shown for two or more terms) opens a group of
+   checkboxes, one per term (a phrase is marked "on its last word", a repeated term "written N times" and gets
+   its `$` in every place), with "Add $ to the ticked terms" (`aria-disabled`, saying why in visible text,
+   until one is ticked). Both are an edit of the **draft**, exactly like Load with parentheses: one change in the editor
+   (so the editor's undo and **Revert edits** take it back), focus moves to the editor (from the Builder tab, to
+   the Builder tab itself: the button is gone and the builder's controls are rebuilt only once `/parse`
+   answers; A11Y-M4; Load with parentheses does the same), the row is labelled a
+   draft, and nothing is searched or put in the URL until Search; then `q` holds the `$` (guarantee 3),
+   browser Back returns to the query as typed, and the expansions row lists what each `$` matched (guarantee
+   6). The client only splices (`src/lib/word-forms.ts`, checked against the server's own strings in
+   `word-forms-golden.json`): it never finds a term, and offers nothing while the editor holds other text
+   than the one reported on. When the notice is shown and `word_forms` is empty (no named term can take a
+   `$`, or the query would pass the length cap with them added; the client can't tell which, so it names
+   both) the line says so in place of the buttons: "`$` can't be added to these terms for you. A term is
+   left as typed when it has too few letters or digits, has a symbol or another `$` beside it, or is a
+   lowercase `and`, `or` or `not`. The same happens when the query would be over the length limit with `$`
+   added. Type a wildcard yourself where one is valid." The chooser ends with the same reasons for a named
+   term it doesn't list. A line under the notice says what `$` is: "`$` after a
+   term also matches it with one more letter or digit: `benchmark$` matches `benchmark` and `benchmarks`, not
+   `benchmarking`. That is fewer forms than Google Scholar counts; type `*` for any ending." Both states then
+   say what `$` can't do (gate review, USAB-S4): "Google Scholar also reads the full text of a paper;
+   openproceedings matches titles and abstracts only. Most of a difference in counts can come from that,
+   and `$` does not recover it." (the figure behind "most" is in help, with its source). The action never
+   claims to reproduce Scholar's stemming, and there is no "stem" setting anywhere (guarantee 1).
 
    The highlighting lexer selects tokenizer 2 or 3 from `/meta.tokenizer_version`, using 3 while metadata
    is absent (or names an unsupported version). A language compartment reconfigures when the served version
@@ -181,6 +215,36 @@ warnings, the save's index check), the design doc says so; its open questions li
    `backend/tests/contract/test_frontend_builder_golden.py` parses: an unedited rewrite keeps the
    `canonical`, and an edited query means exactly what its chips say). At run time the builder checks the
    server's reading of each query it wrote and says so if it differs.
+   *Group counts (TASK-176, `group-counts.ts`; copy BD-12).* After a search, each group shows its two counts
+   on one line, with how many papers leaving the group out adds ("529 papers match this group by itself ·
+   2,337 match the query without it (+2,270)"), and a line above the groups gives the search's total to
+   compare them with and says how to read them ("67 papers match the whole query. Each group shows how many
+   papers match it by itself (the other groups removed), and how many match the query without it, with how
+   many that adds in brackets: the group whose removal adds the most papers narrows the search most. The
+   query's limits, leave-out terms and default filters apply to every count."). The added number is
+   `total_without − total`; every other number is `/search`'s `groups`
+   and `total` as sent (04 §SearchResponse), never computed here; a builder group is given the counts whose
+   span holds one of its terms, and a group that means what an earlier counted one means says "Same as group
+   N, so it is counted once." while that earlier group's line says "without it and group M", since the query
+   without the group has neither copy (the canonical query holds it once; "means" is the server's reading, the
+   group's leaves in the server's `ast` of the query with their normalised tokens, never the typed text). They are shown only while the draft is the
+   searched query, in the same mode: an edit drops every count at once, since a count is a fact about the
+   query searched (an expansion, a fact about the index, stays), and a line says so ("Group counts are from
+   the last search. Search again to see them."). A query that is not an AND of groups shows
+   none; one whose counts the search doesn't have says why (`groups.not_counted`: more groups than the
+   instance counts; more terms or position-checked matches to read than it allows, with how to shorten the query (the
+   syntax help's instance limits name the three bounds from `/meta`); the instance was busy counting for other searches; the counts failed; they weren't ready in time, each of the
+   last three with "Search again to see them."; a reason this build doesn't know reads as a failure, the set being open). The read-only
+   builder shows the counts of each part that fits, or why there are none, with the same status. The Exclude
+   row has none: it is applied to every count. The counts are text inside their group and its description
+   (`aria-describedby`, so a screen reader hears them on entering the group; no colour; the `·` between them
+   is hidden from a screen reader, which hears a pause), and a polite status named "Group counts" says when
+   they arrive ("Group counts shown for 3 groups: 67 papers match the whole query.") or why there are none,
+   since they appear without focus moving. Outside the Builder tab, after a search whose groups were counted
+   and while the draft is that search, a line points to them ("Each of this query's 3 groups has a count in
+   the Builder tab: …" and a "Show group counts" button that opens the tab), and the syntax help's Google
+   Scholar section names the three tools for a lower count than Scholar's in the order to use them: Add `$`,
+   the group counts, Compare with your records.
 4. **Filter sidebar.** Venue, year range, track, status. Workshop is **off by default**. Each control shows
    its count and **edits the `track:`/`status:` clauses in `q`**.
 5. **Exclusion banner.** "212 workshop · 4 competition · 88 rejected excluded by default filters", with
@@ -312,6 +376,56 @@ warnings, the save's index check), the design doc says so; its open questions li
    (`sessionStorage`). `/record/[id]` (`components/record/record-view.tsx`) reads the stored record first
    (`?replay=false`), then its replay; the methods text and the exports appear once the replay has answered (or
    couldn't run: "Replay: waiting" on a 429 or `API_BUSY`), so a `mismatch` never shows either.
+9. **Compare with your records** (TASK-177; `components/compare/compare-records.tsx`, `lib/compare.ts`;
+   design `docs/design/2026-10-05-ris-comparison.md`). The project's own review (one team, n=1) asked what a
+   query does to the records it already held from Google Scholar; that other reviewers ask it too is an
+   assumption, untested until TASK-032 and TASK-047. A button beside Export and Save opens a panel under the results
+   header: choose a RIS file, **Compare**, and the searched query `(q, mode)` is compared with it on the shown
+   index (`POST /compare`, 04 §Comparing with a RIS file). It is drawn only when `GET /meta`'s
+   `limits.compare` is not null: an instance whose operator hasn't turned comparisons on doesn't offer it.
+   - **Before sending**, the panel says where the file goes ("sent to this instance for this one comparison;
+     not stored, not logged and not added to the index") and the caps from `limits.compare`; a file over
+     `max_body_bytes`, or an empty one, is refused in the browser with the size and the cap (the input is then
+     `aria-invalid`). Compare, while off, says why beside it: no file yet, a file too large, the search's own
+     reason, or the network's pause after a comparison ("Next comparison in N s", from the answer's
+     `next_comparison_seconds`; a local instance has none). The file's bytes
+     are sent as they are (never decoded in the browser, so the server can still refuse what isn't UTF-8),
+     and its name never leaves the browser.
+   - **Counts first.** A four-row table: Kept, Dropped, Not in the index, Added, each with its one-line
+     meaning and the server's `*_total`; then the file's accounting (records read, papers compared, records
+     from other venues, repeats). Every number is an API field, `reason_totals` included: nothing is counted
+     in the browser.
+   - **What "dropped" means** is said in place: the index holds the paper and this search doesn't return it
+     (other word forms only where the query asks, with `$` or `*`); Google Scholar matches full text and other
+     word forms; a dropped paper is not judged irrelevant. One sentence to copy says what the comparison found,
+     on what index and query (the server keeps nothing of it; TASK-195). When some kept or dropped papers are in the index only because a RIS file was
+     imported (`kept_ris_only_total`, `dropped_ris_only_total`; each such row is marked "import only"), a
+     warning says a match to them shows the import holds the paper, not that the index covers it.
+   - **Lists on demand.** Each list is a section with its count, the reasons with their counts (`excluded by a
+     default filter`, `no exact match in its title or abstract`, `matches only as another word form`, …; an
+     unknown `reason` is shown as sent, the enum being open), each with what to do next (add `$`, write the
+     filter into the query, keep it from your own file, check it by hand, report it), one toggle button whose
+     name doesn't change (its state in `aria-expanded`), and its
+     downloads. A row is the title (the file's own; a link to `/paper/[id]` with the query when the index
+     holds the paper, opened in a new tab and named so: the comparison is held by this page only), venue and year, its position in the file, how it was matched or why it wasn't, the
+     reason and the server's `detail` (less what the match line already says), and "import only", what a
+     person must check (named: "to check: is it in the index under another title, venue or year?"), and
+     "abstract withheld" as text. A list draws 100 rows at a time ("Show more").
+   - **Downloads** are the response's own text saved as sent: each list's `csv`, and for Added also
+     `added_ris` (what `GET /export` writes for those papers). The browser builds no cell.
+   - **Never a stale answer.** The comparison is keyed by `(q, mode, index_version)`: after another search its
+     numbers are not shown ("The search changed since the last comparison…"; the chosen file stays, so one
+     click compares again). An answer from another index, or whose `total` isn't the shown search's, is
+     refused in place (the second is a bug, worded as one). Compare is off, with the reason, while the draft
+     is dirty or the results are stale, as Export and Save are.
+   - **Accessibility.** A native file input with a visible label; the result's heading takes focus when the
+     answer lands (unless the panel was closed meanwhile) and a polite live region beside the panel says
+     "Comparison done: 51 kept, 1,756 dropped, 8 not in the index, 16 added."; refusals are alerts worded from
+     the envelope, a 429 with its countdown and Retry, a 503 `API_BUSY` retried by itself when its
+     `Retry-After` is up (up to 3 times in a row), a refused file with "Choose another file" and no Retry; a
+     running comparison shows a seconds counter and can be cancelled; separators (`·`) are hidden from screen
+     readers. Focus never falls to the page: Cancel and Retry hand it to
+     Compare, and the last "Show more" to the first row it drew. It fits 320 px (the table has two columns; titles wrap).
 
 ## Error handling
 
@@ -373,6 +487,35 @@ warnings, the save's index check), the design doc says so; its open questions li
   `reproduced`; targeted keyboard flows cover the primary editor, builder, filter, paging, export and save
   interactions, while axe samples success, error, expanded, dialog, builder, paper, record, coverage and
   syntax states in both themes at desktop and 320 px, and the footer's takedown contact is checked on the home,
-  search, paper and coverage pages at both widths.
+  search, paper and coverage pages at both widths. The fixture server offers comparisons (as a local
+  instance does): axe samples an answered comparison with a list open, and one test runs a comparison at
+  320 px and reads it by keyboard (focus on the result's heading, the counts, a list opened with Enter, no
+  sideways overflow, kept + added equal to the shown total). The ports are 8000 and 3000 unless
+  `OP_E2E_API_PORT` / `OP_E2E_WEB_PORT` move them, so a run can sit beside an instance already on them.
+- The three surfaces added after M3b each have a spec of their own (TASK-182): `word-forms.spec.ts` (Add `$`
+  to all terms and to ticked ones, the URL after Search, the expansions, Back to the typed query, a lowercase
+  `and` never offered, the line when nothing can be offered), `group-counts.spec.ts` (each group's two counts
+  equal to `/search`'s `groups`, the note, the announcement, no counts for an edited draft or a single group,
+  "Same as group N", and the too-many and too-costly notes) and `compare.spec.ts` (a file with a paper in
+  every list, each list opened and downloaded byte for byte, comparisons not offered, a file over the cap,
+  the network's cooldown with its countdown). Each runs its states through axe in both themes at 1280 and
+  320 px, checks they don't scroll sideways, and works them by keyboard. States that only another
+  configuration gives are the server's own answers: the fixture server runs three instances of the one index
+  (the default; `tight` on the next port: 2 groups and 5 terms counted, the rate limit on with a comparison
+  cooldown long enough to see, a 2,048-byte file cap; `plain` on the one after: comparisons off), and
+  `e2e/instances.ts` sends a page's API calls to one of them. Nothing is mocked in the browser.
+- The comparison panel's unit tests answer with `compare-fixture.json`, this API's own `POST /compare`
+  response (`backend/tests/contract/compare_fixture.py`, kept current by
+  `test_frontend_compare_fixture.py`).
 - Visual regression on the search view (both themes), with platform-specific baselines and Linux CI on a
-  fixed `ubuntu-24.04` runner label (whose hosted image revision can still change).
+  fixed `ubuntu-24.04` runner label (whose hosted image revision can still change). What an instance's
+  configuration decides is left out of the baselines (`e2e/visual.css`): the footer's contact, and the
+  "Compare with your records" button, offered only where comparisons are on. The Add `$` notice, the builder
+  with its group counts and an answered comparison are element baselines of their own
+  (`word-forms-*`, `group-counts-*`, `comparison-*`; TASK-182). New baselines are written by `npm run
+  e2e:update --workspace frontend`, on the platform they are for: the Linux ones on an amd64 `ubuntu-24.04`
+  host or runner, never on an arm64 Mac. No workflow writes them: without such a host, take them from CI's
+  own run. A test whose baseline is missing fails there and leaves its screenshot as
+  `frontend/test-results/<test>/<name>-actual.png` in the advisory `e2e` job's `playwright-report` artifact;
+  download it (`gh run download <run> -n playwright-report`), copy each to
+  `frontend/e2e/__screenshots__/visual.spec.ts-snapshots/<name>-linux.png`, look at it, and commit.

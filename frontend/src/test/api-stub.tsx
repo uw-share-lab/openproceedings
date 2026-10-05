@@ -14,7 +14,9 @@ export interface Call {
   readonly path: string;
   /** The request's query parameters (GET /search, /papers/{id}). */
   readonly query: URLSearchParams;
+  /** A JSON body parsed; any other body (a RIS file, `POST /compare`) as its text; `null` without one. */
   readonly body: unknown;
+  readonly contentType: string | null;
   readonly signal: AbortSignal;
 }
 
@@ -34,11 +36,14 @@ export function stubFetch(handler: Handler): { fetch: typeof globalThis.fetch; c
     if (!(input instanceof Request)) throw new Error("the typed client always passes a Request");
     const url = new URL(input.url);
     const text = input.method === "GET" ? "" : await input.text();
+    const contentType = input.headers.get("Content-Type");
+    const isJson = contentType === null || contentType.startsWith("application/json");
     const call: Call = {
       method: input.method,
       path: url.pathname,
       query: url.searchParams,
-      body: text === "" ? null : JSON.parse(text),
+      body: text === "" ? null : isJson ? JSON.parse(text) : text,
+      contentType,
       signal: input.signal,
     };
     calls.push(call);
@@ -97,6 +102,7 @@ export function parsed(q: string, over: Partial<ParseResponse> = {}): ParseRespo
     warnings: [],
     translations: [],
     filters: null,
+    word_forms: [],
     identification_query: q,
     index_version: "idx1",
     mode: "native",
@@ -116,6 +122,10 @@ export const META: Schemas["MetaResponse"] = {
     max_query_depth: 64,
     max_verification_candidates: 1,
     max_verified_clauses: 1,
+    max_counted_groups: 10,
+    max_counted_terms: 5000,
+    max_counted_ids: 300000,
+    compare: null,
   },
   query_version: "q1",
   tokenizer_version: "t1",

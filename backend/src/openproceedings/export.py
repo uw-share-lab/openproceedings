@@ -334,10 +334,10 @@ def _csv(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             "abstract_withheld_reason": r.get(_REASON),
             "twins": "; ".join(r.get(_TWINS) or ()),
         }
-        yield _csv_row(_cell(row[c]) for c in CSV_COLUMNS)
+        yield _csv_row(csv_cell(row[c]) for c in CSV_COLUMNS)
 
 
-def _cell(value: object) -> object:
+def csv_cell(value: object) -> object:
     """A CSV cell a spreadsheet won't run: text starting with `=`, `+`, `-`, `@`, a tab or a carriage return
     is prefixed with `'` (OWASP's CSV-injection guard; titles and abstracts come from anyone)."""
     if value is None:

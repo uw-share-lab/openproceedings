@@ -88,6 +88,39 @@ def _utf8(v: str) -> str:
     return v
 
 
+def title_text(raw: str) -> tuple[str, int]:
+    """A source's title as a record stores it, and how many control characters it lost (TASK-180): every
+    control character (Unicode category Cc: C0, DEL and C1) becomes a space, then whitespace is collapsed.
+    Nothing else changes, so the stored title is otherwise the source's. A space, never a deletion: the
+    tokenizer reads a control character as a separator (`SPEC\x02TRUM` is `spec`, `trum`), so the stored
+    title's tokens are the raw title's (`$`-math aside, where a space beside a delimiter reads differently),
+    and an invisible character never fuses two words. The count leaves out the controls that are whitespace
+    (tab, line breaks, U+001C-U+001F, U+0085), which collapsing always turned into a space."""
+    spaced = "".join(" " if unicodedata.category(c) == "Cc" else c for c in raw)
+    replaced = sum(unicodedata.category(c) == "Cc" and not c.isspace() for c in raw)
+    return " ".join(spaced.split()), replaced
+
+
+def title_evidence(evidence: str, replaced: int) -> str:
+    """A title claim's evidence, saying how many control characters `title_text` replaced (nothing is silent;
+    decision-036). Unchanged when none were."""
+    if not replaced:
+        return evidence
+    return f"{evidence} ({replaced} control character{'' if replaced == 1 else 's'} replaced by a space)"
+
+
+_REPLACED = re.compile(r" \(([1-9][0-9]*) control characters? replaced by a space\)\Z")
+
+
+def title_controls_replaced(record: PaperRecord) -> int:
+    """How many control characters `title_text` replaced in the record's title, read back from its title claims'
+    evidence (`title_evidence`); 0 when none were. The crawl reports count the titles this is above 0 for."""
+    return sum(
+        int(m.group(1)) for c in record.provenance
+        if c.field == "title" and (m := _REPLACED.search(c.evidence or ""))
+    )  # fmt: skip
+
+
 # Every string a record or claim holds: strict, and encodable, so a snapshot can always be written.
 Text = Annotated[StrictStr, AfterValidator(_utf8)]
 type ClaimValue = Text | StrictInt | tuple[Text, ...] | None

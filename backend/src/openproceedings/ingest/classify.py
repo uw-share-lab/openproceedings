@@ -266,11 +266,13 @@ def _v2p(track: str, **by_presentation: str) -> dict[str, tuple[str, str | None]
 
 
 # `content.venue` on an accepted, non-workshop API v2 submission note, exactly as held in the TASK-054 crawl
-# cache (counts in spec 01 §Presentation) or a recorded fixture: (venue, year) → string → (the track its
+# cache (2026: the TASK-178 one; counts in spec 01 §Presentation): (venue, year) → string → (the track its
 # venueid must give, presentation). Case and wording drift per year, so it's a table, never a regex. ICML
 # 2023's `OralPoster` and ICML 2025's `spotlightposter` are orals and spotlights that also had a poster slot:
 # the higher tier is the presentation. A `none` string is known and states no presentation (Tiny Papers'
-# Archive/Present/Notable tiers are not presentations). Anything unlisted is unmapped: `null`, counted.
+# Archive/Present/Notable tiers are not presentations). Anything unlisted is unmapped: `null`, counted. ICML
+# 2026's other tier, `ICML 2026 regular` (and `ICML 2026 Position Paper Track regular`), is left out on purpose:
+# it names no presentation, and nothing recorded says a regular paper was a poster.
 V2_PRESENTATION: dict[tuple[str, int], dict[str, tuple[str, str | None]]] = {
     ("ICLR", 2024): {
         **_v2p("main", oral="ICLR 2024 oral", spotlight="ICLR 2024 spotlight", poster="ICLR 2024 poster"),
@@ -282,7 +284,7 @@ V2_PRESENTATION: dict[tuple[str, int], dict[str, tuple[str, str | None]]] = {
         **_v2p("main", oral="ICLR 2025 Oral", spotlight="ICLR 2025 Spotlight", poster="ICLR 2025 Poster"),
         **_v2p("blogpost", none="ICLR 2025 Blogpost Track"),
     },
-    ("ICLR", 2026): _v2p("main", poster="ICLR 2026 Poster"),  # fixture only: not crawled yet
+    ("ICLR", 2026): _v2p("main", oral="ICLR 2026 Oral", poster="ICLR 2026 Poster"),  # no spotlight tier
     ("ICML", 2023): _v2p("main", oral="ICML 2023 OralPoster", poster="ICML 2023 Poster"),
     ("ICML", 2024): _v2p("main", oral="ICML 2024 Oral", spotlight="ICML 2024 Spotlight", poster="ICML 2024 Poster"),
     ("ICML", 2025): {
@@ -290,6 +292,10 @@ V2_PRESENTATION: dict[tuple[str, int], dict[str, tuple[str, str | None]]] = {
         **_v2p("position", oral="ICML 2025 Position Paper Track oral",
                spotlight="ICML 2025 Position Paper Track spotlightposter",
                poster="ICML 2025 Position Paper Track poster"),
+    },
+    ("ICML", 2026): {
+        **_v2p("main", spotlight="ICML 2026 spotlight"),
+        **_v2p("position", spotlight="ICML 2026 Position Paper Track spotlight"),
     },
     ("NeurIPS", 2023): {
         **_v2p("main", oral="NeurIPS 2023 oral", spotlight="NeurIPS 2023 spotlight", poster="NeurIPS 2023 poster"),

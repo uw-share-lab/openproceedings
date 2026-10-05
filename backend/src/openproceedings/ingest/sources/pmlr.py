@@ -25,7 +25,16 @@ from urllib.parse import urljoin, urlparse
 from pydantic import ValidationError
 
 from openproceedings.ingest import urls
-from openproceedings.ingest.record import Claim, ClaimField, ClaimValue, PaperRecord, Source, is_url
+from openproceedings.ingest.record import (
+    Claim,
+    ClaimField,
+    ClaimValue,
+    PaperRecord,
+    Source,
+    is_url,
+    title_evidence,
+    title_text,
+)
 from openproceedings.ingest.sources.common import (
     ListingReport,
     MinerError,
@@ -234,7 +243,7 @@ def _record(
 ) -> tuple[PaperRecord, str | None]:
     """The record and, when it has no abstract, why (`common.missing_reason`)."""
     assert volume.year is not None
-    title = collapse(entry.title)
+    title, replaced = title_text(entry.title)  # a control character becomes a space (decision-036)
     claims: list[Claim] = []
 
     def claim(fld: ClaimField, value: ClaimValue, evidence: str, at: datetime) -> None:
@@ -248,7 +257,7 @@ def _record(
     claim("year", volume.year, table, index.fetched_at)
     claim("track", volume.track, table, index.fetched_at)
     claim("status", "accepted", f"listed on {volume.index_url}", index.fetched_at)
-    claim("title", title, listed_on, index.fetched_at)
+    claim("title", title, title_evidence(listed_on, replaced), index.fetched_at)
     claim("urls.proceedings", entry.url, listed_on, index.fetched_at)
     if entry.forum:
         claim("urls.forum", f"https://openreview.net/forum?id={entry.forum}", listed_on, index.fetched_at)

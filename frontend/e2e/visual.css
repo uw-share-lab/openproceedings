@@ -9,3 +9,9 @@
 body > footer {
   display: none !important;
 }
+
+/* "Compare with your records" (TASK-177) is offered only where the instance's operator turned comparisons on,
+   so it is left out of the /search baselines too; accessibility.spec.ts opens and checks it. */
+button[data-compare-trigger] {
+  display: none !important;
+}

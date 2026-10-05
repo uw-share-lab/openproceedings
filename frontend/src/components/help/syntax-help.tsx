@@ -207,6 +207,10 @@ export function SyntaxHelp({
     max_query_depth: c.max_query_depth,
     max_verified_clauses: c.max_verified_clauses,
     max_verification_candidates: c.max_verification_candidates,
+    max_counted_groups: c.max_counted_groups,
+    max_counted_terms: c.max_counted_terms,
+    max_counted_ids: c.max_counted_ids,
+    compare: null, // `POST /compare`'s caps are no query limit: the help page doesn't show them (TASK-177)
   };
   return (
     <div className="space-y-8 text-sm">
@@ -409,6 +413,43 @@ export function SyntaxHelp({
           zero-or-one wildcard, and unquoted words side by side in an OR item are read as one phrase. Every
           translation is shown with the results. Google Scholar stems words and searches full text; here words
           match exactly, in titles and abstracts only.
+        </p>
+        <p>
+          So a Google Scholar string usually finds fewer papers here until its terms carry a wildcard. The
+          notice that lists the terms matched exactly offers <strong>Add $</strong>: it writes{" "}
+          <code className={CODE}>$</code> after every listed term that can take one, or after the terms you
+          tick under Choose terms, in the editor. A phrase gets it on its last word. Terms that already have a
+          wildcard, terms with fewer than {count(c.min_wildcard_stem)} letters or digits, terms that end in a
+          symbol or have another <code className={CODE}>$</code> beside them, a lowercase{" "}
+          <code className={CODE}>and</code>, <code className={CODE}>or</code> or{" "}
+          <code className={CODE}>not</code>, and filter values are left as typed; when no term can take one,
+          or the query would be over the length limit with them added, the notice says so and offers nothing.
+          Nothing is searched until you press Search, and the editor&apos;s undo takes the change back.{" "}
+          <code className={CODE}>$</code> adds at most one character (<code className={CODE}>benchmark$</code>{" "}
+          matches <code className={CODE}>benchmark</code> and <code className={CODE}>benchmarks</code>, not{" "}
+          <code className={CODE}>benchmarking</code>), which is fewer forms than Google Scholar counts; type{" "}
+          <code className={CODE}>*</code> for any ending. After a search, the expansions show every word each
+          wildcard matched.
+        </p>
+        <p>
+          Most of a difference from Google Scholar&apos;s count can come from full text, which{" "}
+          <code className={CODE}>$</code> does not recover. Measured once, for one review&apos;s main string
+          on index <code className={CODE}>fd13d8d27535</code> (2026-10-05): of the 1,813 papers Google Scholar
+          found in these venues and years, 1,752 (96.6%) match the string nowhere in their title or abstract,
+          even with other inflections of its words, and 32 (1.8%) match only with one (source: the
+          project&apos;s <code className={CODE}>docs/results/2026-10-05-scholar-comparison.md</code>). It is
+          one string&apos;s figure, not a rule for every query.
+        </p>
+        <p>
+          For what titles and abstracts can explain, three tools can help you find out why a string still
+          finds fewer papers here than in Google Scholar, in this order. First, <strong>Add $</strong> matches
+          one more letter or digit on the terms its notice names (<code className={CODE}>benchmark$</code>:{" "}
+          <code className={CODE}>benchmarks</code>); it is not Google Scholar&apos;s stemming. Then, after a
+          search, the <strong>group counts</strong> in the Builder tab show how many papers each group of the
+          query matches by itself and how many the query finds without it: the group whose removal adds the
+          most papers is the one narrowing the search. Last, where this instance offers it,{" "}
+          <strong>Compare with your records</strong> under the results checks your own exported records
+          against the query and says why each one it doesn&apos;t find is missed.
         </p>
         <Examples items={data.sections.scholar} />
       </Section>

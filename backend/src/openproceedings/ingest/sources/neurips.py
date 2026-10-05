@@ -33,7 +33,17 @@ from pydantic import ValidationError
 
 from openproceedings.ingest import urls
 from openproceedings.ingest.classify import NEURIPS_DB_2021_HOST, classify_neurips_listing
-from openproceedings.ingest.record import Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls, is_url
+from openproceedings.ingest.record import (
+    Claim,
+    ClaimField,
+    ClaimValue,
+    PaperRecord,
+    Source,
+    Urls,
+    is_url,
+    title_evidence,
+    title_text,
+)
 from openproceedings.ingest.sources.common import (
     ListingReport,
     MinerError,
@@ -267,7 +277,7 @@ def _record(
     year: int, native: str, entry: Entry, track: str, rule: str, listing: str, index: Page, page: Page
 ) -> tuple[PaperRecord, str | None]:  # fmt: skip
     """The record and, when it has no abstract, why (`common.MISSING`)."""
-    title = collapse(entry.title)
+    title, replaced = title_text(entry.title)  # a control character becomes a space (decision-036)
     claims: list[Claim] = []
 
     def claim(fld: ClaimField, value: ClaimValue, evidence: str, at: datetime) -> None:
@@ -279,10 +289,10 @@ def _record(
     for fld, value in (
         ("venue", "NeurIPS"),
         ("year", year),
-        ("title", title),
         ("urls.proceedings", entry.url),
     ):
         claim(fld, value, listed_on, index.fetched_at)  # type: ignore[arg-type]
+    claim("title", title, title_evidence(listed_on, replaced), index.fetched_at)
     claim("track", track, rule, index.fetched_at)
     claim("status", "accepted", f"listed on {listing}", index.fetched_at)
 

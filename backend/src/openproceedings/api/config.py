@@ -44,6 +44,23 @@ class RateLimit(BaseModel):
     # one token per this many ms of cold verification a request used, debited when it finishes (the bucket may
     # go below zero): a client's share of the verification slot is at most refill × this (round 4)
     verify_token_ms: float = Field(default=100.0, gt=0)
+    # one token per this many ms a comparison (`POST /compare`, TASK-177) held its slot: the wall time its file
+    # took to arrive plus the CPU time of the comparison, debited when it finishes like `verify_token_ms`. A
+    # client's share of the comparison slot is at most refill × this (50% at the defaults), a network's 4 × that.
+    # 500 ms, not 100: a comparison is seconds of work by design (about 10 s per 1,000 records), and at 100 one
+    # run would lock a reviewer out of search for minutes
+    compare_token_ms: float = Field(default=500.0, gt=0)
+    # the wall time a comparison's file took to arrive counts this many times over, in that debit and in the
+    # cooldown below: it is the part of a slot's time the client alone decides (a stalled upload holds the
+    # slot and does no work), so it is the dearest
+    compare_upload_weight: float = Field(default=4.0, ge=1)
+    # what bounds a network's share of the comparison slots (the token debit can't: a network's bucket refills
+    # 4 tokens/s, so several addresses of one network could hold a slot all the time). After a comparison, its
+    # client's network (IPv4 /24, IPv6 /48) starts no other for this many times the slot time it used (the
+    # upload weighted as above), and runs one at a time: a network's sustained share of a slot is at most
+    # 1 / (1 + factor) however many addresses it holds, 25% at 3 (7.7% for uploads that stall), and a reviewer
+    # waits under a minute after an 18 s comparison. 0 turns it off
+    compare_cooldown_factor: float = Field(default=3.0, ge=0)
     max_clients: int = Field(default=100_000, ge=1)  # buckets held in memory; the least recent is dropped
 
     @property
@@ -124,6 +141,26 @@ class ApiConfig(BaseModel):
     # query's work near 11-17 s idle at 80k (more wall time under load, which `max_verification_seconds` caps),
     # above the heaviest real review query (Trust-Evals main-2-pop, Scholar mode: 247,793 candidates, 10.2 s)
     max_verification_candidates: int = Field(default=300_000, ge=1)
+    # `/search` counts each concept group alone (spec 04 §SearchResponse, `groups`; TASK-176) for a query of at
+    # most this many groups: one more collection a group, no position check of its own. A query with more gets
+    # its result without them (`groups.not_counted`: `too_many_groups`); 10 is twice the widest Trust-Evals
+    # string's groups
+    max_counted_groups: int = Field(default=10, ge=1)
+    # and only when counting them reads at most this many terms, summed over the trees counted (each group
+    # alone and the query without each: `query.groups.Groups.terms_read`; a kept `NOT (… wildcards …)` is read
+    # by every one). Over it: the result without counts, `too_costly`. 5,000 admits every Trust-Evals string
+    # (the widest, main-2-pop, reads 243 on the real index) and refuses a query built to make 20 collections of thousands of terms
+    max_counted_terms: int = Field(default=5_000, ge=1)
+    # nor more than this many verified ids, summed the same way: a position-verified clause is an id set in
+    # its tree's query, resolved id by id by every collection that reads it (a kept `NOT (model NEAR/10
+    # model*)`: few terms, tens of thousands of ids, read by all 2 × N trees)
+    max_counted_ids: int = Field(default=300_000, ge=1)
+    # how long a finished search waits for its group counts: for a counting job no worker has taken (then
+    # `busy`: the workers are counting for other searches), and for one that is running (then `timed_out`).
+    # `search.GROUP_COUNT_GRACE_SECONDS` and `GROUP_COUNT_WAIT_SECONDS`; a test instance on a busy machine
+    # raises them (decision-034)
+    group_count_grace_seconds: float = Field(default=0.05, gt=0)
+    group_count_wait_seconds: float = Field(default=2.0, gt=0)
     # a request holding a verification slot longer than this logs `verification_slow` (WARNING)
     slow_verification_seconds: float = Field(default=5.0, gt=0)
     # a request's cold verifications together get this much wall time from its first slot; past it the verify
@@ -146,6 +183,43 @@ class ApiConfig(BaseModel):
     # Swagger UI at /api/v1/docs (it loads its script and styles from a CDN). Off unless asked for: `op serve`
     # turns it on for a loopback --host only (a local instance), or with --docs. openapi.json is always served
     serve_docs: bool = False
+    # `POST /compare` (TASK-177, decision-035): a reviewer's own RIS file against a query, parsed in memory
+    # for the one request and never stored or logged. Off unless asked for: `op serve` turns it on for a
+    # loopback --host without a trusted proxy (a local instance), or with --compare. While off, the route
+    # answers 403 `API_COMPARE_DISABLED`, `/meta`'s `limits.compare` is null and no match table is built
+    compare_enabled: bool = False
+    # comparisons are on by `op serve`'s loopback default, not by --compare: a local instance whose one user is
+    # its operator. It has no per-network cooldown (the pause bounds strangers sharing a slot, and there are
+    # none), and a request that came through a proxy (`X-Forwarded-For`, `Forwarded` or `Via`) is refused 403
+    # `API_COMPARE_DISABLED`: a same-host proxy in front of a loopback bind makes it public (decision-035)
+    compare_local: bool = False
+    # the file's caps, each refused with a typed error, never cut (`/meta` `limits.compare` states them).
+    # 16 MiB: the Trust-Evals export is 3.7 MB for 1,834 records with abstracts (2 KB a record), so the record
+    # cap's worth of such records is ~10 MB. A body over it is 413 `API_BODY_TOO_LARGE` before it is read
+    compare_max_body_bytes: int = Field(default=16 * 1024 * 1024, ge=1024)
+    # records one file may hold (413 `API_RIS_TOO_LARGE`). A comparison costs about 10 s of CPU per 1,000
+    # records (the oracle decides every class), so 5,000 is what fits `compare_max_seconds` with room
+    compare_max_records: int = Field(default=5_000, ge=1)
+    # characters in one line of the file, tag included (413 `API_RIS_TOO_LARGE`): above the ingest cap on an
+    # abstract (20,000, decision-026), so no line this corpus could hold is refused
+    compare_max_line_chars: int = Field(default=32_768, ge=64)
+    # papers of the query's result that the file doesn't hold (422 `API_COMPARE_TOO_COSTLY`): each is read from
+    # the snapshot and judged by the oracle, so an unbounded result is unbounded work
+    compare_max_results: int = Field(default=5_000, ge=1)
+    # the largest answer, in bytes (422 `API_COMPARE_TOO_COSTLY`, checked as it is built): an answer echoes
+    # the file's titles and venues and holds each list twice (rows and CSV), so it can outgrow its file (5,000
+    # records of long titles reach this cap, refused after the seconds of work that built it, which are
+    # charged). The body cap's value, so no answer is larger than the largest file the instance takes; the
+    # review's 3.7 MB file with abstracts gives 1.4 MB
+    compare_max_response_bytes: int = Field(default=16 * 1024 * 1024, ge=1024)
+    # comparisons running at once; one more is 503 `API_BUSY` with Retry-After, before its file is read (so at
+    # most this many files are in memory)
+    comparison_slots: int = Field(default=1, ge=1)
+    # the wall time one comparison's work gets from the moment its file is read; past it, 503 `API_BUSY`
+    compare_max_seconds: float = Field(default=60.0, gt=0)
+    # the wall time a file gets to arrive once the slot is held; past it, 408 `API_UPLOAD_TIMEOUT`. Behind the
+    # reverse proxy the body arrives whole (spec 08 §Deploy), so this bounds a direct client only
+    compare_upload_seconds: float = Field(default=30.0, gt=0)
 
     @property
     def verified_cost(self) -> float:

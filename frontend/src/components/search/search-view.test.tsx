@@ -118,6 +118,7 @@ function body(over: Partial<Body> = {}): Body {
       track: { main: 301, datasets_benchmarks: 64, position: 47, workshop: 205, competition: 4 },
       status: { accepted: 412, rejected: 88 },
     },
+    groups: { counts: [], groups_total: 1, limit: 10, not_counted: "fewer_than_two_groups" },
     hits: [HIT],
     ...over,
   };
@@ -211,6 +212,54 @@ describe("the builder's expansions come from this /search answer (TASK-111)", ()
     const group = screen.getByRole("group", { name: "Group 1 of 1, any of: trust star, bias" });
     expect(within(group).getByRole("list", { name: "Expansions" }).textContent).toBe(
       "trust* → expands to 2 words: trust, trusted",
+    );
+  });
+});
+
+describe("the builder's group counts come from this /search answer (TASK-176)", () => {
+  it("shows the answer's count in each group, beside the answer's total", async () => {
+    const q = "trust AND bias";
+    const ast: Schemas["ParseResponse"]["ast"] = {
+      kind: "and",
+      span: [0, 14],
+      children: [
+        { kind: "term", token: "trust", field: null, span: [0, 5] },
+        { kind: "term", token: "bias", field: null, span: [10, 14] },
+      ],
+    };
+    const groups: Body["groups"] = {
+      counts: [
+        { span: [0, 5], total: 1340, total_without: 977 },
+        { span: [10, 14], total: 977, total_without: 1340 },
+      ],
+      groups_total: 2,
+      limit: 10,
+      not_counted: null,
+    };
+    const api = handler({
+      search: () => json(body({ query: { ...body().query, input: q }, groups })),
+      parse: (text) => json(parsed(text, { ast, filters: unrestricted(text) })),
+    });
+    await setup(stateOf({ q }), api);
+    // outside the Builder tab, a line says where the counts are, and its button opens the tab
+    const pointer = "Each of this query's 2 groups has a count in the Builder tab";
+    expect(screen.getByText(new RegExp(pointer, "u")).textContent).toBe(
+      `${pointer}: how many papers it matches by itself, and how many the query finds without it. Show group counts`,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show group counts" }));
+    await pass(10);
+    expect(screen.getByRole("tab", { name: "Builder" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByText(new RegExp(pointer, "u"))).toBeNull();
+    const first = screen.getByRole("group", { name: "Group 1 of 2, any of: trust" });
+    const second = screen.getByRole("group", { name: "Group 2 of 2, any of: bias" });
+    expect(within(first).getByText(/this group by itself/u).textContent).toBe(
+      "1,340 papers match this group by itself ·; 977 match the query without it (+565)",
+    );
+    expect(within(second).getByText(/this group by itself/u).textContent).toBe(
+      "977 papers match this group by itself ·; 1,340 match the query without it (+928)",
+    );
+    expect(screen.getByRole("status", { name: "Group counts" }).textContent).toBe(
+      "Group counts shown for 2 groups: 412 papers match the whole query.",
     );
   });
 });

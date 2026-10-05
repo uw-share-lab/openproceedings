@@ -3,7 +3,8 @@ task-028). The oracle is the definition of correct, so every generated tree must
 the same wildcard expansions (or the same refusal), the same disjunctive facets, the same `total` for every
 sort (and, for `year_asc`, the (year, id) order), and, for trees that parse, the same exclusion counts as a
 brute-force count, through the facet combos and through the default fields alone (a search without facets,
-TASK-166). The engine is built at the current SCHEMA_VERSION; the previous schema a pinned index may hold is
+TASK-166). And each concept group's counts, alone and the query without it, are the oracle's
+(`test_group_counts_agree_with_the_oracle`, TASK-176). The engine is built at the current SCHEMA_VERSION; the previous schema a pinned index may hold is
 held to the oracle in `tests/unit/engine/test_served_schemas.py` (TASK-167). Trees draw on the corpus's own term dictionary (`synthetic_5k.vocab()`), rare terms
 weighted up, and stems at the 200-expansion cap's edge (`cap_records()`, 20 records added to the corpus the
 engines search, 5,020 in all, both parts hash-pinned: `qca*` expands to 199 terms, `qcb*` to 200, `qcc*` to 201
@@ -27,21 +28,23 @@ from pathlib import Path
 
 import pytest
 from hypothesis import given, settings
+from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.exclusions import ORDER, excluded
 from openproceedings.engine.protocol import FACET_FIELDS, MAX_EXPANSIONS, EngineInputError
 from openproceedings.engine.reference import ReferenceEngine, _conjuncts, _own_field
 from openproceedings.engine.tantivy_engine import SORTS, TantivyEngine
-from openproceedings.query.ast import Node, Wildcard
+from openproceedings.query.ast import And, Node, Not, Wildcard
 from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.defaults import DEFAULT_CLAUSES
+from openproceedings.query.groups import split
 from openproceedings.query.parser import ParseResult, parse
 from pydantic import TypeAdapter
 
 from tests.corpus import Rec
 from tests.fixtures.corpus.synthetic_5k import CAP_STEMS, cap_records, cap_vocab, records
 from tests.golden.test_tantivy_200 import as_paper
-from tests.strategies import engine_asts
+from tests.strategies import SPAN, engine_asts, filters
 from tests.unit.engine.test_exclusions import tantivy_of
 
 REGRESSIONS = Path(__file__).parent / "differential-regressions.json"
@@ -208,3 +211,41 @@ def test_the_corpus_covers_every_filter_combination() -> None:
     assert digest(cap_records())[:16] == CAP_HASH
     assert len(seen) == len(VENUES) * len(YEARS) * len(TRACKS) * len(STATUSES)
     assert len(corpus_5k) == 5_000 and any(r.abstract is None for r in corpus_5k)
+
+
+# --- each concept group's counts (TASK-176): `TantivyEngine.counts` against the oracle's match sets -----------------
+@st.composite
+def grouped_asts(draw: st.DrawFn) -> Node:
+    """An AND of several trees (each a concept group, a leave-out or a filter clause) and extra top-level
+    filters: the queries whose groups `search.run` counts (as `tests/unit/test_group_counts.py` draws them,
+    here over the cap-edge vocabulary too)."""
+    parts: list[Node] = draw(st.lists(engine_asts(cap_vocab()), min_size=1, max_size=4))
+    parts += [
+        Not(span=SPAN, child=f) if draw(st.booleans()) else f for f in draw(st.lists(filters(), max_size=3))
+    ]
+    return parts[0] if len(parts) == 1 else And(span=SPAN, children=tuple(draw(st.permutations(parts))))
+
+
+# up to nine trees through the oracle per example: no per-example deadline; sharded as the agreement property
+@settings(deadline=None, max_examples=max(1, settings().max_examples // SHARDS))
+@given(tree=grouped_asts())
+def test_group_counts_agree_with_the_oracle(
+    engines: tuple[ReferenceEngine, TantivyEngine], tree: Node
+) -> None:
+    """The query, each group alone and the query without each, counted in one `counts` call (shared conjuncts,
+    as `search.run` asks) and one at a time with `count`: each the oracle's `len(match_ids)`, or the same
+    refusal. Run at the profile's examples (ci 2,000, nightly 50,000), unlike the unit property's pinned few."""
+    reference, tantivy = engines
+    tantivy.faceted.clear()  # a fresh collection as often as a memoised one
+    ast = canonicalize(tree)
+    found = split(ast)
+    trees = [ast, *map(found.alone, found.groups[:4])]
+    if len(found.groups) >= 2:
+        trees += map(found.without, found.groups[:4])
+    q = f"{render(ast)}\nregression: {NODE.dump_json(ast).decode()}"
+    expected = [outcome(lambda n: len(reference.match_ids(n)), t) for t in trees]
+    assert [outcome(tantivy.count, t) for t in trees] == expected, q
+    if all(isinstance(e, int) for e in expected):
+        assert outcome(tantivy.counts, trees) == expected, q
+    else:  # one refused tree refuses the call, with the first refusal's code
+        assert outcome(tantivy.counts, trees) == next(e for e in expected if not isinstance(e, int)), q

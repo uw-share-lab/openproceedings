@@ -607,3 +607,24 @@ def test_the_reports_first_fetch_is_the_index_page(tmp_path: Path) -> None:
     seed(cache, "neurips", neurips_abs(2013, B13), "", status=404, at=T0)
     [report] = mine(cache, 2013).reports
     assert report.fetched[0] == T1 and T0 in report.fetched[1:]
+
+
+def test_a_listed_title_with_a_control_character_keeps_its_paper() -> None:
+    """decision-036 (TASK-180 review): the listing is no longer dropped as `invalid`; the control character
+    becomes a space and the title claim's evidence says so."""
+    from openproceedings.ingest.sources.http import Page
+
+    native = "nips-" + "a" * 32
+    url = f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{'a' * 32}-Abstract-Conference.html"
+    listing = "https://proceedings.neurips.cc/paper_files/paper/2024"
+    t0 = datetime(2026, 9, 29, tzinfo=UTC)
+    index, page = Page(listing, 200, "", t0), Page(url, 404, "", t0)
+    entry = neurips.Entry(url, "Induc\x02tive Trust", ("A One",))
+    record, _ = neurips._record(2024, native, entry, "main", "track token Conference", listing, index, page)
+    assert record.title == "Induc tive Trust"
+    assert (
+        claim(record, "title").evidence == f"year index {listing} (1 control character replaced by a space)"
+    )
+    clean, _ = neurips._record(2024, native, neurips.Entry(url, "Inductive Trust", ("A One",)), "main",
+                               "track token Conference", listing, index, page)  # fmt: skip
+    assert claim(clean, "title").evidence == f"year index {listing}"

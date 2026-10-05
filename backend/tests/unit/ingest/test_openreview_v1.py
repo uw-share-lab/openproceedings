@@ -341,6 +341,22 @@ def test_a_workshop_copy_and_its_conference_twin_are_linked_both_ways(
     )
 
 
+def test_a_v1_title_with_a_control_character_is_imported_with_a_space(tmp_path: Path) -> None:
+    """TASK-180: the v1 crawler reads a title through the v2 crawler's rule, so a note is no longer `invalid`
+    over an invisible character."""
+    note = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    note["content"]["title"] = "Deep\x02Learn\x02ing with Trust"
+    crawl = iclr_2017(tmp_path, [note], [])
+    record = by_forum(crawl)[note["id"]]
+    assert record.title == "Deep Learn ing with Trust" and crawl.report.skipped["invalid"] == 0
+    assert [c.evidence for c in record.claims("title")] == [
+        "content.title (2 control characters replaced by a space)"
+    ]
+    assert (
+        crawl.report.title_control_characters == 1 == crawl.report.to_manifest()["title_control_characters"]
+    )
+
+
 def test_a_title_match_links_a_copy_whose_bibtex_names_another_forum(tmp_path: Path) -> None:
     """ICLR 2017's 35 `Invite to Workshop` notes all carry a `_bibtex` naming one unrelated conference forum
     (B1akgy9xx), so a `_bibtex` counts only when it names a submission with the copy's title; otherwise the one

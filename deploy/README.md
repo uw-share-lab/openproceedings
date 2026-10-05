@@ -253,6 +253,68 @@ outside the data directory, at `$OP_TAKEDOWN_LOG_HOST/log.jsonl`.
 `withheld.txt`, and SIGHUP. Versions that still hold the text show it again. A snapshot built while the id
 was listed keeps it withheld until a rebuild without the id is promoted.
 
+## Comparisons with a reviewer's own RIS file (off by default)
+
+`POST /api/v1/compare` and the search page's "Compare with your records" (spec 04 §Comparing with a RIS file)
+are off on this stack: `op serve` behind a proxy doesn't offer them unless told to. Turning them on is your
+decision as the operator (decision-035), and not before the proxy block below has been fixed and has passed
+`smoke-test.sh` on your stack (TASK-183): it is what keeps a slow upload off the API's one comparison slot, and
+**as written it cannot work** (see the note under it). What it means:
+
+- anyone can upload a RIS file of up to 16 MiB and 5,000 records. It is read in memory for that one request
+  and dropped: never written to disk, never logged (the access line has counts only), never added to the
+  index. One comparison runs at a time (another is told to retry before its file is read), so the `api`
+  process holds at most one file: budget about 250 MB per comparison slot there (one 16 MiB file raised the
+  process's resident memory by 142 MiB at its peak in the security review: the file, its text, its parsed
+  records and the answer). The proxy is another matter: it buffers **every** upload in flight before the API
+  can refuse it (`request_buffers`), up to 16 MiB each, with no limit on how many arrive at once (200
+  concurrent uploads ≈ 3.2 GB, and they cost no tokens). Budget 16 MiB per concurrent upload in the proxy, and
+  give the `caddy` service a memory limit (`mem_limit` in `compose.yml`, which sets none today) as part of
+  turning comparisons on;
+- each comparison is up to a minute of CPU in the `api` process (about 10 s per 1,000 records: the reference
+  matcher decides why each paper was dropped), during which searches are slower. Its client pays for the
+  time from its rate-limit bucket;
+- the served index's match table takes about 80 MB more memory (95,877 records), built in the background
+  after each load (`match_index_built` in the log).
+
+They are off here because `compose.yml` passes `--trusted-proxy`. If you run `op serve` yourself on 127.0.0.1
+behind a proxy on the same host, pass `--trusted-proxy <the proxy's address>` (or `--no-compare`): without
+either, the API takes a loopback bind for a local instance. It then refuses a comparison to every request the
+proxy forwards (one carrying `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Real-IP`,
+`Forwarded`, `Via` or `CF-Connecting-IP`) and to every page not on that machine (a non-loopback `Origin`), and
+`GET /api/v1/meta` doesn't offer comparisons to those requests; a proxy that sets none of those headers, in
+front of a client that sends no `Origin`, would still offer comparisons to everyone it serves.
+
+A network (IPv4 /24, IPv6 /48) runs one comparison at a time and then waits three times as long as its
+comparison held the slot, so one network holds the slot at most a quarter of the time; many networks together
+can still fill it, and comparisons are then refused while searches are not.
+
+To turn them on: add `--compare` to the `api` service's `command` in `compose.yml`, and let that one path
+through the proxy with a larger body (everything else keeps 64KB), by adding to the `Caddyfile`'s
+site block, before the general `reverse_proxy /api/*`:
+
+```
+	@compare path /api/v1/compare
+	handle @compare {
+		request_body {
+			max_size 16MB
+		}
+		reverse_proxy api:8000 {
+			request_buffers 16MB # the whole file is read here before the API sees the request
+		}
+	}
+```
+
+**This block cannot work as written** (TASK-183 fixes it and runs it through `smoke-test.sh`): the site-wide
+`request_body { max_size 64KB }` (`Caddyfile`) wraps it first, so a file over 64 KB is refused before this
+block is reached (the 64 KB cap must be scoped to `@rest not path /api/v1/compare` instead); and Caddy's `16MB`
+is 16,000,000 bytes, under the 16,777,216 (16 MiB) the API advertises in `limits.compare`, so write `16MiB`.
+Check the edited file with `caddy validate` before reloading, and raise the server's `read_body` timeout to
+what a 16 MiB upload needs on your users' links (`read_body 60s` admits 2 Mbit/s). `read_body` is a timeout of
+the whole server, every path, not of this one: Caddy has no per-path setting for it. With `--compare` the network pause above applies (an instance on by the loopback default has none).
+`GET /api/v1/meta` then shows `limits.compare`, and the web app offers the panel; no rebuild
+of the `web` image is needed. To turn them off again, remove `--compare` and restart `api`.
+
 ## Backups
 
 `$OP_DATA_HOST/records/records.sqlite` holds the only copy of every saved search. Losing it also unpins

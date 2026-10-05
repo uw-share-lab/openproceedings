@@ -21,12 +21,13 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
 from openproceedings.api.errors import ErrorCode, ErrorEnvelope
-from openproceedings.api.models import ChangedInput
+from openproceedings.api.models import ChangedInput, CompareReason, MatchedBy, NotComparedReason
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.ingest.dedup import Origin
 from openproceedings.ingest.record import ClaimField, Presentation, Source
 from openproceedings.query.ast import FilterField, TextField
 from openproceedings.query.clauses import CLAUSE_REASONS
+from openproceedings.search import NotCounted
 from openproceedings.vocab import Status, Track, Venue
 
 # repo-relative; the snapshot sits with the contract tests that pin it
@@ -85,6 +86,70 @@ BUSY: dict[int | str, dict[str, Any]] = {
         },
     }
 }
+# `POST /compare` (TASK-177): its 503 is also a taken comparison slot, a match table still being built, or a
+# comparison past its time; its other statuses are declared so a client can tell them apart by status alone
+COMPARE_REFUSALS: dict[int | str, dict[str, Any]] = {
+    403: {
+        "model": ErrorEnvelope,
+        "description": "API_COMPARE_DISABLED: this instance's operator has not turned comparisons on "
+        "(`GET /meta` `limits.compare` is null), or the instance offers them to its local user only (on by "
+        "`op serve`'s loopback default) and the request came through a proxy or from a page not on that "
+        "machine (a non-loopback `Origin`)",
+    },
+    408: {
+        "model": ErrorEnvelope,
+        "description": "API_UPLOAD_TIMEOUT: the file didn't arrive within the time one upload gets",
+    },
+    413: {
+        "model": ErrorEnvelope,
+        "description": "API_BODY_TOO_LARGE (the file's bytes, refused as they arrive) or API_RIS_TOO_LARGE "
+        "(its records, its lines, or one line's length): over a cap of `GET /meta` `limits.compare`, refused "
+        "whole, never cut",
+    },
+    415: {
+        "model": ErrorEnvelope,
+        "description": "API_UNSUPPORTED_MEDIA_TYPE: the body is not declared "
+        "`application/x-research-info-systems` (a form or multipart upload is not read), or has a "
+        "`Content-Encoding`",
+    },
+    422: {
+        "model": ErrorEnvelope,
+        "description": "API_RIS_INVALID: the file is not UTF-8 RIS (no record, content before the first one, "
+        "carriage-return-only lines); API_COMPARE_TOO_COSTLY: the result holds more papers the file doesn't "
+        "than `limits.compare.max_results`, a phrase or NEAR has too many inflected spellings, or the answer "
+        "would pass `limits.compare.max_response_bytes`; or the query's own refusals, as on /search",
+    },
+    429: {
+        "model": ErrorEnvelope,
+        "description": (
+            "API_RATE_LIMITED: this client's token bucket or its network's can't pay for the request (as on "
+            "every route); or this client's network (IPv4 /24, IPv6 /48) is running a comparison, or ran one "
+            "less than its pause ago (decision-035: `compare_cooldown_factor` times the slot time it used; "
+            "none on a local instance). Refused before the file is read"
+        ),
+        "headers": {
+            "Retry-After": response_header(
+                "Whole seconds until the request would be allowed", {"type": "integer", "minimum": 1}
+            )
+        },
+    },
+    503: {
+        "model": ErrorEnvelope,
+        "description": (
+            "API_BUSY (with Retry-After): every comparison slot is taken (refused before the file is read), "
+            "the served index's comparison table is still being built (Retry-After: the build's expected time "
+            "left), or the query needs a slow position check and every verification slot is taken; API_BUSY "
+            "without Retry-After: the comparison ran past the time this instance gives one (the same request "
+            "would run as long again), or the table could not be built, until the operator reloads the index "
+            "(`limits.compare` is then null); or API_INDEX_NOT_LOADED (no index loaded yet; no Retry-After)"
+        ),
+        "headers": {
+            "Retry-After": response_header(
+                "Sent with API_BUSY: whole seconds to wait before retrying", {"type": "integer", "minimum": 1}
+            )
+        },
+    },
+}
 DEFAULT_ERROR: dict[int | str, dict[str, Any]] = {
     "default": {"model": ErrorEnvelope, "description": "Error (spec 04 §Error handling)"}
 }
@@ -109,6 +174,11 @@ OPEN_ENUMS: dict[str, frozenset[str]] = {
     "error code": frozenset(ErrorCode),
     "changed input": frozenset(get_args(ChangedInput.model_fields["input"].annotation)),
     "clause reason": frozenset(CLAUSE_REASONS),  # why /parse can't toggle a filter clause (decision-011)
+    "groups not counted": frozenset(get_args(NotCounted)),  # why /search has no group counts (TASK-176)
+    # `POST /compare` (TASK-177): the comparison core's own vocabularies, which a later class or rule extends
+    "match rule": frozenset(get_args(MatchedBy)),
+    "compare reason": frozenset(get_args(CompareReason)),
+    "not compared reason": frozenset(get_args(NotComparedReason)),
 }
 CLOSED_ENUMS: dict[str, frozenset[str]] = {
     "mode": frozenset({"native", "scholar"}),

@@ -343,7 +343,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -459,7 +460,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       }
     },
     "defaults_only": {
@@ -765,7 +767,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -788,7 +791,8 @@
           }
         ],
         "translations": [],
-        "filters": null
+        "filters": null,
+        "word_forms": null
       }
     },
     "all_negative": {
@@ -1114,7 +1118,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -1137,7 +1142,8 @@
           }
         ],
         "translations": [],
-        "filters": null
+        "filters": null,
+        "word_forms": null
       }
     },
     "one_default": {
@@ -1440,7 +1446,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -1538,7 +1545,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       }
     },
     "scholar": {
@@ -1617,7 +1625,7 @@
           "translations": [
             {
               "code": "COMPAT_NO_STEMMING",
-              "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `language$`).",
+              "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `\"large language$\"`).",
               "span": [0, 36],
               "reading": null
             },
@@ -1722,7 +1730,7 @@
           "translations": [
             {
               "code": "COMPAT_NO_STEMMING",
-              "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `language$`).",
+              "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `\"large language$\"`).",
               "span": [0, 36],
               "reading": null
             },
@@ -1970,7 +1978,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -2130,7 +2139,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       }
     }
   },
@@ -2207,6 +2217,12 @@
             "unknown": 34,
             "withdrawn": 31
           }
+        },
+        "groups": {
+          "counts": [],
+          "groups_total": 1,
+          "limit": 10,
+          "not_counted": "fewer_than_two_groups"
         },
         "hits": [
           {
@@ -2325,7 +2341,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       }
     },
     "statuses": {
@@ -2397,6 +2414,12 @@
             "unknown": 34,
             "withdrawn": 31
           }
+        },
+        "groups": {
+          "counts": [],
+          "groups_total": 1,
+          "limit": 10,
+          "not_counted": "fewer_than_two_groups"
         },
         "hits": [
           {
@@ -2527,7 +2550,8 @@
             "blocking_spans": [],
             "values": ["accepted", "rejected", "withdrawn"]
           }
-        }
+        },
+        "word_forms": []
       }
     },
     "negated_status": {
@@ -2599,6 +2623,12 @@
             "unknown": 34,
             "withdrawn": 31
           }
+        },
+        "groups": {
+          "counts": [],
+          "groups_total": 1,
+          "limit": 10,
+          "not_counted": "fewer_than_two_groups"
         },
         "hits": [
           {
@@ -2741,7 +2771,8 @@
             "blocking_spans": [],
             "values": ["rejected"]
           }
-        }
+        },
+        "word_forms": []
       }
     },
     "workshop": {
@@ -2810,6 +2841,12 @@
             "unknown": 23,
             "withdrawn": 27
           }
+        },
+        "groups": {
+          "counts": [],
+          "groups_total": 1,
+          "limit": 10,
+          "not_counted": "fewer_than_two_groups"
         },
         "hits": [
           {
@@ -2940,7 +2977,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       }
     }
   }

@@ -251,7 +251,9 @@ describe("the diagnostics row", () => {
       .map((l) => l.getAttribute("aria-label"));
     expect(lists).toEqual(["Errors", "Translations", "Warnings"]);
     const error = within(within(row).getByRole("list", { name: "Errors" })).getByRole("listitem");
-    expect(error.textContent).toContain("Error: This `(` is never closed — add a `)`.");
+    // verbatim, its backticked runs drawn as code instead of showing the backticks
+    expect(error.textContent).toContain("Error: This ( is never closed — add a ).");
+    expect([...error.querySelectorAll("code")].map((c) => c.textContent)).toEqual(["(", ")"]);
     const help = within(error).getByRole("link", { name: "Syntax help for PARSE_UNBALANCED_PAREN" });
     expect(help.getAttribute("href")).toBe("/help/syntax#parse_unbalanced_paren");
     expect(within(row).getByText("Read as native syntax:")).toBeTruthy();
@@ -274,6 +276,35 @@ describe("the diagnostics row", () => {
     expect(all.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(all);
     expect(within(line).getByText("greek 4")).toBeTruthy();
+  });
+
+  it("draws the Scholar-mode $ notices as one line about the widening, the server's own behind Show", async () => {
+    const pop = (w: string, k: number) =>
+      diag("COMPAT_POP_DOLLAR", `\`${w}$\`: \`$\` has no documented wildcard meaning in Google Scholar.`, [
+        k,
+        k + 6,
+      ]);
+    const handler = api((q) => json({ ...parsed(q), translations: [pop("trust", 0), pop("model", 7)] }));
+    const { type } = setup({}, handler);
+    await type("trust$ model$");
+    await pass(300);
+    const line = within(screen.getByRole("list", { name: "Translations" })).getAllByRole("listitem")[0]!;
+    expect(line.textContent).toContain("$ is read as a wildcard in 2 places");
+    expect(line.textContent).toContain("That widening is what $ is for");
+    expect(line.textContent).not.toContain("2 ×");
+    expect(line.textContent).not.toContain("trust$"); // the server's notices are behind Show
+    const show = within(line).getByRole("button", { name: "Show all 2 notices" });
+    expect(show.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(show);
+    expect(
+      within(line)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual([
+      "trust$: $ has no documented wildcard meaning in Google Scholar.",
+      "model$: $ has no documented wildcard meaning in Google Scholar.",
+    ]);
+    expect(within(line).getByRole("button", { name: "Hide the notices" })).toBeTruthy();
   });
 
   it("opens the tree for mixed AND/OR, and Show how it was read moves focus to it", async () => {

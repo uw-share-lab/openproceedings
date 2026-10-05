@@ -1,4 +1,4 @@
-import { syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { query } from "./index";
 import goldenV2 from "./lexer-v2-golden.json";
@@ -6,7 +6,7 @@ import { TreeFragment, type Tree } from "@lezer/common";
 import { buildParserFile } from "@lezer/generator";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { codePointSpanToUtf16 } from "@/api/spans";
 import golden from "./lexer-golden.json";
 import type { LexemeKind } from "./lex";
@@ -119,6 +119,29 @@ describe("incremental reparsing after an edit gives the same tokens as a fresh p
 describe("the tokenizer 2 Lezer language has the server's token spans", () => {
   it.each(goldenV2.cases.map((c) => [JSON.stringify(c.q).slice(0, 80), c] as const))("%s", (_name, c) => {
     const state = EditorState.create({ doc: c.q, extensions: [query("2")] });
-    expect(tokens(syntaxTree(state))).toEqual(expected(c.q, c.tokens));
+    // The whole tree, however long it takes: `syntaxTree(state)` is only what CodeMirror parsed within its
+    // start-up time budget (wall clock), so on a loaded machine it can be the tree of a prefix of the query.
+    const tree = ensureSyntaxTree(state, c.q.length, 60_000);
+    expect(tree).not.toBeNull();
+    expect(tokens(tree as Tree)).toEqual(expected(c.q, c.tokens));
+  });
+
+  it("is judged on the whole tree even when the clock outruns CodeMirror's parse budget", () => {
+    // every read of the clock is 30 ms later: the start-up budget is spent at once, as under heavy load
+    let now = 0;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => (now += 30));
+    try {
+      let cut = 0;
+      for (const c of goldenV2.cases) {
+        const state = EditorState.create({ doc: c.q, extensions: [query("2")] });
+        if (syntaxTree(state).length < c.q.length) cut += 1;
+        const tree = ensureSyntaxTree(state, c.q.length, Number.MAX_SAFE_INTEGER);
+        expect(tree?.length).toBe(c.q.length);
+        expect(tokens(tree as Tree)).toEqual(expected(c.q, c.tokens));
+      }
+      expect(cut).toBeGreaterThan(0); // the budgeted tree really is cut short here: what the cases must not read
+    } finally {
+      clock.mockRestore();
+    }
   });
 });

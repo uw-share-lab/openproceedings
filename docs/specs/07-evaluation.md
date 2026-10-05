@@ -53,6 +53,109 @@ added, and check the track). The rest goes to `review.csv` for a person to decid
 `docs/results/<date>-scholar-comparison.md`. This report is also a result the paper itself can use:
 *how much of Scholar's result set comes from full-text matches and stemming.*
 
+As built (TASK-056): `op eval scholar --ris <file>… --years LO..HI --index <v>` writes the report and, beside it,
+`<date>-scholar-comparison-review.csv` (the protocol's `review.csv`, dated like its report). Two modules:
+`eval/scholar_compare.py` is the comparison itself, pure functions that a reviewer's own RIS file goes through
+too (TASK-177: one implementation); `eval/scholar_report.py` picks the review rows and renders.
+
+- **The Scholar set** is any RIS file, read with scholarmend's parser. The first report reads the review's
+  export as scholarmend mended it (`mended.ris`: the same 1,834 records as `clean.ris`, which holds the delta,
+  with the years Scholar left out or guessed corrected), and says so under its hash.
+- **Matching** follows 01's merge rules in order: the OpenReview forum id a URL names (`/forum?id=` or
+  `/pdf?id=`), then the proceedings paper a URL names, then the dedup title key within the same venue and year. A
+  proceedings id is matched **within its venue and year**, as dedup merges on it: a NeurIPS hash is md5 of the
+  paper's number and repeats every year. An id or key that names two records is ambiguous, never a pick, and
+  so are a forum id and a proceedings id that name different records; a title alone never matches; the venue is
+  one of Scholar mode's source names exactly. A venue string that is anything else is no venue, and
+  such a record is out of scope unless a URL of it names an indexed paper. One exception: when the string is
+  empty or cut by Scholar (`…`) and an in-scope index record of the same year has its title, the record is in
+  scope and `unsettled`, for a person, with that record named. A record that names another venue in full stays
+  out, whatever its title.
+- **Provenance.** An index that an RIS set was imported into holds that set's records, and comparing the set
+  with it matches them to themselves. So every match records whether its index record has an independent
+  source (a crawl) or only the import (`ris`), and its abstract's source; the report states both counts, a
+  table per venue and year beside the crawled records the index holds there, and each class count for the two
+  kinds apart. Where the index has no crawled record (2026, on the first report's index `05a0541717f6`) nothing
+  can be only in openproceedings, and the report says so. The 2026 crawl (TASK-178, index `5ec5231adae2`,
+  and the dedup fix of TASK-179, index `fd13d8d27535`, `docs/results/2026-10-05-scholar-comparison.md`) left no
+  RIS-only match, where there had been 530. A RIS-only match whose title another index record shares is
+  `unsettled` (one paper under two ids, or a wrong venue or year in the import).
+- **Scope** is `--years` and `--venues`, applied to both sides: the result is the engine's match set for the
+  string as written, limited to records of those venues and years; a matched Scholar record is scoped by its
+  index record's venue and year, an unmatched one by its own.
+- **Classes**, in the protocol's order, each decided by `ReferenceEngine` over the compared records (every matched
+  Scholar paper and every in-scope match): `our_bug` (the oracle and the served index disagree on a compared
+  record, on either side or in both), `filtered`, `compat_reading` (below), `coverage_gap`, `stemming`,
+  `full_text`; and `scholar_cap`, `compat_reading`, `scholar_missed` for records only in the result. The filters
+  are judged before the text: a record that fails the default filters and matches without them under any
+  reading (as run, Scholar's, or with inflected forms) is `filtered`, with the reading in its evidence; one that
+  matches under none is `full_text` whether or not it passes the filters, and the report counts the
+  `full_text` rows that fail them. A record the
+  corpus holds without an abstract can't be `full_text`: it is `unsettled`, for a person. Every `coverage_gap` and
+  `scholar_missed` row goes to a person too, with a tenth of the settled rows as a spot check.
+- **`compat_reading`** (decision-002 and `$`): the string is rewritten as Google Scholar reads it and run again.
+  `$` is no wildcard there, and an unquoted multi-word `|` item is separate words with `|` binding tighter than
+  juxtaposition, so `(large language model | LLM)` is `large AND language AND (model OR llm)`. A record that
+  Scholar's reading matches and ours doesn't, or the reverse, is `compat_reading`, not a miss; the report prints
+  Scholar's reading and says so for each such string (`main-2-pop`).
+- **`stemming`** adds each searched word's other English inflections found in the compared records (`s`/`es`/
+  `ies`, `ed`, `ing`; no derivation). Google Scholar's stemmer is undocumented, so the rule is a stated
+  stand-in, not Scholar's rule, and the `stemming` and `full_text` counts are relative to it. Decision-038 keeps
+  it and adopts no published stemmer (below). `full_text`
+  is not a lower bound: a wider stemmer moves rows out of it. The report therefore gives a sensitivity figure
+  per string: how many `full_text` rows would match if every searched word were replaced by its inflection stem
+  read as a prefix (`benchmarks` → `benchmark*`). It measures that and no more: it is not a stemmer, and one that
+  strips derivational endings could move more rows. On index `fd13d8d27535` it moves 0 of 1,752 `full_text` rows
+  for `main-7-most-updated` and 2 of 1,708 for `main-2-pop`, which is why decision-038 adds no stemmer
+  dependency; a string whose figure is not near zero reopens the decision.
+- **`scholar_cap`** needs the size of each Scholar search: the set's Publish or Perish query dates group its
+  records by search, and a group at 1,000 or more marks its venues and years as capped.
+- **Any reviewer's own file** (TASK-177): the same comparison is served as `POST /compare` (04 §Comparing with
+  a RIS file) and drawn by the web app's "Compare with your records" panel (05 §Components 9): one query
+  against one file, every indexed venue and year on both sides (a limit is written in the query), with the
+  matching and the classes of this section and no report. `compare_query` takes a `tick` the route raises its
+  time limit from; `result_in_scope` and `only_in_result` are the result and the added ids as both callers
+  compute them. The route is tested against the core's own rows (`backend/tests/contract/test_compare.py`).
+  Since that route echoes a row's evidence to whoever uploaded the file (decision-035), the evidence of a
+  record the index doesn't hold names its links' hosts only as valid host names, at most three a record
+  (`link_host`, `MAX_HOSTS`), in the report too; a link no URL parser takes names no paper and no host.
+- **Calls are read back.** Whoever makes a call fills `human_class` (a protocol class, `in_both` or
+  `out_of_scope`), `reviewer_role` (a role, never a name) and `note` in the review file. The same command, run
+  again, checks that the file's rows are the run's own (a cell the run wrote that a spreadsheet changed is named
+  by line and column), leaves the file untouched and rewrites the report with a "Human calls" section: calls per
+  query, spot-check agreement with the automated class ("none called" when no spot-check row has one), any row
+  called `our_bug`, the counts after the calls, and the line **Every disagreement classified: yes/no** (no
+  `our_bug` by the automation or by a call, and a call on every row left for one). `--check` fails on a call of
+  `our_bug` as well as on the automation's. The review file is UTF-8 with a BOM and CRLF line ends, as `/compare`'s
+  CSV: what a spreadsheet opens and saves as "CSV UTF-8"; a file saved in another encoding is refused with that
+  fix, and is never overwritten. Calls are keyed by a row's place, so a file whose rows a spreadsheet sorted is
+  refused as "its rows were reordered" (never misread); its last column, `row_number` (1, 2, …, written and
+  checked like every cell the run writes), sorts it back.
+- **What a call does to the counts** (the "After the calls" tables, and a bullet under each Finding). A class
+  moves its row to that class. `out_of_scope` (Scholar-side rows only) takes the record out of the Scholar set,
+  so out of the denominator. `in_both` (Scholar-side rows with no index record of their own) moves the record to
+  "in both" and pairs it with the one same-title record its evidence names (`Row.near`, the record named after
+  "same title:"), which must be one of that query's rows only in the result: it leaves them, the two being one
+  paper. An `in_both` call is refused when the row's evidence names no such record or several, when the record
+  it pairs with is not among the query's rows only in the result (so a row with an index record of its own is
+  refused: that record is in the index, not in the result), when another `in_both` call already pairs that record, or when the
+  record's own row has a call; so no paper is counted in both twice. The pairing never reads `note`. Rows without a call keep the automation's class. The tables above the
+  Human calls section, and the Finding's first figures, stay the automation's alone.
+- **A call weighs what its role does.** The report prints each distinct `reviewer_role` with its row count beside
+  the Human calls figures, on the closing line and on the command's verdict line, and never quotes a note. The
+  tool does not judge a role: when any call was made by someone other than an independent reviewer (the
+  analyst, or an AI assistant acting for the project), it is recorded like any other, but the "yes" is
+  provisional and this section's bar is not closed. A paper cites the automation's figures; the counts after the
+  calls are not to be cited until every role is an independent reviewer's (the Finding's after-calls bullet says
+  so in these words), and then with the roles beside them. The 2026-10-05 "yes" rests on 48 calls an AI
+  assistant made at the owner's direction: TASK-193 (an independent reviewer repeats them) need not block
+  merging, but blocks citing the calls and closing this bar.
+- A report never replaces a review file in which a call is filled in, and names its inputs by file name and sha256,
+  never by path. Notes about one set of inputs come from the file `--notes` names (for the review's export,
+  `docs/results/scholar-comparison-notes.md`), printed verbatim under its hash; there is no default, since
+  another set would get the wrong notes. `--answers <name>` names the string the set is Scholar's answer to:
+  the report then marks every other string's numbers as a comparison against that set only.
+
 ## C. Coverage (report plus a soft gate at M4)
 
 For each venue × year × track: indexed accepted count compared with the official accepted count (the table
@@ -106,7 +209,10 @@ only that they are counted: the owner's decision record is what names them as th
 (`drifted`, the failed check in its cause note); a gap (no records) is never accepted and stays `✗ gap`. The
 report marks the cell `✓ accepted exception`, lists every exception in its own section and counts them in the
 verdict line, and reports an exception whose cell is within ±1% or not gated as stale; `--check` exits 1 on a
-stale exception too. ICLR 2013 main is one (decision-016). The exception is applied by the gate report
+stale exception too. ICLR 2013 main is one (decision-016). The report also lists, per cell, the
+accepted records whose only source is an imported RIS set, with the cell's delta without them (TASK-178): such
+a record is counted as indexed with no listing or note behind it, and where it is a second copy of a crawled
+paper it inflates the cell. The exception is applied by the gate report
 (`op eval coverage`) only: `GET /coverage` and the `/coverage` page report the raw ±1% per cell, so an accepted
 cell is served with `within_gate: false`.
 
@@ -141,7 +247,14 @@ the report and shown as a warning annotation, never a failure (TASK-057).
 The `/search` endpoint rows (`test_search_endpoint_first_page`) run over the 5k corpus as the API serves it
 (`attributed` records: authors and abstract claims) and include each hit's `abstract_source`, a lookup in
 what the snapshot reader computed at load (TASK-134; about 95 µs per 50-hit page on the served snapshot, spec
-03 §Performance budgets).
+03 §Performance budgets), and each concept group's counts as the route asks for them, at `ApiConfig`'s
+default bounds, grace and wait (TASK-176). Beside the first page of every Trust-Evals string there are a warm
+later page of each (`test_search_endpoint_later_page`: facets and counts from the memo) and a query of ten
+one-word groups, the most `/search` counts (`test_search_endpoint_ten_groups`: 20 collections on a first
+page); `test_the_endpoint_bench_counts_groups` checks that these rows do count groups. What the counts add,
+with and without them on the fixture and on the real corpus, is a report
+(`backend/tests/bench/group_counts_report.py` → `docs/results/<date>-bench-group-counts.md`; median and p95
+of 200 rounds), cited by 04 §SearchResponse.
 
 ## F. Usefulness of near-misses (report, M5: deferred)
 

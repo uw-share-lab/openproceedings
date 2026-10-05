@@ -27,7 +27,7 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 - **Why, as a constant.** A failure line carries `error` (the type) and, when there is one, a `reason`
   constant, never the message (messages name paths): an exception's own `reason` (`SnapshotError`,
   `IndexBuildError`, `IndexSelectionError`, `IndexUnservable`) or an OSError's errno name (`ENOENT`),
-  through `api.errors.reason_of`. A failure that stands for another (`raise … from e`) logs the cause's
+  through `logs.reason_of` (and its frames through `logs.frames`). A failure that stands for another (`raise … from e`) logs the cause's
   type, frames and reason too (`cause`, `cause_frames`, `cause_reason`).
 - **A state, not a stream.** A condition that persists (a full record store, an unreadable index
   directory) logs once when it starts and once when it ends (`records_store_full` /
@@ -69,13 +69,14 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 ## Crawl lines (TASK-116)
 - **Start, heartbeats, end** at INFO. OpenReview (API v1 and v2 alike): `openreview_crawl_started`,
   `openreview_crawl_progress`, `openreview_crawl_finished`, each with `api`, `venue`, `year`, the counts
-  processed so far, `requests` and `cached`; a heartbeat is due at most every 30 s (`common.Heartbeat` on the
+  processed so far, `requests` and `cached` (the finished line also counts `title_control_characters`, the
+  records whose title lost a control character: decision-036, never an attention count); a heartbeat is due at most every 30 s (`common.Heartbeat` on the
   HTTP client's monotonic clock, so a test's fake clock drives it). The proceedings miners:
   `neurips_listing_started` / `_progress` / `_mined` and `pmlr_volume_started` / `_progress` / `_mined`, with the
   year or volume and `done` / `of`; their heartbeat is due at most every `PROGRESS_SECONDS` (30 s) of
   `time.monotonic`, checked after each record built. Never a line per item.
 - **Record-level anomalies are DEBUG** (`openreview_unknown_track`, `openreview_v1_unmapped`,
-  `openreview_v1_conflict`, `openreview_v1_twin_outcome`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `openreview_presentation_unmapped`, `neurips_record_invalid`,
+  `openreview_v1_conflict`, `openreview_v1_twin_outcome`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `openreview_presentation_unmapped`, `openreview_title_control_characters` (forum and count, never the title), `neurips_record_invalid`,
   `pmlr_record_invalid`, and per cache entry `openreview_cache_incompatible`, a purged pre-projection entry,
   which a crawl reports as `cache_incompatible`). Each listing or crawl logs **at most one aggregate WARNING**
   with the counts
@@ -101,7 +102,13 @@ withheld abstracts, is `index_load_failed` with `reason` `takedowns_invalid`, `t
 `takedowns_missing`. A snapshot whose merges.csv doesn't match its manifest is one ERROR
 `takedown_merges_unavailable` per damaged snapshot (`snapshot`, its directory name; `error`; `reason`), and the
 list applies without that snapshot's merges (in the API and `op export`). Likewise `op export` of another index than `current` logs one ERROR `takedown_twins_unavailable` (`error`; `reason`; `index`, the current index's name) when the current index's snapshot can't be read: the list then follows only the exported snapshot's twin links (TASK-163).
-A 503 `API_BUSY` from the bounded pinned-open wait puts `busy: pinned_open` on the access line (TASK-067). `abstracts_withheld` means three counts,
+A 503 `API_BUSY` from the bounded pinned-open wait puts `busy: pinned_open` on the access line (TASK-067). On
+`POST /compare` (TASK-177) `busy` names the capacity that refused it: `match_index_building` and
+`compare_slots` on a 503 with `Retry-After`; `match_index_failed` (retrying won't help until the index is
+reloaded) and `compare_deadline` (the client offers Retry at once and never retries it by itself) on a 503
+without one; `compare_running` and `compare_cooldown` on the network's 429. A loopback-default instance
+refusing a proxied request puts `compare_refused: proxied` on its 403 (spec 04 §Logging, the access line's
+`busy`, is the full list). `abstracts_withheld` means three counts,
 each named by its event: the list's size on a load, the records a build withheld on `snapshot_built`, the
 records of the body on an export's access line (the build's JSON gives the ids themselves, `withheld_ids`). `snapshot_built` / `snapshot_exists` carry
 `abstracts_withheld`, `takedowns_followed`, `takedowns_unmatched` and `takedowns_twins` counts, and `trimmed`: how many records
@@ -120,8 +127,14 @@ held none; added by `IndexState.verification_slot` through the `errors.current_a
 the request having no handle there). A request whose slot holds pass `slow_verification_seconds` logs one
 `verification_slow` WARNING (`verify_ms`, `threshold_ms`): every other cold verification was refused
 meanwhile. `verify_cpu_ms` is the verifying thread's CPU in those holds, and `verify_tokens` what that CPU
-time was debited after the fact (`RateLimit`; never wall time, which other requests' load inflates). A facet worker
-that would have had to verify (a bug) logs `facet_worker_recounted` (WARNING) and the caller recounts. Health checks log at DEBUG. An unexpected failure is one `request_failed` ERROR line beside it: `code`, `error`, `frames`,
+time was debited after the fact (`RateLimit`; never wall time, which other requests' load inflates). A comparison (`POST /compare`, TASK-177) adds counts only: `ris_bytes`, `ris_records`, `ris_papers`, `kept`,
+`dropped`, `not_in_index`, `added`, `compare_ms` (wall time it held its slot), `compare_cost_ms` (what is
+debited: the file's arrival plus the work's CPU) and `compare_tokens`. Never a title, a venue string or a file
+name from the uploaded file (none is sent; a test greps every line for them). The served index's match table
+logs `match_index_built` (INFO: `index_version`, `records`, `ms`) once per served index, or `match_index_failed`
+(ERROR: `index_version`, `error`, `ms`, `reason` when there is one, `frames` for an unexpected type); each
+comparison refused after it is a state on the access line (`busy: match_index_failed`), not another ERROR. A facet worker
+that would have had to verify (a bug) logs `facet_worker_recounted` (WARNING) and the caller recounts; the group-count worker likewise, `group_worker_recounted` (TASK-176); any other failure of it is one ERROR `group_count_failed` (`groups`, `error`: the type, never the message, `frames`, and `reason` when the error has one), a late answer one WARNING `group_count_timed_out` (`groups`, `threshold_ms`: the wait it passed), and a job no counting worker took within the grace one DEBUG `group_count_busy` (`groups`: a state under load, not an alarm), the search answering without its counts either way. `/search`'s line also carries `groups` (how many concept groups the query has) and `groups_counted` (how many were counted: all or 0), two integers, never a span, and, when none were, `groups_not_counted` (why: a `search.NotCounted` constant). Health checks log at DEBUG. An unexpected failure is one `request_failed` ERROR line beside it: `code`, `error`, `frames`,
 and for a wrapped one (only then: never `cause: null`) `cause`, `cause_frames` (where it really failed: Starlette wraps an error its handler
 catches after a stream started in a RuntimeError whose frames stop at the handler) and `cause_reason`. `status` is what the client was sent. If a handler fails after the response started (a
 stream cut short), the line adds `aborted: true`, beside that failure's one `request_failed` ERROR line;
@@ -153,6 +166,12 @@ or nothing for Ctrl-C) of whatever made it restore. A later retire of that versi
 `retire_cut_short` until the directory is moved back. A
 `storage.sweep` that can't remove a `.tmp-` leftover logs `tmp_sweep_failed` (WARNING, its name and the
 chmod's errno name) and carries on.
+
+`op eval scholar` logs `scholar_report_started` (INFO: `index_version`, `queries`, `ris_records`) before it
+reads the snapshot, then one `scholar_report_written` line (ERROR when the automation found an `our_bug`, else
+INFO): `index_version`, `queries`, `ris_records`, `ris_papers` (the set's papers in scope, the name the
+`/compare` access line uses), `ris_only_matches`, `our_bug`, `unresolved`, `review_rows`, `human_calls`,
+`human_our_bug`, `classified`, `replaced`, `ms`. Counts only: never a query, a title, a role or a note.
 
 ## Review checklist (`observability-reviewer`)
 1. Does every new failure path produce exactly one log at the right level?

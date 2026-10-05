@@ -158,6 +158,8 @@ MESSAGES: tuple[tuple[DiagnosticCode, str, Mode, str | None, str | None], ...] =
     (DiagnosticCode.COMPAT_POP_DOLLAR, "model$", "scholar", None, None),
     (DiagnosticCode.COMPAT_POP_PHRASE, "(large language model | LLM)", "scholar", None, None),
     (DiagnosticCode.COMPAT_NO_STEMMING, "trust", "scholar", "trust$", None),
+    # no term here can take a `$` as written (too short), so the message gives no example (TASK-181)
+    (DiagnosticCode.COMPAT_NO_STEMMING, "AI ML", "scholar", None, None),
 )
 # said beside a message whose text depends on the index it ran on
 NOTES = {
@@ -280,6 +282,9 @@ def build() -> dict[str, Any]:
             "max_query_depth": MAX_DEPTH,
             "max_verified_clauses": config["max_verified_clauses"].default,
             "max_verification_candidates": config["max_verification_candidates"].default,
+            "max_counted_groups": config["max_counted_groups"].default,
+            "max_counted_terms": config["max_counted_terms"].default,
+            "max_counted_ids": config["max_counted_ids"].default,
         },
         "text_fields": list(TEXT_FIELDS),
         "values": {"venue": list(VENUES.values()), "track": list(TRACKS), "status": list(STATUSES)},

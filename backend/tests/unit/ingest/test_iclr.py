@@ -208,3 +208,15 @@ def test_the_reports_first_fetch_is_the_index_page(tmp_path: Path) -> None:
     seed_year(tmp_path, 2014)
     [report] = mine(tmp_path, 2014).reports
     assert report.fetched == [T0]
+
+
+def test_a_listed_title_with_a_control_character_keeps_its_paper() -> None:
+    """decision-036 (TASK-180 review): the control character becomes a space and the claim says so; before, the
+    record was refused and the listing lost a paper."""
+    iclr = source()
+    entry = iclr.Entry("https://arxiv.org/abs/1412.6623", "iclr-77b79d4a8d13c419bf89c1bf9c2a109d",
+                       "Induc\x02tive Trust", ("Actual One",), None)  # fmt: skip
+    record = iclr._record(2015, iclr.LISTINGS[2015], T0, entry)
+    assert record.title == "Induc tive Trust"
+    [title] = record.claims("title")
+    assert title.evidence is not None and title.evidence.endswith("(1 control character replaced by a space)")

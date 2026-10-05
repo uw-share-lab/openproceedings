@@ -31,6 +31,7 @@ import {
   type Sort,
 } from "@/lib/search-state";
 import { fieldWarning, type FieldWarning } from "@/lib/export";
+import { CompareRecords } from "../compare/compare-records";
 import { CopyButton } from "../copy-button";
 import { ExportMenu } from "../export/export-menu";
 import { SaveRecord, SaveRecordProvider } from "../record/save-record";
@@ -100,6 +101,11 @@ export function SearchView({ state }: { state: SearchState }) {
         refusal={refusal}
         openTree={zero}
         expansions={good?.data.query.expansions ?? null}
+        searchedGroups={
+          good === null
+            ? null
+            : { q: good.state.q, mode: good.state.mode, total: good.data.total, groups: good.data.groups }
+        }
         results={
           state.q.trim() === "" ? null : (
             <Results
@@ -385,6 +391,14 @@ function ResultsBody({
               indexVersion={response.index_version}
               total={total}
               disabledReason={offReason}
+            />
+            <CompareRecords
+              q={shownState.q}
+              mode={shownState.mode}
+              indexVersion={response.index_version}
+              total={total}
+              disabledReason={offReason}
+              onSearchAgain={onSearchAgain}
             />
           </div>
           <p role="status" aria-live="polite" className="sr-only">

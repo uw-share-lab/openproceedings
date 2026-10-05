@@ -231,6 +231,10 @@ def config(data_dir: Path, **overrides: Any) -> ApiConfig:
         "load_in_background": False,
         "handle_sighup": False,
         "rate_limit": RateLimit(capacity=10_000),  # rate-limit tests set their own
+        # a search's group counts get 30 s here, not production's 50 ms and 2 s: these tests assert the
+        # counts, on a machine that may be busy (the defaults have their own tests, test_group_counts.py)
+        "group_count_grace_seconds": 30.0,
+        "group_count_wait_seconds": 30.0,
     }
     return ApiConfig(**{**base, **overrides})
 

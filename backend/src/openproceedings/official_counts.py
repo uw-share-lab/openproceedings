@@ -109,6 +109,12 @@ OFFICIAL_ACCEPTED: OfficialTable = {
         "https://proceedings.iclr.cc/paper_files/paper/2025",
         date(2026, 9, 27),
     ),
+    ("ICLR", 2026, "main"): OfficialCount(
+        5351,
+        "papers in the ICLR 2026 proceedings index (5,351 distinct Conference entries; fact sheet announced 5,357, retrospective 5,355)",
+        "https://proceedings.iclr.cc/paper_files/paper/2026",
+        date(2026, 10, 5),
+    ),
     ("ICML", 2013, "main"): OfficialCount(
         283,
         "papers in PMLR volume 28 (every accepted paper; ICML 2013 had no separate tracks)",
@@ -186,6 +192,12 @@ OFFICIAL_ACCEPTED: OfficialTable = {
         "main-track accepted papers in the fact sheet; the 73 position papers are counted separately",
         "https://media.icml.cc/Conferences/ICML2025/ICML2025_Fact_Sheet.pdf",
         date(2026, 9, 27),
+    ),
+    ("ICML", 2026, "main"): OfficialCount(
+        6341,
+        "papers on the ICML 2026 virtual-site paper list that link an OpenReview forum (6,554 of its 6,628 posters; the 74 TMLR/JMLR journal-track posters excluded) and are not among the 213 on the site's position-papers listing; both lists counted entry by entry",
+        "https://icml.cc/static/virtual/data/icml-2026-orals-posters.json and https://icml.cc/virtual/2026/events/2026-position-papers",
+        date(2026, 10, 5),
     ),
     ("NeurIPS", 2013, "main"): OfficialCount(
         360,

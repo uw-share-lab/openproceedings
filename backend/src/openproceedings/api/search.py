@@ -18,7 +18,15 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request
 
-from openproceedings.api.deps import EngineDep, ServedDep, annotate, check_candidates, parsed, searchable
+from openproceedings.api.deps import (
+    EngineDep,
+    ServedDep,
+    access_fields,
+    annotate,
+    check_candidates,
+    parsed,
+    searchable,
+)
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import (
     DEFAULT_LIMIT,
@@ -31,6 +39,8 @@ from openproceedings.api.models import (
     AbstractSource,
     Excluded,
     Facets,
+    GroupCount,
+    GroupCounts,
     Highlights,
     Hit,
     ParseRequest,
@@ -47,6 +57,7 @@ from openproceedings.ingest.record import Urls
 from openproceedings.ingest.snapshot import RecordFile
 from openproceedings.query.clauses import filter_clauses
 from openproceedings.query.parser import Mode
+from openproceedings.query.wordforms import word_forms
 from openproceedings.search import Hit as Found
 from openproceedings.search import expansions_json, run
 
@@ -72,6 +83,7 @@ def parse_query(request: Request, engine: EngineDep, body: ParseRequest) -> Pars
         errors=result.errors,
         translations=result.translations,
         filters=filter_clauses(body.q, result),
+        word_forms=word_forms(body.q, result),
     )
 
 
@@ -94,8 +106,27 @@ def search(
     check_candidates(
         request, engine, result.effective_ast
     )  # 422 API_QUERY_TOO_COSTLY before any verification
-    found = run(engine, result, sort=sort, offset=offset, limit=limit, facets=True, highlight=True)
+    found = run(
+        engine,
+        result,
+        sort=sort,
+        offset=offset,
+        limit=limit,
+        facets=True,
+        highlight=True,
+        groups=request.app.state.config.max_counted_groups,
+        groups_terms=request.app.state.config.max_counted_terms,
+        groups_ids=request.app.state.config.max_counted_ids,
+        groups_wait=request.app.state.config.group_count_wait_seconds,
+        groups_grace=request.app.state.config.group_count_grace_seconds,
+    )
     annotate(request, total=found.total)
+    assert found.groups is not None  # asked for
+    # the access line: how many groups the query has, how many were counted (two integers, never a span) and,
+    # when none were, why (a `NotCounted` constant)
+    access_fields(request).update(groups=found.groups.found, groups_counted=len(found.groups.counts))
+    if found.groups.not_counted is not None:
+        access_fields(request)["groups_not_counted"] = found.groups.not_counted
     sources = page_attributions(served.records, [h.id for h in found.hits])
     hidden = served.withheld_in(served.records)  # the takedown list, as this bundle's load read it
     assert result.canonical is not None and result.canonical_hash is not None  # it parsed
@@ -116,6 +147,15 @@ def search(
         identified_total=identified_total(found.total, found.excluded.total),
         unclassified_total=unclassified_total(found.excluded.track, found.excluded.status),
         facets=Facets.model_validate(found.facets),
+        groups=GroupCounts(
+            counts=[
+                GroupCount(span=span, total=alone, total_without=without)
+                for span, alone, without in found.groups.counts
+            ],
+            groups_total=found.groups.found,
+            limit=found.groups.limit,
+            not_counted=found.groups.not_counted,
+        ),
         hits=[
             _hit(h, sources[h.id], withheld=h.id in hidden, twins=served.records.twins.get(h.id, ()))
             for h in found.hits
