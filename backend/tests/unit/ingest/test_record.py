@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import unicodedata
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
-from openproceedings.ingest.record import DERIVED, Claim, PaperRecord, Urls, content_hash
+from hypothesis import given
+from hypothesis import strategies as st
+from openproceedings.ingest.record import DERIVED, Claim, PaperRecord, Urls, content_hash, title_text
 from openproceedings.ingest.snapshot import record_line
+from openproceedings.query.normalize import normalize
 from pydantic import ValidationError
 
 FETCHED = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
@@ -434,3 +438,44 @@ def test_venue_name_is_derived_never_stored_or_hashed() -> None:
     assert "venue_name" not in PaperRecord.model_fields and frozenset({"venue_name"}) == DERIVED
     with pytest.raises(ValidationError, match="venue_name"):
         PaperRecord.model_validate(r.model_dump())
+
+
+# --- control characters in a title (TASK-180) ----------------------------------------------------------------
+
+TITLE_TEXT = [
+    # raw, stored, control characters replaced
+    ("A SPEC\x02TRUM FROM LOGIC", "A SPEC TRUM FROM LOGIC", 1),  # ICLR 2026 `xHMNX3l8rx`: U+0002, twice in it
+    ("Aquifers in Ibadan, Nigeria\x00", "Aquifers in Ibadan, Nigeria", 1),  # NeurIPS 2026 `KlvYZ17FPi`
+    ("INDUC\x02TIVE \x02 KNOWLEDGE", "INDUC TIVE KNOWLEDGE", 2),  # a run of spaces and controls is one space
+    ("a\x7fb\x85c\x9fd", "a b c d", 2),  # DEL and C1 too; U+0085 is whitespace, which always became a space
+    ("Details  through\x0b Chain\tof\nManipulations", "Details through Chain of Manipulations", 0),
+    ("Trust in AI", "Trust in AI", 0),
+    ("café​—τ $x^2$", "café​—τ $x^2$", 0),  # nothing but controls and whitespace is touched
+    ("\x00\x02", "", 2),  # nothing left: the importer has no title
+]
+
+
+@pytest.mark.parametrize(("raw", "stored", "replaced"), TITLE_TEXT)
+def test_a_control_character_in_a_title_becomes_a_space(raw: str, stored: str, replaced: int) -> None:
+    assert title_text(raw) == (stored, replaced)
+    assert title_text(stored) == (stored, 0)  # idempotent
+    if stored:
+        assert record(title=stored).title == stored  # the record model accepts it
+
+
+@given(st.text(alphabet=st.sampled_from([*"abAB12 -\\{}^_.,é́​", *"\x00\x02\x08\x0b\x1c\x7f\x85\x9f\n"]), max_size=20))  # fmt: skip
+def test_the_stored_title_keeps_the_raw_titles_tokens(raw: str) -> None:
+    """The tokenizer reads a control character as a separator, so replacing it with a space changes no token
+    (token-contract). `$` is left out of the alphabet: the one exception is below."""
+    stored, _ = title_text(raw)
+    assert normalize(stored) == normalize(raw)
+    assert not any(unicodedata.category(c) == "Cc" for c in stored) and stored == " ".join(stored.split())
+
+
+def test_a_control_character_beside_a_math_delimiter_is_the_one_token_exception() -> None:
+    """A space just inside `$…$` stops it reading as math, so there the stored title's tokens differ from the raw
+    title's: stated in spec 01, pinned here so a tokenizer change that moves it is seen."""
+    raw = "$\\tau\x02$-bench"
+    stored, replaced = title_text(raw)
+    assert (stored, replaced) == ("$\\tau $-bench", 1)
+    assert (normalize(raw), normalize(stored)) == (["τ", "bench"], ["bench"])

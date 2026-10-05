@@ -51,7 +51,17 @@ from typing import Any
 from pydantic import ValidationError
 
 from openproceedings.ingest.classify import classify_v2_presentation, classify_venueid
-from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls
+from openproceedings.ingest.record import (
+    FORUM_ID,
+    Claim,
+    ClaimField,
+    ClaimValue,
+    PaperRecord,
+    Source,
+    Urls,
+    title_evidence,
+    title_text,
+)
 from openproceedings.ingest.sources.common import CrawlError, Crawls, Heartbeat, Report
 from openproceedings.ingest.sources.http import CacheMiss
 from openproceedings.ingest.sources.openreview_client import OpenReviewClient
@@ -178,6 +188,18 @@ def _text(value: Any) -> str | None:
     return " ".join(value.split()) or None
 
 
+def _title(value: Any, forum: str) -> tuple[str | None, str]:
+    """A note's title and its claim's evidence (both API versions). A control character the source left in it
+    becomes a space (`record.title_text`, TASK-180, decision-036): the paper is kept, the evidence says how many were replaced,
+    and a DEBUG line names the forum. None when no title is left."""
+    if not isinstance(value, str):
+        return None, "content.title"
+    title, replaced = title_text(value)
+    if replaced:
+        log.debug("openreview_title_control_characters", extra={"forum": forum, "replaced": replaced})
+    return title or None, title_evidence("content.title", replaced)
+
+
 def note_record(
     note: Mapping[str, Any],
     *,
@@ -196,7 +218,7 @@ def note_record(
     if not FORUM_ID.fullmatch(nid):
         return "invalid"
     content: Mapping[str, Any] = note["content"] if isinstance(note.get("content"), Mapping) else {}
-    title = _text(_value(content, "title"))
+    title, title_evidence = _title(_value(content, "title"), nid)
     if title is None:
         return "no_title"
     raw = _value(content, "venueid")
@@ -236,7 +258,7 @@ def note_record(
         ("venue", venue), ("year", year), ("track", track), ("status", status),
     )  # fmt: skip
     provenance = [claim(f, v, evidence) for f, v in scope]
-    provenance += [claim("title", title, "content.title"), claim("authors", authors, "content.authors")]
+    provenance += [claim("title", title, title_evidence), claim("authors", authors, "content.authors")]
     if abstract is not None:
         provenance.append(claim("abstract", abstract, "content.abstract"))
     if keywords:

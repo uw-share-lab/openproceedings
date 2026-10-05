@@ -1078,3 +1078,23 @@ def test_an_invitation_outside_the_v1_years_is_ignored(v1_imported: Imported) ->
     reading and no `invitation` claim, as the `venue_string` row beside it does."""
     r = v1_imported[0][V1["v2_invitation"]]
     assert (r.track, r.status) == ("main", "rejected") and r.claims("invitation") == ()
+
+
+def test_a_scholar_title_with_a_control_character_is_imported_with_a_space(tmp_path: Path) -> None:
+    """decision-036 (TASK-180 review): `_record` has no handler, so a control character in a RIS title raised out
+    of the import and failed the build. It becomes a space, and the title claim says so."""
+    old, new = "Synthetic Trust Benchmark", "Synthetic Trust\x02 Bench\x02mark"
+    (tmp_path / "mended.ris").write_bytes(
+        (FIXTURE / "mended.ris").read_bytes().replace(old.encode(), new.encode())
+    )
+    entries = json.loads((FIXTURE / "resolved.json").read_text(encoding="utf-8"))
+    for entry in entries:
+        entry["title"] = entry["title"].replace(old, new)
+    (tmp_path / "resolved.json").write_text(json.dumps(entries), encoding="utf-8")
+    records, _ = import_ris(tmp_path / "mended.ris")
+    record = {r.id: r for r in records}[NEURIPS]
+    assert record.title == "Synthetic Trust Bench mark for Language Models"
+    [title] = record.claims("title")
+    assert title.evidence == "mended.ris:TI (2 control characters replaced by a space)"
+    untouched = {r.id: r for r in import_ris(FIXTURE / "mended.ris")[0]}[NEURIPS]
+    assert [c.evidence for c in untouched.claims("title")] == ["mended.ris:TI"]
