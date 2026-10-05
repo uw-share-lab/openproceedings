@@ -55,7 +55,9 @@ test("the spec 05 review flow searches, includes workshops, exports RIS and save
     q: shown.get("q") as string,
     mode: shown.get("mode") ?? "native",
   });
-  const searchResponse = await page.request.get(`http://127.0.0.1:8000/api/v1/search?${apiQuery}`);
+  // the fixture API's port: 8000 unless OP_E2E_API_PORT moves it (playwright.config.ts)
+  const apiPort = process.env.OP_E2E_API_PORT ?? "8000";
+  const searchResponse = await page.request.get(`http://127.0.0.1:${apiPort}/api/v1/search?${apiQuery}`);
   expect(searchResponse.ok()).toBe(true);
   const searched = (await searchResponse.json()) as { total: number; index_version: string };
   expect(total).toBe(searched.total);

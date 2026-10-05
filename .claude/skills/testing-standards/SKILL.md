@@ -36,10 +36,16 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
   that needs a response gets a recorded fixture; there is no marker to opt out. Recording fixtures is a
   manual `op ingest` run by a person, never part of `make test` or CI.
 - **Frontend stubs answer with the API's own fixtures**, not hand-typed partial bodies: a `GET /coverage`
-  stub serves `src/components/coverage/coverage-fixture.json`, a record stub `record-fixture.json` (both kept
-  equal to the served API by backend contract tests). A partial body typed as the response is a lie the
+  stub serves `src/components/coverage/coverage-fixture.json`, a record stub `record-fixture.json`, a
+  comparison stub `src/components/compare/compare-fixture.json` (all kept equal to the served API by backend
+  contract tests). A partial body typed as the response is a lie the
   compiler can't see: the next component that reads one more field crashes in an unrelated test file
   (TASK-110, `concept-builder.test.tsx`).
+
+- **e2e ports.** Playwright's fixture API and web server listen on 8000 and 3000 unless `OP_E2E_API_PORT` /
+  `OP_E2E_WEB_PORT` are set (`playwright.config.ts`, `fixture_server.py`, and every spec that calls the API
+  directly read the same two). Locally the config reuses a server already on its port, so with another
+  instance on 8000/3000 an unset run would test *that* instance: set both variables.
 
 ## Rules
 1. **TDD.** Write the failing test first, watch it fail for the right reason, then implement. A bug fix
