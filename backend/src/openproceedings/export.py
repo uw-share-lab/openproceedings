@@ -334,7 +334,7 @@ def _csv(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             "abstract_withheld_reason": r.get(_REASON),
             "twins": "; ".join(r.get(_TWINS) or ()),
         }
-        yield _csv_row(_cell(row[c]) for c in CSV_COLUMNS)
+        yield _csv_row(csv_cell(row[c]) for c in CSV_COLUMNS)
 
 
 def csv_cell(value: object) -> object:
@@ -348,9 +348,6 @@ def csv_cell(value: object) -> object:
         if head in ("=", "+", "-", "@") or value[:1] in ("\t", "\r"):
             return "'" + value
     return value
-
-
-_cell = csv_cell  # the name this module's writers use
 
 
 class _Line:
