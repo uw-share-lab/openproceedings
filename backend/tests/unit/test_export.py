@@ -664,8 +664,8 @@ def test_jsonl_escapes_unicode_line_separators_and_carries_the_date() -> None:
 
 
 def test_csv_guards_disguised_formulas_and_strips_control_characters() -> None:
-    assert export._cell(" =1+1") == "' =1+1" and export._cell("＝1+1") == "'＝1+1"
-    assert export._cell("a\x00b\x1bc") == "abc" and export._cell("plain") == "plain"
+    assert export.csv_cell(" =1+1") == "' =1+1" and export.csv_cell("＝1+1") == "'＝1+1"
+    assert export.csv_cell("a\x00b\x1bc") == "abc" and export.csv_cell("plain") == "plain"
 
 
 def test_bibtex_names_are_never_split_or_read_as_et_al() -> None:
