@@ -129,6 +129,11 @@ class ApiConfig(BaseModel):
     # its result without them (`groups.not_counted`: `too_many_groups`); 10 is twice the widest Trust-Evals
     # string's groups
     max_counted_groups: int = Field(default=10, ge=1)
+    # and only when counting them reads at most this many terms, summed over the trees counted (each group
+    # alone and the query without each: `query.groups.Groups.terms_read`; a kept `NOT (… wildcards …)` is read
+    # by every one). Over it: the result without counts, `too_costly`. 5,000 admits every Trust-Evals string
+    # (the widest, main-2-pop, reads 243 on the real index) and refuses a query built to make 20 collections of thousands of terms
+    max_counted_terms: int = Field(default=5_000, ge=1)
     # a request holding a verification slot longer than this logs `verification_slow` (WARNING)
     slow_verification_seconds: float = Field(default=5.0, gt=0)
     # a request's cold verifications together get this much wall time from its first slot; past it the verify

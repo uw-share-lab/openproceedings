@@ -115,6 +115,7 @@ def search(
         facets=True,
         highlight=True,
         groups=request.app.state.config.max_counted_groups,
+        groups_terms=request.app.state.config.max_counted_terms,
     )
     annotate(request, total=found.total)
     assert found.groups is not None  # asked for

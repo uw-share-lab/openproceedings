@@ -532,9 +532,9 @@ export interface components {
             limit: number;
             /**
              * Not Counted
-             * @description Why `counts` is empty, null when it isn't: `fewer_than_two_groups` (the query is not an AND of groups), `too_many_groups` (`groups_total` is over `limit`), `count_failed` or `timed_out` (the counts could not be computed, or not in time; search again). The search itself is complete in every case.
+             * @description Why `counts` is empty, null when it isn't: `fewer_than_two_groups` (the query is not an AND of groups), `too_many_groups` (`groups_total` is over `limit`), `too_costly` (counting them would read more terms than this instance allows: shorten the `NOT` clauses or use longer wildcard stems), `count_failed` or `timed_out` (the counts could not be computed, or not in time; search again). The search itself is complete in every case.
              */
-            not_counted: ("fewer_than_two_groups" | "too_many_groups" | "count_failed" | "timed_out") | null;
+            not_counted: ("fewer_than_two_groups" | "too_many_groups" | "too_costly" | "count_failed" | "timed_out") | null;
         };
         /** Health */
         Health: {

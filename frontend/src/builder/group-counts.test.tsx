@@ -273,6 +273,10 @@ describe("each group's count after a search (TASK-176)", () => {
   });
 
   it.each([
+    [
+      "too_costly",
+      "Group counts aren't shown: counting each group of this query would read more terms than this site allows. Shorten the leave-out terms or use longer wildcard stems to see them.",
+    ],
     ["count_failed", "Group counts couldn't be computed for this search. Search again to see them."],
     ["timed_out", "Group counts weren't ready in time for this search. Search again to see them."],
     ["a_reason_added_later", "Group counts couldn't be computed for this search. Search again to see them."],

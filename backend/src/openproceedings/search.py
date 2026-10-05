@@ -27,7 +27,9 @@ beside the facets. Those trees hold only clauses of the effective tree, compiled
 verifies either; the counts read nothing the page, `total`, the facets or `excluded` are computed from, and
 change none of them. They are an extra, so they can never cost the search its answer: a worker that fails,
 or isn't done `GROUP_COUNT_WAIT_SECONDS` after everything else is, leaves the search whole with no counts and
-the reason (`count_failed`, `timed_out`) (`tests/unit/test_group_counts.py`).
+the reason (`count_failed`, `timed_out`). And they are bounded before they start: a query whose counting would
+read more than `groups_terms` terms (`Groups.terms_read`: every tree counted reads the kept clauses again)
+gets no counts and `too_costly` (`tests/unit/test_group_counts.py`).
 """
 
 from __future__ import annotations
@@ -56,7 +58,11 @@ from openproceedings.query.parser import ParseResult
 
 type Spans = Mapping[TextField, list[tuple[int, int]]]
 # why a search asked for its groups' counts has none (spec 04 §SearchResponse, `groups.not_counted`)
-NotCounted = Literal["fewer_than_two_groups", "too_many_groups", "count_failed", "timed_out"]
+NotCounted = Literal["fewer_than_two_groups", "too_many_groups", "too_costly", "count_failed", "timed_out"]
+# the most terms the counting of one query's groups may read, summed over the trees counted
+# (`Groups.terms_read`): over it the search answers without counts (`too_costly`). The API passes its own
+# (`ApiConfig.max_counted_terms`)
+MAX_COUNTED_TERMS = 5_000
 # how long a finished search waits for its counting worker before answering without the counts: the page,
 # the facets and the exclusion accounting are done by then, so this is the most the counts can add to a
 # response (they take milliseconds; a worker this late is queued behind others or stuck)
@@ -128,19 +134,21 @@ def run(
     facets: bool = False,
     highlight: bool = False,
     groups: int | None = None,
+    groups_terms: int = MAX_COUNTED_TERMS,
     groups_wait: float = GROUP_COUNT_WAIT_SECONDS,
 ) -> Search:
     """One page of `parsed`'s search on `engine`, with its total, exclusion accounting and expansions (and,
     when asked, the disjunctive facets, each hit's code-point highlight spans, and each concept group's counts
-    when the query has from two to `groups` of them, waited for at most `groups_wait` seconds once the rest
-    is done). `parsed` must have
+    when the query has from two to `groups` of them and counting them reads at most `groups_terms` terms,
+    waited for at most `groups_wait` seconds once the rest is done). `parsed` must have
     parsed: a query with errors never reaches an engine (spec 03 §Error handling)."""
     ast = _runnable(engine, parsed)
     expansions = expanded(engine, ast)
     scope = Scope()  # the ids this request verifies, for its every compile (module docstring)
     faceting: Future[dict[str, dict[str, int]]] | None = None
     found = None if groups is None else split(ast)
-    countable = found is not None and groups is not None and 2 <= len(found.groups) <= groups
+    why = None if found is None or groups is None else _uncountable(found, groups, groups_terms, expansions)
+    countable = found is not None and why is None
     counting: Future[tuple[Pair, ...]] | None = None
     if facets or countable:
         engine.check_page(sort, offset, limit)  # a bad argument is refused before any work, as before
@@ -187,9 +195,25 @@ def run(
     # with facets, the combos the worker just collected; without, only the default fields' (TASK-166)
     over = COMBO if facets else ORDER
     gone = excluded(engine, parsed, total, facets=partial(engine.facets, scope=scope, over=over))
-    return Search(
-        total, hits, gone, expansions, counted, _grouped(engine, found, groups, counting, scope, groups_wait)
-    )
+    grouped = None
+    if found is not None and groups is not None:
+        if why is not None:
+            grouped = GroupCounts((), len(found.groups), groups, why)
+        else:
+            grouped = _grouped(engine, found, groups, counting, scope, groups_wait)
+    return Search(total, hits, gone, expansions, counted, grouped)
+
+
+def _uncountable(found: Groups, limit: int, terms: int, expansions: Expansions) -> NotCounted | None:
+    """Why `found`'s groups are not counted, decided from the query and its expansions before any counting:
+    it is not an AND of groups, has more groups than `limit`, or counting them would read more than `terms`
+    terms. None when they are counted."""
+    n = len(found.groups)
+    if n < 2:
+        return "fewer_than_two_groups"
+    if n > limit:
+        return "too_many_groups"
+    return "too_costly" if found.terms_read(expansions) > terms else None
 
 
 def _alone(engine: TantivyEngine, found: Groups, scope: Scope) -> tuple[Pair, ...]:
@@ -202,20 +226,16 @@ def _alone(engine: TantivyEngine, found: Groups, scope: Scope) -> tuple[Pair, ..
 
 def _grouped(
     engine: TantivyEngine,
-    found: Groups | None,
-    limit: int | None,
+    found: Groups,
+    limit: int,
     counting: Future[tuple[Pair, ...]] | None,
     scope: Scope,
     wait: float,
-) -> GroupCounts | None:
-    """`run`'s `groups`: the worker's counts (or the caller's own, when no worker took them), or why there are
-    none. None when they weren't asked for. Never raises for a count: the search is already computed, and a
-    count that fails or is late is reported in `not_counted`, not as the search's failure."""
-    if found is None or limit is None:
-        return None
+) -> GroupCounts:
+    """`run`'s `groups` for a query whose groups are counted: the worker's counts (or the caller's own, when
+    no worker took them). Never raises for a count: the search is already computed, and a count that fails or
+    is late is reported in `not_counted`, not as the search's failure."""
     n = len(found.groups)
-    if n < 2 or n > limit:
-        return GroupCounts((), n, limit, "fewer_than_two_groups" if n < 2 else "too_many_groups")
     try:
         if counting is None:  # no worker (the pool is shutting down): counted here instead
             totals = _alone(engine, found, scope)

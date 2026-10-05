@@ -245,7 +245,8 @@ class GroupCounts(Model):
     )
     not_counted: NotCounted | None = Field(
         description="Why `counts` is empty, null when it isn't: `fewer_than_two_groups` (the query is not an "
-        "AND of groups), `too_many_groups` (`groups_total` is over `limit`), `count_failed` or `timed_out` "
+        "AND of groups), `too_many_groups` (`groups_total` is over `limit`), `too_costly` (counting them would read more "
+        "terms than this instance allows: shorten the `NOT` clauses or use longer wildcard stems), `count_failed` or `timed_out` "
         "(the counts could not be computed, or not in time; search again). The search itself is complete "
         "in every case."
     )

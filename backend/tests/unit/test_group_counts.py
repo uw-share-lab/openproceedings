@@ -399,33 +399,39 @@ def test_counting_groups_verifies_no_clause_again(tmp_path: Any) -> None:
     assert not [name for name in entered if name.startswith("op-facets")]
 
 
+def measured(engine: TantivyEngine, parsed: Any, **kw: Any) -> tuple[search.Search, int, set[str], int, int]:
+    """A search on a fresh engine, with what it cost the shared memos: the id term sets it built, the `compiled`
+    memo's keys and charged units, and the `faceted` memo's entries, once every worker is done."""
+    builds = 0
+    id_set = engine.id_set
+
+    def counted(ids: list[str]) -> Any:
+        nonlocal builds
+        builds += 1
+        return id_set(ids)
+
+    engine.id_set = counted  # type: ignore[method-assign]
+    got = search.run(engine, parsed, facets=True, **kw)
+    search.shutdown()  # every worker done: the memos are final
+    return got, builds, set(engine.compiled), sum(engine.charges["compiled"]), len(engine.faceted)
+
+
+def two_engines(tmp_path: Any) -> tuple[TantivyEngine, TantivyEngine]:
+    """Two fresh engines over one 5k index, with empty memos."""
+    first = tantivy_of(RECORDS, tmp_path / "a")
+    (built,) = (p for p in (tmp_path / "a" / "indexes").iterdir() if p.is_dir() and not p.is_symlink())
+    return first, TantivyEngine(built)
+
+
 def test_counting_groups_stores_nothing_in_the_compiled_memo(tmp_path: Any) -> None:
     """Ten one-word groups and a kept verified clause (`NOT (model NEAR/10 model*)`): the twenty trees counted
     are never stored in `compiled` (each would hold the kept clause's ids against the shared budget), and the
     kept clause's id set is built once more for all of them, not once a tree."""
-    root = tmp_path / "a"
-    plain_engine = tantivy_of(RECORDS, root)
-    (built,) = (p for p in (root / "indexes").iterdir() if p.is_dir() and not p.is_symlink())
-    engine = TantivyEngine(built)
+    plain_engine, engine = two_engines(tmp_path)
     q = "trust model data learning method results training network approach performance NOT (model NEAR/10 model*)"
     parsed = parse(q)
-
-    def measured(e: TantivyEngine, **kw: Any) -> tuple[search.Search, int, set[str], int]:
-        builds = 0
-        id_set = e.id_set
-
-        def counted(ids: list[str]) -> Any:
-            nonlocal builds
-            builds += 1
-            return id_set(ids)
-
-        e.id_set = counted  # type: ignore[method-assign]
-        got = search.run(e, parsed, facets=True, **kw)
-        search.shutdown()  # every worker done: the memos are final
-        return got, builds, set(e.compiled), sum(e.charges["compiled"])
-
-    plain, plain_builds, plain_keys, plain_units = measured(plain_engine)
-    got, builds, keys, units = measured(engine, groups=10)
+    plain, plain_builds, plain_keys, plain_units, plain_faceted = measured(plain_engine, parsed)
+    got, builds, keys, units, faceted = measured(engine, parsed, groups=10)
     assert got.groups is not None and len(got.groups.counts) == 10
     assert dataclasses.replace(got, groups=None) == plain
     assert (keys, units) == (
@@ -433,7 +439,89 @@ def test_counting_groups_stores_nothing_in_the_compiled_memo(tmp_path: Any) -> N
         plain_units,
     )  # not one entry, not one unit, more than the plain search
     assert builds - plain_builds <= 2  # the kept clause, once a field, whatever the number of groups
-    assert len(engine.faceted) - len(plain_engine.faceted) <= 20  # two memoised collections a group
+    assert faceted - plain_faceted <= 20  # two memoised collections a group
+
+
+def wide_kept_query(engine: TantivyEngine) -> str:
+    """Ten one-word groups and one kept `NOT (… every three-letter stem under the expansion cap …)`, as long as
+    a query may be: the shape that made every counted tree recompile, and re-read, thousands of terms."""
+    stems = sorted(
+        {
+            t[:3]
+            for f in ("title", "abstract")
+            for t, _n in engine.searcher.terms_with_prefix(f, "")
+            if len(t) > 3
+        }
+    )
+    groups = "trust model data learning neural network training language agent task"
+    kept: list[str] = []
+    for stem in stems:
+        if not (stem.isascii() and stem.isalpha()):
+            continue
+        tree = parse(f"{stem}*").effective_ast
+        if tree is None:
+            continue
+        try:
+            engine.expansions(tree)
+        except EngineInputError:
+            continue  # over the 200-term cap
+        if len(f"{groups} NOT ({' OR '.join([*kept, stem + '*'])})") > 2000:
+            break
+        kept.append(f"{stem}*")
+    return f"{groups} NOT ({' OR '.join(kept)})"
+
+
+def test_a_long_kept_clause_costs_the_memos_nothing_and_is_too_costly_by_default(tmp_path: Any) -> None:
+    """The review's shape (10 groups, a kept NOT of every stem under the cap: thousands of expanded terms, no
+    verified clause, one rate-limit token). Counted (the bound lifted), it adds no `compiled` entry or unit
+    to the plain search's and at most 20 `faceted` entries; at the default bound it is not counted at all."""
+    plain_engine, engine = two_engines(tmp_path)
+    q = wide_kept_query(plain_engine)
+    parsed = parse(q)
+    assert parsed.effective_ast is not None
+    found = split(parsed.effective_ast)
+    read = found.terms_read(plain_engine.expansions(parsed.effective_ast))
+    assert len(found.groups) == 10 and read > 50_000  # 10 groups × 2 × thousands of kept terms
+    plain, _builds, plain_keys, plain_units, plain_faceted = measured(plain_engine, parsed)
+    got, _builds, keys, units, faceted = measured(engine, parsed, groups=10, groups_terms=read)
+    assert got.groups is not None and got.groups.not_counted is None and len(got.groups.counts) == 10
+    assert dataclasses.replace(got, groups=None) == plain
+    assert (keys, units) == (plain_keys, plain_units)
+    assert faceted - plain_faceted <= 20
+    # one term under what it reads: refused before any counting, the search whole, the memos the plain search's
+    _first, fresh = two_engines(tmp_path / "again")
+
+    def never(*_a: Any, **_kw: Any) -> list[int]:
+        raise AssertionError("a query over the bound counts no group")
+
+    fresh.counts = never  # type: ignore[method-assign]
+    for bound in (read - 1, search.MAX_COUNTED_TERMS):
+        refused = search.run(fresh, parsed, facets=True, groups=10, groups_terms=bound)
+        assert refused.groups == search.GroupCounts((), 10, 10, "too_costly")
+        assert dataclasses.replace(refused, groups=None) == plain
+    search.shutdown()
+    assert (set(fresh.compiled), sum(fresh.charges["compiled"])) == (plain_keys, plain_units)
+
+
+def test_terms_read_is_the_terms_of_every_tree_counted(engines: Engines) -> None:
+    """N groups of G terms and K kept terms: N·G + 2·N·K (the docstring's arithmetic), a wildcard counting its
+    expansions, a phrase and a NEAR their items, a filter nothing; equal to the sum over the trees counted."""
+    _reference, tantivy, _other = engines
+    q = '(trust OR calibrat*) "language model" (agents NEAR/3 reliance) NOT (survey OR bias*) year:2020..2024'
+    ast = parse(q).effective_ast
+    assert ast is not None
+    expansions = tantivy.expansions(ast)
+    calibrat, bias = len(expansions[("calibrat", "*")]), len(expansions[("bias", "*")])
+    found = split(ast)
+    in_groups, in_kept = (1 + calibrat) + 2 + 2, 1 + bias
+    assert found.terms_read(expansions) == 3 * in_groups + 2 * 3 * in_kept
+
+    def terms(tree: Node) -> int:
+        return split(tree).terms_read(expansions) // max(1, len(split(tree).groups))
+
+    one = split(parse("trust").effective_ast)  # type: ignore[arg-type]
+    assert one.terms_read({}) == 1  # one group, nothing kept but filters
+    assert terms(found.alone(found.groups[1])) == 2 + 2 * in_kept  # itself a query of one group
 
 
 def test_a_counting_worker_that_would_verify_is_recounted_in_the_caller(

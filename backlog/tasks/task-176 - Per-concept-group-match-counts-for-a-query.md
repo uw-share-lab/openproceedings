@@ -4,7 +4,7 @@ title: Per-concept-group match counts for a query
 status: In Progress
 assignee: []
 created_date: '2026-10-05 01:47'
-updated_date: '2026-10-05 04:22'
+updated_date: '2026-10-05 04:41'
 labels:
   - api
   - frontend
@@ -52,3 +52,12 @@ Real corpus (index 05a0541717f6, Scholar mode, the 2026-10-04 string with source
 Review round 1 (c3c01a74): Must (failure/timeout isolation), Shoulds (compiled-memo cost, property assertions, concurrency test) and Nits (spec sentences, 'same as group N', live status) fixed.
 Needs a decision record (id to be assigned by the main session). Not done: an e2e/axe case for the builder with counts (ports 3000/8000 in use), and no learnings entry (INDEX.md would conflict across parallel branches).
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-05 04:41
+---
+Review round 2 (cost Must): TantivyEngine.counts compiles each conjunct once per request and stores nothing in the compiled memo (the 158-wildcard kept-clause shape: 2 entries / 19,106 units with or without counts, was 12 / 114,356); residual collection cost bounded by ApiConfig.max_counted_terms (default 5,000 terms read, N*G + 2*N*K), over which not_counted is too_costly.
+---
+<!-- COMMENTS:END -->

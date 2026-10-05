@@ -115,6 +115,26 @@ def test_a_query_over_the_limit_gets_its_whole_result_without_counts(store: Stor
     }
 
 
+def test_a_query_whose_counting_reads_too_many_terms_gets_its_whole_result_without_counts(
+    store: Store,
+) -> None:
+    """`max_counted_terms`: `trust model* NOT bias*` reads 2 × (1 + |model*|) + 2 × 2 × |bias*| terms."""
+    q = "trust model* NOT bias*"
+    with TestClient(make_app(store.indexes.parent)) as default:
+        counted = ok(default, q)
+        expansions = counted["query"]["expansions"]
+        read = 2 * (1 + len(expansions["model*"])) + 2 * 2 * len(expansions["bias*"])
+    with TestClient(make_app(store.indexes.parent, max_counted_terms=read)) as at:
+        assert ok(at, q)["groups"] == counted["groups"]
+    with TestClient(make_app(store.indexes.parent, max_counted_terms=read - 1)) as under:
+        over = ok(under, q)
+    assert counted["groups"]["not_counted"] is None and len(counted["groups"]["counts"]) == 2
+    assert over["groups"] == {"counts": [], "groups_total": 2, "limit": 10, "not_counted": "too_costly"}
+    assert {k: v for k, v in over.items() if k != "groups"} == {
+        k: v for k, v in counted.items() if k != "groups"
+    }
+
+
 @pytest.mark.parametrize(("q", "mode"), GROUPED)
 def test_the_counts_change_nothing_else_in_the_response(client: TestClient, q: str, mode: str) -> None:
     """`total`, the page and its scores, `excluded` and the facets are the search's without groups (`run`, as

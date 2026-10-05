@@ -19,9 +19,10 @@ the AST is read here; an engine counts the trees.
 
 from __future__ import annotations
 
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 
-from openproceedings.query.ast import And, Filter, Node, Not, Or
+from openproceedings.query.ast import And, Filter, Near, Node, Not, Or, Phrase, Term, Wildcard
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,35 @@ class Groups:
         """The query with `group` removed: every other group AND everything kept (the leave-one-out tree).
         Only asked of a query with two or more groups, so another group is always left."""
         return _and((*(g for g in self.groups if g is not group), *self.kept))
+
+    def terms_read(self, expansions: Mapping[tuple[str, str], Collection[str]]) -> int:
+        """How many terms counting every group reads, summed over the trees counted (each group alone, and the
+        query without each): what the counting costs, known before any of it is done. A tree's collection
+        reads every term of its text conjuncts (a wildcard's every expansion; a filter reads none: it is
+        applied to the collected combinations), so with N groups of G terms in all and K kept terms the
+        alone trees read G + N·K and the without trees (N − 1)·G + N·K: N·G + 2·N·K together. A long kept
+        clause (`NOT (… many wildcards …)`) is read by every tree, which is what makes a query costly."""
+        n = len(self.groups)
+        in_groups = sum(_terms(g, expansions) for g in self.groups)
+        in_kept = sum(_terms(k, expansions) for k in self.kept)
+        return n * in_groups + 2 * n * in_kept
+
+
+def _terms(n: Node, expansions: Mapping[tuple[str, str], Collection[str]]) -> int:
+    """The terms a tree's query reads: one a term, a wildcard's expansions, a phrase's or NEAR's items'."""
+    if isinstance(n, Term):
+        return 1
+    if isinstance(n, Wildcard):
+        return len(expansions[(n.stem, n.op)])
+    if isinstance(n, Phrase):
+        return sum(_terms(i, expansions) for i in n.items)
+    if isinstance(n, Near):
+        return _terms(n.left, expansions) + _terms(n.right, expansions)
+    if isinstance(n, Not):
+        return _terms(n.child, expansions)
+    if isinstance(n, And | Or):
+        return sum(_terms(c, expansions) for c in n.children)
+    return 0  # a filter
 
 
 def _and(nodes: tuple[Node, ...]) -> Node:
