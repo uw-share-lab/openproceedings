@@ -307,8 +307,9 @@ def _matching(side: ScholarSide, index: MatchIndex, meta: Meta) -> list[str]:
     ]  # fmt: skip
     if unvenued:
         lines += [
-            f"`no match (no venue)`: {_n(unvenued)} records whose venue string is not a venue (Scholar cut it, or "
-            "left it out) and whose URLs name no indexed paper, but whose title key an in-scope index record has. "
+            f"`no match (no venue)`: {_n(unvenued)} records whose venue string is empty or cut by Scholar (`…`) "
+            "and whose URLs name no indexed paper, but whose title key an in-scope index record of the same year "
+            "has. "
             "A title alone is never a match, so they are counted in scope and listed as `unsettled` for a person, "
             "with that record named.",
             "",
@@ -319,8 +320,8 @@ def _matching(side: ScholarSide, index: MatchIndex, meta: Meta) -> list[str]:
             "Outside the scope: "
             + "; ".join(f"{_n(k)} {reason.replace('_', ' ')}" for reason, k in sorted(reasons.items()))
             + ". `venue unrecognised` means the record's venue string is not exactly one of Scholar mode's source "
-            "names (Scholar cuts long venue names with `…`), no URL of it names an indexed paper, and no in-scope "
-            "index record has its title. Venue strings: "
+            "names and no URL of it names an indexed paper: it names another venue in full, or it is empty or cut "
+            "(`…`) and no in-scope index record of its year has its title. Venue strings: "
             + "; ".join(f"{_md(v)} ({k})" for v, k in sorted(by_venue.items(), key=lambda x: (-x[1], x[0])))
             + ".",
             "",
@@ -393,6 +394,7 @@ def _query(c: QueryComparison, review: Sequence[ReviewRow], meta: Meta) -> list[
             "",
         ]
     kept_own = sum(r.independent is False for r in c.kept)
+    kept_shared = sum(r.shared_title for r in c.kept)
     lines += [
         "| | records |",
         "|---|---|",
@@ -400,6 +402,7 @@ def _query(c: QueryComparison, review: Sequence[ReviewRow], meta: Meta) -> list[
         f"| openproceedings `total` (default filters; every venue and year) | {_n(c.total)} |",
         f"| openproceedings, in scope | {_n(c.in_scope)} |",
         f"| in both | {_n(len(c.kept))} ({_n(len(c.kept) - kept_own)} crawled records, {_n(kept_own)} RIS-only) |",
+        f"| in both, matched to a RIS-only record whose title another index record has | {_n(kept_shared)} |",
         f"| only in the Scholar set | {_n(len(c.only_scholar))} |",
         f"| only in openproceedings | {_n(len(c.added))} |",
         "",
@@ -464,10 +467,11 @@ def _query(c: QueryComparison, review: Sequence[ReviewRow], meta: Meta) -> list[
         "on a RIS-only record, whose title and abstract are the import's own.",
         f"- {_n(full_filtered)} of them also fail the default track or status filters.",
         f"- **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in (see Method); "
-        f"which stemmer stands for Scholar's is an open decision for the project owner. Under the widest suffix "
-        f"reading, every searched word as a prefix (`word*`), {prefix} `full_text` papers would match title or "
-        "abstract. That is how far a stemmer that only strips or adds endings could move this count; it is "
-        "not a bound for one that rewrites the stem.",
+        f"which stemmer stands for Scholar's is an open decision for the project owner. With every searched "
+        f"word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → "
+        f"`evaluat*`), {prefix} `full_text` papers would match title or abstract. That is all this figure "
+        "measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) "
+        "or rewrites the stem could move more.",
         "",
     ]
     return lines
@@ -495,7 +499,7 @@ _METHOD = """## Method
   derivation (`trustworthy` is not a form of `trust`), and it over-pairs in places (`suite` with `suit`). Google
   Scholar's stemmer is undocumented, so this is a stated stand-in, not Scholar's rule; quoted words get forms too.
   A wider stemmer would move papers from `full_text` to `stemming`; each query's sensitivity line says how many
-  a prefix reading of every word would move.
+  would move if every word were replaced by its inflection stem read as a prefix, and nothing more than that.
 - **`full_text`** is the residue: the record is in the corpus with an abstract, and the oracle confirms that no
   reading above matches its title or abstract. It may also fail the filters (counted under each finding). A
   record the corpus holds without an abstract is `unsettled`.

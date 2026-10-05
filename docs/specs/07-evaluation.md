@@ -66,9 +66,11 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   proceedings id is matched **within its venue and year**, as dedup merges on it: a NeurIPS hash is md5 of the
   paper's number and repeats every year. An id or key that names two records is ambiguous, never a pick, and
   so are a forum id and a proceedings id that name different records; a title alone never matches; the venue is
-  one of Scholar mode's source names exactly. A venue string Scholar cut with `…` is no venue: such a record is
-  out of scope unless a URL of it names an indexed paper, or an in-scope index record has its title, in which
-  case it is in scope and `unsettled`, for a person, with that record named.
+  one of Scholar mode's source names exactly. A venue string that is anything else is no venue, and
+  such a record is out of scope unless a URL of it names an indexed paper. One exception: when the string is
+  empty or cut by Scholar (`…`) and an in-scope index record of the same year has its title, the record is in
+  scope and `unsettled`, for a person, with that record named. A record that names another venue in full stays
+  out, whatever its title.
 - **Provenance.** An index that an RIS set was imported into holds that set's records, and comparing the set
   with it matches them to themselves. So every match records whether its index record has an independent
   source (a crawl) or only the import (`ris`), and its abstract's source; the report states both counts, a
@@ -98,7 +100,9 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   `ies`, `ed`, `ing`; no derivation). Google Scholar's stemmer is undocumented, so the rule is a stated
   stand-in, and which stemmer should stand for Scholar's is an open decision for the project owner. `full_text`
   is not a lower bound: a wider stemmer moves rows out of it. The report therefore gives a sensitivity figure
-  per string: how many `full_text` rows would match if every searched word were read as a prefix (`word*`).
+  per string: how many `full_text` rows would match if every searched word were replaced by its inflection stem
+  read as a prefix (`benchmarks` → `benchmark*`). It measures that and no more: it is not a stemmer, and one that
+  strips derivational endings could move more rows.
 - **`scholar_cap`** needs the size of each Scholar search: the set's Publish or Perish query dates group its
   records by search, and a group at 1,000 or more marks its venues and years as capped.
 - A report never replaces a review file a person has filled in, and names its inputs by file name and sha256,

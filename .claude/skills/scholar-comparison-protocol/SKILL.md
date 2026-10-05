@@ -87,8 +87,9 @@ range gives other numbers, so always state them.
 - `source:PMLR` translates to `venue:ICML` with a warning — PMLR also hosts other venues; note it.
 - A paper can be both `filtered` and `stemming`; record the first class in the order above (`filtered`) and the
   other in `auto_evidence` (`also stemming (matches with …)`).
-- A record with a year but a venue string that is no venue (Scholar cut it) is out of scope, unless an in-scope
-  index record has its title: then it is in scope and `unsettled`, with that record named. The papers in scope
+- A record whose venue string is no venue is out of scope. One exception: the string is empty or cut by Scholar
+  (`…`) and an in-scope index record of the same year has its title: then it is in scope and `unsettled`, with
+  that record named. A complete name of another venue (AISTATS) keeps the record out, whatever its title. The papers in scope
   are the denominator of every percentage of the Scholar set, and the report states it.
 - A forum id and a proceedings id on one Scholar record that name different index records are ambiguous.
 - The `stemming` test is inflection only (`scholar_compare.inflection_stem`: `s`/`es`/`ies`, `ed`, `ing`), a
@@ -96,7 +97,8 @@ range gives other numbers, so always state them.
   `llm`): the first version required one and missed the commonest variant in the corpus. Which stemmer stands
   for Scholar's is an open decision for the project owner; don't adopt another one in passing. `full_text` is
   **not** a lower bound: a wider stemmer moves rows out of it. The report gives a sensitivity figure instead,
-  how many `full_text` rows a prefix reading of every word (`word*`) would match.
+  how many `full_text` rows match when every word is replaced by its inflection stem read as a prefix
+  (`benchmarks` → `benchmark*`): exactly that, not what another stemmer would do.
 - Notes about one export (`--notes`) are never a default: another set would be printed with the wrong notes.
   `--answers <name>` says which string the set is Scholar's answer to, and the report marks the others.
 - The Scholar set answers one string (`main-7-most-updated`: one export per `source:` value). Running another

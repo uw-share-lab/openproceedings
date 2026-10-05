@@ -431,6 +431,7 @@ def test_the_report_says_how_many_matches_are_the_sets_own_import() -> None:
         "| NeurIPS | 2024 | 3 | 3 | 0 | 3 |",
         "| NeurIPS | 2026 | 3 | 0 | 3 | 0 |",
         "| in both | 2 (1 crawled records, 1 RIS-only) |",
+        "| in both, matched to a RIS-only record whose title another index record has | 0 |",
         "| `q` | 7 | 2 | 2 | 5 | 0 | 3 (42.9%) | 1 | 0 (0.0%) | 2 |",
         "- Of the 3 `full_text` papers, 2 rest on a crawled record and 1 on a RIS-only record, whose title and "
         "abstract are the import's own.",
@@ -456,12 +457,11 @@ def test_a_shared_title_on_an_import_only_match_and_a_no_venue_record_are_counte
         "import's venue or year may be wrong). The match is kept, and each such row that is a disagreement is "
         "`unsettled`, for a person."
     ) in text
-    assert "`no match (no venue)`: 1 records whose venue string is not a venue" in text
+    assert "`no match (no venue)`: 1 records whose venue string is empty or cut by Scholar (`…`)" in text
     assert "| no match (no venue) | 1 |" in text
     assert (
         "| `set.ris#7` | Graph theory | … Information Processing … | 2026 | `unsettled` | its venue string is no "
-        "venue, so no title match is made; same title: op:neurips:2024:crwl0002 (NeurIPS 2024); "
-        "op:neurips:2026:ris00003 (NeurIPS 2026) |"
+        "venue, so no title match is made; same title: op:neurips:2026:ris00003 (NeurIPS 2026) |"
     ) in text
     assert (
         "| `op:neurips:2026:ris00003` | Graph theory | NeurIPS | 2026 | `unsettled` | matched by title venue year"
@@ -472,9 +472,11 @@ def test_a_shared_title_on_an_import_only_match_and_a_no_venue_record_are_counte
 def test_the_stemmer_sensitivity_is_stated_and_no_lower_bound_is_claimed() -> None:
     text = own_report()
     assert (
-        "Under the widest suffix reading, every searched word as a prefix (`word*`), 1 of the 3 (33.3%) "
-        "`full_text` papers would match title or abstract."
+        "With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, "
+        "`evaluating` → `evaluat*`), 1 of the 3 (33.3%) `full_text` papers would match title or abstract. That is "
+        "all this figure measures"
     ) in text
+    assert "strips or adds endings" not in text
     assert "which stemmer stands for Scholar's is an open decision for the project owner" in text
     assert "lower bound" not in text
 
@@ -532,3 +534,16 @@ def test_notes_are_never_a_default(data_dir: Path, inputs: tuple[Path, Path], tm
     assert (
         "- Notes: none" in text and "## Notes on these inputs" not in text
     )  # another set's notes would be wrong
+
+
+def test_a_kept_record_matched_to_a_shared_title_import_is_counted_under_in_both() -> None:
+    records = [
+        paper("crwl0009", "LLM trust benchmark", abstract="An abstract.", year=2025),
+        imported("ris00009", "LLM trust benchmark", abstract="The import's own text.", year=2026),
+    ]
+    text = entry("LLM trust benchmark", year=2026)
+    index = MatchIndex.build(records)
+    c = compare(QUERY, text, records)
+    assert [(r.op_id, r.shared_title, r.auto_class) for r in c.kept] == [(nid("ris00009", 2026), True, "")]
+    out = render(META, scope_and_match(read_ris(text, NAME), index, META.scope), index, [c], review_rows([c]))
+    assert "| in both, matched to a RIS-only record whose title another index record has | 1 |" in out

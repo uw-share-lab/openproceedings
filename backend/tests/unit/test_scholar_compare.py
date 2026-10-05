@@ -583,12 +583,19 @@ def test_a_forum_id_and_a_proceedings_id_naming_different_records_are_ambiguous(
     assert set(m.candidates) == {nid("frm00001"), nid(f"nips-{H[1]}", 2024)}
 
 
-def test_a_record_with_no_venue_and_a_same_year_title_goes_to_a_person() -> None:
+def test_a_record_with_a_cut_or_empty_venue_and_a_same_year_title_goes_to_a_person() -> None:
     records = corpus()
-    text = entry("Graph networks", venue="… Information Processing …") + entry("Elsewhere", venue="AISTATS")
+    text = (
+        entry("Graph networks", venue="… Information Processing …")
+        + entry("Graph kernels", venue=None)  # no venue string at all, same year: kept
+        + entry("Graph networks", venue="… Information Processing …", year=2023)  # another year: out
+        + entry("Graph networks", venue="International Conference on Artificial Intelligence and Statistics")
+        + entry("Elsewhere", venue="AISTATS")
+    )
     c = compare(QUERY, text, records)
-    assert c.scholar_in_scope == 1  # the denominator: the no-venue record is in, the unrelated one is out
-    [row] = c.not_in_index
+    assert c.scholar_in_scope == 2  # the denominator: a record that names another venue in full stays out
+    assert [r.scholar_key for r in c.not_in_index] == ["set.ris#1", "set.ris#2"]
+    row = c.not_in_index[0]
     assert (row.scholar_key, row.auto_class, row.settled, row.venue) == (
         "set.ris#1", UNSETTLED, False, "… Information Processing …",
     )  # fmt: skip
@@ -772,3 +779,14 @@ def test_the_prefix_reading_bounds_how_far_a_wider_stemmer_could_move_full_text(
     assert parsed.ast is not None
     tree = apply_defaults(with_prefixes(parsed.ast, TOKENIZER_VERSION), 0).identification
     assert tree is not None and render(tree) == '("ai agent*" OR llm*)'  # a two-letter word stays a word
+
+
+def test_the_prefix_is_built_on_the_inflection_stem_not_the_word_as_typed() -> None:
+    parsed = parse("benchmarks OR evaluating OR evaluation", "native")
+    assert parsed.ast is not None
+    tree = apply_defaults(with_prefixes(parsed.ast, TOKENIZER_VERSION), 0).identification
+    assert tree is not None and render(tree) == "(benchmark* OR evaluat* OR evaluation*)"
+    # typed in the plural, the paper has another ending: `benchmarks*` would miss it, and so do the inflected forms
+    records = [paper("stem0002", "A benchmarkable design", abstract="An abstract.")]
+    c = compare("benchmarks", entry("A benchmarkable design"), records, mode="native")
+    assert [r.auto_class for r in c.dropped] == [FULL_TEXT] and c.full_text_by_prefix == 1

@@ -378,8 +378,9 @@ def scope_and_match(
     """Every RIS record matched, scoped and counted once per paper. A matched record is scoped by its index
     record's venue and year (the two sides then share one definition of the scope); an unmatched one by its own.
     An unmatched record with no year can't be scoped: it stays in, for a person (`unsettled`). So does an
-    unmatched record whose venue string is no venue but whose title key an in-scope index record has: it may be
-    that paper, and only a person can say. Two records are one paper when they match one index record, or,
+    unmatched record whose venue string is empty or cut (`…`) and whose title key an in-scope index record of
+    the same year has: it may be that paper, and only a person can say. A record that names another venue in
+    full is out of scope, whatever its title. Two records are one paper when they match one index record, or,
     unmatched, share venue, year and title key."""
     entries: dict[tuple[object, ...], Entry] = {}
     dropped: list[Dropped] = []
@@ -397,9 +398,14 @@ def scope_and_match(
             if cell[0] is not None and cell[1] is not None:
                 cells.append((cell[0], cell[1]))
         near = tuple(i for i in m.near if scope.holds(*index.cells[i]))
+        # an empty or cut venue string says nothing; a complete name of another venue says the record is elsewhere
+        unsaid = not r.venue_raw or any(cut in r.venue_raw for cut in _ELLIPSES)
         in_scope = scope.holds(*cell) or (
             m.op_id is None
-            and ((r.year is None and r.venue in scope.venues) or (m.problem == "no_venue" and bool(near)))
+            and (
+                (r.year is None and r.venue in scope.venues)
+                or (m.problem == "no_venue" and unsaid and any(index.cells[i][1] == r.year for i in near))
+            )
         )
         if not in_scope:
             reason = (
@@ -587,14 +593,17 @@ def with_variants(n: Node, forms: Mapping[str, Sequence[str]]) -> Node:
 
 
 def with_prefixes(n: Node, tokenizer: str) -> Node:
-    """`n` with every searched word read as a prefix (`word*`): the widest reading a suffix stemmer could give,
-    for the report's sensitivity figure, never for a class. A word under the wildcard's minimum stem stays a
-    word; a `$` wildcard becomes `*`; filters are untouched."""
+    """`n` with every searched word replaced by its inflection stem read as a prefix (`inflection_stem(word)*`:
+    `benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), so both a stripped ending and any added one are
+    covered. For the report's sensitivity figure, never for a class. It is not a stemmer: it does not strip
+    derivational endings (`evaluation` stays `evaluation*`, which `evaluate` does not match). A word whose
+    stem is under the wildcard's minimum stays a word; a `$` wildcard becomes `*`; filters are untouched."""
 
     def wide(item: Term | Wildcard, field: TextField | None) -> Term | Wildcard:
-        stem = item.stem if isinstance(item, Wildcard) else item.token
+        typed = item.stem if isinstance(item, Wildcard) else item.token
+        stem = inflection_stem(typed)
         if letters(stem, tokenizer) < MIN_STEM:
-            return Term(span=item.span, token=stem, field=field) if isinstance(item, Term) else item
+            return Term(span=item.span, token=typed, field=field) if isinstance(item, Term) else item
         return Wildcard(span=item.span, stem=stem, op="*", field=field)
 
     def leaf(x: Leaf) -> Leaf:
@@ -679,6 +688,9 @@ class Row:
     independent: bool | None = None
     abstract_source: str = ""
     fails_filters: bool = False  # its index record fails a default filter of the query
+    shared_title: bool = (
+        False  # matched to a RIS-only record whose title another index record has (`Match.shared`)
+    )
 
 
 @dataclass(frozen=True)
@@ -756,7 +768,9 @@ def _not_in_index(e: Entry, index: MatchIndex, scope: Scope) -> Row:
     elif m.problem == "no_year":
         cls, evidence = UNSETTLED, f"no year and no id: matched by id only{same}"
     elif m.problem == "no_venue":  # kept only because an in-scope record has its title (`scope_and_match`)
-        here = _cells_of((i for i in m.near if scope.holds(*index.cells[i])), index)
+        here = _cells_of(
+            (i for i in m.near if scope.holds(*index.cells[i]) and index.cells[i][1] == e.year), index
+        )
         cls, evidence = (
             UNSETTLED,
             f"its venue string is no venue, so no title match is made; same title: {here}",
@@ -924,7 +938,7 @@ def compare_query(
                 f"`{cls}` ({evidence})"
             )
             cls, settled = UNSETTLED, False
-        return Row("scholar", e.record.key, i, e.record.title, d.venue, d.year, cls, evidence, settled, *provenance(i, d))  # fmt: skip
+        return Row("scholar", e.record.key, i, e.record.title, d.venue, d.year, cls, evidence, settled, *provenance(i, d), bool(e.match.shared))  # fmt: skip
 
     def added(i: str) -> Row:
         d = docs[i]
@@ -961,7 +975,7 @@ def compare_query(
                 if bug
                 else ("", e.match.rule)
             )
-            kept.append(Row("scholar", e.record.key, d.id, e.record.title, d.venue, d.year, cls, evidence, not bug, *provenance(d.id, d)))  # fmt: skip
+            kept.append(Row("scholar", e.record.key, d.id, e.record.title, d.venue, d.year, cls, evidence, not bug, *provenance(d.id, d), bool(e.match.shared)))  # fmt: skip
     members = frozenset(by_id)
     notices = Counter(str(d.code) for d in (*parsed.translations, *parsed.warnings))
     full = frozenset(r.op_id for r in only if r.auto_class == FULL_TEXT)
