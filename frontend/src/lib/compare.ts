@@ -186,31 +186,44 @@ const COUNTED_ADDED: Record<string, readonly [string, string]> = {
 
 /**
  * What a reviewer can do about a paper with each reason (copy CM-19): a dropped or missing paper's count is
- * never left without a next step.
+ * never left without a next step. A word form's step depends on the mode: the "Add $" action under the query
+ * is Scholar mode's only (USAB-R2-1).
  */
 const NEXT_STEP: Record<string, string> = {
   filtered: "to include such a paper, write its track or status into the query (its row says which)",
   full_text:
     "no form of this query finds such a paper by its title or abstract; keep it from your own file if it belongs in the review",
-  stemming: "add $ to that word (the Add $ action under the query) to match its other forms",
+  stemming: "type $ after that word (e.g. word$) to match its other forms",
   compat_reading:
     "write the query as Google Scholar reads it (its translation notice shows how) to match such a paper",
-  coverage_gap: "keep such a paper from your own file: no query here can find it",
+  coverage_gap: "Keep such a paper from your own file; no query here can find it",
   unsettled: "check such a paper by hand (its row says what is undecided)",
   our_bug: "please report it with this query",
 };
+const SCHOLAR_STEMMING_STEP = "add $ to that word (the Add $ action under the query) to match its other forms";
 
 /**
  * "1,713 papers have no exact match in their title or abstract: no form of this query finds …": the server's
  * counts per reason, each a sentence of its own with what to do (an unknown reason is shown as sent).
  */
-export function reasonLines(list: ListName, totals: Readonly<Record<string, number>>): string[] {
+export function reasonLines(
+  list: ListName,
+  totals: Readonly<Record<string, number>>,
+  mode: Mode,
+): string[] {
   return Object.entries(totals).map(([reason, n]) => {
     const words = (list === "added" ? COUNTED_ADDED : COUNTED)[reason];
     const papers = `${n.toLocaleString("en-US")} ${n === 1 ? "paper" : "papers"}`;
     if (words === undefined) return `${papers}: ${reason}.`;
-    const next = list === "added" && reason !== "our_bug" ? undefined : NEXT_STEP[reason];
-    return `${papers} ${n === 1 ? words[0] : words[1]}${next === undefined ? "" : `: ${next}`}.`;
+    const next =
+      list === "added" && reason !== "our_bug"
+        ? undefined
+        : reason === "stemming" && mode === "scholar"
+          ? SCHOLAR_STEMMING_STEP
+          : NEXT_STEP[reason];
+    // a step that is a sentence of its own (a capital) follows a full stop, never a second colon (USAB-R2-N)
+    const joint = next === undefined ? "" : /^[A-Z]/.test(next) ? `. ${next}` : `: ${next}`;
+    return `${papers} ${n === 1 ? words[0] : words[1]}${joint}.`;
   });
 }
 

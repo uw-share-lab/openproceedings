@@ -70,7 +70,7 @@ result set, and the comparison is about it).
 | Off | dirty draft or stale results | `[Compare]` off with the same reason Export shows |
 | Running | Compare | "Comparing `<name>` (3.5 MB) with this search… up to 60 s. 12 s so far." (the counter ticks, hidden from screen readers), `[Cancel]` |
 | Answered | 200 | C3 below |
-| Refused | envelope | "The comparison didn't run. Nothing was compared." + the server's code and message; a 429 counts down to Retry; a 503 `API_BUSY` with `Retry-After` (a table still being built: its expected time left) retries by itself, up to 3 times in a row; a refusal of the file (413, 415, 422) offers no Retry: "Choose another file, then Compare." |
+| Refused | envelope | "The comparison didn't run. Nothing was compared." + the server's code and message; a 429 counts down to Retry; a 503 `API_BUSY` with `Retry-After` (every slot taken; a table still being built: its expected time left) retries by itself, up to 3 times in a row, and while a retry is to come says "The comparison hasn't run yet: this instance is busy, and it will try again by itself." with "Busy; retrying by itself in `<n>` s" (no alert); a 503 `API_BUSY` without `Retry-After` (the comparison ran past its time, or the table could not be built) is not retried by itself: Retry is offered at once; a refusal of the file (413, 415, 422) offers no Retry: "Choose another file, then Compare." |
 | Pausing | a 200 with `next_comparison_seconds` > 0 (`--compare`, or off loopback) | `[Compare]` off, beside it "Next comparison in 54 s: this instance pauses between one network's comparisons." counting down |
 | No answer | not JSON / unreachable | the export's wording for the same case, Retry |
 | Stale | `(q, mode, index)` changed | "The search changed since the last comparison…" (no numbers), file kept |
@@ -150,7 +150,12 @@ read "; " instead.
 - **Screen reader.** A polite status region (beside the panel, not in it, so an answer that lands while the
   panel is closed is still announced; the heading then takes no focus) says "Comparing `<name>` with this search." then "Comparison done:
   51 kept, 1,756 dropped, 8 not in the index, 16 added." (or "The comparison didn't run." / "Comparison
-  cancelled."). Refusals are `role="alert"`. The counts are a real table with a caption, row headers and
+  cancelled."). Refusals are `role="alert"`, but for a busy server's wait that ends in a retry by itself: that
+  is one polite "Busy; retrying by itself in `<n>` s." in the same region, and the retry is not announced as
+  "Comparing…" again, since a busy server can be met several times in a row (A11Y-R2-2). A retry by itself
+  moves focus only off the notice it replaces, and its answer takes focus only from Compare or from nowhere,
+  never from wherever the reader went while it waited (A11Y-R2-1). An `aria-disabled` Compare sends nothing
+  when pressed (USAB-R2-2). The counts are a real table with a caption, row headers and
   right-aligned `tabular-nums`. Each download's accessible name says which list and how many ("Download CSV of
   the 1,756 dropped papers"); its visible text is the start of that name.
 - **What changes the URL:** nothing.
@@ -168,17 +173,17 @@ read "; " instead.
 | CM-6 | List toggles (one name, state in `aria-expanded`): "List the 1,756 dropped papers ▸/▾"; "List the 8 papers not in the index"; "Download CSV", "Download RIS" |
 | CM-7 | Reasons on a row (dropped): "excluded by a default filter", "no exact match in its title or abstract", "matches only as another word form", "matches only as Google Scholar reads the query", "can't be decided automatically", "openproceedings judges it both ways (a bug: please report it)"; (added): "an exact match your file doesn't hold", "matches as this search reads the query, not as Google Scholar reads it", "its venue and year hit Google Scholar's 1,000-result cap in your file" |
 | CM-8 | Import warning: "`<n>` of the `<kept>` kept and `<m>` of the `<dropped>` dropped papers are in this index only because a RIS file was imported into it (marked “import only”). Matching such a paper shows that the import holds it, not that the index covers it from its own sources." |
-| CM-9 | Announcements: "Comparison done: `<k>` kept, `<d>` dropped, `<n>` not in the index, `<a>` added."; "The comparison didn't run."; "Comparison cancelled." |
+| CM-9 | Announcements: "Comparison done: `<k>` kept, `<d>` dropped, `<n>` not in the index, `<a>` added."; "The comparison didn't run."; "Busy; retrying by itself in `<n>` s." (a busy wait that ends in a retry by itself, instead of "didn't run"); "Comparison cancelled." |
 | CM-10 | Running: "Comparing `<name>` (`<size>` MB) with this search… Each paper is checked against the query, so a large file can take up to `<max_seconds>` s." then "`<n>` s so far." (not announced) |
 | CM-11 | Local refusals: "This file is empty. Choose a RIS export that holds records."; "This file is `<size>` MB; this instance compares files up to `<cap>` MB. Export it without abstracts (only titles, venues, years and links are compared), or split it." |
-| CM-12 | Refused: "The comparison didn't run. Nothing was compared." then the server's code and message. With an earlier answer for the same search still shown: "The new comparison didn't run. The results below are from the earlier comparison with `<its file>`." A refusal of the file adds "Choose another file, then Compare." (no Retry); `API_COMPARE_TOO_COSTLY` adds "Compare a smaller file, or narrow the query and search again." |
+| CM-12 | Refused: "The comparison didn't run. Nothing was compared." then the server's code and message. With an earlier answer for the same search still shown: "The new comparison didn't run. The results below are from the earlier comparison with `<its file>`." A refusal of the file adds "Choose another file, then Compare." (no Retry); `API_COMPARE_TOO_COSTLY` adds "Compare a smaller file, or narrow the query and search again." While a busy server's retry by itself is still to come (A11Y-R2-2): "The comparison hasn't run yet: this instance is busy, and it will try again by itself." (or "The new comparison hasn't run yet: …" before the earlier-results sentence), then the server's message and "Busy; retrying by itself in `<n>` s", then "Retrying…" |
 | CM-13 | Stale: "The search changed since the last comparison, so its numbers are no longer shown. Compare again to see what the current query keeps, drops and adds." |
 | CM-14 | Index moved: "The index changed after this search: the comparison ran on index `<a>`, and the results shown are from `<b>`, so its numbers are not shown. Search again, then compare again." `[Search again]` |
 | CM-15 | Total differs: "The comparison counted `<n>` papers for this search, not the `<m>` shown, on the same index. That shouldn't happen: it is a bug in openproceedings. Its numbers are not shown." "Report it ▸" |
 | CM-16 | Not compared: "Records of your file that are not NeurIPS, ICLR or ICML papers as far as their venue and links say. They are in none of the lists above." |
 | CM-17 | Retired (UX-S1): the client's own 429 line ("…you can keep searching while you wait") was untrue for a token-bucket 429; the server's cooldown message says "searching is not affected" itself. |
 | CM-18 | A list's reasons, each count a sentence of its own (singular for 1), followed by CM-19's step: dropped "`<n>` papers are excluded by a default filter", "… have no exact match in their title or abstract", "… match only as another word form", "… match only as Google Scholar reads the query", "… can't be decided automatically", "… are judged both ways by openproceedings (a bug: please report it)"; not in the index "… are not in the index"; added "… match exactly and are not in your file", "… match as this search reads the query, not as Google Scholar reads it", "… are from a venue and year that hit Google Scholar's 1,000-result cap in your file" |
-| CM-19 | What to do, after a dropped or missing count (USAB-S3): filtered "to include such a paper, write its track or status into the query (its row says which)"; full text "no form of this query finds such a paper by its title or abstract; keep it from your own file if it belongs in the review"; word form "add $ to that word (the Add $ action under the query) to match its other forms"; Scholar's reading "write the query as Google Scholar reads it (its translation notice shows how) to match such a paper"; not in the index "keep such a paper from your own file: no query here can find it"; undecided "check such a paper by hand (its row says what is undecided)"; a bug "please report it with this query" |
+| CM-19 | What to do, after a dropped or missing count (USAB-S3): filtered "to include such a paper, write its track or status into the query (its row says which)"; full text "no form of this query finds such a paper by its title or abstract; keep it from your own file if it belongs in the review"; word form, in native mode "type $ after that word (e.g. word$) to match its other forms", in Scholar mode, where the Add $ action is, "add $ to that word (the Add $ action under the query) to match its other forms" (USAB-R2-1); Scholar's reading "write the query as Google Scholar reads it (its translation notice shows how) to match such a paper"; not in the index, a sentence of its own after the count ("3 papers are not in the index. Keep such a paper from your own file; no query here can find it."; USAB-R2-N); undecided "check such a paper by hand (its row says what is undecided)"; a bug "please report it with this query" |
 | CM-20 | What is undecided, on a row (UX-S4): "to check: is it in the index under another title, venue or year?" (not in the index); "to check: does the paper itself match the query? (its row says what is undecided)" (dropped); "to check: is it the paper your file holds under another record?" (added); "to report: openproceedings judged it both ways" |
 | CM-21 | Summary (USAB-S7): "This comparison in one sentence, for your notes (nothing of it is kept here):" `[Copy]` → "On `<date>`, the query `<canonical>` (canonical_hash `<hash>`) on openproceedings index `<v>`, compared with `<file>` (`<r>` records read, `<p>` papers compared): `<k>` kept, `<d>` dropped, `<n>` not in the index; it adds `<a>` papers the file doesn't hold." |
 | CM-22 | Why Compare is off, beside it (A11Y-S5, USAB-S2): "Choose a RIS file first."; "Choose a smaller file."; "Next comparison in `<n>` s: this instance pauses between one network's comparisons."; or the search page's own reason (a dirty draft, stale results) |
@@ -224,14 +229,21 @@ search heuristics, `heuristic-evaluation`), on the built panel. Dispositions:
 | USAB-N1 a refused file offered Retry with the same file | Nit | fixed: "Choose another file" |
 | USAB-N3, UX-N the missing paper's row said the same thing twice; units | Nit | fixed: CM-10, units line |
 | Long panel with several lists open; Scholar-centric reasons for Scopus/WoS files; "records" naming; "dropped" as a verdict | research question | for TASK-032/TASK-047 (§Open questions), not a fix |
+| USAB-R2-1 the word-form step named an Add $ action native mode doesn't have | Should | fixed: CM-19 by mode |
+| USAB-R2-2 Compare, aria-disabled during the pause, still sent the file | Should | fixed |
+| USAB-R2-N two colons in the not-in-the-index line | Nit | fixed: CM-19 |
+| A11Y-R2-1 a retry by itself moved focus; A11Y-R2-2 an alert per busy cycle, "didn't run" while a retry was to come | Should | fixed: CM-9, CM-12, §Interaction spec |
+
+## Decided
+
+- The stemmer that stands for Google Scholar's (decision-038: inflected forms only); `stemming` vs
+  `full_text` counts move if it changes.
 
 ## Open questions
 
 - Should a comparison be saved with a search record (the file's hash and the counts, never the file), so a
   methods section can cite "kept 51 of 1,815"? Not built: the owner ruled that nothing of the file is stored.
   The copyable sentence (CM-21) is the stopgap; the citable form and its place in the record are TASK-195.
-- The stemmer that stands for Google Scholar's is decided (decision-038: inflected forms only); `stemming` vs
-  `full_text` counts move if it changes.
 - A file from another database (Scopus, Web of Science) has DOIs, which the merge rules don't match on
   (TASK-186), and the reasons are worded for Scholar.
 - For the user research and usability rounds (TASK-032, TASK-047; each needs ORE clearance first): do reviewers

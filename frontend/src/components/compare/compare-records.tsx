@@ -48,7 +48,7 @@ import {
 import { saveBlob } from "@/lib/export";
 import type { Mode } from "@/lib/search-state";
 import { CopyButton } from "../copy-button";
-import { box, button, FailureNotice, Report, warnBox } from "../export/export-notice";
+import { autoRetryText, box, button, FailureNotice, Report, warnBox } from "../export/export-notice";
 import { paperHref } from "../search/hit-item";
 
 export interface CompareRecordsProps {
@@ -67,6 +67,16 @@ export interface CompareRecordsProps {
 export const ROWS_SHOWN = 100;
 /** A wait the server answers with `API_BUSY` is retried by itself this many times in a row, then by Retry. */
 export const AUTO_RETRIES = 3;
+/** A refusal a retry by itself follows: `API_BUSY` with a `Retry-After`, while retries are left (`tries`). */
+function retriedByItself(failure: Failure, tries: number): failure is Extract<Failure, { kind: "refused" }> {
+  return (
+    failure.kind === "refused" &&
+    failure.status === 503 &&
+    failure.error.code === "API_BUSY" &&
+    failure.retryAfter !== null &&
+    tries < AUTO_RETRIES
+  );
+}
 /** Refusals of the file itself: the same file would be refused again, so the notice offers another file. */
 const FILE_CODES = new Set([
   "API_BODY_TOO_LARGE",
@@ -146,6 +156,7 @@ export function CompareRecords({
   const compareButton = useRef<HTMLButtonElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
+  const notice = useRef<HTMLDivElement>(null);
   const focusResult = useRef(false);
   const [autoTries, setAutoTries] = useState(0);
   const panelId = useId();
@@ -166,10 +177,12 @@ export function CompareRecords({
   }, [done, open]);
 
   /** Focus to Compare when the control that had it is about to go (a Retry's notice, Cancel), never from
-   * elsewhere on the page (an automatic retry must not move it). */
-  const keepFocus = () => {
+   * elsewhere on the page. A retry by itself moves it only off the notice it replaces, never off another of
+   * the panel's controls (A11Y-R2-1). */
+  const keepFocus = (byItself: boolean) => {
     const active = document.activeElement;
-    if (active === null || active === document.body || panel.current?.contains(active))
+    const going = byItself ? notice.current : panel.current;
+    if (active === null || active === document.body || going?.contains(active))
       compareButton.current?.focus();
   };
 
@@ -177,19 +190,26 @@ export function CompareRecords({
     (byItself = false) => {
       const problem = file === null || limits === null ? null : fileProblem(file, limits);
       if (disabledReason !== null || file === null || problem !== null || run.kind === "running") return;
-      setAutoTries(byItself ? autoTries + 1 : 0);
+      if (pause > 0) return; // Compare is aria-disabled, not disabled: a click still lands (USAB-R2-2)
+      const tries = byItself ? autoTries + 1 : 0;
+      setAutoTries(tries);
       aborter.current?.abort();
       const controller = new AbortController();
       aborter.current = controller;
       const asked = key;
-      keepFocus();
+      keepFocus(byItself);
       setRun({ kind: "running", fileName: file.name, size: file.size, since: Date.now() });
-      setAnnouncement(`Comparing ${file.name} with this search.`);
+      // a retry by itself was announced with its wait; "Comparing…" again would only repeat it (A11Y-R2-2)
+      if (!byItself) setAnnouncement(`Comparing ${file.name} with this search.`);
       void postCompare(api, { q, mode }, file, controller.signal).then(
         (outcome) => {
           if (controller.signal.aborted) return;
           if (outcome.kind === "ok") {
-            focusResult.current = true;
+            // an answer that came by itself takes focus only from Compare or from nowhere, never from
+            // wherever the reader went while it waited (A11Y-R2-1)
+            const active = document.activeElement;
+            focusResult.current =
+              !byItself || active === null || active === document.body || active === compareButton.current;
             setAutoTries(0);
             const wait = outcome.data.next_comparison_seconds;
             setNextAt(wait > 0 ? Date.now() + wait * 1000 : null);
@@ -204,7 +224,11 @@ export function CompareRecords({
             setAnnouncement(doneText(outcome.data));
           } else {
             setRun({ kind: "failed", key: asked, failure: outcome });
-            setAnnouncement("The comparison didn't run.");
+            setAnnouncement(
+              retriedByItself(outcome, tries)
+                ? `${autoRetryText(outcome.retryAfter ?? 0)}.`
+                : "The comparison didn't run.",
+            );
           }
         },
         () => {
@@ -214,7 +238,7 @@ export function CompareRecords({
         },
       );
     },
-    [api, autoTries, disabledReason, file, key, limits, mode, q, run.kind],
+    [api, autoTries, disabledReason, file, key, limits, mode, pause, q, run.kind],
   );
 
   if (limits === null) return null; // this instance doesn't offer comparisons (C8)
@@ -243,10 +267,12 @@ export function CompareRecords({
     run.failure.kind === "refused" &&
     run.failure.status === 503 &&
     run.failure.error.code === "API_BUSY";
+  // the wait ends in a retry by itself: not "didn't run" while it is still to come (A11Y-R2-2)
+  const retrying = run.kind === "failed" && retriedByItself(run.failure, autoTries);
 
   const cancel = () => {
     aborter.current?.abort();
-    keepFocus(); // Cancel is gone once the run is
+    keepFocus(false); // Cancel is gone once the run is
     setRun({ kind: "idle" });
     setAnnouncement("Comparison cancelled.");
   };
@@ -342,19 +368,26 @@ export function CompareRecords({
           </p>
         )}
         {run.kind === "failed" && run.key === key && (
-          <div className="space-y-2">
+          <div ref={notice} className="space-y-2">
             {current === null ? (
-              <p className="font-medium">The comparison didn&apos;t run. Nothing was compared.</p>
+              <p className="font-medium">
+                {retrying
+                  ? "The comparison hasn't run yet: this instance is busy, and it will try again by itself."
+                  : "The comparison didn't run. Nothing was compared."}
+              </p>
             ) : (
               <p className="font-medium break-words">
-                The new comparison didn&apos;t run. The results below are from the earlier comparison with{" "}
+                {retrying
+                  ? "The new comparison hasn't run yet: this instance is busy, and it will try again by itself."
+                  : "The new comparison didn't run."}{" "}
+                The results below are from the earlier comparison with{" "}
                 <span className="break-all">{current.fileName}</span>.
               </p>
             )}
             <FailureNotice
               failure={run.failure}
               onRetry={refusedFile ? null : () => start(busy)}
-              autoRetry={busy && autoTries < AUTO_RETRIES}
+              autoRetry={retrying}
             />
             {refusedFile && (
               <p className="break-words">
@@ -597,7 +630,7 @@ function ListSection({ name, c, q, mode }: { name: ListName; c: Comparison; q: s
   const [open, setOpen] = useState(false);
   const { shown, more, row: rowProps } = useRowsShown();
   const listId = useId();
-  const reasons = reasonLines(name, c.reason_totals[name]);
+  const reasons = reasonLines(name, c.reason_totals[name], mode);
   return (
     <section aria-label={listCount(name, total)} className="space-y-1 border-t pt-2">
       <CountHeading label={LIST_LABELS[name]} count={total} />

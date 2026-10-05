@@ -180,6 +180,7 @@ test("Cancel, pressed by keyboard, hands focus back to Compare", async ({ page }
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
+  // deliberate fault injection: the request is held in the browser, so the run is still going at Cancel
   await page.route("**/api/v1/compare?**", async (route) => {
     await held; // the comparison is still running when Cancel is pressed
     await route.continue().catch(() => {});
@@ -202,6 +203,7 @@ test("Retry, pressed by keyboard, hands focus to Compare while the new compariso
   test.setTimeout(90_000);
   await search(page, Q);
   let calls = 0;
+  // deliberate fault injection: the first try fails in the browser, which no real instance can be made to do
   await page.route("**/api/v1/compare?**", async (route) => {
     calls += 1;
     if (calls === 1)
@@ -221,6 +223,42 @@ test("Retry, pressed by keyboard, hands focus to Compare while the new compariso
   await expect(panel(page).getByRole("heading", { name: /^Comparison with my-records\.ris$/ })).toBeFocused({
     timeout: 60_000,
   });
+});
+
+test("a busy server's wait is one polite announcement, and its retry leaves focus where it went", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await search(page, Q);
+  let calls = 0;
+  // deliberate fault injection: a 503 API_BUSY the default instance only gives under load
+  await page.route("**/api/v1/compare?**", async (route) => {
+    calls += 1;
+    if (calls === 1)
+      await route.fulfill({
+        status: 503,
+        headers: { "Retry-After": "2", "Content-Type": "application/json" },
+        body: JSON.stringify({
+          error: {
+            code: "API_BUSY",
+            message: "This instance is running as many comparisons as it can. Try again in 2 s.",
+          },
+        }),
+      });
+    else await route.continue();
+  });
+  await compare(page, Buffer.from(UNKNOWN));
+  const live = page.locator("[data-compare-trigger] + [role=status]");
+  await expect(live).toHaveText("Busy; retrying by itself in 2 s.");
+  // no alert per busy cycle, and not "didn't run" while the retry is still to come (A11Y-R2-2)
+  await expect(panel(page).getByRole("alert")).toHaveCount(0);
+  await expect(panel(page)).toContainText("The comparison hasn't run yet: this instance is busy");
+  await expect(panel(page)).not.toContainText("didn't run");
+  const input = panel(page).getByLabel("RIS file");
+  await input.focus(); // the reader moved on while it waited
+  await expect(panel(page).getByRole("table")).toBeVisible({ timeout: 60_000 });
+  await expect(input).toBeFocused(); // the answer that came by itself didn't take focus (A11Y-R2-1)
+  expect(calls).toBe(2);
 });
 
 test("the last Show more hands focus to the first row it drew", async ({ page }) => {
@@ -296,6 +334,21 @@ test("after a comparison Compare says when the next may start, and searching sti
   const start = panel(page).getByRole("button", { name: "Compare", exact: true });
   // the pause is said beside Compare, not discovered as a refusal (USAB-S2)
   await expect(start).toHaveAttribute("aria-disabled", "true");
+  // and pressing it meanwhile sends nothing: it is aria-disabled, so a click or Enter still lands (USAB-R2-2)
+  let sent = 0;
+  const count = (r: { url: () => string }) => {
+    if (r.url().includes("/api/v1/compare")) sent += 1;
+  };
+  page.on("request", count);
+  await start.click({ force: true });
+  await start.focus();
+  await page.keyboard.press("Enter");
+  // half a second for a request to leave, had either press started one (the file is read first)
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 500)));
+  await expect(panel(page).getByRole("alert")).toHaveCount(0);
+  await expect(panel(page)).not.toContainText("Comparing my-records.ris");
+  expect(sent).toBe(0);
+  page.off("request", count);
   const why = panel(page).locator(`#${await start.getAttribute("aria-describedby")}`);
   await expect(why).toHaveText(
     /^Next comparison in \d+ s: this instance pauses between one network's comparisons\.$/,

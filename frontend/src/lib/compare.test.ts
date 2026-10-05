@@ -106,7 +106,7 @@ describe("the words", () => {
   });
 
   it("writes each reason's count as a sentence with what to do, in the server's order", () => {
-    expect(reasonLines("dropped", fixture.response.reason_totals.dropped)).toEqual([
+    expect(reasonLines("dropped", fixture.response.reason_totals.dropped, "scholar")).toEqual([
       "2 papers are excluded by a default filter: to include such a paper, write its track or status into " +
         "the query (its row says which).",
       "2 papers match only as another word form: add $ to that word (the Add $ action under the query) to " +
@@ -114,17 +114,21 @@ describe("the words", () => {
       "2 papers have no exact match in their title or abstract: no form of this query finds such a paper by " +
         "its title or abstract; keep it from your own file if it belongs in the review.",
     ]);
-    expect(reasonLines("kept", fixture.response.reason_totals.kept)).toEqual([]);
-    expect(reasonLines("added", { scholar_missed: 154 })).toEqual([
+    // the Add $ action is under the query in Scholar mode only; native mode says to type it (USAB-R2-1)
+    expect(reasonLines("dropped", { stemming: 1 }, "native")).toEqual([
+      "1 paper matches only as another word form: type $ after that word (e.g. word$) to match its other forms.",
+    ]);
+    expect(reasonLines("kept", fixture.response.reason_totals.kept, "native")).toEqual([]);
+    expect(reasonLines("added", { scholar_missed: 154 }, "native")).toEqual([
       "154 papers match exactly and are not in your file.",
     ]);
-    expect(reasonLines("added", { scholar_missed: 1 })).toEqual([
+    expect(reasonLines("added", { scholar_missed: 1 }, "native")).toEqual([
       "1 paper matches exactly and is not in your file.",
     ]);
-    expect(reasonLines("not_in_index", { coverage_gap: 3 })).toEqual([
-      "3 papers are not in the index: keep such a paper from your own file: no query here can find it.",
+    expect(reasonLines("not_in_index", { coverage_gap: 3 }, "native")).toEqual([
+      "3 papers are not in the index. Keep such a paper from your own file; no query here can find it.",
     ]);
-    expect(reasonLines("dropped", { a_new_class: 2 })).toEqual(["2 papers: a_new_class."]); // open enum
+    expect(reasonLines("dropped", { a_new_class: 2 }, "native")).toEqual(["2 papers: a_new_class."]); // open enum
     // every reason the API documents has its sentence, in both lists it can appear in, and a dropped or
     // missing paper's always says what to do next (USAB-S3)
     for (const reason of [
@@ -136,13 +140,15 @@ describe("the words", () => {
       "unsettled",
       "our_bug",
     ]) {
-      const [line = ""] = reasonLines("dropped", { [reason]: 2 });
+      const [line = ""] = reasonLines("dropped", { [reason]: 2 }, "native");
       expect(line).not.toContain(reason);
-      expect(line).toMatch(/: .+\.$/);
+      expect(line).toMatch(/(: |\. [A-Z]).+\.$/);
+      // one colon at most outside a parenthesis (USAB-R2-N)
+      expect(line.replace(/\([^)]*\)/g, "").split(":").length).toBeLessThanOrEqual(2);
       expect(line).not.toContain("`");
     }
     for (const reason of ["scholar_missed", "compat_reading", "scholar_cap", "our_bug"]) {
-      expect(reasonLines("added", { [reason]: 2 })[0]).not.toContain(reason);
+      expect(reasonLines("added", { [reason]: 2 }, "native")[0]).not.toContain(reason);
     }
   });
 
