@@ -14,14 +14,16 @@
 - **Scholar's cap.** The review's 17 raw exports hold between 7 and 639 records each, all under Scholar's 1,000,
   so no search was cut at the cap. The set itself is de-duplicated across exports, which is why its largest
   query-date group is smaller.
-- **Earlier counts.** On this index the 2026-09-30 runs gave 27 records for the literal string and 67 for the `$`
-  string, 51 of them among the review's records and 16 not. This report reproduces all four numbers:
-  `main-7-most-updated` limited to 2020–2026 is the literal string.
-- **The set is in the index.** This index's snapshot was built with the set imported as its `ris` source
+- **Earlier counts.** On index `05a0541717f6` (snapshot `2026-09-29-d552baa07aed`, no 2026 crawl) the
+  2026-09-30 runs gave 27 records for the literal string and 67 for the `$` string, 51 of them among the
+  review's records and 16 not; `docs/results/2026-10-04-scholar-comparison.md` reproduces all four on that
+  index (`main-7-most-updated` limited to 2020–2026 is the literal string). An index built after the 2026 crawl
+  holds more records, so its counts are larger.
+- **The set is in the index.** Every snapshot so far was built with the set imported as its `ris` source
   (1,805 of the set's records, their ids from scholarmend's claims). Where a crawl holds the paper too, the two
-  were merged and the record has an independent source. Where no crawl holds it, the index record is the import
-  alone: above all in 2026, which no crawl had reached when the snapshot was built. "What the matches rest on"
-  counts the two kinds apart. On an index built without the import, the RIS-only papers would be reported as not
-  in the index, and their classes could not be judged at all.
+  are merged and the record has an independent source; where none does, the index record is the import alone.
+  On the 2026-09-29 snapshot that was 530 of the matched papers, nearly all of them 2026, which no crawl had
+  reached. The 2026 OpenReview crawl (snapshot `2026-10-05-47d4e190ca81`, TASK-178) merged almost all of them
+  into crawled records. "What the matches rest on" counts the two kinds apart for the index a report ran on.
 - **Matching.** This report matches the set by URL and title, as it would any RIS file, not by the import's
   ids.
