@@ -27,7 +27,8 @@ beside the facets. Those trees hold only clauses of the effective tree, compiled
 verifies either; the counts read nothing the page, `total`, the facets or `excluded` are computed from, and
 change none of them. They are an extra, so they can never cost the search its answer: a worker that fails,
 or isn't done `GROUP_COUNT_WAIT_SECONDS` after everything else is, leaves the search whole with no counts and
-the reason (`count_failed`, `timed_out`), and the late job stops before its next collection. And they are
+the reason (`count_failed`, `timed_out`), and the late job stops before its next collection; a job no
+worker has started within a short grace is dropped at once (`busy`). And they are
 bounded before they start: a query whose counting would read more than `groups_terms` terms or `groups_ids`
 verified ids (`Groups.read`: every tree counted reads the kept clauses again) gets no counts and `too_costly`.
 They run on their own two workers, so the facets never queue behind them (`tests/unit/test_group_counts.py`).
@@ -59,7 +60,9 @@ from openproceedings.query.parser import ParseResult
 
 type Spans = Mapping[TextField, list[tuple[int, int]]]
 # why a search asked for its groups' counts has none (spec 04 §SearchResponse, `groups.not_counted`)
-NotCounted = Literal["fewer_than_two_groups", "too_many_groups", "too_costly", "count_failed", "timed_out"]
+NotCounted = Literal[
+    "fewer_than_two_groups", "too_many_groups", "too_costly", "busy", "count_failed", "timed_out"
+]
 # the most terms the counting of one query's groups may read, summed over the trees counted
 # (`Groups.terms_read`): over it the search answers without counts (`too_costly`). The API passes its own
 # (`ApiConfig.max_counted_terms`)
@@ -78,6 +81,10 @@ class _Abandoned(Exception):
 # the facets and the exclusion accounting are done by then, so this is the most the counts can add to a
 # response (they take milliseconds; a worker this late is queued behind others or stuck)
 GROUP_COUNT_WAIT_SECONDS = 2.0
+# and how long it waits for a counting job that has not STARTED (every counting worker is busy with other
+# searches' jobs): past this grace the search answers `busy` at once, so other clients' counting can cost a
+# search its counts but no more than this of its time. An idle worker starts a job in well under a millisecond
+GROUP_COUNT_GRACE_SECONDS = 0.05
 # one group's two counts: the query with every other group removed, and the query with this group removed
 type Pair = tuple[int, int]
 
@@ -148,11 +155,13 @@ def run(
     groups_terms: int = MAX_COUNTED_TERMS,
     groups_ids: int = MAX_COUNTED_IDS,
     groups_wait: float = GROUP_COUNT_WAIT_SECONDS,
+    groups_grace: float | None = None,
 ) -> Search:
     """One page of `parsed`'s search on `engine`, with its total, exclusion accounting and expansions (and,
     when asked, the disjunctive facets, each hit's code-point highlight spans, and each concept group's counts
     when the query has from two to `groups` of them and counting them reads at most `groups_terms` terms and
-    `groups_ids` verified ids, waited for at most `groups_wait` seconds once the rest is done). `parsed` must have
+    `groups_ids` verified ids, waited for at most `groups_wait` seconds once the rest is done, and only
+    `groups_grace` (default `GROUP_COUNT_GRACE_SECONDS`) if their job hasn't started by then). `parsed` must have
     parsed: a query with errors never reaches an engine (spec 03 §Error handling)."""
     ast = _runnable(engine, parsed)
     expansions = expanded(engine, ast)
@@ -163,6 +172,7 @@ def run(
     countable = found is not None and why is None
     counting: Future[tuple[Pair, ...]] | None = None
     abandoned = threading.Event()  # set when this search stops waiting for its counting job
+    taken = threading.Event()  # set by the counting job when a worker takes it
     if facets or countable:
         engine.check_page(sort, offset, limit)  # a bad argument is refused before any work, as before
         # compiled first, here: a cold verified clause takes its slot in this thread, and the worker's facet
@@ -173,7 +183,7 @@ def run(
     if found is not None and countable and _ids_read(found, scope) > groups_ids:
         why, countable = "too_costly", False  # known only now: the ids are the compile's
     if found is not None and countable:
-        counting = _start(partial(_alone, engine, found, scope.reader(), abandoned), counts=True)
+        counting = _start(partial(_alone, engine, found, scope.reader(), abandoned, taken), counts=True)
     try:
         # one collection: ids and scores
         total, page = engine.page(ast, sort=sort, offset=offset, limit=limit, scope=scope)
@@ -216,7 +226,8 @@ def run(
         if why is not None:
             grouped = GroupCounts((), len(found.groups), groups, why)
         else:
-            grouped = _grouped(engine, found, groups, counting, scope, groups_wait, abandoned)
+            grace = GROUP_COUNT_GRACE_SECONDS if groups_grace is None else groups_grace
+            grouped = _grouped(engine, found, groups, counting, scope, (grace, groups_wait), abandoned, taken)
     return Search(total, hits, gone, expansions, counted, grouped)
 
 
@@ -250,11 +261,18 @@ def _ids_read(found: Groups, scope: Scope) -> int:
 
 
 def _alone(
-    engine: TantivyEngine, found: Groups, scope: Scope, abandoned: threading.Event
+    engine: TantivyEngine,
+    found: Groups,
+    scope: Scope,
+    abandoned: threading.Event,
+    started: threading.Event | None = None,
 ) -> tuple[Pair, ...]:
     """Each group's two counts, in query order: alone, and the query without it (`TantivyEngine.counts`: at
-    most two collections a group, memoised; every conjunct compiled at most once for all of them). Stops
-    before its next collection once `abandoned` is set (`_Abandoned`): nobody is waiting for the rest."""
+    most two collections a group, memoised; every conjunct compiled at most once for all of them). Sets
+    `started` when it begins (a worker took the job), and stops before its next collection once `abandoned`
+    is set (`_Abandoned`): nobody is waiting for the rest."""
+    if started is not None:
+        started.set()
 
     def wanted() -> None:
         if abandoned.is_set():
@@ -272,19 +290,29 @@ def _grouped(
     limit: int,
     counting: Future[tuple[Pair, ...]] | None,
     scope: Scope,
-    wait: float,
+    waits: tuple[float, float],
     abandoned: threading.Event,
+    started: threading.Event,
 ) -> GroupCounts:
     """`run`'s `groups` for a query whose groups are counted: the worker's counts (or the caller's own, when
     no worker took them). Never raises for a count: the search is already computed, and a count that fails or
-    is late is reported in `not_counted`, not as the search's failure. A job not done after `wait` seconds is
-    abandoned: cancelled if still queued, stopped before its next collection if running."""
+    is late is reported in `not_counted`, not as the search's failure. `waits` is (grace, wait): a job no
+    worker has started after `grace` seconds is cancelled and the answer is `busy` (the workers are doing
+    other searches' counting, which must not cost this search its time); a started job not done after `wait`
+    seconds is abandoned (`timed_out`) and stops before its next collection."""
     n = len(found.groups)
-    if counting is not None and not wait_for([counting], timeout=wait).done:
-        abandoned.set()
-        counting.cancel()
-        log.warning("group_count_timed_out", extra={"groups": n, "wait_ms": round(wait * 1000)})
-        return GroupCounts((), n, limit, "timed_out")
+    grace, wait = waits
+    if counting is not None and not counting.done():
+        if not started.wait(grace):
+            abandoned.set()  # should a worker take it just now, it stops at once
+            counting.cancel()
+            log.debug("group_count_busy", extra={"groups": n})  # a state under load, not an event to act on
+            return GroupCounts((), n, limit, "busy")
+        if not wait_for([counting], timeout=wait).done:
+            abandoned.set()
+            counting.cancel()
+            log.warning("group_count_timed_out", extra={"groups": n, "wait_ms": round(wait * 1000)})
+            return GroupCounts((), n, limit, "timed_out")
     try:
         if counting is None:  # no worker (the pool is shutting down): counted here instead
             totals = _alone(engine, found, scope, abandoned)

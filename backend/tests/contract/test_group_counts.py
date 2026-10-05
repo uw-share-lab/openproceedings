@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from openproceedings import search
 from openproceedings.api.config import ApiConfig
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.query.groups import split
@@ -21,6 +22,14 @@ from tests.contract.test_frontend_builder_golden import READ_GOLDEN
 from tests.contract.test_search import SEARCH, engine_of, ok, pages, reference
 
 __all__ = ["reference"]  # the oracle fixture, shared with test_search.py
+
+
+@pytest.fixture(autouse=True)
+def a_patient_grace(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A counting job gets 30 s to be taken by a worker here, not a served search's 50 ms: these tests are
+    about the counts, on a machine that may be busy (`busy` itself is tested in tests/unit)."""
+    monkeypatch.setattr(search, "GROUP_COUNT_GRACE_SECONDS", 30.0)
+
 
 GROUPED = [
     ("(trust OR reliance) AND calibrat* AND model*", "native"),

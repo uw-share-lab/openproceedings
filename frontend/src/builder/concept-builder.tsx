@@ -895,6 +895,8 @@ function notCountedText(groups: SearchedGroups["groups"]): string | null {
       return `Group counts aren't shown: this query has ${num(groups.groups_total)} groups, and this site counts at most ${num(groups.limit)}.`;
     case "too_costly":
       return "Group counts aren't shown: counting each group of this query would read more terms than this site allows. Shorten the leave-out terms or use longer wildcard stems to see them.";
+    case "busy":
+      return "Group counts weren't computed for this search: the site was busy counting for other searches. Search again to see them.";
     case "timed_out":
       return "Group counts weren't ready in time for this search. Search again to see them.";
     default: // `count_failed`, or a reason added later (an open set)

@@ -246,6 +246,7 @@ Two readings follow from "the canonical form decides", and are worth knowing:
   | `fewer_than_two_groups` | the query is not an AND of groups: one group, or one group with limits and leave-out terms, whose count would be `total` |
   | `too_many_groups` | `groups_total` is over `limit` |
   | `too_costly` | counting the groups would read more than `ApiConfig.max_counted_terms` terms (default 5,000) or `max_counted_ids` verified ids (default 300,000), decided before any counting (below) |
+  | `busy` | no counting worker took the job within `search.GROUP_COUNT_GRACE_SECONDS` (50 ms) of the rest of the search being done: the workers were counting for other searches. The job is cancelled (one DEBUG line `group_count_busy`: a state under load, not an alarm) |
   | `count_failed` | the counting failed (a bug: one ERROR line `group_count_failed` with `groups` and the error's type, never its message) |
   | `timed_out` | the counts were not ready `search.GROUP_COUNT_WAIT_SECONDS` (2 s) after the rest of the search was (one WARNING line `group_count_timed_out` with `groups` and `wait_ms`); the job is abandoned and stops. A job that itself ends in a `TimeoutError` is `count_failed`: only the wait decides `timed_out` |
 
@@ -289,7 +290,10 @@ Two readings follow from "the canonical form decides", and are worth knowing:
     | `ApiConfig.max_counted_ids` (`op serve --max-counted-ids`) | the ids its position-verified clauses matched, per field: such a clause is an id set in its tree's query, resolved id by id by every collection (`search._ids_read`, from the request's own compile; an upper bound, since a clause most of whose candidates match is compiled as the shorter list of those that fail) | 300,000 | a kept `NOT (model NEAR/10 model*)`: few terms, tens of thousands of ids read by every tree |
 
     Over either, the groups are not counted, no tree is compiled or collected for them, and the search
-    answers whole with `not_counted: "too_costly"`. Both numbers are known from the query, its expansions
+    answers whole with `not_counted: "too_costly"`. The terms bound is decided before anything is compiled;
+    the ids bound after the request's own compile of the query, since the ids are that compile's, so a
+    request that is `too_costly` by its ids has already been admitted, charged and verified under
+    decision-010 exactly as the same search without counts is (the bound saves the counting, not the search). Both numbers are known from the query, its expansions
     and its verified clauses alone, so for a canonical query and `index_version` an instance always answers
     the same way; `/meta` `limits` serves both bounds and the group limit. The defaults leave the real
     review strings far inside: on the real index the Trust-Evals strings read 30 to 243 terms and 0 to
@@ -305,12 +309,13 @@ Two readings follow from "the canonical form decides", and are worth knowing:
     with the same groups and kept clauses collect nothing; a changed kept clause collects again, within the
     same bounds). The job runs on **the counts' own two workers** (`search.GROUP_WORKERS`), never on the facet
     pool: a search waits for its facets without a timeout, so no counting job, however slow or however many,
-    may hold a thread the facets need. A search waits **at most 2 s** for its counts after the page, the
-    facets and the exclusion accounting are done; a job not done by then is abandoned: cancelled if still
-    queued, and if running **stopped before its next collection** (`counts`' `check`), keeping what it had
-    collected in the memo. So a job nobody waits for does at most one more collection, and counting jobs
-    queue only behind each other (`timed_out` for those that wait too long). No rate-limit token, no
-    verification slot.
+    may hold a thread the facets need. After the page, the facets and the exclusion accounting are done, a
+    search waits for its counts **at most 50 ms if no worker has taken its job** (then `busy`, the job
+    cancelled), and **at most 2 s if one has** (then `timed_out`); an abandoned job that is running is
+    **stopped before its next collection** (`counts`' `check`), keeping what it had collected in the memo.
+    So the **worst case other clients' counting can add to a search is the 50 ms grace** (and its counts);
+    the 2 s is only ever spent on a search's own running job, whose work the two bounds above cap; and a job
+    nobody waits for does at most one more collection. No rate-limit token, no verification slot.
 
   Measured. The 158-wildcard shape on the 5k fixture, cold, median of 5 fresh engines (load 9–11): 209.8 ms
   without counts; 206.2 ms with them asked for at the default bounds, where it is `too_costly` and no group is
@@ -1232,7 +1237,8 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   fails or is late leaves the search whole; no clause verified again and none by a worker; nothing stored in
   `compiled`, on a kept NEAR and on the 158-wildcard kept clause, which is `too_costly` at the default bound,
   as a kept verified clause over the ids bound is; a timed-out job stops within one collection; eight
-  searches whose counting never ends still get their facets; a worker's own `TimeoutError` is a failure;
+  searches whose counting never ends still get their facets; a light search is answered `busy` within the
+  grace while every counting worker is held; a worker's own `TimeoutError` is a failure;
   searches from eight threads while the memos are cleared; the limits, in `/meta` too; the access line
   (`tests/unit/test_group_counts.py`, `tests/contract/test_group_counts.py`). The contract file also holds the
   builder's rule for finding its groups' counts (a term inside the span) to the server's groups on every

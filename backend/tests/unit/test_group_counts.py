@@ -37,6 +37,13 @@ RECORDS = list(records())
 type Engines = tuple[ReferenceEngine, TantivyEngine, TantivyEngine]
 
 
+@pytest.fixture(autouse=True)
+def a_patient_grace(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests are about the counts, on a machine that may be busy: a counting job gets 30 s to be taken
+    by a worker, not the 50 ms a served search gives it (the tests of `busy` pass their own grace)."""
+    monkeypatch.setattr(search, "GROUP_COUNT_GRACE_SECONDS", 30.0)
+
+
 @pytest.fixture(scope="module")
 def engines(tmp_path_factory: pytest.TempPathFactory) -> Engines:
     """The oracle and two engines over one 5k index, each with its own memos: one runs the search with its
@@ -430,7 +437,8 @@ def test_facets_are_served_while_slow_counting_jobs_hold_every_counting_worker(
     engines: Engines, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Eight concurrent searches whose counting never finishes (every counting worker held, the rest queued):
-    each still answers with its facets, `timed_out` for its groups, after its own wait and no longer. The
+    each still answers with its facets and no counts (`timed_out`, or `busy` for a job no worker took), after
+    its own wait or grace and no longer. The
     counts have their own workers, so no facet job queues behind one."""
     _reference, tantivy, other = engines
     parsed = parse("trust model calibration")
@@ -445,22 +453,56 @@ def test_facets_are_served_while_slow_counting_jobs_hold_every_counting_worker(
 
     def one(_i: int) -> tuple[search.Search, float]:
         started = time.monotonic()
-        got = search.run(tantivy, parsed, facets=True, groups=10, groups_wait=0.3)
+        got = search.run(tantivy, parsed, facets=True, groups=10, groups_wait=0.3, groups_grace=0.05)
         return got, time.monotonic() - started
 
     try:
         with ThreadPoolExecutor(8) as pool:
             answers = list(pool.map(one, range(8)))
         assert search._GROUP_POOL is not None and search._GROUP_POOL._max_workers == search.GROUP_WORKERS
+        reasons = [got.groups.not_counted for got, _took in answers if got.groups is not None]
+        # the two a worker took waited their 0.3 s; the six left queued were answered after the 50 ms grace
+        assert set(reasons) <= {"busy", "timed_out"} and len(reasons) == 8
+        assert reasons.count("timed_out") <= search.GROUP_WORKERS and reasons.count("busy") >= 6
         for got, took in answers:
-            assert got.groups == search.GroupCounts((), 3, 10, "timed_out")
+            assert got.groups is not None and got.groups.counts == ()
             assert dataclasses.replace(got, groups=None) == plain
-            assert took < 20  # its own 0.3 s wait, not the 60 s the counting workers are held
+            assert took < 20  # its own grace or wait, not the 60 s the counting workers are held
         # a search that asks for no counts is untouched while they are still held
         assert search.run(tantivy, parsed, facets=True) == plain
     finally:
         release.set()
         search.shutdown()
+
+
+def test_a_light_search_answers_within_the_grace_while_every_counting_worker_is_taken(
+    engines: Engines, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Other searches' counting jobs hold both counting workers: a light two-group search is answered `busy`
+    after the grace (50 ms), not after the 30 s it would wait for a job of its own that had started, and
+    everything but `groups` is the plain search's. Once a worker is free, the same search has its counts."""
+    reference, tantivy, other = engines
+    parsed = parse("trust model")
+    assert parsed.effective_ast is not None
+    plain = search.run(other, parsed, facets=True, highlight=True)
+    release = threading.Event()
+    holding = [search._start(lambda: release.wait(60), counts=True) for _ in range(search.GROUP_WORKERS)]
+    assert all(h is not None for h in holding)
+    try:
+        started = time.monotonic()
+        got = search.run(
+            tantivy, parsed, facets=True, highlight=True, groups=10, groups_wait=30, groups_grace=0.05
+        )
+        took = time.monotonic() - started
+    finally:
+        release.set()
+    assert got.groups == search.GroupCounts((), 2, 10, "busy")
+    assert dataclasses.replace(got, groups=None) == plain
+    assert took < 10  # the grace and the search itself, never the 30 s wait
+    assert not [r for r in caplog.records if r.levelname in ("WARNING", "ERROR")]  # a state, not an alarm
+    search.shutdown()  # the held workers are released: the cancelled job never ran
+    free = search.run(tantivy, parsed, facets=True, groups=10).groups
+    assert free is not None and free.counts == expected_pairs(reference, split(parsed.effective_ast))
 
 
 def test_a_kept_verified_clause_of_many_ids_is_too_costly(engines: Engines) -> None:

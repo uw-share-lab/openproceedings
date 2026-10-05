@@ -218,8 +218,8 @@ warnings, the save's index check), the design doc says so; its open questions li
    query searched (an expansion, a fact about the index, stays). A query that is not an AND of groups shows
    none; one whose counts the search doesn't have says why (`groups.not_counted`: more groups than the
    instance counts; more terms or position-checked matches to read than it allows, with how to shorten the query (the
-   syntax help's instance limits name the three bounds from `/meta`); the counts failed; they weren't ready in time, each of the last two with "Search again
-   to see them."; a reason this build doesn't know reads as a failure, the set being open). The read-only
+   syntax help's instance limits name the three bounds from `/meta`); the site was busy counting for other searches; the counts failed; they weren't ready in time, each of the
+   last three with "Search again to see them."; a reason this build doesn't know reads as a failure, the set being open). The read-only
    builder shows the counts of each part that fits. The Exclude row has none: it is applied to every count.
    The counts are text inside their group (no colour; the `·` between them is hidden from a screen reader,
    which hears a pause), and a polite status named "Group counts" says when they arrive ("Group counts shown
