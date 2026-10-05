@@ -98,6 +98,9 @@ One row per cell:
   count for main and position together (6,552) and no source announces the main track alone, so the row is a
   rule-3 count of the conference's own two lists (the virtual-site paper list minus its position listing:
   6,554 − 213 = 6,341), said to be a count and not an announced number, until PMLR publishes the volume.
+  The virtual-site list is generated from OpenReview, the crawl's own upstream, so its Δ 0 confirms the
+  classification, not the coverage; the fact sheet's 6,552 is the only figure independent of it. A hand count
+  that gates a cell records who fetched it, when, and the sha256 of each fetched page.
 - Deduplication across OpenReview and proceedings: an under-merge shows as surplus, an over-merge as
   deficit. Cross-check with `merges.csv`/`conflicts.csv` (`dedup-rules`).
 When a cell misses the gate, classify the cause in the report (source definition, classification,
