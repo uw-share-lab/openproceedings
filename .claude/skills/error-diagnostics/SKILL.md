@@ -22,7 +22,10 @@ class Diagnostic(BaseModel):  # frozen, extra="forbid"
   (TASK-140: it
   once quoted `(a b) OR c` for `a b OR () OR c`; a property pins message ↔ `reading`; an "always set" rule 500'd the summary, TASK-099 review). The UI's "Load with parentheses" splices it over `span`; **a client never
   parses `message`** for data. Data another code needs becomes a field the same way (a spec 04 change, additive:
-  nullable, null on the other codes), never prose to extract.
+  nullable, null on the other codes), never prose to extract. Data that costs a parse of an edited string to
+  report is not put on the Diagnostic (`parse` would recurse, and `/search` and replay would pay for it): it is
+  a `/parse` field beside `filters`, as `COMPAT_NO_STEMMING`'s "Add `$`" places are (`word_forms`,
+  `query/wordforms.py`, TASK-175).
 - `ParseResult.warnings`, `.errors`, `.translations` are all `list[Diagnostic]`. Non-empty `errors` ⇒ no
   search runs.
 - API errors: `{ "error": { "code", "message", "diagnostics"?: [Diagnostic] } }`. Statuses and codes are

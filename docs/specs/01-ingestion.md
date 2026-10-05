@@ -66,7 +66,8 @@ the withdrawn / desk-rejected invitation, and the venueid only confirms venue, y
 Every public submission is ingested and indexed whatever its status; the default `status:accepted`
 (02 §Default filters) excludes the others and counts them. What is public differs: ICLR publishes every
 rejected, withdrawn and desk-rejected submission; NeurIPS and ICML only rejected papers whose authors opt in
-(NeurIPS 2024 main: 201; ICML 2025: 162; ICML 2023–2024: none), and almost no withdrawn ones. So a status
+(NeurIPS 2024 main: 201; ICML 2025: 162; ICML 2026: 214 main and 28 position; ICML 2023–2024: none), and
+almost no withdrawn ones. So a status
 count is complete for ICLR and a floor elsewhere, and coverage (07 §C) says which.
 
 ### Presentation (TASK-101)
@@ -95,26 +96,37 @@ count is complete for ICLR and a floor elsewhere, and coverage (07 §C) says whi
   non-accepted status, shows `null`; the presentation claim stays in provenance as evidence.
 
 The v2 table, with each string's count of accepted submission notes in the TASK-054 crawl cache
-(2026-09-29); every string has a recorded note under `backend/tests/fixtures/http/openreview/v2/`:
+(2026-09-29; the 2026 rows from the TASK-178 crawl cache, fetched 2026-10-05 UTC); every string has a recorded
+note under `backend/tests/fixtures/http/openreview/v2/`:
 
 | Venue-year | `oral` | `spotlight` | `poster` | Stated, no presentation (`null`) |
 |---|---|---|---|---|
 | ICLR 2024 | `ICLR 2024 oral` 86 | `ICLR 2024 spotlight` 367 | `ICLR 2024 poster` 1,807 | `BT@ICLR2024` 22 (blogpost); `Tiny Papers @ ICLR 2024 {Archive 55, Present 98, Notable 39}` (tiny papers' tiers) |
 | ICLR 2025 | `ICLR 2025 Oral` 213 | `ICLR 2025 Spotlight` 380 | `ICLR 2025 Poster` 3,110 | `ICLR 2025 Blogpost Track` 49 |
-| ICLR 2026 | | | `ICLR 2026 Poster` (fixture only; not crawled) | |
+| ICLR 2026 | `ICLR 2026 Oral` 224 | | `ICLR 2026 Poster` 5,127 | |
 | ICML 2023 | `ICML 2023 OralPoster` 155 | | `ICML 2023 Poster` 1,673 | |
 | ICML 2024 | `ICML 2024 Oral` 144 | `ICML 2024 Spotlight` 191 | `ICML 2024 Poster` 2,275 | |
 | ICML 2025 | `ICML 2025 oral` 108; position `… Position Paper Track oral` 12 | `ICML 2025 spotlightposter` 211; position `… spotlightposter` 12 | `ICML 2025 poster` 2,938; position `… poster` 49 | |
+| ICML 2026 | | `ICML 2026 spotlight` 536; position `ICML 2026 Position Paper Track spotlight` 38 | | |
 | NeurIPS 2023 | `NeurIPS 2023 oral` 67; D&B `NeurIPS 2023 Datasets and Benchmarks Oral` 10 | `… spotlight` 378; D&B `… Spotlight` 22 | `… poster` 2,773; D&B `… Poster` 290 | |
 | NeurIPS 2024 | `NeurIPS 2024 oral` 61; D&B `NeurIPS 2024 Track Datasets and Benchmarks Oral` 11 | `… spotlight` 326; D&B `… Spotlight` 56 | `… poster` 3,648; D&B `… Poster` 392 | `NeurIPS 2024 Competition Track` 16 |
 | NeurIPS 2025 | `NeurIPS 2025 oral` 77; D&B `NeurIPS 2025 Datasets and Benchmarks Track oral` 7; position `NeurIPS 2025 Position Paper Track Oral` 9 | `… spotlight` 687; D&B `… spotlight` 56 | `… poster` 4,522; D&B `… poster` 434 | `NeurIPS 2025 Position Paper Track` 31 |
 
 ICML 2023's `OralPoster` and ICML 2025's `spotlightposter` are orals and spotlights that also had a poster
-slot; the higher tier is the presentation (ICML 2023: 155 + 1,673 = the 1,828 accepted notes). No accepted,
-non-workshop string in the cache is unmapped. Known unmapped strings, left out until someone can say what
-they mean: `ICML 2026 regular` (recorded; not a presentation word) and ICLR 2026's `Oral`, ICML 2026's
-`spotlight` (seen live 2026-09-27, research doc, but with no recorded note yet); each is counted when those
-years are crawled.
+slot; the higher tier is the presentation (ICML 2023: 155 + 1,673 = the 1,828 accepted notes). ICLR 2026 has
+no spotlight tier (224 + 5,127 = its 5,351 accepted notes).
+
+**Known unmapped strings.** No accepted, non-workshop string in the 2023–2025 cache is unmapped. ICML 2026 has
+two tiers, `spotlight` and `regular` (536 + 5,805 = its 6,341 accepted main-track notes; 38 + 175 = the 213
+position papers). `spotlight` is mapped. `ICML 2026 regular` and `ICML 2026 Position Paper Track regular` are
+left out of the table: `regular` is not a presentation word, and nothing recorded says a regular paper was a
+poster. Both strings have a recorded note and a test that keeps them unmapped
+(`icml-2026/notes-presentation-*.json`), and their records show no presentation. **They await an owner
+decision** (`poster`, a stated string with no presentation, or left as they are). Until then ICML 2026 reports
+`presentation_unmapped` 5,980 (5,805 + 175) and raises the `openreview_crawl_attention` WARNING on every crawl
+and replay. The DEBUG line carries only a forum id, so the count is the only signal: **any ICML 2026 count
+other than 5,980 means a string this table has not seen** (or a changed listing), and is chased by listing the
+cache's distinct `content.venue` values. NeurIPS 2026's strings get rows when its notes are public.
 
 ## Sources
 

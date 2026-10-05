@@ -39,7 +39,7 @@ FORMATS = ("ris", "csv", "bibtex", "jsonl")  # export formats (export.FORMATS; i
 SORTS = ("relevance", "year_desc", "year_asc", "title")  # tantivy_engine.SORTS
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Mapping, Set
 
     from pydantic import ValidationError
 
@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from openproceedings.engine.reference import ReferenceEngine
     from openproceedings.engine.tantivy_engine import TantivyEngine
     from openproceedings.eval.coverage_report import RecordCell
+    from openproceedings.eval.scholar_compare import Scope
     from openproceedings.official_counts import OfficialTable
     from openproceedings.query.parser import ParseResult
     from openproceedings.records import RecordStore, SearchRecord
@@ -61,8 +62,9 @@ PLANNED: dict[str, tuple[str, str]] = {
         "task-058",
     ),
 }
-# `op eval <report>` reports still to come -> the task that implements them (coverage: TASK-054)
-PLANNED_EVALS: dict[str, str] = {"scholar": "task-056", "audit": "task-055", "near-miss": "task-061"}
+# `op eval <report>` reports still to come -> the task that implements them (coverage: TASK-054; scholar:
+# TASK-056)
+PLANNED_EVALS: dict[str, str] = {"audit": "task-055", "near-miss": "task-061"}
 # `op record replay`'s exit status on a `mismatch` (spec 08 §Error handling): a broken guarantee 4, which a
 # script must tell apart from a refusal (1), a usage error (2) and drift (0)
 EXIT_MISMATCH = 3
@@ -360,6 +362,48 @@ def build_parser() -> argparse.ArgumentParser:
         "--check", action="store_true", help="exit 1 when the M4 gate fails or an accepted exception is stale"
     )
     cov.set_defaults(run=_eval_coverage)
+    sch = reports.add_parser(
+        "scholar",
+        help="write docs/results/<date>-scholar-comparison.md and its review rows: a Scholar RIS set against "
+        "the review's strings on one index, every disagreement classified (spec 07 §B)",
+    )
+    sch.add_argument(
+        "--ris", type=Path, action="append", required=True, metavar="FILE",
+        help="the Scholar set, a RIS file (repeatable: the files are read as one set)",
+    )  # fmt: skip
+    sch.add_argument(
+        "--query-file", type=Path, action="append", metavar="FILE",
+        help="queries to run: `## name` lines each followed by a query line, or one bare query named after the "
+        "file (repeatable; default the Trust-Evals strings, backend/tests/fixtures/queries/trust-evals.txt)",
+    )  # fmt: skip
+    sch.add_argument(
+        "--name", action="append", metavar="NAME",
+        help="run only this query of the files, in the order given (repeatable; default all of them)",
+    )  # fmt: skip
+    sch.add_argument("--query", help="one more query string, named `query`")
+    sch.add_argument("--mode", choices=("native", "scholar"), default="scholar", help="default scholar")
+    sch.add_argument(
+        "--years", metavar="LO..HI", help="the years both sides are limited to (default every year)"
+    )
+    sch.add_argument(
+        "--venues", metavar="V[,V…]", help="the venues both sides are limited to (default NeurIPS,ICLR,ICML)"
+    )
+    sch.add_argument("--index", help="`current` (default) or an index_version under <data-dir>/indexes")
+    sch.add_argument(
+        "--out", type=Path, help="the report's directory (default the repository's docs/results)"
+    )
+    sch.add_argument("--date", help="the report's date, YYYY-MM-DD (default today, UTC)")
+    sch.add_argument(
+        "--notes", type=Path, metavar="FILE",
+        help="Markdown about these inputs, printed verbatim under `Notes on these inputs` with its sha256",
+    )  # fmt: skip
+    sch.add_argument(
+        "--answers", metavar="NAME",
+        help="the query the Scholar set is Scholar's answer to; the report then says the other queries are "
+        "only compared against that set",
+    )  # fmt: skip
+    sch.add_argument("--check", action="store_true", help="exit 1 when any `our_bug` row is found")
+    sch.set_defaults(run=_eval_scholar)
     for name, task in PLANNED_EVALS.items():
         _stub(reports.add_parser(name, help=_stub_status(task)), f"eval {name}", task)
 
@@ -894,6 +938,181 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
     if ns.check and stale_ex:  # a stale exception fails --check, as a gate failure does
         print(f"--check: {len(stale_ex)} stale accepted exception(s)", file=sys.stderr)
     return 1 if ns.check and (not verdict.passed or stale_ex) else 0
+
+
+def _scholar_scope(ns: argparse.Namespace) -> Scope:
+    from openproceedings.eval.scholar_compare import Scope
+    from openproceedings.vocab import VENUES
+
+    years: tuple[int, int] | None = None
+    if ns.years:
+        lo, sep, hi = ns.years.partition("..")
+        if not (lo.isascii() and lo.isdigit() and (not sep or (hi.isascii() and hi.isdigit()))):
+            raise _usage(f"--years must be YYYY or YYYY..YYYY, not {ns.years!r}")
+        years = (int(lo), int(hi) if sep else int(lo))
+        if years[0] > years[1]:
+            raise _usage(f"--years runs backwards: {ns.years!r}")
+    venues = frozenset(VENUES.values())
+    if ns.venues:
+        named = [v.strip().lower() for v in ns.venues.split(",") if v.strip()]
+        if not named or any(v not in VENUES for v in named):
+            raise _usage(f"--venues must be among {', '.join(VENUES.values())}")
+        venues = frozenset(VENUES[v] for v in named)
+    return Scope(venues, years)
+
+
+def _scholar_queries(ns: argparse.Namespace, root: Path | None) -> tuple[list[tuple[str, str]], list[Path]]:
+    """The (name, query) pairs `op eval scholar` runs and the files they were read from: the query files (the
+    Trust-Evals fixture when none is named and there is no --query), narrowed and ordered by --name, then
+    --query."""
+    from openproceedings.eval.scholar_report import parse_query_file
+
+    files: list[Path] = list(ns.query_file or [])
+    if not files and ns.query is None:
+        if root is None:
+            raise _usage("pass --query-file or --query: the default strings are read from a checkout")
+        files = [root / "backend" / "tests" / "fixtures" / "queries" / "trust-evals.txt"]
+    found: list[tuple[str, str]] = []
+    for f in files:
+        found += parse_query_file(f.read_text(encoding="utf-8-sig"), f.stem)
+    if ns.name:
+        by_name = dict(found)
+        if missing := [n for n in ns.name if n not in by_name]:
+            raise _usage(f"no query named {', '.join(missing)} (have: {', '.join(by_name) or 'none'})")
+        found = [(n, by_name[n]) for n in dict.fromkeys(ns.name)]
+    if ns.query is not None:
+        found.append(("query", ns.query))
+    names = [n for n, _ in found]
+    if len(set(names)) != len(names):
+        raise _usage("two queries share a name: rename one in its file")
+    return found, files
+
+
+def _scholar_command(ns: argparse.Namespace, index_version: str, day: str) -> str:
+    """The command as the report states it: file names only (a directory can name a person)."""
+    words = ["op eval scholar"]
+    words += [f"--ris {p.name}" for p in ns.ris]
+    words += [f"--query-file {p.name}" for p in ns.query_file or []]
+    words += [f"--name {n}" for n in ns.name or []]
+    if ns.query is not None:
+        words.append("--query '<the string under `query`>'")
+    if ns.mode != "scholar":
+        words.append(f"--mode {ns.mode}")
+    words += [f"--{k} {v}" for k in ("years", "venues", "answers") if (v := getattr(ns, k))]
+    words += [f"--notes {ns.notes.name}"] if ns.notes else []
+    return " ".join([*words, f"--index {index_version}", f"--date {day}"])
+
+
+def _eval_scholar(ns: argparse.Namespace) -> int:
+    """`op eval scholar` (TASK-056, spec 07 §B): the dated Scholar comparison and its review rows."""
+    import hashlib
+    from datetime import UTC, date, datetime
+
+    from openproceedings.api.state import snapshot_records
+    from openproceedings.engine.protocol import Searchable
+    from openproceedings.engine.tantivy_engine import TantivyEngine
+    from openproceedings.eval.scholar_compare import (
+        MatchIndex,
+        QueryRefused,
+        RisRecord,
+        compare_query,
+        load_ris,
+        scope_and_match,
+    )
+    from openproceedings.eval.scholar_report import (
+        UNRESOLVED,
+        Meta,
+        RisFile,
+        render,
+        render_review,
+        review_rows,
+        write,
+    )
+    from openproceedings.ingest.snapshot import iter_records
+
+    started = time.perf_counter()
+    try:
+        day = date.fromisoformat(ns.date) if ns.date else datetime.now(UTC).date()
+    except ValueError:
+        raise _usage(f"--date must be YYYY-MM-DD, not {ns.date!r}") from None
+    scope = _scholar_scope(ns)
+    root = _repo_root()
+    if ns.out is None and root is None:
+        raise _usage("pass --out: the default is the checkout's docs/results")
+    out = ns.out or (root / "docs" / "results" if root else Path())
+    queries, query_files = _scholar_queries(ns, root)
+    if ns.answers is not None and ns.answers not in [n for n, _ in queries]:
+        raise _usage(f"--answers names no query of this run: {ns.answers!r}")
+    notes = ns.notes  # about one set of inputs, so never a default: another set would get the wrong notes
+    names = [p.name for p in ns.ris]
+    if len(set(names)) != len(names):  # a row's key is `<file name>#<n>`
+        raise _usage("two --ris files share a name: rename one")
+    ris: list[RisRecord] = []
+    ris_files: list[RisFile] = []
+    for p in ns.ris:
+        read = load_ris(p)
+        ris += read
+        ris_files.append(RisFile(p.name, hashlib.sha256(p.read_bytes()).hexdigest(), len(read)))
+    path = _index_path(ns)
+    engine = TantivyEngine(path)
+    records = snapshot_records(ns.data_dir, path, engine.index_version)  # verified, as the server loads it
+    index = MatchIndex.build(iter_records(records.path.parent))
+    side = scope_and_match(ris, index, scope)
+    held: dict[str, Searchable] = {}
+
+    def fetch(ids: Set[str]) -> dict[str, Searchable]:
+        for i in ids:
+            if i not in held and (r := records.get(i)) is not None:
+                held[i] = r
+        return {i: held[i] for i in ids if i in held}
+
+    comparisons = []
+    for name, q in queries:
+        try:
+            comparisons.append(
+                compare_query(name, q, side=side, index=index, engine=engine, fetch=fetch, scope=scope, mode=ns.mode)
+            )  # fmt: skip
+        except QueryRefused as e:  # a UserInputError, so it logs at DEBUG; the codes, never the query
+            raise _usage(str(e)) from None
+    review = review_rows(comparisons)
+    meta = Meta(
+        date=day,
+        index_version=engine.index_version,
+        tokenizer_version=engine.tokenizer_version,
+        snapshot=records.path.parent.name,
+        snapshot_hash=records.snapshot_hash,
+        records=len(index.cells),
+        ris=tuple(ris_files),
+        scope=scope,
+        command=_scholar_command(ns, engine.index_version, day.isoformat()),
+        notes=notes.read_text(encoding="utf-8") if notes else None,
+        notes_name=notes.name if notes else None,
+        notes_sha256=hashlib.sha256(notes.read_bytes()).hexdigest() if notes else None,
+        query_files=tuple((p.name, hashlib.sha256(p.read_bytes()).hexdigest()) for p in query_files),
+        answers=ns.answers,
+    )
+    text = render(meta, side, index, comparisons, review)
+    written, rows, replaced = write(text, render_review(review, engine.index_version), out, day)
+    bugs = sum(c.our_bug for c in comparisons)
+    unresolved = sum(x.kind == UNRESOLVED for x in review)
+    log.log(logging.ERROR if bugs else logging.INFO, "scholar_report_written", extra={
+        "index_version": engine.index_version, "queries": len(comparisons), "ris_records": len(ris),
+        "in_scope": len(side.entries),
+        "ris_only_matches": sum(e.match.op_id is not None and e.match.op_id not in index.independent for e in side.entries),
+        "our_bug": bugs, "unresolved": unresolved, "review_rows": len(review),
+        "replaced": replaced, "ms": elapsed_ms(started),
+    })  # fmt: skip
+    print(f"wrote {written}", file=sys.stderr)
+    print(f"wrote {rows} ({len(review)} rows, {unresolved} unresolved)", file=sys.stderr)
+    for c in comparisons:
+        print(
+            f"  {c.name}: Scholar {c.scholar_in_scope}, openproceedings {c.in_scope}, both {len(c.kept)}, "
+            f"only Scholar {len(c.only_scholar)}, only openproceedings {len(c.added)}, our_bug {c.our_bug}",
+            file=sys.stderr,
+        )
+    if bugs:
+        print(f"our_bug: {bugs} (must be 0: investigate before the report is cited)", file=sys.stderr)
+    return 1 if ns.check and bugs else 0
 
 
 def _search(ns: argparse.Namespace) -> int:

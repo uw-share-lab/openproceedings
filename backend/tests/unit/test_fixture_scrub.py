@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from tests.fixtures.http import scrub
 
 
@@ -71,3 +73,17 @@ def test_only_allow_listed_venue_labels_keep_an_at_sign_and_dotless_addresses_ar
     assert (out["N0"], out["N1"]) == ("BT@ICLR2024", "Tiny Papers @ ICLR 2024 Archive")
     assert all(out[i].startswith("synthetic.person") for i in ("N2", "N3", "N4", "N5"))
     assert scrub.PERSON.search("user@localhost")
+
+
+def test_a_capture_states_its_own_fetch_date_and_one_without_it_takes_the_default() -> None:
+    capture = {
+        "url": "https://api2.openreview.net/notes?content.venueid=ICML.cc/2026/Conference",
+        "auth": True,
+        "status": 200,
+        "headers": {"content-type": "application/json"},
+        "body": json.dumps({"notes": [], "count": 0}),
+    }
+    assert scrub.fixture(capture)["_recorded"]["date"] == scrub.RECORDED
+    assert scrub.fixture({**capture, "date": "2026-10-05"})["_recorded"]["date"] == "2026-10-05"
+    with pytest.raises(ValueError):
+        scrub.fixture({**capture, "date": "5 October 2026"})

@@ -343,7 +343,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -459,7 +460,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       }
     },
     "defaults_only": {
@@ -765,7 +767,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -788,7 +791,8 @@
           }
         ],
         "translations": [],
-        "filters": null
+        "filters": null,
+        "word_forms": null
       }
     },
     "all_negative": {
@@ -1114,7 +1118,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -1137,7 +1142,8 @@
           }
         ],
         "translations": [],
-        "filters": null
+        "filters": null,
+        "word_forms": null
       }
     },
     "one_default": {
@@ -1440,7 +1446,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -1538,7 +1545,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       }
     },
     "scholar": {
@@ -1970,7 +1978,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -2130,7 +2139,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       }
     }
   },
@@ -2331,7 +2341,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       }
     },
     "statuses": {
@@ -2539,7 +2550,8 @@
             "blocking_spans": [],
             "values": ["accepted", "rejected", "withdrawn"]
           }
-        }
+        },
+        "word_forms": []
       }
     },
     "negated_status": {
@@ -2759,7 +2771,8 @@
             "blocking_spans": [],
             "values": ["rejected"]
           }
-        }
+        },
+        "word_forms": []
       }
     },
     "workshop": {
@@ -2964,7 +2977,8 @@
             "blocking_spans": [],
             "values": ["accepted"]
           }
-        }
+        },
+        "word_forms": []
       }
     }
   }

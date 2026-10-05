@@ -86,6 +86,48 @@ LIVE: list[tuple[str, str | None, int | None, str, str]] = [
     # the first v2 years keep venueid status
     ("NeurIPS.cc/2023/Conference/Rejected_Submission", "NeurIPS", 2023, "main", "rejected"),
     ("ICLR.cc/2024/Conference/Rejected_Submission", "ICLR", 2024, "main", "rejected"),
+    # forms on notes in the 2026 crawl cache (TASK-178, fetched 2026-10-05), each with a forum id that carries it
+    ("ICLR.cc/2026/Conference/Withdrawn_Submission", "ICLR", 2026, "main", "withdrawn"),  # 5,204; mj5EJe50X2
+    (
+        "ICLR.cc/2026/Conference/Desk_Rejected_Submission",
+        "ICLR",
+        2026,
+        "main",
+        "desk_rejected",
+    ),  # 908; GtyMclqDqY
+    (
+        "ICML.cc/2026/Conference/Rejected_Submission",
+        "ICML",
+        2026,
+        "main",
+        "rejected",
+    ),  # 214 opt-in; Eo5uKnah7q
+    (
+        "ICML.cc/2026/Position_Paper_Track/Rejected_Submission",
+        "ICML",
+        2026,
+        "position",
+        "rejected",
+    ),  # 28; thf3e0Ptbf
+    # an undecided workshop submission left public: `unknown`, never accepted (11 notes; xFNDnnuTSf, KadCjvcLOz)
+    ("ICML.cc/2026/Workshop/NExT-Game/Submission", "ICML", 2026, "workshop", "unknown"),
+    ("ICLR.cc/2026/Workshop/LMRL/Submission", "ICLR", 2026, "workshop", "unknown"),
+    (
+        "ICLR.cc/2026/Workshop/LLM_Reasoning/Withdrawn_Submission",
+        "ICLR",
+        2026,
+        "workshop",
+        "withdrawn",
+    ),  # 1lNr7gL71D
+    (
+        "ICLR.cc/2026/Workshop/AFAA/Rejected_Submission",
+        "ICLR",
+        2026,
+        "workshop",
+        "rejected",
+    ),  # 17; S8YlUOWpPz
+    # a workshop whose name ends in `_Track` is still a workshop (42 notes; P39YgSzQwI)
+    ("ICLR.cc/2026/Workshop/ML4RS_Main_Track", "ICLR", 2026, "workshop", "accepted"),
 ]
 
 UNVERIFIED: list[tuple[str, str | None, int | None, str, str]] = [
@@ -386,6 +428,12 @@ V2_NOTES: list[tuple[str, str, str]] = [
         "accepted",
     ),
     ("v2/neurips-2025/notes-presentation-position-paper-track.json", "position", "accepted"),
+    # TASK-178: trimmed from the 2026 crawl cache (2026-10-05)
+    ("v2/iclr-2026/notes-presentation-conference.json", "main", "accepted"),
+    ("v2/icml-2026/notes-presentation-conference.json", "main", "accepted"),
+    ("v2/icml-2026/notes-presentation-position-paper-track.json", "position", "accepted"),
+    ("v2/icml-2026/notes-rejected.json", "main", "rejected"),  # `Submitted to ICML 2026`: an opt-in rejection
+    ("v2/icml-2026/notes-workshop-submission.json", "workshop", "unknown"),  # `…/Workshop/GenBio/Submission`
 ]
 
 V2_VENUE_LABELS = [
