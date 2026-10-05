@@ -35,3 +35,13 @@
   differed only by those 7.
 - **Matching.** This report matches the set by URL and title, as it would any RIS file, not by the import's
   ids.
+- **Who made the human calls.** The 48 calls in the review file of the 2026-10-05 run were made on 2026-10-05 by an
+  AI assistant at the project owner's direction, not by an independent reviewer; the file's `reviewer_role`
+  says so on each row, and each `note` gives the evidence. Where this report says "a person", read it with
+  that in mind. The checks behind them: for the 12 `scholar_missed` papers, no record with the title (exact,
+  prefix or near match) in `mended.ris` or in the review's 20 other Scholar export files; for the 5 records with no
+  venue string, the same title, year and authors as the named index record, then the class the tool gives once
+  the venue is restored; for the 3 `coverage_gap` records, the venue named by Crossref or by the conference's
+  own page (a Springer LNCS volume of another conference, an IEEE conference of another name, and a NeurIPS 2022
+  tutorial). No spot-check row has a call. A reviewer who repeats any of these calls should replace the role on
+  that row.

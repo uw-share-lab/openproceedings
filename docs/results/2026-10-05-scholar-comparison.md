@@ -7,7 +7,7 @@
 - Queries: `main-7-most-updated`, `main-7-dollar`, `main-2-pop`
 - Query file: `trust-evals.txt`, sha256 `16afdaff80f1c4767ea7e92d3854620ff73ed5beec192995743a03d97ee8e47c`
 - Query file: `scholar-comparison-strings.txt`, sha256 `bc55c6e2dddb7300fea1608a0eaf6fb2f6bff2735babf95d777343fe1d81e56b`
-- Notes: `scholar-comparison-notes.md`, sha256 `9dfc33e3c80739b3283dd8941e1ada4a9649f143259185f17b8cfd67497cc4a1`
+- Notes: `scholar-comparison-notes.md`, sha256 `59e38715c2f223d4b7e8c5ac2d3ba6866b3fb3524fcd2437deb82a77bd0d2299`
 - Command: `op eval scholar --ris mended.ris --query-file trust-evals.txt --query-file scholar-comparison-strings.txt --name main-7-most-updated --name main-7-dollar --name main-2-pop --years 2020..2026 --answers main-7-most-updated --notes scholar-comparison-notes.md --index fd13d8d27535 --date 2026-10-05`
 - Review rows: `2026-10-05-scholar-comparison-review.csv` (586 rows, 48 unresolved)
 
@@ -458,9 +458,29 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 
 ## Human calls
 
-None yet: no row of the review file has a `human_class`. A person fills `human_class` (one of `our_bug`, `filtered`, `compat_reading`, `coverage_gap`, `stemming`, `full_text`, `scholar_cap`, `scholar_missed`, `in_both`, `out_of_scope`), `reviewer_role` (a role, never a name) and, if wanted, `note`; running the same command again then reads the calls back into this section and leaves the file as it is.
+Read from `2026-10-05-scholar-comparison-review.csv` (sha256 `ec9f57c0db9705dd0b22ac361e44995bf0c4336221ab2bb6b2d4fc4c8f25fcc1`): 48 of its 586 rows have a person's call. `in_both` means the record is the same paper as one in the result; `out_of_scope` that it is no paper of the scope's venues and years.
 
-**Every disagreement classified: no.** `our_bug` by the automation: 0; by a person: 0; rows left for a person that have no call yet: 48.
+| query | unresolved rows | called | spot-check rows | called | agree with the automated class |
+|---|---|---|---|---|---|
+| `main-7-most-updated` | 20 | 20 | 179 | 0 | 0 |
+| `main-7-dollar` | 20 | 20 | 180 | 0 | 0 |
+| `main-2-pop` | 8 | 8 | 179 | 0 | 0 |
+
+| query | automated class | human class | rows |
+|---|---|---|---|
+| `main-2-pop` | `coverage_gap` | `out_of_scope` | 3 |
+| `main-2-pop` | `unsettled` | `full_text` | 4 |
+| `main-2-pop` | `unsettled` | `in_both` | 1 |
+| `main-7-dollar` | `coverage_gap` | `out_of_scope` | 3 |
+| `main-7-dollar` | `scholar_missed` | `scholar_missed` | 12 |
+| `main-7-dollar` | `unsettled` | `full_text` | 4 |
+| `main-7-dollar` | `unsettled` | `in_both` | 1 |
+| `main-7-most-updated` | `coverage_gap` | `out_of_scope` | 3 |
+| `main-7-most-updated` | `scholar_missed` | `scholar_missed` | 12 |
+| `main-7-most-updated` | `unsettled` | `full_text` | 4 |
+| `main-7-most-updated` | `unsettled` | `stemming` | 1 |
+
+**Every disagreement classified: yes.** `our_bug` by the automation: 0; by a person: 0; rows left for a person that have no call yet: 0.
 
 ## Method
 
@@ -538,3 +558,13 @@ None yet: no row of the review file has a `human_class`. A person fills `human_c
   differed only by those 7.
 - **Matching.** This report matches the set by URL and title, as it would any RIS file, not by the import's
   ids.
+- **Who made the human calls.** The 48 calls in the review file of the 2026-10-05 run were made on 2026-10-05 by an
+  AI assistant at the project owner's direction, not by an independent reviewer; the file's `reviewer_role`
+  says so on each row, and each `note` gives the evidence. Where this report says "a person", read it with
+  that in mind. The checks behind them: for the 12 `scholar_missed` papers, no record with the title (exact,
+  prefix or near match) in `mended.ris` or in the review's 20 other Scholar export files; for the 5 records with no
+  venue string, the same title, year and authors as the named index record, then the class the tool gives once
+  the venue is restored; for the 3 `coverage_gap` records, the venue named by Crossref or by the conference's
+  own page (a Springer LNCS volume of another conference, an IEEE conference of another name, and a NeurIPS 2022
+  tutorial). No spot-check row has a call. A reviewer who repeats any of these calls should replace the role on
+  that row.
