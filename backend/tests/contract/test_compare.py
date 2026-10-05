@@ -16,6 +16,7 @@ import csv
 import gzip
 import io
 import json
+import re
 import tempfile
 import threading
 from collections.abc import Callable, Iterator
@@ -1066,6 +1067,19 @@ def test_a_disabled_instance_answers_every_request_alike(corpus_dir: Path, tmp_p
         assert len({r.content for r in answers}) == 1
         e = error(answers[0], 403, "API_COMPARE_DISABLED")
         assert set(e) == {"code", "message"} and "access-control-allow-origin" not in answers[-1].headers
+        # what any route refuses before its handler is refused here too, and says nothing of this feature
+        error(c.post(COMPARE, params={"q": Q, "bogus": "1"}, content=body, headers=RIS), 422, "API_BAD_PARAM")
+        error(c.post(COMPARE, params={"q": Q}, content=b"x" * 70_000, headers=RIS), 413, "API_BODY_TOO_LARGE")
+
+        def chunked() -> Iterator[bytes]:  # the same size with no declared length: drained, then the 403
+            for _ in range(70):
+                yield b"x" * 1000
+
+        assert c.post(COMPARE, params={"q": Q}, content=chunked(), headers=RIS).status_code == 403
+        error(c.get(COMPARE, params={"q": Q}), 405, "API_METHOD_NOT_ALLOWED")
+    with TestClient(make_app(corpus_dir, rate_limit=RateLimit(capacity=10, refill_per_second=0.001))) as c:
+        assert c.post(COMPARE, params={"q": Q}, content=b"x", headers=RIS).status_code == 403
+        error(c.post(COMPARE, params={"q": Q}, content=b"x", headers=RIS), 429, "API_RATE_LIMITED")
     (tmp_path / "indexes").mkdir()
     with TestClient(make_app(tmp_path)) as c:  # no index loaded: still the one answer, not the index's state
         assert c.post(COMPARE, params={"q": Q}, content=b"x", headers=RIS).content == answers[0].content
@@ -1124,8 +1138,6 @@ def test_a_filtered_paper_is_one_search_serves_when_asked(shared: TestClient) ->
 def test_every_id_a_comparison_names_is_a_paper_the_index_serves(shared: TestClient) -> None:
     """The match table holds the served snapshot's records and no others: every id in a row, in its evidence,
     in a CSV or in the RIS answers on `/papers/{id}`."""
-    import re
-
     twin = BY_ID[next(i for i in BY_ID if i.endswith("Fx0516"))]
     file = the_file() + entry(one_line(twin.title), twin.venue, twin.year)  # an ambiguous match names two ids
     file += entry(
@@ -1151,8 +1163,8 @@ def test_one_requests_file_never_reaches_another(corpus_dir: Path) -> None:
         assert state.served is not None and state.served.matches is not None
         table = state.served.matches.index
         assert table is not None and not any(SECRET in key for key in table.any_cell)
-    # and no module or app object keeps a parsed file: the route's only shared state is its slots and the
-    # networks' cooldown times
+    # the app's own object for this route holds its slots and the networks' cooldown times, nothing else
+    # (this checks that one object's attributes; the assertions above are what show no file is kept)
     assert set(vars(c.app.state.comparisons)) == {"slots", "cooldowns"}  # type: ignore[attr-defined]
 
 
@@ -1169,6 +1181,24 @@ def test_no_refusal_or_failure_says_what_the_file_held(
             post(c, secret_file.encode() + b"\xff"),  # not UTF-8
         ]
         assert [r.status_code for r in refusals] == [413, 413, 422, 422]
+        # each message is the route's own: a constant for a 422 (never scholarmend's, which names the file and
+        # its byte count), and for a 413 a sentence in which only numbers vary
+        said = [r.json()["error"]["message"] for r in refusals]
+        assert said[2] == route.NOT_RIS and said[3] == route.NOT_UTF8
+        assert set(said[2:]) <= route.INVALID_MESSAGES
+        assert re.fullmatch(
+            r"The file holds [0-9,]+ records; this instance compares at most [0-9,]+ in one request\. "
+            r"Split it into several files\.",
+            said[0],
+        )
+        assert re.fullmatch(
+            r"Line [0-9,]+ of the file is over [0-9,]+ characters, the longest line this instance reads\. "
+            r"Leave the abstracts out: only titles, venues, years and links are compared\.",
+            said[1],
+        )
+        for empty in (b"", b"  \n"):
+            assert post(c, empty).json()["error"]["message"] == route.NO_RECORD
+        assert post(c, b"TY  - JOUR\rER  - \r").json()["error"]["message"] == route.CR_ONLY
 
         def broken(*a: Any, **k: Any) -> None:
             raise RuntimeError(f"failed on {SECRET} at /srv/data/indexes")

@@ -253,6 +253,21 @@ def check_media(request: Request) -> None:
         )
 
 
+# The route's own words for a file it can't read. Nothing of the file is in them, and scholarmend's refusals
+# (which name the file and its size) never reach a client: a test holds every 422 to this set.
+NOT_UTF8 = (
+    "The file is not UTF-8 text. Export it again as RIS in UTF-8 (the default of Publish or Perish, Zotero and "
+    "EndNote)."
+)
+CR_ONLY = "The file's lines end with a carriage return only, which is not read. Save it with LF or CRLF line endings."
+NOT_RIS = (
+    "The file is not RIS as this instance reads it: it must start with a record (a `TY  - ` line), with "
+    "nothing before the first one."
+)
+NO_RECORD = "The file holds no RIS record (no `TY  - ` line)."
+INVALID_MESSAGES = frozenset({NOT_UTF8, CR_ONLY, NOT_RIS, NO_RECORD})
+
+
 def _too_large(message: str) -> ApiError:
     return ApiError(DiagnosticCode.API_RIS_TOO_LARGE, message)
 
@@ -267,10 +282,7 @@ def decode(body: bytes | bytearray) -> str:
     try:
         return body.decode("utf-8-sig")
     except UnicodeDecodeError:
-        raise _invalid(
-            "The file is not UTF-8 text. Export it again as RIS in UTF-8 (the default of Publish or Perish, "
-            "Zotero and EndNote)."
-        ) from None
+        raise _invalid(NOT_UTF8) from None
 
 
 def check_caps(text: str, *, max_records: int, max_line_chars: int, max_title_chars: int = MAX_TITLE) -> int:
@@ -279,10 +291,7 @@ def check_caps(text: str, *, max_records: int, max_line_chars: int, max_title_ch
     the lines (at most `MAX_LINES_PER_RECORD` × `max_records`), each line's length (`max_line_chars`; a title
     or venue line's value `max_title_chars`, since those are normalized for matching), then the records."""
     if "\n" not in text and "\r" in text:  # the parser reads `\n` and `\r\n`; this would be one endless line
-        raise _invalid(
-            "The file's lines end with a carriage return only, which is not read. Save it with LF or CRLF line "
-            "endings."
-        )
+        raise _invalid(CR_ONLY)
     max_lines = MAX_LINES_PER_RECORD * max_records
     if text.count("\n") > max_lines:
         raise _too_large(
@@ -322,12 +331,9 @@ def parse_file(text: str, tick: Callable[[], None] | None = None) -> list[RisRec
     try:
         records = read_ris(text, NAME, tick)
     except ValueError:
-        raise _invalid(
-            "The file is not RIS as this instance reads it: it must start with a record (a `TY  - ` line), "
-            "with nothing before the first one."
-        ) from None
+        raise _invalid(NOT_RIS) from None
     if not records:
-        raise _invalid("The file holds no RIS record (no `TY  - ` line).")
+        raise _invalid(NO_RECORD)
     return records
 
 
@@ -493,9 +499,12 @@ async def _read(request: Request, seconds: float) -> bytearray:
 
 async def offered(request: Request) -> None:
     """403 `API_COMPARE_DISABLED` unless this instance's operator turned comparisons on. The route's first
-    dependency, so an instance that doesn't offer them answers every request to the path alike (whatever its
-    query, its body or the index's state; only an undeclared parameter is refused earlier, as on any route):
-    it says nothing about the served index, and nothing of the query or the body is looked at."""
+    dependency, so an instance that doesn't offer them answers a POST to the path with this 403 whatever its
+    query, its body, its media type or the index's state: it says nothing about the served index, and nothing
+    of the query or the body is looked at. What is refused earlier is what every route refuses before its
+    handler, none of it about this feature: an undeclared or repeated parameter (422, `strict_query`), a
+    declared `Content-Length` over `max_body_bytes` (413 from `BodyLimit`; the same body sent chunked is
+    drained and gets the 403), another method (405) and a rate-limited client (429)."""
     config: ApiConfig = request.app.state.config
     if not config.compare_enabled:
         await drain(request.receive)  # at most `max_body_bytes` on this path while comparisons are off

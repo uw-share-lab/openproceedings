@@ -432,10 +432,15 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   `--no-compare` turns it off. While off, the route answers 403 `API_COMPARE_DISABLED`, `GET /meta`
   `limits.compare` is null (the web app then doesn't offer it), no match table is built, and the path reads no
   body larger than any other route's (`max_body_bytes`).
-  The check is the route's first dependency, so a disabled instance answers every request to the path with
-  that one 403 whatever its query, body or origin, and whether or not an index is loaded (only an undeclared
-  parameter is refused earlier, as on every route).
-- **What it may disclose** (audited 2026-10-05; each point has a test in `test_compare.py`). A withheld
+  The check is the route's first dependency, so a disabled instance answers a POST to the path with that one
+  403 whatever its query, body, media type or origin, and whether or not an index is loaded. What is refused
+  earlier is what every route refuses before its handler, and none of it is about this feature: an undeclared
+  or repeated parameter (422), a declared `Content-Length` over `max_body_bytes` (413 from `BodyLimit`; the
+  same body sent chunked gets the 403), another method (405 for GET) and a rate-limited client (429).
+- **What it may disclose** (audited 2026-10-05; each point below has a test in `test_compare.py` or
+  `test_compare_review.py`, the takedown ones through a listed id, a merged id, a rekeyed id and a twin
+  link). Timing was not made a guarantee: the reviewer measured no withheld-specific signal in process
+  (12.37 against 11.41 ms median, inside the spread), and no test pins it. A withheld
   abstract (decision-022) is never returned and its row has no `detail`; the list and class a withheld paper
   falls in say only whether the query, or a stated variant of it, matches, which `/search` and
   `/papers/{id}?q=` already say (the accepted leak). A `filtered` row names a track or status that a query

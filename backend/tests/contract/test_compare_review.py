@@ -15,6 +15,8 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from openproceedings import export as exporter
+from openproceedings import takedown_check
 from openproceedings.api import ApiConfig, RateLimit
 from openproceedings.api import compare as route
 from openproceedings.api.compare import Cooldowns, slot_seconds
@@ -22,18 +24,17 @@ from openproceedings.api.middleware import TokenBucket, network_key, take_all
 from openproceedings.api.state import IndexState, MatchTable
 from openproceedings.eval import scholar_compare
 from openproceedings.eval.scholar_compare import MAX_HOSTS, MatchIndex, Scope, link_host, read_ris
+from scholarmend.parse import parse_ris
 
-from tests.contract.conftest import SECRET, make_app
+from tests.contract.conftest import attributed, make_app
 from tests.contract.test_abuse_limits import error
 from tests.contract.test_compare import (
     BY_ID,
     COMPARE,
     INDEX,
     KEPT,
+    NO_COOLDOWN,
     ORACLE,
-    PAPERS,
-    RESULT,
-    RIS,
     Logs,
     Q,
     app_of,
@@ -47,6 +48,7 @@ from tests.contract.test_compare import (
 from tests.contract.test_takedowns import Aliased, aliased, aliased_store, listing  # noqa: F401  (fixtures)
 from tests.contract.test_twins import Twins, twins_store  # noqa: F401  (a fixture)
 from tests.contract.test_twins import data as twins_data  # noqa: F401  (a fixture)
+from tests.fixtures.corpus.synthetic_5k import records
 
 
 # --- one network can't hold the slot (SHOULD 1) ------------------------------------------------------------------
@@ -491,38 +493,84 @@ def test_the_uploads_bytes_are_released_once_decoded(
 
 
 # --- a takedown is followed here too (the audit's gap) ---------------------------------------------------------
-def test_a_takedown_follows_a_merged_or_rekeyed_id_on_this_route(aliased: Aliased) -> None:
-    """The list names the id the newest index has; served from the older index, the same paper under its older
-    ids (a rekey, a duplicate later merged) is withheld here as on `/search`: no evidence, no abstract."""
-    data, prev, _, paper, rekeyed, dup = aliased
-    file = "".join(
-        entry("some title", r.venue, r.year, f"https://openreview.net/forum?id={r.native}")
-        for r in (rekeyed, dup)
+def named(*papers: Any) -> str:
+    """A file naming each paper by its OpenReview link (so it matches whatever its title says)."""
+    return "".join(
+        entry("some title", p.venue, p.year, f"https://openreview.net/forum?id={p.native}") for p in papers
     )
-    with TestClient(make_app(data, index=prev, compare_enabled=True)) as c:
-        r = post(c, file, "agent OR trust OR benchmark OR model")
-        assert r.status_code == 200, r.text
-        body = r.json()
-    rows = {x["id"]: x for name in ("kept", "dropped") for x in body[name]}
-    assert set(rows) == {rekeyed.id, dup.id}
-    assert all(x["abstract_withheld"] is True and x["detail"] == "" for x in rows.values())
-    assert paper.abstract is not None and paper.abstract[:40] not in r.text
+
+
+def csv_details(text: str) -> dict[str, str]:
+    import csv
+    import io
+
+    return {r["id"]: r["detail"] for r in csv.DictReader(io.StringIO(text.removeprefix("\ufeff")))}
+
+
+def test_a_takedown_follows_a_merged_or_rekeyed_id_on_this_route(aliased: Aliased) -> None:
+    """The list names the id the newest index has; the served (older) index holds the paper only under its
+    aliases: `rekeyed` (the same native id, a year off) and `dup` (linked by another snapshot's merges.csv).
+    Both are withheld here as on `/search`: no evidence in the row or the CSV, no abstract anywhere."""
+    data, prev, _, paper, rekeyed, dup = aliased
+    with TestClient(make_app(data, index=prev, compare_enabled=True, rate_limit=NO_COOLDOWN)) as c:
+        assert c.get(f"/api/v1/papers/{paper.id}").status_code == 404  # only the aliases are served here
+        control = next(
+            p for p in (attributed(r) for r in list(records())[:300]) if p.id != paper.id and p.abstract
+        )
+        dropped = post(c, named(rekeyed, dup, control), "zzqqnosuchword")
+        assert dropped.status_code == 200, dropped.text
+        body = dropped.json()
+        rows = {x["id"]: x for x in body["dropped"]}
+        assert set(rows) == {rekeyed.id, dup.id, control.id}
+        for alias in (rekeyed, dup):
+            assert rows[alias.id]["abstract_withheld"] is True and rows[alias.id]["detail"] == ""
+            assert csv_details(body["csv"]["dropped"])[alias.id] == ""
+        assert rows[control.id]["abstract_withheld"] is False and rows[control.id]["detail"] != ""
+        assert csv_details(body["csv"]["dropped"])[control.id] == rows[control.id]["detail"]
+        added = post(c, named(control), takedown_check.cell_query(rekeyed.id))
+        assert added.status_code == 200, added.text
+        there = {x["id"]: x for x in added.json()["added"]}
+        assert there[rekeyed.id]["abstract_withheld"] is True and there[rekeyed.id]["detail"] == ""
+        ris = {r.fields["ID"][0]: r for r in parse_ris(added.json()["added_ris"], "added.ris")}
+        assert "AB" not in ris[rekeyed.id].fields and exporter.TAKEDOWN in ris[rekeyed.id].fields["N1"]
+    assert paper.abstract is not None
+    assert paper.abstract[:40] not in dropped.text and paper.abstract[:40] not in added.text
 
 
 def test_a_takedown_follows_a_twin_link_on_this_route(twins_data: Path, twins_store: Twins) -> None:
-    _, conf, copy, copy2, other = twins_store
-    listing(twins_data, conf.id)  # only the conference record is listed: its twins are withheld with it
-    file = "".join(
-        entry("some title", r.venue, r.year, f"https://openreview.net/forum?id={r.native}")
-        for r in (conf, copy, copy2, other)
-    )
-    with TestClient(make_app(twins_data, compare_enabled=True)) as c:
-        r = post(c, file, "agent OR trust OR benchmark OR model")
-        assert r.status_code == 200, r.text
-        body = r.json()
-    rows = {x["id"]: x for name in ("kept", "dropped", "added") for x in body[name]}
+    """Three twin records, one of them listed: all three are withheld, as dropped and as added, in the row,
+    the CSV and the RIS, while an unlisted paper of the same venue and year keeps its evidence."""
+    _, conf, copy, copy2, _other = twins_store
+    cell = [
+        p
+        for p in (attributed(r) for r in list(records())[:300])
+        if (p.venue, p.year) == (conf.venue, conf.year)
+    ]
+    control = next(p for p in cell if p.id not in {conf.id, copy.id, copy2.id} and p.abstract)
+    listing(twins_data, copy.id)  # only one twin is listed
+    with TestClient(make_app(twins_data, compare_enabled=True, rate_limit=NO_COOLDOWN)) as c:
+        dropped = post(c, named(conf, copy, copy2, control), "zzqqnosuchword")
+        assert dropped.status_code == 200, dropped.text
+        body = dropped.json()
+        rows = {x["id"]: x for x in body["dropped"]}
+        details = csv_details(body["csv"]["dropped"])
+        assert set(rows) == {conf.id, copy.id, copy2.id, control.id}
+        for twin in (conf, copy, copy2):
+            assert rows[twin.id]["abstract_withheld"] is True and rows[twin.id]["detail"] == ""
+            assert details[twin.id] == ""
+        assert rows[control.id]["abstract_withheld"] is False
+        assert rows[control.id]["detail"] != "" and details[control.id] == rows[control.id]["detail"]
+        entirely = post(c, named(BY_ID[KEPT[0]]), takedown_check.cell_query(conf.id))
+        assert entirely.status_code == 200, entirely.text
+        added = entirely.json()
+        there = {x["id"]: x for x in added["added"]}
+        added_details = csv_details(added["csv"]["added"])
+        ris = {r.fields["ID"][0]: r for r in parse_ris(added["added_ris"], "added.ris")}
+        for twin in (conf, copy, copy2):
+            assert there[twin.id]["abstract_withheld"] is True and there[twin.id]["detail"] == ""
+            assert added_details[twin.id] == ""
+            assert "AB" not in ris[twin.id].fields and exporter.TAKEDOWN in ris[twin.id].fields["N1"]
+        assert there[control.id]["abstract_withheld"] is False and "AB" in ris[control.id].fields
     for twin in (conf, copy, copy2):
-        assert rows[twin.id]["abstract_withheld"] is True and rows[twin.id]["detail"] == ""
-        assert twin.abstract is not None and twin.abstract[:40] not in r.text
-    assert rows[other.id]["abstract_withheld"] is False
-    assert SECRET not in r.text and len(PAPERS) > 0 and RESULT and RIS
+        assert twin.abstract is not None
+        assert twin.abstract[:40] not in dropped.text and twin.abstract[:40] not in entirely.text
