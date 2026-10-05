@@ -714,7 +714,17 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   `limits.compare` is null (the web app stops offering them) until a reload, and every reload (SIGHUP), whether or not `current` moved,
   builds a failed table again. Builds run one at a time, and one whose index was swapped out while it waited
   is skipped, so quick promotions never run several at once. A reload that keeps the index (a new
-  takedown list) keeps a table that was built.
+  takedown list) keeps a table that was built. **At a swap** the old bundle, its table included (about 80 MB),
+  stays in memory until the requests holding it finish, while the new table builds: the peak is then about
+  420 MB of resident memory on the 95,877-record index (the 340 MB above plus the old table; an estimate from
+  those two measurements, not measured as one).
+- **Searches meanwhile** (PERF-S3; measured 2026-10-05 on the 5k fixture, an M1 Pro laptop at a 1-minute load
+  of 4 to 12, commit e11b303b plus this change, 300 `/search` calls of five queries, first 20 hits, in process):
+  idle, 6.7 ms median and 13.4 ms p95; with match tables built back to back in the background, 74 ms median
+  and 326 ms p95 when the build held the GIL, so the build now releases it before every record it reads
+  (`state._yielding`), and searches took 32 ms median and 64 ms p95 (a build alone, 258 against 270 ms);
+  with comparisons back to back (a 256-record file, 0.13 to 0.18 s each), 10 to 14 ms median and 69 to 75 ms
+  p95. Both are within 03's 100 ms p95; neither was measured on the full index.
 - **And `op eval scholar`.** The CLI writes the dated report of 07 §B for the project's own strings: several
   queries, `--years`/`--venues` scopes, the review file, percentages, a spot check. `POST /compare` is one
   query against one file for whoever asks, with the same matching and the same classes and no report.

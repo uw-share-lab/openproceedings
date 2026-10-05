@@ -1469,3 +1469,14 @@ def test_the_running_answer_size_counts_what_json_escapes_add() -> None:
     assert route._sent("abc") == 5
     assert route._sent('"' * 10) == 22 and route._sent("\\" * 10) == 22
     assert route._sent("\x01") == 8 and route._sent("é") == 4
+
+
+def test_the_table_build_lets_searches_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PERF-S3: the build releases the GIL as it reads (`time.sleep(0)` per record by default), and reads every
+    record, in order, all the same."""
+    from openproceedings.api import state as served_state
+
+    slept: list[float] = []
+    monkeypatch.setattr(served_state.time, "sleep", slept.append)
+    assert list(served_state._yielding(iter(PAPERS))) == PAPERS
+    assert len(slept) == len(PAPERS) and set(slept) == {0}

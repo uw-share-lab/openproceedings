@@ -73,7 +73,7 @@ import signal
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -101,6 +101,7 @@ if TYPE_CHECKING:
     from openproceedings.api.models import CoverageResponse
     from openproceedings.engine.tantivy_engine import TantivyEngine
     from openproceedings.eval.scholar_compare import MatchIndex
+    from openproceedings.ingest.record import PaperRecord
 
 log = logging.getLogger(__name__)
 # the access-line key (never logged) holding a request's verification deadline, on the wall clock `_wall`
@@ -152,7 +153,7 @@ class MatchTable:
         started = time.perf_counter()
         self._records, self._started = len(records), time.monotonic()
         try:
-            index = MatchIndex.build(iter_records(records.path.parent))
+            index = MatchIndex.build(_yielding(iter_records(records.path.parent)))
             if index.cells.keys() != records.ids():  # the table must be this bundle's snapshot's, id for id
                 raise SnapshotError(
                     "the match table's records are not the served snapshot's", reason="match_index_mismatch"
@@ -175,6 +176,20 @@ class MatchTable:
             "match_index_built",
             extra={"index_version": index_version, "records": len(index.cells), "ms": elapsed_ms(started)},
         )
+
+
+YIELD_EVERY = 1  # records the match-table build reads between two GIL releases (`_yielding`)
+
+
+def _yielding(records: Iterable[PaperRecord], every: int = YIELD_EVERY) -> Iterator[PaperRecord]:
+    """`records`, releasing the GIL every `every` of them (`time.sleep(0)`): the build is pure Python in a
+    background thread, and a search that waits for the GIL behind it missed spec 03's 100 ms p95 (on the 5k
+    fixture, builds back to back: 326 ms p95 without a release, 107 ms every 4 records, 64 ms every record;
+    the build alone 258 ms against 270 ms; spec 04 §Comparing with a RIS file, The match table; PERF-S3)."""
+    for i, record in enumerate(records):
+        if i % every == 0:
+            time.sleep(0)
+        yield record
 
 
 @dataclass(frozen=True, slots=True)
