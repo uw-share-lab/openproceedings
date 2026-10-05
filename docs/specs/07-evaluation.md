@@ -77,7 +77,8 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   table per venue and year beside the crawled records the index holds there, and each class count for the two
   kinds apart. Where the index has no crawled record (2026, on the first report's index `05a0541717f6`) nothing
   can be only in openproceedings, and the report says so. The 2026 crawl (TASK-178, index `5ec5231adae2`,
-  `docs/results/2026-10-05-scholar-comparison.md`) left 7 RIS-only matches of 1,807, where there had been 530. A RIS-only match whose title another index record shares is
+  and the dedup fix of TASK-179, index `fd13d8d27535`, `docs/results/2026-10-05-scholar-comparison.md`) left no
+  RIS-only match, where there had been 530. A RIS-only match whose title another index record shares is
   `unsettled` (one paper under two ids, or a wrong venue or year in the import).
 - **Scope** is `--years` and `--venues`, applied to both sides: the result is the engine's match set for the
   string as written, limited to records of those venues and years; a matched Scholar record is scoped by its
@@ -104,8 +105,8 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   is not a lower bound: a wider stemmer moves rows out of it. The report therefore gives a sensitivity figure
   per string: how many `full_text` rows would match if every searched word were replaced by its inflection stem
   read as a prefix (`benchmarks` → `benchmark*`). It measures that and no more: it is not a stemmer, and one that
-  strips derivational endings could move more rows. On index `5ec5231adae2` it moves 0 of 1,753 `full_text` rows
-  for `main-7-most-updated` and 2 of 1,709 for `main-2-pop`, which is why decision-038 adds no stemmer
+  strips derivational endings could move more rows. On index `fd13d8d27535` it moves 0 of 1,752 `full_text` rows
+  for `main-7-most-updated` and 2 of 1,708 for `main-2-pop`, which is why decision-038 adds no stemmer
   dependency; a string whose figure is not near zero reopens the decision.
 - **`scholar_cap`** needs the size of each Scholar search: the set's Publish or Perish query dates group its
   records by search, and a group at 1,000 or more marks its venues and years as capped.
@@ -118,6 +119,12 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   Since that route echoes a row's evidence to whoever uploaded the file (decision-035), the evidence of a
   record the index doesn't hold names its links' hosts only as valid host names, at most three a record
   (`link_host`, `MAX_HOSTS`), in the report too; a link no URL parser takes names no paper and no host.
+- **Human calls are read back.** A person fills `human_class` (a protocol class, `in_both` or `out_of_scope`),
+  `reviewer_role` and `note` in the review file. The same command, run again, checks that the file's rows are
+  the run's own, leaves the file untouched and rewrites the report with a "Human calls" section: calls per
+  query, spot-check agreement with the automated class, any row a person called `our_bug`, and the line
+  **Every disagreement classified: yes/no** (no `our_bug` by the automation or a person, and a call on every
+  row left for a person). That line is this section's bar; `--check` fails on a person's `our_bug` as well.
 - A report never replaces a review file a person has filled in, and names its inputs by file name and sha256,
   never by path. Notes about one set of inputs come from the file `--notes` names (for the review's export,
   `docs/results/scholar-comparison-notes.md`), printed verbatim under its hash; there is no default, since

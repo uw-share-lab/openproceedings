@@ -1,25 +1,25 @@
 # Scholar comparison, 2026-10-05
 
-- Index: `index_version` `5ec5231adae2`, `tokenizer_version` `3`
-- Snapshot: `2026-10-05-47d4e190ca81`, `snapshot_hash` `47d4e190ca816d89ff22bc88206e5e730929c14efbaa5a5213e5b36afde8a866` (133,632 records)
+- Index: `index_version` `fd13d8d27535`, `tokenizer_version` `3`
+- Snapshot: `2026-10-05-10b5a205a63f`, `snapshot_hash` `10b5a205a63f964496b9b572321785cf4c845c49fac4bf6cbdf5ab3dfe4cbe76` (133,629 records)
 - Scholar set: `mended.ris`, sha256 `ec0b1367acb6d3764780db0eb00b11868d1fe14ebe437b106aa4215ae7476a7b` (1,834 records)
 - Scope, both sides: ICLR, ICML, NeurIPS; 2020–2026
 - Queries: `main-7-most-updated`, `main-7-dollar`, `main-2-pop`
 - Query file: `trust-evals.txt`, sha256 `16afdaff80f1c4767ea7e92d3854620ff73ed5beec192995743a03d97ee8e47c`
 - Query file: `scholar-comparison-strings.txt`, sha256 `bc55c6e2dddb7300fea1608a0eaf6fb2f6bff2735babf95d777343fe1d81e56b`
-- Notes: `scholar-comparison-notes.md`, sha256 `97bd327517201fcf52ac0d63dff8cec637f426c9331ca5d5645e7af816387908`
-- Command: `op eval scholar --ris mended.ris --query-file trust-evals.txt --query-file scholar-comparison-strings.txt --name main-7-most-updated --name main-7-dollar --name main-2-pop --years 2020..2026 --answers main-7-most-updated --notes scholar-comparison-notes.md --index 5ec5231adae2 --date 2026-10-05`
-- Review rows: `2026-10-05-scholar-comparison-review.csv` (589 rows, 51 unresolved)
+- Notes: `scholar-comparison-notes.md`, sha256 `9dfc33e3c80739b3283dd8941e1ada4a9649f143259185f17b8cfd67497cc4a1`
+- Command: `op eval scholar --ris mended.ris --query-file trust-evals.txt --query-file scholar-comparison-strings.txt --name main-7-most-updated --name main-7-dollar --name main-2-pop --years 2020..2026 --answers main-7-most-updated --notes scholar-comparison-notes.md --index fd13d8d27535 --date 2026-10-05`
+- Review rows: `2026-10-05-scholar-comparison-review.csv` (586 rows, 48 unresolved)
 
 **`our_bug`: 0** across 3 queries.
 
-**What the matches rest on.** Of the 1,815 in-scope papers of the Scholar set, 1,807 match an index record: 1,800 a record with an independent source (a crawl), 7 a record whose only source is an imported RIS set. A match of the second kind is the set matching its own import, and says nothing about coverage (see Matching).
+**What the matches rest on.** Of the 1,813 in-scope papers of the Scholar set, 1,805 match an index record: 1,805 a record with an independent source (a crawl), 0 a record whose only source is an imported RIS set. A match of the second kind is the set matching its own import, and says nothing about coverage (see Matching).
 
 | query | Scholar set in scope | openproceedings in scope | both | only Scholar | only openproceedings | `full_text` | of them RIS-only | `stemming` | unresolved |
 |---|---|---|---|---|---|---|---|---|---|
-| `main-7-most-updated` | 1,815 | 33 | 21 | 1,794 | 12 | 1,753 (96.6%) | 6 | 32 (1.8%) | 21 |
-| `main-7-dollar` † | 1,815 | 101 | 51 | 1,764 | 50 | 1,753 (96.6%) | 6 | 2 (0.1%) | 21 |
-| `main-2-pop` † | 1,815 | 114 | 65 | 1,750 | 49 | 1,709 (94.2%) | 6 | 32 (1.8%) | 9 |
+| `main-7-most-updated` | 1,813 | 33 | 21 | 1,792 | 12 | 1,752 (96.6%) | 0 | 32 (1.8%) | 20 |
+| `main-7-dollar` † | 1,813 | 101 | 51 | 1,762 | 50 | 1,752 (96.6%) | 0 | 2 (0.1%) | 20 |
+| `main-2-pop` † | 1,813 | 114 | 65 | 1,748 | 49 | 1,708 (94.2%) | 0 | 32 (1.8%) | 8 |
 
 † The Scholar set is Google Scholar's answer to `main-7-most-updated` only. For `main-7-dollar`, `main-2-pop` the columns are what the string keeps, drops and adds against that same set, not a comparison with what Scholar returns for it.
 
@@ -32,13 +32,13 @@ Each Scholar record is matched by spec 01's merge rules, in their order: the Ope
 | read | 1,834 |
 | outside the scope (ICLR, ICML, NeurIPS; 2020–2026) | 19 |
 | in scope | 1,815 |
-| repeats of a paper already counted | 0 |
-| **papers in scope** (the denominator of every percentage of the Scholar set) | **1,815** |
+| repeats of a paper already counted | 2 |
+| **papers in scope** (the denominator of every percentage of the Scholar set) | **1,813** |
 
 | matched by | papers |
 |---|---|
-| proceedings id | 1,636 |
-| forum id | 169 |
+| proceedings id | 1,635 |
+| forum id | 168 |
 | no match (no venue) | 5 |
 | no match (not found) | 3 |
 | title venue year | 2 |
@@ -49,15 +49,15 @@ Outside the scope: 19 venue unrecognised. `venue unrecognised` means the record'
 
 ### What the matches rest on
 
-Matched to a record with an independent source (a crawl of OpenReview or the proceedings): **1,800**. Matched to a record whose only source is an imported RIS set (RIS-only): **7**.
+Matched to a record with an independent source (a crawl of OpenReview or the proceedings): **1,805**. Matched to a record whose only source is an imported RIS set (RIS-only): **0**.
 
 A RIS-only record is in the index because a Scholar set was imported into it. When the set compared here is that set, such a match is the set matching itself: it shows nothing about coverage, and the title and abstract the classes are judged on are the ones the import carried. Counts below are given for both kinds.
 
 | venue | year | matched papers | crawled record | RIS-only record | crawled records the index holds |
 |---|---|---|---|---|---|
-| ICLR | 2024 | 51 | 50 | 1 | 8,522 |
-| ICLR | 2025 | 208 | 205 | 3 | 13,746 |
-| ICLR | 2026 | 415 | 412 | 3 | 22,825 |
+| ICLR | 2024 | 50 | 50 | 0 | 8,523 |
+| ICLR | 2025 | 208 | 208 | 0 | 13,746 |
+| ICLR | 2026 | 414 | 414 | 0 | 22,826 |
 | ICML | 2022 | 1 | 1 | 0 | 1,233 |
 | ICML | 2023 | 2 | 2 | 0 | 2,826 |
 | ICML | 2024 | 11 | 11 | 0 | 4,124 |
@@ -67,9 +67,7 @@ A RIS-only record is in the index because a Scholar set was imported into it. Wh
 | NeurIPS | 2024 | 336 | 336 | 0 | 7,561 |
 | NeurIPS | 2025 | 632 | 632 | 0 | 10,687 |
 
-Abstract source of the matched records: `openreview_v2` 1,798; `ris:proceedings_page` 7; `neurips_proceedings` 1; `pmlr` 1. `ris:` is text the import carried (what scholarmend read from the proceedings page or the OpenReview API), not a crawl of this project.
-
-1 papers matched a RIS-only record whose title key another index record has too (1 in the same venue and year: one paper under two ids, so the set can count it twice; the others in another venue or year: the import's venue or year may be wrong). The match is kept, and each such row that is a disagreement is `unsettled`, for a person.
+Abstract source of the matched records: `openreview_v2` 1,803; `neurips_proceedings` 1; `pmlr` 1. `ris:` is text the import carried (what scholarmend read from the proceedings page or the OpenReview API), not a crawl of this project.
 
 Scholar searches in the set (Publish or Perish query dates): 16; the largest holds 631 records. Google Scholar returns at most 1,000 per search; a search at the cap makes every record only in openproceedings from its venues and years `scholar_cap`. No search in this set reached it.
 
@@ -91,12 +89,12 @@ Notices: `COMPAT_NO_STEMMING` × 1, `COMPAT_SOURCE_ALIAS` × 9, `WARN_SOURCE_PAR
 
 | | records |
 |---|---|
-| Scholar set, in scope | 1,815 |
+| Scholar set, in scope | 1,813 |
 | openproceedings `total` (default filters; every venue and year) | 33 |
 | openproceedings, in scope | 33 |
 | in both | 21 (21 crawled records, 0 RIS-only) |
 | in both, matched to a RIS-only record whose title another index record has | 0 |
-| only in the Scholar set | 1,794 |
+| only in the Scholar set | 1,792 |
 | only in openproceedings | 12 |
 
 ### Only in the Scholar set
@@ -106,9 +104,9 @@ Notices: `COMPAT_NO_STEMMING` × 1, `COMPAT_SOURCE_ALIAS` × 9, `WARN_SOURCE_PAR
 | `our_bug` | 0 | 0.0% | 0.0% | 0 | 0 | the oracle and the served engine disagree (must be 0) |
 | `coverage_gap` | 3 | 0.2% | 0.2% | 0 | 0 | no record in the snapshot by forum id, proceedings id or title+venue+year |
 | `stemming` | 32 | 1.8% | 1.8% | 32 | 0 | matches title or abstract only with an inflected form added |
-| `full_text` | 1,753 | 97.7% | 96.6% | 1,747 | 6 | in the corpus with an abstract; no reading matches its title or abstract, inflected forms included |
-| `unsettled` | 6 | 0.3% | 0.3% | 0 | 1 | the automation can't tell (see the row's evidence) |
-| total | 1,794 | 100.0% | 98.8% | 1,779 | 7 | |
+| `full_text` | 1,752 | 97.8% | 96.6% | 1,752 | 0 | in the corpus with an abstract; no reading matches its title or abstract, inflected forms included |
+| `unsettled` | 5 | 0.3% | 0.3% | 0 | 0 | the automation can't tell (see the row's evidence) |
+| total | 1,792 | 100.0% | 98.8% | 1,784 | 0 | |
 
 `crawled record` and `RIS-only record` say what the row's index record rests on (a row with no index record is in neither).
 
@@ -120,17 +118,17 @@ Notices: `COMPAT_NO_STEMMING` × 1, `COMPAT_SOURCE_ALIAS` × 9, `WARN_SOURCE_PAR
 | `scholar_missed` | 12 | 100.0% | 36.4% | 12 | 0 | an exact title or abstract match that the Scholar set lacks |
 | total | 12 | 100.0% | 36.4% | 12 | 0 | |
 
-`our_bug`: **0**. Rows for a person in `review.csv`: 21 unresolved, 179 spot check.
+`our_bug`: **0**. Rows for a person in `review.csv`: 20 unresolved, 179 spot check.
 
-### Concept groups, over the 1,807 Scholar papers the index holds
+### Concept groups, over the 1,805 Scholar papers the index holds
 
 How many of them hold each top-level group of the string in title or abstract, whatever their track and status:
 
 | group | as run | with inflected forms |
 |---|---|---|
-| 1. `("foundation model" OR "large language model" OR llm OR "generative ai")` | 551 | 1,013 |
+| 1. `("foundation model" OR "large language model" OR llm OR "generative ai")` | 550 | 1,012 |
 | 2. `(trustworthiness OR trustworthy OR trust OR "trustworthy ai")` | 191 | 197 |
-| 3. `(benchmark OR leaderboard OR "evaluation framework")` | 480 | 800 |
+| 3. `(benchmark OR leaderboard OR "evaluation framework")` | 480 | 799 |
 
 Inflected forms added for the `stemming` test (the forms the compared records hold): `benchmark` → benchmarked, benchmarking, benchmarks; `evaluation` → evaluations; `foundation` → foundations; `framework` → frameworks; `language` → languages; `leaderboard` → leaderboards; `llm` → llms; `model` → modeled, modeling, models; `trust` → trusted, trusting.
 
@@ -138,7 +136,6 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 
 | record | title | venue | year | class | evidence |
 |---|---|---|---|---|---|
-| `op:iclr:2024:iclr-c3eb94d149aea08c28505d1e5234a21a` | Less is more: One-shot subgraph reasoning on large-scale knowledge graphs | ICLR | 2024 | `unsettled` | matched by proceedings id to a record only the imported set holds, whose title is also on op:iclr:2024:QHROe7Mfcb (ICLR 2024): possibly one paper under two ids; otherwise `full_text` (no title or abstract match for group 1, 2, inflected forms included) |
 | `mended.ris#3` | Building a stable classifier with the inflated argmax |  | 2024 | `unsettled` | its venue string is no venue, so no title match is made; same title: op:neurips:2024:M7zNXntzsp (NeurIPS 2024) |
 | `mended.ris#4` | Selective Explanations |  | 2024 | `unsettled` | its venue string is no venue, so no title match is made; same title: op:neurips:2024:gHCFduRo7o (NeurIPS 2024) |
 | `mended.ris#143` | Crafting interpretable embeddings for language neuroscience by asking LLMs questions | … processing systems | 2024 | `unsettled` | its venue string is no venue, so no title match is made; same title: op:neurips:2024:mxMvWwyBWe (NeurIPS 2024) |
@@ -165,11 +162,11 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 | `op:icml:2026:W85McJPVMI` | ASyMOB: Algebraic Symbolic Mathematical Operations Benchmark | ICML | 2026 | `scholar_missed` | exact match on group 1: llm (abstract); group 2: trustworthy (abstract), "trustworthy ai" (abstract); group 3: benchmark (title) |
 | `op:neurips:2025:XwqawBglmv` | LC-Opt: Benchmarking Reinforcement Learning and Agentic AI for End-to-End Liquid Cooling Optimization in Data Centers | NeurIPS | 2025 | `scholar_missed` | exact match on group 1: llm (abstract); group 2: trust (abstract); group 3: benchmark (abstract) |
 
-**Finding.** Of the 1,815 in-scope papers of the Scholar set, 1,753 (96.6%) match this string nowhere in title or abstract, inflected forms included (`full_text`), and 32 (1.8%) match only through an inflected form (`stemming`). 21 (1.2%) are in the exact result.
+**Finding.** Of the 1,813 in-scope papers of the Scholar set, 1,752 (96.6%) match this string nowhere in title or abstract, inflected forms included (`full_text`), and 32 (1.8%) match only through an inflected form (`stemming`). 21 (1.2%) are in the exact result.
 
-- Of the 1,753 `full_text` papers, 1,747 rest on a crawled record and 6 on a RIS-only record, whose title and abstract are the import's own.
+- Of the 1,752 `full_text` papers, 1,752 rest on a crawled record and 0 on a RIS-only record, whose title and abstract are the import's own.
 - 2 of them also fail the default track or status filters.
-- **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in (see Method); which stemmer stands for Scholar's is an open decision for the project owner. With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), 0 of the 1,753 (0.0%) `full_text` papers would match title or abstract. That is all this figure measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) or rewrites the stem could move more.
+- **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in, kept by decision-038 (see Method); it is not Google Scholar's stemmer, which is undocumented. With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), 0 of the 1,752 (0.0%) `full_text` papers would match title or abstract. That is all this figure measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) or rewrites the stem could move more.
 
 ## Query `main-7-dollar`
 
@@ -197,12 +194,12 @@ Google Scholar reads this string differently from Scholar mode. Scholar's readin
 
 | | records |
 |---|---|
-| Scholar set, in scope | 1,815 |
+| Scholar set, in scope | 1,813 |
 | openproceedings `total` (default filters; every venue and year) | 101 |
 | openproceedings, in scope | 101 |
 | in both | 51 (51 crawled records, 0 RIS-only) |
 | in both, matched to a RIS-only record whose title another index record has | 0 |
-| only in the Scholar set | 1,764 |
+| only in the Scholar set | 1,762 |
 | only in openproceedings | 50 |
 
 ### Only in the Scholar set
@@ -212,9 +209,9 @@ Google Scholar reads this string differently from Scholar mode. Scholar's readin
 | `our_bug` | 0 | 0.0% | 0.0% | 0 | 0 | the oracle and the served engine disagree (must be 0) |
 | `coverage_gap` | 3 | 0.2% | 0.2% | 0 | 0 | no record in the snapshot by forum id, proceedings id or title+venue+year |
 | `stemming` | 2 | 0.1% | 0.1% | 2 | 0 | matches title or abstract only with an inflected form added |
-| `full_text` | 1,753 | 99.4% | 96.6% | 1,747 | 6 | in the corpus with an abstract; no reading matches its title or abstract, inflected forms included |
-| `unsettled` | 6 | 0.3% | 0.3% | 0 | 1 | the automation can't tell (see the row's evidence) |
-| total | 1,764 | 100.0% | 97.2% | 1,749 | 7 | |
+| `full_text` | 1,752 | 99.4% | 96.6% | 1,752 | 0 | in the corpus with an abstract; no reading matches its title or abstract, inflected forms included |
+| `unsettled` | 5 | 0.3% | 0.3% | 0 | 0 | the automation can't tell (see the row's evidence) |
+| total | 1,762 | 100.0% | 97.2% | 1,754 | 0 | |
 
 `crawled record` and `RIS-only record` say what the row's index record rests on (a row with no index record is in neither).
 
@@ -227,17 +224,17 @@ Google Scholar reads this string differently from Scholar mode. Scholar's readin
 | `scholar_missed` | 12 | 24.0% | 11.9% | 12 | 0 | an exact title or abstract match that the Scholar set lacks |
 | total | 50 | 100.0% | 49.5% | 50 | 0 | |
 
-`our_bug`: **0**. Rows for a person in `review.csv`: 21 unresolved, 180 spot check.
+`our_bug`: **0**. Rows for a person in `review.csv`: 20 unresolved, 180 spot check.
 
-### Concept groups, over the 1,807 Scholar papers the index holds
+### Concept groups, over the 1,805 Scholar papers the index holds
 
 How many of them hold each top-level group of the string in title or abstract, whatever their track and status:
 
 | group | as run | with inflected forms |
 |---|---|---|
-| 1. `("foundation model$" OR "large language model$" OR llm$ OR "generative ai")` | 1,013 | 1,013 |
+| 1. `("foundation model$" OR "large language model$" OR llm$ OR "generative ai")` | 1,012 | 1,012 |
 | 2. `(trustworthiness OR trustworthy OR trust OR "trustworthy ai")` | 191 | 197 |
-| 3. `(benchmark$ OR leaderboard$ OR "evaluation framework$")` | 790 | 800 |
+| 3. `(benchmark$ OR leaderboard$ OR "evaluation framework$")` | 789 | 799 |
 
 Inflected forms added for the `stemming` test (the forms the compared records hold): `benchmark` → benchmarked, benchmarking, benchmarks; `evaluation` → evaluations; `foundation` → foundations; `framework` → frameworks; `language` → languages; `leaderboard` → leaderboards; `llm` → llms; `model` → modeled, modeling, models; `trust` → trusted, trusting.
 
@@ -245,7 +242,6 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 
 | record | title | venue | year | class | evidence |
 |---|---|---|---|---|---|
-| `op:iclr:2024:iclr-c3eb94d149aea08c28505d1e5234a21a` | Less is more: One-shot subgraph reasoning on large-scale knowledge graphs | ICLR | 2024 | `unsettled` | matched by proceedings id to a record only the imported set holds, whose title is also on op:iclr:2024:QHROe7Mfcb (ICLR 2024): possibly one paper under two ids; otherwise `full_text` (no title or abstract match for group 1, 2, inflected forms included) |
 | `mended.ris#3` | Building a stable classifier with the inflated argmax |  | 2024 | `unsettled` | its venue string is no venue, so no title match is made; same title: op:neurips:2024:M7zNXntzsp (NeurIPS 2024) |
 | `mended.ris#4` | Selective Explanations |  | 2024 | `unsettled` | its venue string is no venue, so no title match is made; same title: op:neurips:2024:gHCFduRo7o (NeurIPS 2024) |
 | `mended.ris#143` | Crafting interpretable embeddings for language neuroscience by asking LLMs questions | … processing systems | 2024 | `unsettled` | its venue string is no venue, so no title match is made; same title: op:neurips:2024:mxMvWwyBWe (NeurIPS 2024) |
@@ -310,11 +306,11 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 | `op:neurips:2025:eafIjoZAHm` | GnnXemplar: Exemplars to Explanations - Natural Language Rules for Global GNN Interpretability | NeurIPS | 2025 | `compat_reading` | `$`: a zero-or-one wildcard here, no wildcard in Scholar |
 | `op:neurips:2025:gA3fFAEXNT` | Trust, But Verify: A Self-Verification Approach to Reinforcement Learning with Verifiable Rewards | NeurIPS | 2025 | `compat_reading` | `$`: a zero-or-one wildcard here, no wildcard in Scholar |
 
-**Finding.** Of the 1,815 in-scope papers of the Scholar set, 1,753 (96.6%) match this string nowhere in title or abstract, inflected forms included (`full_text`), and 2 (0.1%) match only through an inflected form (`stemming`). 51 (2.8%) are in the exact result.
+**Finding.** Of the 1,813 in-scope papers of the Scholar set, 1,752 (96.6%) match this string nowhere in title or abstract, inflected forms included (`full_text`), and 2 (0.1%) match only through an inflected form (`stemming`). 51 (2.8%) are in the exact result.
 
-- Of the 1,753 `full_text` papers, 1,747 rest on a crawled record and 6 on a RIS-only record, whose title and abstract are the import's own.
+- Of the 1,752 `full_text` papers, 1,752 rest on a crawled record and 0 on a RIS-only record, whose title and abstract are the import's own.
 - 2 of them also fail the default track or status filters.
-- **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in (see Method); which stemmer stands for Scholar's is an open decision for the project owner. With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), 0 of the 1,753 (0.0%) `full_text` papers would match title or abstract. That is all this figure measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) or rewrites the stem could move more.
+- **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in, kept by decision-038 (see Method); it is not Google Scholar's stemmer, which is undocumented. With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), 0 of the 1,752 (0.0%) `full_text` papers would match title or abstract. That is all this figure measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) or rewrites the stem could move more.
 
 ## Query `main-2-pop`
 
@@ -344,12 +340,12 @@ Google Scholar reads this string differently from Scholar mode. Scholar's readin
 
 | | records |
 |---|---|
-| Scholar set, in scope | 1,815 |
+| Scholar set, in scope | 1,813 |
 | openproceedings `total` (default filters; every venue and year) | 114 |
 | openproceedings, in scope | 114 |
 | in both | 65 (65 crawled records, 0 RIS-only) |
 | in both, matched to a RIS-only record whose title another index record has | 0 |
-| only in the Scholar set | 1,750 |
+| only in the Scholar set | 1,748 |
 | only in openproceedings | 49 |
 
 ### Only in the Scholar set
@@ -359,9 +355,9 @@ Google Scholar reads this string differently from Scholar mode. Scholar's readin
 | `our_bug` | 0 | 0.0% | 0.0% | 0 | 0 | the oracle and the served engine disagree (must be 0) |
 | `coverage_gap` | 3 | 0.2% | 0.2% | 0 | 0 | no record in the snapshot by forum id, proceedings id or title+venue+year |
 | `stemming` | 32 | 1.8% | 1.8% | 32 | 0 | matches title or abstract only with an inflected form added |
-| `full_text` | 1,709 | 97.7% | 94.2% | 1,703 | 6 | in the corpus with an abstract; no reading matches its title or abstract, inflected forms included |
-| `unsettled` | 6 | 0.3% | 0.3% | 0 | 1 | the automation can't tell (see the row's evidence) |
-| total | 1,750 | 100.0% | 96.4% | 1,735 | 7 | |
+| `full_text` | 1,708 | 97.7% | 94.2% | 1,708 | 0 | in the corpus with an abstract; no reading matches its title or abstract, inflected forms included |
+| `unsettled` | 5 | 0.3% | 0.3% | 0 | 0 | the automation can't tell (see the row's evidence) |
+| total | 1,748 | 100.0% | 96.4% | 1,740 | 0 | |
 
 `crawled record` and `RIS-only record` say what the row's index record rests on (a row with no index record is in neither).
 
@@ -373,17 +369,17 @@ Google Scholar reads this string differently from Scholar mode. Scholar's readin
 | `compat_reading` | 49 | 100.0% | 43.0% | 49 | 0 | decided by how Scholar mode read the string (decision-002 phrases, `$`), not by the corpus |
 | total | 49 | 100.0% | 43.0% | 49 | 0 | |
 
-`our_bug`: **0**. Rows for a person in `review.csv`: 9 unresolved, 179 spot check.
+`our_bug`: **0**. Rows for a person in `review.csv`: 8 unresolved, 179 spot check.
 
-### Concept groups, over the 1,807 Scholar papers the index holds
+### Concept groups, over the 1,805 Scholar papers the index holds
 
 How many of them hold each top-level group of the string in title or abstract, whatever their track and status:
 
 | group | as run | with inflected forms |
 |---|---|---|
-| 1. `("large language model$" OR llm OR "foundation model$" OR "generative ai$" OR "vision language model$" OR vlm OR "multimodal model$" OR "ai agent$" OR "text to image model$")` | 1,116 | 1,160 |
+| 1. `("large language model$" OR llm OR "foundation model$" OR "generative ai$" OR "vision language model$" OR vlm OR "multimodal model$" OR "ai agent$" OR "text to image model$")` | 1,115 | 1,159 |
 | 2. `(trust OR trustworthy OR trustworthiness OR "trustworthy ai$")` | 191 | 197 |
-| 3. `(benchmark OR dataset OR evaluation OR leaderboard OR "evaluation framework$" OR "test suite$")` | 794 | 1,257 |
+| 3. `(benchmark OR dataset OR evaluation OR leaderboard OR "evaluation framework$" OR "test suite$")` | 794 | 1,256 |
 
 Inflected forms added for the `stemming` test (the forms the compared records hold): `agent` → agents; `benchmark` → benchmarked, benchmarking, benchmarks; `dataset` → datasets; `evaluation` → evaluations; `foundation` → foundations; `framework` → frameworks; `image` → images, imaging; `language` → languages; `leaderboard` → leaderboards; `llm` → llms; `model` → modeled, modeling, models; `suite` → suit, suited, suites; `test` → tested, testing, tests; `text` → texts; `trust` → trusted, trusting; `vlm` → vlms.
 
@@ -391,7 +387,6 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 
 | record | title | venue | year | class | evidence |
 |---|---|---|---|---|---|
-| `op:iclr:2024:iclr-c3eb94d149aea08c28505d1e5234a21a` | Less is more: One-shot subgraph reasoning on large-scale knowledge graphs | ICLR | 2024 | `unsettled` | matched by proceedings id to a record only the imported set holds, whose title is also on op:iclr:2024:QHROe7Mfcb (ICLR 2024): possibly one paper under two ids; otherwise `full_text` (no title or abstract match for group 1, 2, inflected forms included) |
 | `mended.ris#3` | Building a stable classifier with the inflated argmax |  | 2024 | `unsettled` | its venue string is no venue, so no title match is made; same title: op:neurips:2024:M7zNXntzsp (NeurIPS 2024) |
 | `mended.ris#4` | Selective Explanations |  | 2024 | `unsettled` | its venue string is no venue, so no title match is made; same title: op:neurips:2024:gHCFduRo7o (NeurIPS 2024) |
 | `mended.ris#143` | Crafting interpretable embeddings for language neuroscience by asking LLMs questions | … processing systems | 2024 | `unsettled` | its venue string is no venue, so no title match is made; same title: op:neurips:2024:mxMvWwyBWe (NeurIPS 2024) |
@@ -455,11 +450,17 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 | `op:neurips:2025:XwqawBglmv` | LC-Opt: Benchmarking Reinforcement Learning and Agentic AI for End-to-End Liquid Cooling Optimization in Data Centers | NeurIPS | 2025 | `compat_reading` | decision-002: the unquoted `\|` items are phrases here, neighbouring words ORed in Scholar |
 | `op:neurips:2025:zPKeJAEo27` | What is Your Data Worth to GPT? LLM-Scale Data Valuation with Influence Functions | NeurIPS | 2025 | `compat_reading` | decision-002: the unquoted `\|` items are phrases here, neighbouring words ORed in Scholar |
 
-**Finding.** Of the 1,815 in-scope papers of the Scholar set, 1,709 (94.2%) match this string nowhere in title or abstract, inflected forms included (`full_text`), and 32 (1.8%) match only through an inflected form (`stemming`). 65 (3.6%) are in the exact result.
+**Finding.** Of the 1,813 in-scope papers of the Scholar set, 1,708 (94.2%) match this string nowhere in title or abstract, inflected forms included (`full_text`), and 32 (1.8%) match only through an inflected form (`stemming`). 65 (3.6%) are in the exact result.
 
-- Of the 1,709 `full_text` papers, 1,703 rest on a crawled record and 6 on a RIS-only record, whose title and abstract are the import's own.
+- Of the 1,708 `full_text` papers, 1,708 rest on a crawled record and 0 on a RIS-only record, whose title and abstract are the import's own.
 - 2 of them also fail the default track or status filters.
-- **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in (see Method); which stemmer stands for Scholar's is an open decision for the project owner. With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), 2 of the 1,709 (0.1%) `full_text` papers would match title or abstract. That is all this figure measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) or rewrites the stem could move more.
+- **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in, kept by decision-038 (see Method); it is not Google Scholar's stemmer, which is undocumented. With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), 2 of the 1,708 (0.1%) `full_text` papers would match title or abstract. That is all this figure measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) or rewrites the stem could move more.
+
+## Human calls
+
+None yet: no row of the review file has a `human_class`. A person fills `human_class` (one of `our_bug`, `filtered`, `compat_reading`, `coverage_gap`, `stemming`, `full_text`, `scholar_cap`, `scholar_missed`, `in_both`, `out_of_scope`), `reviewer_role` (a role, never a name) and, if wanted, `note`; running the same command again then reads the calls back into this section and leaves the file as it is.
+
+**Every disagreement classified: no.** `our_bug` by the automation: 0; by a person: 0; rows left for a person that have no call yet: 48.
 
 ## Method
 
@@ -484,6 +485,9 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
   Scholar's stemmer is undocumented, so this is a stated stand-in, not Scholar's rule; quoted words get forms too.
   A wider stemmer would move papers from `full_text` to `stemming`; each query's sensitivity line says how many
   would move if every word were replaced by its inflection stem read as a prefix, and nothing more than that.
+  Decision-038 keeps this stand-in and adopts no published stemmer, because that figure is at or near zero for
+  the review's strings; the `stemming` and `full_text` counts are relative to the stand-in, and the decision is
+  revisited for any string whose sensitivity is not near zero.
 - **`full_text`** is the residue: the record is in the corpus with an abstract, and the oracle confirms that no
   reading above matches its title or abstract. It may also fail the filters (counted under each finding). A
   record the corpus holds without an abstract is `unsettled`.
@@ -522,7 +526,15 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
   (1,805 of the set's records, their ids from scholarmend's claims). Where a crawl holds the paper too, the two
   are merged and the record has an independent source; where none does, the index record is the import alone.
   On the 2026-09-29 snapshot that was 530 of the matched papers, nearly all of them 2026, which no crawl had
-  reached. The 2026 OpenReview crawl (snapshot `2026-10-05-47d4e190ca81`, TASK-178) merged almost all of them
-  into crawled records. "What the matches rest on" counts the two kinds apart for the index a report ran on.
+  reached (`docs/results/2026-10-04-scholar-comparison.md`). The 2026 OpenReview crawl (TASK-178) merged all but
+  7, and the dedup fix of TASK-179 merged those. "What the matches rest on" counts the two kinds apart for the
+  index a report ran on.
+- **The superseded run of 2026-10-05.** A report of this date first ran on index `5ec5231adae2` (snapshot
+  `2026-10-05-47d4e190ca81`, 133,632 records), the first build after the 2026 crawl. That snapshot still held 7
+  imported records as unmerged second copies of crawled papers (ICLR 2024 ×1, 2025 ×3, 2026 ×3), and lacked 4
+  papers refused for a control character in their title. TASK-179 and TASK-180 fixed both, the snapshot was
+  rebuilt (`2026-10-05-10b5a205a63f`, 133,629 records), and that report was replaced by this one. On the
+  superseded index 1,800 matched papers rested on a crawled record and 7 on the import alone; the class counts
+  differed only by those 7.
 - **Matching.** This report matches the set by URL and title, as it would any RIS file, not by the import's
   ids.

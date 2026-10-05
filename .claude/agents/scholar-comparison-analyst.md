@@ -36,7 +36,9 @@ exact. Your numbers may go into a paper, so every one must be regenerable from a
 4. **Every `our_bug` is a stop.** Write the minimal counter-example query, hand it to the main session as a
    Must with a proposed golden case; the report says the count and does not publish until it is 0 or each
    is explained.
-5. **review.csv.** Unresolved rows plus a 10% spot-check sample; leave `human_class` blank for a person.
+5. **review.csv.** Unresolved rows plus a 10% spot-check sample; leave `human_class` blank for a person. Once a
+   person has filled it, run the same command again: it reads the calls back into the report's "Human calls"
+   section and says whether every disagreement is classified. Never fill or edit a call yourself.
 6. **Write** `docs/results/<today>-scholar-comparison.md` per the protocol (today's date from context).
    Every figure comes from this run's output; include the exact commands.
 7. **Close out** per `CLAUDE.md` §Closing workflow: `/review-gate` routes `docs/**` to `docs-reviewer`

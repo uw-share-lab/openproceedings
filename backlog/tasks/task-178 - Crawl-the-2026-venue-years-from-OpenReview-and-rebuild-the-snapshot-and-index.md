@@ -4,7 +4,7 @@ title: Crawl the 2026 venue-years from OpenReview and rebuild the snapshot and i
 status: In Progress
 assignee: []
 created_date: '2026-10-05 02:43'
-updated_date: '2026-10-05 05:19'
+updated_date: '2026-10-05 08:25'
 labels:
   - ingest
   - eval
@@ -24,8 +24,8 @@ The first live crawl (2026-09-29) stopped at 2025. The index holds ICLR 2026 (41
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 ICLR 2026, ICML 2026 and, if OpenReview has published it, NeurIPS 2026 are crawled; every venueid and presentation string the crawl met is classified or reported, none silently defaulted (01 track taxonomy)
-- [ ] #2 A new snapshot and index are built; the snapshot diff against 2026-09-29-d552baa07aed is reviewed and shows the RIS-only 2026 records merging into crawled ones or explains each that does not
+- [x] #1 ICLR 2026, ICML 2026 and, if OpenReview has published it, NeurIPS 2026 are crawled; every venueid and presentation string the crawl met is classified or reported, none silently defaulted (01 track taxonomy)
+- [x] #2 A new snapshot and index are built; the snapshot diff against 2026-09-29-d552baa07aed is reviewed and shows the RIS-only 2026 records merging into crawled ones or explains each that does not
 - [x] #3 The coverage report is regenerated on the new index with a sourced official count for each 2026 cell that has one, and the M4 gate result stated (07 section C)
 - [x] #4 The Scholar comparison is re-run on the new index and its RIS-only share reported (07 section B)
 <!-- AC:END -->
@@ -50,4 +50,12 @@ Scholar comparison (AC 4): docs/results/2026-10-05-scholar-comparison.md and -re
 The 7 RIS-only records are all second copies of a crawled paper that dedup did not merge: iclr-c3eb94d1 = QHROe7Mfcb (ICLR 2024; same title, both hold a ris claim); iclr-1b126cc3 = roNSXZpUDN, iclr-a07e87ec = CkgKSqZbuC, iclr-a6610efd = EwFJaXVePU (ICLR 2025) and iclr-2aa3da3c = OutljIofvS, iclr-dcbdb995 = 3CPzUWIoNf (ICLR 2026): the imported title lost its math symbol (tau, R^2, infinity, A^2), so the title keys differ; iclr-6b41e04c is probably CwoM9T55lG (ICLR 2026) under an earlier title. The 36 ICLR 2026 imports that shared a title with a 2025 record all merged into crawled ICLR 2026 accepted records; the 2025 records are earlier versions of the same work (24 workshop papers only, 10 rejected submissions only, 2 both), correctly separate: the import's venue and year were right.
 
 2026-10-05, later: ICML 2026 main now has a row, replacing the 'no row' above (owner's request). It is a rule-3 list count by the session lead: 6,554 OpenReview-linked posters on the virtual-site paper list (74 TMLR/JMLR journal-track posters excluded) minus the 213 on the position-papers listing = 6,341, equal to the indexed 6,341. The fact sheet's combined 6,552 is kept under Disagreements. Gate on 5ec5231adae2: PASS, 45 of 46 gated cells within 1% plus the ICLR 2013 exception; coverage-sources.md has 46 rows.
+
+2026-10-05, final regeneration (branch task-178-final-reports) after TASK-179 and TASK-180: snapshot 2026-10-05-10b5a205a63f (hash 10b5a205a63f964496b9b572321785cf4c845c49fac4bf6cbdf5ab3dfe4cbe76, 133,629 records), index fd13d8d27535, parity 0 differences (main session). Diff against 2026-10-05-47d4e190ca81, as reviewed by the session lead: the 7 RIS-only copies removed, 4 records added, 0 changed, 7 display-only; no RIS-only record remains. The run on 5ec5231adae2 is superseded and its two dated reports replaced.
+
+Coverage: M4 gate PASS, 45 of 46 gated cells within 1%, 0 gaps, 1 owner-accepted exception (ICLR 2013 main). ICLR 2026 main 5,351 vs 5,357 (delta -6); ICLR 2024 main 2,260 vs 2,260 and ICLR 2025 main 3,703 vs 3,703 (the inflation is gone); ICML 2026 main 6,341 vs 6,341. No accepted record is held only by an imported set.
+
+Scholar comparison: 1,813 papers in scope (2 Scholar records now repeat a paper already counted, where each used to match an imported copy), 1,805 matched, all to crawled records. our_bug 0. main-7-most-updated 33 results, 21 in both, 12 only openproceedings (6 from 2026); full_text 1,752 (96.6%), stemming 32, coverage_gap 3, unsettled 5. main-7-dollar 101 / 51 / 50 (34 from 2026). main-2-pop 114 / 65 / 49 (26 from 2026). Review file: 586 rows, 48 unresolved. The report now reads a person's calls back from the review file and states whether every disagreement is classified (currently no: 48 rows await a call).
+
+ACs 1 and 2 ticked on the session lead's statement that the crawl's strings are classified and the diff reviewed; 3 and 4 on the reports above.
 <!-- SECTION:NOTES:END -->

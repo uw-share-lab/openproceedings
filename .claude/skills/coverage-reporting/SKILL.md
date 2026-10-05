@@ -122,8 +122,9 @@ and `container` are routine; `not_a_v2_venue`, which can be an unreadable group,
 are not), or skipped anything but
 `not_submission` replies. Then "Accepted records only an imported set holds" (TASK-178): per cell, the accepted
 records whose only source is an imported RIS set (no listing or note behind them), with the cell's delta
-without them; on snapshot `2026-10-05-47d4e190ca81` these are 7 ICLR records (2024 ×1, 2025 ×3, 2026 ×3), each
-a second copy of a crawled paper that dedup did not merge, so they inflate their cells. Then "Unresolved records" (TASK-113): every `conflicts.csv` row a source left
+without them; on snapshot `2026-10-05-47d4e190ca81` these were 7 ICLR records (2024 ×1, 2025 ×3, 2026 ×3), each
+a second copy of a crawled paper that dedup did not merge, inflating its cell. TASK-179 merged them: on
+snapshot `2026-10-05-10b5a205a63f` the section is empty. Then "Unresolved records" (TASK-113): every `conflicts.csv` row a source left
 unresolved (`unresolved:<source>`, the field `unknown`, decision-020), by record id, with its track / status now (flagged when the field
 is no longer unknown), the cell it would count in were it resolved and whether that cell is gated (`conflicts.csv` is read only after its sha256 matches the
 manifest's `files`). Then totals of records, missing abstracts, `unknown` track and status. The report is
