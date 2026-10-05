@@ -83,7 +83,7 @@ from weakref import WeakKeyDictionary
 
 from openproceedings import takedowns
 from openproceedings.api.config import INDEX_NAME
-from openproceedings.api.errors import ApiError, current_access, frames, reason_of
+from openproceedings.api.errors import ApiError, current_access
 from openproceedings.diagnostics import DiagnosticCode, OpenProceedingsError
 from openproceedings.engine.index import VERSION_NAME, IndexBuildError
 from openproceedings.ingest.snapshot import (
@@ -93,7 +93,7 @@ from openproceedings.ingest.snapshot import (
     indexed_snapshot,
     merges_on_disk,
 )
-from openproceedings.logs import elapsed_ms
+from openproceedings.logs import elapsed_ms, frames, reason_of
 from openproceedings.takedowns import NONE, TakedownError, Withheld, list_path
 from openproceedings.takedowns import load as load_takedowns
 
