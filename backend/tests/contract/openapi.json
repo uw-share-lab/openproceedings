@@ -323,6 +323,11 @@
             "title": "Max Records",
             "type": "integer"
           },
+          "max_response_bytes": {
+            "description": "the largest answer, in bytes; a comparison whose answer would be larger is 422 `API_COMPARE_TOO_COSTLY`",
+            "title": "Max Response Bytes",
+            "type": "integer"
+          },
           "max_results": {
             "description": "the most papers of the query's result that the file doesn't hold; more is 422 `API_COMPARE_TOO_COSTLY`",
             "title": "Max Results",
@@ -345,7 +350,8 @@
           "max_line_length",
           "max_title_length",
           "max_results",
-          "max_seconds"
+          "max_seconds",
+          "max_response_bytes"
         ],
         "title": "CompareLimits",
         "type": "object"

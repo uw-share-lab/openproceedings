@@ -13,7 +13,8 @@
       "max_line_length": 32768,
       "max_title_length": 1000,
       "max_results": 5000,
-      "max_seconds": 60.0
+      "max_seconds": 60.0,
+      "max_response_bytes": 16777216
     }
   },
   "search_total": 27,

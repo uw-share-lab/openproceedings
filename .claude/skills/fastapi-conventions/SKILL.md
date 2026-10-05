@@ -97,9 +97,13 @@ raised mid-stream: `errors.internal_error` logs the cause's frames and reason, s
   (set by `IndexState` on every engine it opens) and refused with 503 `API_BUSY`, never queued.
 - A comparison (`POST /compare`) costs `export_weight`, its query's verified charge like any search, and
   afterwards one token per `RateLimit.compare_token_ms` (500 ms) of the time it held its slot
-  (`compare_cost_ms`: the file's arrival in wall time plus the work's CPU time; `RateLimit.debit_comparison`).
-  `comparison_slots` (1) run at once; the work stops at `compare_max_seconds` (the core's `tick`), both 503
-  `API_BUSY`. Per-index data a route needs beyond the engine and the records goes on the `Served` bundle
+  (`compare_cost_ms`: the file's arrival in wall time, counted `compare_upload_weight` times, plus the work's
+  CPU time; `RateLimit.debit_comparison`). The buckets don't bound a *network's* share of a single slot (its
+  bucket refills four times as fast), so `compare.Cooldowns` does: one comparison at a time per client
+  network, then none for `compare_cooldown_factor` × the slot time used (429). A scarce slot needs a bound
+  that holds for any number of addresses, with a simulation at the default buckets as its test.
+  `comparison_slots` (1) run at once; the work stops at `compare_max_seconds`, both 503 `API_BUSY`: the
+  limit is a `tick` called per record and per row in every phase, never only between phases. Per-index data a route needs beyond the engine and the records goes on the `Served` bundle
   (`Served.matches`, the match table, built in the background after the swap), never in a cache keyed by
   version: one reference, one index.
 - Record saves are held to a per-network ceiling (`record_saves_network_burst`,

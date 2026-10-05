@@ -268,6 +268,14 @@ decision as the operator. What it means:
 - the served index's match table takes about 80 MB more memory (95,877 records), built in the background
   after each load (`match_index_built` in the log).
 
+They are off here because `compose.yml` passes `--trusted-proxy`. If you run `op serve` yourself on 127.0.0.1
+behind a proxy on the same host, pass `--trusted-proxy <the proxy's address>` (or `--no-compare`): without
+either, the API takes a loopback bind for a local instance and offers comparisons to everyone the proxy serves.
+
+A network (IPv4 /24, IPv6 /48) runs one comparison at a time and then waits three times as long as its
+comparison held the slot, so one network holds the slot at most a quarter of the time; many networks together
+can still fill it, and comparisons are then refused while searches are not.
+
 To turn them on: add `--compare` to the `api` service's `command` in `compose.yml`, and let that one path
 through the proxy with a larger body (everything else keeps 64KB and 10 s), by adding to the `Caddyfile`'s
 site block, before the general `reverse_proxy /api/*`:

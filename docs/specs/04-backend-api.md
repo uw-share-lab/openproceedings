@@ -447,11 +447,15 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   415 `API_UNSUPPORTED_MEDIA_TYPE`: a form (`multipart/form-data`, urlencoded), another type, a `charset`
   other than UTF-8, any `Content-Encoding` (nothing is ever decompressed, and no multipart parser runs, so
   nothing is spooled to disk).
-- **The file is used for that one request.** It is read into memory, compared and dropped. It is never
-  written to disk, never stored, never added to the index, a search record or any export, and never logged:
-  the access line carries counts only (`ris_bytes`, `ris_records`, `ris_papers`, `kept`, `dropped`,
-  `not_in_index`, `added`), no title, no venue string, and no file name (none is sent). The response echoes the
-  file's own titles back to the client that sent them, nothing else.
+- **The file is used for that one request.** It is read into memory, compared and dropped (its bytes are
+  released as soon as they are decoded). It is never written to disk, never stored, never added to the index,
+  a search record or any export, and never logged: the access line carries counts only (`ris_bytes`,
+  `ris_records`, `ris_papers`, `kept`, `dropped`, `not_in_index`, `added`), no title, no venue string, and no
+  file name (none is sent). The answer echoes three things of the file back to the client that sent it, and
+  nothing else: each record's title, its venue string, and, in the `detail` of a record the index doesn't
+  hold, the host names of at most three of its links (a host name as DNS writes one, at most 253 characters;
+  anything else in a link's host position is dropped, and no path, query or credential is ever echoed). A
+  link no URL parser takes (`http://[x`, a volume of 5,000 digits) names no paper and never refuses the file.
 - **Caps**, stated in `GET /meta` `limits.compare`; a file over one is refused whole, never cut:
   `max_body_bytes` (16 MiB; 413 `API_BODY_TOO_LARGE`, by `Content-Length` before a byte is read, else counted
   as the bytes arrive), then, before anything is parsed into fields, 413 `API_RIS_TOO_LARGE` for more than 64
@@ -460,7 +464,10 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   abstract cap, so no line this corpus could hold is refused), a title or venue line over `max_title_length`
   (1,000, the corpus's own title cap: those lines are normalized for matching) or more than `max_records`
   (5,000) records. Bytes that aren't UTF-8, a file with no `TY  - ` line or with content before the first one,
-  and carriage-return-only line endings are 422 `API_RIS_INVALID`. No message quotes the file.
+  and carriage-return-only line endings are 422 `API_RIS_INVALID`. No refusal quotes the file (a line number
+  or a count at most). The answer has a cap too, `max_response_bytes` (16 MiB, the body cap's value: an
+  answer is never larger than the largest file), counted as the rows, the CSV text and the RIS are built and
+  again on the encoded JSON: over it is 422 `API_COMPARE_TOO_COSTLY`.
 - **Matching** is 01's merge rules in their order (07 §B): the OpenReview forum id a URL names, then the
   proceedings paper a URL names (within its venue and year), then the dedup title key **with the same venue
   and year**; never a title alone. The venue is one of Scholar mode's `source:` names exactly. A record whose
@@ -496,11 +503,25 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   (guarantee 5). The same query, `index_version` and file give the same bytes.
 - **Cost** (decision-010's model). The request costs `export_weight` like an export; the query's
   position-verified clauses are charged and bounded as on `/search`; and the time the request held its
-  comparison slot (the wall time its file took to arrive plus the CPU time of the work) is debited afterwards
-  at one token per `compare_token_ms` (500 ms), as verification time is. The work is bounded: the caps above,
+  comparison slot is debited afterwards at one token per `compare_token_ms` (500 ms), as verification time
+  is: the CPU time of the work, plus the wall time its file took to arrive counted `compare_upload_weight` (4)
+  times, since that part is the client's alone to decide. **A network's share of the slot** is bounded by a
+  cooldown, not by the buckets (a network's bucket refills 4 tokens/s, so before the cooldown three addresses
+  of one /24, or three /64s of one IPv6 /48, could hold the slot all the time): a client network (IPv4 /24,
+  IPv6 /48) runs one comparison at a time, and after one starts no other for `compare_cooldown_factor` (3)
+  times the slot time it used, the upload weighted as above (429 `API_RATE_LIMITED` with `Retry-After`,
+  before the file is read). So one network holds a slot at most 1 / (1 + 3) = 25% of the time with
+  comparisons back to back, and 7.7% with uploads that stall until their 408, whatever number of addresses it
+  uses (simulated with the real buckets at their defaults for 1, 2, 3, 8 and 64 addresses:
+  `test_compare_review.py`); a reviewer waits 54 s after an 18 s comparison, and searches meanwhile. Many
+  networks together can still fill the slot: comparisons are then refused (503) and searches are not. The
+  cooldown applies while the rate limit is on. The work is bounded: the caps above,
   `max_results` (5,000 papers of the result that the file doesn't hold: more is 422
   `API_COMPARE_TOO_COSTLY`, as is a phrase or NEAR with more than 512 inflected spellings), and
-  `max_seconds` (60 s of wall time: past it 503 `API_BUSY` with `Retry-After`). `comparison_slots` (1)
+  `max_seconds` (60 s of wall time: past it 503 `API_BUSY` with `Retry-After`), which is checked before every
+  record read, every record matched, every oracle evaluation, every row and CSV line written and the final
+  encoding (5,000 records of 1,000-character titles built to be slow to normalize stopped 0.01 s after a 2 s
+  and a 5 s limit; the longest stretch between two checks in a full run was 0.34 s). `comparison_slots` (1)
   comparisons run at once; another is 503 `API_BUSY` before its file is read, so at most that many files are
   in memory. A refusal sent before the file was read (that 503, a 429, a query refusal) first reads and
   discards what arrives of the file for up to 2 s (`middleware.drain`; nothing is held), so the client
@@ -517,9 +538,12 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   build's transient records and one comparison included), and lives on the served bundle (`state.Served.matches`), so one request reads the engine, the
   records and the table of one `index_version`: a hot swap can't pair one index's result with another's
   table, and a comparison in flight finishes on the index it started on. Until it is built the route answers
-  503 `API_BUSY` with `Retry-After`; searches are served meanwhile (`match_index_built`, INFO; a table that
-  can't be built is one `match_index_failed` ERROR, and comparisons answer 500 until the next reload). A reload that keeps the index (a new
-  takedown list) keeps the table.
+  503 `API_BUSY` with `Retry-After`; searches are served meanwhile (`match_index_built`, INFO). A table that
+  can't be built is one `match_index_failed` ERROR: comparisons answer 500 and `/meta` `limits.compare` is null
+  (the web app stops offering them) until a reload, and every reload (SIGHUP), whether or not `current` moved,
+  builds a failed table again. Builds run one at a time, and one whose index was swapped out while it waited
+  is skipped, so quick promotions never run several at once. A reload that keeps the index (a new
+  takedown list) keeps a table that was built.
 - **And `op eval scholar`.** The CLI writes the dated report of 07 §B for the project's own strings: several
   queries, `--years`/`--venues` scopes, the review file, percentages, a spot check. `POST /compare` is one
   query against one file for whoever asks, with the same matching and the same classes and no report.

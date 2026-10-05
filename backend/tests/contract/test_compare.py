@@ -170,8 +170,12 @@ def corpus_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return root
 
 
+# no pause between one test's comparisons (the cooldown has its own tests, in test_compare_review.py)
+NO_COOLDOWN = RateLimit(capacity=10_000, compare_cooldown_factor=0)
+
+
 def app_of(data: Path, **overrides: Any) -> TestClient:
-    return TestClient(make_app(data, **{"compare_enabled": True, **overrides}))
+    return TestClient(make_app(data, **{"compare_enabled": True, "rate_limit": NO_COOLDOWN, **overrides}))
 
 
 @pytest.fixture(scope="module")
@@ -428,6 +432,7 @@ def test_meta_states_the_caps(corpus_dir: Path) -> None:
             "max_title_length": MAX_TITLE,
             "max_results": 5_000,
             "max_seconds": 60.0,
+            "max_response_bytes": 16 * 1024 * 1024,
         }
 
 
@@ -801,7 +806,13 @@ def test_the_file_is_never_written_anywhere(corpus_dir: Path, monkeypatch: pytes
 
 # --- cost: the rate limit, the slot, the time ---------------------------------------------------------------------
 def test_a_comparison_costs_an_exports_weight_and_its_slot_time(corpus_dir: Path, logs: Logs) -> None:
-    limit = RateLimit(capacity=25, refill_per_second=0.001, export_weight=10, compare_token_ms=1_000_000)
+    limit = RateLimit(
+        capacity=25,
+        refill_per_second=0.001,
+        export_weight=10,
+        compare_token_ms=1_000_000,
+        compare_cooldown_factor=0,
+    )
     with app_of(corpus_dir, rate_limit=limit) as c:
         assert post(c, the_file()).status_code == 200
         assert post(c, the_file()).status_code == 200
@@ -815,7 +826,13 @@ def test_a_comparison_costs_an_exports_weight_and_its_slot_time(corpus_dir: Path
 
 def test_the_time_a_comparison_held_its_slot_is_debited(corpus_dir: Path) -> None:
     """One token per `compare_token_ms`: at a tiny rate one comparison leaves the client in debt."""
-    limit = RateLimit(capacity=100, refill_per_second=0.001, export_weight=10, compare_token_ms=0.001)
+    limit = RateLimit(
+        capacity=100,
+        refill_per_second=0.001,
+        export_weight=10,
+        compare_token_ms=0.001,
+        compare_cooldown_factor=0,
+    )
     with app_of(corpus_dir, rate_limit=limit) as c:
         assert post(c, the_file()).status_code == 200
         error(c.get("/api/v1/search", params={"q": Q}), 429, "API_RATE_LIMITED")
@@ -1134,8 +1151,9 @@ def test_one_requests_file_never_reaches_another(corpus_dir: Path) -> None:
         assert state.served is not None and state.served.matches is not None
         table = state.served.matches.index
         assert table is not None and not any(SECRET in key for key in table.any_cell)
-    # and no module or app object keeps a parsed file: the route's only shared state is its slots
-    assert set(vars(c.app.state.comparisons)) == {"slots"}  # type: ignore[attr-defined]
+    # and no module or app object keeps a parsed file: the route's only shared state is its slots and the
+    # networks' cooldown times
+    assert set(vars(c.app.state.comparisons)) == {"slots", "cooldowns"}  # type: ignore[attr-defined]
 
 
 def test_no_refusal_or_failure_says_what_the_file_held(

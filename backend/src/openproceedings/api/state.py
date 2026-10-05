@@ -54,8 +54,10 @@ served snapshot's `MatchIndex` (`eval/scholar_compare.py`: what matches an outsi
 once per served index, in a background thread after the swap (13 s and ~80 MB for 95,877 records; searches are
 served meanwhile). It lives on the bundle (`Served.matches`), so a request reads the engine, the records and the
 table of one index_version in one reference, and a swap can never pair one index's results with another's
-table; a reload that keeps the index keeps its table. `POST /compare` answers 503 `API_BUSY` until it is built
-(`match_index_built`; `match_index_failed` ERROR if it can't be).
+table; a reload that keeps the index keeps its table, unless the table failed to build: then every reload
+builds it again. Builds run one at a time, and one whose index was swapped out while it waited is skipped.
+`POST /compare` answers 503 `API_BUSY` until it is built (`match_index_built`; `match_index_failed` ERROR if
+it can't be, and `/meta` then says comparisons are not offered).
 
 Every failure line carries a `reason` constant, never a message (messages name paths): an
 `IndexSelectionError`'s (`name_invalid`, `not_found`, `outside_indexes`), an `IndexBuildError`'s
@@ -340,6 +342,7 @@ class IndexState:
         # comparisons on: each newly served index gets a match table (module docstring), built after the swap
         self._compare = compare
         self._matches_in_background = matches_in_background
+        self._matches_building = threading.Lock()  # one match-table build at a time (`_build_matches`)
         # the served index, its snapshot's records and its coverage: built and checked together at load and
         # swapped as one reference, so a request that read it keeps its own index's records and coverage
         # however many swaps happen before it finishes
@@ -515,21 +518,28 @@ class IndexState:
             path = index_path(self._data_dir, self._name)
             attempted = path.name
             if served is not None and path.name == served.engine.index_version:
-                if listed == served.listed:
+                # a match table that failed to build is built again on every reload (TASK-177 review): the
+                # same index gets a new table, so "until the next reload" is true of a failure
+                retry = served.matches is not None and served.matches.failed
+                if listed == served.listed and not retry:
                     log.info("index_unchanged", extra={"index_version": kept})
                     return True
                 # the same index, another list: the same engine and records, coverage counted again
-                self._served = self._bundle(served.engine, served.records, listed, served.matches)
-                log.info(
-                    "takedowns_reloaded",
-                    extra={
-                        "index_version": kept,
-                        "abstracts_withheld": len(listed),
-                        "takedowns_not_in_index": _not_in(listed, served.records),
-                        "takedowns_followed": _followed(self._served),
-                        "ms": elapsed_ms(started),
-                    },
-                )
+                matches = MatchTable() if retry else served.matches
+                self._served = again = self._bundle(served.engine, served.records, listed, matches)
+                if listed != served.listed:
+                    log.info(
+                        "takedowns_reloaded",
+                        extra={
+                            "index_version": kept,
+                            "abstracts_withheld": len(listed),
+                            "takedowns_not_in_index": _not_in(listed, served.records),
+                            "takedowns_followed": _followed(self._served),
+                            "ms": elapsed_ms(started),
+                        },
+                    )
+                if retry:
+                    self._build_matches(again)
                 return True
             engine = self._gated(self._opener(path))  # verifies every file; the live engine is untouched
             records = snapshot_records(self._data_dir, path, engine.index_version)
@@ -574,15 +584,29 @@ class IndexState:
                 "ms": elapsed_ms(started),
             },
         )
-        if bundle.matches is not None:  # after the swap: searches are served while the table is built
-            build = bundle.matches.build
-            if self._matches_in_background:
-                threading.Thread(
-                    target=build, args=(records, engine.index_version), name="op-match-index", daemon=True
-                ).start()
-            else:
-                build(records, engine.index_version)
+        self._build_matches(bundle)  # after the swap: searches are served while the table is built
         return True
+
+    def _build_matches(self, bundle: Served) -> None:
+        """Build `bundle`'s match table (if it has one), in a background thread unless configured otherwise.
+        One build at a time, and a bundle that is no longer the served one when its turn comes is skipped: N
+        quick swaps are at most one build running and one more for the index left serving, never N at once
+        (each holds the snapshot's records while it runs)."""
+        table = bundle.matches
+        if table is None:
+            return
+
+        def build() -> None:
+            with self._matches_building:
+                served = self._served
+                if served is None or served.matches is not table:
+                    return  # superseded while it waited: that index is no longer served
+                table.build(bundle.records, bundle.engine.index_version)
+
+        if self._matches_in_background:
+            threading.Thread(target=build, name="op-match-index", daemon=True).start()
+        else:
+            build()
 
     def _bundle(
         self, engine: TantivyEngine, records: RecordFile, listed: Withheld, matches: MatchTable | None

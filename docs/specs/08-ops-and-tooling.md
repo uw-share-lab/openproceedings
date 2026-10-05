@@ -290,7 +290,11 @@ TASK-177; 04 §Comparing with a RIS file) are an operator's choice: on by defaul
 with no `--trusted-proxy`, off here unless `op serve --compare` is added to the `api` command. Turning them on
 for a public instance means accepting uploads of up to 16 MiB from anyone (read in memory for the one
 request, one at a time, never stored or logged), about 80 MB more memory for the served index's match table,
-and comparisons that each hold a slot for up to a minute of CPU. The proxy must then let that one path
+and comparisons that each hold a slot for up to a minute of CPU (one network at most a quarter of the time:
+04 §Comparing with a RIS file, Cost). "Loopback" is what `op serve` binds, not who can reach it: run on
+127.0.0.1 behind a proxy on the same host **without** `--trusted-proxy`, it would take itself for a local
+instance and offer comparisons to everyone the proxy serves, so a proxied instance always passes
+`--trusted-proxy` (as `compose.yml` does) or `--no-compare`. The proxy must then let that one path
 through: a `request_body` and `request_buffers` of 16MB and a longer `read_body` for `/api/v1/compare` only
 (the site-wide 64KB and 10 s stay for everything else), as `deploy/README.md` §Comparisons shows; with the
 proxy buffering the file, a slow upload holds a proxy goroutine, never the API's comparison slot. Swagger UI (`/api/v1/docs`, scripts from a

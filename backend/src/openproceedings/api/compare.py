@@ -26,8 +26,12 @@ comparison is seconds of work, nothing is kept between requests, and a second re
 
 Cost (decision-010's model): the route costs `export_weight` like an export, the query's position-verified
 clauses are charged and bounded as on `/search` (`deps.searchable`, `deps.check_candidates`), and the time the
-slot was held is debited afterwards (`middleware.RateLimit.debit_comparison`). The work is bounded by the caps,
-by `compare_max_results` (422 `API_COMPARE_TOO_COSTLY`) and by `compare_max_seconds` (503 `API_BUSY`).
+slot was held is debited afterwards (`middleware.RateLimit.debit_comparison`), the file's arrival counted
+`compare_upload_weight` times. A network's share of the slots is bounded by `Cooldowns`: one comparison at a
+time per client network, and none for `compare_cooldown_factor` times the slot time its last one used (429
+`API_RATE_LIMITED` with `Retry-After`). The work is bounded by the caps, by `compare_max_results` and
+`compare_max_response_bytes` (422 `API_COMPARE_TOO_COSTLY`) and by `compare_max_seconds` (503 `API_BUSY`),
+which is checked before every record read, matched and written (`tick`).
 
 The handler is `async` (the one exception to fastapi-conventions §Handlers): it must take the slot before it
 reads the body, which only a coroutine can order. Everything CPU-bound runs in the thread pool
@@ -41,8 +45,8 @@ import io
 import re
 import threading
 import time
-from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections import Counter, OrderedDict
+from collections.abc import Callable, Iterable, Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from typing import Annotated
@@ -62,7 +66,7 @@ from openproceedings.api.deps import (
 )
 from openproceedings.api.errors import ApiError
 from openproceedings.api.export import sources_of, stored_documents
-from openproceedings.api.middleware import API_PREFIX, drain
+from openproceedings.api.middleware import API_PREFIX, BUCKETS, drain, rate_limited
 from openproceedings.api.models import (
     MODE_DOC,
     Q_DOC,
@@ -141,15 +145,77 @@ _wall = time.monotonic  # module names, so a test can move them
 _cpu = time.thread_time
 
 
+class Cooldowns:
+    """One comparison at a time per client network, and after one, none for `factor` times the slot time it
+    used: a network's sustained share of a slot is at most 1 / (1 + factor), however many addresses it holds
+    (the token buckets can't bound that: a network's refills four times as fast as a client's). Thread-safe;
+    at most `max_networks` networks are remembered, the one free soonest forgotten first."""
+
+    def __init__(self, factor: float, max_networks: int, clock: Callable[[], float] = time.monotonic) -> None:
+        self.factor, self.max_networks, self.clock = factor, max_networks, clock
+        self._until: OrderedDict[str, float] = OrderedDict()  # network → when it may compare again
+        self._running: set[str] = set()
+        self._lock = threading.Lock()
+
+    def enter(self, network: str) -> float:
+        """0.0 and the network is running a comparison; else the seconds until it may start one (a comparison
+        of its own still running: -1.0, the caller's retry time applies)."""
+        if self.factor == 0:  # off: no pause, and no one-at-a-time rule either
+            return 0.0
+        with self._lock:
+            if network in self._running:
+                return -1.0
+            wait = self._until.get(network, 0.0) - self.clock()
+            if wait > 0:
+                return wait
+            self._until.pop(network, None)
+            self._running.add(network)
+            return 0.0
+
+    def leave(self, network: str, used_seconds: float) -> None:
+        """The network's comparison ended, having used `used_seconds` of a slot (0: it never held one)."""
+        with self._lock:
+            self._running.discard(network)
+            now = self.clock()
+            if self.factor > 0 and used_seconds > 0:
+                self._until[network] = now + self.factor * used_seconds
+                self._until.move_to_end(network)
+            if len(self._until) > self.max_networks:
+                for name in [n for n, until in self._until.items() if until <= now]:
+                    del self._until[name]
+                while len(self._until) > self.max_networks:
+                    del self._until[min(self._until, key=self._until.__getitem__)]
+
+
+def slot_seconds(config: ApiConfig, upload_seconds: float, work_seconds: float) -> float:
+    """The slot time a comparison is held to account for: its work, and its file's arrival counted
+    `compare_upload_weight` times (the cooldown's unit; the token debit counts the work's CPU instead)."""
+    return config.rate_limit.compare_upload_weight * upload_seconds + work_seconds
+
+
 @dataclass(frozen=True)
 class Comparisons:
-    """What the app holds for `POST /compare`: the slots (a comparison takes one before it reads its file)."""
+    """What the app holds for `POST /compare`: the slots (a comparison takes one before it reads its file)
+    and the per-network cooldowns."""
 
     slots: threading.BoundedSemaphore
+    cooldowns: Cooldowns
 
 
 def install(app: FastAPI, config: ApiConfig) -> None:
-    app.state.comparisons = Comparisons(threading.BoundedSemaphore(config.comparison_slots))
+    app.state.comparisons = Comparisons(
+        threading.BoundedSemaphore(config.comparison_slots),
+        Cooldowns(config.rate_limit.compare_cooldown_factor, config.rate_limit.max_clients),
+    )
+
+
+def _network(request: Request) -> str | None:
+    """The request's client network as the rate limit keys it, or None when the rate limit is off (a local
+    instance run with `--no-rate-limit` has no cooldown either)."""
+    held = request.scope.get(BUCKETS)
+    if not isinstance(held, tuple):
+        return None
+    return str(held[0][1][1])
 
 
 def _closing(code: DiagnosticCode, message: str, **headers: str) -> ApiError:
@@ -250,11 +316,11 @@ def check_caps(text: str, *, max_records: int, max_line_chars: int, max_title_ch
     return records
 
 
-def parse_file(text: str) -> list[RisRecord]:
+def parse_file(text: str, tick: Callable[[], None] | None = None) -> list[RisRecord]:
     """`read_ris` of the file's text; 422 `API_RIS_INVALID` for a text that holds no record (the parser's own
     refusals name the file and its size, so the message here is ours)."""
     try:
-        records = read_ris(text, NAME)
+        records = read_ris(text, NAME, tick)
     except ValueError:
         raise _invalid(
             "The file is not RIS as this instance reads it: it must start with a record (a `TY  - ` line), "
@@ -290,7 +356,7 @@ def _source(independent: bool | None) -> str:
     return "" if independent is None else "crawled" if independent else "ris_only"
 
 
-def csv_text(rows: Iterable[Iterable[object]]) -> str:
+def csv_text(rows: Iterable[Iterable[object]], tick: Callable[[], None] | None = None) -> str:
     """A CSV file's text: the BOM (so a spreadsheet reads UTF-8), the header row, then `rows`, every cell
     through `export.csv_cell` (titles come from anyone: no cell starts a formula)."""
     out = io.StringIO()
@@ -298,6 +364,8 @@ def csv_text(rows: Iterable[Iterable[object]]) -> str:
     writer = csv.writer(out, lineterminator="\r\n")
     writer.writerow(CSV_COLUMNS)
     for row in rows:
+        if tick is not None:
+            tick()
         writer.writerow(csv_cell(c) for c in row)
     return out.getvalue()
 
@@ -478,28 +546,55 @@ async def compare_records(
     config: ApiConfig = request.app.state.config
     gate: Comparisons = request.app.state.comparisons
     retry = config.busy_retry_seconds
+    network = _network(request)
+    entered = False
     try:
         check_media(request)
         result = await anyio.to_thread.run_sync(_admit, request, served, q, mode)
         index = _table(served, retry)
+        if network is not None:
+            wait = gate.cooldowns.enter(network)
+            if wait != 0:
+                raise _cooling(wait, retry)
+            entered = True
         if not gate.slots.acquire(blocking=False):
             raise _busy("This instance is running as many comparisons as it can.", retry)
     except Exception:
+        if entered and network is not None:
+            gate.cooldowns.leave(network, 0.0)  # it never held a slot
         await drain(request.receive)  # so the refusal reaches a client still sending its file
         raise
     fields = access_fields(request)
     started = _wall()
     spent = _Spent()
     try:
-        body = await _read(request, config.compare_upload_seconds)
+        holder = [await _read(request, config.compare_upload_seconds)]
         spent.upload_ms = (_wall() - started) * 1000
-        return await anyio.to_thread.run_sync(_compare, request, served, index, result, q, mode, body, spent)
+        # `holder` is the only reference to the file's bytes: the worker takes them out of it, so they are
+        # freed as soon as they are decoded, not when this coroutine's frame goes
+        return await anyio.to_thread.run_sync(
+            _compare, request, served, index, result, q, mode, holder, spent
+        )
     finally:
         gate.slots.release()
+        held = (_wall() - started) * 1000
         if spent.upload_ms == 0.0:  # the upload itself failed: all of the hold was the file arriving
-            spent.upload_ms = (_wall() - started) * 1000
-        fields["compare_ms"] = round((_wall() - started) * 1000, 1)
-        fields["compare_cost_ms"] = round(spent.upload_ms + spent.cpu_ms, 1)
+            spent.upload_ms = held
+        weighted = config.rate_limit.compare_upload_weight * spent.upload_ms
+        if network is not None:
+            used = slot_seconds(config, spent.upload_ms / 1000, (held - spent.upload_ms) / 1000)
+            gate.cooldowns.leave(network, used)
+        fields["compare_ms"] = round(held, 1)
+        fields["compare_cost_ms"] = round(weighted + spent.cpu_ms, 1)
+
+
+def _cooling(wait: float, retry: int) -> ApiError:
+    """429 `API_RATE_LIMITED`: this network is running a comparison, or ran one a moment ago."""
+    error = rate_limited(
+        float(retry) if wait < 0 else wait,
+        "One comparison at a time from this network, and a pause after each in proportion to how long it ran",
+    )
+    return ApiError(error.code, error.message, headers={**error.headers, "Connection": "close"})
 
 
 def _compare(
@@ -509,14 +604,14 @@ def _compare(
     result: ParseResult,
     q: str,
     mode: Mode,
-    body: bytearray,
+    holder: list[bytearray],
     spent: _Spent,
 ) -> Response:
     """The work, in a worker thread: its CPU time goes to `spent` whatever happens."""
     fields = access_fields(request)
     cpu, verified = _cpu(), fields.get("verify_cpu_ms", 0.0)
     try:
-        return _run(request, served, index, result, q, mode, body)
+        return _run(request, served, index, result, q, mode, holder)
     finally:
         after = fields.get("verify_cpu_ms", 0.0)
         already = (after - verified) if isinstance(after, float) and isinstance(verified, float) else 0.0
@@ -530,11 +625,23 @@ def _run(
     result: ParseResult,
     q: str,
     mode: Mode,
-    body: bytearray,
+    holder: list[bytearray],
 ) -> Response:
     config: ApiConfig = request.app.state.config
     engine = served.engine
     deadline = _wall() + config.compare_max_seconds
+    written = 0
+
+    def budget(size: int) -> None:
+        """Count `size` more bytes of the answer; 422 once it would pass `compare_max_response_bytes`."""
+        nonlocal written
+        written += size
+        if written > config.compare_max_response_bytes:
+            raise ApiError(
+                DiagnosticCode.API_COMPARE_TOO_COSTLY,
+                f"This comparison's answer would be over {config.compare_max_response_bytes:,} bytes, the "
+                "largest this instance sends. Compare a smaller file, or narrow the query.",
+            )
 
     def tick() -> None:
         if _wall() > deadline:
@@ -545,15 +652,15 @@ def _run(
                 config.busy_retry_seconds,
             )
 
+    body = holder.pop()  # the one reference to the file's bytes (the handler keeps only the empty list)
     size = len(body)
     text = decode(body)
     del body
     check_caps(text, max_records=config.compare_max_records, max_line_chars=config.compare_max_line_chars)
-    records = parse_file(text)
+    records = parse_file(text, tick)
     del text
     annotate(request, ris_bytes=size, ris_records=len(records))
-    tick()
-    side = scope_and_match(records, index, SCOPE)
+    side = scope_and_match(records, index, SCOPE, tick=tick)
     tick()
     assert result.effective_ast is not None and result.canonical is not None
     assert result.canonical_hash is not None  # it parsed (`_admit`)
@@ -594,13 +701,29 @@ def _run(
             DiagnosticCode.API_INTERNAL, "a comparison failed on a query that parsed"
         ) from None
     entries = {e.record.key: e for e in side.entries}
+
+    def row(r: Row) -> CompareRow:
+        tick()
+        made = _row(r, entries.get(r.scholar_key), hidden)
+        budget(len(made.title.encode()) + len(made.detail.encode()) + len((made.venue or "").encode()) + 256)
+        return made
+
+    def left(d: Dropped) -> NotComparedRow:
+        tick()
+        made = _left_out(d)
+        budget(len(made.title.encode()) + len(made.venue.encode()) + 128)
+        return made
+
+    def text_of(name: str, rows: Iterable[tuple[object, ...]]) -> str:
+        made = csv_text(rows, tick)
+        budget(len(made.encode()))
+        return made
+
     lists: dict[str, list[CompareRow]] = {
-        "kept": [_row(r, entries[r.scholar_key], hidden) for r in compared.kept],
-        "dropped": [_row(r, entries[r.scholar_key], hidden) for r in compared.dropped],
-        "not_in_index": [_row(r, entries[r.scholar_key], hidden) for r in compared.not_in_index],
-        "added": [_row(r, None, hidden) for r in compared.added],
+        name: [row(r) for r in getattr(compared, name)]
+        for name in ("kept", "dropped", "not_in_index", "added")
     }
-    left_out = [_left_out(d) for d in side.out_of_scope]
+    left_out = [left(d) for d in side.out_of_scope]
     version, digest = engine.index_version, result.canonical_hash
     annotate(
         request,
@@ -628,26 +751,39 @@ def _run(
         not_compared=left_out,
         csv=CompareCsv(
             **{
-                name: csv_text(_csv_row(name, r, version, digest) for r in rows)
+                name: text_of(name, (_csv_row(name, r, version, digest) for r in rows))
                 for name, rows in lists.items()
             },
-            not_compared=csv_text(_left_out_csv(r, version, digest) for r in left_out),
+            not_compared=text_of("not_compared", (_left_out_csv(r, version, digest) for r in left_out)),
         ),
-        added_ris=_added_ris(request, served, extra, digest),
+        added_ris=_added_ris(request, served, extra, digest, tick, budget),
     )
-    return Response(response.model_dump_json(), media_type="application/json")
+    tick()
+    encoded = response.model_dump_json().encode("utf-8")
+    written = 0
+    budget(len(encoded))  # the answer as sent (JSON escapes included), whatever the running count said
+    return Response(encoded, media_type="application/json")
 
 
-def _added_ris(request: Request, served: Served, ids: list[str], canonical_hash: str) -> str:
+def _added_ris(
+    request: Request,
+    served: Served,
+    ids: list[str],
+    canonical_hash: str,
+    tick: Callable[[], None],
+    budget: Callable[[int], None],
+) -> str:
     """The papers the query adds, as `GET /export` writes RIS: the same writer over the same display records,
     attributions and withheld abstracts, in id order, counted against the list. Nothing of the file is in it."""
     engine = served.engine
     sources, withheld, twins = sources_of(request, served, engine)
     provenance = Provenance(engine.index_version, canonical_hash, utc_date())
-    written = list(
-        entries(
-            "ris", stored_documents(engine, ids), provenance, sources=sources, withheld=withheld, twins=twins
-        )
-    )
+    written: list[str] = []
+    for entry in entries(
+        "ris", stored_documents(engine, ids), provenance, sources=sources, withheld=withheld, twins=twins
+    ):
+        tick()
+        budget(len(entry.encode()))
+        written.append(entry)
     check_count(len(written), len(ids))
     return header("ris") + "".join(written)

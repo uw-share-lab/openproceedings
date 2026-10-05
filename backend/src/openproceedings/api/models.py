@@ -551,6 +551,10 @@ class CompareLimits(Model):
     max_seconds: float = Field(
         description="the wall time one comparison's work gets; past it, 503 `API_BUSY` with `Retry-After`"
     )
+    max_response_bytes: int = Field(
+        description="the largest answer, in bytes; a comparison whose answer would be larger is 422 "
+        "`API_COMPARE_TOO_COSTLY`"
+    )
 
 
 class MetaResponse(Versioned):

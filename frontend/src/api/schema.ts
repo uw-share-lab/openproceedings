@@ -367,6 +367,11 @@ export interface components {
              */
             max_records: number;
             /**
+             * Max Response Bytes
+             * @description the largest answer, in bytes; a comparison whose answer would be larger is 422 `API_COMPARE_TOO_COSTLY`
+             */
+            max_response_bytes: number;
+            /**
              * Max Results
              * @description the most papers of the query's result that the file doesn't hold; more is 422 `API_COMPARE_TOO_COSTLY`
              */

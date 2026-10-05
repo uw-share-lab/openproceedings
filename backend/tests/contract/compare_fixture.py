@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from openproceedings.api import compare as route
 
 from tests.contract.conftest import attributed, build, make_app
-from tests.contract.test_compare import COMPARE, DATE, RIS, TWIN, Q, the_file
+from tests.contract.test_compare import COMPARE, DATE, NO_COOLDOWN, RIS, TWIN, Q, the_file
 from tests.fixtures.corpus.synthetic_5k import records
 
 REPO = Path(__file__).resolve().parents[3]
@@ -34,7 +34,7 @@ def answers() -> dict[str, Any]:
         root = Path(tmp)
         version = build(corpus, root / "snapshots", "compared", root / "indexes", paper=attributed)
         (root / "indexes" / "current").symlink_to(version)
-        with TestClient(make_app(root, compare_enabled=True)) as client:
+        with TestClient(make_app(root, compare_enabled=True, rate_limit=NO_COOLDOWN)) as client:
             file = the_file()
             r = client.post(COMPARE, params={"q": Q}, content=file.encode("utf-8"), headers=RIS)
             assert r.status_code == 200, r.text

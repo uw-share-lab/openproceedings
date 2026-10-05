@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 
 from openproceedings.api.config import ApiConfig
-from openproceedings.api.deps import EngineDep
+from openproceedings.api.deps import EngineDep, ServedDep
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import CompareLimits, Limits, MetaResponse, Vocabularies, versions
 from openproceedings.api.state import IndexState
@@ -22,7 +22,7 @@ router = APIRouter(prefix=API_PREFIX)
 
 
 @router.get("/meta", response_model=MetaResponse)
-def get_meta(request: Request, engine: EngineDep) -> MetaResponse:
+def get_meta(request: Request, engine: EngineDep, served: ServedDep) -> MetaResponse:
     state: IndexState = request.app.state.index
     config: ApiConfig = request.app.state.config
     return MetaResponse(
@@ -38,7 +38,8 @@ def get_meta(request: Request, engine: EngineDep) -> MetaResponse:
             max_query_depth=MAX_DEPTH,
             max_verified_clauses=config.max_verified_clauses,
             max_verification_candidates=config.max_verification_candidates,
-            compare=compare_limits(config),
+            # not offered either while the served index's match table failed to build (a reload retries it)
+            compare=None if served.matches is None or served.matches.failed else compare_limits(config),
         ),
     )
 
@@ -54,4 +55,5 @@ def compare_limits(config: ApiConfig) -> CompareLimits | None:
         max_title_length=MAX_TITLE,
         max_results=config.compare_max_results,
         max_seconds=config.compare_max_seconds,
+        max_response_bytes=config.compare_max_response_bytes,
     )

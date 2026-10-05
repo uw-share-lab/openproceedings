@@ -50,6 +50,17 @@ class RateLimit(BaseModel):
     # 500 ms, not 100: a comparison is seconds of work by design (about 10 s per 1,000 records), and at 100 one
     # run would lock a reviewer out of search for minutes
     compare_token_ms: float = Field(default=500.0, gt=0)
+    # the wall time a comparison's file took to arrive counts this many times over, in that debit and in the
+    # cooldown below: it is the part of a slot's time the client alone decides (a stalled upload holds the
+    # slot and does no work), so it is the dearest
+    compare_upload_weight: float = Field(default=4.0, ge=1)
+    # what bounds a network's share of the comparison slots (the token debit can't: a network's bucket refills
+    # 4 tokens/s, so several addresses of one network could hold a slot all the time). After a comparison, its
+    # client's network (IPv4 /24, IPv6 /48) starts no other for this many times the slot time it used (the
+    # upload weighted as above), and runs one at a time: a network's sustained share of a slot is at most
+    # 1 / (1 + factor) however many addresses it holds, 25% at 3 (7.7% for uploads that stall), and a reviewer
+    # waits under a minute after an 18 s comparison. 0 turns it off
+    compare_cooldown_factor: float = Field(default=3.0, ge=0)
     max_clients: int = Field(default=100_000, ge=1)  # buckets held in memory; the least recent is dropped
 
     @property
@@ -170,6 +181,10 @@ class ApiConfig(BaseModel):
     # papers of the query's result that the file doesn't hold (422 `API_COMPARE_TOO_COSTLY`): each is read from
     # the snapshot and judged by the oracle, so an unbounded result is unbounded work
     compare_max_results: int = Field(default=5_000, ge=1)
+    # the largest answer, in bytes (422 `API_COMPARE_TOO_COSTLY`, checked as it is built): an answer echoes
+    # the file's titles and venues and holds each list twice (rows and CSV), so its size follows the file's.
+    # The body cap's value: an answer is never larger than the largest file (the review's 3.7 MB file: 1.4 MB)
+    compare_max_response_bytes: int = Field(default=16 * 1024 * 1024, ge=1024)
     # comparisons running at once; one more is 503 `API_BUSY` with Retry-After, before its file is read (so at
     # most this many files are in memory)
     comparison_slots: int = Field(default=1, ge=1)

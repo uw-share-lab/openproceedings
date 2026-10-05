@@ -111,6 +111,11 @@ _YEAR = re.compile(r"\s*([0-9]{4})(?![0-9])")
 _QUERY_DATE = re.compile(r"Query date: (.+)")  # Publish or Perish: one per Scholar search
 _OPENREVIEW_PATHS = frozenset({"/forum", "/pdf"})
 _ELLIPSES = ("…", "...")
+MAX_HOSTS = 3  # link hosts kept per record (they are quoted in a row's evidence)
+# a host name as DNS writes one (letters, digits and hyphens in dot-separated labels), with an optional port
+_HOST = re.compile(
+    r"(?=.{1,253}(?::|\Z))[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*(?::[0-9]{1,5})?"
+)
 
 
 # --- the RIS set -------------------------------------------------------------------------------------------
@@ -128,7 +133,8 @@ class RisRecord:
     forum_ids: tuple[str, ...]  # OpenReview forum ids its URLs name
     proceedings_ids: tuple[ProceedingsKey, ...]  # the proceedings papers its URLs name (`proceedings_key`)
     search: str | None  # the Scholar search it came from (PoP's query date), for the result cap
-    hosts: tuple[str, ...] = ()  # where its links point, for a person judging an unmatched record
+    # where its links point (valid host names only, the first `MAX_HOSTS`), for a person judging an unmatched record
+    hosts: tuple[str, ...] = ()
 
 
 def openreview_id(url: str) -> str | None:
@@ -157,15 +163,35 @@ def proceedings_key(url: str) -> ProceedingsKey | None:
     return ("ICML", ICML_PMLR_VOLUMES[volume[0]][0], native)
 
 
+def _named[T](read: Callable[[str], T | None], url: str) -> T | None:
+    """`read(url)`, or None for a link no reader can take (`http://[x` is no URL to `urlparse`; a volume of
+    5,000 digits is no integer): such a link names no paper, and never refuses the file it is in."""
+    try:
+        return read(url)
+    except ValueError:
+        return None
+
+
+def link_host(url: str) -> str | None:
+    """The host a link points at, lower-cased, when it is a host name as DNS writes one (at most 253
+    characters, no control or other characters); else None. A row's evidence quotes it, so nothing else of
+    a link is ever echoed."""
+    host = urlparse(url).netloc.lower()
+    return host if _HOST.fullmatch(host) else None
+
+
 def _first(fields: Mapping[str, Sequence[str]], tags: Iterable[str]) -> str:
     return next((v.strip() for t in tags for v in fields.get(t, ()) if v.strip()), "")
 
 
-def read_ris(text: str, name: str) -> list[RisRecord]:
+def read_ris(text: str, name: str, tick: Callable[[], None] | None = None) -> list[RisRecord]:
     """The records of one RIS text, in file order (`name` is how keys and errors refer to it). ValueError for a
-    text that holds content but no record (scholarmend refuses to drop a whole file)."""
+    text that holds content but no record (scholarmend refuses to drop a whole file). `tick`, when given, is
+    called before each record is read (its venue string is normalized)."""
     out: list[RisRecord] = []
     for n, rec in enumerate(parse_ris(text, name), 1):
+        if tick is not None:
+            tick()
         links = [u for t in _URL_TAGS for u in rec.fields.get(t, ())]
         venue_raw = _first(rec.fields, _VENUE_TAGS)
         year = _YEAR.match(_first(rec.fields, _YEAR_TAGS))
@@ -177,10 +203,10 @@ def read_ris(text: str, name: str) -> list[RisRecord]:
                 venue=SOURCE_ALIASES.get(source_key(venue_raw)),
                 venue_raw=venue_raw,
                 year=int(year.group(1)) if year else None,
-                forum_ids=tuple(dict.fromkeys(f for u in links if (f := openreview_id(u)))),
-                proceedings_ids=tuple(dict.fromkeys(p for u in links if (p := proceedings_key(u)))),
+                forum_ids=tuple(dict.fromkeys(f for u in links if (f := _named(openreview_id, u)))),
+                proceedings_ids=tuple(dict.fromkeys(p for u in links if (p := _named(proceedings_key, u)))),
                 search=dates[0] if dates else None,
-                hosts=tuple(dict.fromkeys(h for u in links if (h := urlparse(u).netloc.lower()))),
+                hosts=tuple(dict.fromkeys(h for u in links if (h := _named(link_host, u))))[:MAX_HOSTS],
             )
         )
     return out
@@ -373,7 +399,11 @@ class ScholarSide:
 
 
 def scope_and_match(
-    records: Sequence[RisRecord], index: MatchIndex, scope: Scope, cap: int = SCHOLAR_CAP_RESULTS
+    records: Sequence[RisRecord],
+    index: MatchIndex,
+    scope: Scope,
+    cap: int = SCHOLAR_CAP_RESULTS,
+    tick: Callable[[], None] | None = None,
 ) -> ScholarSide:
     """Every RIS record matched, scoped and counted once per paper. A matched record is scoped by its index
     record's venue and year (the two sides then share one definition of the scope); an unmatched one by its own.
@@ -381,12 +411,15 @@ def scope_and_match(
     unmatched record whose venue string is empty or cut (`…`) and whose title key an in-scope index record of
     the same year has: it may be that paper, and only a person can say. A record that names another venue in
     full is out of scope, whatever its title. Two records are one paper when they match one index record, or,
-    unmatched, share venue, year and title key."""
+    unmatched, share venue, year and title key. `tick`, when given, is called before each record (a title key
+    is milliseconds of normalization on a long title): a caller with a time limit raises from it."""
     entries: dict[tuple[object, ...], Entry] = {}
     dropped: list[Dropped] = []
     duplicates = 0
     by_search: dict[str, list[Cell]] = {}
     for r in records:
+        if tick is not None:
+            tick()
         m = index.match(r)
         if m.op_id is not None:
             venue, year = index.cells[m.op_id]
@@ -822,8 +855,8 @@ def compare_query(
     abstract, track, status) by id: every id it is asked for must come back. The result set is exactly
     `engine.match_ids` of the query's effective tree, limited to `scope`: nothing here changes what matches.
     `TooManyForms` when a phrase or NEAR of the query has more inflected spellings than the cap. `tick`, when
-    given, is called before each of the oracle's evaluations (the comparison's cost): a caller with a time
-    limit raises from it (`POST /compare`), and nothing is returned."""
+    given, is called before each of the oracle's evaluations and before each row is written (the comparison's
+    cost): a caller with a time limit raises from it (`POST /compare`), and nothing is returned."""
     parsed = parse(q, mode, engine.tokenizer_version)
     if parsed.effective_ast is None or parsed.ast is None or parsed.canonical is None:
         raise QueryRefused(name, [str(d.code) for d in parsed.errors])
@@ -979,8 +1012,17 @@ def compare_query(
             cls, evidence, settled = SCHOLAR_MISSED, "exact match on " + "; ".join(hits), False
         return Row("openproceedings", "", i, " ".join(d.title.split()), d.venue, d.year, cls, evidence, settled, *provenance(i, d))  # fmt: skip
 
+    def step() -> None:
+        if tick is not None:
+            tick()
+
+    def added_row(i: str) -> Row:
+        step()
+        return added(i)
+
     kept, only, gaps = [], [], []
     for e in side.entries:
+        step()
         if e.match.op_id is None:
             gaps.append(_not_in_index(e, index, scope))
         elif e.match.op_id not in in_scope:
@@ -1016,7 +1058,7 @@ def compare_query(
         kept=tuple(kept),
         dropped=tuple(only),
         not_in_index=tuple(gaps),
-        added=tuple(added(i) for i in only_in_result(in_scope, side)),
+        added=tuple(added_row(i) for i in only_in_result(in_scope, side)),
         groups=tuple(
             Group(render(g), len(exact & members), len(loose & members))
             for g, (exact, loose) in zip(groups, group_ids, strict=True)
