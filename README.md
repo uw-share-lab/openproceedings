@@ -28,7 +28,9 @@ authoritative):
   parentheses, `"quoted phrases"`, `a NEAR/5 b`, the suffix wildcards `*` (zero or more characters) and `$`
   (zero or one), and the fields `title:`, `abstract:`, `venue:`, `year:` (`2020..2024`), `track:` and
   `status:`. The web app has a query editor with live diagnostics, a concept-group builder, and a syntax help
-  page (`/help/syntax`).
+  page (`/help/syntax`). After a search of several concept groups, the builder shows how many papers each
+  group matches by itself and how many the query finds without it, so the group narrowing a search is seen
+  (`/search`'s `groups`, bounded per instance).
 - **Scholar and Publish or Perish syntax** (`mode=scholar`, `op search --mode scholar`): `|`, `source:`
   (mapped to `venue:`) and PoP's `$` are accepted. Each rewrite is reported, so an existing review string runs
   unchanged or comes back with a precise explanation. Scholar stems words and openproceedings never does, so
@@ -78,7 +80,7 @@ so those searches replay the same ids (decision-022). This is the project's deci
 |---|---|
 | M1 | The query language: tokenizer, parser, canonical form, defaults ([spec 02](docs/specs/02-query-language.md)) |
 | M2 | RIS ingestion, snapshots, the Tantivy index, `op search` / `op export` ([spec 01](docs/specs/01-ingestion.md), [spec 03](docs/specs/03-search-engine.md)) |
-| M3 | The `/api/v1` HTTP API (`op serve`), search records, and the web UI: query editor and builder, results, paper pages, exports, the coverage page and syntax help ([spec 04](docs/specs/04-backend-api.md), [spec 05](docs/specs/05-frontend.md)) |
+| M3 | The `/api/v1` HTTP API (`op serve`), search records, and the web UI: query editor and builder, results, paper pages, exports, the coverage page and syntax help, with each concept group's counts in the builder ([spec 04](docs/specs/04-backend-api.md), [spec 05](docs/specs/05-frontend.md)) |
 | M4 | Crawlers for OpenReview (API v1 and v2), the NeurIPS proceedings, PMLR and the ICLR archive (`op ingest …`), and the coverage report with the M4 gate (`op eval coverage`, [spec 07](docs/specs/07-evaluation.md) §C). The first full crawl's report passes the gate: 43 of 44 gated cells are within ±1%, and the one other cell is an exception the owner accepted ([`docs/results/2026-09-29-coverage.md`](docs/results/2026-09-29-coverage.md)). After the 2026 OpenReview crawl the gate still passes, with ICLR 2026 and ICML 2026 main added: 45 of 46 gated cells within ±1% and the same exception ([`docs/results/2026-10-05-coverage.md`](docs/results/2026-10-05-coverage.md)). |
 | M6 (in progress) | Deployment: Docker Compose with Caddy for TLS, and the api, web and caddy images, verified locally ([`deploy/`](deploy/README.md), TASK-065). Still to come: the hosting choice (TASK-064), the first tagged release, then the public v1 launch. Releases follow [spec 08](docs/specs/08-ops-and-tooling.md) §Release (one semver version, decision-023), and the release notes are the generated [`CHANGELOG.md`](CHANGELOG.md) |
 | Deferred | Semantic "near-miss" suggestions and re-sort (M5, [spec 06](docs/specs/06-semantic-layer.md)): phase 2, not v1. v1 is Boolean search only (decision-017) |
