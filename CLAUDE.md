@@ -27,7 +27,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   other index_versions), `deps.py`, `errors.py`, `middleware.py`, `models.py` (the response
   contract), routers `search.py` (parse and search), `papers.py`, `records.py`, `meta.py`, `coverage.py`, `health.py`, `export.py`
   (streamed exports, `op export`'s writers), `server.py` → `op serve`, `openapi.py` → `op openapi`);
-  `eval/` (`coverage_report.py` → `op eval coverage`, TASK-054; the other reports arrive with their tasks),
+  `eval/` (`coverage_report.py` → `op eval coverage`, TASK-054; `scholar_compare.py` (a RIS set against a query's result on one index: matching by the merge rules, scope, and every disagreement's class; the one implementation, TASK-056/TASK-177) and `scholar_report.py` → `op eval scholar`; the other reports arrive with their tasks),
   no `semantic/` in v1: spec 06 is deferred to phase 2 by decision-017). Tests in `backend/tests/`; `uv run pytest` from the root.
 - **API contract:** after changing a route or a response model, run `make openapi` and commit both
   `backend/tests/contract/openapi.json` (the snapshot) and `frontend/src/api/schema.ts` (generated from it;

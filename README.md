@@ -52,7 +52,7 @@ authoritative):
   exports, and marked as removed. `op takedown check` verifies a running instance.
 - **One CLI, `op`**, runs the same functions as the API: `op ingest`, `op snapshot build|diff`,
   `op index build|parity|retire`, `op search`, `op export`, `op record save|replay`, `op serve`,
-  `op eval coverage`, `op takedown check` and `op openapi` ([spec 08](docs/specs/08-ops-and-tooling.md) §CLI).
+  `op eval coverage|scholar`, `op takedown check` and `op openapi` ([spec 08](docs/specs/08-ops-and-tooling.md) §CLI).
 
 **Abstracts on a public instance.** A public deployment shows every abstract, attributed to its source
 (OpenReview, the NeurIPS proceedings or PMLR) with a link to it, and names a takedown contact. Private, local
@@ -209,6 +209,15 @@ missing contact fail the build too, and the `web` image requires it: `docker bui
 `uv run op eval coverage --index <index_version>` writes `docs/results/<date>-coverage.md`: indexed against
 official accepted counts per venue, year and track, and the M4 gate verdict (`--check` makes a failing gate the
 exit status).
+
+`uv run op eval scholar --ris <scholar-set.ris> --years 2020..2026 --index <index_version>` compares a Google
+Scholar RIS set with the review's search strings on that index ([spec 07](docs/specs/07-evaluation.md) §B). It
+writes `docs/results/<date>-scholar-comparison.md`, with every record only one side holds classified (filtered,
+read differently by Scholar, matched only through an inflected form, matched nowhere in title or abstract, not
+in the corpus), and `<date>-scholar-comparison-review.csv`, the rows a person decides. It also says how many
+of the set's papers match a crawled record and how many only a record the set's own import put in the index. `--query-file` and
+`--query` run other strings; the first report is
+[`docs/results/2026-10-04-scholar-comparison.md`](docs/results/2026-10-04-scholar-comparison.md).
 
 ## Run it with Docker Compose
 

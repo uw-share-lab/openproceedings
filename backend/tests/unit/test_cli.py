@@ -10,7 +10,7 @@ from openproceedings import cli
 PLANNED = {
     "embed": "task-058",
 }
-PLANNED_EVALS = {"scholar": "task-056", "audit": "task-055", "near-miss": "task-061"}  # coverage: TASK-054
+PLANNED_EVALS = {"audit": "task-055", "near-miss": "task-061"}  # coverage: TASK-054, scholar: TASK-056
 DEFERRED = {"embed", "eval near-miss"}  # the semantic layer, deferred to phase 2 (decision-017)
 
 
@@ -160,7 +160,7 @@ def test_default_log_format_is_json() -> None:
     [
         ["embed", "build", "--index", "current"],
         ["--log-level", "debug", "--log-format", "json", "eval", "audit", "old"],
-        ["eval", "scholar", "--query", "trust"],
+        ["eval", "near-miss", "--query", "trust"],
     ],
 )
 def test_stub_accepts_the_future_arguments_of_its_command(

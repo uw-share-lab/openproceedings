@@ -37,7 +37,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `docs/specs/` | `NN-name.md`, changed only by PR (`spec-writing`) | |
 | `docs/{design,usability,research}/` | Created as needed | |
 | `docs/plans/` | Implementation plans, `YYYY-MM-DD-<slug>.md` | |
-| `docs/results/` | Dated reports, `YYYY-MM-DD-<slug>.md`, plus `coverage-sources.md` | Numbers live here, never in learnings |
+| `docs/results/` | Dated reports, `YYYY-MM-DD-<slug>.md`, plus the undated inputs a report reads (`coverage-sources.md`, `coverage-causes.toml`, `scholar-comparison-notes.md`, `scholar-comparison-strings.txt`) | Numbers live here, never in learnings |
 | `backlog/` | Backlog.md store: tasks, completed, docs, decisions | CLI only (`decision-records`) |
 | `.claude/` | Agents, skills, commands, hooks, learnings | Committed; linted by `lint_tooling.py`; roster in the generated `.claude/README.md` |
 | `deploy/` | Dockerfiles, `compose.yml` | Every image a build pulls (`FROM`, `# syntax=`, `COPY --from=`, `RUN --mount` `from=`) is `name:tag@sha256:<multi-arch index digest>` (spec 08 §Deploy; `check_digest_pins.py` in `make tooling`); Dependabot's `docker` entry bumps the `FROM` digests |

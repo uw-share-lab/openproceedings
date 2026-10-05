@@ -24,7 +24,7 @@ guarantees are the review standard for everything else.
 
 | Directory | Holds |
 |---|---|
-| [`results/`](results/) | dated reports: coverage (`op eval coverage`), benchmarks, audits and data checks; `coverage-sources.md` and `coverage-causes.toml` feed the coverage report |
+| [`results/`](results/) | dated reports: coverage (`op eval coverage`), the Scholar comparison (`op eval scholar`, with its `-review.csv` rows for a person), benchmarks, audits and data checks; `coverage-sources.md` and `coverage-causes.toml` feed the coverage report, `scholar-comparison-notes.md` and `scholar-comparison-strings.txt` the Scholar comparison |
 | [`design/`](design/) | UX design docs and the copy deck behind spec 05 |
 | [`research/`](research/) | verified facts about the sources (OpenReview and the proceedings sites) |
 | [`releases.toml`](releases.toml) | each release's data table (spec 08 §Release) |
