@@ -102,15 +102,38 @@ describe("the words", () => {
     expect(matchedByText(null)).toBe("");
   });
 
-  it("writes the reasons with the server's counts, in the server's order", () => {
+  it("writes each reason's count as a sentence, with the server's counts in the server's order", () => {
     expect(reasonsLine("dropped", fixture.response.reason_totals.dropped)).toBe(
-      "2 excluded by a default filter · 2 matches only as another word form · " +
-        "2 no exact match in its title or abstract",
+      "2 papers are excluded by a default filter · 2 papers match only as another word form · " +
+        "2 papers have no exact match in their title or abstract",
     );
     expect(reasonsLine("kept", fixture.response.reason_totals.kept)).toBe("");
-    expect(reasonsLine("added", { scholar_missed: 1713 })).toBe(
-      "1,713 an exact match your file doesn't hold",
+    expect(reasonsLine("added", { scholar_missed: 154 })).toBe(
+      "154 papers match exactly and are not in your file",
     );
+    expect(reasonsLine("added", { scholar_missed: 1 })).toBe(
+      "1 paper matches exactly and is not in your file",
+    );
+    expect(reasonsLine("dropped", { full_text: 1, unsettled: 41 })).toBe(
+      "1 paper has no exact match in its title or abstract · 41 papers can't be decided automatically",
+    );
+    expect(reasonsLine("not_in_index", { coverage_gap: 3 })).toBe("3 papers are not in the index");
+    expect(reasonsLine("dropped", { a_new_class: 2 })).toBe("2 papers: a_new_class"); // open enum
+    // every reason the API documents has its sentence, in both lists it can appear in
+    for (const reason of [
+      "filtered",
+      "full_text",
+      "stemming",
+      "compat_reading",
+      "coverage_gap",
+      "unsettled",
+      "our_bug",
+    ]) {
+      expect(reasonsLine("dropped", { [reason]: 2 })).not.toContain(reason);
+    }
+    for (const reason of ["scholar_missed", "compat_reading", "scholar_cap", "our_bug"]) {
+      expect(reasonsLine("added", { [reason]: 2 })).not.toContain(reason);
+    }
   });
 
   it("counts a list with its noun", () => {
@@ -142,6 +165,12 @@ describe("the file", () => {
 
   it("states the caps from /meta", () => {
     expect(megabytes(3_687_464)).toBe("3.5 MB");
+    expect(megabytes(2_048)).toBe("2.0 KB"); // a small cap is never "0.0 MB"
+    expect(megabytes(104_857)).toBe("102.4 KB");
+    expect(megabytes(104_858)).toBe("0.1 MB");
+    expect(fileProblem({ size: 3_000 }, { ...LIMITS, max_body_bytes: 2_048 })).toMatch(
+      /^This file is 2\.9 KB; this server compares files up to 2\.0 KB\./,
+    );
     expect(limitsLine(LIMITS)).toBe(
       "Up to 16.0 MB and 5,000 records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it).",
     );

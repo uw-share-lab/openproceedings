@@ -68,9 +68,15 @@ export async function postCompare(
   );
 }
 
-/** A size in megabytes to one decimal (binary megabytes, as the caps are): `3.5 MB`. */
+/**
+ * A size to one decimal in binary megabytes, as the caps are (`3.5 MB`), or in kilobytes when it is under a
+ * tenth of one (`2.0 KB`): an instance's cap can be that small, and "0.0 MB" would say nothing.
+ */
 export function megabytes(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
+  const one = { minimumFractionDigits: 1, maximumFractionDigits: 1 };
+  const mb = bytes / (1024 * 1024);
+  if (mb < 0.1) return `${(bytes / 1024).toLocaleString("en-US", one)} KB`;
+  return `${mb.toLocaleString("en-US", one)} MB`;
 }
 
 /**
@@ -146,10 +152,49 @@ export function notComparedText(reason: string): string {
   return NOT_COMPARED[reason] ?? reason;
 }
 
-/** "1,713 no exact match in its title or abstract · 2 matches only as another word form" (server counts). */
+/** A reason as a count's sentence, [one paper, several]: "1 paper has …", "1,713 papers have …" (copy CM-7). */
+const COUNTED: Record<string, readonly [string, string]> = {
+  filtered: ["is excluded by a default filter", "are excluded by a default filter"],
+  full_text: [
+    "has no exact match in its title or abstract",
+    "have no exact match in their title or abstract",
+  ],
+  stemming: ["matches only as another word form", "match only as another word form"],
+  compat_reading: [
+    "matches only as Google Scholar reads the query",
+    "match only as Google Scholar reads the query",
+  ],
+  coverage_gap: ["is not in the index", "are not in the index"],
+  unsettled: ["can't be decided automatically", "can't be decided automatically"],
+  our_bug: [
+    "is judged differently by the two matchers (a bug in openproceedings)",
+    "are judged differently by the two matchers (a bug in openproceedings)",
+  ],
+};
+const COUNTED_ADDED: Record<string, readonly [string, string]> = {
+  scholar_missed: ["matches exactly and is not in your file", "match exactly and are not in your file"],
+  compat_reading: [
+    "matches as this search reads the query, not as Google Scholar reads it",
+    "match as this search reads the query, not as Google Scholar reads it",
+  ],
+  scholar_cap: [
+    "is from a venue and year that hit Google Scholar's 1,000-result cap in your file",
+    "are from a venue and year that hit Google Scholar's 1,000-result cap in your file",
+  ],
+  our_bug: COUNTED.our_bug as readonly [string, string],
+};
+
+/**
+ * "1,713 papers have no exact match in their title or abstract · 2 papers match only as another word form":
+ * the server's counts per reason, each a sentence of its own (an unknown reason is shown as sent).
+ */
 export function reasonsLine(list: ListName, totals: Readonly<Record<string, number>>): string {
   return Object.entries(totals)
-    .map(([reason, n]) => `${n.toLocaleString("en-US")} ${reasonText(list, reason)}`)
+    .map(([reason, n]) => {
+      const words = (list === "added" ? COUNTED_ADDED : COUNTED)[reason];
+      const papers = `${n.toLocaleString("en-US")} ${n === 1 ? "paper" : "papers"}`;
+      return words === undefined ? `${papers}: ${reason}` : `${papers} ${n === 1 ? words[0] : words[1]}`;
+    })
     .join(" · ");
 }
 

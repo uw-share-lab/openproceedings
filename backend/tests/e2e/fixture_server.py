@@ -6,18 +6,29 @@ provenance only, so the ranking that picks them is the final index's. Comparison
 TASK-177), as on a local instance, so the search page's "Compare with your records" panel is exercised.
 
 The ports are 8000 (API) and 3000 (web) unless `OP_E2E_API_PORT` / `OP_E2E_WEB_PORT` say otherwise
-(`frontend/playwright.config.ts` reads the same two), so a run can sit beside an instance already on them."""
+(`frontend/playwright.config.ts` reads the same two), so a run can sit beside an instance already on them.
+
+Three instances serve the one index, so a spec reaches states only another configuration gives without mocking
+an answer in the browser (TASK-182; `frontend/e2e/instances.ts` sends a page's API calls to one of them):
+
+- the API port: the default, as a local instance (no rate limit, comparisons on);
+- port + 1, `tight`: at most 2 concept groups and 5 terms counted (`too_many_groups`, `too_costly`), the rate
+  limit on with a comparison cooldown of 200 times the slot time used (a fixture comparison takes hundredths
+  of a second, so the default factor of 3 would be over before a second click; at 200 the 429 and its
+  countdown last a few seconds), and a 2,048-byte comparison file cap (an over-cap file);
+- port + 2, `plain`: comparisons off, as a public instance is by default (the panel is not offered)."""
 
 from __future__ import annotations
 
 import os
 import tempfile
+import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
 from openproceedings.api import ApiConfig, RateLimit
-from openproceedings.api.server import serve
+from openproceedings.api.server import serve, uvicorn_config
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.ingest.record import Claim, PaperRecord
 from openproceedings.query.parser import parse
@@ -68,6 +79,24 @@ def main() -> None:
             compare_enabled=True,
         )
         port = int(os.environ.get("OP_E2E_API_PORT", "8000"))
+        others = {
+            port + 1: config.model_copy(  # `tight`
+                update={
+                    "max_counted_groups": 2,
+                    "max_counted_terms": 5,
+                    "rate_limit": RateLimit(capacity=10_000, compare_cooldown_factor=200),
+                    "compare_max_body_bytes": 2_048,
+                }
+            ),
+            port + 2: config.model_copy(update={"compare_enabled": False}),  # `plain`
+        }
+        for other_port, other in others.items():
+            import uvicorn
+
+            server = uvicorn.Server(
+                uvicorn_config(ApiConfig.model_validate(other.model_dump()), "127.0.0.1", other_port)
+            )
+            threading.Thread(target=server.run, name=f"e2e-api-{other_port}", daemon=True).start()
         serve(config, "127.0.0.1", port, log_level="WARNING", log_format="text")
 
 
