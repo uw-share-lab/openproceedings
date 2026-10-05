@@ -7,7 +7,7 @@ It generates the synthetic corpus at 80,000 records with abstracts of realistic 
 same generator as the 5k differential corpus, so anyone can reproduce it), builds the index, and writes
 `docs/results/<date>-bench.md` (or OUT): build time, size and peak memory; p95 of a 50-hit search (and its warm p99), of the
 50-hit search with its highlights, and of `match_ids` with exclusion accounting for every Trust-Evals protocol
-string; the `/search` endpoint's whole work (facets and exclusions too), first and later pages, as wall-time
+string; the `/search` endpoint's whole work (facets, exclusions and group counts too), first and later pages, as wall-time
 p95 (the facet aggregation overlaps the page on a worker thread, so wall time is what a client waits) and
 the first page's CPU time per request (what bounds throughput); the widest expansion under the cap and one
 past it; the position-verified cases spec 03 exempts (stopword NEAR, wildcard phrases), timed cold; and every
@@ -261,7 +261,8 @@ p95 and the p99 of the {WARM_ROUNDS} runs after it, with the caches an engine ke
 {WARM_ROUNDS} warm runs of the same search with its display records and every hit's highlights, as
 `search.run` assembles them (`test_bench.search_with_highlights`; no cache holds them; task-073); the two
 `/search` columns are the endpoint's whole engine work (`test_bench.search_endpoint`: `search.run` with facets,
-highlights and exclusion accounting; its facet aggregation on a worker thread, overlapping the page), p95 of
+highlights, exclusion accounting and the concept groups' counts at the route's default bounds; its facet
+aggregation and its counting on worker threads, overlapping the page), p95 of
 {ENDPOINT_ROUNDS} runs in wall time: the first page with the facet memo forgotten each run, and a later page
 (offset 50) that reads it; then the first page's mean CPU time per request over {ENDPOINT_ROUNDS} more runs (all
 threads: the overlap saves wall time, not CPU); the exclusions column is the p95 of

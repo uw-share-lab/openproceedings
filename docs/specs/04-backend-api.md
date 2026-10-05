@@ -250,8 +250,8 @@ Two readings follow from "the canonical form decides", and are worth knowing:
   | `too_many_groups` | `groups_total` is over `limit` |
   | `too_costly` | counting the groups would read more than `ApiConfig.max_counted_terms` terms (default 5,000) or `max_counted_ids` verified ids (default 300,000), decided before any counting (below) |
   | `busy` | no counting worker took the job within `search.GROUP_COUNT_GRACE_SECONDS` (50 ms) of the rest of the search being done: the workers were counting for other searches. The job is cancelled (one DEBUG line `group_count_busy`: a state under load, not an alarm) |
-  | `count_failed` | the counting failed (a bug: one ERROR line `group_count_failed` with `groups` and the error's type, never its message) |
-  | `timed_out` | the counts were not ready `search.GROUP_COUNT_WAIT_SECONDS` (2 s) after the rest of the search was (one WARNING line `group_count_timed_out` with `groups` and `wait_ms`); the job is abandoned and stops. A job that itself ends in a `TimeoutError` is `count_failed`: only the wait decides `timed_out` |
+  | `count_failed` | the counting failed (a bug: one ERROR line `group_count_failed` with `groups`, the error's type and `frames`, and its `reason` constant when it has one, never its message) |
+  | `timed_out` | the counts were not ready `search.GROUP_COUNT_WAIT_SECONDS` (2 s) after the rest of the search was (one WARNING line `group_count_timed_out` with `groups` and `threshold_ms`, the wait in ms); the job is abandoned and stops. A job that itself ends in a `TimeoutError` is `count_failed`: only the wait decides `timed_out` |
 
   In every case the response is a 200 and the search itself is whole: `total`, `hits`, `facets` and `excluded`
   are what they would be. The counts are an extra, so no failure or delay of theirs is ever the search's.
@@ -320,17 +320,20 @@ Two readings follow from "the canonical form decides", and are worth knowing:
     the 2 s is only ever spent on a search's own running job, whose work the two bounds above cap; and a job
     nobody waits for does at most one more collection. No rate-limit token, no verification slot.
 
-  Measured. The 158-wildcard shape on the 5k fixture, cold, median of 5 fresh engines (load 9–11): 209.8 ms
-  without counts; 206.2 ms with them asked for at the default bounds, where it is `too_costly` and no group is
-  counted; 905.7 ms when the bounds are lifted (the first implementation: 1,198 ms, and 12 `compiled`
-  entries of 114,356 units against today's 2 and 19,106). Ordinary queries there: `(trust OR reliance) AND
-  calibrat* AND model*` 5.8 ms without and 19.7 ms with its six counts; `trust model NOT (model NEAR/10
-  model*)` 44.2 and 38.6 ms (within noise). The real 95,877-record index (`05a0541717f6`, load 35–53;
-  `search.run` with facets and highlights): the example query took a median 30.6 ms without its counts and
-  31.6 ms with them from the memo (every page after the first), and 31.5 against 68.1 ms with the facet memo
-  cleared before each run (its wildcard phrases' id sets rebuilt once for the six collections); a query of 10
-  one-word groups of the commonest words (8,388 to 27,741 papers each; 100 terms read), 5.5 ms without and
-  41.7 ms with, cleared each run (20 collections). A query over the group limit is not refused either: it
+  Measured (`docs/results/2026-10-05-bench-group-counts.md`, `backend/tests/bench/group_counts_report.py`:
+  `search.run` with facets and highlights as `/search` runs it, with and without its counts at the default
+  bounds, alternated, median and p95 of 200 rounds of wall time; Apple M1 Pro, load 4.5 at the start and 9.8
+  at the end, commit `c41ea508`). On the real corpus (index `fd13d8d27535`, 133,629 records), a first page
+  (the facet memo forgotten every round, so every collection is made again) of `(trust OR reliance) AND
+  calibrat* AND model*` took a median 17.2 ms and p95 19.2 ms without its three counts and 23.8 / 28.9 ms with
+  them; `("large language model$" OR LLM*) AND (trust* OR calibrat*) AND (benchmark* OR evaluat*)` (wildcard
+  phrases) 34.3 / 50.6 ms and 80.2 / 110.8 ms, the one p95 over the 03 search budget, on this first-page
+  protocol only; `trust model NOT (model NEAR/10 model*)` 29.6 / 39.3 and 47.7 / 63.4 ms; ten one-word
+  groups of common words (20 collections) 2.4 / 5.0 and 30.6 / 44.5 ms. A later page reads the counts from the
+  memo and costs what it costs without them (the wildcard-phrase query 32.3 / 47.9 and 32.3 / 38.8 ms). On
+  the 5k fixture the same shapes add 4–26 ms to a first page's median, every round counted at the default
+  grace; the 158-wildcard shape is `too_costly` and costs what the search alone does (31.0 ms median either
+  way). A query over the group limit is not refused either: it
   gets its result without counts and `not_counted: "too_many_groups"`.
 - Only `/search` sends it. `op search`, a record's save and replay, and an export run the same search without
   it (`search.run`'s `groups` is unset), and a search record stores no group counts.
@@ -1050,7 +1053,8 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`), `verified_clauses`
     (the query's, a replay's too), `verification_candidates` (their candidates, summed; absent with none),
     `groups` and `groups_counted` (`/search` only, TASK-176: how many concept groups the query has, and how
-    many were counted, all of them or 0),
+    many were counted, all of them or 0) and, when none were, `groups_not_counted` (why: the response's
+    `groups.not_counted`, one of its six constants),
     `verify_ms` (the wall time the request held a verification slot; absent when it held none), `busy`
     (`pinned_open` on a 503 `API_BUSY` because another version's open, or another request's open of the same
     version, outlasted `pinned_open_wait_seconds`; TASK-067),

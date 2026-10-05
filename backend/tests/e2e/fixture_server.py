@@ -77,6 +77,11 @@ def main() -> None:
             handle_sighup=False,
             records_min_free_bytes=0,
             compare_enabled=True,
+            # a search's group counts get 30 s, not production's 50 ms grace and 2 s wait: the browser tests
+            # assert the counts arrive, on a machine other suites may load (the defaults are held by
+            # tests/unit and tests/contract test_group_counts.py)
+            group_count_grace_seconds=30.0,
+            group_count_wait_seconds=30.0,
         )
         port = int(os.environ.get("OP_E2E_API_PORT", "8000"))
         others = {

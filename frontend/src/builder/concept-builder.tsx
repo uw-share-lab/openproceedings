@@ -10,8 +10,9 @@
  * construct that doesn't fit, and is never changed; the parts that do fit are shown under the notice, dimmed
  * and not editable (B2). Builder edits are draft edits: only Search changes the URL. After a search, each group
  * shows its own wildcards' expansions from that `/search` answer (TASK-111) and, while the draft is still the
- * searched query, how many papers the group matches alone and how many the query matches without it (TASK-176,
- * `group-counts.ts`).
+ * searched query, how many papers the group matches by itself and how many the query matches without it, as
+ * the group's description (TASK-176, `group-counts.ts`); once the draft is edited, a line says the counts were
+ * the last search's.
  */
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
@@ -199,6 +200,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
   const pendingFocus = useRef<string | null>(null);
   const hintId = useId();
   const termHelpId = useId();
+  const countsId = useId();
 
   // "Reading the query…" only once the answer is slow (BD-8, after 300 ms)
   const loading = initial?.kind === "loading";
@@ -497,6 +499,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
         Papers must match every group. Within a group, any term is enough (OR).
       </p>
       <GroupCountsNote searched={searched} />
+      <StaleGroupCounts last={props.searched} current={searched} />
       <GroupCountsStatus searched={searched} />
       <span id={termHelpId} className="sr-only">
         Enter edits the term, Delete removes it.
@@ -528,6 +531,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
             <GroupBox
               label={groupLabel(index, nGroups, group)}
               onMove={(by) => move(index, by)}
+              describedBy={totals.has(group.id) ? `${countsId}-${group.id}` : undefined}
               heading={
                 <h3 tabIndex={-1} data-focus={`heading:${group.id}`} className="font-medium">
                   Group {index + 1} <span className="text-muted-foreground">of {nGroups}</span>
@@ -559,7 +563,11 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
                 </>
               }
             >
-              <GroupCount shown={totals.get(group.id)} />
+              <GroupCount
+                shown={totals.get(group.id)}
+                whole={searched?.total ?? 0}
+                id={`${countsId}-${group.id}`}
+              />
               {renderTerms(index, group)}
               <GroupExpansions group={group} keys={keys} expansions={props.expansions ?? null} />
             </GroupBox>
@@ -635,12 +643,15 @@ function GroupBox({
   heading,
   actions,
   onMove,
+  describedBy,
   children,
 }: {
   label: string;
   heading: ReactNode;
   actions?: ReactNode;
   onMove?: (by: -1 | 1) => void;
+  /** The group's counts line, read with the group's name when focus enters it (copy BD-12) */
+  describedBy?: string | undefined;
   children: ReactNode;
 }) {
   // Alt+↑/↓ anywhere in a group moves it, as its buttons do (design §Keyboard)
@@ -653,6 +664,7 @@ function GroupBox({
     <section
       role="group"
       aria-label={label}
+      aria-describedby={describedBy}
       onKeyDown={onKeyDown}
       className="space-y-2 rounded-md border p-2"
     >
@@ -868,19 +880,32 @@ function GroupExpansions({
 const num = (n: number) => n.toLocaleString("en-US");
 const papers = (n: number) => `${num(n)} ${n === 1 ? "paper" : "papers"}`;
 
-/** A group's two counts from the last search of this query (copy BD-12); nothing without them. */
-function GroupCount({ shown }: { shown: GroupShown | undefined }) {
+/** "group 3", "groups 3 and 4", "groups 3, 4 and 5". */
+const groupNumbers = (ns: readonly number[]) =>
+  ns.length === 1 ? `group ${ns[0]}` : `groups ${ns.slice(0, -1).join(", ")} and ${ns[ns.length - 1]}`;
+
+/**
+ * A group's two counts from the last search of this query, and how many papers leaving it out adds to the
+ * whole query's `whole` (copy BD-12); nothing without them. `id` names the line, for its group's description.
+ */
+function GroupCount({ shown, whole, id }: { shown: GroupShown | undefined; whole: number; id: string }) {
   if (shown === undefined) return null;
   if (shown.kind === "same")
-    return <p className="text-xs text-muted-foreground">Same as group {shown.as}, so it is counted once.</p>;
-  const { total, totalWithout } = shown;
+    return (
+      <p id={id} className="text-xs text-muted-foreground">
+        Same as group {shown.as}, so it is counted once.
+      </p>
+    );
+  const { total, totalWithout, repeats } = shown;
+  const without = repeats.length === 0 ? "without it" : `without it and ${groupNumbers(repeats)}`;
   return (
-    <p className="text-xs text-muted-foreground">
+    <p id={id} className="text-xs text-muted-foreground">
       <span className="font-semibold text-foreground tabular-nums">{papers(total)}</span>{" "}
-      {total === 1 ? "matches" : "match"} this group alone <span aria-hidden="true">·</span>
+      {total === 1 ? "matches" : "match"} this group by itself <span aria-hidden="true">·</span>
       <span className="sr-only">;</span>{" "}
       <span className="font-semibold text-foreground tabular-nums">{num(totalWithout)}</span>{" "}
-      {totalWithout === 1 ? "matches" : "match"} the query without it
+      {totalWithout === 1 ? "matches" : "match"} the query {without}{" "}
+      <span className="tabular-nums">(+{num(Math.max(0, totalWithout - whole))})</span>
     </p>
   );
 }
@@ -892,11 +917,11 @@ function notCountedText(groups: SearchedGroups["groups"]): string | null {
     case "fewer_than_two_groups":
       return null;
     case "too_many_groups":
-      return `Group counts aren't shown: this query has ${num(groups.groups_total)} groups, and this site counts at most ${num(groups.limit)}.`;
+      return `Group counts aren't shown: this query has ${num(groups.groups_total)} groups, and this instance counts at most ${num(groups.limit)}.`;
     case "too_costly":
-      return "Group counts aren't shown: counting each group of this query would read more terms than this site allows. Shorten the leave-out terms or use longer wildcard stems to see them.";
+      return "Group counts aren't shown: counting each group of this query would read more terms, or more position-checked matches, than this instance allows. Shorten the leave-out terms, use longer wildcard stems, or use fewer NEARs and phrases with a wildcard to see them.";
     case "busy":
-      return "Group counts weren't computed for this search: the site was busy counting for other searches. Search again to see them.";
+      return "Group counts weren't computed for this search: the instance was busy counting for other searches. Search again to see them.";
     case "timed_out":
       return "Group counts weren't ready in time for this search. Search again to see them.";
     default: // `count_failed`, or a reason added later (an open set)
@@ -917,10 +942,10 @@ function GroupCountsNote({ searched }: { searched: SearchedGroups | null }) {
   return (
     <p className="text-muted-foreground">
       <span className="font-semibold text-foreground tabular-nums">{papers(total)}</span>{" "}
-      {total === 1 ? "matches" : "match"} the whole query. Each group shows how many papers match it with the
-      other groups removed, and how many match the query without it: the group whose removal adds the most
-      papers narrows the search most. The query&apos;s limits, leave-out terms and default filters apply to
-      every count.
+      {total === 1 ? "matches" : "match"} the whole query. Each group shows how many papers match it by itself
+      (the other groups removed), and how many match the query without it, with how many that adds in
+      brackets: the group whose removal adds the most papers narrows the search most. The query&apos;s limits,
+      leave-out terms and default filters apply to every count.
     </p>
   );
 }
@@ -937,6 +962,23 @@ function GroupCountsStatus({ searched }: { searched: SearchedGroups | null }) {
     <p role="status" aria-label="Group counts" className="sr-only">
       {said}
     </p>
+  );
+}
+
+/**
+ * Why the counts of the last search went away: the draft was edited, so it is another query (copy BD-12).
+ * Shown while the last search had counts and the draft is not that search.
+ */
+function StaleGroupCounts({
+  last,
+  current,
+}: {
+  last: SearchedGroups | null | undefined;
+  current: SearchedGroups | null;
+}) {
+  if (current !== null || last == null || last.groups.counts.length === 0) return null;
+  return (
+    <p className="text-muted-foreground">Group counts are from the last search. Search again to see them.</p>
   );
 }
 
@@ -962,6 +1004,7 @@ function FittingParts({
   searched: SearchedGroups | null;
 }) {
   const headingId = useId();
+  const countsId = useId();
   const n = model.groups.length;
   const totals =
     searched === null
@@ -988,7 +1031,10 @@ function FittingParts({
         Parts that fit the builder
       </h3>
       <p>Anything that doesn&apos;t fit is left out. Nothing here can be edited.</p>
-      {totals.size > 0 && <GroupCountsNote searched={searched} />}
+      {(totals.size > 0 || (searched !== null && notCountedText(searched.groups) !== null)) && (
+        <GroupCountsNote searched={searched} />
+      )}
+      <GroupCountsStatus searched={searched} />
       <ol className="space-y-2">
         {model.groups.map((group, index) => (
           <li key={group.id} className="space-y-2">
@@ -996,8 +1042,13 @@ function FittingParts({
             <GroupBox
               label={`Group ${index + 1}, any of: ${termList(group)}`}
               heading={<h4 className="font-medium">Group {index + 1}</h4>}
+              describedBy={totals.has(group.id) ? `${countsId}-${group.id}` : undefined}
             >
-              <GroupCount shown={totals.get(group.id)} />
+              <GroupCount
+                shown={totals.get(group.id)}
+                whole={searched?.total ?? 0}
+                id={`${countsId}-${group.id}`}
+              />
               {terms(group)}
             </GroupBox>
           </li>

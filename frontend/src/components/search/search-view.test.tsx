@@ -241,15 +241,22 @@ describe("the builder's group counts come from this /search answer (TASK-176)", 
       parse: (text) => json(parsed(text, { ast, filters: unrestricted(text) })),
     });
     await setup(stateOf({ q }), api);
-    fireEvent.click(screen.getByRole("tab", { name: "Builder" }));
+    // outside the Builder tab, a line says where the counts are, and its button opens the tab
+    const pointer = "Each of this query's 2 groups has a count in the Builder tab";
+    expect(screen.getByText(new RegExp(pointer, "u")).textContent).toBe(
+      `${pointer}: how many papers it matches by itself, and how many the query finds without it. Show group counts`,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show group counts" }));
     await pass(10);
+    expect(screen.getByRole("tab", { name: "Builder" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByText(new RegExp(pointer, "u"))).toBeNull();
     const first = screen.getByRole("group", { name: "Group 1 of 2, any of: trust" });
     const second = screen.getByRole("group", { name: "Group 2 of 2, any of: bias" });
-    expect(within(first).getByText(/this group alone/u).textContent).toBe(
-      "1,340 papers match this group alone ·; 977 match the query without it",
+    expect(within(first).getByText(/this group by itself/u).textContent).toBe(
+      "1,340 papers match this group by itself ·; 977 match the query without it (+565)",
     );
-    expect(within(second).getByText(/this group alone/u).textContent).toBe(
-      "977 papers match this group alone ·; 1,340 match the query without it",
+    expect(within(second).getByText(/this group by itself/u).textContent).toBe(
+      "977 papers match this group by itself ·; 1,340 match the query without it (+928)",
     );
     expect(screen.getByRole("status", { name: "Group counts" }).textContent).toBe(
       "Group counts shown for 2 groups: 412 papers match the whole query.",

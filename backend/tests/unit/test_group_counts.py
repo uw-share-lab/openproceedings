@@ -383,7 +383,7 @@ def test_a_count_that_is_late_leaves_the_search_whole(
     assert dataclasses.replace(got, groups=None) == plain
     assert waited < 10  # bounded by the wait, not by the worker (held for 30 s)
     (line,) = [r for r in caplog.records if r.message == "group_count_timed_out"]
-    assert (line.levelname, line.groups, line.wait_ms) == ("WARNING", 3, 50)  # type: ignore[attr-defined]
+    assert (line.levelname, line.groups, line.threshold_ms) == ("WARNING", 3, 50.0)  # type: ignore[attr-defined]
     search.shutdown()  # the released worker finishes before the next test reads the engine's memos
 
 
@@ -728,6 +728,69 @@ def test_the_callers_error_comes_before_the_counting_workers(
     monkeypatch.setattr(tantivy, "counts", also_broken)
     with pytest.raises(RuntimeError, match="the page failed"):
         search.run(tantivy, parse("trust model"), groups=10)
+
+
+@pytest.mark.parametrize("failing", ["facets", "excluded"])
+def test_a_search_that_fails_after_its_page_abandons_its_running_counting_job(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch, failing: str
+) -> None:
+    """The facet worker's error (re-raised by `faceting.result()`) or the exclusion accounting's, while the
+    counting job is inside its first collection: the search raises it, and the job, which nobody will wait
+    for, stops once that collection ends (one of the six a three-group query has), not after all six."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    release, inside = threading.Event(), threading.Event()
+    collected: list[str] = []
+    combos = engine.combos
+
+    def slow(*a: Any, **kw: Any) -> Any:
+        if threading.current_thread().name.startswith("op-groups"):
+            collected.append(threading.current_thread().name)
+            inside.set()
+            release.wait(30)
+        return combos(*a, **kw)
+
+    def broken(*_a: Any, **_kw: Any) -> Any:
+        assert inside.wait(30)  # the counting job is running
+        raise RuntimeError(f"the {failing} failed")
+
+    engine.combos = slow  # type: ignore[method-assign]
+    if failing == "facets":
+        monkeypatch.setattr(engine, "facets", broken)  # the facet worker's job
+    else:
+        monkeypatch.setattr(search, "excluded", broken)
+    try:
+        with pytest.raises(RuntimeError, match=f"the {failing} failed"):
+            search.run(engine, parse("trust model calibration"), facets=True, groups=10)
+    finally:
+        release.set()
+    search.shutdown()  # the job has ended, one way or the other
+    assert len(collected) == 1
+
+
+def test_at_the_production_waits_a_search_is_busy_at_once_while_the_counting_workers_are_taken(
+    engines: Engines, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`run`'s own grace and wait, which this module's other tests raise: with both counting workers held, a
+    ten-group-limit search that passes neither answers `busy` in well under a second, never the 2 s wait."""
+    monkeypatch.undo()  # this module's patient grace: the only patch so far
+    assert (search.GROUP_COUNT_GRACE_SECONDS, search.GROUP_COUNT_WAIT_SECONDS) == (0.05, 2.0)
+    _reference, tantivy, other = engines
+    parsed = parse("trust model calibration")
+    plain = search.run(other, parsed, facets=True)
+    search.run(tantivy, parsed, facets=True)  # warm: what is timed is the wait, not a first compile
+    release = threading.Event()
+    held = [search._start(lambda: release.wait(60), counts=True) for _ in range(search.GROUP_WORKERS)]
+    assert all(h is not None for h in held)
+    try:
+        started = time.monotonic()
+        got = search.run(tantivy, parsed, facets=True, groups=10)
+        took = time.monotonic() - started
+    finally:
+        release.set()
+        search.shutdown()
+    assert got.groups == search.GroupCounts((), 3, 10, "busy")
+    assert dataclasses.replace(got, groups=None) == plain
+    assert took < 1.0
 
 
 # --- concurrency: searches with groups from several threads while the memos are cleared -------------------------

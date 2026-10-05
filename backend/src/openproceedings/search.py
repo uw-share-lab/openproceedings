@@ -54,6 +54,7 @@ from openproceedings.engine.exclusions import ORDER, Excluded, excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInputError, EngineInternalError, Expansions
 from openproceedings.engine.tantivy_engine import COMBO, Scope, TantivyEngine, WouldVerify
+from openproceedings.logs import frames, reason_of
 from openproceedings.query.ast import Node, Span, TextField
 from openproceedings.query.groups import Groups, split
 from openproceedings.query.parser import ParseResult
@@ -184,6 +185,8 @@ def run(
         why, countable = "too_costly", False  # known only now: the ids are the compile's
     if found is not None and countable:
         counting = _start(partial(_alone, engine, found, scope.reader(), abandoned, taken), counts=True)
+    # from here to `_grouped`, whatever fails takes the workers' jobs with it: the facets' is cancelled, and
+    # the counting job, which nobody will wait for, is cancelled or stops before its next collection
     try:
         # one collection: ids and scores
         total, page = engine.page(ast, sort=sort, offset=offset, limit=limit, scope=scope)
@@ -199,28 +202,26 @@ def run(
             )
             for i, score in page
         )
+        counted: dict[str, dict[str, int]] | None = None
+        if faceting is not None:
+            try:
+                counted = faceting.result()  # the worker's error, re-raised as it was raised
+            except WouldVerify:
+                # a clause the request should have held (a bug, never the client's): count here, where
+                # verifying is allowed, rather than answer 500 (round 4); logged so the bug is seen
+                log.warning("facet_worker_recounted", extra={"reason": "would_verify"})
+                counted = engine.facets(ast, scope=scope)
+        elif facets:  # no worker (the pool is shutting down): counted here instead
+            counted = engine.facets(ast, scope=scope)
+        # with facets, the combos the worker just collected; without, only the default fields' (TASK-166)
+        over = COMBO if facets else ORDER
+        gone = excluded(engine, parsed, total, facets=partial(engine.facets, scope=scope, over=over))
     except BaseException:
         abandoned.set()  # a counting job already running stops before its next collection
         for started in (faceting, counting):
             if started is not None:
                 started.cancel()  # not started yet: never run; running: its result (or error) is dropped
         raise  # the caller's error first, as when facets ran after the page
-    counted: dict[str, dict[str, int]] | None = None
-    if faceting is not None:
-        try:
-            counted = faceting.result()  # the worker's error, re-raised as it was raised
-        except WouldVerify:
-            # a clause the request should have held (a bug, never the client's): count here, where verifying
-            # is allowed, rather than answer 500 (round 4); logged so the bug is seen
-            log.warning("facet_worker_recounted", extra={"reason": "would_verify"})
-            counted = engine.facets(ast, scope=scope)
-    elif facets:
-        counted = engine.facets(
-            ast, scope=scope
-        )  # no worker (the pool is shutting down): counted here instead
-    # with facets, the combos the worker just collected; without, only the default fields' (TASK-166)
-    over = COMBO if facets else ORDER
-    gone = excluded(engine, parsed, total, facets=partial(engine.facets, scope=scope, over=over))
     grouped = None
     if found is not None and groups is not None:
         if why is not None:
@@ -311,7 +312,7 @@ def _grouped(
         if not wait_for([counting], timeout=wait).done:
             abandoned.set()
             counting.cancel()
-            log.warning("group_count_timed_out", extra={"groups": n, "wait_ms": round(wait * 1000)})
+            log.warning("group_count_timed_out", extra={"groups": n, "threshold_ms": round(wait * 1000, 1)})
             return GroupCounts((), n, limit, "timed_out")
     try:
         if counting is None:  # no worker (the pool is shutting down): counted here instead
@@ -323,8 +324,12 @@ def _grouped(
                 # as for the facets: a clause the request should have held (a bug, never the client's)
                 log.warning("group_worker_recounted", extra={"reason": "would_verify"})
                 totals = _alone(engine, found, scope, abandoned)
-    except Exception as e:  # any failure of the extra: logged by type, never the message (it may quote input)
-        log.error("group_count_failed", extra={"groups": n, "error": type(e).__name__})
+    # any failure of the extra: where and what kind, never the message (it may quote input)
+    except Exception as e:
+        failed: dict[str, object] = {"groups": n, "error": type(e).__name__, "frames": frames(e)}
+        if (reason := reason_of(e)) is not None:
+            failed["reason"] = reason
+        log.error("group_count_failed", extra=failed)
         return GroupCounts((), n, limit, "count_failed")
     return GroupCounts(
         tuple((g.span, alone, without) for g, (alone, without) in zip(found.groups, totals, strict=True)),

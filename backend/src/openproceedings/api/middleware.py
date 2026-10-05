@@ -78,6 +78,7 @@ ANNOTATIONS = (
     "verification_candidates",  # the documents their position checks would read, summed (api/deps.py)
     "groups",  # how many concept groups a searched query has (api/search.py; TASK-176)
     "groups_counted",  # how many of them /search counted alone: all, or none
+    "groups_not_counted",  # why none were: a `search.NotCounted` constant (`busy`, `too_costly`, …)
     "verify_ms",  # time this request held a verification slot (api/state.py::verification_slot)
     "verify_cpu_ms",  # the verifying thread's CPU time in those holds: what is debited (round 5)
     "verify_tokens",  # what that time was debited after the fact (RateLimit.debit_verification)

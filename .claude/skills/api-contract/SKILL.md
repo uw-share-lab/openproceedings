@@ -17,7 +17,7 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | GET | `/records/{id}/diff` | for a record of any status: added and removed ids (with titles, paged), and which `index_version` inputs changed |
 | POST | `/compare` | `q, mode` + a RIS file as the body (`application/x-research-info-systems`; no form, no encoding) → `CompareResponse`: the file's papers the query keeps, drops (with `reason`/`detail`) and adds, the ones the index doesn't hold, the records not compared, `*_total` for each, `reason_totals`, each list as CSV text (`csv`) and the added papers as RIS (`added_ris`); `total` is `/search`'s. Off unless the operator turned it on (403 `API_COMPARE_DISABLED`); spec 04 §Comparing with a RIS file, TASK-177 |
 | GET | `/coverage` | counts per venue × year × track × status, abstract-missing counts, snapshot date; `snapshot.crawl_dates_kind` and `identification_citable`, a record's derivation (TASK-091) |
-| GET | `/meta` | current and servable `index_version`s, field names, venue, track and status vocabularies, and `limits` (`max_query_length`, the parser's; `max_verified_clauses` and `max_verification_candidates`, the served config's; task-089; `compare`: `POST /compare`'s caps, or null when comparisons are off, which is how a client knows not to offer them) |
+| GET | `/meta` | current and servable `index_version`s, field names, venue, track and status vocabularies, and `limits` (`max_query_length`, the parser's; `max_verified_clauses` and `max_verification_candidates`, the served config's, task-089; `max_counted_groups`, `max_counted_terms` and `max_counted_ids`, the bounds of `/search`'s group counts, TASK-176; `compare`: `POST /compare`'s caps, or null when comparisons are off, which is how a client knows not to offer them) |
 | GET | `/healthz` | liveness, index loaded |
 | GET | `/near-misses` | M5 only (deferred to phase 2, decision-017; not in v1), a separate resource (`.claude/skills/specter2-embeddings/SKILL.md`) |
 
@@ -27,7 +27,7 @@ expansions{pattern: [terms]}}`,
 `index_version`, `tokenizer_version`, `query_version`, `total`, `excluded`, `identified_total`,
 `unclassified_total`, `facets`, `groups {counts[{span, total, total_without}], groups_total, limit, not_counted}` (TASK-176, decision-034:
 each concept group's count alone, the query with every other group removed, and the query's count without it;
-`not_counted` is an open enum (`too_many_groups`, `too_costly`: over `max_counted_groups`, or `max_counted_terms` / `max_counted_ids`, all three in `/meta` `limits`), and a count that fails or is late never fails the search; spec 04 §SearchResponse), `hits[]`. Each hit
+`not_counted` is null exactly when the groups were counted, else one of an open enum of six: `fewer_than_two_groups` (not an AND of groups), `too_many_groups` (over `max_counted_groups`), `too_costly` (over `max_counted_terms` or `max_counted_ids`; all three bounds in `/meta` `limits`), `busy` (no counting worker free within the grace), `count_failed` and `timed_out` (a count that fails or is late never fails the search); spec 04 §SearchResponse), `hits[]`. Each hit
 has `id, title, abstract, authors, venue, year, track, status, presentation, score, highlights{field:
 [[start,end]]}, urls, abstract_source{source, origin, url}|null` (the claim the abstract came from, the site that
 published it, for `ris` read from the claim's evidence, and the paper's page there; TASK-134, decision-018;

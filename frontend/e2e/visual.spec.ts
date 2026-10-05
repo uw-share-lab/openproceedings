@@ -41,7 +41,7 @@ const surfaces: { name: string; open: (page: Page) => Promise<Locator> }[] = [
       await expect(page.getByText(/\d+ papers?/).first()).toBeVisible();
       await page.getByRole("tab", { name: "Builder" }).click();
       const builder = page.getByRole("tabpanel", { name: "Builder" });
-      await expect(builder.getByText(/this group alone/)).toHaveCount(3);
+      await expect(builder.getByText(/this group by itself/)).toHaveCount(3);
       return builder;
     },
   },

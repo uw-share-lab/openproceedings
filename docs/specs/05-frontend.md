@@ -216,26 +216,35 @@ warnings, the save's index check), the design doc says so; its open questions li
    `canonical`, and an edited query means exactly what its chips say). At run time the builder checks the
    server's reading of each query it wrote and says so if it differs.
    *Group counts (TASK-176, `group-counts.ts`; copy BD-12).* After a search, each group shows its two counts
-   on one line ("529 papers match this group alone · 2,337 match the query without it"), and a line above the
-   groups gives the search's total to compare them with and says how to read them ("67 papers match the whole
-   query. Each group shows how many papers match it with the other groups removed, and how many match the
-   query without it: the group whose removal adds the most papers narrows the search most. The query's
-   limits, leave-out terms and default filters apply to every count."). The numbers are `/search`'s `groups`
+   on one line, with how many papers leaving the group out adds ("529 papers match this group by itself ·
+   2,337 match the query without it (+2,270)"), and a line above the groups gives the search's total to
+   compare them with and says how to read them ("67 papers match the whole query. Each group shows how many
+   papers match it by itself (the other groups removed), and how many match the query without it, with how
+   many that adds in brackets: the group whose removal adds the most papers narrows the search most. The
+   query's limits, leave-out terms and default filters apply to every count."). The added number is
+   `total_without − total`; every other number is `/search`'s `groups`
    and `total` as sent (04 §SearchResponse), never computed here; a builder group is given the counts whose
    span holds one of its terms, and a group that means what an earlier counted one means says "Same as group
-   N, so it is counted once." (the canonical query holds it once; "means" is the server's reading, the
+   N, so it is counted once." while that earlier group's line says "without it and group M", since the query
+   without the group has neither copy (the canonical query holds it once; "means" is the server's reading, the
    group's leaves in the server's `ast` of the query with their normalised tokens, never the typed text). They are shown only while the draft is the
    searched query, in the same mode: an edit drops every count at once, since a count is a fact about the
-   query searched (an expansion, a fact about the index, stays). A query that is not an AND of groups shows
+   query searched (an expansion, a fact about the index, stays), and a line says so ("Group counts are from
+   the last search. Search again to see them."). A query that is not an AND of groups shows
    none; one whose counts the search doesn't have says why (`groups.not_counted`: more groups than the
    instance counts; more terms or position-checked matches to read than it allows, with how to shorten the query (the
-   syntax help's instance limits name the three bounds from `/meta`); the site was busy counting for other searches; the counts failed; they weren't ready in time, each of the
+   syntax help's instance limits name the three bounds from `/meta`); the instance was busy counting for other searches; the counts failed; they weren't ready in time, each of the
    last three with "Search again to see them."; a reason this build doesn't know reads as a failure, the set being open). The read-only
-   builder shows the counts of each part that fits. The Exclude row has none: it is applied to every count.
-   The counts are text inside their group (no colour; the `·` between them is hidden from a screen reader,
-   which hears a pause), and a polite status named "Group counts" says when they arrive ("Group counts shown
-   for 3 groups: 67 papers match the whole query.") or why there are none, since they appear without focus
-   moving.
+   builder shows the counts of each part that fits, or why there are none, with the same status. The Exclude
+   row has none: it is applied to every count. The counts are text inside their group and its description
+   (`aria-describedby`, so a screen reader hears them on entering the group; no colour; the `·` between them
+   is hidden from a screen reader, which hears a pause), and a polite status named "Group counts" says when
+   they arrive ("Group counts shown for 3 groups: 67 papers match the whole query.") or why there are none,
+   since they appear without focus moving. Outside the Builder tab, after a search whose groups were counted
+   and while the draft is that search, a line points to them ("Each of this query's 3 groups has a count in
+   the Builder tab: …" and a "Show group counts" button that opens the tab), and the syntax help's Google
+   Scholar section names the three tools for a lower count than Scholar's in the order to use them: Add `$`,
+   the group counts, Compare with your records.
 4. **Filter sidebar.** Venue, year range, track, status. Workshop is **off by default**. Each control shows
    its count and **edits the `track:`/`status:` clauses in `q`**.
 5. **Exclusion banner.** "212 workshop · 4 competition · 88 rejected excluded by default filters", with

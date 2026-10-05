@@ -793,9 +793,9 @@ def _current_twin_pairs(data_dir: Path, exported: Path) -> list[tuple[str, str]]
     export's takedowns (TASK-163, as the API's `Served.withheld_in`); none when there is no current index, and
     none with one ERROR `takedown_twins_unavailable` and a stderr warning when its snapshot can't be verified
     (the exported snapshot's own still apply)."""
-    from openproceedings.api.errors import reason_of
     from openproceedings.api.state import snapshot_records
     from openproceedings.ingest.snapshot import SnapshotError
+    from openproceedings.logs import reason_of
 
     current = data_dir / "indexes" / "current"
     if not current.exists() or current.resolve() == exported.resolve():
@@ -1329,11 +1329,11 @@ def _reference(ns: argparse.Namespace, index: Path, tokenizer: str) -> Reference
 
 
 def _export(ns: argparse.Namespace) -> int:
-    from openproceedings.api.errors import reason_of
     from openproceedings.api.state import snapshot_records
     from openproceedings.engine.tantivy_engine import TantivyEngine
     from openproceedings.export import Provenance, Sources, Twins, check_count, utc_date, write
     from openproceedings.ingest.snapshot import SnapshotError, any_withheld, merges_on_disk
+    from openproceedings.logs import reason_of
     from openproceedings.takedowns import list_path, same_paper
     from openproceedings.takedowns import load as load_takedowns
 
