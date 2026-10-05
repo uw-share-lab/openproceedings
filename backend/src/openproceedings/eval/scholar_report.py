@@ -14,7 +14,8 @@ weighs what its role does), the counts after them, and whether every disagreemen
 `review.csv` holds every row the automation couldn't settle, plus a tenth of each query's settled disagreements
 as a spot check. The tenth is the rows whose sha256 (of query name, side and ids) sorts first: fixed for a
 given run, unrelated to any field, and the same on every machine, so the file is reproducible. `human_class`,
-`reviewer_role` and `note` are left empty for whoever makes the call.
+`reviewer_role` and `note` are left empty for whoever makes the call; `row_number` is each row's place, so a file
+sorted in a spreadsheet can be sorted back.
 """
 
 from __future__ import annotations
@@ -55,6 +56,7 @@ SPOT_CHECK = 0.1  # the share of a query's settled disagreements a person re-che
 REVIEW_COLUMNS = (
     "query_name", "side", "scholar_key", "op_id", "title", "venue", "year", "auto_class", "auto_evidence",
     "human_class", "reviewer_role", "note", "row_kind", "index_version", "record_source", "abstract_source",
+    "row_number",
 )  # fmt: skip
 UNRESOLVED, SPOT = "unresolved", "spot_check"
 BOM = chr(0xFEFF)
@@ -127,21 +129,21 @@ def review_rows(comparisons: Sequence[QueryComparison]) -> list[ReviewRow]:
 
 
 def render_review(rows: Sequence[ReviewRow], index_version: str) -> str:
-    """`review.csv`: the protocol's twelve columns, then `row_kind` (why the row is here), `index_version`, and
-    what the row's index record rests on: `record_source` (`crawled`, or `ris_only` for a record only an imported
-    RIS set holds) and `abstract_source`."""
+    """`review.csv`: the protocol's twelve columns, then `row_kind` (why the row is here), `index_version`, what
+    the row's index record rests on: `record_source` (`crawled`, or `ris_only` for a record only an imported RIS
+    set holds) and `abstract_source`, and `row_number` (1, 2, …: the column to sort a reordered file back by)."""
     buffer = io.StringIO()
     buffer.write(
         BOM
     )  # with CRLF rows, what a spreadsheet opens as UTF-8 and writes back (as `/compare`'s CSV)
     writer = csv.writer(buffer, lineterminator="\r\n")
     writer.writerow(REVIEW_COLUMNS)
-    for x in rows:
+    for number, x in enumerate(rows, 1):
         r = x.row
         cells = (
             x.query_name, r.side, r.scholar_key, r.op_id, r.title, r.venue, "" if r.year is None else r.year,
             r.auto_class, r.auto_evidence, "", "", "", x.kind, index_version,
-            {True: "crawled", False: "ris_only", None: ""}[r.independent], r.abstract_source,
+            {True: "crawled", False: "ris_only", None: ""}[r.independent], r.abstract_source, number,
         )  # fmt: skip
         writer.writerow(csv_cell(c) for c in cells)
     return buffer.getvalue()
@@ -203,6 +205,8 @@ def _difference(found: list[list[str]], expected: list[list[str]]) -> str:
     """Where a filled file first departs from the rows this run writes, for the refusal."""
     if found[:1] != expected[:1]:
         return "its header is not this run's"
+    if sorted(found[1:]) == sorted(expected[1:]):
+        return "its rows were reordered: sort them by `row_number` and save it again"
     for n, (a, b) in enumerate(zip(found[1:], expected[1:], strict=False), 2):
         if a != b:
             column = next(
@@ -218,13 +222,20 @@ def _paired(row: Row) -> str | None:
     return row.op_id or (row.near[0] if len(row.near) == 1 else None)
 
 
-def read_calls(review_file: Path, expected: str, review: Sequence[ReviewRow] = ()) -> HumanCalls | None:
+def read_calls(
+    review_file: Path,
+    expected: str,
+    review: Sequence[ReviewRow] = (),
+    comparisons: Sequence[QueryComparison] = (),
+) -> HumanCalls | None:
     """The calls filled into `review_file`, or None when there is no file or nothing is filled. `expected` is
-    the review text this run would write and `review` its rows, in order. ValueError when the file is not
-    UTF-8, when its rows are not this run's (it belongs to another index, set or query, or a spreadsheet
-    rewrote a cell: the first difference is named), when a `human_class` is not one of HUMAN_CLASSES, when a
-    row has a role or a note without a class or a class without a `reviewer_role`, or when an `in_both` or
-    `out_of_scope` call is on a row it can't apply to."""
+    the review text this run would write, `review` its rows, in order, and `comparisons` the queries they come
+    from. ValueError when the file is not UTF-8, when its rows are not this run's (it belongs to another index,
+    set or query, a spreadsheet rewrote a cell, or its rows were reordered: the first difference is named), when
+    a `human_class` is not one of HUMAN_CLASSES, when a row has a role or a note without a class or a class
+    without a `reviewer_role`, when an `in_both` or `out_of_scope` call is on a row it can't apply to, or when an
+    `in_both` call's paired record (`_paired`) is not among its query's rows only in openproceedings, is paired
+    by an earlier `in_both` call already (one paper can't be in both twice), or has a call on its own row."""
     if not review_file.is_file():
         return None
     data = review_file.read_bytes()
@@ -246,6 +257,8 @@ def read_calls(review_file: Path, expected: str, review: Sequence[ReviewRow] = (
             "another index, set or query, or a cell the run wrote was changed. Move it, or write elsewhere "
             "(--out, --date)"
         )
+    added = {c.name: {r.op_id for r in c.added} for c in comparisons}
+    paired: dict[tuple[str, str], int] = {}  # (query, paired record) → the line whose `in_both` took it
     calls: dict[int, Call] = {}
     for n, (cls, role, note) in filled:
         where = f"{review_file.name} line {n + 2}"
@@ -265,7 +278,27 @@ def read_calls(review_file: Path, expected: str, review: Sequence[ReviewRow] = (
                 f"{where}: `in_both` needs the one index record the row is the same paper as, and its evidence "
                 "names none or several"
             )
+        if review and comparisons and cls == IN_BOTH:
+            query, pair = review[n].query_name, _paired(review[n].row)
+            if pair not in added.get(query, ()):
+                raise ValueError(
+                    f"{where}: `in_both` pairs the row with `{pair}`, which is not among query `{query}`'s records "
+                    "only in openproceedings, so it can't be counted in both"
+                )
+            if (query, pair) in paired:
+                raise ValueError(
+                    f"{where}: `in_both` pairs the row with `{pair}`, which the `in_both` call on line "
+                    f"{paired[query, pair]} already pairs: one paper is in both once"
+                )
+            paired[query, pair] = n + 2
         calls[n] = Call(cls, role, note)
+    for n in calls:  # the paired record's own row: the `in_both` call already says what it is
+        x = review[n] if review else None
+        if x is not None and x.row.side == "openproceedings" and (x.query_name, x.row.op_id) in paired:
+            raise ValueError(
+                f"{review_file.name} line {n + 2}: `{x.row.op_id}` has a call, and the `in_both` call on line "
+                f"{paired[x.query_name, x.row.op_id]} pairs it as the same paper: keep one of the two"
+            )
     return HumanCalls(review_file.name, hashlib.sha256(data).hexdigest(), calls)
 
 
@@ -306,9 +339,10 @@ def tally(c: QueryComparison) -> Tally:
 def after_calls(c: QueryComparison, review: Sequence[ReviewRow], calls: HumanCalls | None) -> Tally:
     """`c`'s tally once each call on one of its rows is applied (scholar-comparison-protocol §After the calls):
     a class moves the row to that class; `out_of_scope` takes the record out of the set, so out of the
-    denominator; `in_both` moves it to "in both" and, when the record it is paired with (`_paired`) is among
-    the rows only in the result, takes that row out of them, the two being one paper. Rows without a call keep
-    the automation's class."""
+    denominator; `in_both` moves it to "in both" and takes the record it is paired with (`_paired`) out of the
+    rows only in the result, the two being one paper (`read_calls` refuses an `in_both` whose paired record is
+    not among them, is paired twice, or has a call of its own). Rows without a call keep the automation's
+    class."""
     made = calls.calls if calls is not None else {}
     in_scope, both = c.scholar_in_scope, len(c.kept)
     scholar, result = c.counts("scholar"), c.counts("openproceedings")
@@ -738,8 +772,13 @@ def _query(
         lines += [
             "Read the table above with care. A `compat_reading` row decided by `$` matches only through a plural, "
             "the same forms the `stemming` class credits Google Scholar with, so it is no evidence that Scholar "
-            "would not return the paper. `scholar_missed` counts exact matches only: it is a floor for what "
-            "Scholar's set lacks, not the whole of it.",
+            "would not return the paper."
+            + (
+                " `scholar_missed` counts exact matches only: it is a floor for what Scholar's set lacks, not the "
+                "whole of it."
+                if c.counts("openproceedings")[SCHOLAR_MISSED]
+                else ""
+            ),
             "",
         ]
     if c.groups:
@@ -802,8 +841,8 @@ def _query(
             f"{_n(after.in_scope)} ({_pct(full_after, after.in_scope)}) `full_text`, {_n(stem_after)} "
             f"({_pct(stem_after, after.in_scope)}) `stemming`, {_n(after.both)} ({_pct(after.both, after.in_scope)}) "
             "in the exact result. The figures above this bullet are the automation's and are the ones to cite. "
-            "Cite the after-calls figures only with those roles beside them, and as reviewed only if every role is "
-            "an independent reviewer's.",
+            "The after-calls figures are not to be cited until every role is an independent reviewer's"
+            + (" (see Notes on these inputs)." if meta.notes else "."),
         ]
     return [*lines, ""]
 
