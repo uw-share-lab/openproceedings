@@ -237,7 +237,13 @@ test("a busy server's wait is one polite announcement, and its retry leaves focu
     if (calls === 1)
       await route.fulfill({
         status: 503,
-        headers: { "Retry-After": "2", "Content-Type": "application/json" },
+        // cross-origin as the API is: the browser hands the page Retry-After only when it is exposed
+        headers: {
+          "Retry-After": "2",
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Expose-Headers": "Retry-After",
+        },
         body: JSON.stringify({
           error: {
             code: "API_BUSY",
