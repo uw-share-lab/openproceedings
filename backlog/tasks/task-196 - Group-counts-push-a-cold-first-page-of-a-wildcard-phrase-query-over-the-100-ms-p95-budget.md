@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-05 13:59'
-updated_date: '2026-10-05 14:37'
+updated_date: '2026-10-05 16:27'
 labels:
   - perf
   - search
@@ -31,4 +31,6 @@ docs/results/2026-10-05-bench-group-counts.md (index fd13d8d27535, 200 rounds, l
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-05 (gate round 2, PERF-R2-1/DOC-R2-S3): spec 03 §Performance budgets now carries 'Exception, as measured (TASK-196)' for this miss; spec 04 §SearchResponse Cost and docs/results/2026-10-05-bench-group-counts.md cite this task. The bench's timed /search rows now assert that no measured round skipped its counting (PERF-R2-N c).
+
+PR #105 CI (2026-10-05): the advisory bench job's 20% gate failed on test_search_endpoint_first_page because the head's bench now asks for group counts and the base's never did (PERF-S1): fixture minima rose 108–1031% (main-7-most-updated 6.6 → 16.4 ms; llm-as-judge 0.54 → 6.1 ms), all under the 100 ms budget. Once this PR is on dev the baseline includes counts; this task decides whether the cold first page needs work.
 <!-- SECTION:NOTES:END -->
