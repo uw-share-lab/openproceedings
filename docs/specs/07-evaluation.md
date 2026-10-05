@@ -75,8 +75,9 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   with it matches them to themselves. So every match records whether its index record has an independent
   source (a crawl) or only the import (`ris`), and its abstract's source; the report states both counts, a
   table per venue and year beside the crawled records the index holds there, and each class count for the two
-  kinds apart. Where the index has no crawled record (2026, on the first report's index) nothing can be only in
-  openproceedings, and the report says so. A RIS-only match whose title another index record shares is
+  kinds apart. Where the index has no crawled record (2026, on the first report's index `05a0541717f6`) nothing
+  can be only in openproceedings, and the report says so. The 2026 crawl (TASK-178, index `5ec5231adae2`,
+  `docs/results/2026-10-05-scholar-comparison.md`) left 7 RIS-only matches of 1,807, where there had been 530. A RIS-only match whose title another index record shares is
   `unsettled` (one paper under two ids, or a wrong venue or year in the import).
 - **Scope** is `--years` and `--venues`, applied to both sides: the result is the engine's match set for the
   string as written, limited to records of those venues and years; a matched Scholar record is scoped by its
@@ -164,7 +165,10 @@ only that they are counted: the owner's decision record is what names them as th
 (`drifted`, the failed check in its cause note); a gap (no records) is never accepted and stays `✗ gap`. The
 report marks the cell `✓ accepted exception`, lists every exception in its own section and counts them in the
 verdict line, and reports an exception whose cell is within ±1% or not gated as stale; `--check` exits 1 on a
-stale exception too. ICLR 2013 main is one (decision-016). The exception is applied by the gate report
+stale exception too. ICLR 2013 main is one (decision-016). The report also lists, per cell, the
+accepted records whose only source is an imported RIS set, with the cell's delta without them (TASK-178): such
+a record is counted as indexed with no listing or note behind it, and where it is a second copy of a crawled
+paper it inflates the cell. The exception is applied by the gate report
 (`op eval coverage`) only: `GET /coverage` and the `/coverage` page report the raw ±1% per cell, so an accepted
 cell is served with `within_gate: false`.
 

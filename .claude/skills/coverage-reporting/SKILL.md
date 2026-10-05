@@ -94,7 +94,9 @@ One row per cell:
   the authors' opt-in (decision-012), so their "statuses indexed" cell says so.
 - NeurIPS D&B track: separate count, and ≤2023 proceedings use `Datasets_and_Benchmarks` aliased to
   `_Track` — misclassification shows up as main-track surplus + D&B deficit.
-- ICML position papers counted inside or outside the main total.
+- ICML position papers counted inside or outside the main total. ICML 2026's fact sheet gives one accepted
+  count for main and position together (6,552) and no source states the main track alone, so the cell has no
+  row (`no source`) until PMLR publishes the volume: a main-only number derived by subtraction is not a row.
 - Deduplication across OpenReview and proceedings: an under-merge shows as surplus, an over-merge as
   deficit. Cross-check with `merges.csv`/`conflicts.csv` (`dedup-rules`).
 When a cell misses the gate, classify the cause in the report (source definition, classification,
@@ -117,7 +119,10 @@ proceedings listing that skipped entries or whose count disagreed with its page,
 that is incomplete, has coverage gaps, conflicts, unmapped venues or non-routine skipped groups (`proposal`
 and `container` are routine; `not_a_v2_venue`, which can be an unreadable group, and `no_submission_venue_id`
 are not), or skipped anything but
-`not_submission` replies. Then "Unresolved records" (TASK-113): every `conflicts.csv` row a source left
+`not_submission` replies. Then "Accepted records only an imported set holds" (TASK-178): per cell, the accepted
+records whose only source is an imported RIS set (no listing or note behind them), with the cell's delta
+without them; on snapshot `2026-10-05-47d4e190ca81` these are 7 ICLR records (2024 ×1, 2025 ×3, 2026 ×3), each
+a second copy of a crawled paper that dedup did not merge, so they inflate their cells. Then "Unresolved records" (TASK-113): every `conflicts.csv` row a source left
 unresolved (`unresolved:<source>`, the field `unknown`, decision-020), by record id, with its track / status now (flagged when the field
 is no longer unknown), the cell it would count in were it resolved and whether that cell is gated (`conflicts.csv` is read only after its sha256 matches the
 manifest's `files`). Then totals of records, missing abstracts, `unknown` track and status. The report is

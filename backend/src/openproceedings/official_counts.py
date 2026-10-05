@@ -109,6 +109,12 @@ OFFICIAL_ACCEPTED: OfficialTable = {
         "https://proceedings.iclr.cc/paper_files/paper/2025",
         date(2026, 9, 27),
     ),
+    ("ICLR", 2026, "main"): OfficialCount(
+        5357,
+        "accepted papers announced in the final fact sheet (19,525 submissions; 224 orals included); no ICLR 2026 proceedings index was read",
+        "https://media.iclr.cc/Conferences/ICLR2026/ICLR2026_Fact_Sheet.pdf",
+        date(2026, 10, 5),
+    ),
     ("ICML", 2013, "main"): OfficialCount(
         283,
         "papers in PMLR volume 28 (every accepted paper; ICML 2013 had no separate tracks)",
