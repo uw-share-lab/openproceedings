@@ -3,7 +3,9 @@
 /**
  * The diagnostics row (spec 05 §Components 1; ui-design-system §Transparency; design W3, W5–W7; copy ED-8–17).
  * Errors, then the translations ("Read as native syntax:"), then warnings, each in span order, every message
- * the server's, verbatim. A code that repeats is one line ("9 ×", the first message, "Show all 9"). Each line has
+ * the server's, verbatim, its backticked runs drawn as code (`Coded`). A code that repeats is one line ("9 ×",
+ * the first message, "Show all 9"); the Scholar-mode `$` notices are one line that says what `$` does, with the
+ * server's notices behind "Show" (USAB-N4: after Add `$` they would otherwise warn about what it wrote). Each line has
  * a Help link, and four codes carry an action: `WARN_MIXED_AND_OR` (Show how it was read, when the tree can
  * render; Load with parentheses, when it has a reading), `FIELD_COMPAT_ONLY` (Read as Google Scholar syntax),
  * `WILDCARD_TOO_MANY_EXPANSIONS` (why it appeared only after Search) and `COMPAT_NO_STEMMING` (Add `$`, to
@@ -12,6 +14,7 @@
  */
 import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
+import { Coded } from "@/components/coded";
 import { CopyButton } from "@/components/copy-button";
 import {
   groupRepeats,
@@ -121,6 +124,35 @@ function Actions({ group, props }: { group: Group; props: DiagnosticsRowProps })
 
 const BUTTON = "min-h-6 rounded-sm border px-1.5 text-xs hover:bg-muted";
 
+/**
+ * Said under the no-stemming notice in both of its states (copy ED-19): word forms are the smaller part of a
+ * lower count than Google Scholar's, so `$` is not presented as the way to close the gap.
+ */
+const FULL_TEXT = (
+  <p className="text-muted-foreground">
+    Google Scholar also reads the full text of a paper; openproceedings matches titles and abstracts only.
+    Most of a difference in counts usually comes from that, and <code className="font-mono">$</code> does not
+    recover it.
+  </p>
+);
+
+/**
+ * The one line that stands for the Scholar-mode `$` notices (`COMPAT_POP_DOLLAR`, one per `$` the query holds):
+ * what the wildcard does and that counts differ from a Scholar run because of it. Presentation only: the
+ * server's notices are listed under it, unchanged.
+ */
+function DollarSummary({ n }: { n: number }) {
+  return (
+    <>
+      <code className="font-mono">$</code> is read as a wildcard in {n.toLocaleString("en-US")}{" "}
+      {n === 1 ? "place" : "places"}: each matches its word and the word with one more letter or digit, as in
+      Web of Science (Google Scholar gives <code className="font-mono">$</code> no meaning). That widening is
+      what <code className="font-mono">$</code> is for, so counts differ from a Google Scholar run of the same
+      string.
+    </>
+  );
+}
+
 /** Why a term the notice names has no `$` on offer (spec 02 §Word forms; copy ED-19). */
 const NOT_OFFERED = (
   <>
@@ -144,11 +176,14 @@ function WordForms({ props }: { props: DiagnosticsRowProps }) {
   if (terms.length === 0) {
     // the notice names terms, and the server found no place for a `$` (or the query can't grow): say so
     return (
-      <p className="mt-1 text-muted-foreground">
-        <code className="font-mono">$</code> can&apos;t be added to these terms for you. {NOT_OFFERED} The
-        same happens when the query would be over the length limit with <code className="font-mono">$</code>{" "}
-        added. Type a wildcard yourself where one is valid.
-      </p>
+      <div className="mt-1 space-y-1.5">
+        <p className="text-muted-foreground">
+          <code className="font-mono">$</code> can&apos;t be added to these terms for you. {NOT_OFFERED} The
+          same happens when the query would be over the length limit with <code className="font-mono">$</code>{" "}
+          added. Type a wildcard yourself where one is valid.
+        </p>
+        {FULL_TEXT}
+      </div>
     );
   }
   const picked = terms.filter((t) => ticked.has(t.term));
@@ -168,6 +203,7 @@ function WordForms({ props }: { props: DiagnosticsRowProps }) {
         That is fewer forms than Google Scholar counts; type <code className="font-mono">*</code> for any
         ending.
       </p>
+      {FULL_TEXT}
       <p className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -232,7 +268,8 @@ function WordForms({ props }: { props: DiagnosticsRowProps }) {
             >
               Add $ to the ticked terms
             </button>
-            <span id={`${id}-picked`} className="sr-only">
+            {/* the reason a dimmed button does nothing is read by everyone, not only by a screen reader */}
+            <span id={`${id}-picked`} className={picked.length === 0 ? "text-muted-foreground" : "sr-only"}>
               {picked.length === 0
                 ? "Tick at least one term first."
                 : "Puts $ in the editor after each ticked term. Nothing is searched until you press Search."}
@@ -254,14 +291,16 @@ function Line({ group, props }: { group: Group; props: DiagnosticsRowProps }) {
   const first = group.items[0];
   if (first === undefined) return null;
   const n = group.items.length;
+  const dollars = group.code === "COMPAT_POP_DOLLAR";
+  const count = n.toLocaleString("en-US");
   return (
     <li className="break-words">
       <span aria-hidden="true" className={`mr-1.5 font-bold ${className}`}>
         {glyph}
       </span>
       <span className="sr-only">{prefix} </span>
-      {n > 1 && <span className="font-semibold tabular-nums">{n.toLocaleString("en-US")} × </span>}
-      {first.message}
+      {n > 1 && !dollars && <span className="font-semibold tabular-nums">{count} × </span>}
+      {dollars ? <DollarSummary n={n} /> : <Coded text={first.message} />}
       <Actions group={group} props={props} />
       {group.code === "COMPAT_NO_STEMMING" && <WordForms props={props} />}
       {group.code === "WILDCARD_TOO_MANY_EXPANSIONS" && (
@@ -269,7 +308,7 @@ function Line({ group, props }: { group: Group; props: DiagnosticsRowProps }) {
           Only a search can count expansions, so this appears after Search, not while typing.
         </span>
       )}
-      {n > 1 && (
+      {(n > 1 || dollars) && (
         <>
           {" "}
           <button
@@ -278,12 +317,24 @@ function Line({ group, props }: { group: Group; props: DiagnosticsRowProps }) {
             onClick={() => setAll(!all)}
             className="min-h-6 rounded-sm border px-1.5 text-xs hover:bg-muted"
           >
-            {all ? "Show fewer" : `Show all ${n.toLocaleString("en-US")}`}
+            {dollars
+              ? all
+                ? n === 1
+                  ? "Hide the notice"
+                  : "Hide the notices"
+                : n === 1
+                  ? "Show the notice"
+                  : `Show all ${count} notices`
+              : all
+                ? "Show fewer"
+                : `Show all ${count}`}
           </button>
           {all && (
             <ul className="mt-1 ml-5 list-disc space-y-0.5">
               {group.items.map((item, i) => (
-                <li key={i}>{item.message}</li>
+                <li key={i}>
+                  <Coded text={item.message} />
+                </li>
               ))}
             </ul>
           )}

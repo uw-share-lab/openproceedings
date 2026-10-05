@@ -92,8 +92,11 @@ test("Choose terms adds $ to the ticked terms only", async ({ page }) => {
 test("a lowercase and is named by the notice and never offered a $", async ({ page }) => {
   await page.goto("/");
   const editor = await typeQuery(page, "trust and benchmark", "scholar");
-  await expect(notice(page)).toContainText("`trust`, `and`, `benchmark`");
-  await expect(page.getByRole("list", { name: "Warnings" })).toContainText("`and` is searched as a word");
+  // the message's backticked runs are drawn as code, not as backticks
+  await expect(notice(page).first().locator("code").filter({ hasText: /^and$/ })).toHaveCount(1);
+  await expect(notice(page)).toContainText("trust, and, benchmark");
+  await expect(notice(page)).not.toContainText("`");
+  await expect(page.getByRole("list", { name: "Warnings" })).toContainText("and is searched as a word");
   await page.getByRole("button", { name: "Choose terms" }).click();
   const terms = page.getByRole("group", { name: "Add $ to" });
   await expect(terms.getByRole("checkbox")).toHaveCount(2);
@@ -106,9 +109,10 @@ test("a lowercase and is named by the notice and never offered a $", async ({ pa
 test("when no term can take a $, the notice says so and offers nothing", async ({ page }) => {
   await page.goto("/");
   await typeQuery(page, "ai and ml", "scholar");
-  await expect(notice(page)).toContainText("`ai`, `and`, `ml`");
+  await expect(notice(page)).toContainText("ai, and, ml");
   await expect(notice(page)).toContainText("$ can't be added to these terms for you.");
   await expect(notice(page)).toContainText("Type a wildcard yourself where one is valid.");
+  await expect(notice(page)).toContainText("Google Scholar also reads the full text of a paper");
   await expect(page.getByRole("button", { name: /^Add \$/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Choose terms" })).toHaveCount(0);
 });
@@ -128,15 +132,51 @@ test("Add $ is worked by keyboard alone", async ({ page }) => {
   await tabTo(page, terms.getByRole("button", { name: "Add $ to the ticked terms" }), 6);
   await page.keyboard.press("Enter");
   await expect(editor).toHaveText('trust$ benchmark "language model"');
+  await expect(editor).toBeFocused(); // the button is gone with the edit: focus is on the edit, not lost
   // the rest in one press: back to the all-terms button, which now counts what is left
   const rest = page.getByRole("button", { name: "Add $ to all 2 terms" });
   await page.keyboard.press("Shift+Tab");
   await tabTo(page, rest, 10);
   await page.keyboard.press("Enter");
   await expect(editor).toHaveText(WITH_ALL);
-  await editor.focus();
+  await expect(editor).toBeFocused();
   await page.keyboard.press("Enter"); // Enter in the editor searches
   await expect.poll(() => q(page)).toBe(WITH_ALL);
+});
+
+test("Add $ from the Builder tab leaves focus on the Builder tab, not on the page", async ({ page }) => {
+  await page.goto("/");
+  await typeQuery(page, TYPED, "scholar");
+  const builderTab = page.getByRole("tab", { name: "Builder" });
+  await page.getByRole("tab", { name: "Text" }).focus();
+  await page.keyboard.press("ArrowRight"); // selects Builder, focus stays on the tabs
+  await expect(builderTab).toHaveAttribute("aria-selected", "true");
+  const all = page.getByRole("button", { name: "Add $ to all 3 terms" });
+  await tabTo(page, all);
+  await page.keyboard.press("Enter");
+  await expect(all).toHaveCount(0);
+  await expect(builderTab).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Draft — not searched", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Text" }).click(); // the edit is in the editor
+  await expect(page.getByRole("textbox", { name: "Query" })).toHaveText(WITH_ALL);
+});
+
+test("after Add $ and Search, the $ notices are one line about the widening, the server's behind Show", async ({
+  page,
+}) => {
+  await search(page, WITH_ALL, "scholar");
+  const dollars = notice(page).filter({ hasText: "is read as a wildcard in 3 places" });
+  await expect(dollars).toHaveCount(1);
+  await expect(dollars).toContainText("That widening is what $ is for");
+  const show = dollars.getByRole("button", { name: "Show all 3 notices" });
+  await expect(show).toHaveAttribute("aria-expanded", "false");
+  await show.click();
+  await expect(dollars.getByRole("listitem")).toHaveCount(3);
+  await expect(dollars.getByRole("listitem").first()).toContainText("has no documented wildcard meaning");
+  await expect(dollars.getByRole("button", { name: "Hide the notices" })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
 });
 
 for (const theme of THEMES) {

@@ -157,16 +157,24 @@ warnings, the save's index check), the design doc says so; its open questions li
    `/meta`. The **server's parser is authoritative.** The client grammar only highlights, it never
    decides. A `WARN_MIXED_AND_OR` line offers **Load with parentheses**, which splices the warning's
    `reading` field over its span in the draft (never searching); with no `reading` it isn't offered. The
-   client never parses a diagnostic's `message` (TASK-099).
+   client never parses a diagnostic's `message` (TASK-099); it only draws the message's backticked runs as
+   code (`Coded`; a backtick inside quoted text is clipped to `\x60`, so the runs are the server's own). The
+   Scholar-mode `COMPAT_POP_DOLLAR` notices (one per `$`) are one line, "`$` is read as a wildcard in N
+   places: …", which says the widening is what `$` is for and so counts differ from a Google Scholar run,
+   with the server's notices, unchanged, behind "Show all N notices" (gate review, USAB-N4): after Add `$`
+   they would otherwise read as N warnings about what the tool wrote.
 
    The Scholar-mode `COMPAT_NO_STEMMING` line offers **Add `$`** (TASK-175; 02 §Word forms), because a
    Scholar string run as typed identifies fewer records than it means in Scholar (the review's primary string:
-   27 as typed, 67 with `$` on five terms, 2026-10-04). "Add $ to all N terms" writes `$` at every place
+   27 as typed, 67 with `$` on six terms on index `05a0541717f6`; 33 and 101 on `fd13d8d27535`, 2026-10-05;
+   `docs/results/2026-10-05-scholar-comparison.md`). "Add $ to all N terms" writes `$` at every place
    `/parse` reported in `word_forms`; **Choose terms** (shown for two or more terms) opens a group of
    checkboxes, one per term (a phrase is marked "on its last word", a repeated term "written N times" and gets
-   its `$` in every place), with "Add $ to the ticked terms" (`aria-disabled`, saying why, until one is
-   ticked). Both are an edit of the **draft**, exactly like Load with parentheses: one change in the editor
-   (so the editor's undo and **Revert edits** take it back), focus moves to the editor, the row is labelled a
+   its `$` in every place), with "Add $ to the ticked terms" (`aria-disabled`, saying why in visible text,
+   until one is ticked). Both are an edit of the **draft**, exactly like Load with parentheses: one change in the editor
+   (so the editor's undo and **Revert edits** take it back), focus moves to the editor (from the Builder tab, to
+   the Builder tab itself: the button is gone and the builder's controls are rebuilt only once `/parse`
+   answers; A11Y-M4; Load with parentheses does the same), the row is labelled a
    draft, and nothing is searched or put in the URL until Search; then `q` holds the `$` (guarantee 3),
    browser Back returns to the query as typed, and the expansions row lists what each `$` matched (guarantee
    6). The client only splices (`src/lib/word-forms.ts`, checked against the server's own strings in
@@ -179,7 +187,10 @@ warnings, the save's index check), the design doc says so; its open questions li
    added. Type a wildcard yourself where one is valid." The chooser ends with the same reasons for a named
    term it doesn't list. A line under the notice says what `$` is: "`$` after a
    term also matches it with one more letter or digit: `benchmark$` matches `benchmark` and `benchmarks`, not
-   `benchmarking`. That is fewer forms than Google Scholar counts; type `*` for any ending." The action never
+   `benchmarking`. That is fewer forms than Google Scholar counts; type `*` for any ending." Both states then
+   say what `$` can't do (gate review, USAB-S4): "Google Scholar also reads the full text of a paper;
+   openproceedings matches titles and abstracts only. Most of a difference in counts usually comes from that,
+   and `$` does not recover it." (the figure behind "most" is in help, with its source). The action never
    claims to reproduce Scholar's stemming, and there is no "stem" setting anywhere (guarantee 1).
 
    The highlighting lexer selects tokenizer 2 or 3 from `/meta.tokenizer_version`, using 3 while metadata

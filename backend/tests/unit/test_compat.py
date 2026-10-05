@@ -7,11 +7,13 @@ from pathlib import Path
 
 import pytest
 from openproceedings.diagnostics import DiagnosticCode
-from openproceedings.query.ast import Phrase, Wildcard
 from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.compat import SOURCE_ALIASES, source_key
+from openproceedings.query.lexer import OPERATOR_WORDS
 from openproceedings.query.parser import ParseResult, parse
 from openproceedings.query.wordforms import word_forms
+
+from .test_wordforms import check_example
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "queries"
 C = DiagnosticCode
@@ -244,6 +246,11 @@ STEMMING_EXAMPLES: list[tuple[str, str | None]] = [
     ("C++ trust? .NET", "net$"),  # symbols after the word
     ("US$5 benchmark", "benchmark$"),  # a `$` already in the word's run
     ("(model$|LLM) x", None),
+    (
+        '"and" trust',
+        '"and$"',
+    ),  # a quoted operator word is offered, and its example is quoted as Add `$` writes it
+    ('"or not" x', '"or not$"'),
     ('"generative AI" LLM', '"generative ai$"'),  # a phrase whole: its earlier words count toward the stem
     ("(large language model | LLM)", '"large language model$"'),
     ("gpt-4 trust", '"gpt 4$"'),
@@ -273,23 +280,22 @@ def test_no_stemming_example_is_a_term_that_takes_a_dollar_or_is_left_out(
     forms = word_forms(q, result)
     assert forms is not None
     # the first term "Add `$`" would rewrite that a message can quote whole (40 characters; `diagnostics.clip`)
-    quotable = [f.term for f in forms if len(f.term) + 1 + 2 * (" " in f.term) <= 40]
+    quotable = [
+        f.term for f in forms if len(f.term) + 1 + 2 * (" " in f.term or f.term in OPERATOR_WORDS) <= 40
+    ]
     if example is None:
         assert quotable == []
         return
-    assert example.strip('"').removesuffix("$") == quotable[0]
-    # and a query the parser accepts as that wildcard
-    alone = parse(example)
-    assert alone.errors == [] and alone.ast is not None
-    last = alone.ast.items[-1] if isinstance(alone.ast, Phrase) else alone.ast
-    assert isinstance(last, Wildcard) and last.op == "$"
+    # and a query both modes read as that term made a wildcard
+    check_example(example, quotable[0])
 
 
 @pytest.mark.parametrize("name", list(protocol()))
 def test_no_stemming_example_on_the_review_strings_is_valid(name: str) -> None:
     q = protocol()[name]
     example = stemming_example(q, scholar(q))
-    assert example is not None and parse(example).errors == []
+    assert example is not None
+    check_example(example, word_forms(q, scholar(q))[0].term)  # type: ignore[index]
 
 
 def test_scholar_mixed_warning_says_scholar_groups_the_other_way() -> None:

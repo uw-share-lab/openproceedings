@@ -62,7 +62,7 @@ from openproceedings.query.compat import (
 )
 from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.exact import dollar_places, exact_leaves, exact_name
-from openproceedings.query.lexer import FIELDS, Kind, Lexeme, lex
+from openproceedings.query.lexer import FIELDS, OPERATOR_WORDS, Kind, Lexeme, lex
 from openproceedings.query.normalize import SERVED_TOKENIZERS, TOKENIZER_VERSION, tokenize
 from openproceedings.vocab import STATUSES, TEXT_FIELDS, TRACKS, VENUES
 
@@ -792,8 +792,10 @@ def _stemming_notice(q: str, ast: Node, lexemes: Sequence[Lexeme], tokenizer: st
     shown = ", ".join(f"`{clip(t)}`" for t in terms[:8]) + (
         f" and {len(terms) - 8} more" if len(terms) > 8 else ""
     )
+    # quoted when it is a phrase, or a lowercase operator word (offered only inside quotes: `"and" trust`),
+    # so the example reads in either mode as the wildcard "Add `$`" writes
     examples = (
-        f'"{place.term}$"' if " " in place.term else f"{place.term}$"
+        f'"{place.term}$"' if " " in place.term or place.term in OPERATOR_WORDS else f"{place.term}$"
         for place in dollar_places(q, ast, lexemes, tokenizer)
     )
     example = next((e for e in examples if verbatim(e) and clip(e) == e), None)

@@ -307,9 +307,14 @@ export function SearchWorkspace({
     router.push(searchHref(next));
   };
 
+  // A row action that rewrites the draft (Add $, Load with parentheses, an example) unmounts its own button, so
+  // focus has to be put somewhere at once (A11Y-M4). On the Text tab that is the editor, which now shows the
+  // edit. On the Builder tab it is the Builder tab itself: it is always mounted and names the panel the reader
+  // is in, while the builder's own controls are rebuilt only when /parse has answered for the new text.
   const load = (next: Draft) => {
     setDraft(next);
     if (tab === "text") editor.current?.focus();
+    else document.getElementById(tabId(tabsId, tab))?.focus();
   };
 
   const shownDirty = shown !== null && isDirty(shown, state);
