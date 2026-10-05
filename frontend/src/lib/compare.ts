@@ -200,17 +200,14 @@ const NEXT_STEP: Record<string, string> = {
   unsettled: "check such a paper by hand (its row says what is undecided)",
   our_bug: "please report it with this query",
 };
-const SCHOLAR_STEMMING_STEP = "add $ to that word (the Add $ action under the query) to match its other forms";
+const SCHOLAR_STEMMING_STEP =
+  "add $ to that word (the Add $ action under the query) to match its other forms";
 
 /**
  * "1,713 papers have no exact match in their title or abstract: no form of this query finds …": the server's
  * counts per reason, each a sentence of its own with what to do (an unknown reason is shown as sent).
  */
-export function reasonLines(
-  list: ListName,
-  totals: Readonly<Record<string, number>>,
-  mode: Mode,
-): string[] {
+export function reasonLines(list: ListName, totals: Readonly<Record<string, number>>, mode: Mode): string[] {
   return Object.entries(totals).map(([reason, n]) => {
     const words = (list === "added" ? COUNTED_ADDED : COUNTED)[reason];
     const papers = `${n.toLocaleString("en-US")} ${n === 1 ? "paper" : "papers"}`;
