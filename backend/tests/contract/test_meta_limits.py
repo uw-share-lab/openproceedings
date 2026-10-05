@@ -23,16 +23,31 @@ def test_meta_serves_the_parser_cap_and_the_default_verification_limits(client: 
         "max_query_depth": MAX_DEPTH,
         "max_verified_clauses": DEFAULTS["max_verified_clauses"].default,
         "max_verification_candidates": DEFAULTS["max_verification_candidates"].default,
+        "max_counted_groups": DEFAULTS["max_counted_groups"].default,
+        "max_counted_terms": DEFAULTS["max_counted_terms"].default,
+        "max_counted_ids": DEFAULTS["max_counted_ids"].default,
         "compare": None,  # comparisons are off by default (TASK-177; test_compare.py has the caps when on)
     }
 
 
 def test_meta_serves_this_instances_configured_verification_limits(store: Store) -> None:
     """The values are the served config's, not the defaults: an instance run with other limits says so."""
-    app = make_app(store.indexes.parent, max_verified_clauses=3, max_verification_candidates=12_345)
+    app = make_app(
+        store.indexes.parent,
+        max_verified_clauses=3,
+        max_verification_candidates=12_345,
+        max_counted_groups=4,
+        max_counted_terms=777,
+        max_counted_ids=8_888,
+    )
     with TestClient(app) as c:
         limits = c.get("/api/v1/meta").json()["limits"]
     assert (limits["max_verified_clauses"], limits["max_verification_candidates"]) == (3, 12_345)
+    assert (limits["max_counted_groups"], limits["max_counted_terms"], limits["max_counted_ids"]) == (
+        4,
+        777,
+        8_888,
+    )
     assert (limits["max_query_length"], limits["max_query_depth"]) == (MAX_QUERY_LENGTH, MAX_DEPTH)  # fixed
 
 
@@ -50,6 +65,9 @@ def test_limits_are_required_in_the_meta_schema(client: TestClient) -> None:
     assert "limits" in schemas["MetaResponse"]["required"]
     assert sorted(schemas["Limits"]["required"]) == [
         "compare",
+        "max_counted_groups",
+        "max_counted_ids",
+        "max_counted_terms",
         "max_query_depth",
         "max_query_length",
         "max_verification_candidates",

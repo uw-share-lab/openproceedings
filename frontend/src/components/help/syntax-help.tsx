@@ -207,6 +207,9 @@ export function SyntaxHelp({
     max_query_depth: c.max_query_depth,
     max_verified_clauses: c.max_verified_clauses,
     max_verification_candidates: c.max_verification_candidates,
+    max_counted_groups: c.max_counted_groups,
+    max_counted_terms: c.max_counted_terms,
+    max_counted_ids: c.max_counted_ids,
     compare: null, // `POST /compare`'s caps are no query limit: the help page doesn't show them (TASK-177)
   };
   return (

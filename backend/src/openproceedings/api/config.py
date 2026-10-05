@@ -141,6 +141,20 @@ class ApiConfig(BaseModel):
     # query's work near 11-17 s idle at 80k (more wall time under load, which `max_verification_seconds` caps),
     # above the heaviest real review query (Trust-Evals main-2-pop, Scholar mode: 247,793 candidates, 10.2 s)
     max_verification_candidates: int = Field(default=300_000, ge=1)
+    # `/search` counts each concept group alone (spec 04 §SearchResponse, `groups`; TASK-176) for a query of at
+    # most this many groups: one more collection a group, no position check of its own. A query with more gets
+    # its result without them (`groups.not_counted`: `too_many_groups`); 10 is twice the widest Trust-Evals
+    # string's groups
+    max_counted_groups: int = Field(default=10, ge=1)
+    # and only when counting them reads at most this many terms, summed over the trees counted (each group
+    # alone and the query without each: `query.groups.Groups.terms_read`; a kept `NOT (… wildcards …)` is read
+    # by every one). Over it: the result without counts, `too_costly`. 5,000 admits every Trust-Evals string
+    # (the widest, main-2-pop, reads 243 on the real index) and refuses a query built to make 20 collections of thousands of terms
+    max_counted_terms: int = Field(default=5_000, ge=1)
+    # nor more than this many verified ids, summed the same way: a position-verified clause is an id set in
+    # its tree's query, resolved id by id by every collection that reads it (a kept `NOT (model NEAR/10
+    # model*)`: few terms, tens of thousands of ids, read by all 2 × N trees)
+    max_counted_ids: int = Field(default=300_000, ge=1)
     # a request holding a verification slot longer than this logs `verification_slow` (WARNING)
     slow_verification_seconds: float = Field(default=5.0, gt=0)
     # a request's cold verifications together get this much wall time from its first slot; past it the verify

@@ -12,7 +12,7 @@ from __future__ import annotations
 import dataclasses
 import heapq
 import json
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
 from importlib.metadata import version
@@ -27,6 +27,7 @@ from openproceedings.engine.compile import (
     Compiled,
     Compiler,
     Expansions,
+    combine,
     id_set,
     verified_clauses,
     wildcards,
@@ -416,8 +417,48 @@ class TantivyEngine:
             out[f] = dict(sorted(counts.items()))
         return out
 
+    def count(self, ast: Node, *, scope: Scope | None = None) -> int:
+        """How many documents match `ast`: `len(match_ids(ast))`, without reading an id (`counts` of one)."""
+        return self.counts([ast], scope=scope)[0]
+
+    def counts(
+        self, trees: Sequence[Node], *, scope: Scope | None = None, check: Callable[[], None] | None = None
+    ) -> list[int]:
+        """How many documents match each of `trees`, without reading an id (TASK-176: a query's concept groups,
+        each alone and the query without each; `search.run`). Counted as a facet is: a tree's top-level
+        filters (`Filter`, or `NOT` of one) are set aside, the rest is collected once per combination of
+        (venue, year, track, status) (`combos`, memoised per base: another page, and the same group under
+        other filters, never collect again), and the combos passing every filter are summed. A filter
+        depends only on its field's value, so the sum is exact (`test_group_counts.py` holds it to
+        `match_ids` and to ReferenceEngine).
+
+        The trees of one call share their conjuncts (a query's groups and what is kept for each), so each
+        distinct conjunct is compiled at most once per call, whatever the number of trees, and only when some
+        base misses the memo; a base's query is those conjuncts' queries ANDed, as `Compiler.node` builds an
+        AND. None of it is stored in `compiled`: a tree counted here is never searched, and storing one entry
+        a tree would hold every kept verified clause's ids once per group against the memo's shared budget.
+
+        `check` is called before each tree: a caller that no longer wants the counts raises from it, so the
+        work stops within one collection (what is already collected stays memoised)."""
+        parts = _Parts(self, scope)
+        out: list[int] = []
+        for ast in trees:
+            if check is not None:
+                check()
+            self.expansions(ast)  # the cap applies, as for every tree an engine is given
+            conjuncts = _conjuncts(ast)
+            filters = [(COMBO.index(f), c) for c in conjuncts if (f := _filter_field(c)) is not None]
+            combos = self.combos([c for c in conjuncts if _filter_field(c) is None], scope, parts=parts)
+            out.append(sum(n for combo, n in combos if all(_passes(c, combo[at]) for at, c in filters)))
+        return out
+
     def combos(
-        self, base: list[Node], scope: Scope | None = None, over: tuple[str, ...] = COMBO
+        self,
+        base: list[Node],
+        scope: Scope | None = None,
+        over: tuple[str, ...] = COMBO,
+        *,
+        parts: _Parts | None = None,
     ) -> tuple[tuple[Combo, int], ...]:
         """How many matches of `base`'s conjunction (every document when empty) have each combination of the
         `over` fields' values (a subsequence of COMBO: (venue, year, track, status) unless narrowed), from one
@@ -428,7 +469,12 @@ class TantivyEngine:
         if hit is not None:
             return hit
         node = base[0] if len(base) == 1 else And(span=(0, 0), children=tuple(base)) if base else None
-        query = tantivy.Query.all_query() if node is None else self.compile(node, scope).query
+        if node is None:
+            query = tantivy.Query.all_query()
+        elif parts is not None:
+            query = parts.query(base)  # `counts`: conjunct by conjunct, nothing stored in `compiled`
+        else:
+            query = self.compile(node, scope).query
         aggs: dict[str, Any] = {}
         for f in reversed(over):  # venue → year → track → status, innermost last
             aggs = {f: {"terms": {"field": f, "size": 100_000}, **({"aggs": aggs} if aggs else {})}}
@@ -486,6 +532,14 @@ class TantivyEngine:
                     scope.ids[clause] = ids
             return self._copy(hit)
         self._trim("compiled", self.compiled, self.MAX_COMPILED_UNITS)
+        compiled = self._fresh(ast, scope)
+        self.compiled[key] = compiled
+        self.charges["compiled"].append(compiled.held + 1)
+        return self._copy(compiled)
+
+    def _fresh(self, ast: Node, scope: Scope | None) -> Compiled:
+        """`ast` compiled now, outside the `compiled` memo (`compile` stores what this returns; `counts` doesn't).
+        Verified clauses are read from `scope` and the `verified` memo first, and stored there, as ever."""
         store = self._store_verified
         gate = self.verification_gate
         if scope is not None:
@@ -497,7 +551,7 @@ class TantivyEngine:
                 request[key] = ids  # the request's first: the memo's store may clear the memo
                 self._store_verified(key, ids)
 
-        compiled = Compiler(
+        return Compiler(
             self.index.schema,
             self.expansions(ast),
             self.read,
@@ -509,9 +563,6 @@ class TantivyEngine:
             members=self.ids_of,
             id_query=self.id_set,
         ).compile(ast)
-        self.compiled[key] = compiled
-        self.charges["compiled"].append(compiled.held + 1)
-        return self._copy(compiled)
 
     def _store_verified(self, key: tuple[str, str], ids: list[str]) -> None:
         """Store one newly verified clause, keeping `verified`'s budget clause by clause (trim, store, charge,
@@ -600,6 +651,27 @@ class TantivyEngine:
             doc = self.searcher.doc(address).to_dict()
             text = doc[field][0] if doc.get(field) else ""
             yield doc["id"][0], text.split(" ") if text else []
+
+
+class _Parts:
+    """One `TantivyEngine.counts` call's conjunct queries: each distinct conjunct compiled once (`_fresh`: never
+    stored in `compiled`), on first need, and a base's query built from them. Used by one thread."""
+
+    __slots__ = ("built", "engine", "scope")
+
+    def __init__(self, engine: TantivyEngine, scope: Scope | None) -> None:
+        self.engine, self.scope = engine, scope
+        self.built: dict[int, tantivy.Query] = {}  # by the conjunct's identity: the call's trees share nodes
+
+    def query(self, base: list[Node]) -> tantivy.Query:
+        """`base`'s conjunction, as `Compiler.node` builds an AND: its conjuncts' queries, all required."""
+        queries = []
+        for c in base:
+            q = self.built.get(id(c))
+            if q is None:
+                q = self.built[id(c)] = self.engine._fresh(c, self.scope).query
+            queries.append(q)
+        return combine(tantivy.Occur.Must, queries)
 
 
 def _aggregated(over: tuple[str, ...]) -> tuple[str, ...]:

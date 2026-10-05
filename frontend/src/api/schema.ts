@@ -755,6 +755,44 @@ export interface components {
             /** Values */
             values: (string | components["schemas"]["YearRange"])[];
         };
+        /** GroupCount */
+        GroupCount: {
+            /** @description Half-open code-point range of the group in `q` (its node in `ast`). */
+            span: components["schemas"]["Span"];
+            /**
+             * Total
+             * @description This group alone: how many papers the query matches with every other group removed. Never below the search's `total`.
+             */
+            total: number;
+            /**
+             * Total Without
+             * @description The query without this group: how many papers it matches with this group removed and every other group kept. Never below the search's `total`; the difference is what this group removes.
+             */
+            total_without: number;
+        };
+        /** GroupCounts */
+        GroupCounts: {
+            /**
+             * Counts
+             * @description Each group's count, in query order. Empty when `not_counted` says why.
+             */
+            counts: components["schemas"]["GroupCount"][];
+            /**
+             * Groups Total
+             * @description How many groups the query has.
+             */
+            groups_total: number;
+            /**
+             * Limit
+             * @description The most groups this instance counts for one query (`op serve --max-counted-groups`).
+             */
+            limit: number;
+            /**
+             * Not Counted
+             * @description Why `counts` is empty, null when it isn't: `fewer_than_two_groups` (the query is not an AND of groups), `too_many_groups` (`groups_total` is over `limit`), `too_costly` (counting them would read more terms or verified ids than this instance allows, `/meta` `limits`: shorten the `NOT` clauses or use longer wildcard stems), `busy` (the counting workers were taken by other searches), `count_failed` or `timed_out` (the counts could not be computed, or not in time; search again). The search itself is complete in every case.
+             */
+            not_counted: ("fewer_than_two_groups" | "too_many_groups" | "too_costly" | "busy" | "count_failed" | "timed_out") | null;
+        };
         /** Health */
         Health: {
             /** Index Loaded */
@@ -832,6 +870,21 @@ export interface components {
         Limits: {
             /** @description `POST /compare`'s caps (TASK-177), or null when this instance's operator has not turned comparisons on (the route then answers 403 `API_COMPARE_DISABLED`, and a client doesn't offer it) */
             compare: components["schemas"]["CompareLimits"] | null;
+            /**
+             * Max Counted Groups
+             * @description TASK-176: the most concept groups `/search` counts for one query; a query with more gets its result with `groups.not_counted: too_many_groups`
+             */
+            max_counted_groups: number;
+            /**
+             * Max Counted Ids
+             * @description TASK-176: the most verified ids the group counts of one query may read, summed the same way over its position-verified clauses' matches; more is `groups.not_counted: too_costly`
+             */
+            max_counted_ids: number;
+            /**
+             * Max Counted Terms
+             * @description TASK-176: the most terms the group counts of one query may read, summed over the trees counted (N groups of G terms in all, K terms in the kept text clauses: N·G + 2·N·K; a wildcard counts its expansions); more is `groups.not_counted: too_costly`, never a refusal of the search
+             */
+            max_counted_terms: number;
             /**
              * Max Query Depth
              * @description the deepest nesting of groups and `NOT`s a `q` may have; deeper is 422 `PARSE_TOO_DEEP` (from `/parse`, a 200 whose `errors` hold it)
@@ -1486,6 +1539,8 @@ export interface components {
         SearchResponse: {
             excluded: components["schemas"]["Excluded"];
             facets: components["schemas"]["Facets"];
+            /** @description TASK-176 (additive): for a query that is an AND of concept groups, how many papers each group matches alone and how many the query matches without it, so a reviewer can see which group narrows the search. A group is a top-level AND conjunct that searches text and is not negated. The query's filters (the default track and status filters included) and its `NOT` clauses apply to every count, so none is below `total`. Exact, and the same for the same canonical query and `index_version`; it never changes `total`, `hits`, `facets` or `excluded`. */
+            groups: components["schemas"]["GroupCounts"];
             /** Hits */
             hits: components["schemas"]["Hit"][];
             /**

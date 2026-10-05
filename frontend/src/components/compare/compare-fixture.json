@@ -7,6 +7,9 @@
     "max_query_depth": 64,
     "max_verified_clauses": 16,
     "max_verification_candidates": 300000,
+    "max_counted_groups": 10,
+    "max_counted_terms": 5000,
+    "max_counted_ids": 300000,
     "compare": {
       "max_body_bytes": 16777216,
       "max_records": 5000,

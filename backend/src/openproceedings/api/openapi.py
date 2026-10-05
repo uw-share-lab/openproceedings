@@ -27,6 +27,7 @@ from openproceedings.ingest.dedup import Origin
 from openproceedings.ingest.record import ClaimField, Presentation, Source
 from openproceedings.query.ast import FilterField, TextField
 from openproceedings.query.clauses import CLAUSE_REASONS
+from openproceedings.search import NotCounted
 from openproceedings.vocab import Status, Track, Venue
 
 # repo-relative; the snapshot sits with the contract tests that pin it
@@ -148,6 +149,7 @@ OPEN_ENUMS: dict[str, frozenset[str]] = {
     "error code": frozenset(ErrorCode),
     "changed input": frozenset(get_args(ChangedInput.model_fields["input"].annotation)),
     "clause reason": frozenset(CLAUSE_REASONS),  # why /parse can't toggle a filter clause (decision-011)
+    "groups not counted": frozenset(get_args(NotCounted)),  # why /search has no group counts (TASK-176)
     # `POST /compare` (TASK-177): the comparison core's own vocabularies, which a later class or rule extends
     "match rule": frozenset(get_args(MatchedBy)),
     "compare reason": frozenset(get_args(CompareReason)),
