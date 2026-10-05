@@ -18,8 +18,8 @@ Candidate: `dev` at `63da2318` (PR #106's merge). Base: `main` at `d8eec5fd`.
   The `web-image` push run at `63da2318` (`37352990475`) passed. The `e2e` push run there (`37352990725`) was
   still running when this was written; its result is in the promotion PR. Both were green at PR #105's merge,
   `bed0a6cb`.
-- **Nightly:** the scheduled nightly `37337202193` (still running when this was written) is on `142f3e0e` (`dev` before PR #105) on 2026-10-05.
-  Its result is in the promotion PR. The previous nightly, `37204685351` (2026-10-04, same sha), passed
+- **Nightly:** the scheduled nightly `37337202193` is still running on `142f3e0e` (`dev` before PR #105),
+  started on 2026-10-05. Its result is in the promotion PR. The previous nightly, `37204685351` (2026-10-04, same sha), passed
   all jobs. Neither tested PR #105 or #106, so a nightly was also dispatched on the candidate itself
   (`37353576315`, `63da2318`). The promotion waits for it.
 - **Backlog:** `backlog task list --plain` shows no open Must finding. TASK-197, the one known budget miss,
@@ -87,15 +87,15 @@ to sample. As on 2026-10-03, a supplementary replay used the 14 real rows of the
 diagnostic store. The rows were copied into two scratch data directories. The copy passed
 `integrity_check`, and the source's SHA-256 hashes were identical before and after.
 
-| Replay                                                    | Outcome                                                                                                         |
-| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| On each record's retained pin `05a0541717f6` (14)          | `reproduced`, ids and exclusions match                                                                          |
-| On `fd13d8d27535` alone, `--index fd13d8d27535` (14)       | `drifted`, naming exactly `snapshot_hash` (corpus), and `tokenizer_version` and `schema_version` 2 → 3 (method)     |
-| All 28 `op record replay --json` calls                     | exit 0, no refused replay, no mismatch                                                                          |
+| Replay                                               | Outcome                                                                                                         |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| On each record's retained pin `05a0541717f6` (14)    | `reproduced`, ids and exclusions match                                                                          |
+| On `fd13d8d27535` alone, `--index fd13d8d27535` (14) | `drifted`, naming exactly `snapshot_hash` (corpus), and `tokenizer_version` and `schema_version` 2 → 3 (method) |
+| All 28 `op record replay --json` calls               | exit 0, no refused replay, no mismatch                                                                          |
 
 On the new index, 2 of the 14 records keep identical membership. The other 12 gain 2–44 ids and lose 0–18,
 which the corpus change (the 2026 crawl and dedup) accounts for, and their replays name that change. The
-per-record JSON, exit codes and source hashes are kept outside the repository, in `/private/tmp/claude-501/-Users-jeevanparmar-school-Research-Ferguson/06380199-f19b-4b93-b3e2-45129af1a2e2/scratchpad/release/replay/`.
+per-record JSON, exit codes and source hashes are kept outside the repository, in the release session's scratchpad (not retained).
 
 ## 4. Release branch
 
