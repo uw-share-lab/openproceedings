@@ -464,7 +464,8 @@ class TantivyEngine:
         `over` fields' values (a subsequence of COMBO: (venue, year, track, status) unless narrowed), from one
         collection; memoised per base and fields under task-080's rules."""
         over = _aggregated(over)
-        key = "\x00".join((",".join(over), *sorted(_spanless(c) for c in base)))
+        spanless = _spanless if parts is None else parts.spanless
+        key = "\x00".join((",".join(over), *sorted(spanless(c) for c in base)))
         hit = self.faceted.get(key)  # one read (task-080)
         if hit is not None:
             return hit
@@ -657,11 +658,19 @@ class _Parts:
     """One `TantivyEngine.counts` call's conjunct queries: each distinct conjunct compiled once (`_fresh`: never
     stored in `compiled`), on first need, and a base's query built from them. Used by one thread."""
 
-    __slots__ = ("built", "engine", "scope")
+    __slots__ = ("built", "engine", "keys", "scope")
 
     def __init__(self, engine: TantivyEngine, scope: Scope | None) -> None:
         self.engine, self.scope = engine, scope
         self.built: dict[int, tantivy.Query] = {}  # by the conjunct's identity: the call's trees share nodes
+        self.keys: dict[int, str] = {}  # each conjunct's memo-key part, serialised once for all the trees
+
+    def spanless(self, conjunct: Node) -> str:
+        """`_spanless(conjunct)`, once per call: every tree counted names the kept conjuncts again."""
+        key = self.keys.get(id(conjunct))
+        if key is None:
+            key = self.keys[id(conjunct)] = _spanless(conjunct)
+        return key
 
     def query(self, base: list[Node]) -> tantivy.Query:
         """`base`'s conjunction, as `Compiler.node` builds an AND: its conjuncts' queries, all required."""
