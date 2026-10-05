@@ -187,12 +187,24 @@ def _first(fields: Mapping[str, Sequence[str]], tags: Iterable[str]) -> str:
 def read_ris(text: str, name: str, tick: Callable[[], None] | None = None) -> list[RisRecord]:
     """The records of one RIS text, in file order (`name` is how keys and errors refer to it). ValueError for a
     text that holds content but no record (scholarmend refuses to drop a whole file). `tick`, when given, is
-    called before each record is read (its venue string is normalized)."""
+    called before each record is read (its venue string is normalized) and every 256 links within one."""
     out: list[RisRecord] = []
     for n, rec in enumerate(parse_ris(text, name), 1):
         if tick is not None:
             tick()
         links = [u for t in _URL_TAGS for u in rec.fields.get(t, ())]
+        forums: dict[str, None] = {}
+        listings: dict[ProceedingsKey, None] = {}
+        hosts: dict[str, None] = {}
+        for n_link, u in enumerate(links):  # one record may hold every link line of the file
+            if tick is not None and n_link % 256 == 255:
+                tick()
+            if (f := _named(openreview_id, u)) is not None:
+                forums[f] = None
+            if (p := _named(proceedings_key, u)) is not None:
+                listings[p] = None
+            if len(hosts) < MAX_HOSTS and (h := _named(link_host, u)) is not None:
+                hosts[h] = None
         venue_raw = _first(rec.fields, _VENUE_TAGS)
         year = _YEAR.match(_first(rec.fields, _YEAR_TAGS))
         dates = [m.group(1) for v in rec.fields.get("M1", ()) if (m := _QUERY_DATE.fullmatch(v.strip()))]
@@ -203,10 +215,10 @@ def read_ris(text: str, name: str, tick: Callable[[], None] | None = None) -> li
                 venue=SOURCE_ALIASES.get(source_key(venue_raw)),
                 venue_raw=venue_raw,
                 year=int(year.group(1)) if year else None,
-                forum_ids=tuple(dict.fromkeys(f for u in links if (f := _named(openreview_id, u)))),
-                proceedings_ids=tuple(dict.fromkeys(p for u in links if (p := _named(proceedings_key, u)))),
+                forum_ids=tuple(forums),
+                proceedings_ids=tuple(listings),
                 search=dates[0] if dates else None,
-                hosts=tuple(dict.fromkeys(h for u in links if (h := _named(link_host, u))))[:MAX_HOSTS],
+                hosts=tuple(hosts),
             )
         )
     return out

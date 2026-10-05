@@ -286,7 +286,7 @@ the one trusted proxy (`--trusted-proxy <its address>`); a trusted network wider
 is refused, as is `--no-rate-limit` with a non-loopback `--host`. Off loopback, or with a `--trusted-proxy`,
 `<data-dir>/takedowns/withheld.txt` must exist before the first start (an empty file on a fresh instance), or
 the load fails `takedowns_missing` (TASK-067). Comparisons with a reviewer's own RIS file (`POST /compare`,
-TASK-177; 04 §Comparing with a RIS file) are an operator's choice: on by default only for a loopback `--host`
+TASK-177, decision-035; 04 §Comparing with a RIS file) are an operator's choice: on by default only for a loopback `--host`
 with no `--trusted-proxy`, off here unless `op serve --compare` is added to the `api` command. Turning them on
 for a public instance means accepting uploads of up to 16 MiB from anyone (read in memory for the one
 request, one at a time, never stored or logged), about 80 MB more memory for the served index's match table,
@@ -297,7 +297,9 @@ instance and offer comparisons to everyone the proxy serves, so a proxied instan
 `--trusted-proxy` (as `compose.yml` does) or `--no-compare`. The proxy must then let that one path
 through: a `request_body` and `request_buffers` of 16MB and a longer `read_body` for `/api/v1/compare` only
 (the site-wide 64KB and 10 s stay for everything else), as `deploy/README.md` §Comparisons shows; with the
-proxy buffering the file, a slow upload holds a proxy goroutine, never the API's comparison slot. Swagger UI (`/api/v1/docs`, scripts from a
+proxy buffering the file, a slow upload holds a proxy goroutine, never the API's comparison slot. That proxy
+block has not been run through `deploy/smoke-test.sh`: decision-035 makes that smoke test a condition of any
+public instance enabling comparisons. Swagger UI (`/api/v1/docs`, scripts from a
 CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. `api` mounts `snapshots/` and `takedowns/` read-only, the
 search records' directory `records/` read-write (a host directory, 0700 and owned by the API's uid, 10001 by default; `records.sqlite` and
 the WAL files SQLite writes beside it; spec 04 §Search records), and `indexes/` read-write but closed by file modes: Tantivy opens an index only after taking

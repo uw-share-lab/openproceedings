@@ -41,11 +41,12 @@ reads the body, which only a coroutine can order. Everything CPU-bound runs in t
 from __future__ import annotations
 
 import csv
+import heapq
 import io
 import re
 import threading
 import time
-from collections import Counter, OrderedDict
+from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
@@ -148,12 +149,16 @@ _cpu = time.thread_time
 class Cooldowns:
     """One comparison at a time per client network, and after one, none for `factor` times the slot time it
     used: a network's sustained share of a slot is at most 1 / (1 + factor), however many addresses it holds
-    (the token buckets can't bound that: a network's refills four times as fast as a client's). Thread-safe;
-    at most `max_networks` networks are remembered, the one free soonest forgotten first."""
+    (the token buckets can't bound that: a network's refills four times as fast as a client's; decision-035).
+    Thread-safe. At most `max_networks` networks are remembered, the one free soonest forgotten first: a heap
+    of (free at, network) finds it, so forgetting one is O(log n), never a scan of the map under the lock."""
 
     def __init__(self, factor: float, max_networks: int, clock: Callable[[], float] = time.monotonic) -> None:
         self.factor, self.max_networks, self.clock = factor, max_networks, clock
-        self._until: OrderedDict[str, float] = OrderedDict()  # network → when it may compare again
+        self._until: dict[str, float] = {}  # network → when it may compare again
+        self._soonest: list[
+            tuple[float, str]
+        ] = []  # a heap of the same; an entry `_until` disagrees with is stale
         self._running: set[str] = set()
         self._lock = threading.Lock()
 
@@ -178,13 +183,17 @@ class Cooldowns:
             self._running.discard(network)
             now = self.clock()
             if self.factor > 0 and used_seconds > 0:
-                self._until[network] = now + self.factor * used_seconds
-                self._until.move_to_end(network)
-            if len(self._until) > self.max_networks:
-                for name in [n for n, until in self._until.items() if until <= now]:
+                until = now + self.factor * used_seconds
+                self._until[network] = until
+                heapq.heappush(self._soonest, (until, network))
+            # forget the pauses that are over, then the soonest-ending ones beyond the bound
+            while self._soonest and (self._soonest[0][0] <= now or len(self._until) > self.max_networks):
+                until, name = heapq.heappop(self._soonest)
+                if self._until.get(name) == until:
                     del self._until[name]
-                while len(self._until) > self.max_networks:
-                    del self._until[min(self._until, key=self._until.__getitem__)]
+            if len(self._soonest) > 2 * len(self._until) + 64:  # stale entries of networks that came back
+                self._soonest = [(until, name) for name, until in self._until.items()]
+                heapq.heapify(self._soonest)
 
 
 def slot_seconds(config: ApiConfig, upload_seconds: float, work_seconds: float) -> float:
@@ -498,7 +507,8 @@ async def _read(request: Request, seconds: float) -> bytearray:
 
 
 async def offered(request: Request) -> None:
-    """403 `API_COMPARE_DISABLED` unless this instance's operator turned comparisons on. The route's first
+    """403 `API_COMPARE_DISABLED` unless this instance's operator turned comparisons on (decision-035: an
+    operator-controlled capability, off by default off loopback). The route's first
     dependency, so an instance that doesn't offer them answers a POST to the path with this 403 whatever its
     query, its body, its media type or the index's state: it says nothing about the served index, and nothing
     of the query or the body is looked at. What is refused earlier is what every route refuses before its
@@ -598,10 +608,11 @@ async def compare_records(
 
 
 def _cooling(wait: float, retry: int) -> ApiError:
-    """429 `API_RATE_LIMITED`: this network is running a comparison, or ran one a moment ago."""
+    """429 `API_RATE_LIMITED`: this network is running a comparison, or ran one a moment ago (decision-035)."""
     error = rate_limited(
         float(retry) if wait < 0 else wait,
-        "One comparison at a time from this network, and a pause after each in proportion to how long it ran",
+        "One comparison at a time from this network, with a pause after each in proportion to how long it "
+        "ran (searching is not affected)",
     )
     return ApiError(error.code, error.message, headers={**error.headers, "Connection": "close"})
 

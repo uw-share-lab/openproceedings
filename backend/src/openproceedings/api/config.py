@@ -196,8 +196,10 @@ class ApiConfig(BaseModel):
     # the snapshot and judged by the oracle, so an unbounded result is unbounded work
     compare_max_results: int = Field(default=5_000, ge=1)
     # the largest answer, in bytes (422 `API_COMPARE_TOO_COSTLY`, checked as it is built): an answer echoes
-    # the file's titles and venues and holds each list twice (rows and CSV), so its size follows the file's.
-    # The body cap's value: an answer is never larger than the largest file (the review's 3.7 MB file: 1.4 MB)
+    # the file's titles and venues and holds each list twice (rows and CSV), so it can outgrow its file (5,000
+    # records of long titles reach this cap, refused after the seconds of work that built it, which are
+    # charged). The body cap's value, so no answer is larger than the largest file the instance takes; the
+    # review's 3.7 MB file with abstracts gives 1.4 MB
     compare_max_response_bytes: int = Field(default=16 * 1024 * 1024, ge=1024)
     # comparisons running at once; one more is 503 `API_BUSY` with Retry-After, before its file is read (so at
     # most this many files are in memory)

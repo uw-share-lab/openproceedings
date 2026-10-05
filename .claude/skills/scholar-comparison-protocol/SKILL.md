@@ -31,7 +31,10 @@ The same core answers `POST /compare` (spec 04 §Comparing with a RIS file) and 
 records": one query, one RIS file, `Scope()` (every indexed venue and year: a limit is written in the query),
 no report and no `review.csv`. The API's `reason` is the class below and `detail` its evidence; `matched_by`
 is `Match.rule` or `Match.problem`; `independent` is `Row.independent`. `kept` + `added` is exactly `/search`'s
-result. A change to the classes, the rules or their order changes both the report and the endpoint
+result. Evidence is echoed to the uploader there, so what it quotes of a file is bounded: a `coverage_gap`
+row names its links' hosts as valid host names only (`link_host`: DNS labels, at most 253 characters, no
+credentials or control characters), at most three a record (`MAX_HOSTS`), and a malformed link names nothing.
+A change to the classes, the rules or their order changes both the report and the endpoint
 (`backend/tests/contract/test_compare.py` compares the route's rows with `compare_query`'s).
 
 ## Classification

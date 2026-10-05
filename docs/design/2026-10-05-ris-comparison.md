@@ -154,6 +154,7 @@ default filter — track=workshop`), then `import only · needs a person to deci
 | CM-10 | Running: "Comparing `<name>` (`<size>` MB) with this search… Each paper is checked against the query, so a large file can take up to `<max_seconds>` seconds." |
 | CM-11 | Local refusals: "This file is empty. Choose a RIS export that holds records."; "This file is `<size>` MB; this server compares files up to `<cap>` MB. Export it without abstracts (only titles, venues, years and links are compared), or split it." |
 | CM-12 | Refused: "The comparison didn't run. Nothing was compared." then the server's code and message |
+| CM-17 | A 429 (the network's cooldown, decision-035; the server's message gives the seconds, the countdown follows `Retry-After`): "Comparisons are limited more tightly than searches: you can keep searching while you wait." |
 | CM-13 | Stale: "The search changed since the last comparison, so its numbers are no longer shown. Compare again to see what the current query keeps, drops and adds." |
 | CM-14 | Index moved: "The index changed after this search: the comparison ran on index `<a>`, and the results shown are from `<b>`, so its numbers are not shown. Search again, then compare again." |
 | CM-15 | Total differs: "The comparison counted `<n>` papers for this search, not the `<m>` shown, on the same index. That shouldn't happen: it is a bug in openproceedings. Its numbers are not shown." |

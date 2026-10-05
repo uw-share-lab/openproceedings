@@ -454,8 +454,144 @@ def test_a_superseded_build_is_skipped_and_builds_never_overlap(
             time.sleep(0.01)
         time.sleep(0.2)
     assert most == 1  # never two at once
-    assert tables[-1].index is not None and [t for t in tables[1:-1] if t.index is not None] == []
-    assert len(built) <= 2  # the one that was running, and the one left serving
+    # built: the one that held the lock when the others queued (whichever thread got there first: it was the
+    # served one at that moment), and the one left serving. The three swapped out while they waited never are
+    assert tables[-1].index is not None and len(built) <= 2
+    assert len([t for t in tables if t.index is not None]) <= 2
+
+
+def test_forgetting_a_network_never_scans_the_map() -> None:
+    """At the bound, each new pause forgets the one ending soonest through the heap: evicting 500 at a
+    100,000-network bound took 1.8 s when each scanned the map (the review's measurement); the work here is
+    counted, not timed."""
+    clock = Clock()
+    cool = Cooldowns(3.0, 2_000, clock)
+    for n in range(2_000):
+        cool.leave(f"n{n}", 1.0 + n)  # n0 ends soonest
+    looked = 0
+
+    class Counting(dict[str, float]):
+        def __iter__(self) -> Any:
+            nonlocal looked
+            looked += len(self)
+            return super().__iter__()
+
+        def items(self) -> Any:
+            nonlocal looked
+            looked += len(self)
+            return super().items()
+
+    cool._until = Counting(cool._until)
+    for n in range(500):
+        cool.leave(f"m{n}", 10_000.0)  # each pushes the map over its bound
+    assert len(cool._until) == 2_000 and looked == 0  # no pass over the map, 500 times over
+    assert (
+        "n0" not in cool._until
+        and "n499" not in cool._until
+        and "n500" in cool._until
+        and "m499" in cool._until
+    )
+    assert len(cool._soonest) <= 2 * len(cool._until) + 64
+    for _ in range(10_000):  # one network coming back again and again: the heap's stale entries are dropped
+        clock.now += 100_000
+        assert cool.enter("again") == 0
+        cool.leave("again", 1.0)
+    assert len(cool._soonest) <= 2 * len(cool._until) + 65
+    clock.now += 1e9
+    cool.leave("last", 1.0)
+    assert set(cool._until) == {"last"}  # every pause that is over is forgotten
+
+
+def test_one_record_holding_every_link_still_asks_the_clock() -> None:
+    links = "".join(f"UR  - https://host{n}.example/x\n" for n in range(3_000))
+    calls = 0
+
+    def tick() -> None:
+        nonlocal calls
+        calls += 1
+
+    (record,) = read_ris("TY  - JOUR\nTI  - one record\n" + links + "ER  - \n", "file", tick)
+    assert calls == 1 + 3_000 // 256 and len(record.hosts) == MAX_HOSTS
+
+
+# --- beside the group counts (TASK-176) -----------------------------------------------------------------------
+GROUPED = "(trust OR reliance) AND (benchmark OR evaluation)"
+
+
+def test_a_comparison_never_counts_groups(corpus_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A comparison is `engine.match_ids` of the query and nothing of `search.run`: no group counting, no
+    facets, no job for the counting pool, whatever the query's shape. `/meta` states both features' bounds."""
+    from openproceedings import search as search_module
+    from openproceedings.engine.tantivy_engine import TantivyEngine
+
+    called: list[str] = []
+    for owner, name in ((search_module, "run"), (search_module, "_grouped"), (TantivyEngine, "counts"),
+                        (TantivyEngine, "count"), (TantivyEngine, "facets")):  # fmt: skip
+        real = getattr(owner, name)
+
+        def spy(*a: Any, _real: Any = real, _name: str = name, **k: Any) -> Any:
+            called.append(_name)
+            return _real(*a, **k)
+
+        monkeypatch.setattr(owner, name, spy)
+    with app_of(corpus_dir) as c:
+        engine = c.app.state.index.served.engine  # type: ignore[attr-defined]
+        faceted = dict(engine.faceted)
+        body = compared(c, the_file(), GROUPED)
+        assert called == [] and engine.faceted == faceted
+        search = c.get("/api/v1/search", params={"q": GROUPED, "limit": 0}).json()
+        assert "_grouped" in called and "facets" in called  # the search does both; the comparison neither
+        assert search["groups"]["groups_total"] == 2 and body["total"] == search["total"]
+        limits = c.get("/api/v1/meta").json()["limits"]
+    assert limits["compare"]["max_records"] == 5_000 and limits["max_counted_groups"] >= 2
+    assert {"max_counted_terms", "max_counted_ids"} <= set(limits)
+
+
+def test_a_comparison_and_a_grouped_search_at_once_each_give_their_solo_answer(corpus_dir: Path) -> None:
+    """Both read the one engine (its `compiled` memo included) from different threads: each answer is the
+    one it gives alone. A search's group counts may be withheld under load (`busy`, `timed_out`: its own
+    rule); when they are given they are the solo ones, and the search itself is whole either way."""
+    with app_of(corpus_dir) as c:
+        solo_compare = post(c, the_file(), GROUPED).content
+        solo = c.get("/api/v1/search", params={"q": GROUPED, "limit": 200}).json()
+        assert solo["groups"]["not_counted"] is None and len(solo["groups"]["counts"]) == 2
+        compares: list[bytes] = []
+        searches: list[dict[str, Any]] = []
+        errors: list[BaseException] = []
+
+        def comparing() -> None:
+            try:
+                for _ in range(3):
+                    compares.append(post(c, the_file(), GROUPED).content)
+            except BaseException as e:
+                errors.append(e)
+
+        def searching() -> None:
+            try:
+                for _ in range(12):
+                    engine = c.app.state.index.served.engine  # type: ignore[attr-defined]
+                    engine.compiled.clear()  # the memo emptied under both, as a busy instance trims it
+                    searches.append(c.get("/api/v1/search", params={"q": GROUPED, "limit": 200}).json())
+            except BaseException as e:
+                errors.append(e)
+
+        threads = [
+            threading.Thread(target=comparing),
+            threading.Thread(target=searching),
+            threading.Thread(target=searching),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(120)
+    assert errors == [] and len(compares) == 3 and len(searches) == 24
+    assert all(answer == solo_compare for answer in compares)
+    for got in searches:
+        assert {k: got[k] for k in got if k != "groups"} == {k: solo[k] for k in solo if k != "groups"}
+        if got["groups"]["not_counted"] is None:
+            assert got["groups"] == solo["groups"]
+        else:
+            assert got["groups"]["not_counted"] in ("busy", "timed_out")
 
 
 # --- nits ---------------------------------------------------------------------------------------------------------

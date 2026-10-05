@@ -17,6 +17,7 @@ import gzip
 import io
 import json
 import re
+import shutil
 import tempfile
 import threading
 from collections.abc import Callable, Iterator
@@ -173,6 +174,14 @@ def corpus_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 # no pause between one test's comparisons (the cooldown has its own tests, in test_compare_review.py)
 NO_COOLDOWN = RateLimit(capacity=10_000, compare_cooldown_factor=0)
+
+
+@pytest.fixture
+def own_dir(corpus_dir: Path, tmp_path: Path) -> Path:
+    """A private copy of the corpus for a test that writes a takedown list: nothing it leaves behind (or a
+    sibling left behind, had it failed half way) can change what another test's app loads."""
+    shutil.copytree(corpus_dir, tmp_path / "data", symlinks=True)
+    return tmp_path / "data"
 
 
 def app_of(data: Path, **overrides: Any) -> TestClient:
@@ -951,8 +960,8 @@ def test_a_file_that_arrives_too_slowly_is_408() -> None:
 
 
 # --- the match table and the served index --------------------------------------------------------------------------
-def test_the_table_is_built_once_per_served_index(corpus_dir: Path, logs: Logs) -> None:
-    with app_of(corpus_dir) as c:
+def test_the_table_is_built_once_per_served_index(own_dir: Path, logs: Logs) -> None:
+    with app_of(own_dir) as c:
         state: IndexState = c.app.state.index  # type: ignore[attr-defined]
         served = state.served
         assert served is not None and served.matches is not None and served.matches.index is not None
@@ -961,7 +970,7 @@ def test_the_table_is_built_once_per_served_index(corpus_dir: Path, logs: Logs) 
         compared(c, the_file())
         assert state.load()  # SIGHUP with nothing changed
         assert state.served is served
-        (data := corpus_dir / "takedowns").mkdir(exist_ok=True)
+        (data := own_dir / "takedowns").mkdir(exist_ok=True)
         try:
             (data / "withheld.txt").write_text(f"{KEPT[0]}  # logged\n", encoding="utf-8")
             assert state.load()  # the same index, another takedown list: a new bundle, the same table
@@ -1085,15 +1094,15 @@ def test_a_disabled_instance_answers_every_request_alike(corpus_dir: Path, tmp_p
         assert c.post(COMPARE, params={"q": Q}, content=b"x", headers=RIS).content == answers[0].content
 
 
-def test_a_withheld_abstract_is_never_returned_or_located(corpus_dir: Path) -> None:
+def test_a_withheld_abstract_is_never_returned_or_located(own_dir: Path) -> None:
     """Decision-022: a takedown withholds what is shown. A comparison says which list a withheld paper is in
     (whether the query matches it, as `/search` does: the accepted leak) and nothing more: no abstract, no
     evidence naming words or the field they are in, in the rows, the CSV or the RIS."""
     listed = [*sorted(i for i in RESULT - set(KEPT) if BY_ID[i].abstract)[:2], STEMMED[0], UNMATCHED[0]]
-    (data := corpus_dir / "takedowns").mkdir(exist_ok=True)
+    (data := own_dir / "takedowns").mkdir(exist_ok=True)
     (data / "withheld.txt").write_text("".join(f"{i}  # logged\n" for i in listed), encoding="utf-8")
     try:
-        with app_of(corpus_dir) as c:
+        with app_of(own_dir) as c:
             before = compared(c, the_file())  # the same file on the same index, the list applied
             raw = post(c, the_file()).text
             hits = c.get("/api/v1/search", params={"q": Q, "limit": 200}).json()["hits"]

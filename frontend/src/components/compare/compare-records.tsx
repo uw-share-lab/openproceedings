@@ -221,6 +221,11 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
         {run.kind === "failed" && run.key === key && (
           <div className="space-y-2">
             <p className="font-medium">The comparison didn&apos;t run. Nothing was compared.</p>
+            {run.failure.kind === "refused" && run.failure.status === 429 && (
+              <p className="break-words">
+                Comparisons are limited more tightly than searches: you can keep searching while you wait.
+              </p>
+            )}
             <FailureNotice failure={run.failure} onRetry={start} />
           </div>
         )}

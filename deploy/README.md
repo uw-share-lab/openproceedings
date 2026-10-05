@@ -257,7 +257,9 @@ was listed keeps it withheld until a rebuild without the id is promoted.
 
 `POST /api/v1/compare` and the search page's "Compare with your records" (spec 04 §Comparing with a RIS file)
 are off on this stack: `op serve` behind a proxy doesn't offer them unless told to. Turning them on is your
-decision as the operator. What it means:
+decision as the operator (decision-035), and not before the proxy block below has passed `smoke-test.sh` on
+your stack: it is what keeps a slow upload off the API's one comparison slot, and it is untested. What it
+means:
 
 - anyone can upload a RIS file of up to 16 MiB and 5,000 records. It is read in memory for that one request
   and dropped: never written to disk, never logged (the access line has counts only), never added to the

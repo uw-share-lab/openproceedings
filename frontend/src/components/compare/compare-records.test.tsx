@@ -282,6 +282,24 @@ describe("CompareRecords", () => {
     expect(asked).toBe(2);
   });
 
+  it("says how long a cooling-down network waits, and that searching still works", async () => {
+    const cooling = {
+      error: {
+        code: "API_RATE_LIMITED",
+        message:
+          "One comparison at a time from this network, with a pause after each in proportion to how long it ran (searching is not affected); try again in 54 s.",
+      },
+    };
+    await draw(serve(() => json(cooling, 429, { "Retry-After": "54" })));
+    await compareWith();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("try again in 54 s.");
+    expect(alert.textContent).toContain("Retry in 54 s");
+    expect(within(alert).getByRole("button", { name: "Retry" }).getAttribute("aria-disabled")).toBe("true");
+    const panel = screen.getByRole("region", { name: "Compare with your records" });
+    expect(panel.textContent).toContain("you can keep searching while you wait");
+  });
+
   it("is off, with the reason, while the results shown aren't the searched query's", async () => {
     const reason =
       "The results shown are from an earlier query — search again or restore it before exporting.";
