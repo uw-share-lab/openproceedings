@@ -29,6 +29,14 @@ reads the stream itself under a deadline and runs everything CPU-bound through `
 (context variables, so the access line, travel with it), returning a built `Response` so nothing is
 serialized on the event loop. Don't copy the shape for a route without a large body.
 
+**An extra beside a search** (the group counts, `search.py`, TASK-176, decision-034) is never allowed to cost
+the search. Before adding one: bound it from the parsed query before any of it runs (decision-010 charges
+only position verification, so collections and term reads need their own threshold, served in `/meta`
+`limits`); give it its own workers, so facets never queue behind it; wait a short grace for a job no worker
+has taken and a longer one only for a running job, and cancel what the search stopped waiting for; compile
+its trees per request, never into the shared `compiled` memo (no search ran them); and give each way it can
+fail its own value in the answer (`not_counted`), never the search's error.
+
 ## Index lifecycle
 1. **Startup:** load `data/indexes/current` (a symlink to `data/indexes/<index_version>/`) once, in the
    lifespan handler. `/healthz` reports `index_loaded: false` until that finishes; search routes return

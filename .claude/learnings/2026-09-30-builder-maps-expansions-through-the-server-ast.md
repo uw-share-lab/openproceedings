@@ -26,3 +26,13 @@ Show each builder group's wildcard expansions after a search, and show the group
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — the design doc's §As built (TASK-111) and copy deck BD-11 record the mapping and the copy; CLAUDE.md's `src/builder/` line names TASK-111. No skill change: `wildcards-and-expansion` already says the stem is normalized before expansion, and the key format is in `search.py`'s docstring.
 - Test or hook added? — `frontend/src/builder/expansions.test.ts`, the `readFitting` cases in `read.test.ts`, and the TASK-111 blocks in `concept-builder.test.tsx` and `search-view.test.tsx`.
+
+## Addendum — 2026-10-05
+The same rule held for a second kind of server data, with one more trap (TASK-176, `frontend/src/builder/group-counts.ts`).
+`/search` reports each concept group's count with the group's code-point span in the searched query, and a
+builder group takes the count whose span holds one of its terms. "A term inside the span", not the group's
+index or its text: the canonical form collapses `(model OR model)` and deduplicates a group written twice, so
+the typed query and the counted one can differ in how many groups they have. Top-level spans never overlap,
+so a term lies in at most one; the second copy of a repeated group says "same as group N", read from the
+server's `ast`, never from the typed text (commit af63f471). The bounds on the counting itself are in
+[an extra on a search needs its own bound](2026-10-05-an-extra-on-a-search-needs-its-own-bound-pool-and-failure-isolation.md).
