@@ -136,7 +136,7 @@ describe("the sections", () => {
   it("gives the full-text figure the diagnostics row's ED-19 sentence points to, with its index and source", () => {
     page();
     const text = document.getElementById("scholar")?.textContent ?? "";
-    expect(text).toContain("comes from full text, which $ does not recover");
+    expect(text).toContain("can come from full text, which $ does not recover");
     expect(text).toContain("index fd13d8d27535 (2026-10-05)");
     expect(text).toContain("1,752 (96.6%) match the string nowhere in their title or abstract");
     expect(text).toContain("docs/results/2026-10-05-scholar-comparison.md");
@@ -153,9 +153,9 @@ describe("the sections", () => {
     expect(at.every((i) => i >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(text).toContain("the group whose removal adds the most papers is the one narrowing the search");
-    expect(text).toContain("For what title and abstract can explain, three tools can help you find out why");
+    expect(text).toContain("For what titles and abstracts can explain, three tools can help you find out why");
     expect(text).toContain(
-      "First, Add $ matches one more letter or digit on the terms it names (benchmark$: benchmarks); it is not Google Scholar's stemming.",
+      "First, Add $ matches one more letter or digit on the terms its notice names (benchmark$: benchmarks); it is not Google Scholar's stemming.",
     );
     expect(text).not.toContain("show why");
     expect(text).not.toContain("stemming would have matched");
