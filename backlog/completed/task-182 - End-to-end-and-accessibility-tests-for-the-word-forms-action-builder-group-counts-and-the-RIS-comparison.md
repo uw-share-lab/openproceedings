@@ -3,10 +3,10 @@ id: TASK-182
 title: >-
   End-to-end and accessibility tests for the word-forms action, builder group
   counts and the RIS comparison
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-05 05:12'
-updated_date: '2026-10-05 08:23'
+updated_date: '2026-10-05 16:27'
 labels:
   - frontend
   - e2e
@@ -32,7 +32,7 @@ TASK-175, TASK-176 and TASK-177 each shipped with unit and contract tests only: 
 - [x] #1 frontend/e2e covers: Scholar string, Add $ (all and chosen terms), Search, URL carries the $, expansions shown, Back restores the typed query
 - [x] #2 frontend/e2e covers: builder group counts and without-counts after a search, hidden when the draft differs, the too-many and too-costly notes, the live announcement
 - [x] #3 frontend/e2e covers: the RIS comparison from upload to the kept, dropped, added and not-in-index lists and their exports, the disabled state, and an over-cap file
-- [ ] #4 axe passes WCAG 2.2 AA on each new state and the 320 px reflow check passes; visual snapshots are added through the suite's own update command
+- [x] #4 axe passes WCAG 2.2 AA on each new state and the 320 px reflow check passes; visual snapshots are added through the suite's own update command
 - [x] #5 make e2e passes locally and the run's counts are recorded in the task
 <!-- AC:END -->
 
@@ -51,3 +51,9 @@ Product change made: lib/compare.ts megabytes() showed a cap under 0.05 MB as 0.
 
 Follow-ups (2026-10-05): the reason lines are sentences; a refused re-compare names the earlier answer's file; grammar.test.ts no longer reads CodeMirror's time-budgeted partial tree (the flake's cause; it failed 4 runs of 4 under 60 CPU hogs before and passed 4 of 4 after). Final run: Playwright 55 passed, Vitest 4,826 passed three times in a row, make lint and make tooling exit 0. Linux baselines: no workflow writes them; take the six -actual.png files from the e2e job's playwright-report artifact (spec 05 Testing has the steps).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+35 Playwright tests over the three new surfaces (word forms, builder group counts, RIS comparison), plus the focus, retry and new-tab tests the review gate added: keyboard runs, axe WCAG 2.2 AA in both themes and 320 px reflow on every new state, states reached through fixture-server configurations, not browser mocks. Six visual baselines per platform: darwin written locally, linux taken from PR #105's first CI run (its e2e job, 58 passed and the 6 missing baselines failed) and checked by eye. The grammar.test.ts flake was fixed at its cause (ensureSyntaxTree).
+<!-- SECTION:FINAL_SUMMARY:END -->
