@@ -67,7 +67,17 @@ from openproceedings.ingest.classify import (
     classify_venueid,
     is_v1,
 )
-from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Urls, is_url
+from openproceedings.ingest.record import (
+    FORUM_ID,
+    Claim,
+    ClaimField,
+    ClaimValue,
+    PaperRecord,
+    Urls,
+    is_url,
+    title_evidence,
+    title_text,
+)
 from openproceedings.ingest.sources.openreview_v1 import is_twin_outcome, submission_listing
 from openproceedings.ingest.urls import pmlr, proceedings, proceedings_native, proceedings_parts
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
@@ -385,7 +395,7 @@ def _abstract(entry: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
 def _record(
     entry: dict[str, Any], ris: dict[str, list[str]], ident: _Identity, fetched: datetime
 ) -> PaperRecord:
-    title = " ".join(entry["title"].split())
+    title, replaced = title_text(entry["title"])  # a control character becomes a space (decision-036)
     authors = tuple(a for a in ris.get("AU", []) if a != _TRUNCATED)
     abstract = _abstract(entry)
 
@@ -399,7 +409,10 @@ def _record(
         "status": ident.cls.status,
     }
     provenance = [claim(k, v, "scholarmend:{} {}".format(*ident.evidence[k])) for k, v in values.items()]
-    provenance += [claim("title", title, "mended.ris:TI"), claim("authors", authors, "mended.ris:AU")]
+    provenance += [
+        claim("title", title, title_evidence("mended.ris:TI", replaced)),
+        claim("authors", authors, "mended.ris:AU"),
+    ]
     if abstract is not None:
         provenance.append(
             claim("abstract", abstract[0], f"scholarmend:{abstract[1]['source']} {abstract[1]['evidence']}")

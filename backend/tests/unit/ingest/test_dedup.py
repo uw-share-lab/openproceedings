@@ -24,6 +24,7 @@ from openproceedings.ingest.dedup import (
     dedup,
     is_creative_ai,
     resolve,
+    shown_key,
     title_key,
 )
 from openproceedings.ingest.record import Claim, PaperRecord
@@ -65,6 +66,8 @@ def paper(
     status: str = "accepted",
     abstract: str | None = None,
     fetched: datetime = T0,
+    abstract_evidence: str
+    | None = None,  # the abstract claim's evidence (`imported` gives a RIS row its own)
     **extra: Any,  # further claim fields, e.g. `urls_proceedings=nips(1)`
 ) -> PaperRecord:
     """A record whose fields are exactly what its claims say (as every importer builds them); a
@@ -73,10 +76,28 @@ def paper(
     values: dict[str, Any] = {"title": title, "venue": venue, "year": year, "track": track, "status": status,
                               "abstract": abstract, **{k.replace("urls_", "urls.", 1): v for k, v in extra.items()}}  # fmt: skip
     claims = [
-        Claim(field=f, value=v, source=source, fetched_at=fetched) for f, v in values.items() if v is not None
-    ]  # type: ignore[arg-type]
+        Claim(field=f, value=v, source=source, fetched_at=fetched,
+              evidence=abstract_evidence if f == "abstract" else None)
+        for f, v in values.items() if v is not None
+    ]  # type: ignore[arg-type]  # fmt: skip
     record, _ = resolve(f"op:{venue.lower()}:{year}:{native}", claims)
     return record
+
+
+def own_page(native: str, year: int) -> str:
+    """A RIS abstract claim's evidence as `ingest/ris.py` writes it when scholarmend read the abstract from the
+    record's own page: its proceedings page, or its forum."""
+    page = self_url(native, year)
+    return (
+        f"scholarmend:proceedings_page {page}" if page else f"scholarmend:openreview_api openreview:{native}"
+    )
+
+
+def imported(native: str, title: str = "Trust in AI", **kw: Any) -> PaperRecord:
+    """A RIS row whose abstract is its own page's (step 3's evidence, TASK-179) unless the caller says otherwise."""
+    if kw.get("abstract_evidence") is None:
+        kw["abstract_evidence"] = own_page(native, kw.get("year", 2024))
+    return paper(native, title, source="ris", **kw)
 
 
 def resolutions(result: Any) -> list[str]:
@@ -1149,7 +1170,10 @@ def not_merged(result: Any) -> list[tuple[str, str]]:
 
 def test_abstract_key_is_the_title_keys_normalisation_hashed_and_needs_enough_tokens() -> None:
     key = abstract_key(LONG)
-    assert key.startswith("sha256:") and len(key) == len("sha256:") + 16
+    assert (
+        key.startswith("sha256:") and len(key) == len("sha256:") + 64
+    )  # the whole digest is what is matched
+    assert shown_key(key) == key[:23] and len(shown_key(key)) == len("sha256:") + 16  # merges.csv's form
     assert abstract_key(LONG.upper().replace(" ", ",  ")) == key  # case, punctuation, spacing: one key
     assert abstract_key(LONG + " more") != key
     assert abstract_key(" ".join(LONG.split()[1:])) == ""  # one token short
@@ -1163,8 +1187,8 @@ def test_a_papers_two_ris_rows_do_not_make_it_ambiguous() -> None:
     under one title key. Sharing `ris` is not two candidates from one source: each RIS row names its paper by id."""
     xs = [
         paper("QHROe7Mfcb", "Less is More: One-shot Subgraph Reasoning", **ICLR),
-        paper("QHROe7Mfcb", "Less is more: One-shot subgraph reasoning", source="ris", **ICLR),
-        paper(f"iclr-{H[1]}", "Less is more: One-shot subgraph reasoning", source="ris", fetched=T1, **ICLR),
+        imported("QHROe7Mfcb", "Less is more: One-shot subgraph reasoning", **ICLR),
+        imported(f"iclr-{H[1]}", "Less is more: One-shot subgraph reasoning", fetched=T1, **ICLR),
     ]
     result = dedup(xs)
     [r] = result.records
@@ -1185,7 +1209,7 @@ def test_a_papers_two_ris_rows_do_not_make_it_ambiguous() -> None:
     ],
 )
 def test_two_ris_rows_naming_different_papers_still_never_merge(a: str, b: str) -> None:
-    xs = [paper(a, source="ris", abstract=LONG, **ICLR), paper(b, source="ris", abstract=LONG, **ICLR)]
+    xs = [imported(a, abstract=LONG, **ICLR), imported(b, abstract=LONG, **ICLR)]
     result = dedup(xs)
     assert len(result.records) == 2 and rules(result) == []
     assert not_merged(result) == [
@@ -1205,21 +1229,21 @@ LOST_SYMBOL = [  # crawled title, the title Google Scholar gave the import
 ]  # fmt: skip
 
 
-@pytest.mark.parametrize(("crawled", "imported"), LOST_SYMBOL)
+@pytest.mark.parametrize(("crawled", "scholar"), LOST_SYMBOL)
 def test_an_imported_copy_whose_title_lost_its_math_merges_on_its_abstract(
-    crawled: str, imported: str
+    crawled: str, scholar: str
 ) -> None:
-    assert title_key(crawled) != title_key(imported)
+    assert title_key(crawled) != title_key(scholar)
     note = paper("CkgKSqZbuC", crawled, abstract=LONG, **ICLR)
-    copy = paper(f"iclr-{H[1]}", imported, source="ris", abstract=LONG.upper(), **ICLR)
+    copy = imported(f"iclr-{H[1]}", scholar, abstract=LONG.upper(), **ICLR)
     result = dedup([copy, note])
     [r] = result.records
     assert (r.id, r.title, r.abstract) == (note.id, crawled, LONG)
     assert result.merges == (
-        Merge(note.id, copy.id, "abstract_venue_year", abstract_key(LONG), "ICLR", 2025, "ris"),
+        Merge(note.id, copy.id, "abstract_venue_year", shown_key(abstract_key(LONG)), "ICLR", 2025, "ris"),
     )
     assert result.conflicts == (
-        Conflict(note.id, "title", crawled, "openreview_v2", imported, "ris", "precedence:openreview_v2"),
+        Conflict(note.id, "title", crawled, "openreview_v2", scholar, "ris", "precedence:openreview_v2"),
     )
     assert dedup(result.records).records == result.records
 
@@ -1227,11 +1251,11 @@ def test_an_imported_copy_whose_title_lost_its_math_merges_on_its_abstract(
 def test_the_retitled_import_merges_with_a_note_that_holds_its_own_ris_row() -> None:
     """ICLR 2026 `CwoM9T55lG`: the note's cluster holds the RIS row of its forum id, so the merge needs both
     rules: the abstract (the titles differ) and `ris` on both sides being no ambiguity."""
-    crawled, imported = LOST_SYMBOL[-1]
+    crawled, scholar = LOST_SYMBOL[-1]
     xs = [
         paper("CwoM9T55lG", crawled, abstract=LONG, **ICLR),
-        paper("CwoM9T55lG", crawled, source="ris", abstract=LONG, **ICLR),
-        paper(f"iclr-{H[1]}", imported, source="ris", abstract=LONG, fetched=T1, **ICLR),
+        imported("CwoM9T55lG", crawled, abstract=LONG, **ICLR),
+        imported(f"iclr-{H[1]}", scholar, abstract=LONG, fetched=T1, **ICLR),
     ]
     result = dedup(xs)
     [r] = result.records
@@ -1244,7 +1268,7 @@ def test_two_papers_whose_titles_differ_only_by_a_symbol_are_not_merged() -> Non
     abstract, a short one, or none stay two records, with no row (nothing ties them)."""
     note = paper("3CPzUWIoNf", "A$^2$Search: Ambiguity-Aware Question Answering", abstract=LONG, **ICLR)
     for abstract in (OTHER, "Ambiguity-aware question answering.", None):
-        copy = paper(f"iclr-{H[1]}", "ASearch: Ambiguity-Aware Question Answering", source="ris", abstract=abstract, **ICLR)  # fmt: skip
+        copy = imported(f"iclr-{H[1]}", "ASearch: Ambiguity-Aware Question Answering", abstract=abstract, **ICLR)  # fmt: skip
         result = dedup([note, copy])
         assert [r.id for r in result.records] == [note.id, copy.id]
         assert result.merges == () and result.conflicts == ()
@@ -1252,7 +1276,7 @@ def test_two_papers_whose_titles_differ_only_by_a_symbol_are_not_merged() -> Non
 
 def test_a_short_shared_abstract_is_never_merge_evidence() -> None:
     short = " ".join(LONG.split()[1:])
-    xs = [paper("AbCd1234", "One", abstract=short, **ICLR), paper(f"iclr-{H[1]}", "Two", source="ris", abstract=short, **ICLR)]  # fmt: skip
+    xs = [paper("AbCd1234", "One", abstract=short, **ICLR), imported(f"iclr-{H[1]}", "Two", abstract=short, **ICLR)]  # fmt: skip
     assert len(dedup(xs).records) == 2
 
 
@@ -1261,7 +1285,7 @@ def test_an_abstract_never_merges_across_venue_or_year(other: dict[str, Any]) ->
     prefix = "nips" if other["venue"] == "NeurIPS" else "iclr"
     xs = [
         paper("AbCd1234", "One", abstract=LONG, **ICLR),
-        paper(f"{prefix}-{H[1]}", "Two", source="ris", abstract=LONG, **other),
+        imported(f"{prefix}-{H[1]}", "Two", abstract=LONG, **other),
     ]
     result = dedup(xs)
     assert len(result.records) == 2 and result.merges == () and result.conflicts == ()
@@ -1285,7 +1309,7 @@ def test_an_import_beside_two_accepted_notes_with_its_abstract_is_ambiguous() ->
     xs = [
         paper("AbCd1234", "One", abstract=LONG, **ICLR),
         paper("EfGh5678", "Two", abstract=LONG, **ICLR),
-        paper(f"iclr-{H[1]}", "Three", source="ris", abstract=LONG, **ICLR),
+        imported(f"iclr-{H[1]}", "Three", abstract=LONG, **ICLR),
     ]
     result = dedup(xs)
     assert len(result.records) == 3 and result.merges == ()
@@ -1294,31 +1318,39 @@ def test_an_import_beside_two_accepted_notes_with_its_abstract_is_ambiguous() ->
 
 
 @pytest.mark.parametrize(
-    "rival",
+    ("rival", "row"),
     [
-        {"track": "workshop"},  # the paper's workshop version, same abstract
-        {"status": "rejected"},  # an earlier, rejected submission
+        ({"track": "workshop"}, "track_not_merged"),  # the paper's workshop version, same abstract
+        ({"status": "rejected"}, "ambiguous_not_merged"),  # an earlier, rejected submission
     ],
 )
 def test_a_rival_that_cannot_be_the_listed_paper_is_set_aside_on_an_abstract_too(
-    rival: dict[str, Any],
+    rival: dict[str, Any], row: str
 ) -> None:
+    """As on a title (TASK-126): the import and its note merge, the rival stays its own record, and its row is
+    written against the record that now holds the listing, on this run and on the next."""
     xs = [
         paper("AbCd1234", "One", abstract=LONG, **ICLR),
         paper("EfGh5678", "Two", abstract=LONG, **ICLR, **rival),
-        paper(f"iclr-{H[1]}", "Three", source="ris", abstract=LONG, **ICLR),
+        imported(f"iclr-{H[1]}", "Three", abstract=LONG, **ICLR),
     ]
     result = dedup(xs)
     assert [r.id for r in result.records] == ["op:iclr:2025:AbCd1234", "op:iclr:2025:EfGh5678"]
     assert rules(result) == [("op:iclr:2025:AbCd1234", f"op:iclr:2025:iclr-{H[1]}", "abstract_venue_year")]
-    # no not-merged row: rows are judged on the output records, where no imported record is left to face the rival
-    assert not_merged(result) == [] and dedup(result.records).records == result.records
+    rows = [c for c in result.conflicts if c.resolution.endswith("_not_merged")]
+    assert rows == [
+        Conflict("op:iclr:2025:AbCd1234", "abstract_key", "op:iclr:2025:AbCd1234", "openreview_v2+ris",
+                 "op:iclr:2025:EfGh5678", "openreview_v2", row)
+    ]  # fmt: skip
+    again = dedup(result.records)
+    assert again.records == result.records
+    assert [c for c in again.conflicts if c.resolution.endswith("_not_merged")] == rows
 
 
 def test_an_imported_listing_never_merges_with_a_workshop_note_on_its_abstract() -> None:
     xs = [
         paper("AbCd1234", "One", abstract=LONG, track="workshop", **ICLR),
-        paper(f"iclr-{H[1]}", "Two", source="ris", abstract=LONG, **ICLR),
+        imported(f"iclr-{H[1]}", "Two", abstract=LONG, **ICLR),
     ]
     result = dedup(xs)
     assert len(result.records) == 2 and result.merges == ()
@@ -1330,9 +1362,113 @@ def test_an_import_that_matched_by_title_is_not_matched_again_by_abstract() -> N
     imported record, so a second note sharing only its abstract is left alone."""
     xs = [
         paper("AbCd1234", "One", abstract=OTHER, **ICLR),
-        paper(f"iclr-{H[1]}", "One", source="ris", abstract=LONG, **ICLR),
+        imported(f"iclr-{H[1]}", "One", abstract=LONG, **ICLR),
         paper("EfGh5678", "Two", abstract=LONG, track="workshop", **ICLR),
     ]
     result = dedup(xs)
     assert [r.id for r in result.records] == ["op:iclr:2025:AbCd1234", "op:iclr:2025:EfGh5678"]
-    assert [m.rule for m in result.merges] == ["title_venue_year"] and not_merged(result) == []
+    assert [m.rule for m in result.merges] == ["title_venue_year"]
+    # the workshop note shares the listing's abstract: a rival's row (as a title's would be), never a merge
+    assert not_merged(result) == [("abstract_key", "track_not_merged")]
+
+
+# --- step 3's own refusals (TASK-179 review) ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("status", ["withdrawn", "rejected", "desk_rejected"])
+def test_an_accepted_import_never_merges_into_a_lone_note_that_is_not_accepted(status: str) -> None:
+    """`_mergeable` ignores status, so without step 3's own rule the accepted import would merge into the note
+    and take its status (RIS ranks last for status), and the paper would leave every accepted-only result."""
+    note = paper("AbCd1234", "One", abstract=LONG, status=status, **ICLR)
+    copy = imported(f"iclr-{H[1]}", "Two", abstract=LONG, **ICLR)
+    result = dedup([note, copy])
+    assert [(r.id, r.status) for r in result.records] == [(note.id, status), (copy.id, "accepted")]
+    assert result.merges == ()
+    assert result.conflicts == (
+        Conflict(copy.id, "abstract_key", copy.id, "ris", note.id, "openreview_v2", "ambiguous_not_merged"),
+    )
+    assert dedup(result.records) == result
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        f"scholarmend:proceedings_page {self_url(f'iclr-{H[2]}', 2025)}",  # another paper's page
+        "scholarmend:proceedings_page",  # no page named
+        "scholarmend:openreview_api openreview:EfGh5678",  # a forum's abstract on a proceedings-id row
+        "scholarmend:semanticscholar x",  # a route this code doesn't know
+        "",
+    ],
+)
+def test_an_abstract_that_is_not_the_imports_own_page_is_no_evidence(evidence: str) -> None:
+    """The import "Reward Shaping in Bandits" with the abstract of "Graph Transformers for Chemistry": only an
+    abstract scholarmend read from the import's own page says which paper the import is."""
+    note = paper("AbCd1234", "Graph Transformers for Chemistry", abstract=LONG, **ICLR)
+    copy = imported(f"iclr-{H[1]}", "Reward Shaping in Bandits", abstract=LONG,
+                 abstract_evidence=evidence, **ICLR)  # fmt: skip
+    result = dedup([note, copy])
+    assert len(result.records) == 2 and result.merges == () and result.conflicts == ()
+
+
+def test_a_forum_id_imports_openreview_abstract_counts_only_for_its_own_forum() -> None:
+    listing = paper(f"iclr-{H[1]}", "One", source="iclr_archive", abstract=LONG, **ICLR)
+    own = imported("AbCd1234", "Two", abstract=LONG, **ICLR)
+    result = dedup([listing, own])
+    [r] = result.records
+    assert r.id == own.id and rules(result) == [
+        (own.id, listing.id, "abstract_venue_year")
+    ]  # the forum id survives
+    other = imported("AbCd1234", "Two", abstract=LONG, **ICLR,
+                  abstract_evidence="scholarmend:openreview_api openreview:EfGh5678")  # fmt: skip
+    assert len(dedup([listing, other]).records) == 2
+
+
+def test_two_keys_chaining_two_imports_through_one_note_merge_nothing() -> None:
+    """A note keeps its own abstract A and its RIS row's abstract B; one import holds A, another B. Each pair
+    could merge alone, but the chain would hold two proceedings papers: all apart, two chain rows, stable."""
+    xs = [
+        paper("AbCd1234", "One", abstract=LONG, **ICLR),
+        imported("AbCd1234", "One", abstract=OTHER, **ICLR),
+        imported(f"iclr-{H[1]}", "Two", abstract=LONG, **ICLR),
+        imported(f"iclr-{H[2]}", "Three", abstract=OTHER, **ICLR),
+    ]
+    result = dedup(xs)
+    assert len(result.records) == 3 and [m.rule for m in result.merges] == ["forum_id"]
+    assert not_merged(result) == [("abstract_key_chain", "ambiguous_not_merged")] * 2
+    again = dedup(result.records)
+    assert again.records == result.records and not_merged(again) == not_merged(result)
+
+
+def test_an_import_never_bridges_a_listing_and_a_note_of_another_forum() -> None:
+    xs = [
+        imported("AbCd1234", "One", abstract=LONG, **ICLR),  # a forum-id import
+        paper(f"iclr-{H[1]}", "Two", source="iclr_archive", abstract=LONG, **ICLR),
+        paper("EfGh5678", "Three", abstract=LONG, **ICLR),
+    ]
+    result = dedup(xs)
+    assert len(result.records) == 3 and result.merges == ()
+    assert not_merged(result) == [("abstract_key", "ambiguous_not_merged")] * 2
+    assert dedup(result.records) == result
+
+
+def test_an_abstract_never_joins_two_crawled_records_even_beside_an_import() -> None:
+    """A proceedings-id import, a crawled listing of another title and a note: the import may be either one's
+    copy, and the abstract alone never says the listing and the note are one paper (decision-037)."""
+    xs = [
+        imported("pmlr-v202-key1", "One", venue="ICML", abstract=LONG),
+        paper("pmlr-v202-key1", "One", source="pmlr", venue="ICML", abstract=LONG),
+        paper("AbCd1234", "Two", venue="ICML", abstract=LONG),
+    ]
+    result = dedup(xs)
+    assert len(result.records) == 2 and [m.rule for m in result.merges] == ["native_id"]
+
+
+def test_matching_is_on_the_whole_digest_not_the_sixteen_digits_merges_csv_shows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from openproceedings.ingest import dedup as module
+
+    fake = {LONG: "sha256:" + "a" * 16 + "0" * 48, OTHER: "sha256:" + "a" * 16 + "1" * 48}
+    monkeypatch.setattr(module, "abstract_key", lambda text: fake.get(text, ""))
+    xs = [paper("AbCd1234", "One", abstract=LONG, **ICLR), imported(f"iclr-{H[1]}", "Two", abstract=OTHER, **ICLR)]  # fmt: skip
+    assert len(dedup(xs).records) == 2  # the two keys share their first 16 digits and are still two abstracts

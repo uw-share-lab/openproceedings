@@ -101,6 +101,14 @@ def title_text(raw: str) -> tuple[str, int]:
     return " ".join(spaced.split()), replaced
 
 
+def title_evidence(evidence: str, replaced: int) -> str:
+    """A title claim's evidence, saying how many control characters `title_text` replaced (nothing is silent;
+    decision-036). Unchanged when none were."""
+    if not replaced:
+        return evidence
+    return f"{evidence} ({replaced} control character{'' if replaced == 1 else 's'} replaced by a space)"
+
+
 # Every string a record or claim holds: strict, and encodable, so a snapshot can always be written.
 Text = Annotated[StrictStr, AfterValidator(_utf8)]
 type ClaimValue = Text | StrictInt | tuple[Text, ...] | None

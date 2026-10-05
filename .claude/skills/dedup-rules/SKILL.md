@@ -33,16 +33,29 @@ over-merge silently deletes a paper from someone's systematic review.
    lost its `e` to a `\e` command and `Erd\H{o\u030b}s` was no accent macro. `test_every_canonically_equivalent_title_has_one_key`
    pins `title_key(NFC(t)) == title_key(NFD(t)) == title_key(t)`. The real corpus held no non-NFC title (2026-09-29).
 
-3. **An imported record that matched nothing: same abstract key, same `venue`, same `year` (TASK-179).** An
+3. **An imported record that matched nothing: same abstract key, same `venue`, same `year` (TASK-179,
+   decision-037).** An
    imported record is a cluster whose only source is `ris` after steps 1 and 2 (`dedup.IMPORTED`). Its title is
    Google Scholar's, which drops math (`$R^2$-Guard` → `-Guard`) and may be a preprint's earlier title; its
    abstract is the publisher's page text. It merges with the same venue-year's clusters that keep an abstract
-   with its **abstract key**: `dedup.abstract_key`, `sha256:` + 16 hex of the abstract's `title_key`, and `""`
-   (never a match) under `MIN_ABSTRACT_TOKENS` = 50 tokens. Same machinery as step 2 (`_join`, `_merging`,
-   `_mergeable`, the chain re-check), so every never-merge rule below holds, set-aside rivals included. A bucket
-   with no imported record is never formed: a crawled listing and a note sharing only an abstract stay apart
-   (NeurIPS 2023 D&B `3sRR2u72oQ` and its retitled listing, the one such pair on the 2026-10-05 crawl; lifting
-   the restriction is an owner decision). Abstracts are normalised only in venue-years that still hold an
+   with its **abstract key**: `dedup.abstract_key`, `sha256:` + the whole digest of the abstract's `title_key`
+   (matching never uses the 16 digits `shown_key` writes to merges.csv), and `""` (never a match) under
+   `MIN_ABSTRACT_TOKENS` = 50 tokens. Same machinery as step 2 (`_join`, `_mergeable`, the chain re-check), so
+   every never-merge rule below holds, set-aside rivals included (`_abstract_aside`), plus step 3's own
+   (`_abstract_group`, `_own_abstract`):
+   - **Own page only.** A `ris` abstract claim is evidence only when scholarmend read it from the record's own
+     page: `scholarmend:proceedings_page <url>` with `urls.names_native(url, <its proceedings id>)`, or
+     `scholarmend:openreview_api openreview:<forum>` on a record with that forum id. `ris.py` prefers an
+     `openreview_api` abstract, so a proceedings-id row can carry another page's text: never evidence.
+   - **An imported record must be in the group**, and **at most one record that isn't imported**: an abstract
+     never joins two crawled records, so an import can't bridge a listing and a note. A crawled listing and a
+     note sharing only an abstract stay apart (NeurIPS 2023 D&B `3sRR2u72oQ` and `nips-39736af1…`, the one such
+     pair on the 2026-10-05 crawl; extending the rule is deferred, decision-037).
+   - **Never into a note that isn't accepted or `unknown`**, even a lone one (`_mergeable` ignores status, and
+     the import would take the note's status): an `abstract_key` row instead.
+   - **Rows on the output records**: a refused group, and a rival a merge set aside (the merged record is a
+     listing that keeps the import's abstract claim, so `_abstract_buckets(merged_too=True)` finds it again on
+     every run). Abstracts are normalised only in venue-years that still hold an
    imported record. Never loosen the title key instead: `A$^2$Search` and `ASearch` with different abstracts are
    two papers.
 
@@ -227,7 +240,7 @@ it needs to know which listings were crawled, and whether completely.
 `merges.csv`: `survivor_id,merged_id,rule,key,venue,year,sources`, where `rule` is `forum_id`,
 `native_id` (the same proceedings id), `forum_link`, `title_venue_year` or `abstract_venue_year`, and `key` is
 the forum id, the native id, the linked forum id, the first shared title key or the abstract key
-(`sha256:<16 hex>`; recompute it with `dedup.abstract_key` on either side's abstract). Step-1 rows point from a cluster's id to
+(`sha256:<16 hex>`; recompute it with `dedup.shown_key(dedup.abstract_key(…))` on either side's abstract). Step-1 rows point from a cluster's id to
 itself (`survivor_id == merged_id`: one row per extra copy of that id); a `forum_link` row points from a
 linked cluster's id (the PMLR listing) to the forum id's; a `title_venue_year` row then points from the
 cluster id to the step-2 survivor, and an `abstract_venue_year` row from a step-2 cluster's id to the final
@@ -262,8 +275,9 @@ listings linking it or another forum, from its venue-year or another); `@example
 over-merges a review found and the link cases. Table tests from the recorded v235 and ICML 2024 note
 fixtures: `test_dedup_forum_link.py`.
 - An `abstract_venue_year` row (TASK-179; the `imports` strategy, and two long abstracts in every pool) joins
-  clusters of one venue-year that both keep the row's abstract, in a group that held an imported record; a pool
-  with no imported record has none.
+  clusters of one venue-year that both keep the row's abstract, in a group that held an imported record and at
+  most one cluster that wasn't one, whose status is `accepted` or `unknown` and whose forum id, if it has one,
+  is the survivor's; a pool with no imported record has none.
 - No output record combines inputs with different `(venue, year)`.
 - Idempotent: `dedup(dedup(xs)).records == dedup(xs).records`, and the same conflict rows apart from
   `newest:`/`tie:`.

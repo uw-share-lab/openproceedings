@@ -21,10 +21,11 @@ from openproceedings.ingest.dedup import (
     abstract_key,
     dedup,
     is_creative_ai,
+    shown_key,
 )
 from openproceedings.ingest.record import PaperRecord
 
-from tests.unit.ingest.test_dedup import LONG, OTHER, T0, T1, T2, H, archive, nips, paper
+from tests.unit.ingest.test_dedup import LONG, OTHER, T0, T1, T2, H, archive, imported, nips, own_page, paper
 
 TITLES = ["Trust in AI", "trust in AI!", "Trust in Machines", "—"]
 FORUMS = ["AbCd1234", "EfGh5678", "IjKl9012"]
@@ -59,12 +60,14 @@ def records(draw: st.DrawFn) -> PaperRecord:
         draw(st.integers(0, 3)) == 0
     ):  # a forum link: a listing's (PMLR v235), a note's own, or a contradicting one
         extra["urls_forum"] = forum_url(draw(st.sampled_from(FORUMS)))
+    year = draw(st.sampled_from([2023, 2024]))
     return paper(
         native,
         draw(st.sampled_from(TITLES)),
         source=source,
         venue=venue,
-        year=draw(st.sampled_from([2023, 2024])),
+        year=year,
+        abstract_evidence=own_page(native, year) if source == "ris" else None,
         track=draw(
             st.sampled_from(["main", "workshop", "position", "datasets_benchmarks", "unknown", "other"])
         ),
@@ -130,17 +133,22 @@ def imports(draw: st.DrawFn) -> list[PaperRecord]:
     venue, prefix = draw(st.sampled_from([("NeurIPS", "nips"), ("ICLR", "iclr")]))
     year = draw(st.sampled_from([2023, 2024]))
     abstracts = st.sampled_from([LONG, LONG, OTHER, "An abstract.", None])
-    xs = [paper(f"{prefix}-{H[1]}", "Trust in Machines", source="ris", venue=venue, year=year, abstract=LONG,
-                track=draw(st.sampled_from(["main", "main", "unknown"])))]  # fmt: skip
+    # sometimes a forum-id import, sometimes an abstract that is not its own page's (never evidence)
+    native = draw(st.sampled_from([f"{prefix}-{H[1]}", f"{prefix}-{H[1]}", FORUMS[2]]))
+    evidence = draw(
+        st.sampled_from([None, None, None, "scholarmend:proceedings_page https://example.org/x", ""])
+    )
+    xs = [imported(native, "Trust in Machines", venue=venue, year=year, abstract=LONG,
+                track=draw(st.sampled_from(["main", "main", "unknown"])), abstract_evidence=evidence)]  # fmt: skip
     for fid in draw(st.lists(st.sampled_from(FORUMS), min_size=1, max_size=2, unique=True)):
         where = dict(venue=venue, year=draw(st.sampled_from([year, year, year, 2023, 2024])))
         title = draw(st.sampled_from(["Trust in AI", "Trust in AI", "Trust in Machines"]))
         xs.append(paper(fid, title, source=draw(st.sampled_from(["openreview_v2", "openreview_v1"])),
                         track=draw(st.sampled_from(["main", "main", "workshop", "unknown"])),
-                        status=draw(st.sampled_from(["accepted", "accepted", "rejected"])),
+                        status=draw(st.sampled_from(["accepted", "accepted", "rejected", "withdrawn"])),
                         abstract=draw(abstracts), **where))  # fmt: skip
         if draw(st.booleans()):  # the RIS row of the note's forum id
-            xs.append(paper(fid, title, source="ris", abstract=draw(abstracts), fetched=T1, **where))
+            xs.append(imported(fid, title, abstract=draw(abstracts), fetched=T1, **where))
     if draw(
         st.booleans()
     ):  # a crawled listing: never joined by its abstract unless the import is in the group
@@ -508,16 +516,16 @@ def test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings(xs: l
 # TASK-179: the six pairs and the retitled seventh of snapshot 2026-10-05-47d4e190ca81, as shapes
 LOST_SYMBOL = [
     paper("AbCd1234", "A$^2$Search", venue="ICLR", abstract=LONG),
-    paper(f"iclr-{H[1]}", "ASearch", source="ris", venue="ICLR", abstract=LONG),
+    imported(f"iclr-{H[1]}", "ASearch", venue="ICLR", abstract=LONG),
 ]
 TWO_RIS_ROWS = [
     paper("AbCd1234", venue="ICLR", abstract=LONG),
-    paper("AbCd1234", "Trust in Machines", source="ris", venue="ICLR", abstract=LONG),
-    paper(f"iclr-{H[1]}", "Trust in Machines", source="ris", venue="ICLR", abstract=LONG, fetched=T1),
+    imported("AbCd1234", "Trust in Machines", venue="ICLR", abstract=LONG),
+    imported(f"iclr-{H[1]}", "Trust in Machines", venue="ICLR", abstract=LONG, fetched=T1),
 ]
 SAME_ABSTRACT_OTHER_YEAR = [
     paper("AbCd1234", "A$^2$Search", venue="ICLR", year=2023, abstract=LONG),
-    paper(f"iclr-{H[1]}", "ASearch", source="ris", venue="ICLR", year=2024, abstract=LONG),
+    imported(f"iclr-{H[1]}", "ASearch", venue="ICLR", year=2024, abstract=LONG),
 ]
 
 
@@ -546,17 +554,26 @@ def test_an_abstract_merge_always_holds_an_imported_record_and_its_abstract(xs: 
         mine = [x for x in members if x.id == m.merged_id or final_before(result, x.id) == m.merged_id]
         rest = [x for x in members if x not in mine]
         for side in (mine, rest):
-            assert any(x.abstract is not None and abstract_key(x.abstract) == m.key for x in side)
-        # an imported record: some cluster in the group whose every input, before step 3, came from `ris` alone
-        before = Counter(final_before(result, x.id) for x in members)
-        assert any(
-            all(
-                {c.source for c in x.provenance} == IMPORTED
-                for x in members
-                if final_before(result, x.id) == cid
-            )
-            for cid in before
-        )
+            assert any(x.abstract is not None and shown_key(abstract_key(x.abstract)) == m.key for x in side)
+        # an imported record: some cluster in the group whose every input, before step 3, came from `ris` alone;
+        # and at most one cluster that isn't one (an abstract never joins two crawled records)
+        before = {final_before(result, x.id) for x in members}
+        inputs = {cid: [x for x in members if final_before(result, x.id) == cid] for cid in before}
+        crawled = [
+            cid
+            for cid, ins in inputs.items()
+            if any({c.source for c in x.provenance} != IMPORTED for x in ins)
+        ]
+        assert len(crawled) <= 1 < len(before)
+        for (
+            cid
+        ) in crawled:  # the cluster's resolved status is one a listing can have, and its forum id survives
+            status = dedup(inputs[cid]).records
+            assert all(r.status in {"accepted", "unknown"} for r in status)
+            if any(x.forum_id is not None and x.id == cid for x in inputs[cid]):
+                assert out.id == cid
+        if any(x.forum_id is not None for x in members):  # a forum id in the group is always the survivor's
+            assert out.forum_id is not None
 
 
 def final_before(result: DedupResult, rid: str) -> str:

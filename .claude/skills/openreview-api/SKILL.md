@@ -175,7 +175,8 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   175 position) stay unmapped until the owner decides what they are, so that venue-year's attention WARNING is
   expected with `presentation_unmapped` exactly 5,980. The DEBUG line has no string, so any other count means a
   new string: list the cache's distinct `content.venue` values before touching the table.
-- Titles (TASK-180; spec 01 §Pipeline 2): both crawlers read a title through `openreview_v2._title`, which
+- Titles (TASK-180, decision-036; spec 01 §Pipeline 2; the RIS and proceedings importers apply the same
+  `record.title_text`): both crawlers read a title through `openreview_v2._title`, which
   replaces each control character (U+0002 from a pasted PDF line break, a trailing NUL) with a space
   (`record.title_text`) instead of losing the note as `invalid`. The claim's evidence becomes
   `content.title (<n> control characters replaced by a space)` and a DEBUG `openreview_title_control_characters`

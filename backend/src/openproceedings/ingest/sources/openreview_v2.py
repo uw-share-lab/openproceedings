@@ -59,6 +59,7 @@ from openproceedings.ingest.record import (
     PaperRecord,
     Source,
     Urls,
+    title_evidence,
     title_text,
 )
 from openproceedings.ingest.sources.common import CrawlError, Crawls, Heartbeat, Report
@@ -189,18 +190,14 @@ def _text(value: Any) -> str | None:
 
 def _title(value: Any, forum: str) -> tuple[str | None, str]:
     """A note's title and its claim's evidence (both API versions). A control character the source left in it
-    becomes a space (`record.title_text`, TASK-180): the paper is kept, the evidence says how many were replaced,
+    becomes a space (`record.title_text`, TASK-180, decision-036): the paper is kept, the evidence says how many were replaced,
     and a DEBUG line names the forum. None when no title is left."""
     if not isinstance(value, str):
         return None, "content.title"
     title, replaced = title_text(value)
-    if not replaced:
-        return title or None, "content.title"
-    log.debug("openreview_title_control_characters", extra={"forum": forum, "replaced": replaced})
-    return (
-        title or None,
-        f"content.title ({replaced} control character{'' if replaced == 1 else 's'} replaced by a space)",
-    )
+    if replaced:
+        log.debug("openreview_title_control_characters", extra={"forum": forum, "replaced": replaced})
+    return title or None, title_evidence("content.title", replaced)
 
 
 def note_record(

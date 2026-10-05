@@ -1,6 +1,6 @@
 ---
 name: dedup-auditor
-description: Read-only auditor of deduplication — reviews backend/src/openproceedings/ingest/dedup.py changes and a snapshot's merges.csv and conflicts.csv, hunting over-merges (across venue or year, on an empty or year-less key, between distinct forum ids, into workshop records) and unexplained record losses in op snapshot diff. Use on every diff touching ingest/ (routed by /review-gate), and before any snapshot is promoted.
+description: Read-only auditor of deduplication — reviews backend/src/openproceedings/ingest/dedup.py changes and a snapshot's merges.csv and conflicts.csv, hunting over-merges (across venue or year, on an empty or year-less key, between distinct forum ids, into workshop records, on an abstract without an imported record or between two crawled records) and unexplained record losses in op snapshot diff. Use on every diff touching ingest/ (routed by /review-gate), and before any snapshot is promoted.
 tools: Read, Grep, Glob, Bash
 ---
 
@@ -43,6 +43,10 @@ fixes.
 - A title merge between two OpenReview records with different forum ids, or between a listing whose
   `urls.forum` link names one forum and a note of another.
 - A `forum_link` merge across venue or year, or one that joins two proceedings ids.
+- An `abstract_venue_year` row (decision-037) with no imported cluster (sources `ris` alone) in its group; on
+  an abstract under 50 tokens, or one that is not the import's own page's text; joining two crawled clusters;
+  into a note that is rejected, withdrawn or desk-rejected; or whose survivor is the import's id when a crawled
+  forum id was in the group.
 - A merge that picks field values by input order instead of precedence.
 - Dedup whose output depends on input order.
 - Records lost without a `merges.csv` row.

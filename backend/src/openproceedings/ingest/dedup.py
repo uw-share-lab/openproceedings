@@ -22,9 +22,12 @@ a review, a duplicate only shows in the hit count.
 3. An **imported record** that matched nothing (a cluster whose only source is `ris`, after steps 1 and 2) then
    merges on `(venue, year, abstract key)` (TASK-179): its title is Google Scholar's rendering, which drops math
    (`$R^2$-Guard` arrives as `-Guard`) and can be a preprint's earlier title, while its abstract is the
-   publisher's own page text. The abstract key is the title key's normalisation of the abstract, and counts only
-   from `MIN_ABSTRACT_TOKENS` tokens. Every refusal of step 2 holds here too (forum ids, proceedings ids, the
-   track rule, the set-aside rivals), and a group with no imported record is never joined by its abstracts.
+   publisher's own page text (`_own_abstract`: an abstract scholarmend read from another paper's page is no
+   evidence). The abstract key is the title key's normalisation of the abstract, and counts only from
+   `MIN_ABSTRACT_TOKENS` tokens. Every refusal of step 2 holds here too (forum ids, proceedings ids, the track
+   rule, the set-aside rivals), and three of its own (`_abstract_group`, decision-037): a group with no imported
+   record is never joined by its abstracts, an abstract never joins two records that aren't imported, and an
+   import never merges into a note that is rejected, withdrawn or desk-rejected.
 
 `ris` is a route, not a publisher: each RIS row names its paper by a forum id or a proceedings id. So two
 candidates that share only `ris` are judged by those ids (at most one of each in a merged record), not refused
@@ -151,13 +154,18 @@ def title_key(title: str) -> str:
 
 @lru_cache(maxsize=1 << 18)
 def abstract_key(abstract: str) -> str:
-    """The dedup key of an abstract (step 3, TASK-179): `sha256:` and the first 16 hex digits of the hash of its
-    `title_key` (the same token-contract normalisation, so no second normaliser), or `""` when it has fewer than
-    `MIN_ABSTRACT_TOKENS` tokens. Hashed because the key is written to merges.csv and an abstract is long."""
+    """The dedup key of an abstract (step 3, TASK-179, decision-037): `sha256:` and the hash of its `title_key`
+    (the same token-contract normalisation, so no second normaliser), or `""` when it has fewer than
+    `MIN_ABSTRACT_TOKENS` tokens. Matching is on the whole digest; merges.csv shows `shown_key`'s 16 digits."""
     key = title_key(abstract)
     if key.count(" ") + 1 < MIN_ABSTRACT_TOKENS:
         return ""
-    return "sha256:" + hashlib.sha256(key.encode()).hexdigest()[:16]
+    return "sha256:" + hashlib.sha256(key.encode()).hexdigest()
+
+
+def shown_key(key: str) -> str:
+    """An abstract key as merges.csv writes it: `sha256:` and the digest's first 16 hex digits."""
+    return key[: len("sha256:") + 16]
 
 
 def _text(v: object) -> str:
@@ -606,47 +614,117 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
     )
 
 
-def _abstract_keys(c: _Cluster) -> frozenset[str]:
-    """The key of every abstract claim the cluster keeps (as `keys` is of its titles) that is long enough."""
+def _imported(c: _Cluster) -> bool:
+    """An imported record: a cluster whose only source is the import route (decision-037)."""
+    return c.sources == IMPORTED
+
+
+def _own_abstract(claim: Claim, record: PaperRecord, pids: frozenset[str]) -> bool:
+    """Is this abstract claim the text of the record's own page? A crawler's always is. A `ris` claim is
+    scholarmend's, and counts only when its evidence ties it to the record: `proceedings_page <url>` where the
+    url is the page of the record's own id or of a proceedings paper it names, or `openreview_api
+    openreview:<forum>` on a record with that forum id. Anything else (another paper's page, a route this code
+    doesn't know) is no evidence of which paper the record is."""
+    if claim.source not in IMPORTED:
+        return True
+    via, _, rest = (claim.evidence or "").partition(" ")
+    where = rest.split(" ", 1)[0]
+    if via == RIS_VIA_PROCEEDINGS:
+        return bool(where) and any(urls.names_native(where, n) for n in {record.native, *pids})
+    if via == RIS_VIA_OPENREVIEW:
+        return record.forum_id is not None and where == f"openreview:{record.forum_id}"
+    return False
+
+
+def _abstract_keys(c: _Cluster, *, imported: bool = False) -> frozenset[str]:
+    """The key of every abstract claim the cluster keeps (as `keys` is of its titles) that is long enough and
+    its own page's text (`_own_abstract`). `imported`: only the import route's claims."""
     return frozenset(
         k for claim in c.summary.provenance
-        if claim.field == "abstract" and isinstance(claim.value, str) and (k := abstract_key(claim.value))
+        if claim.field == "abstract" and isinstance(claim.value, str)
+        and (claim.source in IMPORTED or not imported)
+        and _own_abstract(claim, c.summary, c.proceedings_ids) and (k := abstract_key(claim.value))
     )  # fmt: skip
 
 
-def _abstract_buckets(clusters: Sequence[_Cluster]) -> dict[tuple[str, int, str], set[int]]:
+def _abstract_buckets(
+    clusters: Sequence[_Cluster], *, merged_too: bool = False
+) -> dict[tuple[str, int, str], set[int]]:
     """Step 3's groups: clusters of one venue and year sharing an abstract key, kept only where one of them is an
-    imported record (its sources are `IMPORTED` alone). Abstracts are normalised only in the venue-years that
-    hold one."""
-    scope = {
-        (c.summary.venue, c.summary.year) for c in clusters if c.sources == IMPORTED and _abstract_keys(c)
-    }
+    imported record holding that key (its sources are `IMPORTED` alone). `merged_too`, for the not-merged rows:
+    also where a listing keeps an import-route abstract with that key, as a record an import merged into does (it
+    is always a listing: the import's proceedings id, or the crawled listing a forum-id import joined), so a rival
+    set aside by the merge is still reported on the output records. Abstracts are normalised
+    only in the venue-years that hold such a cluster."""
+    anchors: dict[int, frozenset[str]] = {
+        ci: keys for ci, c in enumerate(clusters)
+        if (_imported(c) or (merged_too and c.listed)) and (keys := _abstract_keys(c, imported=True))
+    }  # fmt: skip
+    scope = {(clusters[ci].summary.venue, clusters[ci].summary.year) for ci in anchors}
     buckets: dict[tuple[str, int, str], set[int]] = defaultdict(set)
     for ci, c in enumerate(clusters):
         if (c.summary.venue, c.summary.year) in scope:
             for key in _abstract_keys(c):
                 buckets[(c.summary.venue, c.summary.year, key)].add(ci)
-    return {k: cis for k, cis in buckets.items() if any(clusters[ci].sources == IMPORTED for ci in cis)}
+    return {k: cis for k, cis in buckets.items() if any(k[2] in anchors.get(ci, ()) for ci in cis)}
+
+
+def _abstract_aside(c: _Cluster, group: Sequence[_Cluster]) -> str | None:
+    """Why a cluster in an abstract group can never be the imported record's paper, as its not-merged resolution,
+    or None. An imported record and a listing are always candidates. Otherwise the title step's rule for a rival
+    of a listing (`_not_the_listed_paper`), and, listing or not, a status the import can't take: `_mergeable`
+    ignores status, so an accepted import would merge into a lone withdrawn or rejected note and take
+    OpenReview's status, and an accepted paper would leave every accepted-only result."""
+    if _imported(c) or c.listed:
+        return None
+    if any(x.listed for x in group):
+        return _not_the_listed_paper(c, group)
+    return None if c.summary.status in _LISTABLE_STATUSES else "ambiguous_not_merged"
+
+
+def _abstract_group(group: Sequence[_Cluster]) -> str | None:
+    """Why these clusters must not share a record on an abstract key, or None: `_mergeable`'s reasons, and step
+    3's own. The group holds an imported record and at most one cluster that isn't one, so an abstract never joins
+    two crawled records (a listing and a note of another title are an owner decision, decision-037), and that
+    cluster's status is one a listing can have."""
+    crawled = [c for c in group if not _imported(c)]
+    if len(crawled) > 1 or len(crawled) == len(group):
+        return "ambiguous_not_merged"
+    if any(c.summary.status not in _LISTABLE_STATUSES for c in crawled):
+        return "ambiguous_not_merged"
+    return _mergeable(group)
+
+
+def _abstract_merging(group: Sequence[_Cluster]) -> list[int] | None:
+    """Positions in an abstract-key group that merge, or None: the clusters not set aside (`_abstract_aside`),
+    if `_abstract_group` lets them share a record."""
+    rest = [i for i, c in enumerate(group) if _abstract_aside(c, group) is None]
+    if len(rest) < 2 or _abstract_group([group[i] for i in rest]) is not None:
+        return None
+    return rest
 
 
 def _join(
     clusters: Sequence[_Cluster], buckets: dict[tuple[str, int, str], set[int]], rule: str
 ) -> tuple[list[_Cluster], list[Merge]]:
-    """Merge the clusters each bucket's key joins, where `_merging` lets them, into new clusters (sorted by id),
-    with one `rule` row per merged cluster, from its id to the survivor's. Used for title keys (step 2) and
-    abstract keys (step 3)."""
+    """Merge the clusters each bucket's key joins, where the step lets them, into new clusters (sorted by id),
+    with one `rule` row per merged cluster, from its id to the survivor's. Title keys (step 2) are judged by
+    `_merging` and `_mergeable`, abstract keys (step 3) by `_abstract_merging` and `_abstract_group`."""
+    by_abstract = rule == "abstract_venue_year"
+    merging_of = _abstract_merging if by_abstract else _merging
+    refusal = _abstract_group if by_abstract else _mergeable
     joined = _Clusters(len(clusters))
     joined_by: dict[int, str] = {}  # cluster → the first key it merged on
     for (_, _, key), cis in sorted(buckets.items()):
         if len(cis) < 2:
             continue
         ordered = sorted(cis)
-        merging = _merging([clusters[ci] for ci in ordered])
+        merging = merging_of([clusters[ci] for ci in ordered])
         if merging is None:
             continue  # reported by _refusals, against the output records
         for ci in (ordered[i] for i in merging):
             joined.union(ordered[merging[0]], ci)
-            joined_by.setdefault(ci, key)
+            joined_by.setdefault(ci, shown_key(key) if by_abstract else key)
     out: list[_Cluster] = []
     merges: list[Merge] = []
     for group in joined.groups():
@@ -657,7 +735,7 @@ def _join(
         # merges with its listing), and this re-check refuses it only because every non-listing record has
         # its own forum id (dedup refuses one naming neither a forum id nor its proceedings URL), unlike the
         # note the listing merged with. The chain splits: the safe direction, never a merge
-        refused = len(group) > 1 and _mergeable(chained) is not None
+        refused = len(group) > 1 and refusal(chained) is not None
         for part in [[ci] for ci in group] if refused else [group]:
             members = [clusters[ci] for ci in part]
             if len(members) == 1:
@@ -742,22 +820,36 @@ def _refusals(out: Sequence[PaperRecord]) -> set[Conflict]:
     for ci, c in enumerate(clusters):
         for key in c.keys:
             buckets[(c.summary.venue, c.summary.year, key)].add(ci)
-    for fld, found in (("title_key", buckets), ("abstract_key", _abstract_buckets(clusters))):
-        for cis in found.values():
-            bucket = [clusters[ci] for ci in sorted(cis)]
-            if len(bucket) < 2:
-                continue
-            # a cluster that can't be a listing's paper (TASK-126) is reported against the first listing, with
-            # its own reason; the rest as before (a key whose records could merge alone was refused in a chain)
-            aside: dict[str, str] = {}
-            if _mergeable(bucket) is not None and any(c.listed for c in bucket):
-                aside = {c.id: why for c in bucket if (why := _not_the_listed_paper(c, bucket))}
-            if aside:
-                listing = next(c for c in bucket if c.listed)
-                rows.update(_pair(listing, c, aside[c.id], fld) for c in bucket if c.id in aside)
-            rest = [c for c in bucket if c.id not in aside]
-            if len(rest) > 1:
-                reason = _mergeable(rest)
-                named = fld if reason else f"{fld}_chain"
-                rows.update(_pair(rest[0], c, reason or "ambiguous_not_merged", named) for c in rest[1:])
+    for cis in buckets.values():
+        bucket = [clusters[ci] for ci in sorted(cis)]
+        if len(bucket) < 2:
+            continue
+        # a cluster that can't be a listing's paper (TASK-126) is reported against the first listing, with
+        # its own reason; the rest as before (a key whose records could merge alone was refused in a chain)
+        aside: dict[str, str] = {}
+        if _mergeable(bucket) is not None and any(c.listed for c in bucket):
+            aside = {c.id: why for c in bucket if (why := _not_the_listed_paper(c, bucket))}
+        if aside:
+            listing = next(c for c in bucket if c.listed)
+            rows.update(_pair(listing, c, aside[c.id]) for c in bucket if c.id in aside)
+        rest = [c for c in bucket if c.id not in aside]
+        if len(rest) > 1:
+            reason = _mergeable(rest)
+            fld = "title_key" if reason else "title_key_chain"
+            rows.update(_pair(rest[0], c, reason or "ambiguous_not_merged", fld) for c in rest[1:])
+    # step 3's groups (TASK-179), on the output records: an imported record that stayed apart, and a record an
+    # import merged into (it keeps the import's abstract claim), each with the records sharing that abstract
+    for cis in _abstract_buckets(clusters, merged_too=True).values():
+        bucket = [clusters[ci] for ci in sorted(cis)]
+        if len(bucket) < 2:
+            continue
+        aside = {c.id: why for c in bucket if (why := _abstract_aside(c, bucket))}
+        if aside:  # against the first candidate: a listing or an imported record (the bucket holds one)
+            anchor = next(c for c in bucket if c.id not in aside)
+            rows.update(_pair(anchor, c, aside[c.id], "abstract_key") for c in bucket if c.id in aside)
+        rest = [c for c in bucket if c.id not in aside]
+        if len(rest) > 1:
+            reason = _abstract_group(rest)
+            fld = "abstract_key" if reason else "abstract_key_chain"
+            rows.update(_pair(rest[0], c, reason or "ambiguous_not_merged", fld) for c in rest[1:])
     return rows
