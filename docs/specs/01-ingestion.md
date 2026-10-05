@@ -122,7 +122,7 @@ position papers). `spotlight` is mapped. `ICML 2026 regular` and `ICML 2026 Posi
 left out of the table: `regular` is not a presentation word, and nothing recorded says a regular paper was a
 poster. Both strings have a recorded note and a test that keeps them unmapped
 (`icml-2026/notes-presentation-*.json`), and their records show no presentation. **They await an owner
-decision** (`poster`, a stated string with no presentation, or left as they are). Until then ICML 2026 reports
+decision** (`poster`, a stated string with no presentation, or left as they are; TASK-190). Until then ICML 2026 reports
 `presentation_unmapped` 5,980 (5,805 + 175) and raises the `openreview_crawl_attention` WARNING on every crawl
 and replay. The DEBUG line carries only a forum id, so the count is the only signal: **any ICML 2026 count
 other than 5,980 means a string this table has not seen** (or a changed listing), and is chased by listing the
@@ -240,7 +240,11 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    reconcile would have turned that paper's OpenReview acceptance into `unknown`; neither has happened on a
    real crawl. **Abstracts, authors and keywords are
    not changed**: the record never refused a control character there, dozens of crawled abstracts hold U+0002,
-   and they are stored and tokenized as before (the tokenizer splits on it). No
+   and they are stored and tokenized as before (the tokenizer splits on it, so `modal␂ity` is two words in the
+   index: TASK-188). The OpenReview crawl reports count the records whose title lost one,
+   `title_control_characters` in the crawl file, the manifest and `openreview_crawl_finished` (listed in the
+   manifest only when above 0, so a crawl with none keeps its shape; never an attention WARNING: the paper is
+   kept). No
    existing record's bytes change (a rebuild of the 2026-10-05 cache adds four records and changes no other),
    so no tokenizer, index-schema or record-schema version moves.
 3. **Classify.** Derive `track`, `status` and `presentation` using the rules above. Every classification
@@ -291,15 +295,24 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    - an abstract never joins two records that aren't imported. The import merges with at most one crawled
      record, so it can't bridge a crawled listing and a note of another title. A crawled listing whose paper was
      retitled therefore stays two records (NeurIPS 2023 D&B `3sRR2u72oQ` and `nips-39736af1…`, the one such
-     pair on the 2026-10-05 crawl); extending the rule to crawled listings is deferred (decision-037);
-   - an import never merges into a note that is rejected, withdrawn or desk-rejected, even a lone one: the
-     merged record would take OpenReview's status (RIS ranks last), and an accepted paper would leave every
-     accepted-only result.
+     pair on the 2026-10-05 crawl); extending the rule to crawled listings is deferred (decision-037, TASK-187);
+   - an import never merges with a record that is no listing and is rejected, withdrawn or desk-rejected, even a
+     lone one: a note (the merged record would take OpenReview's status, as RIS ranks last), or another import,
+     a forum id's RIS row with no note crawled (both claims are `ris`, so the status would be whichever row was
+     fetched last). Either way an accepted paper would leave every accepted-only result. (b) holds the same
+     rule: such a record never merges on its title with imported records alone, imported or crawled itself; a
+     crawled listing, whose status outranks it, may still take a lone rejected note.
    A refused group is a `conflicts.csv` row with field `abstract_key` (or `abstract_key_chain` when each pair
-   could merge alone), and so is a rival set aside by a merge: rows are judged on the output records, where the
-   record an import merged into still keeps the import's abstract claim, so the row is written on every run. The
+   could merge alone), and so is a rival set aside by a merge: rows are judged on the output records, anchored on
+   every own-page abstract the record an import merged into keeps (a listing holding a `ris` claim: a newer RIS
+   row of the note's forum id may have replaced the import's abstract claim, while the note's own still holds
+   the text they merged on), so the row is written on every run. A pair a title key already reported gets no
+   second, `abstract_key` row: it would say nothing more (the 14 such pairs on the 2026-10-05 crawl were each a
+   listing and its same-title workshop version). The
    title key is never loosened: two papers whose titles differ only by a symbol and whose abstracts differ
-   stay two records. The merged record's differing titles are a `precedence:` row, as for any merge. On the
+   stay two records. The title step, for its part, never consults the abstract: an import whose title lost a
+   symbol could equal another paper's title key and merge with it (no instance on the 2026-10-05 crawl;
+   TASK-189). The merged record's differing titles are a `precedence:` row, as for any merge. On the
    2026-10-05 crawl (a) – (c) merge all 7 accepted records that existed only as the import's second copy of a
    crawled ICLR paper: one by its title once `ris` on both sides stopped blocking it, six by their abstract
    (five lost a math symbol; `CwoM9T55lG` is under its earlier title).

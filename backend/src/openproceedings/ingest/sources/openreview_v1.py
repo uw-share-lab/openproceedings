@@ -97,7 +97,16 @@ from pydantic import ValidationError
 
 from openproceedings.ingest.classify import Classification, classify_v1_venue, classify_venueid
 from openproceedings.ingest.dedup import Conflict, title_key
-from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls
+from openproceedings.ingest.record import (
+    FORUM_ID,
+    Claim,
+    ClaimField,
+    ClaimValue,
+    PaperRecord,
+    Source,
+    Urls,
+    title_controls_replaced,
+)
 from openproceedings.ingest.sources.common import CrawlError, Crawls, Report
 from openproceedings.ingest.sources.http import CacheMiss
 from openproceedings.ingest.sources.openreview_client import API_V1, API_V2, OpenReviewClient
@@ -372,6 +381,7 @@ class CrawlReport(Report):
     unknown_track: int = 0
     unknown_status: int = 0
     abstract_missing: int = 0
+    title_control_characters: int = 0  # records whose title had a control character replaced (decision-036)
     authors_split: int = 0  # `content.authors` split by the count-checked rule (decision-019)
     authors_unsplit_ids: list[str] = field(default_factory=list)  # the refused notes' forum ids
     authors_unsplit: int = (
@@ -407,6 +417,11 @@ class CrawlReport(Report):
             "unknown_track": self.unknown_track,
             "unknown_status": self.unknown_status,
             "abstract_missing": self.abstract_missing,
+            **(
+                {"title_control_characters": self.title_control_characters}
+                if self.title_control_characters
+                else {}
+            ),
             "authors_split": self.authors_split,
             "authors_unsplit": self.authors_unsplit,
             # listed only when there are any, so a crawl with none keeps its manifest shape
@@ -861,6 +876,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     report.unknown_track = sum(r.track == "unknown" for r in records.values())
     report.unknown_status = sum(r.status == "unknown" for r in records.values())
     report.abstract_missing = sum(r.abstract is None for r in records.values())
+    report.title_control_characters = sum(title_controls_replaced(r) > 0 for r in records.values())
     report.conflicts.sort()
     incompatible = client.incompatible - purged  # this crawl's share of the client's count
     log.info("openreview_crawl_finished",
@@ -869,6 +885,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
                     "imported": report.imported, "skipped": sum(report.skipped.values()),
                     "unknown_track": report.unknown_track, "unknown_status": report.unknown_status,
                     "conflicts": len(report.conflicts), "twins_linked": report.twins_linked,
+                    "title_control_characters": report.title_control_characters,
                     "requests": client.requests, "cached": client.cached,
                     "cache_incompatible": incompatible,
                     "ms": elapsed_ms(began, time.monotonic)})  # fmt: skip

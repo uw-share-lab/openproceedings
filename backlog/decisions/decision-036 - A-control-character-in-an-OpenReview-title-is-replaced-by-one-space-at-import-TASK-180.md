@@ -6,6 +6,8 @@ title: >-
 date: '2026-10-05 07:20'
 status: accepted
 ---
+The title names OpenReview, where the case was found; the decision covers **every importer** (the OpenReview API v1 and v2 crawlers, the RIS importer, and the NeurIPS, PMLR and ICLR-archive listings), as the Decision and Consequences below say.
+
 ## Context
 
 A record's title holds no control character (Unicode category `Cc`: C0, DEL, C1); `PaperRecord` refuses one. Sources leave them in: a PDF's soft line break pasted as U+0002 (`A SPEC␂TRUM FROM …`), a trailing NUL. The 2026 crawl (TASK-178) skipped ICLR 2026 `xHMNX3l8rx`, an accepted workshop paper, as `invalid` for two U+0002 in its title, and NeurIPS 2026 `KlvYZ17FPi` for a trailing NUL. Two earlier crawls had lost a paper the same way (ICLR 2024 `PqjQmLNuJt`, ICLR 2023 `6l46OaYQvu3`). A real paper was missing from the corpus over invisible characters. In the RIS importer the same character would have raised out of the import and failed the build, and in a proceedings importer it would have dropped the listing, after which reconcile would turn that paper's OpenReview acceptance into `unknown`.
@@ -26,7 +28,8 @@ Every importer replaces each control character in a title with one space and the
 - Tokenization is unchanged in meaning: the tokenizer already split on control characters, so `normalize(stored) == normalize(raw)`. The one exception is a control character just inside `$…$`, where a space stops the span reading as math; a test pins it, and no real title has it.
 - No version changes. Only records that were refused before are affected: a rebuild of the 2026-10-05 cache adds four records (`op:iclr:2026:xHMNX3l8rx`, `op:neurips:2026:KlvYZ17FPi`, `op:iclr:2024:PqjQmLNuJt`, `op:iclr:2023:6l46OaYQvu3`) and changes the content of no other. `TOKENIZER_VERSION`, `SCHEMA_VERSION` and the record schema version stay; existing search records are unaffected until a new snapshot is indexed, and then drift only by the added papers.
 - Whitespace controls (tab, line breaks, U+000B, U+001C–U+001F, U+0085) always became a space when whitespace was collapsed; they are not counted, so those titles' claims are byte-identical.
-- Abstracts keep their control characters (dozens of crawled abstracts hold U+0002, and the tokenizer splits on it, so `modal␂ity` indexes as `modal`, `ity`). Cleaning them would change stored bytes and content hashes of existing records; it is a separate decision.
-- Stated in spec 01 §Pipeline 2 and the `record-schema` and `openreview-api` skills. Tests: `test_record.py` (the table, the token property, the math exception), and one per importer (`test_openreview_v2.py`, `test_openreview_v1.py`, `test_ris.py`, `test_neurips.py`, `test_pmlr.py`, `test_iclr.py`).
+- Abstracts keep their control characters (dozens of crawled abstracts hold U+0002, and the tokenizer splits on it, so `modal␂ity` indexes as `modal`, `ity`). Cleaning them would change stored bytes and content hashes of existing records; it is a separate decision (TASK-188).
+- The OpenReview crawl reports count the records whose title lost one (`title_control_characters`, in the crawl file and the manifest when above 0, and on `openreview_crawl_finished`); never an attention WARNING, since the paper is kept.
+- Stated in spec 01 §Pipeline 2 and the `record-schema` and `openreview-api` skills. Tests: `test_record.py` (the table, the token property without `$` and with it wherever no control character is next to a `$`, the math exception), and one per importer (`test_openreview_v2.py`, `test_openreview_v1.py`, `test_ris.py`, `test_neurips.py`, `test_pmlr.py`, `test_iclr.py`).
 - Revisit if the tokenizer ever stops treating a control character as a separator, or if a source appears whose control characters are reliably one thing (then deletion or a hyphen could be right for that source).
 

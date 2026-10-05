@@ -21,6 +21,8 @@ from openproceedings.ingest.dedup import (
     abstract_key,
     dedup,
     is_creative_ai,
+    is_listing,
+    resolve,
     shown_key,
 )
 from openproceedings.ingest.record import PaperRecord
@@ -138,17 +140,21 @@ def imports(draw: st.DrawFn) -> list[PaperRecord]:
     evidence = draw(
         st.sampled_from([None, None, None, "scholarmend:proceedings_page https://example.org/x", ""])
     )
+    statuses = st.sampled_from(["accepted", "accepted", "rejected", "withdrawn"])
     xs = [imported(native, "Trust in Machines", venue=venue, year=year, abstract=LONG,
-                track=draw(st.sampled_from(["main", "main", "unknown"])), abstract_evidence=evidence)]  # fmt: skip
+                track=draw(st.sampled_from(["main", "main", "unknown"])), abstract_evidence=evidence,
+                status=draw(statuses) if native in FORUMS else "accepted")]  # fmt: skip
     for fid in draw(st.lists(st.sampled_from(FORUMS), min_size=1, max_size=2, unique=True)):
         where = dict(venue=venue, year=draw(st.sampled_from([year, year, year, 2023, 2024])))
         title = draw(st.sampled_from(["Trust in AI", "Trust in AI", "Trust in Machines"]))
-        xs.append(paper(fid, title, source=draw(st.sampled_from(["openreview_v2", "openreview_v1"])),
-                        track=draw(st.sampled_from(["main", "main", "workshop", "unknown"])),
-                        status=draw(st.sampled_from(["accepted", "accepted", "rejected", "withdrawn"])),
-                        abstract=draw(abstracts), **where))  # fmt: skip
-        if draw(st.booleans()):  # the RIS row of the note's forum id
-            xs.append(imported(fid, title, abstract=draw(abstracts), fetched=T1, **where))
+        crawled = draw(st.sampled_from([True, True, False]))  # else only the forum's RIS row, no note crawled
+        if crawled:
+            xs.append(paper(fid, title, source=draw(st.sampled_from(["openreview_v2", "openreview_v1"])),
+                            track=draw(st.sampled_from(["main", "main", "workshop", "unknown"])),
+                            status=draw(statuses), abstract=draw(abstracts), **where))  # fmt: skip
+        if not crawled or draw(st.booleans()):  # the RIS row of the note's forum id, with a status of its own
+            xs.append(imported(fid, title, abstract=draw(abstracts), fetched=draw(st.sampled_from([T0, T1, T2])),
+                               status=draw(statuses), **where))  # fmt: skip
     if draw(
         st.booleans()
     ):  # a crawled listing: never joined by its abstract unless the import is in the group
@@ -214,10 +220,13 @@ def creative(draw: st.DrawFn) -> tuple[list[PaperRecord], list[str], bool, int]:
         f"https://proceedings.neurips.cc/paper_files/paper/{year}/hash/{H[1]}-Abstract-Creative_AI_Track.html"
     )
     venueid = f"NeurIPS.cc/{year}/Creative_AI_Track"
+    listed_by = draw(
+        st.lists(st.sampled_from(["neurips_proceedings", "ris"]), min_size=1, max_size=2, unique=True)
+    )
     xs = [
         paper(f"nips-{H[1]}", title(), source=src, year=year, track="other", urls_proceedings=url,
               fetched=draw(st.sampled_from([T0, T1])))
-        for src in draw(st.lists(st.sampled_from(["neurips_proceedings", "ris"]), min_size=1, max_size=2, unique=True))
+        for src in listed_by
     ]  # fmt: skip
     suffix, status = draw(st.sampled_from([("", "unknown"), ("/Rejected_Submission", "rejected")]))
     xs.append(
@@ -250,6 +259,8 @@ def creative(draw: st.DrawFn) -> tuple[list[PaperRecord], list[str], bool, int]:
         )  # a main note beside a main listing: a candidate
         # a rejected note merges with its listing only alone (TASK-126): beside any rival it is set aside too
         or (status == "rejected" and bool(kinds))
+        # … and only with a crawled listing: beside the RIS copy alone it would keep its status (`ris` ranks last)
+        or (status == "rejected" and listed_by == ["ris"])
     )
     noise = draw(st.lists(records().filter(lambda r: (r.venue, r.year) != ("NeurIPS", year)), max_size=3))
     return xs + noise, aside, blocked, year
@@ -574,6 +585,55 @@ def test_an_abstract_merge_always_holds_an_imported_record_and_its_abstract(xs: 
                 assert out.id == cid
         if any(x.forum_id is not None for x in members):  # a forum id in the group is always the survivor's
             assert out.forum_id is not None
+
+
+IMPORT_ONLY_WITHDRAWN = [  # the forum id's RIS row says withdrawn and was fetched last; no note crawled
+    imported("AbCd1234", "One", venue="ICLR", abstract=LONG, status="withdrawn", fetched=T1),
+    imported(f"iclr-{H[1]}", "Two", venue="ICLR", abstract=LONG),
+]
+WITHDRAWN_NOTE_IMPORTED_LISTING = [
+    paper("AbCd1234", venue="ICLR", status="withdrawn"),
+    imported(f"iclr-{H[1]}", venue="ICLR"),
+]
+
+
+@given(pools)
+@example(IMPORT_ONLY_WITHDRAWN)
+@example(WITHDRAWN_NOTE_IMPORTED_LISTING)
+def test_a_status_no_listing_has_is_never_kept_by_merging_with_imports_alone(xs: list[PaperRecord]) -> None:
+    """Steps 2 and 3 (decision-037): when a title or an abstract joins clusters, one that is no listing and is
+    rejected, withdrawn or desk-rejected (a note, or a forum id's RIS row) has a companion that is no import, a
+    crawled listing whose status outranks it. Merged with imports alone, `ris` ranking last, the record would keep
+    that status, and an accepted paper would leave every accepted-only result."""
+    result = dedup(xs)
+    note(result)
+    ends = final_ids(result)
+    for out in result.records:
+        members = [x for x in xs if ends[x.id] == out.id]
+        inputs: dict[str, list[PaperRecord]] = {}
+        for x in members:
+            inputs.setdefault(linked_before(result, x.id), []).append(x)
+        if len(inputs) < 2:
+            continue
+        for cid, ins in inputs.items():
+            alone, _ = resolve(cid, [c for x in ins for c in x.provenance])
+            if not is_listing(alone) and alone.status not in {"accepted", "unknown"}:
+                assert any(
+                    {c.source for c in x.provenance} != IMPORTED
+                    for other, rest in inputs.items() if other != cid for x in rest
+                )  # fmt: skip
+
+
+def linked_before(result: DedupResult, rid: str) -> str:
+    """The cluster an input id was in before step 2: follow only step 1's and the forum link's rows."""
+    step = {
+        m.merged_id: m.survivor_id
+        for m in result.merges
+        if m.merged_id != m.survivor_id and m.rule in {"forum_id", "native_id", "forum_link"}
+    }
+    while rid in step:
+        rid = step[rid]
+    return rid
 
 
 def final_before(result: DedupResult, rid: str) -> str:

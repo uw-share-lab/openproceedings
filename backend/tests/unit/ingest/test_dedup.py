@@ -1212,10 +1212,12 @@ def test_two_ris_rows_naming_different_papers_still_never_merge(a: str, b: str) 
     xs = [imported(a, abstract=LONG, **ICLR), imported(b, abstract=LONG, **ICLR)]
     result = dedup(xs)
     assert len(result.records) == 2 and rules(result) == []
-    assert not_merged(result) == [
-        ("abstract_key", "ambiguous_not_merged"),
-        ("title_key", "ambiguous_not_merged"),
-    ]
+    # one row: the pair's title key reported it, so its shared abstract adds none
+    assert not_merged(result) == [("title_key", "ambiguous_not_merged")]
+    titled = [imported(a, "One", abstract=LONG, **ICLR), imported(b, "Two", abstract=LONG, **ICLR)]
+    assert not_merged(dedup(titled)) == [
+        ("abstract_key", "ambiguous_not_merged")
+    ]  # the abstract alone ties them
 
 
 LOST_SYMBOL = [  # crawled title, the title Google Scholar gave the import
@@ -1347,6 +1349,44 @@ def test_a_rival_that_cannot_be_the_listed_paper_is_set_aside_on_an_abstract_too
     assert [c for c in again.conflicts if c.resolution.endswith("_not_merged")] == rows
 
 
+def test_a_rival_is_reported_when_a_newer_ris_row_replaced_the_abstract_the_import_merged_on() -> None:
+    """The note's own RIS row (abstract OTHER, fetched last) keeps the merged record's one `ris` abstract claim, so
+    the import's LONG is gone from it; the note's own claim still holds LONG, and the workshop rival sharing it is
+    reported on this run and the next."""
+    xs = [
+        paper("AbCd1234", "One", abstract=LONG, **ICLR),
+        imported("AbCd1234", "One", abstract=OTHER, fetched=T2, **ICLR),
+        imported(f"iclr-{H[1]}", "Three", abstract=LONG, fetched=T1, **ICLR),
+        paper("EfGh5678", "Two", abstract=LONG, track="workshop", **ICLR),
+    ]
+    result = dedup(xs)
+    assert [r.id for r in result.records] == ["op:iclr:2025:AbCd1234", "op:iclr:2025:EfGh5678"]
+    assert rules(result)[-1] == ("op:iclr:2025:AbCd1234", f"op:iclr:2025:iclr-{H[1]}", "abstract_venue_year")
+    [kept] = [c.value for c in result.records[0].provenance if c.field == "abstract" and c.source == "ris"]
+    assert kept == OTHER
+    rows = [c for c in result.conflicts if c.resolution.endswith("_not_merged")]
+    assert rows == [
+        Conflict("op:iclr:2025:AbCd1234", "abstract_key", "op:iclr:2025:AbCd1234", "openreview_v2+ris",
+                 "op:iclr:2025:EfGh5678", "openreview_v2", "track_not_merged")
+    ]  # fmt: skip
+    again = dedup(result.records)
+    assert [c for c in again.conflicts if c.resolution.endswith("_not_merged")] == rows
+
+
+def test_a_pair_a_title_key_reported_gets_no_second_row_for_its_abstract() -> None:
+    """A listing holding a `ris` claim and its same-title workshop version, which share the abstract too: one
+    `title_key` row says it all."""
+    xs = [
+        paper("AbCd1234", "One", abstract=LONG, **ICLR),
+        imported(f"iclr-{H[1]}", "One", abstract=LONG, **ICLR),
+        paper("EfGh5678", "One", abstract=LONG, track="workshop", **ICLR),
+    ]
+    result = dedup(xs)
+    assert len(result.records) == 2
+    assert not_merged(result) == [("title_key", "track_not_merged")]
+    assert not_merged(dedup(result.records)) == not_merged(result)
+
+
 def test_an_imported_listing_never_merges_with_a_workshop_note_on_its_abstract() -> None:
     xs = [
         paper("AbCd1234", "One", abstract=LONG, track="workshop", **ICLR),
@@ -1388,6 +1428,43 @@ def test_an_accepted_import_never_merges_into_a_lone_note_that_is_not_accepted(s
         Conflict(copy.id, "abstract_key", copy.id, "ris", note.id, "openreview_v2", "ambiguous_not_merged"),
     )
     assert dedup(result.records) == result
+
+
+@pytest.mark.parametrize("status", ["withdrawn", "rejected", "desk_rejected"])
+@pytest.mark.parametrize(
+    ("titles", "field"), [(("One", "Two"), "abstract_key"), (("One", "One"), "title_key")]
+)
+@pytest.mark.parametrize("fetched", [(T1, T0), (T0, T1)])
+def test_an_imported_listing_never_merges_with_an_import_only_submission_that_is_not_accepted(
+    status: str, titles: tuple[str, str], field: str, fetched: tuple[Any, Any]
+) -> None:
+    """A forum id's RIS row alone (no note crawled) saying withdrawn, and the paper's proceedings-id RIS row: both
+    claims are `ris`, so the merged record's status would be whichever row was fetched last. Apart, by abstract as
+    by title, whatever the fetch order, with the row against the listing."""
+    own = imported("AbCd1234", titles[0], abstract=LONG, status=status, fetched=fetched[0], **ICLR)
+    listing = imported(f"iclr-{H[1]}", titles[1], abstract=LONG, fetched=fetched[1], **ICLR)
+    result = dedup([own, listing])
+    assert [(r.id, r.status) for r in result.records] == [(own.id, status), (listing.id, "accepted")]
+    assert result.merges == ()
+    assert [c for c in result.conflicts if c.resolution.endswith("_not_merged")] == [
+        Conflict(listing.id, field, listing.id, "ris", own.id, "ris", "ambiguous_not_merged")
+    ]
+    assert dedup(result.records) == result
+
+
+def test_a_crawled_note_that_is_not_accepted_never_merges_with_an_imported_listing_by_title() -> None:
+    """The title step's form of the same rule: the note's OpenReview status outranks `ris`, so merged with the
+    import alone the accepted paper would be withdrawn. A crawled listing outranks it, so beside one it may merge."""
+    note = paper("AbCd1234", "One", status="withdrawn", **ICLR)
+    copy = imported(f"iclr-{H[1]}", "One", **ICLR)
+    result = dedup([note, copy])
+    assert [(r.id, r.status) for r in result.records] == [(note.id, "withdrawn"), (copy.id, "accepted")]
+    assert result.conflicts == (
+        Conflict(copy.id, "title_key", copy.id, "ris", note.id, "openreview_v2", "ambiguous_not_merged"),
+    )
+    crawled = paper(f"iclr-{H[1]}", "One", source="iclr_archive", **ICLR)
+    [r] = dedup([note, copy, crawled]).records
+    assert (r.id, r.status) == (note.id, "accepted")
 
 
 @pytest.mark.parametrize(
@@ -1452,8 +1529,9 @@ def test_an_import_never_bridges_a_listing_and_a_note_of_another_forum() -> None
 
 
 def test_an_abstract_never_joins_two_crawled_records_even_beside_an_import() -> None:
-    """A proceedings-id import, a crawled listing of another title and a note: the import may be either one's
-    copy, and the abstract alone never says the listing and the note are one paper (decision-037)."""
+    """A proceedings-id import, a crawled listing of another title and a note: the abstract alone never says the
+    listing and the note are one paper (decision-037). Step 1 merges the import into its listing, so step 3 has
+    no imported record here and never forms the group: this pins the end result, not step 3's rule (below)."""
     xs = [
         imported("pmlr-v202-key1", "One", venue="ICML", abstract=LONG),
         paper("pmlr-v202-key1", "One", source="pmlr", venue="ICML", abstract=LONG),
@@ -1461,6 +1539,23 @@ def test_an_abstract_never_joins_two_crawled_records_even_beside_an_import() -> 
     ]
     result = dedup(xs)
     assert len(result.records) == 2 and [m.rule for m in result.merges] == ["native_id"]
+
+
+def test_step_threes_two_crawled_records_guard_refuses_a_group_mergeable_would_pass() -> None:
+    """No dedup run reaches `_abstract_group`'s guard against two crawled clusters: an import that passes
+    `_mergeable` beside two of them carries one's id, and step 1 has merged it there. A group built by hand,
+    skipping steps 1 and 2, shows the guard alone refuses one: a note, a crawled listing linking its forum, and
+    an import of the listing's id."""
+    from openproceedings.ingest.dedup import _abstract_group, _cluster, _mergeable
+
+    group = [
+        _cluster([paper("AbCd1234", "One", venue="ICML", abstract=LONG)]),
+        _cluster([paper("pmlr-v202-key1", "Two", source="pmlr", venue="ICML", abstract=LONG,
+                        urls_forum="https://openreview.net/forum?id=AbCd1234")]),
+        _cluster([imported("pmlr-v202-key1", "Three", venue="ICML", abstract=LONG)]),
+    ]  # fmt: skip
+    assert _mergeable(group) is None
+    assert _abstract_group(group) == "ambiguous_not_merged"
 
 
 def test_matching_is_on_the_whole_digest_not_the_sixteen_digits_merges_csv_shows(

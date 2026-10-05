@@ -35,7 +35,7 @@ and `classify_v1_venue` maps a v1 note's exact `content.venue` string to track a
 | `NeurIPS.cc/2026/Evaluations_and_Datasets_Track` | `datasets_benchmarks` | per suffix | live group (2026 rename of D&B), no notes yet; TASK-094 |
 | `<Org>.cc/<Y>/Workshop/<name>` | `workshop` | `accepted` | validated; live |
 | `<Org>.cc/<Y>/Workshop_<City>/<name>` (e.g. `NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM`) | `workshop` | `accepted` | validated; live |
-| `<Org>.cc/<Y>/Workshop/<name>/Rejected_Submission` (and the other suffixes) | `workshop` | per suffix | live (`ICLR.cc/2025/Workshop/ICBINB/Rejected_Submission`); 2026 crawl (TASK-178): ICLR 71 rejected, 6 withdrawn (`1lNr7gL71D`), ICML 5 rejected |
+| `<Org>.cc/<Y>/Workshop/<name>/Rejected_Submission` (and the other suffixes) | `workshop` | per suffix | live (`ICLR.cc/2025/Workshop/ICBINB/Rejected_Submission`); 2026 crawl (TASK-178): ICLR 71 rejected, 6 withdrawn (`1lNr7gL71D`), ICML 5 rejected, NeurIPS 349 rejected (`WiML` 165, `IAB` 105, `TTCL` 79) |
 | `<Org>.cc/<Y>/Workshop/<name>/Submission` | `workshop` | `unknown` | live on notes: 11 undecided workshop submissions were public in the 2026 crawl (ICLR `LMRL` 1, `KadCjvcLOz`; ICML `CTB` 3, `GenBio` 3, `Mech_Interp` 2, `NExT-Game` 2, `xFNDnnuTSf`; fixture `icml-2026/notes-workshop-submission.json`) |
 | `ICML.cc/<Y>/Position_Paper_Track` (2025+) | `position` | per suffix | live (2025: 73; 2026: 213 accepted, 28 opt-in rejected, `thf3e0Ptbf`) |
 | `NeurIPS.cc/<Y>/Position_Paper_Track` (2025+) | `position` | per suffix | live (2025: 40 accepted, 55 rejected; `VZnOKzQ5qW`); TASK-094 |

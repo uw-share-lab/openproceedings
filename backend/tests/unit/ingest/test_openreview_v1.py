@@ -352,6 +352,9 @@ def test_a_v1_title_with_a_control_character_is_imported_with_a_space(tmp_path: 
     assert [c.evidence for c in record.claims("title")] == [
         "content.title (2 control characters replaced by a space)"
     ]
+    assert (
+        crawl.report.title_control_characters == 1 == crawl.report.to_manifest()["title_control_characters"]
+    )
 
 
 def test_a_title_match_links_a_copy_whose_bibtex_names_another_forum(tmp_path: Path) -> None:
