@@ -103,10 +103,12 @@ withheld abstracts, is `index_load_failed` with `reason` `takedowns_invalid`, `t
 `takedown_merges_unavailable` per damaged snapshot (`snapshot`, its directory name; `error`; `reason`), and the
 list applies without that snapshot's merges (in the API and `op export`). Likewise `op export` of another index than `current` logs one ERROR `takedown_twins_unavailable` (`error`; `reason`; `index`, the current index's name) when the current index's snapshot can't be read: the list then follows only the exported snapshot's twin links (TASK-163).
 A 503 `API_BUSY` from the bounded pinned-open wait puts `busy: pinned_open` on the access line (TASK-067). On
-`POST /compare` (TASK-177) `busy` names the capacity that refused it: `match_index_building`, `compare_slots`
-and `compare_deadline` on a 503 with `Retry-After`; `match_index_failed` on a 503 without one (retrying won't
-help until the index is reloaded); `compare_running` and `compare_cooldown` on the network's 429 (spec 04
-§Logging, the access line's `busy`, is the full list). `abstracts_withheld` means three counts,
+`POST /compare` (TASK-177) `busy` names the capacity that refused it: `match_index_building` and
+`compare_slots` on a 503 with `Retry-After`; `match_index_failed` (retrying won't help until the index is
+reloaded) and `compare_deadline` (the client offers Retry at once and never retries it by itself) on a 503
+without one; `compare_running` and `compare_cooldown` on the network's 429. A loopback-default instance
+refusing a proxied request puts `compare_refused: proxied` on its 403 (spec 04 §Logging, the access line's
+`busy`, is the full list). `abstracts_withheld` means three counts,
 each named by its event: the list's size on a load, the records a build withheld on `snapshot_built`, the
 records of the body on an export's access line (the build's JSON gives the ids themselves, `withheld_ids`). `snapshot_built` / `snapshot_exists` carry
 `abstracts_withheld`, `takedowns_followed`, `takedowns_unmatched` and `takedowns_twins` counts, and `trimmed`: how many records
