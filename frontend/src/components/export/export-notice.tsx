@@ -5,7 +5,7 @@
  * §Error handling): the index moved, the count differs on the same index (a bug), or the server refused or
  * didn't answer. Each says that nothing was downloaded. A wait (429, 503 `API_BUSY`) counts down to Retry.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Failure } from "@/api/outcome";
 import { plural } from "@/editor/diagnostics";
 import type { ExportResult } from "@/lib/export";
@@ -15,25 +15,49 @@ export const box = "space-y-2 rounded-md border p-3 text-sm";
 export const warnBox = `${box} border-warn-border bg-warn-bg text-warn-fg`;
 export const button = "min-h-8 rounded-md border px-3 hover:bg-muted";
 
-/** `seconds` counted down to 0, then "You can retry now" and Retry (announced at the start and at 0 only). */
-export function Countdown({ seconds, onRetry }: { seconds: number | null; onRetry: () => void }) {
+/**
+ * `seconds` counted down to 0, then "You can retry now" and Retry (announced at the start and at 0 only). With
+ * `auto`, the retry happens by itself at 0 instead ("Busy; retrying by itself in N s", then "Retrying…"), and
+ * nothing here is a live region: the caller announces the wait once, in its own (A11Y-R2-2).
+ */
+export function Countdown({
+  seconds,
+  onRetry,
+  auto = false,
+}: {
+  seconds: number | null;
+  /** `byItself`: the countdown's own retry at 0 (with `auto`), not a press of Retry. */
+  onRetry: (byItself: boolean) => void;
+  auto?: boolean;
+}) {
   const [left, setLeft] = useState(seconds ?? 0);
+  const retried = useRef(false);
   useEffect(() => {
-    if (left <= 0) return;
+    if (left <= 0) {
+      if (auto && !retried.current) {
+        retried.current = true;
+        onRetry(true);
+      }
+      return;
+    }
     const t = setTimeout(() => setLeft(left - 1), 1000);
     return () => clearTimeout(t);
-  }, [left]);
+  }, [left, auto, onRetry]);
   const waiting = left > 0;
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <p role="status" aria-live="polite">
-        {waiting ? `Retry in ${seconds ?? 0} s` : "You can retry now"}
-      </p>
+      {auto ? (
+        <p>{waiting ? autoRetryText(seconds ?? 0) : "Retrying…"}</p>
+      ) : (
+        <p role="status" aria-live="polite">
+          {waiting ? `Retry in ${seconds ?? 0} s` : "You can retry now"}
+        </p>
+      )}
       <button
         type="button"
         aria-disabled={waiting ? true : undefined}
         onClick={() => {
-          if (!waiting) onRetry();
+          if (!waiting) onRetry(false);
         }}
         className={`${button} ${waiting ? "opacity-60" : ""}`}
       >
@@ -48,7 +72,15 @@ export function Countdown({ seconds, onRetry }: { seconds: number | null; onRetr
   );
 }
 
-function Report({ code }: { code: string }) {
+/** The server's closing "Try again in N s." on a wait, said instead by a countdown that retries by itself. */
+const TRY_AGAIN = / ?Try again in \d+ s\.$/;
+
+/** A wait that ends in a retry by itself, as shown and as its caller announces it once. */
+export function autoRetryText(seconds: number): string {
+  return `Busy; retrying by itself in ${seconds} s`;
+}
+
+export function Report({ code }: { code: string }) {
   return (
     <a href={reportHref(code, new Date())} rel="noopener noreferrer" className="underline underline-offset-4">
       Report it <span aria-hidden="true">▸</span>
@@ -56,13 +88,30 @@ function Report({ code }: { code: string }) {
   );
 }
 
-/** A refusal or no answer, worded from the envelope (never a raw status), with Retry. */
-export function FailureNotice({ failure, onRetry }: { failure: Failure; onRetry: () => void }) {
+/**
+ * A refusal or no answer, worded from the envelope (never a raw status), with Retry. `onRetry` null: the same
+ * request would be refused again (a file the server refused), so no Retry is offered; the caller says what to
+ * do instead; its argument is true only for a countdown's own retry, never for a press of Retry. `autoRetry`: a
+ * wait (429, `API_BUSY`) ends in the retry itself, not in a button to press; it is then no alert, since a busy
+ * server can be met several times in a row and each would interrupt again: the caller announces it once,
+ * politely (`autoRetryText`; A11Y-R2-2). The server's own "Try again in N s." is then left out: the countdown
+ * says when.
+ */
+export function FailureNotice({
+  failure,
+  onRetry,
+  autoRetry = false,
+}: {
+  failure: Failure;
+  onRetry: ((byItself: boolean) => void) | null;
+  autoRetry?: boolean;
+}) {
+  const retry = () => onRetry?.(false);
   if (failure.kind === "unreachable") {
     return (
       <div role="alert" className={box}>
         <p>Couldn&apos;t reach the server. Check your connection.</p>
-        <button type="button" onClick={onRetry} className={button}>
+        <button type="button" onClick={retry} className={button}>
           Retry
         </button>
       </div>
@@ -75,21 +124,23 @@ export function FailureNotice({ failure, onRetry }: { failure: Failure; onRetry:
           The server is busy or restarting
           {failure.status === null ? " (" : ` (HTTP ${failure.status}, `}not from the search service).
         </p>
-        <button type="button" onClick={onRetry} className={button}>
+        <button type="button" onClick={retry} className={button}>
           Retry
         </button>
       </div>
     );
   }
   const { error } = failure;
-  if (failure.status === 429 || error.code === "API_BUSY") {
+  if ((failure.status === 429 || error.code === "API_BUSY") && onRetry !== null) {
+    const auto = autoRetry && failure.retryAfter !== null;
     return (
-      <div role="alert" className={warnBox}>
-        <p className="break-words">{error.message}</p>
+      <div role={auto ? undefined : "alert"} className={warnBox}>
+        <p className="break-words">{auto ? error.message.replace(TRY_AGAIN, "") : error.message}</p>
         <Countdown
           key={`${error.code}:${failure.retryAfter ?? ""}`}
           seconds={failure.retryAfter}
           onRetry={onRetry}
+          auto={auto}
         />
       </div>
     );
@@ -99,12 +150,16 @@ export function FailureNotice({ failure, onRetry }: { failure: Failure; onRetry:
       <p className="break-words">
         <code className="font-mono">{error.code}</code>: {error.message}
       </p>
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={onRetry} className={button}>
-          Retry
-        </button>
-        {error.code === "API_INTERNAL" && <Report code={error.code} />}
-      </div>
+      {(onRetry !== null || error.code === "API_INTERNAL") && (
+        <div className="flex flex-wrap items-center gap-3">
+          {onRetry !== null && (
+            <button type="button" onClick={retry} className={button}>
+              Retry
+            </button>
+          )}
+          {error.code === "API_INTERNAL" && <Report code={error.code} />}
+        </div>
+      )}
     </div>
   );
 }

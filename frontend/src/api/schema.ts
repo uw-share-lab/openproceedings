@@ -4,6 +4,34 @@
  */
 
 export interface paths {
+    "/api/v1/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compare Records
+         * @description Compare the RIS file in the body with `q`'s result on the served index: the papers of the file the
+         *     result keeps, the ones it drops (in the index, not in the result, each with why), the ones the index
+         *     doesn't hold, and the papers the result adds. The file is matched to the index by spec 01's merge rules
+         *     (a forum id, a proceedings id, else title with venue and year; never a title alone). The result is
+         *     `/search`'s for the same `q`, `mode` and index: `total` is its `total`, and `kept_total` + `added_total`
+         *     equal it. Each list also comes as CSV text, and the added papers as RIS, ready to save. The file is used
+         *     for this request only: never stored, never logged, never added to the index.
+         *     Off unless this instance's operator turned it on (403 `API_COMPARE_DISABLED`; `GET /meta`
+         *     `limits.compare` is then null).
+         */
+        post: operations["compare_records"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/coverage": {
         parameters: {
             query?: never;
@@ -300,6 +328,240 @@ export interface components {
             value: components["schemas"]["ClaimValue"];
         };
         ClaimValue: string | number | string[] | null;
+        /**
+         * CompareCsv
+         * @description Each list as a CSV file's text (UTF-8, to be saved with its BOM as sent; one header row), written by
+         *     the server with the export's cell guard, so a client saves it as it is and never builds a cell itself.
+         */
+        CompareCsv: {
+            /** Added */
+            added: string;
+            /** Dropped */
+            dropped: string;
+            /** Kept */
+            kept: string;
+            /** Not Compared */
+            not_compared: string;
+            /** Not In Index */
+            not_in_index: string;
+        };
+        /**
+         * CompareLimits
+         * @description What `POST /compare` takes on this instance (TASK-177): each cap refuses a request over it with a typed
+         *     error, never cuts it short.
+         */
+        CompareLimits: {
+            /**
+             * Max Body Bytes
+             * @description the largest RIS file, in bytes; a larger body is 413 `API_BODY_TOO_LARGE`, before it is read
+             */
+            max_body_bytes: number;
+            /**
+             * Max Line Length
+             * @description the longest line of the file, in Unicode code points, tag included; a longer one is 413 `API_RIS_TOO_LARGE`
+             */
+            max_line_length: number;
+            /**
+             * Max Records
+             * @description the most records one file may hold; more is 413 `API_RIS_TOO_LARGE`
+             */
+            max_records: number;
+            /**
+             * Max Response Bytes
+             * @description the largest answer, in bytes; a comparison whose answer would be larger is 422 `API_COMPARE_TOO_COSTLY`
+             */
+            max_response_bytes: number;
+            /**
+             * Max Results
+             * @description the most papers of the query's result that the file doesn't hold; more is 422 `API_COMPARE_TOO_COSTLY`
+             */
+            max_results: number;
+            /**
+             * Max Seconds
+             * @description the wall time one comparison's work gets; past it, 503 `API_BUSY` without `Retry-After` (the same request would run as long again)
+             */
+            max_seconds: number;
+            /**
+             * Max Title Length
+             * @description the longest title or venue line's value, in Unicode code points (the corpus's own title cap); a longer one is 413 `API_RIS_TOO_LARGE`
+             */
+            max_title_length: number;
+        };
+        /** CompareQuery */
+        CompareQuery: {
+            /** Canonical */
+            canonical: string;
+            /** Canonical Hash */
+            canonical_hash: string;
+            /** Input */
+            input: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "native" | "scholar";
+        };
+        /**
+         * CompareResponse
+         * @description A RIS file against a query's result on the served index. Every record of the file is counted once:
+         *     `records_total` = `not_compared_total` + `duplicates_total` + `papers_total`, and `papers_total` =
+         *     `kept_total` + `dropped_total` + `not_in_index_total`. `kept_total` + `added_total` = `total`.
+         */
+        CompareResponse: {
+            /** Added */
+            added: components["schemas"]["CompareRow"][];
+            /**
+             * Added Ris
+             * @description The papers the query adds (`added`), as `GET /export` writes RIS for them: the same records byte for byte, in id order, each abstract with its source, a withheld one left out and marked (decision-021, decision-022). The only abstracts in the response, each one `/search` serves for the same hit; nothing of the file is in it. Empty when nothing is added.
+             */
+            added_ris: string;
+            /**
+             * Added Total
+             * @description Papers of the result that the file doesn't hold.
+             */
+            added_total: number;
+            csv: components["schemas"]["CompareCsv"];
+            /** Dropped */
+            dropped: components["schemas"]["CompareRow"][];
+            /**
+             * Dropped Ris Only Total
+             * @description Of `dropped_total`, the same.
+             */
+            dropped_ris_only_total: number;
+            /**
+             * Dropped Total
+             * @description Papers of the file the index holds and the result doesn't.
+             */
+            dropped_total: number;
+            /**
+             * Duplicates Total
+             * @description Of them, records that repeat a paper already counted.
+             */
+            duplicates_total: number;
+            /** Index Version */
+            index_version: string;
+            /** Kept */
+            kept: components["schemas"]["CompareRow"][];
+            /**
+             * Kept Ris Only Total
+             * @description Of `kept_total`, papers whose index record has no source but an imported RIS set (`independent` false): the index holds them only because of an import.
+             */
+            kept_ris_only_total: number;
+            /**
+             * Kept Total
+             * @description Papers of the file the query's result holds.
+             */
+            kept_total: number;
+            /**
+             * Next Comparison Seconds
+             * @description Whole seconds until this client's network may start another comparison on this instance (decision-035: a pause in proportion to the slot time this one used); 0 when it may start one now, always on a local instance and with the rate limit off. Sooner is 429 `API_RATE_LIMITED`.
+             */
+            next_comparison_seconds: number;
+            /** Not Compared */
+            not_compared: components["schemas"]["NotComparedRow"][];
+            /**
+             * Not Compared Total
+             * @description Of them, records outside the indexed venues.
+             */
+            not_compared_total: number;
+            /** Not In Index */
+            not_in_index: components["schemas"]["CompareRow"][];
+            /**
+             * Not In Index Total
+             * @description Papers of the file with no index record.
+             */
+            not_in_index_total: number;
+            /**
+             * Papers Total
+             * @description Papers of the file that were compared.
+             */
+            papers_total: number;
+            query: components["schemas"]["CompareQuery"];
+            /** Query Version */
+            query_version: string;
+            reason_totals: components["schemas"]["ReasonTotals"];
+            /**
+             * Records Total
+             * @description Records read from the file.
+             */
+            records_total: number;
+            /** Tokenizer Version */
+            tokenizer_version: string;
+            /**
+             * Total
+             * @description `/search`'s `total` for the same query and index: the whole result.
+             */
+            total: number;
+        };
+        /**
+         * CompareRow
+         * @description One paper of a comparison. A row of `kept`, `dropped` or `not_in_index` is a paper of the file (its
+         *     first record, `ris_record`; its title as the file wrote it); a row of `added` is an index record.
+         */
+        CompareRow: {
+            /**
+             * Abstract Withheld
+             * @description Whether the index record's abstract is withheld (decision-022): this row then has an empty `detail`, since the evidence can name word forms of the abstract. Its list and `reason` stand. False on a `not_in_index` row.
+             */
+            abstract_withheld: boolean;
+            /**
+             * Copies
+             * @description How many records of the file are this paper; 0 on an `added` row.
+             */
+            copies: number;
+            /**
+             * Detail
+             * @description The evidence for `reason`, in words (which filter, which word forms, which group of the query); empty when there is none, and for a record whose abstract is withheld.
+             */
+            detail: string;
+            /**
+             * Fails Filters
+             * @description Whether the index record fails one of the query's default filters.
+             */
+            fails_filters: boolean;
+            /**
+             * Id
+             * @description The index record's id (`/papers/{id}`). Null on a `not_in_index` row.
+             */
+            id: string | null;
+            /**
+             * Independent
+             * @description Whether the index record has a source other than an imported RIS set (a crawl). False: the index holds this paper only because a RIS set was imported, so a match to it says nothing about the index's coverage. Null without an index record.
+             */
+            independent: boolean | null;
+            /**
+             * Matched By
+             * @description How the file's record was matched to the index, by spec 01's merge rules in their order (`forum_id`, `proceedings_id`, `title_venue_year`), or why it has no index record (`not_found`, `ambiguous`: its id or title names several records, `no_year`, `no_venue`, `truncated_title`). Null on an `added` row.
+             */
+            matched_by: ("forum_id" | "proceedings_id" | "title_venue_year" | "not_found" | "ambiguous" | "no_year" | "no_venue" | "truncated_title") | null;
+            /**
+             * Reason
+             * @description Why the paper is on one side only (spec 07 §B's classes): for `dropped`, `filtered` (a default filter removes it: its track or status), `full_text` (no title or abstract match), `stemming` (it matches only with another inflected form), `compat_reading` (it matches as Google Scholar reads the string); for `not_in_index`, `coverage_gap` or `unsettled`; for `added`, `scholar_missed`, `compat_reading` or `scholar_cap`. `unsettled`: a person must decide. `our_bug`: the reference matcher and the served index disagree (report it). Null on a `kept` row that has none.
+             */
+            reason: ("our_bug" | "filtered" | "compat_reading" | "coverage_gap" | "stemming" | "full_text" | "scholar_cap" | "scholar_missed" | "unsettled") | null;
+            /**
+             * Ris Record
+             * @description The record's position in the file, from 1 (the paper's first record when the file repeats it). Null on an `added` row.
+             */
+            ris_record: number | null;
+            /**
+             * Settled
+             * @description False when the automation can't decide and a person must.
+             */
+            settled: boolean;
+            /**
+             * Title
+             * @description The file's title for a paper of the file, the index record's for an `added` row.
+             */
+            title: string;
+            /**
+             * Venue
+             * @description The index record's venue when it has one, else the venue the file names (as written).
+             */
+            venue: string | null;
+            /** Year */
+            year: number | null;
+        };
         /** CoverageCell */
         CoverageCell: {
             /** Count */
@@ -408,7 +670,7 @@ export interface components {
          * @description Open set: new values may be added within /api/v1; handle a value you don't know.
          * @enum {string}
          */
-        DiagnosticCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "WARN_LOWERCASE_OPERATOR" | "WARN_MIXED_AND_OR" | "WARN_NESTED_FILTER" | "WARN_FILTER_SCOPE" | "WARN_LOOKALIKE_OPERATOR" | "WARN_SYMBOLS_DROPPED" | "WARN_SOURCE_PARTIAL" | "WARN_CJK_RUN" | "WARN_SPELLED_GREEK" | "COMPAT_SOURCE_ALIAS" | "COMPAT_POP_DOLLAR" | "COMPAT_POP_PHRASE" | "COMPAT_NO_STEMMING" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_REPLAY_MISMATCH" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY" | "API_TOO_MANY_VERIFIED_CLAUSES" | "API_QUERY_TOO_COSTLY";
+        DiagnosticCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "WARN_LOWERCASE_OPERATOR" | "WARN_MIXED_AND_OR" | "WARN_NESTED_FILTER" | "WARN_FILTER_SCOPE" | "WARN_LOOKALIKE_OPERATOR" | "WARN_SYMBOLS_DROPPED" | "WARN_SOURCE_PARTIAL" | "WARN_CJK_RUN" | "WARN_SPELLED_GREEK" | "COMPAT_SOURCE_ALIAS" | "COMPAT_POP_DOLLAR" | "COMPAT_POP_PHRASE" | "COMPAT_NO_STEMMING" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_REPLAY_MISMATCH" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY" | "API_TOO_MANY_VERIFIED_CLAUSES" | "API_QUERY_TOO_COSTLY" | "API_COMPARE_DISABLED" | "API_UNSUPPORTED_MEDIA_TYPE" | "API_UPLOAD_TIMEOUT" | "API_RIS_INVALID" | "API_RIS_TOO_LARGE" | "API_COMPARE_TOO_COSTLY";
         /** DiffEntry */
         DiffEntry: {
             /** Id */
@@ -429,7 +691,7 @@ export interface components {
          * @description An error envelope's code (spec 04 §Error handling). Open set: new values may be added within /api/v1; handle a value you don't know.
          * @enum {string}
          */
-        ErrorCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY" | "API_TOO_MANY_VERIFIED_CLAUSES" | "API_QUERY_TOO_COSTLY";
+        ErrorCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY" | "API_TOO_MANY_VERIFIED_CLAUSES" | "API_QUERY_TOO_COSTLY" | "API_COMPARE_DISABLED" | "API_UNSUPPORTED_MEDIA_TYPE" | "API_UPLOAD_TIMEOUT" | "API_RIS_INVALID" | "API_RIS_TOO_LARGE" | "API_COMPARE_TOO_COSTLY";
         /** ErrorEnvelope */
         ErrorEnvelope: {
             error: components["schemas"]["ErrorBody"];
@@ -497,6 +759,44 @@ export interface components {
             ];
             /** Values */
             values: (string | components["schemas"]["YearRange"])[];
+        };
+        /** GroupCount */
+        GroupCount: {
+            /** @description Half-open code-point range of the group in `q` (its node in `ast`). */
+            span: components["schemas"]["Span"];
+            /**
+             * Total
+             * @description This group alone: how many papers the query matches with every other group removed. Never below the search's `total`.
+             */
+            total: number;
+            /**
+             * Total Without
+             * @description The query without this group: how many papers it matches with this group removed and every other group kept. Never below the search's `total`; the difference is what this group removes.
+             */
+            total_without: number;
+        };
+        /** GroupCounts */
+        GroupCounts: {
+            /**
+             * Counts
+             * @description Each group's count, in query order. Empty when `not_counted` says why.
+             */
+            counts: components["schemas"]["GroupCount"][];
+            /**
+             * Groups Total
+             * @description How many groups the query has.
+             */
+            groups_total: number;
+            /**
+             * Limit
+             * @description The most groups this instance counts for one query (`op serve --max-counted-groups`).
+             */
+            limit: number;
+            /**
+             * Not Counted
+             * @description Why `counts` is empty, null when it isn't: `fewer_than_two_groups` (the query is not an AND of groups), `too_many_groups` (`groups_total` is over `limit`), `too_costly` (counting them would read more terms or verified ids than this instance allows, `/meta` `limits`: shorten the `NOT` clauses or use longer wildcard stems), `busy` (the counting workers were taken by other searches), `count_failed` or `timed_out` (the counts could not be computed, or not in time; search again). The search itself is complete in every case.
+             */
+            not_counted: ("fewer_than_two_groups" | "too_many_groups" | "too_costly" | "busy" | "count_failed" | "timed_out") | null;
         };
         /** Health */
         Health: {
@@ -573,6 +873,23 @@ export interface components {
          *     differ).
          */
         Limits: {
+            /** @description `POST /compare`'s caps (TASK-177), or null when comparisons are not offered: this instance's operator has not turned them on (the route answers 403 `API_COMPARE_DISABLED`; on an instance on by its loopback default, also to a request that came through a proxy or from a page not on that machine), or the served index's comparison table could not be built (503 `API_BUSY` until a reload). A client doesn't offer comparisons while it is null */
+            compare: components["schemas"]["CompareLimits"] | null;
+            /**
+             * Max Counted Groups
+             * @description TASK-176: the most concept groups `/search` counts for one query; a query with more gets its result with `groups.not_counted: too_many_groups`
+             */
+            max_counted_groups: number;
+            /**
+             * Max Counted Ids
+             * @description TASK-176: the most verified ids the group counts of one query may read, summed the same way over its position-verified clauses' matches; more is `groups.not_counted: too_costly`
+             */
+            max_counted_ids: number;
+            /**
+             * Max Counted Terms
+             * @description TASK-176: the most terms the group counts of one query may read, summed over the trees counted (N groups of G terms in all, K terms in the kept text clauses: N·G + 2·N·K; a wildcard counts its expansions); more is `groups.not_counted: too_costly`, never a refusal of the search
+             */
+            max_counted_terms: number;
             /**
              * Max Query Depth
              * @description the deepest nesting of groups and `NOT`s a `q` may have; deeper is 422 `PARSE_TOO_DEEP` (from `/parse`, a 200 whose `errors` hold it)
@@ -650,6 +967,29 @@ export interface components {
                 number,
                 number
             ];
+        };
+        /**
+         * NotComparedRow
+         * @description A record of the file left out before comparing: it is not a paper of the three venues.
+         */
+        NotComparedRow: {
+            /**
+             * Reason
+             * @description `venue_unrecognised`: its venue string is none of the indexed venues' names; `venue`, `year`: it matched an index record outside the compared venues or years. Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @enum {string}
+             */
+            reason: "venue_unrecognised" | "venue" | "year";
+            /** Ris Record */
+            ris_record: number;
+            /** Title */
+            title: string;
+            /**
+             * Venue
+             * @description The venue the file names, as written (may be empty).
+             */
+            venue: string;
+            /** Year */
+            year: number | null;
         };
         /** Or */
         Or: {
@@ -766,8 +1106,8 @@ export interface components {
         /**
          * ParseResponse
          * @description 02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus
-         *     `filters` (`query.clauses.filter_clauses`, TASK-078). A query with errors is still a 200 here: `errors`
-         *     holds them, and every Optional is null.
+         *     `filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` (`query.wordforms.word_forms`,
+         *     TASK-175). A query with errors is still a 200 here: `errors` holds them, and every Optional is null.
          */
         ParseResponse: {
             /** Ast */
@@ -801,6 +1141,11 @@ export interface components {
             translations: components["schemas"]["Diagnostic"][];
             /** Warnings */
             warnings: components["schemas"]["Diagnostic"][];
+            /**
+             * Word Forms
+             * @description Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order (spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the query text the reader triggers and sees. The server has parsed `q` with every one inserted. Empty outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty.
+             */
+            word_forms: components["schemas"]["WordForm"][] | null;
         };
         /**
          * ParsedClause
@@ -946,6 +1291,29 @@ export interface components {
             translations: components["schemas"]["Diagnostic"][];
             /** Warnings */
             warnings: components["schemas"]["Diagnostic"][];
+        };
+        /**
+         * ReasonTotals
+         * @description How many rows of each list have each `reason` (only the reasons that occur, in spec 07 §B's order), so
+         *     a client shows why papers were dropped without counting rows itself.
+         */
+        ReasonTotals: {
+            /** Added */
+            added: {
+                [key: string]: number;
+            };
+            /** Dropped */
+            dropped: {
+                [key: string]: number;
+            };
+            /** Kept */
+            kept: {
+                [key: string]: number;
+            };
+            /** Not In Index */
+            not_in_index: {
+                [key: string]: number;
+            };
         };
         /** RecordCreated */
         RecordCreated: {
@@ -1176,6 +1544,8 @@ export interface components {
         SearchResponse: {
             excluded: components["schemas"]["Excluded"];
             facets: components["schemas"]["Facets"];
+            /** @description TASK-176 (additive): for a query that is an AND of concept groups, how many papers each group matches alone and how many the query matches without it, so a reviewer can see which group narrows the search. A group is a top-level AND conjunct that searches text and is not negated. The query's filters (the default track and status filters included) and its `NOT` clauses apply to every count, so none is below `total`. Exact, and the same for the same canonical query and `index_version`; it never changes `total`, `hits`, `facets` or `excluded`. */
+            groups: components["schemas"]["GroupCounts"];
             /** Hits */
             hits: components["schemas"]["Hit"][];
             /**
@@ -1444,6 +1814,24 @@ export interface components {
             /** Stem */
             stem: string;
         };
+        /** WordForm */
+        WordForm: {
+            /**
+             * At
+             * @description The code-point offset in `q` to insert at: the end of the word, or of a phrase's last word, as the lexer ends it, so after any invisible character that joins the word (a zero-width space).
+             */
+            at: number;
+            /**
+             * Insert
+             * @description The text to insert at `at`, as it is: `$`, or `$` and a space where another offered word follows in the same unspaced run (`(model|LLM)`), so that the two `$` are not read as LaTeX math.
+             */
+            insert: string;
+            /**
+             * Term
+             * @description The term as the `COMPAT_NO_STEMMING` notice names it: its normalised tokens, a phrase's joined by spaces. One term written in several places has one entry per place.
+             */
+            term: string;
+        };
         /** YearRange */
         YearRange: {
             /** Hi */
@@ -1460,6 +1848,123 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    compare_records: {
+        parameters: {
+            query: {
+                /** @description The query (spec 02 grammar). At most 2,000 Unicode code points: a longer one is 422 `PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is longer, refused after canonicalising. */
+                q: string;
+                /** @description `native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). */
+                mode?: "native" | "scholar";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The RIS file itself, UTF-8 (a BOM is accepted): no form, no multipart, no content encoding. `GET /meta` `limits.compare` gives its caps. */
+        requestBody: {
+            content: {
+                "application/x-research-info-systems": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompareResponse"];
+                };
+            };
+            /** @description API_COMPARE_DISABLED: this instance's operator has not turned comparisons on (`GET /meta` `limits.compare` is null), or the instance offers them to its local user only (on by `op serve`'s loopback default) and the request came through a proxy or from a page not on that machine (a non-loopback `Origin`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method */
+            405: {
+                headers: {
+                    /** @description The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1) */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_UPLOAD_TIMEOUT: the file didn't arrive within the time one upload gets */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_BODY_TOO_LARGE (the file's bytes, refused as they arrive) or API_RIS_TOO_LARGE (its records, its lines, or one line's length): over a cap of `GET /meta` `limits.compare`, refused whole, never cut */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_UNSUPPORTED_MEDIA_TYPE: the body is not declared `application/x-research-info-systems` (a form or multipart upload is not read), or has a `Content-Encoding` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_RIS_INVALID: the file is not UTF-8 RIS (no record, content before the first one, carriage-return-only lines); API_COMPARE_TOO_COSTLY: the result holds more papers the file doesn't than `limits.compare.max_results`, a phrase or NEAR has too many inflected spellings, or the answer would pass `limits.compare.max_response_bytes`; or the query's own refusals, as on /search */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_RATE_LIMITED: this client's token bucket or its network's can't pay for the request (as on every route); or this client's network (IPv4 /24, IPv6 /48) is running a comparison, or ran one less than its pause ago (decision-035: `compare_cooldown_factor` times the slot time it used; none on a local instance). Refused before the file is read */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_BUSY (with Retry-After): every comparison slot is taken (refused before the file is read), the served index's comparison table is still being built (Retry-After: the build's expected time left), or the query needs a slow position check and every verification slot is taken; API_BUSY without Retry-After: the comparison ran past the time this instance gives one (the same request would run as long again), or the table could not be built, until the operator reloads the index (`limits.compare` is then null); or API_INDEX_NOT_LOADED (no index loaded yet; no Retry-After) */
+            503: {
+                headers: {
+                    /** @description Sent with API_BUSY: whole seconds to wait before retrying */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Error (spec 04 §Error handling) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     get_coverage: {
         parameters: {
             query?: never;

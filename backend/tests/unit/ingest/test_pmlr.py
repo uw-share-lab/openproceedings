@@ -314,3 +314,23 @@ def test_the_reports_first_fetch_is_the_index_page(tmp_path: Path) -> None:
         seed(tmp_path, "pmlr", f"https://proceedings.mlr.press/v28/{key}.html", "", status=404, at=T0)
     report = mine(tmp_path, 28).report
     assert report.fetched[0] == T1 and T0 in report.fetched[1:]
+
+
+def test_a_listed_title_with_a_control_character_keeps_its_paper() -> None:
+    """decision-036 (TASK-180 review): a dropped listing would also turn the paper's OpenReview acceptance into
+    `unknown` at reconcile. The control character becomes a space; the claim's evidence says so."""
+    from openproceedings.ingest.sources.http import Page
+
+    volume = VOLUMES[235]
+    entry = pmlr.Entry(
+        "https://proceedings.mlr.press/v235/abe24a.html", "Induc\x02tive Trust\x00", ("A One",), None, None
+    )
+    index = Page(volume.index_url, 200, "", T0)
+    record, missing = pmlr._record(volume, "pmlr-v235-abe24a", entry, index, Page(entry.url, 404, "", T0))
+    assert (record.title, missing) == ("Induc tive Trust", "page_missing")
+    [title] = record.claims("title")
+    assert title.evidence == f"volume index {volume.index_url} (2 control characters replaced by a space)"
+    clean, _ = pmlr._record(volume, "pmlr-v235-abe24a", pmlr.Entry(entry.url, "Inductive  Trust", ("A One",), None, None),
+                            index, Page(entry.url, 404, "", T0))  # fmt: skip
+    assert clean.title == "Inductive Trust"
+    assert [c.evidence for c in clean.claims("title")] == [f"volume index {volume.index_url}"]

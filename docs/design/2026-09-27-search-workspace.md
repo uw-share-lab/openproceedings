@@ -275,7 +275,13 @@ Component rules:
   S7). It is never applied automatically.
 - **Translations** (Scholar mode) get their own row, before the warnings, headed "Read as native syntax:",
   one line per translation message, then `Searched as: <canonical>` in monospace with **Copy**. `COMPAT_NO_STEMMING`
-  is one line naming the terms (the server already lists them).
+  is one line naming the terms (the server already lists them), with **Add `$`** under it while the editor
+  holds the text it was reported for (TASK-175; spec 05 §Components 1, copy ED-19): "Add $ to all N terms",
+  and **Choose terms** for a subset. Like Load with parentheses it edits the draft and never searches. Both
+  states end with the full-text sentence (copy ED-19, gate review USAB-S4): most of a lower count than Google
+  Scholar's can come from Scholar reading full text, which `$` does not recover. The `COMPAT_POP_DOLLAR` notices
+  (one per `$`) are one line saying the widening is what `$` is for, the server's own behind a "Show all N
+  notices" button (USAB-N4). Backticked runs in a message are drawn as code, not as backticks.
 - **Expansion chips**: one line per wildcard key of `query.expansions`, `stem → term, term, …`. Show the
   first 8, then `+N more` (a button, ≥24×24 px) that expands the line in place to the full list; never
   truncate without `+N`. A wildcard that expanded to **0 terms** reads `model$ → (no indexed words)` so a
@@ -578,6 +584,7 @@ controls that change them. Export and Save (TASK-044) go after Sort.
 | Editor (CodeMirror) | Tab **leaves** the editor (no `indentWithTab`); Enter submits; Shift-Enter inserts a newline; Ctrl-Space completion (↑/↓, Enter picks, Esc closes); `Mod-Shift-m` opens the lint panel | accessible name "Query"; `aria-describedby` → diagnostics summary; completion is a listbox |
 | Diagnostics summary | — | polite live region, updated after the debounced `/parse` (250 ms) and after each search: "1 error, 2 warnings — not searched yet" / "The query wasn't searched: 1 error" / cleared when none |
 | Diagnostics row | each Help link and action is a tab stop; **F8** in the editor moves the cursor to the next diagnostic's span (`@codemirror/lint`'s `lintKeymap`; bind `previousDiagnostic` to Shift-F8), announcing its message | each line is text (`<li>`), readable in browse mode; the glyph has an accessible prefix "Error:", "Warning:", "Read as:" |
+| Load with parentheses, Add $ | Enter/Space; the button is gone once the draft changes, so focus moves to the editor on the Text tab and to the Builder tab itself on the Builder tab (its controls are rebuilt after `/parse` answers; A11Y-M4) | the editor or tab announces itself; the draft label says "not searched" |
 | Expansion line | `+N more` is a button (`aria-expanded`); after expanding, focus stays on it (now "Show fewer") | "benchmark star expands to 12 words: benchmark, benchmarking, …" |
 | Tree disclosure | button `aria-expanded`, Enter/Space toggles; **Show how it was read** opens it and moves focus to its heading | tree is a nested list (`<ul>`), each default clause reads "track: main or datasets and benchmarks or position, default" |
 | Copy buttons | Enter/Space | announce "Copied" via the polite region |

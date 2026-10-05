@@ -116,7 +116,10 @@ lists and strings).
 
 Every string field (title, abstract, authors, keywords, venue_id_raw, urls, and a claim's value, url and
 evidence) must be valid Unicode (no lone surrogates), so a snapshot can always be written. A title has
-no control characters; an abstract has no leading or trailing whitespace (importers strip it, and it is
+no control characters (every importer replaces each with a space before building the record,
+`record.title_text`, and says so in the title claim's evidence, `record.title_evidence`; TASK-180,
+decision-036; abstracts, authors and keywords may hold them and are stored as the source gave
+them); an abstract has no leading or trailing whitespace (importers strip it, and it is
 hashed). A claim's value must fit its field: `year` an int, `authors`/`keywords`/`twin` a tuple, every other
 field a string. A forum-id native is 4–64 of `[A-Za-z0-9_-]` with at least one letter or digit.
 

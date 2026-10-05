@@ -22,13 +22,16 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import datetime as dt
+import errno
 import json
 import logging
 import re
 import sys
 import time
+import traceback
 import types
 from collections.abc import Callable, Iterator, Mapping
+from pathlib import Path
 from typing import IO
 
 ROOT = "openproceedings"
@@ -80,6 +83,23 @@ def elapsed_ms(started: float, clock: Callable[[], float] = time.perf_counter) -
     """Milliseconds since `clock()` read `started`, to one decimal: the one form of every log line's `ms`
     field (logging-standards)."""
     return round((clock() - started) * 1000, 1)
+
+
+def frames(exc: BaseException) -> list[str]:
+    """`file:line function` for each frame of `exc`'s traceback: where it failed, without what it said (a
+    failure line's `frames`; the message can quote input, so it is never logged)."""
+    return [f"{Path(f.filename).name}:{f.lineno} {f.name}" for f in traceback.extract_tb(exc.__traceback__)]
+
+
+def reason_of(exc: BaseException) -> str | None:
+    """A constant that says why `exc` happened, never its message: its `reason` (SnapshotError,
+    IndexBuildError, IndexSelectionError, IndexUnservable), or an OSError's errno name (`ENOENT`)."""
+    reason = getattr(exc, "reason", None)
+    if isinstance(reason, str):
+        return reason
+    if isinstance(exc, OSError) and exc.errno is not None:
+        return errno.errorcode.get(exc.errno, str(exc.errno))
+    return None
 
 
 @contextlib.contextmanager

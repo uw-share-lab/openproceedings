@@ -49,6 +49,17 @@ parsed fails the load as a bad index does (the old bundle, and its list, kept). 
 when the list is required (`op serve` off loopback), a list is already applied, or any snapshot on disk
 withheld an abstract; otherwise it withholds nothing (TASK-067).
 
+The match table (TASK-177): with comparisons on (`ApiConfig.compare_enabled`), a load also starts building the
+served snapshot's `MatchIndex` (`eval/scholar_compare.py`: what matches an outside record to an index record),
+once per served index, in a background thread after the swap (13 s and ~80 MB for 95,877 records; searches are
+served meanwhile). It lives on the bundle (`Served.matches`), so a request reads the engine, the records and the
+table of one index_version in one reference, and a swap can never pair one index's results with another's
+table; a reload that keeps the index keeps its table, unless the table failed to build: then every reload
+builds it again. Builds run one at a time, and one whose index was swapped out while it waited is skipped.
+`POST /compare` answers 503 `API_BUSY` until it is built (`match_index_built`); if it can't be, one
+`match_index_failed` ERROR, then 503 `API_BUSY` without `Retry-After` (`busy: match_index_failed`) until a
+reload, and `/meta` says comparisons are not offered.
+
 Every failure line carries a `reason` constant, never a message (messages name paths): an
 `IndexSelectionError`'s (`name_invalid`, `not_found`, `outside_indexes`), an `IndexBuildError`'s
 (`unreadable`, `manifest_changed`, `files_mismatch`, `doc_count_mismatch`), an `IndexUnservable`'s
@@ -63,7 +74,7 @@ import signal
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -73,7 +84,7 @@ from weakref import WeakKeyDictionary
 
 from openproceedings import takedowns
 from openproceedings.api.config import INDEX_NAME
-from openproceedings.api.errors import ApiError, current_access, frames, reason_of
+from openproceedings.api.errors import ApiError, current_access
 from openproceedings.diagnostics import DiagnosticCode, OpenProceedingsError
 from openproceedings.engine.index import VERSION_NAME, IndexBuildError
 from openproceedings.ingest.snapshot import (
@@ -83,13 +94,15 @@ from openproceedings.ingest.snapshot import (
     indexed_snapshot,
     merges_on_disk,
 )
-from openproceedings.logs import elapsed_ms
+from openproceedings.logs import elapsed_ms, frames, reason_of
 from openproceedings.takedowns import NONE, TakedownError, Withheld, list_path
 from openproceedings.takedowns import load as load_takedowns
 
 if TYPE_CHECKING:
     from openproceedings.api.models import CoverageResponse
     from openproceedings.engine.tantivy_engine import TantivyEngine
+    from openproceedings.eval.scholar_compare import MatchIndex
+    from openproceedings.ingest.record import PaperRecord
 
 log = logging.getLogger(__name__)
 # the access-line key (never logged) holding a request's verification deadline, on the wall clock `_wall`
@@ -109,6 +122,82 @@ class Pinned:
     reason: PinnedReason
 
 
+class MatchTable:
+    """One served index's `MatchIndex` (module docstring), built once by `build`: `index` is None until then,
+    and stays None with `failed` set if the build failed. Read `index` once per request."""
+
+    # records the build reads a second, on the laptop that measured it (95,877 in 13 to 15 s): what
+    # `seconds_left` expects of a build in progress
+    RECORDS_PER_SECOND = 6_000
+
+    def __init__(self) -> None:
+        self.index: MatchIndex | None = None
+        self.failed = False
+        self._started: float | None = None  # when the build began (`time.monotonic`); None before
+        self._records = 0
+
+    def queue(self, records: int) -> None:
+        """Note the records a build will read, when it is queued: a table waiting for the build ahead of it
+        expects its whole time, not 0 (CODE-R2-N)."""
+        self._records = records
+
+    def seconds_left(self, clock: Callable[[], float] = time.monotonic) -> float:
+        """About how long the build has still to run: its expected time (its records at
+        `RECORDS_PER_SECOND`) less what it has run, or that expected time if it has not started (it waits
+        for the build ahead of it: `queue`). 0 once built, or failed."""
+        if self.index is not None or self.failed:
+            return 0.0
+        expected = self._records / self.RECORDS_PER_SECOND
+        return expected if self._started is None else max(0.0, expected - (clock() - self._started))
+
+    def build(self, records: RecordFile, index_version: str) -> None:
+        """Build the table from `records`' snapshot (one validating pass, as `op eval scholar` reads it) and
+        publish it in one assignment. Never raises: a failure is one ERROR line and `failed`."""
+        from openproceedings.eval.scholar_compare import MatchIndex
+        from openproceedings.ingest.snapshot import iter_records
+
+        started = time.perf_counter()
+        self._records, self._started = len(records), time.monotonic()
+        try:
+            index = MatchIndex.build(_yielding(iter_records(records.path.parent)))
+            if index.cells.keys() != records.ids():  # the table must be this bundle's snapshot's, id for id
+                raise SnapshotError(
+                    "the match table's records are not the served snapshot's", reason="match_index_mismatch"
+                )
+        except Exception as e:  # the handling layer: logged once; comparisons are a 503 state until a reload
+            self.failed = True
+            fields: dict[str, object] = {
+                "index_version": index_version,
+                "error": type(e).__name__,
+                "ms": elapsed_ms(started),
+            }
+            if (reason := reason_of(e)) is not None:
+                fields["reason"] = reason
+            if not isinstance(e, OSError | SnapshotError):
+                fields["frames"] = frames(e)
+            log.error("match_index_failed", extra=fields)
+            return
+        self.index = index
+        log.info(
+            "match_index_built",
+            extra={"index_version": index_version, "records": len(index.cells), "ms": elapsed_ms(started)},
+        )
+
+
+YIELD_EVERY = 1  # records the match-table build reads between two GIL releases (`_yielding`)
+
+
+def _yielding(records: Iterable[PaperRecord], every: int = YIELD_EVERY) -> Iterator[PaperRecord]:
+    """`records`, releasing the GIL every `every` of them (`time.sleep(0)`): the build is pure Python in a
+    background thread, and a search that waits for the GIL behind it missed spec 03's 100 ms p95 (on the 5k
+    fixture, builds back to back: 326 ms p95 without a release, 107 ms every 4 records, 64 ms every record;
+    the build alone 258 ms against 270 ms; spec 04 §Comparing with a RIS file, The match table; PERF-S3)."""
+    for i, record in enumerate(records):
+        if i % every == 0:
+            time.sleep(0)
+        yield record
+
+
 @dataclass(frozen=True, slots=True)
 class Served:
     """The served index as one reference (`IndexState.served`): its engine, its verified snapshot's records
@@ -120,6 +209,8 @@ class Served:
     listed: Withheld = NONE  # the takedown list as this bundle's load read it (TASK-136)
     # every (survivor, merged) pair of every snapshot on disk, read with the list (TASK-067); empty with no list
     merges: tuple[tuple[str, str], ...] = ()
+    # this index's match table for `POST /compare` (TASK-177); None when comparisons are off
+    matches: MatchTable | None = None
     # records → the ids of theirs that are a listed paper under another id (weakly keyed: a pin the LRU drops
     # takes its entry with it)
     _aliases: WeakKeyDictionary[RecordFile, Withheld] = field(
@@ -281,12 +372,18 @@ class IndexState:
         open_wait_seconds: float = 2.0,
         slow_verification_seconds: float = 5.0,
         max_verification_seconds: float = 30.0,
+        compare: bool = False,
+        matches_in_background: bool = True,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._data_dir = data_dir
         self._name = name
         self._opener = opener
         self._list_required = list_required  # a missing takedown list fails every load (TASK-067)
+        # comparisons on: each newly served index gets a match table (module docstring), built after the swap
+        self._compare = compare
+        self._matches_in_background = matches_in_background
+        self._matches_building = threading.Lock()  # one match-table build at a time (`_build_matches`)
         # the served index, its snapshot's records and its coverage: built and checked together at load and
         # swapped as one reference, so a request that read it keeps its own index's records and coverage
         # however many swaps happen before it finishes
@@ -462,21 +559,28 @@ class IndexState:
             path = index_path(self._data_dir, self._name)
             attempted = path.name
             if served is not None and path.name == served.engine.index_version:
-                if listed == served.listed:
+                # a match table that failed to build is built again on every reload (TASK-177 review): the
+                # same index gets a new table, so "until the next reload" is true of a failure
+                retry = served.matches is not None and served.matches.failed
+                if listed == served.listed and not retry:
                     log.info("index_unchanged", extra={"index_version": kept})
                     return True
                 # the same index, another list: the same engine and records, coverage counted again
-                self._served = self._bundle(served.engine, served.records, listed)
-                log.info(
-                    "takedowns_reloaded",
-                    extra={
-                        "index_version": kept,
-                        "abstracts_withheld": len(listed),
-                        "takedowns_not_in_index": _not_in(listed, served.records),
-                        "takedowns_followed": _followed(self._served),
-                        "ms": elapsed_ms(started),
-                    },
-                )
+                matches = MatchTable() if retry else served.matches
+                self._served = again = self._bundle(served.engine, served.records, listed, matches)
+                if listed != served.listed:
+                    log.info(
+                        "takedowns_reloaded",
+                        extra={
+                            "index_version": kept,
+                            "abstracts_withheld": len(listed),
+                            "takedowns_not_in_index": _not_in(listed, served.records),
+                            "takedowns_followed": _followed(self._served),
+                            "ms": elapsed_ms(started),
+                        },
+                    )
+                if retry:
+                    self._build_matches(again)
                 return True
             engine = self._gated(self._opener(path))  # verifies every file; the live engine is untouched
             records = snapshot_records(self._data_dir, path, engine.index_version)
@@ -487,7 +591,7 @@ class IndexState:
                     reason="takedowns_missing",
                 )
             # the manifest checked against the records and the index
-            bundle = self._bundle(engine, records, listed)
+            bundle = self._bundle(engine, records, listed, MatchTable() if self._compare else None)
         except Exception as e:  # the handling layer: logged once, and the service keeps what it has
             fields: dict[str, object] = {
                 "error": type(e).__name__,
@@ -521,9 +625,34 @@ class IndexState:
                 "ms": elapsed_ms(started),
             },
         )
+        self._build_matches(bundle)  # after the swap: searches are served while the table is built
         return True
 
-    def _bundle(self, engine: TantivyEngine, records: RecordFile, listed: Withheld) -> Served:
+    def _build_matches(self, bundle: Served) -> None:
+        """Build `bundle`'s match table (if it has one), in a background thread unless configured otherwise.
+        One build at a time, and a bundle that is no longer the served one when its turn comes is skipped: N
+        quick swaps are at most one build running and one more for the index left serving, never N at once
+        (each holds the snapshot's records while it runs)."""
+        table = bundle.matches
+        if table is None:
+            return
+        table.queue(len(bundle.records))
+
+        def build() -> None:
+            with self._matches_building:
+                served = self._served
+                if served is None or served.matches is not table:
+                    return  # superseded while it waited: that index is no longer served
+                table.build(bundle.records, bundle.engine.index_version)
+
+        if self._matches_in_background:
+            threading.Thread(target=build, name="op-match-index", daemon=True).start()
+        else:
+            build()
+
+    def _bundle(
+        self, engine: TantivyEngine, records: RecordFile, listed: Withheld, matches: MatchTable | None
+    ) -> Served:
         """What a load serves: with a list, every snapshot's merges read beside it, and the coverage counted
         with every id the list withholds from `records`, under the listed id or another. A snapshot whose
         merges.csv doesn't match its manifest leaves its own merges out (one ERROR `takedown_merges_unavailable`
@@ -544,7 +673,9 @@ class IndexState:
 
         merges = merges_on_disk(self._data_dir / "snapshots", on_damaged=damaged) if listed else ()
         aliases = takedowns.same_paper(listed, merges, records.ids(), twins=records.twin_pairs())
-        served = Served(engine, records, coverage_of(engine, records, listed | aliases), listed, merges)
+        served = Served(
+            engine, records, coverage_of(engine, records, listed | aliases), listed, merges, matches
+        )
         served._aliases[records] = aliases
         return served
 
@@ -553,7 +684,7 @@ class IndexState:
         latest instruction (so a takedown sent with a bad promotion still applies, and so does a lifting). One
         more line, `takedowns_reloaded`; `takedowns_reload_failed` if even that fails (the old bundle stays)."""
         try:
-            bundle = self._bundle(served.engine, served.records, listed)
+            bundle = self._bundle(served.engine, served.records, listed, served.matches)
         except Exception as e:  # the handling layer: the old bundle (and its list) is kept
             fields: dict[str, object] = {
                 "index_version": served.engine.index_version,

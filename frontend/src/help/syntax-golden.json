@@ -10,7 +10,10 @@
     "max_query_length": 2000,
     "max_query_depth": 64,
     "max_verified_clauses": 16,
-    "max_verification_candidates": 300000
+    "max_verification_candidates": 300000,
+    "max_counted_groups": 10,
+    "max_counted_terms": 5000,
+    "max_counted_ids": 300000
   },
   "text_fields": ["title", "abstract"],
   "values": {
@@ -306,6 +309,16 @@
       "display": null,
       "message": "Google Scholar stems words; openproceedings matches them exactly, so `trust` matches only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `trust$`).",
       "fix": "trust$",
+      "note": null
+    },
+    {
+      "code": "COMPAT_NO_STEMMING",
+      "kind": "translation",
+      "mode": "scholar",
+      "example": "AI ML",
+      "display": null,
+      "message": "Google Scholar stems words; openproceedings matches them exactly, so `ai`, `ml` match only those forms (not plurals or other endings). Add `$` or `*` where they should count.",
+      "fix": null,
       "note": null
     },
     {

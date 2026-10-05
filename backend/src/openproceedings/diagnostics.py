@@ -77,6 +77,16 @@ class DiagnosticCode(StrEnum):
     API_TOO_MANY_VERIFIED_CLAUSES = "API_TOO_MANY_VERIFIED_CLAUSES"
     # position checks that would read more candidate documents than the instance allows one query
     API_QUERY_TOO_COSTLY = "API_QUERY_TOO_COSTLY"  # (M3a review round 3, decision-010)
+    # comparing a query with a reviewer's own RIS file (`POST /compare`, TASK-177)
+    API_COMPARE_DISABLED = "API_COMPARE_DISABLED"  # this instance's operator has not turned comparisons on
+    API_UNSUPPORTED_MEDIA_TYPE = "API_UNSUPPORTED_MEDIA_TYPE"  # not a plain RIS body (a form, an encoding)
+    API_UPLOAD_TIMEOUT = "API_UPLOAD_TIMEOUT"  # the file didn't arrive within the time one upload gets
+    API_RIS_INVALID = "API_RIS_INVALID"  # the file is not UTF-8 RIS, or holds no record
+    API_RIS_TOO_LARGE = (
+        "API_RIS_TOO_LARGE"  # more records, lines or characters in a line than one file may have
+    )
+    # the comparison would read more papers, or more inflected spellings, than the instance allows one request
+    API_COMPARE_TOO_COSTLY = "API_COMPARE_TOO_COSTLY"
 
 
 _API_STATUS: dict[DiagnosticCode, int] = {
@@ -95,6 +105,12 @@ _API_STATUS: dict[DiagnosticCode, int] = {
     DiagnosticCode.API_BUSY: 503,
     DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES: 422,
     DiagnosticCode.API_QUERY_TOO_COSTLY: 422,
+    DiagnosticCode.API_COMPARE_DISABLED: 403,
+    DiagnosticCode.API_UNSUPPORTED_MEDIA_TYPE: 415,
+    DiagnosticCode.API_UPLOAD_TIMEOUT: 408,
+    DiagnosticCode.API_RIS_INVALID: 422,
+    DiagnosticCode.API_RIS_TOO_LARGE: 413,
+    DiagnosticCode.API_COMPARE_TOO_COSTLY: 422,
 }
 
 

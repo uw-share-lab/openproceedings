@@ -19,7 +19,16 @@ from datetime import datetime
 from urllib.parse import urljoin
 
 from openproceedings.ingest import urls
-from openproceedings.ingest.record import Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls
+from openproceedings.ingest.record import (
+    Claim,
+    ClaimField,
+    ClaimValue,
+    PaperRecord,
+    Source,
+    Urls,
+    title_evidence,
+    title_text,
+)
 from openproceedings.ingest.sources.common import ListingReport, MinerError, record_from_claims
 from openproceedings.ingest.sources.html import Element, collapse, node_text, parse, text_after
 from openproceedings.ingest.sources.http import Fetcher, canonical
@@ -216,12 +225,13 @@ def _record(year: int, listing: str, fetched_at: datetime, entry: Entry) -> Pape
         )
 
     evidence = f"accepted conference paper listed on {listing}"
+    title, replaced = title_text(entry.title)  # a control character becomes a space (decision-036)
     claims = [
         claim("venue", "ICLR", evidence),
         claim("year", year, evidence),
         claim("track", "main", evidence),
         claim("status", "accepted", evidence),
-        claim("title", entry.title, evidence),
+        claim("title", title, title_evidence(evidence, replaced)),
         claim("authors", entry.authors, evidence),
     ]
     if entry.forum:

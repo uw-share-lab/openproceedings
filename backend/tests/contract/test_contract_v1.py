@@ -132,8 +132,14 @@ def test_search_refuses_an_unknown_or_repeated_parameter(
     assert "trust" not in e["message"] or ("q", "trust") not in params  # names the key, never a value
 
 
-def route_urls(record_id: str, paper_id: str) -> Iterator[tuple[str, str, dict[str, Any] | None]]:
+RIS_FILE = b"TY  - JOUR\nTI  - a title\nJF  - NeurIPS\nPY  - 2024\nER  - \n"
+RIS_HEADERS = {"Content-Type": "application/x-research-info-systems"}
+
+
+def route_urls(record_id: str, paper_id: str) -> Iterator[tuple[str, str, dict[str, Any] | bytes | None]]:
+    """Every route of the contract with a request it answers 200 or 201; a `bytes` body is a RIS file."""
     yield "GET", "/api/v1/search?q=trust", None
+    yield "POST", "/api/v1/compare?q=trust", RIS_FILE
     yield "POST", "/api/v1/parse", {"q": "trust"}
     yield "GET", f"/api/v1/papers/{paper_id}", None
     yield "GET", "/api/v1/export?q=trust&format=ris", None
@@ -146,7 +152,12 @@ def route_urls(record_id: str, paper_id: str) -> Iterator[tuple[str, str, dict[s
 
 
 def test_every_route_refuses_a_parameter_it_doesnt_take(data_dir: Path) -> None:
-    with TestClient(make_app(data_dir)) as c:
+    def send(c: TestClient, method: str, path: str, body: dict[str, Any] | bytes | None) -> Any:
+        if isinstance(body, bytes):
+            return c.request(method, path, content=body, headers=RIS_HEADERS)
+        return c.request(method, path, json=body)
+
+    with TestClient(make_app(data_dir, compare_enabled=True)) as c:
         record_id = c.post("/api/v1/records", json={"q": "trust"}).json()["record_id"]
         paper_id = c.get("/api/v1/search", params={"q": "trust", "limit": 1}).json()["hits"][0]["id"]
         routes = list(route_urls(record_id, paper_id))
@@ -155,9 +166,9 @@ def test_every_route_refuses_a_parameter_it_doesnt_take(data_dir: Path) -> None:
         }
         assert templates == set(DOC["paths"])  # every route of the contract
         for method, path, body in routes:
-            assert c.request(method, path, json=body).status_code in (200, 201), path
+            assert send(c, method, path, body).status_code in (200, 201), path
             joined = f"{path}{'&' if '?' in path else '?'}bogus=1"
-            e = error(c.request(method, joined, json=body), 422, "API_BAD_PARAM")
+            e = error(send(c, method, joined, body), 422, "API_BAD_PARAM")
             assert "`bogus`" in e["message"], path
 
 
@@ -201,6 +212,7 @@ QUERY_ROUTES = [
     ("/api/v1/records", "post"),
     ("/api/v1/records/{id}", "get"),
     ("/api/v1/records/{id}/diff", "get"),
+    ("/api/v1/compare", "post"),
 ]
 
 
@@ -242,7 +254,7 @@ def test_operation_ids_are_verb_noun() -> None:
     ids = {op["operationId"] for item in DOC["paths"].values() for op in item.values()}
     assert ids == {
         "search", "parse_query", "export", "get_paper", "get_coverage", "get_meta", "get_healthz",
-        "create_record", "get_record", "get_record_diff",
+        "create_record", "get_record", "get_record_diff", "compare_records",
     }  # fmt: skip
 
 

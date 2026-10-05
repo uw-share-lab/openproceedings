@@ -235,9 +235,23 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
 ## Performance budgets (for the M4 corpus, about 80k docs; CI benchmarks the 5k fixture and nightly reports a synthetic 80k, 07 §E)
 
 - Index build: under 2 minutes. Index size: under 500 MB.
-- p95 latency: under 100 ms for a search returning the first 50 hits, and under 300 ms for `match_ids`
-  with exclusion accounting.
+- p95 latency: under 100 ms for a search returning the first 50 hits, as `/search` runs it (with its facets,
+  exclusion accounting and each concept group's counts at the instance's default bounds, 04 §SearchResponse
+  `groups`; `docs/results/2026-10-05-bench-group-counts.md`), and under 300 ms for `match_ids` with
+  exclusion accounting.
 - A wildcard expansion of up to 200 terms: under 50 ms.
+- **Exception, as measured (decision-039, TASK-197):** with its group counts, the cold first page (the facet
+  memo forgotten) of the Trust-Evals string `main-2-pop` (`tests/golden/test_trust_evals.py`) took p95
+  190.1 ms (median 178.9 ms) on index `fd13d8d27535`, over the 100 ms search budget; without the counts 62.1 ms, and a later page with them
+  62.3 ms (`docs/results/2026-10-05-bench-group-counts.md`, a 1-minute load of 3.9 at the start and 3.3 at the
+  end). Its first group (nine alternatives, seven of them `$` phrases; about 35 ms a run) is in three of the six
+  trees counted, and each count runs it again. Every other measured query, first page or later, is within the
+  budget with its counts, the wildcard-phrase query `("large language model$" OR LLM*) AND (trust* OR
+  calibrat*) AND (benchmark* OR evaluat*)` included (p95 84.4 ms; TASK-196's 110.8 ms was measured at a load
+  of 4.5 to 9.8). The budget is unchanged; TASK-197 brings this case under it. This is apart from task-024's
+  exception below, which covers `main-2-pop`'s `$` phrases (position-verified) when every cache is cold: here
+  only the facet memo is forgotten, the verified clauses are memoised, the page without its counts is within
+  the budget, and the extra time is the counts collecting the first group again.
 - **Exception, as built (task-024):** a clause that takes the position-verified fallback (a phrase with a
   wildcard item; NEAR with a phrase or wildcard operand, or a term with itself) costs time linear in its
   candidates' text and can exceed the search and `match_ids` budgets when cold: on a synthetic 80k corpus,
@@ -259,7 +273,9 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
 - Measured, the `/search` endpoint (M3a review gate; `search.run(limit=50, facets=True, highlight=True)`,
   synthetic 80k). A first page collects the text query twice: the page, and once without its top-level
   filters for every facet and both exclusion buckets (task-086: counts per (venue, year, track, status) from
-  one nested terms aggregation, the rest in Python; memoised per base in `TantivyEngine.faceted`). Two
+  one nested terms aggregation, the rest in Python; memoised per base in `TantivyEngine.faceted`; a concept
+  group's two counts, 04 §SearchResponse `groups`, are two more such collections a group, on the counts' own workers,
+  from conjunct queries compiled once and never stored in `compiled`: `TantivyEngine.counts`, TASK-176). Two
   collections are the floor of an exact design (the page needs the effective query's own scores), so the
   second runs on a worker thread, overlapping the first (M3a review gate round 2): `search.run` compiles the
   effective tree in the request's thread (a cold verified clause takes its one verification slot there, and

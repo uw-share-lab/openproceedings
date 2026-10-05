@@ -16,6 +16,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { useMeta } from "@/api/hooks";
 import { codePointLength, codePointSpanToUtf16 } from "@/api/spans";
 import { ConceptBuilder, type Expansions } from "@/builder/concept-builder";
+import { countsFor, type SearchedGroups } from "@/builder/group-counts";
 import { panelId, QueryTabList, tabId, type QueryTab } from "@/builder/query-tabs";
 import { countText, editorDiagnostics, itemOf, itemsOf, plural, type Item } from "@/editor/diagnostics";
 import type { ErrorEnvelope, ParseOutcome, ParseResponse } from "@/editor/parse";
@@ -58,6 +59,8 @@ export interface SearchWorkspaceProps {
   readonly results?: ReactNode;
   /** The last answered `/search`'s `query.expansions`: the builder shows each group's own (TASK-111). */
   readonly expansions?: Expansions | null;
+  /** The last answered `/search`'s total and group counts: the builder shows each group's own (TASK-176). */
+  readonly searchedGroups?: SearchedGroups | null;
 }
 
 /** `DRAFT_DIRTY`: the draft differs from the searched query (design W13; copy SB-6). */
@@ -216,6 +219,7 @@ export function SearchWorkspace({
   openTree = false,
   results,
   expansions = null,
+  searchedGroups = null,
 }: SearchWorkspaceProps) {
   const router = useRouter();
   const meta = useMeta();
@@ -303,9 +307,14 @@ export function SearchWorkspace({
     router.push(searchHref(next));
   };
 
+  // A row action that rewrites the draft (Add $, Load with parentheses, an example) unmounts its own button, so
+  // focus has to be put somewhere at once (A11Y-M4). On the Text tab that is the editor, which now shows the
+  // edit. On the Builder tab it is the Builder tab itself: it is always mounted and names the panel the reader
+  // is in, while the builder's own controls are rebuilt only when /parse has answered for the new text.
   const load = (next: Draft) => {
     setDraft(next);
     if (tab === "text") editor.current?.focus();
+    else document.getElementById(tabId(tabsId, tab))?.focus();
   };
 
   const shownDirty = shown !== null && isDirty(shown, state);
@@ -398,10 +407,18 @@ export function SearchWorkspace({
               focusOnOpen={enterBuilder}
               onFocused={builderFocused}
               expansions={expansions}
+              searched={searchedGroups}
             />
           )}
         </div>
       </form>
+
+      {tab !== "builder" && (
+        <GroupCountsPointer
+          searched={countsFor(searchedGroups, draft.text, draft.mode)}
+          onOpen={() => selectTab("builder", true)}
+        />
+      )}
 
       <p id={summaryId} role="status" aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
         {summaryText(shown, draft, state)}
@@ -427,6 +444,7 @@ export function SearchWorkspace({
           }
           text={shown.text}
           textIsDraft={shown.text === draft.text}
+          wordForms={shown.parsed?.word_forms ?? []}
           nativeMode={draft.mode === "native"}
           searchedAs={!shownDirty ? (shown.parsed?.canonical ?? null) : null}
           treeAvailable={shown.parsed != null && shown.parsed.effective_ast !== null}
@@ -459,5 +477,26 @@ export function SearchWorkspace({
         </WorkspaceSlotContext.Provider>
       )}
     </div>
+  );
+}
+
+/**
+ * Outside the Builder tab, after a search whose groups were counted: where the counts are (copy BD-12), so a
+ * reviewer looking for the group that narrows the search finds them. Only while the draft is that search.
+ */
+function GroupCountsPointer({ searched, onOpen }: { searched: SearchedGroups | null; onOpen: () => void }) {
+  if (searched === null || searched.groups.counts.length < 2) return null;
+  return (
+    <p className="text-sm text-muted-foreground">
+      Each of this query&apos;s {searched.groups.counts.length} groups has a count in the Builder tab: how
+      many papers it matches by itself, and how many the query finds without it.{" "}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="inline-flex min-h-6 items-center underline hover:text-foreground"
+      >
+        Show group counts
+      </button>
+    </p>
   );
 }

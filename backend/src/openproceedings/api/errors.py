@@ -12,12 +12,9 @@ traceback, whose last line is the message and can quote the query (task-034 note
 from __future__ import annotations
 
 import contextvars
-import errno
 import logging
-import traceback
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request
@@ -35,6 +32,7 @@ from openproceedings.diagnostics import (
     clip,
     http_status,
 )
+from openproceedings.logs import frames, reason_of
 
 log = logging.getLogger(__name__)
 MAX_NAMED_PARAMS = 5  # bad parameters (or body locations) a 422 refusal names; more are counted
@@ -116,22 +114,6 @@ def error_response(
     if diagnostics is None:
         del content["error"]["diagnostics"]  # absent, not null; a diagnostic's own null span stays
     return JSONResponse(content, status_code=status, headers=headers)
-
-
-def frames(exc: BaseException) -> list[str]:
-    """`file:line function` for each frame of `exc`'s traceback: where it failed, without what it said."""
-    return [f"{Path(f.filename).name}:{f.lineno} {f.name}" for f in traceback.extract_tb(exc.__traceback__)]
-
-
-def reason_of(exc: BaseException) -> str | None:
-    """A constant that says why `exc` happened, never its message: its `reason` (SnapshotError,
-    IndexBuildError, IndexSelectionError, IndexUnservable), or an OSError's errno name (`ENOENT`)."""
-    reason = getattr(exc, "reason", None)
-    if isinstance(reason, str):
-        return reason
-    if isinstance(exc, OSError) and exc.errno is not None:
-        return errno.errorcode.get(exc.errno, str(exc.errno))
-    return None
 
 
 def request_id(scope: Mapping[str, object]) -> str:

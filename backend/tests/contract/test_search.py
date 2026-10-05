@@ -84,7 +84,7 @@ def test_the_response_has_every_field_of_spec_04(client: TestClient, store: Stor
     body = ok(client, "trust AND calibrat*")
     assert set(body) == {
         "query", "index_version", "tokenizer_version", "query_version", "total", "excluded", "facets", "hits",
-        "identified_total", "unclassified_total",
+        "identified_total", "unclassified_total", "groups",
     }  # fmt: skip
     assert (body["index_version"], body["tokenizer_version"], body["query_version"]) == (
         store.big,

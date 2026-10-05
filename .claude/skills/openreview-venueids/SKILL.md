@@ -35,8 +35,9 @@ and `classify_v1_venue` maps a v1 note's exact `content.venue` string to track a
 | `NeurIPS.cc/2026/Evaluations_and_Datasets_Track` | `datasets_benchmarks` | per suffix | live group (2026 rename of D&B), no notes yet; TASK-094 |
 | `<Org>.cc/<Y>/Workshop/<name>` | `workshop` | `accepted` | validated; live |
 | `<Org>.cc/<Y>/Workshop_<City>/<name>` (e.g. `NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM`) | `workshop` | `accepted` | validated; live |
-| `<Org>.cc/<Y>/Workshop/<name>/Rejected_Submission` (and the other suffixes) | `workshop` | per suffix | live (`ICLR.cc/2025/Workshop/ICBINB/Rejected_Submission`) |
-| `ICML.cc/<Y>/Position_Paper_Track` (2025+) | `position` | per suffix | live (2025: 73; 2026: 213) |
+| `<Org>.cc/<Y>/Workshop/<name>/Rejected_Submission` (and the other suffixes) | `workshop` | per suffix | live (`ICLR.cc/2025/Workshop/ICBINB/Rejected_Submission`); 2026 crawl (TASK-178): ICLR 71 rejected, 6 withdrawn (`1lNr7gL71D`), ICML 5 rejected, NeurIPS 349 rejected (`WiML` 165, `IAB` 105, `TTCL` 79) |
+| `<Org>.cc/<Y>/Workshop/<name>/Submission` | `workshop` | `unknown` | live on notes: 11 undecided workshop submissions were public in the 2026 crawl (ICLR `LMRL` 1, `KadCjvcLOz`; ICML `CTB` 3, `GenBio` 3, `Mech_Interp` 2, `NExT-Game` 2, `xFNDnnuTSf`; fixture `icml-2026/notes-workshop-submission.json`) |
+| `ICML.cc/<Y>/Position_Paper_Track` (2025+) | `position` | per suffix | live (2025: 73; 2026: 213 accepted, 28 opt-in rejected, `thf3e0Ptbf`) |
 | `NeurIPS.cc/<Y>/Position_Paper_Track` (2025+) | `position` | per suffix | live (2025: 40 accepted, 55 rejected; `VZnOKzQ5qW`); TASK-094 |
 | ICML 2024 position papers | carry `ICML.cc/2024/Conference`, no marker | – | live: indistinguishable from main on OpenReview |
 | `ICLR.cc/<Y>/TinyPapers` (2023 v1, 2024 v2) | `tiny_papers` | `accepted` in v2 only (2023's 219 v1 notes all say `Submitted to Tiny Papers @ ICLR 2023`) | live |
@@ -48,7 +49,8 @@ and `classify_v1_venue` maps a v1 note's exact `content.venue` string to track a
 | `<Org>.cc/<Y>/Workshop/<name>` whose name looks like a status (`Rejected`, `Data_Submission`) | `workshop` | `accepted` (the segment after `Workshop` is always the name) | rule |
 | anything that does not match the grammar | `unknown` | `unknown` | log, show on coverage |
 
-Workshop names contain hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`). A new form gets a live check
+Workshop names contain hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`, `NExT-Game`), and a name can end in
+`_Track` (`ICLR.cc/2026/Workshop/ML4RS_Main_Track`, 42 notes): rule 1 still makes it a workshop. A new form gets a live check
 (by forum id, authenticated), a recorded fixture, and a table-test row citing the checked id.
 
 ## Rules

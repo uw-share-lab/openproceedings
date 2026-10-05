@@ -34,7 +34,7 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip
+from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip, verbatim
 from openproceedings.query.ast import (
     MAX_YEAR,
     MIN_YEAR,
@@ -61,7 +61,8 @@ from openproceedings.query.compat import (
     source_key,
 )
 from openproceedings.query.defaults import apply_defaults
-from openproceedings.query.lexer import FIELDS, Kind, Lexeme, lex
+from openproceedings.query.exact import dollar_places, exact_leaves, exact_name
+from openproceedings.query.lexer import FIELDS, OPERATOR_WORDS, Kind, Lexeme, lex
 from openproceedings.query.normalize import SERVED_TOKENIZERS, TOKENIZER_VERSION, tokenize
 from openproceedings.vocab import STATUSES, TEXT_FIELDS, TRACKS, VENUES
 
@@ -780,37 +781,32 @@ class _Parser:
         return cls(span=(nodes[0].span[0], nodes[-1].span[1]), children=tuple(nodes))
 
 
-def _exact_terms(n: Node) -> list[str]:
-    """Words and phrases matched exactly (no wildcard), in order: what Scholar would have stemmed."""
-    if isinstance(n, Term):
-        return [n.token]
-    if isinstance(n, Phrase) and not any(isinstance(i, Wildcard) for i in n.items):
-        return [" ".join(i.token for i in n.items if isinstance(i, Term))]
-    if isinstance(n, Near):
-        return _exact_terms(n.left) + _exact_terms(n.right)
-    if isinstance(n, Not):
-        return _exact_terms(n.child)
-    if isinstance(n, And | Or):
-        return [t for c in n.children for t in _exact_terms(c)]
-    return []
-
-
-def _stemming_notice(ast: Node, end: int) -> list[Diagnostic]:
-    """Scholar mode: one notice that exact matching differs from Scholar's stemming (methods-reportable)."""
-    terms = list(dict.fromkeys(_exact_terms(ast)))
+def _stemming_notice(q: str, ast: Node, lexemes: Sequence[Lexeme], tokenizer: str) -> list[Diagnostic]:
+    """Scholar mode: one notice that exact matching differs from Scholar's stemming (methods-reportable). Its
+    example is the first term that can take a `$` as written (`exact.dollar_places`, the rule the UI's "Add
+    `$`" goes by), a phrase quoted whole since its earlier words count toward the stem; there is none when
+    no term can, or when it couldn't be quoted as typed (TASK-181: `AI C++ or` once suggested `ai$`)."""
+    terms = list(dict.fromkeys(exact_name(leaf) for leaf in exact_leaves(ast)))
     if not terms:
         return []
     shown = ", ".join(f"`{clip(t)}`" for t in terms[:8]) + (
         f" and {len(terms) - 8} more" if len(terms) > 8 else ""
     )
+    # quoted when it is a phrase, or a lowercase operator word (offered only inside quotes: `"and" trust`),
+    # so the example reads in either mode as the wildcard "Add `$`" writes
+    examples = (
+        f'"{place.term}$"' if " " in place.term or place.term in OPERATOR_WORDS else f"{place.term}$"
+        for place in dollar_places(q, ast, lexemes, tokenizer)
+    )
+    example = next((e for e in examples if verbatim(e) and clip(e) == e), None)
     return [
         Diagnostic(
             code=DiagnosticCode.COMPAT_NO_STEMMING,
             message=f"Google Scholar stems words; openproceedings matches them exactly, so {shown} "
             + ("matches" if len(terms) == 1 else "match")
-            + " only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. "
-            f"`{clip(terms[0].split()[-1])}$`).",
-            span=(0, end),
+            + " only those forms (not plurals or other endings). Add `$` or `*` where they should count"
+            + (f" (e.g. `{example}`)." if example is not None else "."),
+            span=(0, len(q)),
         )
     ]
 
@@ -935,7 +931,7 @@ def parse(q: str, mode: Mode = "native", tokenizer: str = TOKENIZER_VERSION) -> 
             translations=notes,
         )
     if mode == "scholar":
-        notes = sorted([*notes, *_stemming_notice(ast, len(q))], key=by_position)
+        notes = sorted([*notes, *_stemming_notice(q, ast, lexemes, tokenizer)], key=by_position)
     d = apply_defaults(ast, len(q))
     canonical = render(d.effective)
     top = d.effective.children if isinstance(d.effective, And) else (d.effective,)

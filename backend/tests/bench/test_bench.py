@@ -6,8 +6,9 @@ and head, fails a regression of the minimum over 20% (the least noise-prone stat
 assert the budgets from the timings measured:
 - a search returning the first 50 hits: p95 < 100 ms (every Trust-Evals protocol string, Scholar mode), with
   and without its display records and highlights (task-073; exclusion accounting has its own budget), and
-  as the `/search` endpoint runs it, with exclusion accounting, facets and each hit's `abstract_source` too
-  (first page, facet memo cold; TASK-134);
+  as the `/search` endpoint runs it, with exclusion accounting, facets, each hit's `abstract_source` and its
+  concept groups' counts at `ApiConfig`'s bounds too (first page, facet memo cold; TASK-134, TASK-176), a
+  warm later page of each, and a query of ten one-word groups (the most `/search` counts);
 - `match_ids` with exclusion accounting: p95 < 300 ms;
 - a wildcard expansion of up to 200 terms: p95 < 50 ms.
 The ~80k corpus and the position-verified cases are measured by `backend/tests/bench/report_80k.py` into
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import time
 from bisect import bisect_left, bisect_right
+from collections import Counter
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
@@ -25,6 +27,7 @@ from typing import Any
 
 import pytest
 from openproceedings import search
+from openproceedings.api.config import ApiConfig
 from openproceedings.api.search import page_attributions
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.compile import FIELDS
@@ -44,6 +47,19 @@ from tests.unit.engine.test_exclusions import tantivy_of
 
 ROUNDS = 30
 ENDPOINT_ROUNDS = 100  # the `/search` rows: its p95 over fewer rounds is little more than the slowest one
+# what the `/search` route passes `search.run` for its concept groups, at an instance's defaults (api/search.py)
+_DEFAULTS = {name: field.default for name, field in ApiConfig.model_fields.items()}
+# each `search.run` argument and the `ApiConfig` field the route passes as it
+GROUP_FIELDS = {
+    "groups": "max_counted_groups",
+    "groups_terms": "max_counted_terms",
+    "groups_ids": "max_counted_ids",
+    "groups_wait": "group_count_wait_seconds",
+    "groups_grace": "group_count_grace_seconds",
+}
+GROUPS: dict[str, Any] = {arg: _DEFAULTS[field] for arg, field in GROUP_FIELDS.items()}
+# ten one-word groups (`max_counted_groups`), the fixture's commonest words: 20 collections when counted
+TEN_GROUPS = "agent ai benchmark calibration language bias dataset human trust model"
 
 
 @pytest.fixture(scope="module")
@@ -111,19 +127,47 @@ def search_endpoint(
     offset: int = 0,
     first: bool = True,
     records: RecordFile | None = None,
-) -> object:
-    """The whole of `GET /api/v1/search`'s engine work: `search.run` with facets and highlights (page, display
-    records, highlights, exclusion accounting, disjunctive facets, the last on a worker thread overlapping the
-    page, so its wall time is below its CPU time), and with `records` each hit's `abstract_source` (TASK-134:
-    a lookup in what the snapshot reader computed at load, then the response object). `first` forgets the
-    facet memo, so the call pays as a query's first page does (compiled queries and verified clauses stay
-    warm); otherwise it is a later page of the same query."""
+) -> search.Search:
+    """The whole of `GET /api/v1/search`'s engine work: `search.run` with facets, highlights and the concept
+    groups' counts at the route's default bounds (page, display records, highlights, exclusion accounting,
+    disjunctive facets and the counts, the last two on worker threads overlapping the page, so its wall time
+    is below its CPU time), and with `records` each hit's `abstract_source` (TASK-134: a lookup in what the
+    snapshot reader computed at load, then the response object). `first` forgets the facet memo, which the
+    counts' collections share, so the call pays as a query's first page does (compiled queries and verified
+    clauses stay warm); otherwise it is a later page of the same query, its counts from the memo."""
     if first:
         engine.faceted.clear()
-    found = search.run(engine, parsed, offset=offset, limit=50, facets=True, highlight=True)
+    found = search.run(engine, parsed, offset=offset, limit=50, facets=True, highlight=True, **GROUPS)
     if records is not None:
         page_attributions(records, [h.id for h in found.hits])
     return found
+
+
+# a round with one of these skipped the counting it is timed for (the grace or the wait ran out, or the pool was
+# full): its time is a search without counts, so a measured round must have none
+SKIPPED = ("busy", "count_failed", "timed_out")
+
+
+class Outcomes:
+    """`f` called as before, with how each warm call's groups came back (`counted`, or the `not_counted`
+    reason): what the measured rounds measured. The first call, the cold one `measure` leaves untimed, is not
+    recorded."""
+
+    def __init__(self, f: Callable[[], search.Search]) -> None:
+        self.f, self.calls, self.seen = f, 0, Counter[str]()
+
+    def __call__(self) -> search.Search:
+        found = self.f()
+        self.calls += 1
+        if self.calls > 1:
+            assert found.groups is not None
+            self.seen[found.groups.not_counted or "counted"] += 1
+        return found
+
+    def check(self, time: float | None) -> None:
+        """When the rounds were timed, none of them skipped its counting (PERF-R2-N: at a 50 ms grace a
+        busy machine's rounds can come back `timed_out`, and the p95 would then time less work)."""
+        assert time is None or not set(self.seen) & set(SKIPPED), dict(self.seen)
 
 
 @pytest.fixture(scope="module")
@@ -141,11 +185,70 @@ def test_search_endpoint_first_page(
 ) -> None:
     engine, snapshot = served
     parsed = trust_evals(name)
-    measure(
-        benchmark, lambda: search_endpoint(engine, parsed, records=snapshot), ENDPOINT_ROUNDS
-    )  # facets overlap
+    rounds = Outcomes(lambda: search_endpoint(engine, parsed, records=snapshot))
+    measure(benchmark, rounds, ENDPOINT_ROUNDS)  # facets overlap
     time = p95(benchmark)
     assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
+    rounds.check(time)
+
+
+@pytest.mark.parametrize("name", list(STRINGS))
+def test_search_endpoint_later_page(
+    benchmark: Any, served: tuple[TantivyEngine, RecordFile], name: str
+) -> None:
+    """The second page of the same query: every memo warm (facets and counts collected by the first)."""
+    engine, snapshot = served
+    parsed = trust_evals(name)
+    search_endpoint(engine, parsed, records=snapshot)  # the first page
+    rounds = Outcomes(lambda: search_endpoint(engine, parsed, 50, first=False, records=snapshot))
+    measure(benchmark, rounds, ENDPOINT_ROUNDS)
+    time = p95(benchmark)
+    assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
+    rounds.check(time)
+
+
+def test_search_endpoint_ten_groups(benchmark: Any, served: tuple[TantivyEngine, RecordFile]) -> None:
+    """The most groups `/search` counts, each a common word: 20 collections on a first page."""
+    engine, snapshot = served
+    parsed = parse(TEN_GROUPS)
+    rounds = Outcomes(lambda: search_endpoint(engine, parsed, records=snapshot))
+    measure(benchmark, rounds, ENDPOINT_ROUNDS)
+    time = p95(benchmark)
+    assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
+    rounds.check(time)
+    assert time is None or set(rounds.seen) == {"counted"}, dict(
+        rounds.seen
+    )  # every timed round counted all ten
+
+
+def test_the_endpoint_bench_counts_groups(served: tuple[TantivyEngine, RecordFile]) -> None:
+    """The endpoint rows measure counting: the ten-group query and the Trust-Evals strings within the
+    default bounds are counted (a patient grace here: what is checked is that they are asked for and fit)."""
+    engine, _snapshot = served
+    patient = {**GROUPS, "groups_grace": 30.0, "groups_wait": 30.0}
+    ten = search.run(engine, parse(TEN_GROUPS), limit=50, facets=True, **patient).groups
+    assert ten is not None and ten.not_counted is None and len(ten.counts) == 10
+    counted = [search.run(engine, trust_evals(n), limit=50, **patient).groups for n in STRINGS]
+    assert all(g is not None for g in counted)
+    assert any(g is not None and g.not_counted is None for g in counted)
+
+
+def test_the_group_counts_report_writes_a_row_per_page(
+    served: tuple[TantivyEngine, RecordFile], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`group_counts_report.table` (run by hand, never in CI) still runs: one round, a first and a later page
+    of one Trust-Evals string, as its Trust-Evals table times every string."""
+    from tests.bench import group_counts_report as report
+
+    monkeypatch.setattr(report, "ROUNDS", 1)
+    # a patient grace, as in the test above: what is checked is the rows, not a busy runner's timing
+    monkeypatch.setattr(report, "GROUPS", {**GROUPS, "groups_grace": 30.0, "groups_wait": 30.0})
+    engine, _snapshot = served
+    name = next(iter(STRINGS))
+    rows = report.table(engine, [(f"`{name}`", trust_evals(name))]).splitlines()[2:]
+    assert [r.split(" | ")[0] for r in rows] == [f"| `{name}`"] * 2
+    assert [r.split(" | ")[2] for r in rows] == ["first page", "later page"]
+    assert all(r.endswith(" counted ×1 |") for r in rows), rows  # each round's groups came back counted
 
 
 def test_the_endpoint_bench_builds_attributions(served: tuple[TantivyEngine, RecordFile]) -> None:

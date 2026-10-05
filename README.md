@@ -28,10 +28,14 @@ authoritative):
   parentheses, `"quoted phrases"`, `a NEAR/5 b`, the suffix wildcards `*` (zero or more characters) and `$`
   (zero or one), and the fields `title:`, `abstract:`, `venue:`, `year:` (`2020..2024`), `track:` and
   `status:`. The web app has a query editor with live diagnostics, a concept-group builder, and a syntax help
-  page (`/help/syntax`).
+  page (`/help/syntax`). After a search of several concept groups, the builder shows how many papers each
+  group matches by itself and how many the query finds without it, so the group narrowing a search is seen
+  (`/search`'s `groups`, bounded per instance).
 - **Scholar and Publish or Perish syntax** (`mode=scholar`, `op search --mode scholar`): `|`, `source:`
   (mapped to `venue:`) and PoP's `$` are accepted. Each rewrite is reported, so an existing review string runs
-  unchanged or comes back with a precise explanation.
+  unchanged or comes back with a precise explanation. Scholar stems words and openproceedings never does, so
+  the web app lists the terms it matched exactly and offers to write `$` after them in the query text
+  ("Add $": `benchmark$` matches `benchmark` and `benchmarks`); nothing is expanded unless the query says so.
 - **Default filters with exclusion accounting**: workshop, competition and rejected papers are indexed too.
   A query without a `track:` clause gets `track:(main OR datasets_benchmarks OR position)`, and one without a
   `status:` clause gets `status:accepted`, both written out in the canonical string; write your own clause to
@@ -45,6 +49,12 @@ authoritative):
   `mismatch`. The web app also writes a methods paragraph you can copy.
 - **Exports with provenance**: RIS (checked against Covidence), CSV, BibTeX and JSONL of the entire matched
   set. Each record names the source of its abstract and links to it.
+- **Compare with your records** ([spec 04](docs/specs/04-backend-api.md) §Comparing with a RIS file): give the
+  search page a RIS file of papers you already hold (a Google Scholar export) and see which of them the query
+  keeps, which it drops and why (excluded by a default filter, no exact match in title or abstract, a match
+  only as another word form), which it adds, and which the index doesn't hold; every list downloads as CSV,
+  the added papers as RIS. The file is read in memory for that one request and never stored or logged. It is
+  on for a local instance and off on a public one unless its operator turns it on (`op serve --compare`).
 - **Coverage page** (`/coverage`, `GET /api/v1/coverage`, `op eval coverage`): indexed counts per venue, year,
   track and status, compared with official accepted counts ([spec 07](docs/specs/07-evaluation.md) §C).
 - **Takedowns** ([decision-022](backlog/decisions/decision-022%20-%20A-takedown-withholds-an-abstracts-display-not-its-matching-on-every-loaded-index-version-the-takedown-list-and-log-live-in-the-data-directory-TASK-136.md)):
@@ -52,7 +62,7 @@ authoritative):
   exports, and marked as removed. `op takedown check` verifies a running instance.
 - **One CLI, `op`**, runs the same functions as the API: `op ingest`, `op snapshot build|diff`,
   `op index build|parity|retire`, `op search`, `op export`, `op record save|replay`, `op serve`,
-  `op eval coverage`, `op takedown check` and `op openapi` ([spec 08](docs/specs/08-ops-and-tooling.md) §CLI).
+  `op eval coverage|scholar`, `op takedown check` and `op openapi` ([spec 08](docs/specs/08-ops-and-tooling.md) §CLI).
 
 **Abstracts on a public instance.** A public deployment shows every abstract, attributed to its source
 (OpenReview, the NeurIPS proceedings or PMLR) with a link to it, and names a takedown contact. Private, local
@@ -70,8 +80,8 @@ so those searches replay the same ids (decision-022). This is the project's deci
 |---|---|
 | M1 | The query language: tokenizer, parser, canonical form, defaults ([spec 02](docs/specs/02-query-language.md)) |
 | M2 | RIS ingestion, snapshots, the Tantivy index, `op search` / `op export` ([spec 01](docs/specs/01-ingestion.md), [spec 03](docs/specs/03-search-engine.md)) |
-| M3 | The `/api/v1` HTTP API (`op serve`), search records, and the web UI: query editor and builder, results, paper pages, exports, the coverage page and syntax help ([spec 04](docs/specs/04-backend-api.md), [spec 05](docs/specs/05-frontend.md)) |
-| M4 | Crawlers for OpenReview (API v1 and v2), the NeurIPS proceedings, PMLR and the ICLR archive (`op ingest …`), and the coverage report with the M4 gate (`op eval coverage`, [spec 07](docs/specs/07-evaluation.md) §C). The first full crawl's report passes the gate: 43 of 44 gated cells are within ±1%, and the one other cell is an exception the owner accepted ([`docs/results/2026-09-29-coverage.md`](docs/results/2026-09-29-coverage.md)). |
+| M3 | The `/api/v1` HTTP API (`op serve`), search records, and the web UI: query editor and builder, results, paper pages, exports, the coverage page and syntax help, with each concept group's counts in the builder ([spec 04](docs/specs/04-backend-api.md), [spec 05](docs/specs/05-frontend.md)) |
+| M4 | Crawlers for OpenReview (API v1 and v2), the NeurIPS proceedings, PMLR and the ICLR archive (`op ingest …`), and the coverage report with the M4 gate (`op eval coverage`, [spec 07](docs/specs/07-evaluation.md) §C). The first full crawl's report passes the gate: 43 of 44 gated cells are within ±1%, and the one other cell is an exception the owner accepted ([`docs/results/2026-09-29-coverage.md`](docs/results/2026-09-29-coverage.md)). After the 2026 OpenReview crawl the gate still passes, with ICLR 2026 and ICML 2026 main added: 45 of 46 gated cells within ±1% and the same exception ([`docs/results/2026-10-05-coverage.md`](docs/results/2026-10-05-coverage.md)). |
 | M6 (in progress) | Deployment: Docker Compose with Caddy for TLS, and the api, web and caddy images, verified locally ([`deploy/`](deploy/README.md), TASK-065). Still to come: the hosting choice (TASK-064), the first tagged release, then the public v1 launch. Releases follow [spec 08](docs/specs/08-ops-and-tooling.md) §Release (one semver version, decision-023), and the release notes are the generated [`CHANGELOG.md`](CHANGELOG.md) |
 | Deferred | Semantic "near-miss" suggestions and re-sort (M5, [spec 06](docs/specs/06-semantic-layer.md)): phase 2, not v1. v1 is Boolean search only (decision-017) |
 
@@ -182,7 +192,10 @@ uv run op serve --cors-origin http://localhost:3000   # http://127.0.0.1:8000, s
 ```
 `curl http://127.0.0.1:8000/api/v1/healthz` should report `"index_loaded": true`. The interactive API docs are
 at <http://127.0.0.1:8000/api/v1/docs>. `--index <index_version>` serves another index; `--cors-origin` lets
-the development UI (another origin) call the API.
+the development UI (another origin) call the API. On a loopback host the API also offers `POST
+/api/v1/compare` (the search page's "Compare with your records"); its table of the index's merge keys is built
+in the background after the index loads (about 15 s for 96,000 records), and a comparison asked for before
+then is told to retry.
 
 ### 6. Run the UI
 Development (hot reload), in a second terminal:
@@ -209,6 +222,18 @@ missing contact fail the build too, and the `web` image requires it: `docker bui
 `uv run op eval coverage --index <index_version>` writes `docs/results/<date>-coverage.md`: indexed against
 official accepted counts per venue, year and track, and the M4 gate verdict (`--check` makes a failing gate the
 exit status).
+
+`uv run op eval scholar --ris <scholar-set.ris> --years 2020..2026 --index <index_version>` compares a Google
+Scholar RIS set with the review's search strings on that index ([spec 07](docs/specs/07-evaluation.md) §B). It
+writes `docs/results/<date>-scholar-comparison.md`, with every record only one side holds classified (filtered,
+read differently by Scholar, matched only through an inflected form, matched nowhere in title or abstract, not
+in the corpus), and `<date>-scholar-comparison-review.csv`, the rows a person decides. It also says how many
+of the set's papers match a crawled record and how many only a record the set's own import put in the index. `--query-file` and
+`--query` run other strings. The first report is
+[`docs/results/2026-10-04-scholar-comparison.md`](docs/results/2026-10-04-scholar-comparison.md); the one on the
+index with the 2026 crawl is [`docs/results/2026-10-05-scholar-comparison.md`](docs/results/2026-10-05-scholar-comparison.md).
+For one query against your own file, without a report, use the search page's "Compare with your records" (the
+same matching and classes, `POST /api/v1/compare`).
 
 ## Run it with Docker Compose
 

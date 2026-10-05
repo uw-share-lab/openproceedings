@@ -23,6 +23,20 @@ Tantivy search, `match_ids`, facets and exclusion accounting are CPU-bound and r
 Declare handlers as plain `def` so FastAPI runs them in its thread pool. An `async def` handler that calls
 the engine blocks every other request. Exports use a **sync generator** in `StreamingResponse`.
 
+One exception, `POST /compare` (`api/compare.py`, TASK-177): it is `async def` because it must take its
+comparison slot *before* it reads the body (a file of megabytes), an order only a coroutine can keep. It
+reads the stream itself under a deadline and runs everything CPU-bound through `anyio.to_thread.run_sync`
+(context variables, so the access line, travel with it), returning a built `Response` so nothing is
+serialized on the event loop. Don't copy the shape for a route without a large body.
+
+**An extra beside a search** (the group counts, `search.py`, TASK-176, decision-034) is never allowed to cost
+the search. Before adding one: bound it from the parsed query before any of it runs (decision-010 charges
+only position verification, so collections and term reads need their own threshold, served in `/meta`
+`limits`); give it its own workers, so facets never queue behind it; wait a short grace for a job no worker
+has taken and a longer one only for a running job, and cancel what the search stopped waiting for; compile
+its trees per request, never into the shared `compiled` memo (no search ran them); and give each way it can
+fail its own value in the answer (`not_counted`), never the search's error.
+
 ## Index lifecycle
 1. **Startup:** load `data/indexes/current` (a symlink to `data/indexes/<index_version>/`) once, in the
    lifespan handler. `/healthz` reports `index_loaded: false` until that finishes; search routes return
@@ -89,11 +103,30 @@ raised mid-stream: `errors.internal_error` logs the cause's frames and reason, s
   (`middleware.refund_charged`, from `RateLimit` by the access line's `code`).
   Cold verification is bounded by `ApiConfig.verification_slots` through `TantivyEngine.verification_gate`
   (set by `IndexState` on every engine it opens) and refused with 503 `API_BUSY`, never queued.
+- A comparison (`POST /compare`) costs `export_weight`, its query's verified charge like any search, and
+  afterwards one token per `RateLimit.compare_token_ms` (500 ms) of the time it held its slot
+  (`compare_cost_ms`: the file's arrival in wall time, counted `compare_upload_weight` times, plus the work's
+  CPU time; `RateLimit.debit_comparison`). The buckets don't bound a *network's* share of a single slot (its
+  bucket refills four times as fast), so `compare.Cooldowns` does (decision-035), only where strangers share
+  the slot (`--compare` or off loopback; none with `compare_local`): one comparison at a time per client
+  network, then none for `compare_cooldown_factor` × the slot time used (429). A scarce slot needs a bound
+  that holds for any number of addresses, with a simulation at the default buckets as its test.
+  `comparison_slots` (1) run at once (503 `API_BUSY` with `Retry-After`); the work stops at
+  `compare_max_seconds` (503 `API_BUSY` without `Retry-After`: the same request would run as long again, so
+  nothing should retry it by itself): the limit is a `tick` called per record and per row in every phase,
+  never only between phases, and each `tick` releases the GIL (`time.sleep(0)`) so a search isn't held behind
+  pure-Python work in a worker thread. Per-index data a route needs beyond the engine and the records goes on the `Served` bundle
+  (`Served.matches`, the match table, built in the background after the swap), never in a cache keyed by
+  version: one reference, one index.
 - Record saves are held to a per-network ceiling (`record_saves_network_burst`,
   `record_saves_network_per_hour`) and an instance-wide one (`record_saves_burst`, `record_saves_per_hour`),
   taken together (`api/records.py::SaveCeiling`); a save that then saves nothing is refunded.
 - `BodyLimit` refuses a body over `ApiConfig.max_body_bytes` (64 KiB) before anything reads it, on
-  `Content-Length` and on a chunked body's bytes. uvicorn runs with `limit_concurrency` and
+  `Content-Length` and on a chunked body's bytes. A path in its `streamed` map (`POST /compare`:
+  `compare_max_body_bytes`, 16 MiB, or `max_body_bytes` while comparisons are off) is refused on its declared
+  length at once and otherwise counted as the route reads it, never buffered here. A refusal sent while a
+  file is still arriving (a 429 from `RateLimit`, the route's own before its slot) goes through
+  `middleware.drain` first, or the client sees a reset connection instead of the refusal. uvicorn runs with `limit_concurrency` and
   `timeout_keep_alive`; `op serve` sits behind the proxy, whose timeouts and request buffering spec 08 §Deploy
   requires. Swagger UI (CDN scripts) is off unless `ApiConfig.serve_docs` (`op serve`: loopback only).
 - CORS: an explicit origin allowlist from config. No `*`, no regex wildcards. v1 has no auth and no
@@ -106,3 +139,5 @@ raised mid-stream: `errors.internal_error` logs the cause's frames and reason, s
 - [ ] every response carries `index_version`, `tokenizer_version` and `query_version`
 - [ ] no query text in logs (a test asserts it on a captured log line); one access line per request
 - [ ] OpenAPI snapshot and `frontend/src/api/schema.ts` regenerated (`api-contract`)
+- [ ] a new capability an operator may not want public is an `ApiConfig` flag, off by default, turned on by
+      `op serve` for loopback only (as `--docs`, `--compare`), stated in `/meta`, refused with a typed error

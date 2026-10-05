@@ -51,7 +51,18 @@ from typing import Any
 from pydantic import ValidationError
 
 from openproceedings.ingest.classify import classify_v2_presentation, classify_venueid
-from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls
+from openproceedings.ingest.record import (
+    FORUM_ID,
+    Claim,
+    ClaimField,
+    ClaimValue,
+    PaperRecord,
+    Source,
+    Urls,
+    title_controls_replaced,
+    title_evidence,
+    title_text,
+)
 from openproceedings.ingest.sources.common import CrawlError, Crawls, Heartbeat, Report
 from openproceedings.ingest.sources.http import CacheMiss
 from openproceedings.ingest.sources.openreview_client import OpenReviewClient
@@ -118,6 +129,7 @@ class CrawlReport(Report):
     unknown_track: int = 0
     presentation_unmapped: int = 0  # accepted, non-workshop records whose content.venue isn't in the table
     abstract_missing: int = 0
+    title_control_characters: int = 0  # records whose title had a control character replaced (decision-036)
     track_status: dict[str, Counter[str]] = field(default_factory=dict)
     would_fetch: list[str] = field(default_factory=list)  # dry run: the uncached requests met first
 
@@ -140,6 +152,12 @@ class CrawlReport(Report):
             "unknown_track": self.unknown_track,
             "presentation_unmapped": self.presentation_unmapped,
             "abstract_missing": self.abstract_missing,
+            # listed only when there are any, so a crawl with none keeps its manifest shape
+            **(
+                {"title_control_characters": self.title_control_characters}
+                if self.title_control_characters
+                else {}
+            ),
             "track_status": {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())},
             "crawl_window": self.crawl_window(),
         }
@@ -178,6 +196,18 @@ def _text(value: Any) -> str | None:
     return " ".join(value.split()) or None
 
 
+def _title(value: Any, forum: str) -> tuple[str | None, str]:
+    """A note's title and its claim's evidence (both API versions). A control character the source left in it
+    becomes a space (`record.title_text`, TASK-180, decision-036): the paper is kept, the evidence says how many were replaced,
+    and a DEBUG line names the forum. None when no title is left."""
+    if not isinstance(value, str):
+        return None, "content.title"
+    title, replaced = title_text(value)
+    if replaced:
+        log.debug("openreview_title_control_characters", extra={"forum": forum, "replaced": replaced})
+    return title or None, title_evidence("content.title", replaced)
+
+
 def note_record(
     note: Mapping[str, Any],
     *,
@@ -196,7 +226,7 @@ def note_record(
     if not FORUM_ID.fullmatch(nid):
         return "invalid"
     content: Mapping[str, Any] = note["content"] if isinstance(note.get("content"), Mapping) else {}
-    title = _text(_value(content, "title"))
+    title, title_evidence = _title(_value(content, "title"), nid)
     if title is None:
         return "no_title"
     raw = _value(content, "venueid")
@@ -236,7 +266,7 @@ def note_record(
         ("venue", venue), ("year", year), ("track", track), ("status", status),
     )  # fmt: skip
     provenance = [claim(f, v, evidence) for f, v in scope]
-    provenance += [claim("title", title, "content.title"), claim("authors", authors, "content.authors")]
+    provenance += [claim("title", title, title_evidence), claim("authors", authors, "content.authors")]
     if abstract is not None:
         provenance.append(claim("abstract", abstract, "content.abstract"))
     if keywords:
@@ -418,12 +448,14 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     # only notes that became records: one skipped as invalid, or a re-listed duplicate, isn't counted twice
     report.presentation_unmapped = sum(f"op:{venue.lower()}:{year}:{n}" in records for n in unmapped)
     report.abstract_missing = sum(r.abstract is None for r in records.values())
+    report.title_control_characters = sum(title_controls_replaced(r) > 0 for r in records.values())
     incompatible = client.incompatible - purged  # this crawl's share of the client's count
     log.info("openreview_crawl_finished",
              extra={"api": report.api, "venue": venue, "year": year, "complete": report.complete, "groups": len(report.groups),
                     "notes_read": report.notes_read, "imported": report.imported,
                     "skipped": sum(report.skipped.values()), "unknown_track": report.unknown_track,
                     "presentation_unmapped": report.presentation_unmapped,
+                    "title_control_characters": report.title_control_characters,
                     "requests": client.requests, "cached": client.cached, "cache_incompatible": incompatible,
                     "ms": elapsed_ms(began, time.monotonic)})  # fmt: skip
     anomalies = {k: report.skipped[k] for k in ("out_of_scope", "invalid", "duplicate")}

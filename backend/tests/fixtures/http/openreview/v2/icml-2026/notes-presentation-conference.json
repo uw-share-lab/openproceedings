@@ -1,0 +1,170 @@
+{
+ "_recorded": {
+  "date": "2026-10-05",
+  "run": "TASK-178 authenticated live crawl cache (public projection), fetched 2026-10-05 UTC",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing page trimmed from 1000 to 2 notes (order kept; `count` is the page's)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICML.cc/2026/Conference&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "261",
+   "ratelimit-reset": "3272"
+  },
+  "json": {
+   "count": 6341,
+   "notes": [
+    {
+     "content": {
+      "_bibtex": {
+       "value": "Synthetic bibtex text 1."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 2."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person3"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 4"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 5.",
+        "Synthetic keywords text 6.",
+        "Synthetic keywords text 7."
+       ]
+      },
+      "lay_summary": {
+       "value": "Synthetic lay summary text 8."
+      },
+      "originally_submitted_PDF": {
+       "value": "Synthetic originally submitted pdf text 9."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_10"
+      },
+      "pdf": {
+       "value": "/pdf/ebd7e996cb6db3c2a56f0d0fd115914c744d14b8.pdf"
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 11."
+      },
+      "title": {
+       "value": "Synthetic title text 12."
+      },
+      "venue": {
+       "value": "ICML 2026 regular"
+      },
+      "venueid": {
+       "value": "ICML.cc/2026/Conference"
+      }
+     },
+     "forum": "oiMjaUbSWp",
+     "id": "oiMjaUbSWp",
+     "invitations": [
+      "ICML.cc/2026/Conference/-/Submission",
+      "ICML.cc/2026/Conference/-/Post_Submission",
+      "ICML.cc/2026/Conference/Submission1/-/Full_Submission",
+      "ICML.cc/2026/Conference/Submission1/-/Ready_For_Llm_Feedback",
+      "ICML.cc/2026/Conference/-/Edit",
+      "ICML.cc/2026/Conference/Submission1/-/Camera_Ready_Revision"
+     ],
+     "number": 1,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "_bibtex": {
+       "value": "Synthetic bibtex text 13."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 14."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person15",
+        "~Synthetic_Person16",
+        "~Synthetic_Person17",
+        "~Synthetic_Person18"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 19",
+        "Synthetic Author 20",
+        "Synthetic Author 21",
+        "Synthetic Author 22"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 23.",
+        "Synthetic keywords text 24.",
+        "Synthetic keywords text 25.",
+        "Synthetic keywords text 26."
+       ]
+      },
+      "lay_summary": {
+       "value": "Synthetic lay summary text 27."
+      },
+      "link_to_code": {
+       "value": "Synthetic link to code text 28."
+      },
+      "originally_submitted_PDF": {
+       "value": "Synthetic originally submitted pdf text 29."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_30"
+      },
+      "pdf": {
+       "value": "/pdf/59aa67b0cd25e26fe87c8c4ad66e9911b62f0f4d.pdf"
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 31."
+      },
+      "supplementary_material": {
+       "value": "/attachment/5e3fffa4ba05f0a043a2a0ed22c58b586f06c3b5.zip"
+      },
+      "title": {
+       "value": "Synthetic title text 32."
+      },
+      "venue": {
+       "value": "ICML 2026 spotlight"
+      },
+      "venueid": {
+       "value": "ICML.cc/2026/Conference"
+      }
+     },
+     "forum": "vSzRJyg6k0",
+     "id": "vSzRJyg6k0",
+     "invitations": [
+      "ICML.cc/2026/Conference/-/Submission",
+      "ICML.cc/2026/Conference/-/Post_Submission",
+      "ICML.cc/2026/Conference/Submission2/-/Full_Submission",
+      "ICML.cc/2026/Conference/Submission2/-/Ready_For_Llm_Feedback",
+      "ICML.cc/2026/Conference/-/Edit",
+      "ICML.cc/2026/Conference/Submission2/-/Camera_Ready_Revision"
+     ],
+     "number": 2,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

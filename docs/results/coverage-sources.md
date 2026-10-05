@@ -2,8 +2,11 @@
 
 This is the cited table behind spec 07 §C's coverage gate (TASK-108; `coverage-reporting` skill). It has
 one row per main-track and D&B cell from 2013 (decision-013): ICLR, ICML and NeurIPS main 2013–2025, and
-NeurIPS D&B 2021–2025. That is 44 cells, and **all 44 are sourced**. Every number was read on 2026-09-27
-from a public page, on the conference's own site or in its proceedings, with no login.
+NeurIPS D&B 2021–2025. That is 44 cells, and **all 44 are sourced**. Every one of those numbers was read on
+2026-09-27 from a public page, on the conference's own site or in its proceedings, with no login.
+The 2026 crawl (TASK-178) adds two rows, ICLR 2026 main and ICML 2026 main: 46 rows in all. Both were fetched
+and counted on 2026-10-05 by the AI assistant session working for the project owner, which recorded the sha256
+of each fetched page below so the count can be repeated. NeurIPS 2026 has published nothing; §Not covered here says so.
 The `official_counts.OFFICIAL_ACCEPTED` machine-readable copy is kept equal to this table by a test, and
 `GET /coverage` joins it to each matching cell to compute the gate verdict. This file deliberately holds
 exactly one Markdown table so the equality test can read every line starting with `|` as a data row.
@@ -40,6 +43,7 @@ skipped NeurIPS 2021, because its D&B listing states no count, so no NeurIPS 202
 | ICLR | 2023 | main | 1,574 | accepted papers in the fact sheet: 91 top-5% + 280 top-25% + 1,203 posters | https://media.iclr.cc/Conferences/ICLR2023/ICLR2023-Fact_Sheet.pdf | 2026-09-27 |
 | ICLR | 2024 | main | 2,260 | papers in the ICLR 2024 proceedings index (equals the fact sheet's accepted count); Tiny Papers and blog posts excluded | https://proceedings.iclr.cc/paper_files/paper/2024 | 2026-09-27 |
 | ICLR | 2025 | main | 3,703 | papers in the ICLR 2025 proceedings index (fact sheet announced 3,704); blog posts excluded | https://proceedings.iclr.cc/paper_files/paper/2025 | 2026-09-27 |
+| ICLR | 2026 | main | 5,351 | papers in the ICLR 2026 proceedings index (5,351 distinct Conference entries; fact sheet announced 5,357, retrospective 5,355) | https://proceedings.iclr.cc/paper_files/paper/2026 | 2026-10-05 |
 | ICML | 2013 | main | 283 | papers in PMLR volume 28 (every accepted paper; ICML 2013 had no separate tracks) | https://proceedings.mlr.press/v28/ | 2026-09-27 |
 | ICML | 2014 | main | 310 | papers in PMLR volume 32 (every accepted paper) | https://proceedings.mlr.press/v32/ | 2026-09-27 |
 | ICML | 2015 | main | 270 | papers in PMLR volume 37 (every accepted paper) | https://proceedings.mlr.press/v37/ | 2026-09-27 |
@@ -53,6 +57,7 @@ skipped NeurIPS 2021, because its D&B listing states no count, so no NeurIPS 202
 | ICML | 2023 | main | 1,828 | papers in PMLR volume 202 (every accepted paper) | https://proceedings.mlr.press/v202/ | 2026-09-27 |
 | ICML | 2024 | main | 2,610 | papers in PMLR volume 235, including the 75 position papers (fact sheet), which ICML 2024 did not publish as a separate track | https://proceedings.mlr.press/v235/ | 2026-09-27 |
 | ICML | 2025 | main | 3,260 | main-track accepted papers in the fact sheet; the 73 position papers are counted separately | https://media.icml.cc/Conferences/ICML2025/ICML2025_Fact_Sheet.pdf | 2026-09-27 |
+| ICML | 2026 | main | 6,341 | papers on the ICML 2026 virtual-site paper list that link an OpenReview forum (6,554 of its 6,628 posters; the 74 TMLR/JMLR journal-track posters excluded) and are not among the 213 on the site's position-papers listing; both lists counted entry by entry | https://icml.cc/static/virtual/data/icml-2026-orals-posters.json and https://icml.cc/virtual/2026/events/2026-position-papers | 2026-10-05 |
 | NeurIPS | 2013 | main | 360 | papers in the NeurIPS 2013 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2013 | 2026-09-27 |
 | NeurIPS | 2014 | main | 411 | papers in the NeurIPS 2014 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2014 | 2026-09-27 |
 | NeurIPS | 2015 | main | 403 | papers in the NeurIPS 2015 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2015 | 2026-09-27 |
@@ -99,6 +104,16 @@ out of 24), ICLR 2023's virtual-site list, and NeurIPS 2025 D&B's former virtual
   because it lists other entries as well, and it is not used.
 - **ICLR 2025:** the proceedings have 3,703, the same as OpenReview (3,703, facts doc). The fact sheet
   announced 3,704. The row uses 3,703.
+- **ICLR 2026:** the proceedings index is published, so rule 1 applies. Its page
+  (https://proceedings.iclr.cc/paper_files/paper/2026, fetched once on 2026-10-05, no login; response sha256
+  `36eaea5ab6f769b96cdc370bb2c13273822cf7a7253e71c093bdcda451abc023`) lists 5,351 distinct
+  `…-Abstract-Conference.html` entries, every one of track `Conference`, and each of the 381 proceedings hashes
+  the index's records carry is among them. The row uses 5,351. Two announced figures disagree with it and with
+  each other: the final fact sheet (https://media.iclr.cc/Conferences/ICLR2026/ICLR2026_Fact_Sheet.pdf) says
+  5,357 accepted of 19,525 submissions (224 orals), and the program chairs' retrospective
+  (https://blog.iclr.cc/2026/03/31/a-retrospective-on-the, read 2026-10-05) says 5,355. Like ICLR 2025's
+  3,703 against 3,704, the proceedings probably leave out papers withdrawn after acceptance (an inference from
+  the counts; no source states it).
 - **ICML 2024:** the fact sheet gives the main track only as a rounded figure (over 2,600), and gives 75
   position papers. PMLR v235 has 2,610 papers, and 75 titles start with `Position:`, so v235 includes the
   position papers. The rounded figure fits 2,610 but not 2,535 (2,610 − 75), so the row uses 2,610. The
@@ -108,6 +123,32 @@ out of 24), ICLR 2023's virtual-site list, and NeurIPS 2025 D&B's former virtual
 - **ICML 2025:** the fact sheet gives 3,260 main and 73 position. PMLR v267 has 3,330 papers, with 73 titled
   `Position:`, which leaves 3,257 main. OpenReview also has 3,257 main (facts doc). PMLR does not separate
   the tracks, so rule 2 applies and the row uses 3,260. The difference is 3 papers (0.1%).
+- **ICML 2026:** no source announces a main-track accepted count, and PMLR has not published the volume, so
+  rule 3 applies: a count of the conference's own lists, fetched and counted on 2026-10-05 by the AI assistant
+  session working for the project owner. The virtual-site paper list
+  (https://icml.cc/static/virtual/data/icml-2026-orals-posters.json, the data behind
+  icml.cc/virtual/2026/papers.html; fetched once on 2026-10-05, no login; sha256
+  `83ace3eafd34f521baebe50c4b18bf27b0697cdea7dbf28a8086d3048191627b`) has 6,797 entries: 169 oral events and
+  6,628 posters, all poster names distinct. 6,554 posters link a distinct OpenReview forum; the other 74 are
+  journal-track posters (TMLR, JMLR) with no OpenReview paper and are not conference papers. The list does not
+  mark the track. The site's position-papers listing
+  (https://icml.cc/virtual/2026/events/2026-position-papers, fetched once the same day; sha256
+  `ad126ae0ec821d4181ad09a21b7e671e349a8652e88c7ead9cb8702a92ba6058`) is headed "213 Events"
+  and holds 213 distinct poster links, each an entry of the paper list. The main-track count is the papers on
+  the first list that are not on the second: 6,554 − 213 = 6,341. It is a count of two lists, not an announced
+  number, and the row says so. Checked against the index on snapshot `2026-10-05-47d4e190ca81`: the 6,554 forum
+  ids are exactly the indexed ICML 2026 accepted main and position records (6,341 + 213), and the 213 listed
+  position papers are exactly the indexed `position` ones; two further site titles begin with "Position" and
+  are main-track by venueid. That agreement (Δ 0) confirms the classification, not the coverage: the
+  virtual-site list is generated from OpenReview, the crawl's own upstream, so a paper OpenReview lacks would be
+  missing from both. The fact sheet
+  (https://media.icml.cc/Conferences/ICML2026/ICML2026_Fact_Sheet.pdf, read 2026-10-05) announces 6,552 accepted
+  for main and position together (the program chairs' paper, arXiv:2609.19420, says 24,661 submissions are
+  23,918 main plus 743 position and 6,552 the accepted total of both), 2 fewer than the list's 6,554. When PMLR
+  publishes the volume, rule 1 replaces this row; until then the fact sheet's 6,552 is the only figure
+  independent of OpenReview. A "6,352 of 23,918" figure repeated on secondary sites is not
+  from the conference and is not used. Position cells are not gated and have no row; the 213 match is recorded
+  here only.
 - **NeurIPS 2021 main:** the proceedings (2,334) equal the fact sheet (2,334). The OpenReview v1 `venue`
   strings say 2,630 accepted (facts doc). The gap was 300 papers OpenReview v1 lists twice (297 of them
   accepted), which the v1 crawler now collapses (TASK-125, facts doc); the index then had 2,335 accepted
@@ -153,6 +194,9 @@ archive's accepted-conference listings (`ingest/sources/iclr.py`). Their 35, 31 
 the official main-track counts above, so these cells are now ordinary ±1% gate cells rather than crawl gaps.
 
 ## Not covered here
+
+2026: NeurIPS 2026 has no row because its main conference is not public yet. The index holds its workshop
+submissions and 95 Creative_AI_Track notes (track `other`, status `unknown`), neither gated.
 
 Other tracks are reported on the coverage page but not gated (spec 07 §C), so they have no rows here. These
 are position, workshop, competition, Creative AI, Tiny Papers and blog posts. ICML 2013–2023 had no track

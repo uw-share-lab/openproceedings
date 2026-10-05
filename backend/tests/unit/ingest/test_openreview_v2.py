@@ -63,6 +63,9 @@ FORMS = [
     ("icml-2024/notes-accepted.json", "ICML", 2024, "main", "accepted"),
     ("icml-2025/notes-position.json", "ICML", 2025, "position", "accepted"),
     ("icml-2026/notes-accepted.json", "ICML", 2026, "main", "accepted"),
+    # TASK-178, from the 2026 crawl cache: an opt-in public rejection and an undecided workshop submission
+    ("icml-2026/notes-rejected.json", "ICML", 2026, "main", "rejected"),
+    ("icml-2026/notes-workshop-submission.json", "ICML", 2026, "workshop", "unknown"),
 ]
 # classify.py's mapping of these is TASK-094's (position / competition); the crawler must just follow it
 DELEGATED = [
@@ -143,6 +146,57 @@ def test_each_recorded_venueid_form(fixture: str, venue: str, year: int, track: 
     assert record.venue_id_raw == note["content"]["venueid"]["value"]
 
 
+# --- control characters in a title (TASK-180) -----------------------------------------------------------------
+
+
+def test_a_title_with_control_characters_is_imported_with_spaces_and_says_so(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """ICLR 2026 `xHMNX3l8rx` (two U+0002 in its title) was skipped as `invalid`: a real paper lost to invisible
+    characters. The title keeps everything else; the abstract, which the record never refused, is untouched."""
+    note = recorded_note("iclr-2026/notes-accepted.json")
+    note["content"]["title"]["value"] = "A SPEC\x02TRUM FROM STATISTICAL TO CAUSAL\x02"
+    note["content"]["abstract"]["value"] = "the LiDAR modal\x02ity"
+    with caplog.at_level(logging.DEBUG):
+        record = build(note, "ICLR", 2026)
+    assert isinstance(record, PaperRecord)
+    assert (
+        record.title == "A SPEC TRUM FROM STATISTICAL TO CAUSAL"
+        and record.abstract == "the LiDAR modal\x02ity"
+    )
+    [title] = record.claims("title")
+    assert title.evidence == "content.title (2 control characters replaced by a space)"
+    [line] = [r for r in caplog.records if r.getMessage() == "openreview_title_control_characters"]
+    assert (line.levelno, line.__dict__["forum"], line.__dict__["replaced"]) == (logging.DEBUG, note["id"], 2)
+    assert "title" not in line.__dict__  # a title is never logged
+
+
+@pytest.mark.parametrize(
+    ("title", "evidence"),
+    [
+        ("Trust\x00AI", "content.title (1 control character replaced by a space)"),
+        (
+            "Details  through\x0b Chain",
+            "content.title",
+        ),  # whitespace controls always collapsed: evidence unchanged
+        ("Trust in AI", "content.title"),
+    ],
+)
+def test_the_title_claims_evidence_counts_only_what_was_replaced(title: str, evidence: str) -> None:
+    note = recorded_note("iclr-2024/notes-accepted.json")
+    note["content"]["title"]["value"] = title
+    record = build(note)
+    assert isinstance(record, PaperRecord) and [c.evidence for c in record.claims("title")] == [evidence]
+    assert record.title == " ".join(title.replace("\x00", " ").split())
+
+
+@pytest.mark.parametrize("title", ["\x00\x02", " \x02 ", "", None, 7])
+def test_a_title_of_only_control_characters_is_no_title(title: object) -> None:
+    note = recorded_note("iclr-2024/notes-accepted.json")
+    note["content"]["title"] = {"value": title}
+    assert build(note) == "no_title"
+
+
 @pytest.mark.parametrize(("fixture", "venue", "year"), DELEGATED)
 def test_forms_classify_py_owns_follow_it(fixture: str, venue: str, year: int) -> None:
     note = recorded_note(fixture)
@@ -221,7 +275,8 @@ def test_a_pdf_value_that_is_not_an_openreview_pdf_path_is_dropped() -> None:
 # --- presentation (TASK-101) -------------------------------------------------------------------------------------
 
 # (fixture, content.venue, presentation): every row of classify.V2_PRESENTATION, each on a recorded note
-# (the notes-presentation-* fixtures are one note per string, trimmed from the TASK-054 crawl cache)
+# (the notes-presentation-* fixtures are one note per string, trimmed from the TASK-054 crawl cache; the 2026
+# ones from the TASK-178 cache)
 PRESENTATIONS = [
     ("iclr-2024/notes-presentation-conference.json", "ICLR 2024 oral", "oral"),
     ("iclr-2024/notes-presentation-conference.json", "ICLR 2024 spotlight", "spotlight"),
@@ -235,6 +290,8 @@ PRESENTATIONS = [
     ("iclr-2025/notes-presentation-conference.json", "ICLR 2025 Poster", "poster"),
     ("iclr-2025/notes-presentation-blogposts.json", "ICLR 2025 Blogpost Track", None),
     ("iclr-2026/notes-accepted.json", "ICLR 2026 Poster", "poster"),
+    ("iclr-2026/notes-presentation-conference.json", "ICLR 2026 Oral", "oral"),
+    ("iclr-2026/notes-presentation-conference.json", "ICLR 2026 Poster", "poster"),
     ("icml-2023/notes-presentation-conference.json", "ICML 2023 OralPoster", "oral"),
     ("icml-2023/notes-presentation-conference.json", "ICML 2023 Poster", "poster"),
     ("icml-2024/notes-presentation-conference.json", "ICML 2024 Oral", "oral"),
@@ -247,6 +304,9 @@ PRESENTATIONS = [
     ("icml-2025/notes-presentation-position-paper-track.json", "ICML 2025 Position Paper Track spotlightposter",
      "spotlight"),
     ("icml-2025/notes-presentation-position-paper-track.json", "ICML 2025 Position Paper Track poster", "poster"),
+    ("icml-2026/notes-presentation-conference.json", "ICML 2026 spotlight", "spotlight"),
+    ("icml-2026/notes-presentation-position-paper-track.json", "ICML 2026 Position Paper Track spotlight",
+     "spotlight"),
     ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 oral", "oral"),
     ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 spotlight", "spotlight"),
     ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 poster", "poster"),
@@ -336,6 +396,23 @@ def test_an_unrecognised_string_is_null_counted_and_logged_at_debug(caplog: pyte
     assert "venue_string" not in line.__dict__  # the string can be free text: never logged
 
 
+# ICML 2026's other tier names no presentation, so it stays out of the table and is counted (TASK-178: 5,805
+# main and 175 position notes in the crawl cache)
+@pytest.mark.parametrize(
+    ("fixture", "venue_string", "track"),
+    [
+        ("icml-2026/notes-presentation-conference.json", "ICML 2026 regular", "main"),
+        ("icml-2026/notes-presentation-position-paper-track.json", "ICML 2026 Position Paper Track regular",
+         "position"),
+    ],
+)  # fmt: skip
+def test_icml_2026_regular_is_left_unmapped(fixture: str, venue_string: str, track: str) -> None:
+    record, unmapped = unmapped_after(note_with_venue(fixture, venue_string), "ICML", 2026)
+    assert isinstance(record, PaperRecord) and (record.track, record.status) == (track, "accepted")
+    assert record.presentation is None and unmapped == {record.id.rsplit(":", 1)[1]}
+    assert "presentation" not in {c.field for c in record.provenance}
+
+
 @pytest.mark.parametrize(
     "edit",
     [
@@ -362,6 +439,14 @@ def test_a_string_listed_under_another_track_is_unmapped() -> None:
     assert record.presentation is None and unmapped == {note["id"]}
 
 
+def test_an_icml_2026_main_spotlight_on_a_position_venueid_is_unmapped() -> None:
+    note = note_with_venue("icml-2026/notes-presentation-conference.json", "ICML 2026 spotlight")
+    note["content"]["venueid"]["value"] = "ICML.cc/2026/Position_Paper_Track"  # the venueid says position
+    record, unmapped = unmapped_after(note, "ICML", 2026)
+    assert isinstance(record, PaperRecord) and record.track == "position"
+    assert record.presentation is None and unmapped == {note["id"]}
+
+
 @pytest.mark.parametrize(
     ("fixture", "venue", "year"),
     [
@@ -369,6 +454,8 @@ def test_a_string_listed_under_another_track_is_unmapped() -> None:
         ("iclr-2024/notes-withdrawn.json", "ICLR", 2024),
         ("neurips-2025/notes-creative-ai.json", "NeurIPS", 2025),  # status unknown
         ("neurips-2025/notes-workshop-city.json", "NeurIPS", 2025),  # accepted workshop: not the conference's
+        ("icml-2026/notes-rejected.json", "ICML", 2026),  # `Submitted to ICML 2026`, an opt-in rejection
+        ("icml-2026/notes-workshop-submission.json", "ICML", 2026),  # an undecided workshop submission
     ],
 )
 def test_only_accepted_non_workshop_notes_are_looked_up(fixture: str, venue: str, year: int) -> None:
@@ -491,6 +578,26 @@ def test_unmapped_presentations_are_counted_per_venue_year_in_one_attention_warn
     assert (attention.__dict__["presentation_unmapped"], attention.__dict__["unknown_track"]) == (3, 0)
     [finished] = lines(caplog, "openreview_crawl_finished")
     assert finished.__dict__["presentation_unmapped"] == 3
+
+
+def test_titles_that_lost_a_control_character_are_counted_in_the_report_and_the_finished_line(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """decision-036: each title says so in its evidence and a DEBUG line; the crawl counts the titles (never an
+    attention WARNING: the papers are kept). A crawl with none keeps its manifest shape."""
+    server = world(accepted=4)
+    server.notes[CONF][0]["content"]["title"]["value"] = "A SPEC\x02TRUM\x02"
+    server.notes[CONF][1]["content"]["title"]["value"] = "Trust\x00AI"
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        result = orv.crawl(client(tmp_path, server), "ICLR", 2024)
+    assert (
+        result.report.title_control_characters == 2 == result.report.to_manifest()["title_control_characters"]
+    )
+    [finished] = lines(caplog, "openreview_crawl_finished")
+    assert finished.__dict__["title_control_characters"] == 2
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    plain = orv.crawl(client(tmp_path / "plain", world()), "ICLR", 2024).report
+    assert plain.title_control_characters == 0 and "title_control_characters" not in plain.to_manifest()
 
 
 def test_a_crawl_whose_strings_are_all_mapped_has_no_attention_warning(
