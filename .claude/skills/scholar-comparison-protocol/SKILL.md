@@ -52,7 +52,8 @@ An index built with an imported RIS set holds that set's records as `ris`-only r
 with that index matches those records to themselves: such a match shows nothing about coverage, the text the
 classes are judged on is the import's own, and in a venue-year with no crawled record nothing can be only in
 openproceedings. On index `05a0541717f6`, 530 of the 1,807 matched papers were RIS-only (ICLR 2026 415, ICML
-2026 111, ICLR 2025 3, ICLR 2024 1), and no 2026 record was crawled. So every row carries whether its record has
+2026 111, ICLR 2025 3, ICLR 2024 1), and no 2026 record was crawled. After the 2026 crawl (index `5ec5231adae2`,
+TASK-178) 7 remain, each an unmerged second copy of a crawled paper. So every row carries whether its record has
 an independent source (`Row.independent`; `record_source` in `review.csv`) and its abstract's source, and the
 report gives each count for crawled and RIS-only records apart, with a per-venue-year table. A RIS-only match
 whose title another index record shares is `unsettled` (one paper under two ids, or a wrong mended venue or year).

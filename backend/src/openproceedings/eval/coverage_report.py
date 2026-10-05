@@ -36,7 +36,7 @@ import io
 import re
 import tomllib
 import unicodedata
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -45,7 +45,7 @@ from typing import Any
 from openproceedings import storage
 from openproceedings.ingest.record import is_paper_id
 from openproceedings.official_counts import GATED_TRACKS, OFFICIAL_ACCEPTED, OfficialTable, within_gate
-from openproceedings.vocab import TRACKS, VENUES
+from openproceedings.vocab import BOOTSTRAP_SOURCES, TRACKS, VENUES
 
 type CellKey = tuple[str, int, str]
 type RecordCell = tuple[str, int, str, str]  # a record's (venue, year, track, status)
@@ -428,10 +428,13 @@ def render(
     exceptions: Mapping[CellKey, AcceptedException] | None = None,
     locate: Locate | None = None,
     unresolved: Sequence[Unresolved] = (),
+    imported_only: Mapping[CellKey, Sequence[str]] | None = None,
 ) -> str:
     """The report's Markdown. `cov` is the coverage the API serves (`coverage.breakdown`'s shape); `manifest` is
     the same snapshot's manifest (for the listings); `locate` finds an exception's papers in it (`gate`) and each
-    unresolved record's cell; `unresolved` is the snapshot's unresolved conflict rows (`load_unresolved`)."""
+    unresolved record's cell; `unresolved` is the snapshot's unresolved conflict rows (`load_unresolved`);
+    `imported_only` is, per cell, the accepted records whose only source is an imported RIS set
+    (`imported_only_accepted`; None leaves the section out)."""
     causes = causes or {}
     exceptions = exceptions or {}
     verdict = gate(cov, official, exceptions, locate)
@@ -541,6 +544,32 @@ def render(
         lines.append(
             "None: every crawl is complete, with no coverage gaps, conflicts, unmapped venues or non-routine skips."
         )
+    if imported_only is not None:
+        lines += ["", "## Accepted records only an imported set holds", ""]
+        if imported_only:
+            lines += [
+                "These records are counted as indexed accepted, but no crawl holds them: their only source is an "
+                "imported RIS set (a Scholar search's output, `vocab.BOOTSTRAP_SOURCES`), so a cell's count includes "
+                'them without a proceedings listing or an OpenReview note behind it. "Δ without them" is the '
+                "cell's delta if they were left out.",
+                "",
+                "| cell | records | gated | Δ without them | record ids |",
+                "|---|---|---|---|---|",
+            ]
+            for key in sorted(imported_only, key=lambda k: (k[0], k[1], TRACK_ORDER[k[2]])):
+                ids, cell, count = imported_only[key], cells.get(key), official.get(key)
+                gated = count is not None and key[2] in GATED_TRACKS
+                without = (
+                    _signed(cell["indexed_accepted"] - len(ids) - count.accepted)
+                    if cell is not None and count is not None
+                    else "—"
+                )
+                lines.append(
+                    f"| {key[0]} {key[1]} {key[2]} | {len(ids):,} | {'yes' if gated else 'no'} | {without} "
+                    f"| {', '.join(f'`{i}`' for i in ids)} |"
+                )
+        else:
+            lines.append("None: every accepted record has a crawled source.")
     lines += ["", "## Unresolved records", ""]
     if unresolved:
         lines += ["A source's own signals disagree, so that source set the field to `unknown` (decision-020). \"now\" is "
@@ -577,6 +606,16 @@ def withheld_note(totals: Mapping[str, Any]) -> list[str]:
         "(a takedown, decision-022), and not counted in the missing abstracts above.",
         "",
     ]
+
+
+def imported_only_accepted(records: Iterable[Any]) -> dict[CellKey, list[str]]:
+    """Per (venue, year, track), the ids of the accepted records whose every claim source is an imported RIS set
+    (`vocab.BOOTSTRAP_SOURCES`): counted as indexed, with no crawl behind them. `records` are `PaperRecord`s."""
+    found: dict[CellKey, list[str]] = {}
+    for r in records:
+        if r.status == "accepted" and {c.source for c in r.provenance} <= BOOTSTRAP_SOURCES:
+            found.setdefault((r.venue, r.year, r.track), []).append(r.id)
+    return {k: sorted(v) for k, v in found.items()}
 
 
 def write(text: str, out_dir: Path, day: date) -> tuple[Path, bool]:

@@ -4,7 +4,7 @@ title: Scholar comparison report
 status: In Progress
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-05 02:47'
+updated_date: '2026-10-05 05:09'
 labels:
   - eval
 milestone: m-4
@@ -56,4 +56,6 @@ For the main session to file (no ids created here): (a) owner decision on the st
 New headline (main-7-most-updated): 27 results, 21 in both, 1,796 only Scholar (1,713 full_text = 94.3%, of them 1,247 crawled and 466 RIS-only; 30 stemming; 3 coverage_gap; 50 unsettled), 6 only openproceedings; our_bug 0 on all three strings. Review file: 689 rows, 168 unresolved.
 
 More for the main session to file: (f) dedup miss: the RIS import's iclr-c3eb94d1… record was not merged with OpenReview's QHROe7Mfcb (same title, ICLR 2024); (g) 36 RIS-only ICLR 2026 records share a title with a 2025 NeurIPS/ICML/ICLR record: probably a wrong mended venue or year in the import; (h) crawl 2026, or rebuild the comparison index without the import, before the RIS-only rows are cited.
+
+2026-10-05: re-run on index 5ec5231adae2 after the 2026 crawl (TASK-178): 1,800 of 1,807 matches now rest on a crawled record, 7 RIS-only; report docs/results/2026-10-05-scholar-comparison.md. The 2026-10-04 report is kept as the run on index 05a0541717f6.
 <!-- SECTION:NOTES:END -->

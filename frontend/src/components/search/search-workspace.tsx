@@ -16,6 +16,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { useMeta } from "@/api/hooks";
 import { codePointLength, codePointSpanToUtf16 } from "@/api/spans";
 import { ConceptBuilder, type Expansions } from "@/builder/concept-builder";
+import type { SearchedGroups } from "@/builder/group-counts";
 import { panelId, QueryTabList, tabId, type QueryTab } from "@/builder/query-tabs";
 import { countText, editorDiagnostics, itemOf, itemsOf, plural, type Item } from "@/editor/diagnostics";
 import type { ErrorEnvelope, ParseOutcome, ParseResponse } from "@/editor/parse";
@@ -58,6 +59,8 @@ export interface SearchWorkspaceProps {
   readonly results?: ReactNode;
   /** The last answered `/search`'s `query.expansions`: the builder shows each group's own (TASK-111). */
   readonly expansions?: Expansions | null;
+  /** The last answered `/search`'s total and group counts: the builder shows each group's own (TASK-176). */
+  readonly searchedGroups?: SearchedGroups | null;
 }
 
 /** `DRAFT_DIRTY`: the draft differs from the searched query (design W13; copy SB-6). */
@@ -216,6 +219,7 @@ export function SearchWorkspace({
   openTree = false,
   results,
   expansions = null,
+  searchedGroups = null,
 }: SearchWorkspaceProps) {
   const router = useRouter();
   const meta = useMeta();
@@ -398,6 +402,7 @@ export function SearchWorkspace({
               focusOnOpen={enterBuilder}
               onFocused={builderFocused}
               expansions={expansions}
+              searched={searchedGroups}
             />
           )}
         </div>

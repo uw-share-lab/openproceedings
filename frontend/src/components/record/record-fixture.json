@@ -1625,7 +1625,7 @@
           "translations": [
             {
               "code": "COMPAT_NO_STEMMING",
-              "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `language$`).",
+              "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `\"large language$\"`).",
               "span": [0, 36],
               "reading": null
             },
@@ -1730,7 +1730,7 @@
           "translations": [
             {
               "code": "COMPAT_NO_STEMMING",
-              "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `language$`).",
+              "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `\"large language$\"`).",
               "span": [0, 36],
               "reading": null
             },
@@ -2218,6 +2218,12 @@
             "withdrawn": 31
           }
         },
+        "groups": {
+          "counts": [],
+          "groups_total": 1,
+          "limit": 10,
+          "not_counted": "fewer_than_two_groups"
+        },
         "hits": [
           {
             "id": "op:iclr:2024:Fx4935",
@@ -2408,6 +2414,12 @@
             "unknown": 34,
             "withdrawn": 31
           }
+        },
+        "groups": {
+          "counts": [],
+          "groups_total": 1,
+          "limit": 10,
+          "not_counted": "fewer_than_two_groups"
         },
         "hits": [
           {
@@ -2611,6 +2623,12 @@
             "unknown": 34,
             "withdrawn": 31
           }
+        },
+        "groups": {
+          "counts": [],
+          "groups_total": 1,
+          "limit": 10,
+          "not_counted": "fewer_than_two_groups"
         },
         "hits": [
           {
@@ -2823,6 +2841,12 @@
             "unknown": 23,
             "withdrawn": 27
           }
+        },
+        "groups": {
+          "counts": [],
+          "groups_total": 1,
+          "limit": 10,
+          "not_counted": "fewer_than_two_groups"
         },
         "hits": [
           {

@@ -307,7 +307,7 @@ def test_a_same_day_report_is_replaced_whole(
     assert (out / "2026-10-01-coverage.md").read_text().startswith("# Coverage report, 2026-10-01")
     logged = [json.loads(ln) for ln in capsys.readouterr().err.splitlines() if ln.startswith("{")]
     [written] = [e for e in logged if e.get("event") == "coverage_report_written"]  # one INFO line per run
-    assert (written["replaced"], written["gated"]) == (True, 44)  # the real official table's gated cells
+    assert (written["replaced"], written["gated"]) == (True, 46)  # the real official table's gated cells
     assert sorted(p.name for p in out.iterdir()) == ["2026-10-01-coverage.md"]  # no temp file left
 
 
@@ -798,4 +798,42 @@ def test_the_totals_say_how_many_abstracts_a_takedown_withheld_and_nothing_when_
     assert withheld_note({"abstract_withheld": 1})[0].startswith("1 more record has no abstract here")
     assert withheld_note({"abstract_withheld": 1200})[0].startswith(
         "1,200 more records have no abstract here"
+    )
+
+
+# --- accepted records only an imported set holds (TASK-178) -------------------------------------------------
+
+
+def test_imported_only_accepted_names_the_records_no_crawl_holds() -> None:
+    from openproceedings.eval.coverage_report import imported_only_accepted
+
+    records = [
+        paper("crwl0001", "Crawled", venue="ICLR", year=2013),
+        paper("ris00002", "Imported B", venue="ICLR", year=2013, source="ris"),
+        paper("ris00001", "Imported A", venue="ICLR", year=2013, source="ris"),
+        paper("ris00003", "Imported and rejected", venue="ICLR", year=2013, source="ris", status="rejected"),
+        paper("ris00004", "Imported workshop", venue="ICLR", year=2016, source="ris", track="workshop"),
+    ]
+    assert imported_only_accepted(records) == {
+        ("ICLR", 2013, "main"): ["op:iclr:2013:ris00001", "op:iclr:2013:ris00002"],
+        ("ICLR", 2016, "workshop"): ["op:iclr:2016:ris00004"],
+    }
+
+
+def test_the_report_says_which_cells_count_imported_only_records() -> None:
+    manifest = render_snapshot(DedupResult(tuple(corpus()), (), ()), [], BUILT)
+    cov = breakdown(json.loads(manifest["manifest.json"]), "x", official=TABLE)
+    imported = {
+        ("ICLR", 2013, "main"): ["op:iclr:2013:a", "op:iclr:2013:b"],
+        ("ICLR", 2016, "workshop"): ["op:iclr:2016:c"],
+    }
+    text = render(cov, json.loads(manifest["manifest.json"]), META, official=TABLE, imported_only=imported)
+    assert "## Accepted records only an imported set holds" in text
+    # 24 indexed vs 24 official: without the two imported records the cell would be 2 short
+    assert "| ICLR 2013 main | 2 | yes | −2 | `op:iclr:2013:a`, `op:iclr:2013:b` |" in text
+    assert "| ICLR 2016 workshop | 1 | no | — | `op:iclr:2016:c` |" in text
+    none = render(cov, json.loads(manifest["manifest.json"]), META, official=TABLE, imported_only={})
+    assert "None: every accepted record has a crawled source." in none
+    assert "only an imported set holds" not in render(
+        cov, json.loads(manifest["manifest.json"]), META, official=TABLE
     )

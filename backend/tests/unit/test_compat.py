@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.query.ast import Phrase, Wildcard
 from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.compat import SOURCE_ALIASES, source_key
 from openproceedings.query.parser import ParseResult, parse
+from openproceedings.query.wordforms import word_forms
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "queries"
 C = DiagnosticCode
@@ -49,7 +52,8 @@ def test_the_primary_string_is_pinned() -> None:
     ] * 9
     [stemming] = [t for t in result.translations if t.code is C.COMPAT_NO_STEMMING]
     assert "`llm`" in stemming.message and "and 3 more" in stemming.message
-    assert "`model$`" in stemming.message  # the hint uses the query's own first term (`foundation model`)
+    # the hint is the query's own first term, the phrase whole (TASK-181: its earlier words count toward the stem)
+    assert '(e.g. `"foundation model$"`).' in stemming.message
     [single] = [t for t in scholar("trust").translations if t.code is C.COMPAT_NO_STEMMING]
     assert "`trust` matches only" in single.message and "`trust$`" in single.message
 
@@ -227,6 +231,65 @@ def test_no_stemming_notice_lists_exact_terms_once() -> None:
     assert "bench" not in note.message and "`model`" not in note.message  # wildcarded: nothing to warn about
     assert [t.code for t in scholar("bench*").translations] == []  # only wildcards: no notice
     assert parse("trust").translations == []  # native mode: the rule is the spec, not a translation
+
+
+# (query, the notice's example or None): always a term that takes a `$` as written, the rule "Add `$`" goes by
+STEMMING_EXAMPLES: list[tuple[str, str | None]] = [
+    ("trust", "trust$"),
+    ("AI C++ or", None),  # TASK-181: once `ai$`, which is WILDCARD_STEM_TOO_SHORT
+    ("AI trust model", "trust$"),  # the first term is too short; a later one qualifies
+    ("AI ML", None),  # none qualifies
+    ("and trust model", "trust$"),  # a lowercase operator word first: `and$` would be another query
+    ("or not AI", None),
+    ("C++ trust? .NET", "net$"),  # symbols after the word
+    ("US$5 benchmark", "benchmark$"),  # a `$` already in the word's run
+    ("(model$|LLM) x", None),
+    ('"generative AI" LLM', '"generative ai$"'),  # a phrase whole: its earlier words count toward the stem
+    ("(large language model | LLM)", '"large language model$"'),
+    ("gpt-4 trust", '"gpt 4$"'),
+    ('AI "a b" title:(LLM)', "llm$"),
+    ("year:2023 OR 2024", "2024$"),
+    ("x" * 41, None),  # too long to quote whole (clip would shorten it): no example rather than a cut one
+    ("x" * 39, "x" * 39 + "$"),
+    ("AI " + "y" * 45 + " trust", "trust$"),
+]
+_EXAMPLE = re.compile(r" Add `\$` or `\*` where they should count(?: \(e\.g\. `([^`]*)`\))?\.$")
+
+
+def stemming_example(q: str, result: ParseResult) -> str | None:
+    [note] = [t for t in result.translations if t.code is C.COMPAT_NO_STEMMING]
+    assert note.span == (0, len(q))  # the code and span are what they were: only the example changed
+    found = _EXAMPLE.search(note.message)
+    assert found is not None, note.message
+    return found.group(1)
+
+
+@pytest.mark.parametrize(("q", "example"), STEMMING_EXAMPLES, ids=[q[:30] for q, _ in STEMMING_EXAMPLES])
+def test_no_stemming_example_is_a_term_that_takes_a_dollar_or_is_left_out(
+    q: str, example: str | None
+) -> None:
+    result = scholar(q)
+    assert stemming_example(q, result) == example
+    forms = word_forms(q, result)
+    assert forms is not None
+    # the first term "Add `$`" would rewrite that a message can quote whole (40 characters; `diagnostics.clip`)
+    quotable = [f.term for f in forms if len(f.term) + 1 + 2 * (" " in f.term) <= 40]
+    if example is None:
+        assert quotable == []
+        return
+    assert example.strip('"').removesuffix("$") == quotable[0]
+    # and a query the parser accepts as that wildcard
+    alone = parse(example)
+    assert alone.errors == [] and alone.ast is not None
+    last = alone.ast.items[-1] if isinstance(alone.ast, Phrase) else alone.ast
+    assert isinstance(last, Wildcard) and last.op == "$"
+
+
+@pytest.mark.parametrize("name", list(protocol()))
+def test_no_stemming_example_on_the_review_strings_is_valid(name: str) -> None:
+    q = protocol()[name]
+    example = stemming_example(q, scholar(q))
+    assert example is not None and parse(example).errors == []
 
 
 def test_scholar_mixed_warning_says_scholar_groups_the_other_way() -> None:

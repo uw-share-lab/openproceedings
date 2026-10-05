@@ -23,6 +23,7 @@ from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode
 from openproceedings.query.wordforms import WordForm
 from openproceedings.records import Excluded as Excluded  # one schema for the exclusion accounting
 from openproceedings.records import SearchRecord
+from openproceedings.search import NotCounted
 from openproceedings.timestamps import CrawlWindow, Timestamp
 from openproceedings.vocab import Status, Track, Venue
 
@@ -212,6 +213,45 @@ UNCLASSIFIED_DOC = (
 )
 
 
+GROUPS_DOC = (
+    "TASK-176 (additive): for a query that is an AND of concept groups, how many papers each group matches "
+    "alone and how many the query matches without it, so a reviewer can see which group narrows the search. "
+    "A group is a top-level AND conjunct that searches text and is not negated. The query's filters (the "
+    "default track and status filters included) and its `NOT` clauses apply to every count, so none is "
+    "below `total`. Exact, and the same for the same canonical query and `index_version`; it never changes "
+    "`total`, `hits`, `facets` or `excluded`."
+)
+
+
+class GroupCount(Model):
+    span: Span = Field(description="Half-open code-point range of the group in `q` (its node in `ast`).")
+    total: int = Field(
+        description="This group alone: how many papers the query matches with every other group removed. "
+        "Never below the search's `total`."
+    )
+    total_without: int = Field(
+        description="The query without this group: how many papers it matches with this group removed and "
+        "every other group kept. Never below the search's `total`; the difference is what this group removes."
+    )
+
+
+class GroupCounts(Model):
+    counts: list[GroupCount] = Field(
+        description="Each group's count, in query order. Empty when `not_counted` says why."
+    )
+    groups_total: int = Field(description="How many groups the query has.")
+    limit: int = Field(
+        description="The most groups this instance counts for one query (`op serve --max-counted-groups`)."
+    )
+    not_counted: NotCounted | None = Field(
+        description="Why `counts` is empty, null when it isn't: `fewer_than_two_groups` (the query is not an "
+        "AND of groups), `too_many_groups` (`groups_total` is over `limit`), `too_costly` (counting them would read more "
+        "terms or verified ids than this instance allows, `/meta` `limits`: shorten the `NOT` clauses or use longer wildcard stems), `busy` (the counting workers were taken by other searches), `count_failed` or `timed_out` "
+        "(the counts could not be computed, or not in time; search again). The search itself is complete "
+        "in every case."
+    )
+
+
 class SearchResponse(Versioned):
     query: QueryInfo
     total: int  # the whole matched set: independent of sort, offset and limit
@@ -219,6 +259,7 @@ class SearchResponse(Versioned):
     identified_total: int = Field(description=IDENTIFIED_DOC)  # TASK-090: additive
     unclassified_total: int = Field(description=UNCLASSIFIED_DOC)
     facets: Facets
+    groups: GroupCounts = Field(description=GROUPS_DOC)
     hits: list[Hit]
 
 
@@ -366,6 +407,19 @@ class Limits(Model):
     max_verification_candidates: int = Field(
         description="the most candidate documents a query's position-verified clauses may read, summed over "
         "each clause's fields; more is 422 `API_QUERY_TOO_COSTLY`"
+    )
+    max_counted_groups: int = Field(
+        description="TASK-176: the most concept groups `/search` counts for one query; a query with more "
+        "gets its result with `groups.not_counted: too_many_groups`"
+    )
+    max_counted_terms: int = Field(
+        description="TASK-176: the most terms the group counts of one query may read, summed over the trees "
+        "counted (N groups of G terms in all, K terms in the kept text clauses: N·G + 2·N·K; a wildcard "
+        "counts its expansions); more is `groups.not_counted: too_costly`, never a refusal of the search"
+    )
+    max_counted_ids: int = Field(
+        description="TASK-176: the most verified ids the group counts of one query may read, summed the "
+        "same way over its position-verified clauses' matches; more is `groups.not_counted: too_costly`"
     )
 
 

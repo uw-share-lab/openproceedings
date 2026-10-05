@@ -56,7 +56,9 @@ or not), their `$` gets no PoP notice, and `source:ICLR OR PMLR` warns (`WARN_FI
   query text: "Add `$`" on the `COMPAT_NO_STEMMING` notice writes `$` at the places `POST /parse` reports in
   `word_forms` (`query/wordforms.py`, spec 02 §Word forms, TASK-175). The reader triggers it, the `$` is in
   the saved string, and its expansions are shown. `$` is zero or one character, so it is never described as
-  Scholar's stemming. A new rule for where `$` may go belongs in `wordforms.py`'s table test, never in the
+  Scholar's stemming. The rule for where `$` may go is one function, `query/exact.py::dollar_places`: the notice's own example
+  ("e.g. `trust$`") uses it too, so it never suggests a wildcard the parser refuses (TASK-181). A new rule
+  belongs there and in `wordforms.py`'s table test, never in the
   client, and must survive the read-back (every edit at once, parsed, the tree compared).
 - It does not search full text. That difference is also counted in 07.
 - It does not drop the default filters. They are added and made explicit exactly as in native mode

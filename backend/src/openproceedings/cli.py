@@ -308,6 +308,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="position-verified clauses one query may have (default 16, a backstop; decision-010); with the rate limit on, times each clause's cost it must fit the smaller bucket",
     )
     serve.add_argument(
+        "--max-counted-groups",
+        type=int,
+        default=10,
+        help="concept groups /search counts alone for one query (default 10); a query with more gets its "
+        "result without group counts",
+    )
+    serve.add_argument(
+        "--max-counted-terms",
+        type=int,
+        default=5_000,
+        help="terms the group counts of one query may read, summed over the trees counted (default 5000); a "
+        "query over it gets its result without group counts",
+    )
+    serve.add_argument(
+        "--max-counted-ids",
+        type=int,
+        default=300_000,
+        help="verified ids the group counts of one query may read, summed over the trees counted (default "
+        "300000); a query over it gets its result without group counts",
+    )
+    serve.add_argument(
         "--max-verification-seconds",
         type=float,
         default=30.0,
@@ -849,6 +870,7 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         Meta,
         failing_summary,
         gate,
+        imported_only_accepted,
         load_cause_file,
         load_unresolved,
         missing_decisions,
@@ -857,6 +879,7 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         stale_exceptions,
         write,
     )  # fmt: skip
+    from openproceedings.ingest.snapshot import iter_records
 
     started = time.perf_counter()
     try:
@@ -903,6 +926,7 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         exceptions=exceptions,
         locate=locate,
         unresolved=unresolved,
+        imported_only=imported_only_accepted(iter_records(records.path.parent)),
     )
     written, replaced = write(text, out, day)
     verdict = gate(coverage, official, exceptions, locate)
@@ -1661,6 +1685,9 @@ def _serve(ns: argparse.Namespace) -> int:
             max_verified_clauses=ns.max_verified_clauses,
             max_verification_candidates=ns.max_verification_candidates,
             max_verification_seconds=ns.max_verification_seconds,
+            max_counted_groups=ns.max_counted_groups,
+            max_counted_terms=ns.max_counted_terms,
+            max_counted_ids=ns.max_counted_ids,
             serve_docs=loopback if ns.docs is None else ns.docs,
             # a public instance never starts without its takedown list (TASK-067): off loopback, or behind a
             # proxy on the same host (a trusted proxy means clients reach it); an empty list lists nothing

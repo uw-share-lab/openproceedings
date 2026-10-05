@@ -57,6 +57,12 @@ export function InstanceLimits({ defaults, api }: { defaults: Limits; api?: Api 
           At most {count(limits.max_verification_candidates)} candidate documents read by those clauses&apos;
           position checks, summed over each clause&apos;s fields.
         </li>
+        <li>
+          The builder&apos;s group counts are shown for a query of at most {count(limits.max_counted_groups)}{" "}
+          groups whose counting reads at most {count(limits.max_counted_terms)} terms and{" "}
+          {count(limits.max_counted_ids)} position-checked matches; a larger query is searched as usual,
+          without the counts.
+        </li>
       </ul>
     </div>
   );
