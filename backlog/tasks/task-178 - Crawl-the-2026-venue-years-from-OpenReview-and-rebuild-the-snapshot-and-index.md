@@ -4,7 +4,7 @@ title: Crawl the 2026 venue-years from OpenReview and rebuild the snapshot and i
 status: In Progress
 assignee: []
 created_date: '2026-10-05 02:43'
-updated_date: '2026-10-05 05:09'
+updated_date: '2026-10-05 05:19'
 labels:
   - ingest
   - eval
@@ -48,4 +48,6 @@ Coverage (AC 3): docs/results/2026-10-05-coverage.md. M4 gate PASS: 44 of 45 gat
 Scholar comparison (AC 4): docs/results/2026-10-05-scholar-comparison.md and -review.csv (589 rows, 51 unresolved). 1,815 papers in scope; 1,807 matched: 1,800 to a crawled record, 7 RIS-only (was 1,277 / 530). our_bug 0 on all three strings. main-7-most-updated: 33 results, 21 in both, 12 only openproceedings (6 of them 2026), full_text 1,753 (96.6%; 6 RIS-only), stemming 32, coverage_gap 3, unsettled 6. main-7-dollar: 101 results, 51 in both, 50 only openproceedings (34 from 2026; 38 compat_reading, 12 scholar_missed). main-2-pop: 114 results, 65 in both, 49 only openproceedings (26 from 2026; all compat_reading).
 
 The 7 RIS-only records are all second copies of a crawled paper that dedup did not merge: iclr-c3eb94d1 = QHROe7Mfcb (ICLR 2024; same title, both hold a ris claim); iclr-1b126cc3 = roNSXZpUDN, iclr-a07e87ec = CkgKSqZbuC, iclr-a6610efd = EwFJaXVePU (ICLR 2025) and iclr-2aa3da3c = OutljIofvS, iclr-dcbdb995 = 3CPzUWIoNf (ICLR 2026): the imported title lost its math symbol (tau, R^2, infinity, A^2), so the title keys differ; iclr-6b41e04c is probably CwoM9T55lG (ICLR 2026) under an earlier title. The 36 ICLR 2026 imports that shared a title with a 2025 record all merged into crawled ICLR 2026 accepted records; the 2025 records are earlier versions of the same work (24 workshop papers only, 10 rejected submissions only, 2 both), correctly separate: the import's venue and year were right.
+
+2026-10-05, later: ICML 2026 main now has a row, replacing the 'no row' above (owner's request). It is a rule-3 list count by the session lead: 6,554 OpenReview-linked posters on the virtual-site paper list (74 TMLR/JMLR journal-track posters excluded) minus the 213 on the position-papers listing = 6,341, equal to the indexed 6,341. The fact sheet's combined 6,552 is kept under Disagreements. Gate on 5ec5231adae2: PASS, 45 of 46 gated cells within 1% plus the ICLR 2013 exception; coverage-sources.md has 46 rows.
 <!-- SECTION:NOTES:END -->

@@ -95,8 +95,9 @@ One row per cell:
 - NeurIPS D&B track: separate count, and ≤2023 proceedings use `Datasets_and_Benchmarks` aliased to
   `_Track` — misclassification shows up as main-track surplus + D&B deficit.
 - ICML position papers counted inside or outside the main total. ICML 2026's fact sheet gives one accepted
-  count for main and position together (6,552) and no source states the main track alone, so the cell has no
-  row (`no source`) until PMLR publishes the volume: a main-only number derived by subtraction is not a row.
+  count for main and position together (6,552) and no source announces the main track alone, so the row is a
+  rule-3 count of the conference's own two lists (the virtual-site paper list minus its position listing:
+  6,554 − 213 = 6,341), said to be a count and not an announced number, until PMLR publishes the volume.
 - Deduplication across OpenReview and proceedings: an under-merge shows as surplus, an over-merge as
   deficit. Cross-check with `merges.csv`/`conflicts.csv` (`dedup-rules`).
 When a cell misses the gate, classify the cause in the report (source definition, classification,
