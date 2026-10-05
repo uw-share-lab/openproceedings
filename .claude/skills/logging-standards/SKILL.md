@@ -159,6 +159,12 @@ or nothing for Ctrl-C) of whatever made it restore. A later retire of that versi
 `storage.sweep` that can't remove a `.tmp-` leftover logs `tmp_sweep_failed` (WARNING, its name and the
 chmod's errno name) and carries on.
 
+`op eval scholar` logs `scholar_report_started` (INFO: `index_version`, `queries`, `ris_records`) before it
+reads the snapshot, then one `scholar_report_written` line (ERROR when the automation found an `our_bug`, else
+INFO): `index_version`, `queries`, `ris_records`, `ris_papers` (the set's papers in scope, the name the
+`/compare` access line uses), `ris_only_matches`, `our_bug`, `unresolved`, `review_rows`, `human_calls`,
+`human_our_bug`, `classified`, `replaced`, `ms`. Counts only: never a query, a title, a role or a note.
+
 ## Review checklist (`observability-reviewer`)
 1. Does every new failure path produce exactly one log at the right level?
 2. Is anything logged per record, per term or per page at INFO or above?

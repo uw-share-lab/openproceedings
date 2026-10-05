@@ -7,9 +7,9 @@
 - Queries: `main-7-most-updated`, `main-7-dollar`, `main-2-pop`
 - Query file: `trust-evals.txt`, sha256 `16afdaff80f1c4767ea7e92d3854620ff73ed5beec192995743a03d97ee8e47c`
 - Query file: `scholar-comparison-strings.txt`, sha256 `bc55c6e2dddb7300fea1608a0eaf6fb2f6bff2735babf95d777343fe1d81e56b`
-- Notes: `scholar-comparison-notes.md`, sha256 `59e38715c2f223d4b7e8c5ac2d3ba6866b3fb3524fcd2437deb82a77bd0d2299`
+- Notes: `scholar-comparison-notes.md`, sha256 `66127116eec0caa947a75c9a4f9e458af5dc36ea4742a14cca2eb16ff4e94602`
 - Command: `op eval scholar --ris mended.ris --query-file trust-evals.txt --query-file scholar-comparison-strings.txt --name main-7-most-updated --name main-7-dollar --name main-2-pop --years 2020..2026 --answers main-7-most-updated --notes scholar-comparison-notes.md --index fd13d8d27535 --date 2026-10-05`
-- Review rows: `2026-10-05-scholar-comparison-review.csv` (586 rows, 48 unresolved)
+- Review rows: `2026-10-05-scholar-comparison-review.csv` (586 rows; 48 left for a call, 48 called)
 
 **`our_bug`: 0** across 3 queries.
 
@@ -43,7 +43,7 @@ Each Scholar record is matched by spec 01's merge rules, in their order: the Ope
 | no match (not found) | 3 |
 | title venue year | 2 |
 
-`no match (no venue)`: 5 records whose venue string is empty or cut by Scholar (`…`) and whose URLs name no indexed paper, but whose title key an in-scope index record of the same year has. A title alone is never a match, so they are counted in scope and listed as `unsettled` for a person, with that record named.
+`no match (no venue)`: 5 records whose venue string is empty or cut by Scholar (`…`) and whose URLs name no indexed paper, but whose title key an in-scope index record of the same year has. A title alone is never a match, so they are counted in scope and listed as `unsettled` for a reviewer, with that record named.
 
 Outside the scope: 19 venue unrecognised. `venue unrecognised` means the record's venue string is not exactly one of Scholar mode's source names and no URL of it names an indexed paper: it names another venue in full, or it is empty or cut (`…`) and no in-scope index record of its year has its title. Venue strings: International Conference on Machine … (2); International Conference … (2); (no venue) (1); 2025 International Conference on Machine Learning, Computational Intelligence and Pattern Recognition (MLCIPR) (1); Advances in neural information processing … (1); Conference on … (1); ICBINB (1); International Conference on Artificial Intelligence and Statistics (1); Machine learning for healthcare … (1); Proceedings of Machine … (1); arXiv.org (1); … Information Processing … (1); … International Conference on … (1); … Representations (1); … Systems (NeurIPS 2025), San Diego … (1); … of Machine Learning Research … (1); … of Machine Learning … (1).
 
@@ -118,7 +118,7 @@ Notices: `COMPAT_NO_STEMMING` × 1, `COMPAT_SOURCE_ALIAS` × 9, `WARN_SOURCE_PAR
 | `scholar_missed` | 12 | 100.0% | 36.4% | 12 | 0 | an exact title or abstract match that the Scholar set lacks |
 | total | 12 | 100.0% | 36.4% | 12 | 0 | |
 
-`our_bug`: **0**. Rows for a person in `review.csv`: 20 unresolved, 179 spot check.
+`our_bug`: **0**. Rows of `review.csv`: 20 left for a call, 179 spot check.
 
 ### Concept groups, over the 1,805 Scholar papers the index holds
 
@@ -167,6 +167,7 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 - Of the 1,752 `full_text` papers, 1,752 rest on a crawled record and 0 on a RIS-only record, whose title and abstract are the import's own.
 - 2 of them also fail the default track or status filters.
 - **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in, kept by decision-038 (see Method); it is not Google Scholar's stemmer, which is undocumented. With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), 0 of the 1,752 (0.0%) `full_text` papers would match title or abstract. That is all this figure measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) or rewrites the stem could move more.
+- **After the calls** (section Human calls, made as: `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows)): 1,756 of 1,810 (97.0%) `full_text`, 33 (1.8%) `stemming`, 21 (1.2%) in the exact result. The figures above this bullet are the automation's and are the ones to cite. Cite the after-calls figures only with those roles beside them, and as reviewed only if every role is an independent reviewer's.
 
 ## Query `main-7-dollar`
 
@@ -224,7 +225,9 @@ Google Scholar reads this string differently from Scholar mode. Scholar's readin
 | `scholar_missed` | 12 | 24.0% | 11.9% | 12 | 0 | an exact title or abstract match that the Scholar set lacks |
 | total | 50 | 100.0% | 49.5% | 50 | 0 | |
 
-`our_bug`: **0**. Rows for a person in `review.csv`: 20 unresolved, 180 spot check.
+`our_bug`: **0**. Rows of `review.csv`: 20 left for a call, 180 spot check.
+
+Read the table above with care. A `compat_reading` row decided by `$` matches only through a plural, the same forms the `stemming` class credits Google Scholar with, so it is no evidence that Scholar would not return the paper. `scholar_missed` counts exact matches only: it is a floor for what Scholar's set lacks, not the whole of it.
 
 ### Concept groups, over the 1,805 Scholar papers the index holds
 
@@ -311,6 +314,7 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 - Of the 1,752 `full_text` papers, 1,752 rest on a crawled record and 0 on a RIS-only record, whose title and abstract are the import's own.
 - 2 of them also fail the default track or status filters.
 - **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in, kept by decision-038 (see Method); it is not Google Scholar's stemmer, which is undocumented. With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), 0 of the 1,752 (0.0%) `full_text` papers would match title or abstract. That is all this figure measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) or rewrites the stem could move more.
+- **After the calls** (section Human calls, made as: `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows)): 1,756 of 1,810 (97.0%) `full_text`, 2 (0.1%) `stemming`, 52 (2.9%) in the exact result. The figures above this bullet are the automation's and are the ones to cite. Cite the after-calls figures only with those roles beside them, and as reviewed only if every role is an independent reviewer's.
 
 ## Query `main-2-pop`
 
@@ -369,7 +373,9 @@ Google Scholar reads this string differently from Scholar mode. Scholar's readin
 | `compat_reading` | 49 | 100.0% | 43.0% | 49 | 0 | decided by how Scholar mode read the string (decision-002 phrases, `$`), not by the corpus |
 | total | 49 | 100.0% | 43.0% | 49 | 0 | |
 
-`our_bug`: **0**. Rows for a person in `review.csv`: 8 unresolved, 179 spot check.
+`our_bug`: **0**. Rows of `review.csv`: 8 left for a call, 179 spot check.
+
+Read the table above with care. A `compat_reading` row decided by `$` matches only through a plural, the same forms the `stemming` class credits Google Scholar with, so it is no evidence that Scholar would not return the paper. `scholar_missed` counts exact matches only: it is a floor for what Scholar's set lacks, not the whole of it.
 
 ### Concept groups, over the 1,805 Scholar papers the index holds
 
@@ -455,16 +461,17 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 - Of the 1,708 `full_text` papers, 1,708 rest on a crawled record and 0 on a RIS-only record, whose title and abstract are the import's own.
 - 2 of them also fail the default track or status filters.
 - **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in, kept by decision-038 (see Method); it is not Google Scholar's stemmer, which is undocumented. With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), 2 of the 1,708 (0.1%) `full_text` papers would match title or abstract. That is all this figure measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) or rewrites the stem could move more.
+- **After the calls** (section Human calls, made as: `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows)): 1,712 of 1,810 (94.6%) `full_text`, 32 (1.8%) `stemming`, 66 (3.6%) in the exact result. The figures above this bullet are the automation's and are the ones to cite. Cite the after-calls figures only with those roles beside them, and as reviewed only if every role is an independent reviewer's.
 
 ## Human calls
 
-Read from `2026-10-05-scholar-comparison-review.csv` (sha256 `ec9f57c0db9705dd0b22ac361e44995bf0c4336221ab2bb6b2d4fc4c8f25fcc1`): 48 of its 586 rows have a person's call. `in_both` means the record is the same paper as one in the result; `out_of_scope` that it is no paper of the scope's venues and years.
+Read from `2026-10-05-scholar-comparison-review.csv` (sha256 `80fcbd04e73686489e44c2227495fd1df5d6af1fe73f70dc66d0b90df7bf7e04`): 48 of its 586 rows have a call. **Who made them** (the file's `reviewer_role`, as written): `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows). Every figure in this section rests on those roles; the tables above this section are the automation's alone. `in_both` means the record is the same paper as one in the result; `out_of_scope` that it is no paper of the scope's venues and years.
 
 | query | unresolved rows | called | spot-check rows | called | agree with the automated class |
 |---|---|---|---|---|---|
-| `main-7-most-updated` | 20 | 20 | 179 | 0 | 0 |
-| `main-7-dollar` | 20 | 20 | 180 | 0 | 0 |
-| `main-2-pop` | 8 | 8 | 179 | 0 | 0 |
+| `main-7-most-updated` | 20 | 20 | 179 | none called | — |
+| `main-7-dollar` | 20 | 20 | 180 | none called | — |
+| `main-2-pop` | 8 | 8 | 179 | none called | — |
 
 | query | automated class | human class | rows |
 |---|---|---|---|
@@ -480,7 +487,54 @@ Read from `2026-10-05-scholar-comparison-review.csv` (sha256 `ec9f57c0db9705dd0b
 | `main-7-most-updated` | `unsettled` | `full_text` | 4 |
 | `main-7-most-updated` | `unsettled` | `stemming` | 1 |
 
-**Every disagreement classified: yes.** `our_bug` by the automation: 0; by a person: 0; rows left for a person that have no call yet: 0.
+### After the calls
+
+Each call moves its row: a class puts the row in that class; `out_of_scope` takes the record out of the Scholar set, so out of the denominator; `in_both` moves it to "in both" and takes the index record it is paired with (the row's own record, or the one same-title record its evidence names) out of the rows only in openproceedings. Rows without a call keep the automation's class.
+
+`main-7-most-updated`, the automation's counts and the counts after the calls:
+
+| | automation | after the calls |
+|---|---|---|
+| Scholar set, in scope | 1,813 | 1,810 |
+| in both | 21 | 21 |
+| only in the Scholar set | 1,792 | 1,789 |
+| only in the Scholar set: `coverage_gap` | 3 | 0 |
+| only in the Scholar set: `stemming` | 32 | 33 |
+| only in the Scholar set: `full_text` | 1,752 | 1,756 |
+| only in the Scholar set: `unsettled` | 5 | 0 |
+| only in openproceedings | 12 | 12 |
+| only in openproceedings: `scholar_missed` | 12 | 12 |
+
+`main-7-dollar`, the automation's counts and the counts after the calls:
+
+| | automation | after the calls |
+|---|---|---|
+| Scholar set, in scope | 1,813 | 1,810 |
+| in both | 51 | 52 |
+| only in the Scholar set | 1,762 | 1,758 |
+| only in the Scholar set: `coverage_gap` | 3 | 0 |
+| only in the Scholar set: `stemming` | 2 | 2 |
+| only in the Scholar set: `full_text` | 1,752 | 1,756 |
+| only in the Scholar set: `unsettled` | 5 | 0 |
+| only in openproceedings | 50 | 49 |
+| only in openproceedings: `compat_reading` | 38 | 37 |
+| only in openproceedings: `scholar_missed` | 12 | 12 |
+
+`main-2-pop`, the automation's counts and the counts after the calls:
+
+| | automation | after the calls |
+|---|---|---|
+| Scholar set, in scope | 1,813 | 1,810 |
+| in both | 65 | 66 |
+| only in the Scholar set | 1,748 | 1,744 |
+| only in the Scholar set: `coverage_gap` | 3 | 0 |
+| only in the Scholar set: `stemming` | 32 | 32 |
+| only in the Scholar set: `full_text` | 1,708 | 1,712 |
+| only in the Scholar set: `unsettled` | 5 | 0 |
+| only in openproceedings | 49 | 48 |
+| only in openproceedings: `compat_reading` | 49 | 48 |
+
+**Every disagreement classified: yes, on the calls whose roles this line names.** `our_bug` by the automation: 0; by a call: 0; rows left for a call that have none yet: 0. The 48 calls were made as: `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows). A call weighs what its role does: unless every role is an independent reviewer's, this verdict is provisional and spec 07 §B's bar is not closed.
 
 ## Method
 
@@ -513,11 +567,14 @@ Read from `2026-10-05-scholar-comparison-review.csv` (sha256 `ec9f57c0db9705dd0b
   record the corpus holds without an abstract is `unsettled`.
 - **Provenance.** Each row says whether its index record has an independent source or only an imported RIS set
   (`crawled record`, `RIS-only record`), and `review.csv` carries it with the abstract's source.
-- **`scholar_missed`** rows all go to `review.csv`: a person confirms the exact tokens are in the title or abstract.
+- **`scholar_missed`** rows all go to `review.csv`: a reviewer confirms the exact tokens are in the title or abstract.
 - **`coverage_gap`** rows all go to `review.csv` too: a record the corpus lacks and a record Scholar filed under
-  the wrong venue or year look the same to the matching, so a person checks each against the coverage report.
+  the wrong venue or year look the same to the matching, so a reviewer checks each against the coverage report.
 - **`review.csv`** also holds a spot check: a tenth of each query's settled disagreements, chosen by a hash of
-  the row's ids. `human_class` is filled by a person, never by the analyst.
+  the row's ids. The tool never fills `human_class`: whoever makes a call writes it with their role in
+  `reviewer_role`, and the Human calls section prints those roles beside every figure that rests on them. A call
+  made by anyone but an independent reviewer (the analyst, or software acting for the project) is recorded
+  like any other and leaves the verdict provisional.
 
 ## Notes on these inputs
 
@@ -534,8 +591,8 @@ Read from `2026-10-05-scholar-comparison-review.csv` (sha256 `ec9f57c0db9705dd0b
   `year:2020..2026`, as it was run here on 2026-09-30; `main-2-pop` is the review's Publish or Perish variant. For
   those two the Scholar set is still `main-7-most-updated`'s: their sections show what each string keeps, drops
   and adds against the records the review already holds, not what Scholar returned for them.
-- **Scholar's cap.** The review's 17 raw exports hold between 7 and 639 records each, all under Scholar's 1,000,
-  so no search was cut at the cap. The set itself is de-duplicated across exports, which is why its largest
+- **Scholar's cap.** The review's 17 raw Scholar exports hold between 7 and 639 records each, all under Scholar's
+  1,000, so no search was cut at the cap. The set itself is de-duplicated across exports, which is why its largest
   query-date group is smaller.
 - **Earlier counts.** On index `05a0541717f6` (snapshot `2026-09-29-d552baa07aed`, no 2026 crawl) the
   2026-09-30 runs gave 27 records for the literal string and 67 for the `$` string, 51 of them among the
@@ -556,15 +613,25 @@ Read from `2026-10-05-scholar-comparison-review.csv` (sha256 `ec9f57c0db9705dd0b
   rebuilt (`2026-10-05-10b5a205a63f`, 133,629 records), and that report was replaced by this one. On the
   superseded index 1,800 matched papers rested on a crawled record and 7 on the import alone; the class counts
   differed only by those 7.
+- **Why the denominator moved.** The papers in scope were 1,810 in TASK-056's first run (index `05a0541717f6`);
+  1,817 once a record with an empty or cut venue string was kept when an in-scope record of its year has its
+  title; 1,815 once a record naming another venue in full was kept out again (the 2026-10-04 report). On index
+  `fd13d8d27535` they are 1,813: 2 Scholar records that each matched an imported copy now match a crawled paper
+  another record of the set already matched, and are counted as repeats ("repeats of a paper already counted").
+  The 3 `out_of_scope` calls below take it to 1,810 in the counts after the calls only.
 - **Matching.** This report matches the set by URL and title, as it would any RIS file, not by the import's
   ids.
-- **Who made the human calls.** The 48 calls in the review file of the 2026-10-05 run were made on 2026-10-05 by an
-  AI assistant at the project owner's direction, not by an independent reviewer; the file's `reviewer_role`
-  says so on each row, and each `note` gives the evidence. Where this report says "a person", read it with
-  that in mind. The checks behind them: for the 12 `scholar_missed` papers, no record with the title (exact,
-  prefix or near match) in `mended.ris` or in the review's 20 other Scholar export files; for the 5 records with no
-  venue string, the same title, year and authors as the named index record, then the class the tool gives once
-  the venue is restored; for the 3 `coverage_gap` records, the venue named by Crossref or by the conference's
-  own page (a Springer LNCS volume of another conference, an IEEE conference of another name, and a NeurIPS 2022
-  tutorial). No spot-check row has a call. A reviewer who repeats any of these calls should replace the role on
-  that row.
+- **Who made the calls.** The 48 calls in the review file of the 2026-10-05 run were made on 2026-10-05 by an AI
+  assistant at the project owner's direction, not by an independent reviewer; the file's `reviewer_role` says so
+  on each row, the report prints that role beside every figure that rests on the calls, and each `note` gives the
+  evidence. Until TASK-193 repeats them with an independent reviewer, the calls and the counts after them are not
+  cited, and spec 07 §B's bar is not closed. The checks behind them: for the 12 `scholar_missed` papers, no record
+  with the title (exact, prefix or near match) in `mended.ris` or in the review's other Scholar files, its 17 raw
+  Scholar exports and 3 pre-filter output files (21 files with `mended.ris`); for the 5 records with no venue
+  string, the same title, year and authors as the named index record, then the class the tool gives once the
+  venue is restored; for the 3 `coverage_gap` records, the venue named by Crossref or by the conference's own
+  page (a Springer LNCS volume of another conference, an IEEE conference of another name, and a NeurIPS 2022
+  tutorial). That a `scholar_missed` paper's title or abstract holds the exact tokens rests on the tool alone:
+  each note restates the row's evidence; the abstracts were not read. That reading is the
+  part of these calls TASK-193 must do first. No spot-check row has a call. A reviewer who repeats any of these
+  calls should replace the role on that row.

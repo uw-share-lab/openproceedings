@@ -1084,6 +1084,10 @@ def _eval_scholar(ns: argparse.Namespace) -> int:
     path = _index_path(ns)
     engine = TantivyEngine(path)
     records = snapshot_records(ns.data_dir, path, engine.index_version)  # verified, as the server loads it
+    # the long part starts here (one pass over the snapshot, then a comparison per query): say so once
+    log.info("scholar_report_started", extra={
+        "index_version": engine.index_version, "queries": len(queries), "ris_records": len(ris),
+    })  # fmt: skip
     index = MatchIndex.build(iter_records(records.path.parent))
     side = scope_and_match(ris, index, scope)
     held: dict[str, Searchable] = {}
@@ -1121,19 +1125,19 @@ def _eval_scholar(ns: argparse.Namespace) -> int:
     )
     review_text = render_review(review, engine.index_version)
     calls = read_calls(
-        out / review_name(day), review_text
-    )  # a person's calls for exactly these rows, or None
+        out / review_name(day), review_text, review
+    )  # the calls for exactly these rows, or None
     text = render(meta, side, index, comparisons, review, calls)
     written, rows, replaced = write(text, review_text, out, day, keep_review=calls is not None)
     bugs = sum(c.our_bug for c in comparisons)
-    by_person = human_bugs(calls)
+    by_call = human_bugs(calls)
     unresolved = sum(x.kind == UNRESOLVED for x in review)
     log.log(logging.ERROR if bugs else logging.INFO, "scholar_report_written", extra={
         "index_version": engine.index_version, "queries": len(comparisons), "ris_records": len(ris),
-        "in_scope": len(side.entries),
+        "ris_papers": len(side.entries),
         "ris_only_matches": sum(e.match.op_id is not None and e.match.op_id not in index.independent for e in side.entries),
         "our_bug": bugs, "unresolved": unresolved, "review_rows": len(review),
-        "human_calls": len(calls.calls) if calls else 0, "human_our_bug": by_person,
+        "human_calls": len(calls.calls) if calls else 0, "human_our_bug": by_call,
         "classified": classified(comparisons, review, calls),
         "replaced": replaced, "ms": elapsed_ms(started),
     })  # fmt: skip
@@ -1142,11 +1146,12 @@ def _eval_scholar(ns: argparse.Namespace) -> int:
         print(f"wrote {rows} ({len(review)} rows, {unresolved} unresolved)", file=sys.stderr)
     else:
         print(
-            f"kept {rows} as it is: {len(calls.calls)} of {len(review)} rows have a person's call",
+            f"kept {rows} as it is: {len(calls.calls)} of {len(review)} rows have a call",
             file=sys.stderr,
         )
     verdict = "yes" if classified(comparisons, review, calls) else "no"
-    print(f"every disagreement classified: {verdict}", file=sys.stderr)
+    roles = "; ".join(f"{role} ({k})" for role, k in calls.roles) if calls else "no calls"
+    print(f"every disagreement classified: {verdict} (calls made as: {roles})", file=sys.stderr)
     for c in comparisons:
         print(
             f"  {c.name}: Scholar {c.scholar_in_scope}, openproceedings {c.in_scope}, both {len(c.kept)}, "
@@ -1155,9 +1160,9 @@ def _eval_scholar(ns: argparse.Namespace) -> int:
         )
     if bugs:
         print(f"our_bug: {bugs} (must be 0: investigate before the report is cited)", file=sys.stderr)
-    if by_person:
-        print(f"our_bug by a person: {by_person} (must be 0)", file=sys.stderr)
-    return 1 if ns.check and (bugs or by_person) else 0
+    if by_call:
+        print(f"our_bug by a call: {by_call} (must be 0)", file=sys.stderr)
+    return 1 if ns.check and (bugs or by_call) else 0
 
 
 def _search(ns: argparse.Namespace) -> int:

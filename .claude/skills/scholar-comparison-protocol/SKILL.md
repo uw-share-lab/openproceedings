@@ -74,8 +74,8 @@ Never quote a matched or `full_text` figure without the split.
 ## review.csv (next to the report)
 Columns: `query_name, side, scholar_key, op_id, title, venue, year, auto_class, auto_evidence,
 human_class, reviewer_role, note`. One row per disagreement the automation couldn't settle, plus a random
-10% of automated rows as a spot check. A person fills `human_class`; the analyst never does. Roles, not
-names.
+10% of automated rows as a spot check. The tool never fills `human_class`; whoever makes a call writes it with
+their role in `reviewer_role`. Roles, not names. A call weighs what its role does (below).
 
 As built: the file is `docs/results/<YYYY-MM-DD>-scholar-comparison-review.csv`, with two more columns,
 `row_kind` (`unresolved` or `spot_check`) and `index_version`. Unresolved rows are every `unsettled` row (an
@@ -83,27 +83,53 @@ ambiguous or undated match; a record the corpus holds without an abstract, which
 every `coverage_gap` (a gap and a record Scholar filed under the wrong venue look alike), every
 `scholar_missed` and every `our_bug`. The spot check is the tenth of each query's settled rows whose sha256 of
 (query name, side, ids) sorts first: fixed for a run, unrelated to any field. `op eval scholar` refuses to
-replace a review file in which a person has filled anything. Two further columns, `record_source` (`crawled` or
-`ris_only`) and `abstract_source`, say what the row's index record rests on.
+replace a review file in which anything is filled in (or which is not UTF-8). Two further columns,
+`record_source` (`crawled` or `ris_only`) and `abstract_source`, say what the row's index record rests on. The
+file is UTF-8 with a BOM and CRLF line ends, like `/compare`'s CSV, so a spreadsheet opens it as UTF-8; cells
+are written through `export.csv_cell` (a value starting `=`, `+`, `-` or `@` gets a leading `'`).
 
-**Filling it in, and reading it back.** A person fills three columns and nothing else: `human_class`, one of
-`our_bug`, `filtered`, `compat_reading`, `coverage_gap`, `stemming`, `full_text`, `scholar_cap`,
-`scholar_missed`, `in_both` (the record is the same paper as one in the result) or `out_of_scope` (it is no
-paper of the scope's venues and years: Scholar's venue or year is wrong); `reviewer_role`, a role, never a
-name, required with a class; and `note`, free text. `unsettled` is not a call. Then run the same
-`op eval scholar` command again (same inputs, `--index`, `--date`, `--out`): it checks that the file's rows
-are exactly the rows the run writes, leaves the file byte for byte, and rewrites only the report, whose
-"Human calls" section counts the calls per query (unresolved rows called, spot-check rows called and how many
-agree with the automated class, automated × human class), names any row a person called `our_bug`, and ends
-with **Every disagreement classified: yes/no**. "Yes" needs no `our_bug` by the automation or a person and a
-call on every unresolved row; that line is what closes spec 07 §B's bar. `--check` exits 1 on a person's
-`our_bug` too. A malformed call, or a filled file whose rows belong to another run, is refused and nothing is
-written. The report counts calls; it never quotes a role or a note.
+**Filling it in, and reading it back.** Whoever makes a call fills three columns and nothing else:
+`human_class`, one of `our_bug`, `filtered`, `compat_reading`, `coverage_gap`, `stemming`, `full_text`,
+`scholar_cap`, `scholar_missed`, `in_both` (the record is the same paper as one in the result) or
+`out_of_scope` (it is no paper of the scope's venues and years: Scholar's venue or year is wrong); both verdicts
+go on Scholar-side rows only. `reviewer_role`, a role, never a name, required with a class; and `note`, free
+text. `unsettled` is not a call. Save as "CSV UTF-8" (another encoding is refused with that fix). Then run the
+same `op eval scholar` command again (same inputs, `--index`, `--date`, `--out`): it checks that the file's rows
+are exactly the rows the run writes (naming the first line and column a spreadsheet changed), keys each call by
+its row's place among the run's rows (never by a cell the guard or a spreadsheet may have rewritten), leaves the
+file byte for byte, and rewrites only the report. Its "Human calls" section counts the calls per query
+(unresolved rows called, spot-check rows called and how many agree with the automated class, or "none called"),
+automated × called class, names any row called `our_bug`, prints an "After the calls" table per query, and ends
+with **Every disagreement classified: yes/no**. "Yes" needs no `our_bug` by the automation or a call and a call
+on every unresolved row. `--check` exits 1 on an automated `our_bug` and on a call of `our_bug`. A malformed
+call, or a filled file whose rows belong to another run, is refused and nothing is written. The report never
+quotes a note.
+
+**After the calls.** A class moves its row to that class. `out_of_scope` takes the record out of the Scholar set
+and so out of the denominator. `in_both` moves the record to "in both" and pairs it with one index record: the
+row's own `op_id`, or else the one same-title record its evidence names (`Row.near`: for a record with no venue
+string, the in-scope records of its year named after "same title:"); if that record is a row only in the result,
+the row leaves that table too, the two being one paper. An `in_both` call whose row names none or several is
+refused: the pairing never parses `note`. Rows without a call keep the automation's class. Every table above
+the Human calls section, and the first figures of each Finding, are the automation's alone; the Finding adds an
+"After the calls" bullet with the roles beside it.
+
+**A call weighs what its role does.** The report prints each distinct `reviewer_role` with its row count in the
+Human calls section and on the closing line, and the command prints them on its verdict line. The tool does not
+judge a role. A call by anyone but an independent reviewer (the analyst, or an AI assistant acting for the
+project) leaves "yes" provisional and spec 07 §B's bar open: a paper cites the automation's figures, cites the
+after-calls figures only with the roles beside them, and as reviewed only once every role is an independent
+reviewer's. The 2026-10-05 review file's 48 calls were made by an AI assistant at the owner's direction; TASK-193
+(an independent reviewer repeats them, reading each `scholar_missed` abstract first) blocks citing them, not
+merging.
 
 ## Report — `docs/results/<YYYY-MM-DD>-scholar-comparison.md`
 Header: date, `index_version`, `tokenizer_version`, Scholar export hash, queries run. Per query: sizes
 (Scholar in scope, openproceedings `total`, both), the two classification tables with counts and
-percentages, `our_bug` count (must be 0), and the unresolved `review.csv` count. Close with the paper
+percentages, `our_bug` count (must be 0), and the `review.csv` counts (rows left for a call, called). Under the
+only-in-openproceedings table of a string with `$`, a caveat: a `compat_reading` row decided by `$` matches only
+through a plural, the forms `stemming` credits Scholar with, so it is no evidence Scholar would not return the
+paper; and `scholar_missed` counts exact matches only, a floor. Close with the paper
 finding: *share of Scholar's set explained by full-text matches and by stemming*. Numbers come only from
 the run; state the command, with file names only, never paths (`op eval scholar --ris mended.ris --name
 main-7-most-updated --years 2020..2026 --index <v>`). `--years` and `--venues` are part of the result: another

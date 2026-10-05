@@ -11,8 +11,8 @@
   `year:2020..2026`, as it was run here on 2026-09-30; `main-2-pop` is the review's Publish or Perish variant. For
   those two the Scholar set is still `main-7-most-updated`'s: their sections show what each string keeps, drops
   and adds against the records the review already holds, not what Scholar returned for them.
-- **Scholar's cap.** The review's 17 raw exports hold between 7 and 639 records each, all under Scholar's 1,000,
-  so no search was cut at the cap. The set itself is de-duplicated across exports, which is why its largest
+- **Scholar's cap.** The review's 17 raw Scholar exports hold between 7 and 639 records each, all under Scholar's
+  1,000, so no search was cut at the cap. The set itself is de-duplicated across exports, which is why its largest
   query-date group is smaller.
 - **Earlier counts.** On index `05a0541717f6` (snapshot `2026-09-29-d552baa07aed`, no 2026 crawl) the
   2026-09-30 runs gave 27 records for the literal string and 67 for the `$` string, 51 of them among the
@@ -33,15 +33,25 @@
   rebuilt (`2026-10-05-10b5a205a63f`, 133,629 records), and that report was replaced by this one. On the
   superseded index 1,800 matched papers rested on a crawled record and 7 on the import alone; the class counts
   differed only by those 7.
+- **Why the denominator moved.** The papers in scope were 1,810 in TASK-056's first run (index `05a0541717f6`);
+  1,817 once a record with an empty or cut venue string was kept when an in-scope record of its year has its
+  title; 1,815 once a record naming another venue in full was kept out again (the 2026-10-04 report). On index
+  `fd13d8d27535` they are 1,813: 2 Scholar records that each matched an imported copy now match a crawled paper
+  another record of the set already matched, and are counted as repeats ("repeats of a paper already counted").
+  The 3 `out_of_scope` calls below take it to 1,810 in the counts after the calls only.
 - **Matching.** This report matches the set by URL and title, as it would any RIS file, not by the import's
   ids.
-- **Who made the human calls.** The 48 calls in the review file of the 2026-10-05 run were made on 2026-10-05 by an
-  AI assistant at the project owner's direction, not by an independent reviewer; the file's `reviewer_role`
-  says so on each row, and each `note` gives the evidence. Where this report says "a person", read it with
-  that in mind. The checks behind them: for the 12 `scholar_missed` papers, no record with the title (exact,
-  prefix or near match) in `mended.ris` or in the review's 20 other Scholar export files; for the 5 records with no
-  venue string, the same title, year and authors as the named index record, then the class the tool gives once
-  the venue is restored; for the 3 `coverage_gap` records, the venue named by Crossref or by the conference's
-  own page (a Springer LNCS volume of another conference, an IEEE conference of another name, and a NeurIPS 2022
-  tutorial). No spot-check row has a call. A reviewer who repeats any of these calls should replace the role on
-  that row.
+- **Who made the calls.** The 48 calls in the review file of the 2026-10-05 run were made on 2026-10-05 by an AI
+  assistant at the project owner's direction, not by an independent reviewer; the file's `reviewer_role` says so
+  on each row, the report prints that role beside every figure that rests on the calls, and each `note` gives the
+  evidence. Until TASK-193 repeats them with an independent reviewer, the calls and the counts after them are not
+  cited, and spec 07 §B's bar is not closed. The checks behind them: for the 12 `scholar_missed` papers, no record
+  with the title (exact, prefix or near match) in `mended.ris` or in the review's other Scholar files, its 17 raw
+  Scholar exports and 3 pre-filter output files (21 files with `mended.ris`); for the 5 records with no venue
+  string, the same title, year and authors as the named index record, then the class the tool gives once the
+  venue is restored; for the 3 `coverage_gap` records, the venue named by Crossref or by the conference's own
+  page (a Springer LNCS volume of another conference, an IEEE conference of another name, and a NeurIPS 2022
+  tutorial). That a `scholar_missed` paper's title or abstract holds the exact tokens rests on the tool alone:
+  each note restates the row's evidence; the abstracts were not read. That reading is the
+  part of these calls TASK-193 must do first. No spot-check row has a call. A reviewer who repeats any of these
+  calls should replace the role on that row.

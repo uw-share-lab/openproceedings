@@ -603,6 +603,9 @@ def test_a_record_with_a_cut_or_empty_venue_and_a_same_year_title_goes_to_a_pers
         "its venue string is no venue, so no title match is made; same title: "
         "op:neurips:2024:full0001 (NeurIPS 2024)"
     )
+    assert row.near == (
+        nid("full0001"),
+    )  # the record the evidence names: what an `in_both` call pairs it with
 
 
 def test_full_text_says_when_the_record_also_fails_the_filters() -> None:

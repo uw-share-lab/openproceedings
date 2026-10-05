@@ -110,9 +110,9 @@ OFFICIAL_ACCEPTED: OfficialTable = {
         date(2026, 9, 27),
     ),
     ("ICLR", 2026, "main"): OfficialCount(
-        5357,
-        "accepted papers announced in the final fact sheet (19,525 submissions; 224 orals included); no ICLR 2026 proceedings index was read",
-        "https://media.iclr.cc/Conferences/ICLR2026/ICLR2026_Fact_Sheet.pdf",
+        5351,
+        "papers in the ICLR 2026 proceedings index (5,351 distinct Conference entries; fact sheet announced 5,357, retrospective 5,355)",
+        "https://proceedings.iclr.cc/paper_files/paper/2026",
         date(2026, 10, 5),
     ),
     ("ICML", 2013, "main"): OfficialCount(
