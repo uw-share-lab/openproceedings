@@ -42,6 +42,13 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
   compiler can't see: the next component that reads one more field crashes in an unrelated test file
   (TASK-110, `concept-builder.test.tsx`).
 
+- **e2e instances.** `fixture_server.py` serves one index from three configurations (API port: default;
+  +1 `tight`: low group-count bounds, rate limit and comparison cooldown on, a tiny comparison file cap; +2
+  `plain`: comparisons off). A spec reaches a state only another configuration gives with
+  `useInstance(page, "tight")` (`frontend/e2e/instances.ts`, which re-addresses the page's API calls), never by
+  writing the answer in the browser. Tests on `tight` share one client network, so one that needs a
+  comparison waits out another's cooldown through the panel's own Retry. Add a configuration there rather
+  than a second fixture server.
 - **e2e ports.** Playwright's fixture API and web server listen on 8000 and 3000 unless `OP_E2E_API_PORT` /
   `OP_E2E_WEB_PORT` are set (`playwright.config.ts`, `fixture_server.py`, and every spec that calls the API
   directly read the same two). Locally the config reuses a server already on its port, so with another

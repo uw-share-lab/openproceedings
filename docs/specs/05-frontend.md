@@ -460,10 +460,26 @@ warnings, the save's index check), the design doc says so; its open questions li
   320 px and reads it by keyboard (focus on the result's heading, the counts, a list opened with Enter, no
   sideways overflow, kept + added equal to the shown total). The ports are 8000 and 3000 unless
   `OP_E2E_API_PORT` / `OP_E2E_WEB_PORT` move them, so a run can sit beside an instance already on them.
+- The three surfaces added after M3b each have a spec of their own (TASK-182): `word-forms.spec.ts` (Add `$`
+  to all terms and to ticked ones, the URL after Search, the expansions, Back to the typed query, a lowercase
+  `and` never offered, the line when nothing can be offered), `group-counts.spec.ts` (each group's two counts
+  equal to `/search`'s `groups`, the note, the announcement, no counts for an edited draft or a single group,
+  "Same as group N", and the too-many and too-costly notes) and `compare.spec.ts` (a file with a paper in
+  every list, each list opened and downloaded byte for byte, comparisons not offered, a file over the cap,
+  the network's cooldown with its countdown). Each runs its states through axe in both themes at 1280 and
+  320 px, checks they don't scroll sideways, and works them by keyboard. States that only another
+  configuration gives are the server's own answers: the fixture server runs three instances of the one index
+  (the default; `tight` on the next port: 2 groups and 5 terms counted, the rate limit on with a comparison
+  cooldown long enough to see, a 2,048-byte file cap; `plain` on the one after: comparisons off), and
+  `e2e/instances.ts` sends a page's API calls to one of them. Nothing is mocked in the browser.
 - The comparison panel's unit tests answer with `compare-fixture.json`, this API's own `POST /compare`
   response (`backend/tests/contract/compare_fixture.py`, kept current by
   `test_frontend_compare_fixture.py`).
 - Visual regression on the search view (both themes), with platform-specific baselines and Linux CI on a
   fixed `ubuntu-24.04` runner label (whose hosted image revision can still change). What an instance's
   configuration decides is left out of the baselines (`e2e/visual.css`): the footer's contact, and the
-  "Compare with your records" button, offered only where comparisons are on.
+  "Compare with your records" button, offered only where comparisons are on. The Add `$` notice, the builder
+  with its group counts and an answered comparison are element baselines of their own
+  (`word-forms-*`, `group-counts-*`, `comparison-*`; TASK-182). New baselines are written by `npm run
+  e2e:update --workspace frontend`, on the platform they are for: the Linux ones on an amd64 `ubuntu-24.04`
+  host or runner, never on an arm64 Mac.

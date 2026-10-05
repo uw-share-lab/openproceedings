@@ -142,6 +142,12 @@ describe("the file", () => {
 
   it("states the caps from /meta", () => {
     expect(megabytes(3_687_464)).toBe("3.5 MB");
+    expect(megabytes(2_048)).toBe("2.0 KB"); // a small cap is never "0.0 MB"
+    expect(megabytes(104_857)).toBe("102.4 KB");
+    expect(megabytes(104_858)).toBe("0.1 MB");
+    expect(fileProblem({ size: 3_000 }, { ...LIMITS, max_body_bytes: 2_048 })).toMatch(
+      /^This file is 2\.9 KB; this server compares files up to 2\.0 KB\./,
+    );
     expect(limitsLine(LIMITS)).toBe(
       "Up to 16.0 MB and 5,000 records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it).",
     );

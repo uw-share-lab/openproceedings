@@ -68,9 +68,15 @@ export async function postCompare(
   );
 }
 
-/** A size in megabytes to one decimal (binary megabytes, as the caps are): `3.5 MB`. */
+/**
+ * A size to one decimal in binary megabytes, as the caps are (`3.5 MB`), or in kilobytes when it is under a
+ * tenth of one (`2.0 KB`): an instance's cap can be that small, and "0.0 MB" would say nothing.
+ */
 export function megabytes(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
+  const one = { minimumFractionDigits: 1, maximumFractionDigits: 1 };
+  const mb = bytes / (1024 * 1024);
+  if (mb < 0.1) return `${(bytes / 1024).toLocaleString("en-US", one)} KB`;
+  return `${mb.toLocaleString("en-US", one)} MB`;
 }
 
 /**
