@@ -99,13 +99,25 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   Scholar's reading and says so for each such string (`main-2-pop`).
 - **`stemming`** adds each searched word's other English inflections found in the compared records (`s`/`es`/
   `ies`, `ed`, `ing`; no derivation). Google Scholar's stemmer is undocumented, so the rule is a stated
-  stand-in, and which stemmer should stand for Scholar's is an open decision for the project owner. `full_text`
+  stand-in, not Scholar's rule, and the `stemming` and `full_text` counts are relative to it. Decision-038 keeps
+  it and adopts no published stemmer (below). `full_text`
   is not a lower bound: a wider stemmer moves rows out of it. The report therefore gives a sensitivity figure
   per string: how many `full_text` rows would match if every searched word were replaced by its inflection stem
   read as a prefix (`benchmarks` → `benchmark*`). It measures that and no more: it is not a stemmer, and one that
-  strips derivational endings could move more rows.
+  strips derivational endings could move more rows. On index `5ec5231adae2` it moves 0 of 1,753 `full_text` rows
+  for `main-7-most-updated` and 2 of 1,709 for `main-2-pop`, which is why decision-038 adds no stemmer
+  dependency; a string whose figure is not near zero reopens the decision.
 - **`scholar_cap`** needs the size of each Scholar search: the set's Publish or Perish query dates group its
   records by search, and a group at 1,000 or more marks its venues and years as capped.
+- **Any reviewer's own file** (TASK-177): the same comparison is served as `POST /compare` (04 §Comparing with
+  a RIS file) and drawn by the web app's "Compare with your records" panel (05 §Components 9): one query
+  against one file, every indexed venue and year on both sides (a limit is written in the query), with the
+  matching and the classes of this section and no report. `compare_query` takes a `tick` the route raises its
+  time limit from; `result_in_scope` and `only_in_result` are the result and the added ids as both callers
+  compute them. The route is tested against the core's own rows (`backend/tests/contract/test_compare.py`).
+  Since that route echoes a row's evidence to whoever uploaded the file (decision-035), the evidence of a
+  record the index doesn't hold names its links' hosts only as valid host names, at most three a record
+  (`link_host`, `MAX_HOSTS`), in the report too; a link no URL parser takes names no paper and no host.
 - A report never replaces a review file a person has filled in, and names its inputs by file name and sha256,
   never by path. Notes about one set of inputs come from the file `--notes` names (for the review's export,
   `docs/results/scholar-comparison-notes.md`), printed verbatim under its hash; there is no default, since

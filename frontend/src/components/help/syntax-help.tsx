@@ -210,6 +210,7 @@ export function SyntaxHelp({
     max_counted_groups: c.max_counted_groups,
     max_counted_terms: c.max_counted_terms,
     max_counted_ids: c.max_counted_ids,
+    compare: null, // `POST /compare`'s caps are no query limit: the help page doesn't show them (TASK-177)
   };
   return (
     <div className="space-y-8 text-sm">

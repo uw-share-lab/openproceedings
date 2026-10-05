@@ -104,8 +104,16 @@ def annotate(
     total: int | None = None,
     abstract_source: AbstractSource | None = None,
     abstracts_withheld: int | None = None,
+    ris_bytes: int | None = None,
+    ris_records: int | None = None,
+    ris_papers: int | None = None,
+    kept: int | None = None,
+    dropped: int | None = None,
+    not_in_index: int | None = None,
+    added: int | None = None,
 ) -> None:
-    """Add privacy-safe fields to the access line. Keyword-only and typed, so no query text fits."""
+    """Add privacy-safe fields to the access line. Keyword-only and typed, so no query text fits (nor a
+    title or a file name: a comparison's fields are counts)."""
     fields = access_fields(request)
     for key, value in (
         ("index_version", index_version),
@@ -113,6 +121,13 @@ def annotate(
         ("total", total),
         ("abstract_source", abstract_source),
         ("abstracts_withheld", abstracts_withheld),
+        ("ris_bytes", ris_bytes),
+        ("ris_records", ris_records),
+        ("ris_papers", ris_papers),
+        ("kept", kept),
+        ("dropped", dropped),
+        ("not_in_index", not_in_index),
+        ("added", added),
     ):
         if value is not None:
             fields[key] = value

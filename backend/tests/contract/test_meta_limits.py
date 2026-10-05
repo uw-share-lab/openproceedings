@@ -26,6 +26,7 @@ def test_meta_serves_the_parser_cap_and_the_default_verification_limits(client: 
         "max_counted_groups": DEFAULTS["max_counted_groups"].default,
         "max_counted_terms": DEFAULTS["max_counted_terms"].default,
         "max_counted_ids": DEFAULTS["max_counted_ids"].default,
+        "compare": None,  # comparisons are off by default (TASK-177; test_compare.py has the caps when on)
     }
 
 
@@ -63,6 +64,7 @@ def test_limits_are_required_in_the_meta_schema(client: TestClient) -> None:
     schemas = client.get("/api/v1/openapi.json").json()["components"]["schemas"]
     assert "limits" in schemas["MetaResponse"]["required"]
     assert sorted(schemas["Limits"]["required"]) == [
+        "compare",
         "max_counted_groups",
         "max_counted_ids",
         "max_counted_terms",

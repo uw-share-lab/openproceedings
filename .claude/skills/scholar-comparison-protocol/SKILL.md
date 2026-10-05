@@ -26,6 +26,17 @@ ID, or goes to `review.csv`. The venue is one of Scholar mode's source names exa
 (`… Information Processing …`) is no venue. Code: `eval/scholar_compare.py` (`MatchIndex.match`), the one
 implementation, which a reviewer's own RIS file goes through too (TASK-177).
 
+## A reviewer's own file (TASK-177)
+The same core answers `POST /compare` (spec 04 §Comparing with a RIS file) and the web app's "Compare with your
+records": one query, one RIS file, `Scope()` (every indexed venue and year: a limit is written in the query),
+no report and no `review.csv`. The API's `reason` is the class below and `detail` its evidence; `matched_by`
+is `Match.rule` or `Match.problem`; `independent` is `Row.independent`. `kept` + `added` is exactly `/search`'s
+result. Evidence is echoed to the uploader there, so what it quotes of a file is bounded: a `coverage_gap`
+row names its links' hosts as valid host names only (`link_host`: DNS labels, at most 253 characters, no
+credentials or control characters), at most three a record (`MAX_HOSTS`), and a malformed link names nothing.
+A change to the classes, the rules or their order changes both the report and the endpoint
+(`backend/tests/contract/test_compare.py` compares the route's rows with `compare_query`'s).
+
 ## Classification
 | Only in Scholar, because… | Automated test |
 |---|---|
@@ -95,8 +106,10 @@ range gives other numbers, so always state them.
 - A forum id and a proceedings id on one Scholar record that name different index records are ambiguous.
 - The `stemming` test is inflection only (`scholar_compare.inflection_stem`: `s`/`es`/`ies`, `ed`, `ing`), a
   stated stand-in for Scholar's undocumented stemmer. A plural acronym needs no vowel in its stem (`llms` →
-  `llm`): the first version required one and missed the commonest variant in the corpus. Which stemmer stands
-  for Scholar's is an open decision for the project owner; don't adopt another one in passing. `full_text` is
+  `llm`): the first version required one and missed the commonest variant in the corpus. Decision-038 keeps
+  this stand-in and adopts no published stemmer; don't add one in passing. The `stemming` and `full_text` counts
+  are relative to the stand-in, never "what Scholar stems". Revisit the decision if a string's prefix
+  sensitivity is not near zero. `full_text` is
   **not** a lower bound: a wider stemmer moves rows out of it. The report gives a sensitivity figure instead,
   how many `full_text` rows match when every word is replaced by its inflection stem read as a prefix
   (`benchmarks` → `benchmark*`): exactly that, not what another stemmer would do.

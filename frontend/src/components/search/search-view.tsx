@@ -31,6 +31,7 @@ import {
   type Sort,
 } from "@/lib/search-state";
 import { fieldWarning, type FieldWarning } from "@/lib/export";
+import { CompareRecords } from "../compare/compare-records";
 import { CopyButton } from "../copy-button";
 import { ExportMenu } from "../export/export-menu";
 import { SaveRecord, SaveRecordProvider } from "../record/save-record";
@@ -385,6 +386,13 @@ function ResultsBody({
               onSearchAgain={onSearchAgain}
             />
             <SaveRecord
+              q={shownState.q}
+              mode={shownState.mode}
+              indexVersion={response.index_version}
+              total={total}
+              disabledReason={offReason}
+            />
+            <CompareRecords
               q={shownState.q}
               mode={shownState.mode}
               indexVersion={response.index_version}

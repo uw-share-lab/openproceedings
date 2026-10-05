@@ -356,6 +356,44 @@ warnings, the save's index check), the design doc says so; its open questions li
    (`sessionStorage`). `/record/[id]` (`components/record/record-view.tsx`) reads the stored record first
    (`?replay=false`), then its replay; the methods text and the exports appear once the replay has answered (or
    couldn't run: "Replay: waiting" on a 429 or `API_BUSY`), so a `mismatch` never shows either.
+9. **Compare with your records** (TASK-177; `components/compare/compare-records.tsx`, `lib/compare.ts`;
+   design `docs/design/2026-10-05-ris-comparison.md`). A reviewer moving from Google Scholar asks what a query
+   does to the records they already hold. A button beside Export and Save opens a panel under the results
+   header: choose a RIS file, **Compare**, and the searched query `(q, mode)` is compared with it on the shown
+   index (`POST /compare`, 04 §Comparing with a RIS file). It is drawn only when `GET /meta`'s
+   `limits.compare` is not null: an instance whose operator hasn't turned comparisons on doesn't offer it.
+   - **Before sending**, the panel says where the file goes ("sent to this server for this one comparison;
+     not stored, not logged and not added to the index") and the caps from `limits.compare`; a file over
+     `max_body_bytes`, or an empty one, is refused in the browser with the size and the cap. The file's bytes
+     are sent as they are (never decoded in the browser, so the server can still refuse what isn't UTF-8),
+     and its name never leaves the browser.
+   - **Counts first.** A four-row table: Kept, Dropped, Not in the index, Added, each with its one-line
+     meaning and the server's `*_total`; then the file's accounting (records read, papers compared, records
+     from other venues, repeats). Every number is an API field, `reason_totals` included: nothing is counted
+     in the browser.
+   - **What "dropped" means** is said in place: the index holds the paper and this search doesn't return it;
+     Google Scholar matches full text and other word forms, which this search never does; a dropped paper is
+     not judged irrelevant. When some kept or dropped papers are in the index only because a RIS file was
+     imported (`kept_ris_only_total`, `dropped_ris_only_total`; each such row is marked "import only"), a
+     warning says a match to them shows the import holds the paper, not that the index covers it.
+   - **Lists on demand.** Each list is a section with its count, the reasons with their counts (`excluded by a
+     default filter`, `no exact match in its title or abstract`, `matches only as another word form`, …; an
+     unknown `reason` is shown as sent, the enum being open), a Show/Hide button (`aria-expanded`), and its
+     downloads. A row is the title (the file's own; a link to `/paper/[id]` with the query when the index
+     holds the paper), venue and year, its position in the file, how it was matched or why it wasn't, the
+     reason and the server's `detail`, and "import only" / "needs a person to decide" / "abstract withheld"
+     as text. A list draws 100 rows at a time ("Show more").
+   - **Downloads** are the response's own text saved as sent: each list's `csv`, and for Added also
+     `added_ris` (what `GET /export` writes for those papers). The browser builds no cell.
+   - **Never a stale answer.** The comparison is keyed by `(q, mode, index_version)`: after another search its
+     numbers are not shown ("The search changed since the last comparison…"; the chosen file stays, so one
+     click compares again). An answer from another index, or whose `total` isn't the shown search's, is
+     refused in place (the second is a bug, worded as one). Compare is off, with the reason, while the draft
+     is dirty or the results are stale, as Export and Save are.
+   - **Accessibility.** A native file input with a visible label; the result's heading takes focus when the
+     answer lands and a polite live region says "Comparison done: 51 kept, 1,756 dropped, 8 not in the index,
+     16 added."; refusals are alerts worded from the envelope, a 429 or `API_BUSY` with its countdown and
+     Retry; a running comparison can be cancelled. It fits 320 px (the table has two columns; titles wrap).
 
 ## Error handling
 
@@ -417,6 +455,15 @@ warnings, the save's index check), the design doc says so; its open questions li
   `reproduced`; targeted keyboard flows cover the primary editor, builder, filter, paging, export and save
   interactions, while axe samples success, error, expanded, dialog, builder, paper, record, coverage and
   syntax states in both themes at desktop and 320 px, and the footer's takedown contact is checked on the home,
-  search, paper and coverage pages at both widths.
+  search, paper and coverage pages at both widths. The fixture server offers comparisons (as a local
+  instance does): axe samples an answered comparison with a list open, and one test runs a comparison at
+  320 px and reads it by keyboard (focus on the result's heading, the counts, a list opened with Enter, no
+  sideways overflow, kept + added equal to the shown total). The ports are 8000 and 3000 unless
+  `OP_E2E_API_PORT` / `OP_E2E_WEB_PORT` move them, so a run can sit beside an instance already on them.
+- The comparison panel's unit tests answer with `compare-fixture.json`, this API's own `POST /compare`
+  response (`backend/tests/contract/compare_fixture.py`, kept current by
+  `test_frontend_compare_fixture.py`).
 - Visual regression on the search view (both themes), with platform-specific baselines and Linux CI on a
-  fixed `ubuntu-24.04` runner label (whose hosted image revision can still change).
+  fixed `ubuntu-24.04` runner label (whose hosted image revision can still change). What an instance's
+  configuration decides is left out of the baselines (`e2e/visual.css`): the footer's contact, and the
+  "Compare with your records" button, offered only where comparisons are on.

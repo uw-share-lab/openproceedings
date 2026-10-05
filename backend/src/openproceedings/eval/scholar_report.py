@@ -466,8 +466,8 @@ def _query(c: QueryComparison, review: Sequence[ReviewRow], meta: Meta) -> list[
         f"- Of the {_n(full)} `full_text` papers, {_n(full - full_own)} rest on a crawled record and {_n(full_own)} "
         "on a RIS-only record, whose title and abstract are the import's own.",
         f"- {_n(full_filtered)} of them also fail the default track or status filters.",
-        f"- **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in (see Method); "
-        f"which stemmer stands for Scholar's is an open decision for the project owner. With every searched "
+        f"- **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in, kept by "
+        f"decision-038 (see Method); it is not Google Scholar's stemmer, which is undocumented. With every searched "
         f"word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → "
         f"`evaluat*`), {prefix} `full_text` papers would match title or abstract. That is all this figure "
         "measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) "
@@ -500,6 +500,9 @@ _METHOD = """## Method
   Scholar's stemmer is undocumented, so this is a stated stand-in, not Scholar's rule; quoted words get forms too.
   A wider stemmer would move papers from `full_text` to `stemming`; each query's sensitivity line says how many
   would move if every word were replaced by its inflection stem read as a prefix, and nothing more than that.
+  Decision-038 keeps this stand-in and adopts no published stemmer, because that figure is at or near zero for
+  the review's strings; the `stemming` and `full_text` counts are relative to the stand-in, and the decision is
+  revisited for any string whose sensitivity is not near zero.
 - **`full_text`** is the residue: the record is in the corpus with an abstract, and the oracle confirms that no
   reading above matches its title or abstract. It may also fail the filters (counted under each finding). A
   record the corpus holds without an abstract is `unsettled`.
