@@ -109,11 +109,11 @@ a note.
 
 **After the calls.** A class moves its row to that class. `out_of_scope` takes the record out of the Scholar set
 and so out of the denominator. `in_both` moves the record to "in both" and pairs it with one index record: the
-row's own `op_id`, or else the one same-title record its evidence names (`Row.near`: for a record with no venue
+one same-title record its evidence names (`Row.near`: for a record with no venue
 string, the in-scope records of its year named after "same title:"), which must be one of that query's rows only
 in the result: it leaves that table, the two being one paper. An `in_both` call is refused when its row names
-none or several, when the paired record is not among the query's rows only in the result (a row's own `op_id`
-never is), when another `in_both` call pairs the same record, or when that record's own row has a call: no paper
+none or several, when the paired record is not among the query's rows only in the result (so a row with an
+`op_id` of its own is refused: `in_both` is for a row with no index record), when another `in_both` call pairs the same record, or when that record's own row has a call: no paper
 is counted in both twice. The pairing never parses `note`. Rows without a call keep the automation's class. Every table above
 the Human calls section, and the first figures of each Finding, are the automation's alone; the Finding adds an
 "After the calls" bullet with the roles beside it.

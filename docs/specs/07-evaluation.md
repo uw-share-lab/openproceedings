@@ -133,12 +133,12 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   checked like every cell the run writes), sorts it back.
 - **What a call does to the counts** (the "After the calls" tables, and a bullet under each Finding). A class
   moves its row to that class. `out_of_scope` (Scholar-side rows only) takes the record out of the Scholar set,
-  so out of the denominator. `in_both` (Scholar-side rows only) moves the record to "in both" and pairs it with
-  one index record: the row's own, or else the one same-title record its evidence names (`Row.near`, the
-  record named after "same title:"), which must be one of that query's rows only in the result: it leaves them,
-  the two being one paper. An `in_both` call is refused when the row's evidence names no such record or several,
-  when the record it pairs with is not among the query's rows only in the result (the row's own record never is:
-  it is in the index, not in the result), when another `in_both` call already pairs that record, or when the
+  so out of the denominator. `in_both` (Scholar-side rows with no index record of their own) moves the record to
+  "in both" and pairs it with the one same-title record its evidence names (`Row.near`, the record named after
+  "same title:"), which must be one of that query's rows only in the result: it leaves them, the two being one
+  paper. An `in_both` call is refused when the row's evidence names no such record or several, when the record
+  it pairs with is not among the query's rows only in the result (so a row with an index record of its own is
+  refused: that record is in the index, not in the result), when another `in_both` call already pairs that record, or when the
   record's own row has a call; so no paper is counted in both twice. The pairing never reads `note`. Rows without a call keep the automation's class. The tables above the
   Human calls section, and the Finding's first figures, stay the automation's alone.
 - **A call weighs what its role does.** The report prints each distinct `reviewer_role` with its row count beside
