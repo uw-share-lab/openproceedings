@@ -552,3 +552,132 @@ def test_a_kept_record_matched_to_a_shared_title_import_is_counted_under_in_both
     assert [(r.op_id, r.shared_title, r.auto_class) for r in c.kept] == [(nid("ris00009", 2026), True, "")]
     out = render(META, scope_and_match(read_ris(text, NAME), index, META.scope), index, [c], review_rows([c]))
     assert "| in both, matched to a RIS-only record whose title another index record has | 1 |" in out
+
+
+# --- a person's calls, read back (TASK-178) --------------------------------------------------------------------
+
+
+def fill(rows_file: Path, calls: dict[str, tuple[str, str, str]]) -> None:
+    """Fill `human_class`, `reviewer_role` and `note` on the rows whose op id or Scholar key is named."""
+    with rows_file.open(encoding="utf-8", newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    for r in rows:
+        if (key := r["op_id"] or r["scholar_key"]) in calls and r["query_name"] == "main":
+            r["human_class"], r["reviewer_role"], r["note"] = calls[key]
+    with rows_file.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, REVIEW_COLUMNS, lineterminator="\r\n")  # a spreadsheet's line ends
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+ALL_CALLED = {
+    nid("noab0001"): ("full_text", "second reviewer", "read the PDF"),
+    "set.ris#8": ("out_of_scope", "second reviewer", ""),
+    nid("miss0001"): ("scholar_missed", "second reviewer", ""),
+}
+
+
+@pytest.fixture
+def ran(data_dir: Path, inputs: tuple[Path, Path], tmp_path: Path) -> tuple[list[str], Path, Path]:
+    """One query run once: the command, the report and the review file."""
+    ris, queries = inputs
+    out = tmp_path / "results"
+    argv = args(data_dir, out, ris, "--query-file", str(queries), "--name", "main", "--check")
+    assert main(argv) == 0
+    return argv, out / "2026-10-04-scholar-comparison.md", out / "2026-10-04-scholar-comparison-review.csv"
+
+
+def test_an_unfilled_review_file_leaves_the_disagreements_unclassified(
+    ran: tuple[list[str], Path, Path],
+) -> None:
+    text = ran[1].read_text(encoding="utf-8")
+    assert "## Human calls\n\nNone yet: no row of the review file has a `human_class`." in text
+    assert (
+        "**Every disagreement classified: no.** `our_bug` by the automation: 0; by a person: 0; rows left for a "
+        "person that have no call yet: 3."
+    ) in text
+
+
+def test_a_filled_review_file_is_read_back_and_left_as_it_is(
+    ran: tuple[list[str], Path, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv, report_file, rows_file = ran
+    fill(rows_file, ALL_CALLED)
+    before = rows_file.read_bytes()
+    capsys.readouterr()
+    assert main(argv) == 0
+    assert rows_file.read_bytes() == before  # never rewritten, whatever its line ends
+    text = report_file.read_text(encoding="utf-8")
+    assert (
+        f"Read from `{rows_file.name}` (sha256 `" in text and "3 of its 4 rows have a person's call." in text
+    )
+    assert "| `main` | 3 | 3 | 1 | 0 | 0 |" in text
+    for line in (
+        "| `main` | `coverage_gap` | `out_of_scope` | 1 |",
+        "| `main` | `scholar_missed` | `scholar_missed` | 1 |",
+        "| `main` | `unsettled` | `full_text` | 1 |",
+        "**Every disagreement classified: yes.** `our_bug` by the automation: 0; by a person: 0; rows left for a "
+        "person that have no call yet: 0.",
+    ):
+        assert line in text.splitlines(), line
+    err = capsys.readouterr().err
+    assert "as it is: 3 of 4 rows have a person's call" in err and "every disagreement classified: yes" in err
+    assert (
+        "second reviewer" not in text and "read the PDF" not in text
+    )  # the report counts calls, it quotes none
+
+
+def test_a_spot_check_call_is_compared_with_the_automated_class(ran: tuple[list[str], Path, Path]) -> None:
+    argv, report_file, rows_file = ran
+    with rows_file.open(encoding="utf-8", newline="") as fh:
+        [spot] = [r for r in csv.DictReader(fh) if r["row_kind"] == SPOT]
+    fill(rows_file, {**ALL_CALLED, spot["op_id"]: (spot["auto_class"], "second reviewer", "")})
+    assert main(argv) == 0
+    assert "| `main` | 3 | 3 | 1 | 1 | 1 |" in report_file.read_text(encoding="utf-8")
+
+
+def test_a_persons_our_bug_fails_the_check_and_is_named(ran: tuple[list[str], Path, Path]) -> None:
+    argv, report_file, rows_file = ran
+    fill(rows_file, {**ALL_CALLED, nid("miss0001"): ("our_bug", "second reviewer", "")})
+    assert main(argv) == 1  # --check
+    text = report_file.read_text(encoding="utf-8")
+    assert "**A person called 1 row(s) `our_bug`.**" in text and f"`main` `{nid('miss0001')}`" in text
+    assert "**Every disagreement classified: no.** `our_bug` by the automation: 0; by a person: 1;" in text
+
+
+@pytest.mark.parametrize(
+    ("call", "message"),
+    [
+        (("probably fine", "second reviewer", ""), "human_class must be one of our_bug, filtered"),
+        (("", "second reviewer", ""), "the row has a role or a note but no class"),
+        (("", "", "looked at it"), "the row has a role or a note but no class"),
+        (("full_text", "", ""), "a human_class needs a reviewer_role"),
+        (("unsettled", "second reviewer", ""), "human_class must be one of"),  # a person settles it
+    ],
+)
+def test_a_malformed_call_is_refused_and_nothing_is_written(
+    ran: tuple[list[str], Path, Path],
+    call: tuple[str, str, str],
+    message: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    argv, report_file, rows_file = ran
+    fill(rows_file, {nid("noab0001"): call})
+    before = (report_file.read_bytes(), rows_file.read_bytes())
+    capsys.readouterr()
+    assert main(argv) == 1
+    assert message in capsys.readouterr().err
+    assert (report_file.read_bytes(), rows_file.read_bytes()) == before
+
+
+def test_calls_for_another_runs_rows_are_refused_not_carried_over(
+    ran: tuple[list[str], Path, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv, report_file, rows_file = ran
+    fill(rows_file, ALL_CALLED)
+    before = (report_file.read_bytes(), rows_file.read_bytes())
+    other = [a if a != "main" else "pop" for a in argv]  # another query: other rows
+    capsys.readouterr()
+    assert main(other) == 1
+    assert "holds a person's calls for other rows than this run writes" in capsys.readouterr().err
+    assert (report_file.read_bytes(), rows_file.read_bytes()) == before

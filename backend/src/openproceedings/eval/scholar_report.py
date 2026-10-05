@@ -7,6 +7,9 @@ writes. A figure in the report is a count of rows of one run; nothing is typed i
 set of inputs (why this export, what its searches returned) is read from a notes file and printed verbatim
 under its sha256, as the coverage report reads its cause notes.
 
+Once a person has filled the review file, the same command reads the calls back (`read_calls`): the file is
+left as it is, and the report gains what the person decided and whether every disagreement is classified.
+
 `review.csv` holds every row the automation couldn't settle, plus a tenth of each query's settled disagreements
 as a spot check. The tenth is the rows whose sha256 (of query name, side and ids) sorts first: fixed for a
 given run, unrelated to any field, and the same on every machine, so the file is reproducible. `human_class`,
@@ -20,7 +23,7 @@ import hashlib
 import io
 import math
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -137,6 +140,162 @@ def render_review(rows: Sequence[ReviewRow], index_version: str) -> str:
         )  # fmt: skip
         writer.writerow(csv_cell(c) for c in cells)
     return buffer.getvalue()
+
+
+# --- a person's calls, read back ------------------------------------------------------------------------------
+
+HUMAN_COLUMNS = ("human_class", "reviewer_role", "note")
+IN_BOTH = "in_both"  # the record is the same paper as one in the result: no disagreement after all
+OUT_OF_SCOPE = (
+    "out_of_scope"  # the record is no paper of the scope's venues and years (Scholar's venue is wrong)
+)
+# what a person may write in `human_class`: a class of the protocol, or one of the two verdicts above
+HUMAN_CLASSES = (
+    OUR_BUG, FILTERED, COMPAT_READING, COVERAGE_GAP, STEMMING, FULL_TEXT, SCHOLAR_CAP, SCHOLAR_MISSED, IN_BOTH,
+    OUT_OF_SCOPE,
+)  # fmt: skip
+
+type CallKey = tuple[str, str, str, str]  # (query name, side, scholar key, op id): one review row
+
+
+@dataclass(frozen=True)
+class Call:
+    human_class: str
+    reviewer_role: str
+    note: str
+
+
+@dataclass(frozen=True)
+class HumanCalls:
+    """The filled rows of a review file, by row, with the file's name and sha256 for the report's header."""
+
+    name: str
+    sha256: str
+    calls: Mapping[CallKey, Call]
+
+
+def _blanked(text: str) -> list[list[str]]:
+    """A review file's rows with the person's three columns emptied: what the run itself wrote."""
+    rows = list(csv.reader(io.StringIO(text)))
+    if not rows:
+        return rows
+    at = [rows[0].index(c) for c in HUMAN_COLUMNS if c in rows[0]]
+    return [rows[0], *([("" if k in at else v) for k, v in enumerate(r)] for r in rows[1:])]
+
+
+def read_calls(review_file: Path, expected: str) -> HumanCalls | None:
+    """The calls a person filled into `review_file`, or None when there is no file or nothing is filled.
+    `expected` is the review text this run would write. ValueError when the file's rows are not this run's (it
+    belongs to another index or set: move it, or write elsewhere), when a `human_class` is not one of
+    HUMAN_CLASSES, or when a row has a role or a note without a class, or a class without a `reviewer_role`."""
+    if not human_calls(review_file):
+        return None
+    data = review_file.read_bytes()
+    text = data.decode("utf-8-sig")
+    if _blanked(text) != _blanked(expected):
+        raise ValueError(
+            f"{review_file.name} holds a person's calls for other rows than this run writes (another index, set "
+            "or query): move it, or write elsewhere (--out, --date)"
+        )
+    calls: dict[CallKey, Call] = {}
+    for n, row in enumerate(csv.DictReader(io.StringIO(text)), 2):
+        cls, role, note = (row[c].strip() for c in HUMAN_COLUMNS)
+        if not (cls or role or note):
+            continue
+        if cls not in HUMAN_CLASSES:
+            raise ValueError(
+                f"{review_file.name} line {n}: human_class must be one of {', '.join(HUMAN_CLASSES)}"
+                + ("" if cls else " (the row has a role or a note but no class)")
+            )
+        if not role:
+            raise ValueError(
+                f"{review_file.name} line {n}: a human_class needs a reviewer_role (a role, not a name)"
+            )
+        calls[(row["query_name"], row["side"], row["scholar_key"], row["op_id"])] = Call(cls, role, note)
+    return HumanCalls(review_file.name, hashlib.sha256(data).hexdigest(), calls)
+
+
+def human_bugs(calls: HumanCalls | None) -> int:
+    """How many rows a person called `our_bug`."""
+    return 0 if calls is None else sum(c.human_class == OUR_BUG for c in calls.calls.values())
+
+
+def _key(x: ReviewRow) -> CallKey:
+    return (x.query_name, x.row.side, x.row.scholar_key, x.row.op_id)
+
+
+def classified(
+    comparisons: Sequence[QueryComparison], review: Sequence[ReviewRow], calls: HumanCalls | None
+) -> bool:
+    """Spec 07 §B's bar: no `our_bug`, by the automation or by a person, and every row the automation left for a
+    person has that person's call."""
+    made = calls.calls if calls is not None else {}
+    waiting = sum(x.kind == UNRESOLVED and _key(x) not in made for x in review)
+    return not (sum(c.our_bug for c in comparisons) or human_bugs(calls) or waiting)
+
+
+def _human(
+    comparisons: Sequence[QueryComparison], review: Sequence[ReviewRow], calls: HumanCalls | None
+) -> list[str]:
+    """The section that reads the review file back: what a person decided, per query, and whether every
+    disagreement is now classified."""
+    made = calls.calls if calls is not None else {}
+    lines = ["## Human calls", ""]
+    if calls is None:
+        lines += [
+            "None yet: no row of the review file has a `human_class`. A person fills `human_class` (one of "
+            + ", ".join(f"`{c}`" for c in HUMAN_CLASSES)
+            + "), `reviewer_role` (a role, never a name) and, if wanted, `note`; running the same command again "
+            "then reads the calls back into this section and leaves the file as it is.",
+            "",
+        ]
+    else:
+        lines += [
+            f"Read from `{calls.name}` (sha256 `{calls.sha256}`): {_n(len(made))} of its {_n(len(review))} rows "
+            "have a person's call. `in_both` means the record is the same paper as one in the result; "
+            "`out_of_scope` that it is no paper of the scope's venues and years.",
+            "",
+            "| query | unresolved rows | called | spot-check rows | called | agree with the automated class |",
+            "|---|---|---|---|---|---|",
+        ]
+        for c in comparisons:
+            mine = [x for x in review if x.query_name == c.name]
+            open_rows = [x for x in mine if x.kind == UNRESOLVED]
+            spot = [x for x in mine if x.kind == SPOT]
+            spot_called = [x for x in spot if _key(x) in made]
+            agree = sum(made[_key(x)].human_class == x.row.auto_class for x in spot_called)
+            lines.append(
+                f"| `{c.name}` | {_n(len(open_rows))} | {_n(sum(_key(x) in made for x in open_rows))} "
+                f"| {_n(len(spot))} | {_n(len(spot_called))} | {_n(agree)} |"
+            )
+        pairs = Counter(
+            (x.query_name, x.row.auto_class, made[_key(x)].human_class) for x in review if _key(x) in made
+        )
+        lines += [
+            "",
+            "| query | automated class | human class | rows |",
+            "|---|---|---|---|",
+            *(f"| `{q}` | `{auto}` | `{human}` | {_n(k)} |" for (q, auto, human), k in sorted(pairs.items())),
+            "",
+        ]
+        flagged = [x for x in review if _key(x) in made and made[_key(x)].human_class == OUR_BUG]
+        if flagged:
+            lines += [
+                f"**A person called {_n(len(flagged))} row(s) `our_bug`.** Each is a Must-fix with a golden case "
+                "(spec 07 §Error handling): "
+                + "; ".join(f"`{x.query_name}` `{x.row.op_id or x.row.scholar_key}`" for x in flagged)
+                + ".",
+                "",
+            ]
+    waiting = sum(x.kind == UNRESOLVED and _key(x) not in made for x in review)
+    bugs = sum(c.our_bug for c in comparisons)
+    lines += [
+        f"**Every disagreement classified: {'yes' if classified(comparisons, review, calls) else 'no'}.** "
+        f"`our_bug` by the automation: {bugs}; by a person: {human_bugs(calls)}; rows left for a person that have "
+        f"no call yet: {_n(waiting)}.",
+        "",
+    ]
+    return lines
 
 
 # --- the report -------------------------------------------------------------------------------------------------
@@ -522,8 +681,9 @@ def render(
     index: MatchIndex,
     comparisons: Sequence[QueryComparison],
     review: Sequence[ReviewRow],
+    calls: HumanCalls | None = None,
 ) -> str:
-    """The report's Markdown."""
+    """The report's Markdown. `calls` are a person's calls read back from the review file (`read_calls`)."""
     bugs = sum(c.our_bug for c in comparisons)
     unresolved = sum(x.kind == UNRESOLVED for x in review)
     matched = [e.match.op_id for e in side.entries if e.match.op_id is not None]
@@ -579,6 +739,7 @@ def render(
     lines += _matching(side, index, meta)
     for c in comparisons:
         lines += _query(c, review, meta)
+    lines += _human(comparisons, review, calls)
     lines += [_METHOD]
     if meta.notes:
         lines += ["## Notes on these inputs", "", meta.notes.strip(), ""]
@@ -603,11 +764,18 @@ def human_calls(review_file: Path) -> int:
         )
 
 
-def write(text: str, review: str, out_dir: Path, day: date) -> tuple[Path, Path, bool]:
+def write(
+    text: str, review: str, out_dir: Path, day: date, *, keep_review: bool = False
+) -> tuple[Path, Path, bool]:
     """The report and its review rows under `out_dir`, each written atomically; whether a report was replaced.
-    ValueError, and nothing written, when the review file there already holds a person's calls: a re-run never
-    erases them."""
+    With `keep_review` (the file there holds a person's calls for exactly these rows: `read_calls`), only the
+    report is written and the review file is left byte for byte. Otherwise ValueError, and nothing written,
+    when the review file there already holds a person's calls: a re-run never erases them."""
     path, rows = out_dir / report_name(day), out_dir / review_name(day)
+    if keep_review:
+        replaced = path.exists()
+        storage.write_bytes(path, text.encode("utf-8"))
+        return path, rows, replaced
     if filled := human_calls(rows):
         raise ValueError(
             f"{rows.name} holds {filled} row(s) a person filled in; move it, or write elsewhere (--out, --date)"

@@ -23,7 +23,15 @@
   (1,805 of the set's records, their ids from scholarmend's claims). Where a crawl holds the paper too, the two
   are merged and the record has an independent source; where none does, the index record is the import alone.
   On the 2026-09-29 snapshot that was 530 of the matched papers, nearly all of them 2026, which no crawl had
-  reached. The 2026 OpenReview crawl (snapshot `2026-10-05-47d4e190ca81`, TASK-178) merged almost all of them
-  into crawled records. "What the matches rest on" counts the two kinds apart for the index a report ran on.
+  reached (`docs/results/2026-10-04-scholar-comparison.md`). The 2026 OpenReview crawl (TASK-178) merged all but
+  7, and the dedup fix of TASK-179 merged those. "What the matches rest on" counts the two kinds apart for the
+  index a report ran on.
+- **The superseded run of 2026-10-05.** A report of this date first ran on index `5ec5231adae2` (snapshot
+  `2026-10-05-47d4e190ca81`, 133,632 records), the first build after the 2026 crawl. That snapshot still held 7
+  imported records as unmerged second copies of crawled papers (ICLR 2024 ×1, 2025 ×3, 2026 ×3), and lacked 4
+  papers refused for a control character in their title. TASK-179 and TASK-180 fixed both, the snapshot was
+  rebuilt (`2026-10-05-10b5a205a63f`, 133,629 records), and that report was replaced by this one. On the
+  superseded index 1,800 matched papers rested on a crawled record and 7 on the import alone; the class counts
+  differed only by those 7.
 - **Matching.** This report matches the set by URL and title, as it would any RIS file, not by the import's
   ids.

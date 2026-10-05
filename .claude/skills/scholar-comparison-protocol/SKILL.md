@@ -64,7 +64,8 @@ with that index matches those records to themselves: such a match shows nothing 
 classes are judged on is the import's own, and in a venue-year with no crawled record nothing can be only in
 openproceedings. On index `05a0541717f6`, 530 of the 1,807 matched papers were RIS-only (ICLR 2026 415, ICML
 2026 111, ICLR 2025 3, ICLR 2024 1), and no 2026 record was crawled. After the 2026 crawl (index `5ec5231adae2`,
-TASK-178) 7 remain, each an unmerged second copy of a crawled paper. So every row carries whether its record has
+TASK-178) 7 remained, each an unmerged second copy of a crawled paper; TASK-179 merged them, and on index
+`fd13d8d27535` no match is RIS-only. So every row carries whether its record has
 an independent source (`Row.independent`; `record_source` in `review.csv`) and its abstract's source, and the
 report gives each count for crawled and RIS-only records apart, with a per-venue-year table. A RIS-only match
 whose title another index record shares is `unsettled` (one paper under two ids, or a wrong mended venue or year).
@@ -84,6 +85,20 @@ every `coverage_gap` (a gap and a record Scholar filed under the wrong venue loo
 (query name, side, ids) sorts first: fixed for a run, unrelated to any field. `op eval scholar` refuses to
 replace a review file in which a person has filled anything. Two further columns, `record_source` (`crawled` or
 `ris_only`) and `abstract_source`, say what the row's index record rests on.
+
+**Filling it in, and reading it back.** A person fills three columns and nothing else: `human_class`, one of
+`our_bug`, `filtered`, `compat_reading`, `coverage_gap`, `stemming`, `full_text`, `scholar_cap`,
+`scholar_missed`, `in_both` (the record is the same paper as one in the result) or `out_of_scope` (it is no
+paper of the scope's venues and years: Scholar's venue or year is wrong); `reviewer_role`, a role, never a
+name, required with a class; and `note`, free text. `unsettled` is not a call. Then run the same
+`op eval scholar` command again (same inputs, `--index`, `--date`, `--out`): it checks that the file's rows
+are exactly the rows the run writes, leaves the file byte for byte, and rewrites only the report, whose
+"Human calls" section counts the calls per query (unresolved rows called, spot-check rows called and how many
+agree with the automated class, automated × human class), names any row a person called `our_bug`, and ends
+with **Every disagreement classified: yes/no**. "Yes" needs no `our_bug` by the automation or a person and a
+call on every unresolved row; that line is what closes spec 07 §B's bar. `--check` exits 1 on a person's
+`our_bug` too. A malformed call, or a filled file whose rows belong to another run, is refused and nothing is
+written. The report counts calls; it never quotes a role or a note.
 
 ## Report — `docs/results/<YYYY-MM-DD>-scholar-comparison.md`
 Header: date, `index_version`, `tokenizer_version`, Scholar export hash, queries run. Per query: sizes
