@@ -56,6 +56,16 @@ break. `make lint` and `make tooling` always run (the pre-push hook runs them to
 A diff that spans rows runs the union. When in doubt, run `make test`. The PR's **Tests** section says exactly
 what ran locally, and that CI runs the full suite; never claim a full-suite pass that wasn't run.
 
+### Several sessions on one machine (2026-10-05)
+When agent sessions work in parallel worktrees, the full suite belongs to one of them at a time (two at once
+took the load past 100 and failed Hypothesis deadlines and editor tests that were not broken); the others run
+the affected tests. A long command runs in the **foreground**, behind a wait for the load if need be
+(`until [ "$(uptime | sed 's/.*load averages: \([0-9]*\).*/\1/')" -lt 30 ]; do sleep 20; done; make test`):
+a session that backgrounds its run and waits to be told can stop with its work uncommitted. Scratch files are
+named after the task (`t181-test.log`), never `test.log`. Nothing a session starts listens on 8000 or 3000
+(`OP_E2E_API_PORT` / `OP_E2E_WEB_PORT` for e2e). A session in a worktree reports its follow-ups; it creates no
+Backlog ids.
+
 The learnings commit comes **before** the review because the review record is keyed to the exact HEAD
 sha. Any commit after an approval — a typo fix, a rebase, an amend — produces a new sha with no record, and
 `require-review.sh` blocks the push until `/review-gate` runs again.
