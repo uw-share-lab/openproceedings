@@ -159,7 +159,9 @@ def test_a_capped_title_or_abstract_is_still_one_a_record_accepts(text: str) -> 
     # TASK-155 security round 3: decomposing every character of a trimmed run in NFKD turned a spacing accent
     # (`´` is a space and a mark to NFKD) into two spaces, which the record refuses, aborting the build
     title = " ".join(text.split())
-    abstract = title.strip("…").strip()
+    # every leading and trailing `…` and space: an abstract may not start or end with `…` (a Scholar snippet),
+    # and stripping `…` then spaces once left `… …x` as `…x` (found by the nightly profile, 2026-10-05)
+    abstract = title.strip("… ")
     if not title or not abstract:
         return
     capped_title, capped_abstract = cap("title", title)[0], cap("abstract", abstract)[0]

@@ -11,11 +11,12 @@ from __future__ import annotations
 import random
 from collections import Counter
 
-from hypothesis import event, example, given
+from hypothesis import assume, event, example, given
 from hypothesis import strategies as st
 from openproceedings.ingest import urls
 from openproceedings.ingest.dedup import (
     IMPORTED,
+    PROCEEDINGS_SOURCES,
     PROCEEDINGS_TRACKS,
     DedupResult,
     abstract_key,
@@ -549,6 +550,17 @@ def test_an_abstract_merge_always_holds_an_imported_record_and_its_abstract(xs: 
     """Step 3 (TASK-179): every `abstract_venue_year` row joins two clusters of one venue and year that both keep
     an abstract with the row's key, into a group that held an imported record (sources `ris` alone) before the
     step; and a pool with no imported record has no such row."""
+    # a proceedings page lists accepted papers only (`unknown` is reconcile's absence), so a listing never claims
+    # `rejected`; `records` draws any status for any source, and the status check below holds for real listings
+    # (the nightly profile drew an `iclr_archive` record claiming `rejected`, 2026-10-05)
+    assume(
+        all(
+            c.value in {"accepted", "unknown"}
+            for x in xs
+            for c in x.provenance
+            if c.field == "status" and c.source in PROCEEDINGS_SOURCES
+        )
+    )
     result = dedup(xs)
     note(result)
     rows = [m for m in result.merges if m.rule == "abstract_venue_year"]
