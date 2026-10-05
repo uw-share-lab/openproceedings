@@ -20,7 +20,7 @@ and the facet memo. The result is the sequential one, field for field
 a record's save or replay) doesn't pay for every facet combination its exclusion accounting would never read:
 it aggregates only the two default fields (`TantivyEngine.facets`' `over`; TASK-166), the same counts.
 
-When asked (`groups`, the API's `max_counted_groups`; TASK-176), a query that is an AND of two or more
+When asked (`groups`, the API's `max_counted_groups`; TASK-176, decision-034), a query that is an AND of two or more
 concept groups (`query/groups.py`) also gets two counts a group: the group alone (the query with every other
 group removed) and the query without it (leave-one-out), counted by `TantivyEngine.counts` on a second worker,
 beside the facets. Those trees hold only clauses of the effective tree, compiled first, so their worker never
