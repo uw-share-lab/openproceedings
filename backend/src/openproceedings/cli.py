@@ -306,6 +306,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="position-verified clauses one query may have (default 16, a backstop; decision-010); with the rate limit on, times each clause's cost it must fit the smaller bucket",
     )
     serve.add_argument(
+        "--max-counted-groups",
+        type=int,
+        default=10,
+        help="concept groups /search counts alone for one query (default 10); a query with more gets its "
+        "result without group counts",
+    )
+    serve.add_argument(
         "--max-verification-seconds",
         type=float,
         default=30.0,
@@ -1442,6 +1449,7 @@ def _serve(ns: argparse.Namespace) -> int:
             max_verified_clauses=ns.max_verified_clauses,
             max_verification_candidates=ns.max_verification_candidates,
             max_verification_seconds=ns.max_verification_seconds,
+            max_counted_groups=ns.max_counted_groups,
             serve_docs=loopback if ns.docs is None else ns.docs,
             # a public instance never starts without its takedown list (TASK-067): off loopback, or behind a
             # proxy on the same host (a trusted proxy means clients reach it); an empty list lists nothing

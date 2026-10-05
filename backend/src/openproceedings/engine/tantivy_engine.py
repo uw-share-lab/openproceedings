@@ -416,6 +416,19 @@ class TantivyEngine:
             out[f] = dict(sorted(counts.items()))
         return out
 
+    def count(self, ast: Node, *, scope: Scope | None = None) -> int:
+        """How many documents match `ast`: `len(match_ids(ast))`, without reading an id (TASK-176: a concept
+        group's count, `search.run`). Counted as a facet is: the tree's top-level filters (`Filter`, or `NOT`
+        of one) are set aside, the rest is collected once per combination of (venue, year, track, status)
+        (`combos`, memoised per base: another page, and the same group under other filters, never collect
+        again), and the combos passing every filter are summed. A filter depends only on its field's value,
+        so the sum is exact (`test_group_counts.py` holds it to `match_ids` and to ReferenceEngine)."""
+        self.expansions(ast)  # the cap applies, as for every tree an engine is given
+        conjuncts = _conjuncts(ast)
+        filters = [(COMBO.index(f), c) for c in conjuncts if (f := _filter_field(c)) is not None]
+        combos = self.combos([c for c in conjuncts if _filter_field(c) is None], scope)
+        return sum(n for combo, n in combos if all(_passes(c, combo[at]) for at, c in filters))
+
     def combos(
         self, base: list[Node], scope: Scope | None = None, over: tuple[str, ...] = COMBO
     ) -> tuple[tuple[Combo, int], ...]:

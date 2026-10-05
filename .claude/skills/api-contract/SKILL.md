@@ -24,7 +24,8 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 `query {input, canonical, canonical_hash, identification_query, warnings[], translations[],
 expansions{pattern: [terms]}}`,
 `index_version`, `tokenizer_version`, `query_version`, `total`, `excluded`, `identified_total`,
-`unclassified_total`, `facets`, `hits[]`. Each hit
+`unclassified_total`, `facets`, `groups {counts[{span, total}], groups_total, limit, not_counted}` (TASK-176:
+each concept group's count alone, the query with every other group removed; spec 04 §SearchResponse), `hits[]`. Each hit
 has `id, title, abstract, authors, venue, year, track, status, presentation, score, highlights{field:
 [[start,end]]}, urls, abstract_source{source, origin, url}|null` (the claim the abstract came from, the site that
 published it, for `ris` read from the claim's evidence, and the paper's page there; TASK-134, decision-018;

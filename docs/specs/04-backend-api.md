@@ -125,6 +125,8 @@ reviews without the UI.
   "identified_total": 716,
   "unclassified_total": 0,
   "facets": { "venue": {...}, "year": {...}, "track": {...}, "status": {...} },
+  "groups": { "counts": [ { "span": [0, 19], "total": 1873 }, { "span": [24, 33], "total": 2410 } ],
+              "groups_total": 2, "limit": 10, "not_counted": null },
   "hits": [ { "id": "...", "title": "...", "abstract": "...", "authors": [...], "venue": "ICLR",
               "year": 2025, "track": "main", "status": "accepted", "presentation": "poster", "score": 12.3,
               "highlights": { "title": [[0,5]], "abstract": [[102,114]] }, "urls": {...},
@@ -188,6 +190,64 @@ and `unclassified_total` is `excluded.track.unknown + excluded.status.unknown`. 
 
 `facets` are disjunctive: each facet field is counted over the matched set with every filter applied **except that field's own top-level conjuncts** (a filter nested under an `OR` stays applied; decision-001). So the track facet still shows how many workshop papers you would get by including them. Clicking a facet in the UI
 rewrites the query (guarantee 3). No hidden facet state exists.
+
+`groups` (TASK-176, additive) shows which concept group narrows a query that is an AND of several:
+
+```jsonc
+"groups": { "counts": [ { "span": [0, 75], "total": 6343 }, { "span": [80, 143], "total": 529 },
+                        { "span": [148, 203], "total": 9303 } ],
+            "groups_total": 3, "limit": 10, "not_counted": null }
+```
+
+**A group's count is the number of papers the query matches with every other group removed**: that group
+alone, under the query's own top-level filters (the default track and status filters included, where they
+apply) and its `NOT` clauses. "Top-level" is the facets' and the default filters' notion (decision-001): the
+canonical tree's top-level AND conjuncts, parenthesised AND groups flattened (`query/groups.py`, which reads
+the effective tree). Of those conjuncts:
+
+| Conjunct | Is | Example |
+|---|---|---|
+| searches text and is not negated: a term, wildcard, phrase or NEAR, or an OR holding one (beside a filter too) | a **group**, counted | `(trust OR reliance)`, `calibrat*`, `(llm OR venue:ICLR)` |
+| a filter clause: a filter, `NOT` of one, an OR of filters; the inserted defaults too | kept for every group | `year:2020..2026`, `NOT track:workshop`, `(venue:ICLR OR track:workshop)` |
+| a negated text conjunct (the builder's leave-out terms) | kept for every group | `NOT survey` |
+
+So every count is taken under the same limits as `total` and as every other count: none is below `total`, and
+the smallest names the group that narrows the search most on its own. The example is the 2026-10-04 Trust-Evals
+string on index `05a0541717f6` (Scholar mode; `total` 67): 6,343 papers match its LLM group alone, 529 its
+trust group, 9,303 its benchmark group, each within the three venues, 2020–2026 and the default filters
+(index-wide, with no filter at all, they match 15,724, 1,340 and 18,871).
+
+- `counts` is in query order. `span` is the group's code-point range in `q`: its node in `ast`, parentheses
+  included. The canonical form decides what a group is, so a group written twice is one group (at the first
+  one's span) and a group that repeats one term (`(model OR model)`) is that term, at the first one's span.
+- `groups_total` is how many groups the query has; `limit` is the most this instance counts for one query
+  (`ApiConfig.max_counted_groups`, default 10; `op serve --max-counted-groups`).
+- `not_counted` says why `counts` is empty, and is null exactly when it isn't (an open enum, decision-009):
+  `fewer_than_two_groups` (the query is not an AND of groups: one group, or one group with limits and
+  leave-out terms, whose count would be `total`), or `too_many_groups` (`groups_total` is over `limit`). Either
+  way the search itself is whole: `total`, `hits`, `facets` and `excluded` are what they would be.
+- **Exact, and it changes nothing.** A count is `|match_ids|` of the group's tree on the request's one engine
+  (`TantivyEngine.count`), equal to ReferenceEngine's count of the same tree on generated queries
+  (`tests/unit/test_group_counts.py`, `tests/contract/test_group_counts.py`). It is a function of the canonical
+  query and the `index_version` alone (guarantee 4; a span follows `q` as typed, like a diagnostic's), the same
+  on every page and sort, and nothing the page, `total`, the facets or `excluded` are computed from reads it
+  (guarantee 5): a search with its groups is the search without them, field for field, plus `groups`.
+- **Cost (decision-010).** Counting adds no position verification: a group's tree holds only clauses of the
+  query's own effective tree, which the request compiled, and verified, in its own thread before the counting
+  worker starts, so the query's verified-clause cap, candidate ceiling and charge already cover every clause
+  a count reads, and the worker gets the request's read-only view (`Scope.reader`, as the facet worker does:
+  it never takes a verification slot). What it adds is at most `limit` collections, one a group, each the
+  facets' own kind (`TantivyEngine.combos`: the group and the kept non-filter conjuncts collected once per
+  (venue, year, track, status) combination, the filters applied to the combos, memoised per base in
+  `faceted`, so another page, a facet click and a later query with the same group collect nothing). They run
+  on a second worker beside the facets, and cost no rate-limit token of their own. Measured on the real
+  95,877-record index (`05a0541717f6`, load 22–28): the example query's search took a median 31.4 ms without
+  its group counts and 32.0 ms with them (facet memo cleared each run; 30.2 and 30.7 ms warm); a query of 10
+  broad one-word groups (8,388 to 27,741 papers each), the most an instance counts by default, 5.2 ms
+  without and 16.7 ms with. A query over the limit is not refused: it gets its result without counts and
+  `not_counted: "too_many_groups"`.
+- Only `/search` sends it. `op search`, a record's save and replay, and an export run the same search without
+  it (`search.run`'s `groups` is unset), and a search record stores no group counts.
 
 ## Exports (built to be imported into Covidence)
 
@@ -715,7 +775,8 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     (`tantivy_engine.Scope`; a compiled-memo hit brings its tree's ids along, round 4), so a memo trimmed
     meanwhile never makes it verify a clause twice, and the facet worker never verifies at all
     (`Scope.reader`): only the calling thread holds a slot. Should the worker miss a clause anyway (a bug),
-    the caller recounts the facets itself and logs `facet_worker_recounted` (WARNING), never a 500. A clause's
+    the caller recounts the facets itself and logs `facet_worker_recounted` (WARNING), never a 500 (the
+    group-count worker likewise: `group_worker_recounted`, TASK-176). A clause's
     cost per candidate doesn't depend on its width or expansions (its token sets are built once per clause,
     round 4: a 300-item `rel*` phrase at 80k took 84 s before, 3.1 s after, like a 2-item one), so the
     candidate count is the whole bound. **The slot time used is charged after the fact**: a request that
@@ -755,6 +816,8 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     what a route adds with `deps.annotate`/`annotate_parse`: `canonical_hash`, `total`, `token_count`,
     `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`), `verified_clauses`
     (the query's, a replay's too), `verification_candidates` (their candidates, summed; absent with none),
+    `groups` and `groups_counted` (`/search` only, TASK-176: how many concept groups the query has, and how
+    many were counted alone, all of them or 0),
     `verify_ms` (the wall time the request held a verification slot; absent when it held none), `busy`
     (`pinned_open` on a 503 `API_BUSY` because another version's open, or another request's open of the same
     version, outlasted `pinned_open_wait_seconds`; TASK-067),
@@ -785,7 +848,7 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     it held the slot every other cold verification was 503 `API_BUSY`.
   - `op serve [--host] [--port] [--index] [--cors-origin …] [--trusted-proxy …] [--rate-capacity]
     [--rate-refill] [--export-weight] [--no-rate-limit] [--max-verified-clauses]
-    [--max-verification-candidates] [--max-verification-seconds] [--log-query-text]` refuses an invalid combination as usage, naming each
+    [--max-verification-candidates] [--max-verification-seconds] [--max-counted-groups] [--log-query-text]` refuses an invalid combination as usage, naming each
     option and the validator's reason (never the value pydantic would quote), and runs one uvicorn process with
     its own access log off, `proxy_headers` off, and a 64 KiB request-head limit (uvicorn's 16 KiB would
     refuse a valid 2,000-code-point query in the URL). **Deploy note:** `GET /search?q=…` carries the query
@@ -832,7 +895,8 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   - `GET /search` calls `openproceedings.search.run`, the function `op search` calls, on the one engine
     the request read. It expands every wildcard first, then collects the match set once for `total` and the
     page, then does exclusion accounting with that `total`, then reads the page's display records. The API
-    also asks for the facets (`TantivyEngine.facets`) and each hit's highlights (`engine/highlight.py`), so
+    also asks for the facets (`TantivyEngine.facets`), each hit's highlights (`engine/highlight.py`) and
+    each concept group's count alone (`groups`, §SearchResponse; TASK-176), so
     its ids, order, `total` and `excluded` equal `op search`'s for the same query and index (a contract
     test compares them). Parameters: `q` (required), `mode` (`native` | `scholar`, default `native`),
     `sort` (`relevance` | `year_desc` | `year_asc` | `title`, default `relevance`), `offset` (≥ 0,
@@ -1074,3 +1138,10 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   `status: "mismatch"` plus one `API_REPLAY_MISMATCH` ERROR log line.
 - An export with `record_id` of a `mismatch` record returns 409 `API_RECORD_MISMATCH` and streams nothing; of a record whose index is gone, 409 `API_INDEX_VERSION_UNAVAILABLE`; of a record whose query version drifted, exactly its stored ids.
 - An OpenAPI snapshot test, so any contract change shows up in the PR diff.
+- Group counts (TASK-176): which conjuncts are groups, on hand cases; `TantivyEngine.count` equal to
+  `match_ids` and to ReferenceEngine on generated ANDs of trees with top-level filters; `search.run` with its
+  groups equal, field for field, to the search without them, with the oracle's counts, on the Trust-Evals
+  strings; no clause verified again and none by a worker; the limit; the access line
+  (`tests/unit/test_group_counts.py`, `tests/contract/test_group_counts.py`). The contract file also holds the
+  builder's rule for finding its groups' counts (a term inside the span) to the server's groups on every
+  query of the builder's read golden.

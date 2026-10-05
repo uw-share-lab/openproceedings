@@ -2208,6 +2208,12 @@
             "withdrawn": 31
           }
         },
+        "groups": {
+          "counts": [],
+          "groups_total": 1,
+          "limit": 10,
+          "not_counted": "fewer_than_two_groups"
+        },
         "hits": [
           {
             "id": "op:iclr:2024:Fx4935",
@@ -2397,6 +2403,12 @@
             "unknown": 34,
             "withdrawn": 31
           }
+        },
+        "groups": {
+          "counts": [],
+          "groups_total": 1,
+          "limit": 10,
+          "not_counted": "fewer_than_two_groups"
         },
         "hits": [
           {
@@ -2599,6 +2611,12 @@
             "unknown": 34,
             "withdrawn": 31
           }
+        },
+        "groups": {
+          "counts": [],
+          "groups_total": 1,
+          "limit": 10,
+          "not_counted": "fewer_than_two_groups"
         },
         "hits": [
           {
@@ -2810,6 +2828,12 @@
             "unknown": 23,
             "withdrawn": 27
           }
+        },
+        "groups": {
+          "counts": [],
+          "groups_total": 1,
+          "limit": 10,
+          "not_counted": "fewer_than_two_groups"
         },
         "hits": [
           {

@@ -9,7 +9,8 @@
  * Text leaves it byte for byte as typed. A query the builder can't show is read-only here, naming the first
  * construct that doesn't fit, and is never changed; the parts that do fit are shown under the notice, dimmed
  * and not editable (B2). Builder edits are draft edits: only Search changes the URL. After a search, each group
- * shows its own wildcards' expansions from that `/search` answer (TASK-111).
+ * shows its own wildcards' expansions from that `/search` answer (TASK-111) and, while the draft is still the
+ * searched query, how many papers the group matches alone (TASK-176, `group-counts.ts`).
  */
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
@@ -47,6 +48,7 @@ import {
   type Scope,
 } from "./model";
 import { termWildcards } from "./expansions";
+import { countsFor, groupTotals, type SearchedGroups } from "./group-counts";
 import { constructText, modelOf, readAst, readFitting, sourceSpans } from "./read";
 import { listItems } from "./terms";
 import { readsAsWritten, writeModel } from "./write";
@@ -63,6 +65,8 @@ export interface ConceptBuilderProps {
   readonly onFocused: () => void;
   /** The last answered `/search`'s expansions, keyed `<stem><op>`; `null` before a search. */
   readonly expansions?: Expansions | null;
+  /** The last answered `/search`'s total and group counts, with its query; `null` before a search. */
+  readonly searched?: SearchedGroups | null;
 }
 
 export type Expansions = Schemas["QueryInfo"]["expansions"];
@@ -93,6 +97,8 @@ type Initial =
       /** The parts that fit, shown dimmed under the notice (design B2). */
       readonly fitting: BuilderModel;
       readonly keys: WildcardKeys;
+      /** Each fitting term's place in the query (its group's count is found by them). */
+      readonly spans: ReadonlyMap<number, CodePoints>;
     }
   | { readonly kind: "unchecked" };
 
@@ -113,8 +119,14 @@ function initialOf(text: string, mode: Mode, outcome: ParseOutcome | null): Init
   if (reading.kind === "blocked") {
     const shape = readFitting(result.ast);
     const fitting = modelOf(text, shape);
-    const keys = termWildcards(result.ast, sourceSpans(fitting, shape));
-    return { kind: "blocked", blocker: reading.blocker, fitting, keys };
+    const spans = sourceSpans(fitting, shape);
+    return {
+      kind: "blocked",
+      blocker: reading.blocker,
+      fitting,
+      keys: termWildcards(result.ast, spans),
+      spans,
+    };
   }
   const model = modelOf(text, reading.shape);
   const spans = sourceSpans(model, reading.shape);
@@ -219,6 +231,15 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
   }, [focusOnOpen, onFocused, initial?.kind, current]);
 
   const written = useMemo(() => (current === null ? null : writeModel(current.model)), [current]);
+  // the last search's counts, only while the draft is the query it searched
+  const searched = countsFor(props.searched, text, mode);
+  const totals = useMemo(
+    () =>
+      searched === null || current === null
+        ? new Map<number, number>()
+        : groupTotals(searched.groups.counts, current.model.groups, current.spans),
+    [searched, current],
+  );
 
   // The server's answer for the text shown: per-term diagnostics, the check of the builder's own query, and
   // each term's wildcards (kept from before the edit while it is in flight)
@@ -255,6 +276,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
           onEditInText={props.onEditInText}
           onRetry={() => void query.refetch()}
           expansions={props.expansions ?? null}
+          searched={searched}
         />
       </div>
     );
@@ -471,6 +493,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
       <p id={hintId} className="text-muted-foreground">
         Papers must match every group. Within a group, any term is enough (OR).
       </p>
+      <GroupCountsNote searched={searched} />
       <span id={termHelpId} className="sr-only">
         Enter edits the term, Delete removes it.
       </span>
@@ -532,6 +555,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
                 </>
               }
             >
+              <GroupCount total={totals.get(group.id)} />
               {renderTerms(index, group)}
               <GroupExpansions group={group} keys={keys} expansions={props.expansions ?? null} />
             </GroupBox>
@@ -837,6 +861,44 @@ function GroupExpansions({
   );
 }
 
+const num = (n: number) => n.toLocaleString("en-US");
+const papers = (n: number) => `${num(n)} ${n === 1 ? "paper" : "papers"}`;
+
+/** A group's count from the last search of this query (copy BD-12); nothing without one. */
+function GroupCount({ total }: { total: number | undefined }) {
+  if (total === undefined) return null;
+  return (
+    <p className="text-xs text-muted-foreground">
+      <span className="font-semibold text-foreground tabular-nums">{papers(total)}</span>{" "}
+      {total === 1 ? "matches" : "match"} this group alone
+    </p>
+  );
+}
+
+/**
+ * What the group counts are, beside the search's total they are compared with; or why a query of several
+ * groups has none (copy BD-12). Nothing before a search, for an edited draft, or for a query of one group.
+ */
+function GroupCountsNote({ searched }: { searched: SearchedGroups | null }) {
+  if (searched === null) return null;
+  const { groups, total } = searched;
+  if (groups.not_counted === "too_many_groups")
+    return (
+      <p className="text-muted-foreground">
+        Group counts aren&apos;t shown: this query has {num(groups.groups_total)} groups, and this site counts
+        at most {num(groups.limit)}.
+      </p>
+    );
+  if (groups.counts.length === 0) return null;
+  return (
+    <p className="text-muted-foreground">
+      <span className="font-semibold text-foreground tabular-nums">{papers(total)}</span>{" "}
+      {total === 1 ? "matches" : "match"} the whole query. A group&apos;s count is the papers that match it
+      with the other groups removed: the query&apos;s limits, leave-out terms and default filters still apply.
+    </p>
+  );
+}
+
 /**
  * The parts of a read-only query that fit (design B2; copy BD-11): its groups, Exclude row and limits, dimmed
  * and with no editing controls (a long expansion's `+N more` is the only button), so the reader sees what the
@@ -847,13 +909,19 @@ function FittingParts({
   model,
   keys,
   expansions,
+  spans,
+  searched,
 }: {
   model: BuilderModel;
   keys: WildcardKeys;
   expansions: Expansions | null;
+  spans: ReadonlyMap<number, CodePoints>;
+  searched: SearchedGroups | null;
 }) {
   const headingId = useId();
   const n = model.groups.length;
+  const totals =
+    searched === null ? new Map<number, number>() : groupTotals(searched.groups.counts, model.groups, spans);
   if (n === 0 && model.exclude === null && model.limits.length === 0) return null;
   const terms = (group: BuilderGroup) => (
     <>
@@ -875,6 +943,7 @@ function FittingParts({
         Parts that fit the builder
       </h3>
       <p>Anything that doesn&apos;t fit is left out. Nothing here can be edited.</p>
+      {totals.size > 0 && <GroupCountsNote searched={searched} />}
       <ol className="space-y-2">
         {model.groups.map((group, index) => (
           <li key={group.id} className="space-y-2">
@@ -883,6 +952,7 @@ function FittingParts({
               label={`Group ${index + 1}, any of: ${termList(group)}`}
               heading={<h4 className="font-medium">Group {index + 1}</h4>}
             >
+              <GroupCount total={totals.get(group.id)} />
               {terms(group)}
             </GroupBox>
           </li>
@@ -920,6 +990,7 @@ function ReadOnly({
   onEditInText,
   onRetry,
   expansions,
+  searched,
 }: {
   initial: Initial | null;
   slow: boolean;
@@ -927,6 +998,7 @@ function ReadOnly({
   onEditInText: (span?: CodePoints) => void;
   onRetry: () => void;
   expansions: Expansions | null;
+  searched: SearchedGroups | null;
 }) {
   const box = "space-y-2 rounded-md border border-warn-border bg-warn-bg p-3 text-warn-fg";
   const edit = (
@@ -965,7 +1037,13 @@ function ReadOnly({
               </button>
             </div>
           </div>
-          <FittingParts model={initial.fitting} keys={initial.keys} expansions={expansions} />
+          <FittingParts
+            model={initial.fitting}
+            keys={initial.keys}
+            expansions={expansions}
+            spans={initial.spans}
+            searched={searched}
+          />
         </>
       );
     }

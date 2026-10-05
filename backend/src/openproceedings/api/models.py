@@ -22,6 +22,7 @@ from openproceedings.query.clauses import ParsedFilters
 from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode
 from openproceedings.records import Excluded as Excluded  # one schema for the exclusion accounting
 from openproceedings.records import SearchRecord
+from openproceedings.search import NotCounted
 from openproceedings.timestamps import CrawlWindow, Timestamp
 from openproceedings.vocab import Status, Track, Venue
 
@@ -205,6 +206,38 @@ UNCLASSIFIED_DOC = (
 )
 
 
+GROUPS_DOC = (
+    "TASK-176 (additive): for a query that is an AND of concept groups, how many papers each group matches "
+    "alone, so a reviewer can see which group narrows the search. A group is a top-level AND conjunct that "
+    "searches text and is not negated; a group's count is the number of papers the query matches with every "
+    "other group removed, so the query's filters (the default track and status filters included) and its "
+    "`NOT` clauses still apply and no count is below `total`. Exact, and the same for the same canonical "
+    "query and `index_version`; it never changes `total`, `hits`, `facets` or `excluded`."
+)
+
+
+class GroupCount(Model):
+    span: Span = Field(description="Half-open code-point range of the group in `q` (its node in `ast`).")
+    total: int = Field(
+        description="How many papers the query matches with every other group removed: never below the "
+        "search's `total`."
+    )
+
+
+class GroupCounts(Model):
+    counts: list[GroupCount] = Field(
+        description="Each group's count, in query order. Empty when `not_counted` says why."
+    )
+    groups_total: int = Field(description="How many groups the query has.")
+    limit: int = Field(
+        description="The most groups this instance counts for one query (`op serve --max-counted-groups`)."
+    )
+    not_counted: NotCounted | None = Field(
+        description="Why `counts` is empty, null when it isn't: `fewer_than_two_groups` (the query is not an "
+        "AND of groups), `too_many_groups` (`groups_total` is over `limit`; the search itself is complete)."
+    )
+
+
 class SearchResponse(Versioned):
     query: QueryInfo
     total: int  # the whole matched set: independent of sort, offset and limit
@@ -212,6 +245,7 @@ class SearchResponse(Versioned):
     identified_total: int = Field(description=IDENTIFIED_DOC)  # TASK-090: additive
     unclassified_total: int = Field(description=UNCLASSIFIED_DOC)
     facets: Facets
+    groups: GroupCounts = Field(description=GROUPS_DOC)
     hits: list[Hit]
 
 

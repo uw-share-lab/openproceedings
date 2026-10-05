@@ -187,6 +187,14 @@ differs from or adds to the design above:
   that unreachable for every case they hold.
 - **Built in TASK-111:** the wildcard expansions under each group (and the Exclude row) after a search, and
   the parts that fit under the B2 notice. See §As built (TASK-111).
+- **Built in TASK-176:** each group's count alone after a search (copy BD-12; spec 05 §Components 3; spec 04
+  §SearchResponse `groups`). `SearchView` passes the last answered `/search`'s query, `total` and `groups` to
+  the workspace (`searchedGroups`), which passes them to the builder; `group-counts.ts` applies them only to
+  the draft that was searched (`countsFor`) and gives each builder group the count whose span holds one of
+  its terms (`groupTotals`). Tests: `group-counts.test.tsx` (the rule; each state of the line in the editable
+  and the read-only builder; dropped on an edit), `search-view.test.tsx` (the `/search` answer reaches the
+  builder), and `backend/tests/contract/test_group_counts.py` (the rule against the server's groups on every
+  query of the read golden).
 - **Tests:** `read.test.ts` (the fit rule against the backend's reading), `write.test.ts` (the write golden,
   seeded edits, the writer's rules), `concept-builder.test.tsx` (every state, keyboard, focus and
   announcements, `/parse` answered from the backend's real `ast`s), and

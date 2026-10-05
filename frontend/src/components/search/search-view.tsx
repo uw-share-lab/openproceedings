@@ -100,6 +100,11 @@ export function SearchView({ state }: { state: SearchState }) {
         refusal={refusal}
         openTree={zero}
         expansions={good?.data.query.expansions ?? null}
+        searchedGroups={
+          good === null
+            ? null
+            : { q: good.state.q, mode: good.state.mode, total: good.data.total, groups: good.data.groups }
+        }
         results={
           state.q.trim() === "" ? null : (
             <Results

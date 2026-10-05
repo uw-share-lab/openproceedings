@@ -19,6 +19,13 @@ and the facet memo. The result is the sequential one, field for field
 (`tests/unit/test_search_overlap.py`); only wall time changes, not CPU time. A search without facets (`op search`,
 a record's save or replay) doesn't pay for every facet combination its exclusion accounting would never read:
 it aggregates only the two default fields (`TantivyEngine.facets`' `over`; TASK-166), the same counts.
+
+When asked (`groups`, the API's `max_counted_groups`; TASK-176), a query that is an AND of two or more
+concept groups (`query/groups.py`) also gets each group's count alone: the query with every other group
+removed, counted by `TantivyEngine.count` on a second worker, beside the facets. A group's tree holds only
+clauses of the effective tree, compiled first, so its worker never verifies either; the counts read nothing
+the page, `total`, the facets or `excluded` are computed from, and change none of them
+(`tests/unit/test_group_counts.py`).
 """
 
 from __future__ import annotations
@@ -28,11 +35,11 @@ import contextvars
 import logging
 import os
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import partial
-from typing import Any
+from typing import Any, Literal
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.engine.compile import wildcards
@@ -40,10 +47,13 @@ from openproceedings.engine.exclusions import ORDER, Excluded, excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInputError, EngineInternalError, Expansions
 from openproceedings.engine.tantivy_engine import COMBO, Scope, TantivyEngine, WouldVerify
-from openproceedings.query.ast import Node, TextField
+from openproceedings.query.ast import Node, Span, TextField
+from openproceedings.query.groups import Groups, split
 from openproceedings.query.parser import ParseResult
 
 type Spans = Mapping[TextField, list[tuple[int, int]]]
+# why a search asked for its groups' counts has none (spec 04 §SearchResponse, `groups.not_counted`)
+NotCounted = Literal["fewer_than_two_groups", "too_many_groups"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,12 +82,23 @@ class Hit:
 
 
 @dataclass(frozen=True, slots=True)
+class GroupCounts:
+    """Each concept group's count alone (`query/groups.py`): the query with every other group removed."""
+
+    counts: tuple[tuple[Span, int], ...]  # (the group's span in `q`, its count), in query order
+    found: int  # how many groups the query has
+    limit: int  # the most groups this search would count
+    not_counted: NotCounted | None  # why `counts` is empty; None exactly when the groups were counted
+
+
+@dataclass(frozen=True, slots=True)
 class Search:
     total: int  # |match_ids(effective_ast)|: independent of sort, offset and limit (guarantee 5)
     hits: tuple[Hit, ...]  # the page, in the engine's order
     excluded: Excluded
     expansions: Expansions  # every wildcard's terms (guarantee 6)
     facets: dict[str, dict[str, int]] | None  # None unless asked for
+    groups: GroupCounts | None = None  # None unless asked for
 
 
 def expansions_json(expansions: Expansions) -> dict[str, list[str]]:
@@ -95,20 +116,28 @@ def run(
     limit: int = 50,
     facets: bool = False,
     highlight: bool = False,
+    groups: int | None = None,
 ) -> Search:
     """One page of `parsed`'s search on `engine`, with its total, exclusion accounting and expansions (and,
-    when asked, the disjunctive facets and each hit's code-point highlight spans). `parsed` must have
+    when asked, the disjunctive facets, each hit's code-point highlight spans, and each concept group's count
+    alone when the query has from two to `groups` of them). `parsed` must have
     parsed: a query with errors never reaches an engine (spec 03 §Error handling)."""
     ast = _runnable(engine, parsed)
     expansions = expanded(engine, ast)
     scope = Scope()  # the ids this request verifies, for its every compile (module docstring)
     faceting: Future[dict[str, dict[str, int]]] | None = None
-    if facets:
+    found = None if groups is None else split(ast)
+    countable = found is not None and groups is not None and 2 <= len(found.groups) <= groups
+    counting: Future[tuple[int, ...]] | None = None
+    if facets or countable:
         engine.check_page(sort, offset, limit)  # a bad argument is refused before any work, as before
         # compiled first, here: a cold verified clause takes its slot in this thread, and the worker's facet
         # tree (the same clauses, less top-level filters) then finds each one in `scope` (it never verifies)
         engine.compile(ast, scope)
+    if facets:
         faceting = _submit(engine, ast, scope)
+    if found is not None and countable:
+        counting = _start(partial(_alone, engine, found, scope.reader()))
     try:
         # one collection: ids and scores
         total, page = engine.page(ast, sort=sort, offset=offset, limit=limit, scope=scope)
@@ -125,8 +154,9 @@ def run(
             for i, score in page
         )
     except BaseException:
-        if faceting is not None:
-            faceting.cancel()  # not started yet: never run; running: its result (or error) is dropped
+        for started in (faceting, counting):
+            if started is not None:
+                started.cancel()  # not started yet: never run; running: its result (or error) is dropped
         raise  # the caller's error first, as when facets ran after the page
     counted: dict[str, dict[str, int]] | None = None
     if faceting is not None:
@@ -144,7 +174,38 @@ def run(
     # with facets, the combos the worker just collected; without, only the default fields' (TASK-166)
     over = COMBO if facets else ORDER
     gone = excluded(engine, parsed, total, facets=partial(engine.facets, scope=scope, over=over))
-    return Search(total, hits, gone, expansions, counted)
+    return Search(total, hits, gone, expansions, counted, _grouped(engine, found, groups, counting, scope))
+
+
+def _alone(engine: TantivyEngine, found: Groups, scope: Scope) -> tuple[int, ...]:
+    """Each group's count alone, in query order (`TantivyEngine.count`: one collection a group, memoised)."""
+    return tuple(engine.count(found.alone(g), scope=scope) for g in found.groups)
+
+
+def _grouped(
+    engine: TantivyEngine,
+    found: Groups | None,
+    limit: int | None,
+    counting: Future[tuple[int, ...]] | None,
+    scope: Scope,
+) -> GroupCounts | None:
+    """`run`'s `groups`: the worker's counts (or the caller's own, when no worker took them), or why there are
+    none. None when they weren't asked for."""
+    if found is None or limit is None:
+        return None
+    n = len(found.groups)
+    if n < 2 or n > limit:
+        return GroupCounts((), n, limit, "fewer_than_two_groups" if n < 2 else "too_many_groups")
+    if counting is None:  # no worker (the pool is shutting down): counted here instead
+        totals = _alone(engine, found, scope)
+    else:
+        try:
+            totals = counting.result()  # the worker's error, re-raised as it was raised
+        except WouldVerify:
+            # as for the facets: a clause the request should have held (a bug, never the client's)
+            log.warning("group_worker_recounted", extra={"reason": "would_verify"})
+            totals = _alone(engine, found, scope)
+    return GroupCounts(tuple((g.span, t) for g, t in zip(found.groups, totals, strict=True)), n, limit, None)
 
 
 def highlight(engine: TantivyEngine, parsed: ParseResult, shown: Mapping[str, Any]) -> Spans | None:
@@ -210,13 +271,18 @@ _POOL_LOCK = threading.Lock()
 def _submit(engine: TantivyEngine, ast: Node, scope: Scope) -> Future[dict[str, dict[str, int]]] | None:
     """`engine.facets(ast, scope=scope.reader())` (it never verifies, so never takes a slot) started on a worker, in a copy of the caller's context (a request's log fields
     follow it), or None if the pool is shutting down (`run` then counts them itself)."""
+    return _start(partial(engine.facets, ast, scope=scope.reader()))
+
+
+def _start[T](job: Callable[[], T]) -> Future[T] | None:
+    """`job` started on a worker, in a copy of the caller's context, or None if the pool is shutting down."""
     global _POOL
     with _POOL_LOCK:
         if _POOL is None:
             _POOL = ThreadPoolExecutor(max(4, os.cpu_count() or 4), thread_name_prefix="op-facets")
         pool = _POOL
     try:
-        return pool.submit(contextvars.copy_context().run, partial(engine.facets, ast, scope=scope.reader()))
+        return pool.submit(contextvars.copy_context().run, job)
     except RuntimeError:  # shut down between the lock and the submit (interpreter exit, or `shutdown()`)
         return None
 
