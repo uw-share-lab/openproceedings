@@ -432,7 +432,7 @@ export function SyntaxHelp({
           wildcard matched.
         </p>
         <p>
-          Most of a difference from Google Scholar&apos;s count usually comes from full text, which{" "}
+          Most of a difference from Google Scholar&apos;s count can come from full text, which{" "}
           <code className={CODE}>$</code> does not recover. Measured once, for one review&apos;s main string
           on index <code className={CODE}>fd13d8d27535</code> (2026-10-05): of the 1,813 papers Google Scholar
           found in these venues and years, 1,752 (96.6%) match the string nowhere in their title or abstract,
@@ -441,9 +441,9 @@ export function SyntaxHelp({
           one string&apos;s figure, not a rule for every query.
         </p>
         <p>
-          For what title and abstract can explain, three tools can help you find out why a string still finds
-          fewer papers here than in Google Scholar, in this order. First, <strong>Add $</strong> matches one
-          more letter or digit on the terms it names (<code className={CODE}>benchmark$</code>:{" "}
+          For what titles and abstracts can explain, three tools can help you find out why a string still
+          finds fewer papers here than in Google Scholar, in this order. First, <strong>Add $</strong> matches
+          one more letter or digit on the terms its notice names (<code className={CODE}>benchmark$</code>:{" "}
           <code className={CODE}>benchmarks</code>); it is not Google Scholar&apos;s stemming. Then, after a
           search, the <strong>group counts</strong> in the Builder tab show how many papers each group of the
           query matches by itself and how many the query finds without it: the group whose removal adds the

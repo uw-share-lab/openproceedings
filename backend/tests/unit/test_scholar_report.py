@@ -971,8 +971,12 @@ def test_a_review_file_sorted_in_a_spreadsheet_is_refused_and_reads_once_sorted_
         buffer = io.StringIO()
         csv.writer(buffer, lineterminator="\r\n").writerows([head, *by])
         saved.write_bytes((BOM + buffer.getvalue()).encode("utf-8"))
-        with pytest.raises(ValueError, match="its rows were reordered: sort them by `row_number`"):
+        with pytest.raises(ValueError) as refused:
             read_calls(saved, text, review, [c])
+        # sorting back is the whole fix: no "another index …" cause and no "Move it" (R3-3)
+        assert str(refused.value) == (
+            "review.csv's rows were reordered: sort them by `row_number` and save it again"
+        )
     back = sorted(by, key=lambda r: int(r[head.index("row_number")]))  # sorted back by the run's column
     buffer = io.StringIO()
     csv.writer(buffer, lineterminator="\r\n").writerows([head, *back])

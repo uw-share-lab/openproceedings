@@ -202,11 +202,10 @@ def _blanked(text: str) -> list[list[str]]:
 
 
 def _difference(found: list[list[str]], expected: list[list[str]]) -> str:
-    """Where a filled file first departs from the rows this run writes, for the refusal."""
+    """Where a filled file first departs from the rows this run writes, for the refusal (a file that only
+    reorders them is refused on its own, in `read_calls`)."""
     if found[:1] != expected[:1]:
         return "its header is not this run's"
-    if sorted(found[1:]) == sorted(expected[1:]):
-        return "its rows were reordered: sort them by `row_number` and save it again"
     for n, (a, b) in enumerate(zip(found[1:], expected[1:], strict=False), 2):
         if a != b:
             column = next(
@@ -251,6 +250,11 @@ def read_calls(
     filled = [(n, cells) for n, cells in filled if any(cells)]
     if not filled:
         return None
+    if found[:1] == wanted[:1] and found != wanted and sorted(found[1:]) == sorted(wanted[1:]):
+        # this run's rows, sorted in a spreadsheet: sorting back is the whole fix, not another file
+        raise ValueError(
+            f"{review_file.name}'s rows were reordered: sort them by `row_number` and save it again"
+        )
     if found != wanted:
         raise ValueError(
             f"{review_file.name} holds calls for other rows than this run writes ({_difference(found, wanted)}): "

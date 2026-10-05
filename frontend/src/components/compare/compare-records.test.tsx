@@ -148,7 +148,7 @@ describe("CompareRecords", () => {
     expect([...dropped.querySelectorAll(":scope > p")].map((p) => p.textContent)).toEqual([
       expect.stringMatching(/^2 papers are excluded by a default filter: to include such a paper/),
       expect.stringMatching(
-        /^2 papers match only as another word form: type \$ after that word \(e.g. word\$\)/,
+        /^2 papers match only as another word form: type \* after its stem \(e\.g\. evaluat\*\)/,
       ),
       expect.stringMatching(
         /^2 papers have no exact match in their title or abstract: no form of this query/,
@@ -339,6 +339,8 @@ describe("CompareRecords", () => {
     expect(screen.queryByRole("alert")).toBeNull(); // no alert per busy cycle (A11Y-R2-2)
     expect(within(panel).queryAllByRole("status")).toEqual([]); // and no second live region in the panel
     expect(panel.textContent).toContain("Busy; retrying by itself in 1 s");
+    expect(panel.textContent).toContain("as many comparisons as it can.");
+    expect(panel.textContent).not.toContain("Try again in"); // the countdown says when, once
     expect(panel.textContent).not.toContain("didn't run");
     const heard: string[] = [];
     const watcher = new MutationObserver(() => heard.push(announced().textContent ?? ""));
@@ -347,6 +349,53 @@ describe("CompareRecords", () => {
     watcher.disconnect();
     expect(asked).toBe(2);
     expect(heard.filter((x) => x.startsWith("Comparing"))).toEqual([]); // the retry isn't "Comparing…" again
+  });
+
+  it("announces a press of Retry after a deadline, as any comparison it starts", async () => {
+    let asked = 0;
+    const deadline = {
+      error: { code: "API_BUSY", message: "This comparison ran past the 60 s this instance gives one." },
+    };
+    await draw(
+      serve(() => {
+        asked += 1;
+        return asked === 1 ? json(deadline, 503) : json(R); // no Retry-After: nothing retries it by itself
+      }),
+    );
+    await compareWith();
+    const alert = await screen.findByRole("alert");
+    await waitFor(() => expect(announced().textContent).toBe("The comparison didn't run."));
+    const heard: string[] = [];
+    const watcher = new MutationObserver(() => heard.push(announced().textContent ?? ""));
+    watcher.observe(announced(), { childList: true, characterData: true, subtree: true });
+    fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+    await screen.findByRole("table", { name: /What this search does/ });
+    watcher.disconnect();
+    expect(asked).toBe(2);
+    expect(heard).toContain("Comparing my-records.ris with this search.");
+  });
+
+  it("keeps the count of retries by itself across a press of Retry, neither using one up nor starting over", async () => {
+    let asked = 0;
+    const busy = { error: { code: "API_BUSY", message: "Busy. Try again in 0 s." } };
+    const deadline = { error: { code: "API_BUSY", message: "This comparison ran past its time." } };
+    await draw(
+      serve(() => {
+        asked += 1;
+        // a busy answer (one retry by itself), a deadline that asks for a press, then busy from then on
+        return asked === 2 ? json(deadline, 503) : json(busy, 503, { "Retry-After": "0" });
+      }),
+    );
+    await compareWith();
+    const alert = await screen.findByRole("alert");
+    expect(asked).toBe(2);
+    fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+    // 1 retry by itself was used before the press, so 2 are left after it: asked 3 (the press), 4 and 5
+    await waitFor(() => expect(announced().textContent).toBe("The comparison didn't run."), {
+      timeout: 3000,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(asked).toBe(5);
   });
 
   it("leaves focus where the reader went while a retry by itself was pending", async () => {
@@ -422,7 +471,7 @@ describe("CompareRecords", () => {
     const panel = screen.getByRole("region", { name: "Compare with your records" });
     await waitFor(() =>
       expect(panel.textContent).toContain(
-        "The new comparison hasn't run yet: this instance is busy, and it will try again by itself. The " +
+        "The new comparison hasn't run yet: this instance is busy; this page will try again by itself. The " +
           "results below are from the earlier comparison with first.ris.",
       ),
     );

@@ -279,7 +279,7 @@ Component rules:
   holds the text it was reported for (TASK-175; spec 05 §Components 1, copy ED-19): "Add $ to all N terms",
   and **Choose terms** for a subset. Like Load with parentheses it edits the draft and never searches. Both
   states end with the full-text sentence (copy ED-19, gate review USAB-S4): most of a lower count than Google
-  Scholar's comes from Scholar reading full text, which `$` does not recover. The `COMPAT_POP_DOLLAR` notices
+  Scholar's can come from Scholar reading full text, which `$` does not recover. The `COMPAT_POP_DOLLAR` notices
   (one per `$`) are one line saying the widening is what `$` is for, the server's own behind a "Show all N
   notices" button (USAB-N4). Backticked runs in a message are drawn as code, not as backticks.
 - **Expansion chips**: one line per wildcard key of `query.expansions`, `stem → term, term, …`. Show the

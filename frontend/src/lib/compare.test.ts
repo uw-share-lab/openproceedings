@@ -109,14 +109,16 @@ describe("the words", () => {
     expect(reasonLines("dropped", fixture.response.reason_totals.dropped, "scholar")).toEqual([
       "2 papers are excluded by a default filter: to include such a paper, write its track or status into " +
         "the query (its row says which).",
-      "2 papers match only as another word form: add $ to that word (the Add $ action under the query) to " +
-        "match its other forms.",
+      "2 papers match only as another word form: type * after its stem (e.g. evaluat*) to match its other " +
+        "forms; $ adds only one letter or digit (the Add $ action under the query).",
       "2 papers have no exact match in their title or abstract: no form of this query finds such a paper by " +
         "its title or abstract; keep it from your own file if it belongs in the review.",
     ]);
-    // the Add $ action is under the query in Scholar mode only; native mode says to type it (USAB-R2-1)
+    // the Add $ action is under the query in Scholar mode only (USAB-R2-1); * reaches -ed and -ing forms,
+    // which $ (one more letter or digit) cannot (R3-2)
     expect(reasonLines("dropped", { stemming: 1 }, "native")).toEqual([
-      "1 paper matches only as another word form: type $ after that word (e.g. word$) to match its other forms.",
+      "1 paper matches only as another word form: type * after its stem (e.g. evaluat*) to match its other " +
+        "forms; $ adds only one letter or digit.",
     ]);
     expect(reasonLines("kept", fixture.response.reason_totals.kept, "native")).toEqual([]);
     expect(reasonLines("added", { scholar_missed: 154 }, "native")).toEqual([

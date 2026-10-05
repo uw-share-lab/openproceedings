@@ -1298,6 +1298,26 @@ def test_cors_allows_the_upload_from_a_listed_origin_only(corpus_dir: Path) -> N
         assert r.headers["cache-control"] == "no-store"
 
 
+def test_a_listed_origin_can_read_the_retry_after_of_a_busy_or_limited_comparison(corpus_dir: Path) -> None:
+    """The web app on another origin counts down and retries by itself from `Retry-After`: CORS must expose it
+    on a 503 `API_BUSY` and a 429, or the page sees no wait at all."""
+
+    def exposed(r: Any) -> set[str]:
+        return {h.strip().lower() for h in r.headers.get("access-control-expose-headers", "").split(",")}
+
+    origin = "https://review.example"
+    asked = {**RIS, "Origin": origin}
+    with app_of(corpus_dir, cors_origins=(origin,)) as c:
+        c.app.state.comparisons.slots.acquire()  # type: ignore[attr-defined]  # every slot taken
+        r = c.post(COMPARE, params={"q": Q}, content=the_file().encode(), headers=asked)
+        assert r.status_code == 503 and r.headers["retry-after"] and "retry-after" in exposed(r)
+    limited = RateLimit(capacity=10_000, compare_cooldown_factor=200)
+    with app_of(corpus_dir, cors_origins=(origin,), rate_limit=limited) as c:
+        c.post(COMPARE, params={"q": Q}, content=the_file().encode(), headers=asked)
+        r = c.post(COMPARE, params={"q": Q}, content=the_file().encode(), headers=asked)
+        assert r.status_code == 429 and r.headers["retry-after"] and "retry-after" in exposed(r)
+
+
 # --- a property: the accounting holds for any file --------------------------------------------------------------
 PLAIN = [p for p in PAPERS if plain(p)]
 
