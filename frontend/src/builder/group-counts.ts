@@ -4,7 +4,8 @@
  * §SearchResponse); a builder group is the count's when a term of it lies inside that span. Groups are
  * top-level parts of the query, so their spans never overlap and a term lies in at most one; "a term", not
  * "every term", because the canonical form writes a group that repeats one term (`(model OR model)`) as that
- * term, at the first one's span. A group written twice is one group there: the second says "same as group N".
+ * term, at the first one's span. A group written twice is one group there: the second says "same as group N",
+ * and the first's "without it" count names it, since the server's query without the group has neither.
  * (`backend/tests/contract/test_group_counts.py` holds the rule to the server's groups on every query of the
  * builder's read golden.) The spans are of the searched query, so the counts apply only while the draft is
  * that query (`countsFor`): a count is a fact about a query, and an edited draft is another query.
@@ -34,9 +35,17 @@ export function countsFor(
   return searched != null && searched.q === text && searched.mode === mode ? searched : null;
 }
 
-/** What a builder group shows: its two counts, or the earlier group (1-based) it repeats. */
+/**
+ * What a builder group shows: its two counts, with the later groups (1-based) that repeat it, which its "without
+ * it" count also leaves out (the server holds them as one group); or the earlier group it repeats.
+ */
 export type GroupShown =
-  | { readonly kind: "counted"; readonly total: number; readonly totalWithout: number }
+  | {
+      readonly kind: "counted";
+      readonly total: number;
+      readonly totalWithout: number;
+      readonly repeats: readonly number[];
+    }
   | { readonly kind: "same"; readonly as: number };
 
 type Leaf = Extract<AstNode, { kind: "term" | "wildcard" | "phrase" }>;
@@ -105,6 +114,7 @@ export function groupTotals(
   const shown = new Map<number, GroupShown>();
   const leaves = ast === null ? new Map<string, Leaf>() : leavesBySpan(ast);
   const counted = new Map<string, number>(); // a counted group's meaning → its number
+  const repeats = new Map<number, number[]>(); // a counted group's number → the later groups that repeat it
   groups.forEach((group, index) => {
     const terms = group.terms.flatMap((t) => {
       const span = spans.get(t.id);
@@ -116,12 +126,22 @@ export function groupTotals(
     });
     const key = groupMeaning(group, spans, leaves);
     if (count !== undefined) {
-      shown.set(group.id, { kind: "counted", total: count.total, totalWithout: count.total_without });
+      const later: number[] = [];
+      repeats.set(index + 1, later);
+      shown.set(group.id, {
+        kind: "counted",
+        total: count.total,
+        totalWithout: count.total_without,
+        repeats: later,
+      });
       if (key !== null && !counted.has(key)) counted.set(key, index + 1);
       return;
     }
     const as = key === null ? undefined : counted.get(key);
-    if (as !== undefined) shown.set(group.id, { kind: "same", as });
+    if (as !== undefined) {
+      shown.set(group.id, { kind: "same", as });
+      repeats.get(as)?.push(index + 1);
+    }
   });
   return shown;
 }

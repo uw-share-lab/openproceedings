@@ -16,7 +16,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { useMeta } from "@/api/hooks";
 import { codePointLength, codePointSpanToUtf16 } from "@/api/spans";
 import { ConceptBuilder, type Expansions } from "@/builder/concept-builder";
-import type { SearchedGroups } from "@/builder/group-counts";
+import { countsFor, type SearchedGroups } from "@/builder/group-counts";
 import { panelId, QueryTabList, tabId, type QueryTab } from "@/builder/query-tabs";
 import { countText, editorDiagnostics, itemOf, itemsOf, plural, type Item } from "@/editor/diagnostics";
 import type { ErrorEnvelope, ParseOutcome, ParseResponse } from "@/editor/parse";
@@ -408,6 +408,13 @@ export function SearchWorkspace({
         </div>
       </form>
 
+      {tab !== "builder" && (
+        <GroupCountsPointer
+          searched={countsFor(searchedGroups, draft.text, draft.mode)}
+          onOpen={() => selectTab("builder", true)}
+        />
+      )}
+
       <p id={summaryId} role="status" aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
         {summaryText(shown, draft, state)}
       </p>
@@ -465,5 +472,26 @@ export function SearchWorkspace({
         </WorkspaceSlotContext.Provider>
       )}
     </div>
+  );
+}
+
+/**
+ * Outside the Builder tab, after a search whose groups were counted: where the counts are (copy BD-12), so a
+ * reviewer looking for the group that narrows the search finds them. Only while the draft is that search.
+ */
+function GroupCountsPointer({ searched, onOpen }: { searched: SearchedGroups | null; onOpen: () => void }) {
+  if (searched === null || searched.groups.counts.length < 2) return null;
+  return (
+    <p className="text-sm text-muted-foreground">
+      Each of this query&apos;s {searched.groups.counts.length} groups has a count in the Builder tab: how
+      many papers it matches by itself, and how many the query finds without it.{" "}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="inline-flex min-h-6 items-center underline hover:text-foreground"
+      >
+        Show group counts
+      </button>
+    </p>
   );
 }

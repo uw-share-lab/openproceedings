@@ -133,6 +133,19 @@ describe("the sections", () => {
     expect(text).toContain("fewer forms than Google Scholar counts");
   });
 
+  it("names the three tools for a lower count than Google Scholar's, in the order to use them", () => {
+    page();
+    const text = document.getElementById("scholar")?.textContent ?? "";
+    const at = [
+      "First, Add $",
+      "Then, after a search, the group counts",
+      "Last, where this instance offers it, Compare with your records",
+    ].map((s) => text.indexOf(s));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(text).toContain("the group whose removal adds the most papers is the one narrowing the search");
+  });
+
   it("takes every number and value list from the golden, none written into the page", () => {
     const changed = structuredClone(golden);
     changed.constants.min_wildcard_stem = 7;
