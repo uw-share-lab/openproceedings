@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import time
 from bisect import bisect_left, bisect_right
+from collections import Counter
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
@@ -140,6 +141,33 @@ def search_endpoint(
     return found
 
 
+# a round with one of these skipped the counting it is timed for (the grace or the wait ran out, or the pool was
+# full): its time is a search without counts, so a measured round must have none
+SKIPPED = ("busy", "count_failed", "timed_out")
+
+
+class Outcomes:
+    """`f` called as before, with how each warm call's groups came back (`counted`, or the `not_counted`
+    reason): what the measured rounds measured. The first call, the cold one `measure` leaves untimed, is not
+    recorded."""
+
+    def __init__(self, f: Callable[[], search.Search]) -> None:
+        self.f, self.calls, self.seen = f, 0, Counter[str]()
+
+    def __call__(self) -> search.Search:
+        found = self.f()
+        self.calls += 1
+        if self.calls > 1:
+            assert found.groups is not None
+            self.seen[found.groups.not_counted or "counted"] += 1
+        return found
+
+    def check(self, time: float | None) -> None:
+        """When the rounds were timed, none of them skipped its counting (PERF-R2-N: at a 50 ms grace a
+        busy machine's rounds can come back `timed_out`, and the p95 would then time less work)."""
+        assert time is None or not set(self.seen) & set(SKIPPED), dict(self.seen)
+
+
 @pytest.fixture(scope="module")
 def served(tmp_path_factory: pytest.TempPathFactory) -> tuple[TantivyEngine, RecordFile]:
     """The 5k corpus as the API serves it: its index and its snapshot's reader, the records carrying authors
@@ -155,11 +183,11 @@ def test_search_endpoint_first_page(
 ) -> None:
     engine, snapshot = served
     parsed = trust_evals(name)
-    measure(
-        benchmark, lambda: search_endpoint(engine, parsed, records=snapshot), ENDPOINT_ROUNDS
-    )  # facets overlap
+    rounds = Outcomes(lambda: search_endpoint(engine, parsed, records=snapshot))
+    measure(benchmark, rounds, ENDPOINT_ROUNDS)  # facets overlap
     time = p95(benchmark)
     assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
+    rounds.check(time)
 
 
 @pytest.mark.parametrize("name", list(STRINGS))
@@ -170,20 +198,25 @@ def test_search_endpoint_later_page(
     engine, snapshot = served
     parsed = trust_evals(name)
     search_endpoint(engine, parsed, records=snapshot)  # the first page
-    measure(
-        benchmark, lambda: search_endpoint(engine, parsed, 50, first=False, records=snapshot), ENDPOINT_ROUNDS
-    )
+    rounds = Outcomes(lambda: search_endpoint(engine, parsed, 50, first=False, records=snapshot))
+    measure(benchmark, rounds, ENDPOINT_ROUNDS)
     time = p95(benchmark)
     assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
+    rounds.check(time)
 
 
 def test_search_endpoint_ten_groups(benchmark: Any, served: tuple[TantivyEngine, RecordFile]) -> None:
     """The most groups `/search` counts, each a common word: 20 collections on a first page."""
     engine, snapshot = served
     parsed = parse(TEN_GROUPS)
-    measure(benchmark, lambda: search_endpoint(engine, parsed, records=snapshot), ENDPOINT_ROUNDS)
+    rounds = Outcomes(lambda: search_endpoint(engine, parsed, records=snapshot))
+    measure(benchmark, rounds, ENDPOINT_ROUNDS)
     time = p95(benchmark)
     assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
+    rounds.check(time)
+    assert time is None or set(rounds.seen) == {"counted"}, dict(
+        rounds.seen
+    )  # every timed round counted all ten
 
 
 def test_the_endpoint_bench_counts_groups(served: tuple[TantivyEngine, RecordFile]) -> None:
