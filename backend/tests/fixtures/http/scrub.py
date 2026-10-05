@@ -1,7 +1,8 @@
 """Turns a raw HTTP capture into a committed crawler fixture (decision-004; spec 01 §Testing).
 
 A capture is taken by a person in a manual research or `op ingest` run, never by a test, and is a JSON file
-`{"url", "auth", "status", "headers", "body"}` (the bearer token is never part of it). This module has no
+`{"url", "auth", "status", "headers", "body"}` (the bearer token is never part of it), with an optional
+`"run"` and `"date"` (the day the response was fetched, when it isn't `RECORDED`). This module has no
 network code: it only rewrites captures.
 
 What a fixture keeps real: ids, forum ids, numbers, venueids, venue strings, decisions and
@@ -26,6 +27,7 @@ import json
 import re
 import sys
 from collections.abc import Mapping
+from datetime import date
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -493,8 +495,10 @@ def fixture(capture: dict[str, Any]) -> dict[str, Any]:
     else:
         page, trimmed = scrub_html(url, text)
         response["text"] = page
+    fetched = capture.get("date", RECORDED)
+    date.fromisoformat(fetched)  # a capture's own date is a calendar day, `YYYY-MM-DD`: ValueError otherwise
     recorded: dict[str, Any] = {
-        "date": RECORDED,
+        "date": fetched,
         "run": capture.get("run", "authenticated OpenReview fixture run"),
         "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
     }

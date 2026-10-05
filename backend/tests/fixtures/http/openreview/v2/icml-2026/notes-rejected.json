@@ -1,0 +1,95 @@
+{
+ "_recorded": {
+  "date": "2026-10-05",
+  "run": "TASK-178 authenticated live crawl cache (public projection), fetched 2026-10-05 UTC",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing page trimmed from 214 to 1 notes (order kept; `count` is the page's)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICML.cc/2026/Conference/Rejected_Submission&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "253",
+   "ratelimit-reset": "3259"
+  },
+  "json": {
+   "count": 214,
+   "notes": [
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 1."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 2."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 3."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person4",
+        "~Synthetic_Person5",
+        "~Synthetic_Person6"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 7",
+        "Synthetic Author 8",
+        "Synthetic Author 9"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 10.",
+        "Synthetic keywords text 11.",
+        "Synthetic keywords text 12.",
+        "Synthetic keywords text 13."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_14"
+      },
+      "pdf": {
+       "value": "/pdf/cc55b43913744419e02b4cfa2b9efa0c24ca5ede.pdf"
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 15."
+      },
+      "supplementary_material": {
+       "value": "/attachment/8f8f0d4a97a1ff839e512d7da647cc44fe26fbf3.zip"
+      },
+      "title": {
+       "value": "Synthetic title text 16."
+      },
+      "venue": {
+       "value": "Submitted to ICML 2026"
+      },
+      "venueid": {
+       "value": "ICML.cc/2026/Conference/Rejected_Submission"
+      }
+     },
+     "forum": "Eo5uKnah7q",
+     "id": "Eo5uKnah7q",
+     "invitations": [
+      "ICML.cc/2026/Conference/-/Submission",
+      "ICML.cc/2026/Conference/-/Edit",
+      "ICML.cc/2026/Conference/-/Post_Submission",
+      "ICML.cc/2026/Conference/Submission214/-/Full_Submission"
+     ],
+     "number": 214,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

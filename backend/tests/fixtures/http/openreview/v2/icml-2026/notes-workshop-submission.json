@@ -1,0 +1,144 @@
+{
+ "_recorded": {
+  "date": "2026-10-05",
+  "run": "TASK-178 authenticated live crawl cache (public projection), fetched 2026-10-05 UTC",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing page trimmed from 3 to 1 notes (order kept; `count` is the page's)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICML.cc/2026/Workshop/GenBio/Submission&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "109",
+   "ratelimit-reset": "3098"
+  },
+  "json": {
+   "count": 3,
+   "notes": [
+    {
+     "content": {
+      "_bibtex": {
+       "value": "Synthetic bibtex text 1."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 2."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person3",
+        "~Synthetic_Person4",
+        "~Synthetic_Person5",
+        "~Synthetic_Person6",
+        "~Synthetic_Person7",
+        "~Synthetic_Person8",
+        "~Synthetic_Person9",
+        "~Synthetic_Person10",
+        "~Synthetic_Person11",
+        "~Synthetic_Person12",
+        "~Synthetic_Person13",
+        "~Synthetic_Person14",
+        "~Synthetic_Person15",
+        "~Synthetic_Person16",
+        "~Synthetic_Person17",
+        "~Synthetic_Person18",
+        "~Synthetic_Person19",
+        "~Synthetic_Person20",
+        "~Synthetic_Person21",
+        "~Synthetic_Person22",
+        "~Synthetic_Person23",
+        "~Synthetic_Person24",
+        "~Synthetic_Person25",
+        "~Synthetic_Person26",
+        "~Synthetic_Person27",
+        "~Synthetic_Person28",
+        "~Synthetic_Person29",
+        "~Synthetic_Person30"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 31",
+        "Synthetic Author 32",
+        "Synthetic Author 33",
+        "Synthetic Author 34",
+        "Synthetic Author 35",
+        "Synthetic Author 36",
+        "Synthetic Author 37",
+        "Synthetic Author 38",
+        "Synthetic Author 39",
+        "Synthetic Author 40",
+        "Synthetic Author 41",
+        "Synthetic Author 42",
+        "Synthetic Author 43",
+        "Synthetic Author 44",
+        "Synthetic Author 45",
+        "Synthetic Author 46",
+        "Synthetic Author 47",
+        "Synthetic Author 48",
+        "Synthetic Author 49",
+        "Synthetic Author 50",
+        "Synthetic Author 51",
+        "Synthetic Author 52",
+        "Synthetic Author 53",
+        "Synthetic Author 54",
+        "Synthetic Author 55",
+        "Synthetic Author 56",
+        "Synthetic Author 57",
+        "Synthetic Author 58"
+       ]
+      },
+      "data_release": {
+       "value": "Synthetic data release text 59."
+      },
+      "email_sharing": {
+       "value": "Synthetic email sharing text 60."
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 61.",
+        "Synthetic keywords text 62.",
+        "Synthetic keywords text 63."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_64"
+      },
+      "pdf": {
+       "value": "/pdf/8143de66cbec828571a800aef15940c5c1461a27.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 65."
+      },
+      "venue": {
+       "value": "ICML 2026 Workshop GenBio Submission"
+      },
+      "venueid": {
+       "value": "ICML.cc/2026/Workshop/GenBio/Submission"
+      }
+     },
+     "forum": "9kufpTjht6",
+     "id": "9kufpTjht6",
+     "invitations": [
+      "ICML.cc/2026/Workshop/GenBio/-/Submission",
+      "ICML.cc/2026/Workshop/GenBio/-/Submission_Change_Before_Bidding",
+      "ICML.cc/2026/Workshop/GenBio/-/Submission_Change_Before_Reviewing",
+      "ICML.cc/2026/Workshop/GenBio/-/PC_Revision",
+      "ICML.cc/2026/Workshop/GenBio/-/Submission_Release",
+      "ICML.cc/2026/Workshop/GenBio/Submission5/-/Camera_Ready_Revision",
+      "ICML.cc/2026/Workshop/GenBio/-/Edit"
+     ],
+     "number": 5,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}
