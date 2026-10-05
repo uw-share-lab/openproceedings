@@ -391,7 +391,9 @@ describe("CompareRecords", () => {
     expect(asked).toBe(2);
     fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
     // 1 retry by itself was used before the press, so 2 are left after it: asked 3 (the press), 4 and 5
-    await waitFor(() => expect(announced().textContent).toBe("The comparison didn't run."), { timeout: 3000 });
+    await waitFor(() => expect(announced().textContent).toBe("The comparison didn't run."), {
+      timeout: 3000,
+    });
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(asked).toBe(5);
   });

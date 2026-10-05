@@ -153,7 +153,9 @@ describe("the sections", () => {
     expect(at.every((i) => i >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(text).toContain("the group whose removal adds the most papers is the one narrowing the search");
-    expect(text).toContain("For what titles and abstracts can explain, three tools can help you find out why");
+    expect(text).toContain(
+      "For what titles and abstracts can explain, three tools can help you find out why",
+    );
     expect(text).toContain(
       "First, Add $ matches one more letter or digit on the terms its notice names (benchmark$: benchmarks); it is not Google Scholar's stemming.",
     );
