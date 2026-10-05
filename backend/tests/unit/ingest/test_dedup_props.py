@@ -11,12 +11,11 @@ from __future__ import annotations
 import random
 from collections import Counter
 
-from hypothesis import assume, event, example, given
+from hypothesis import event, example, given
 from hypothesis import strategies as st
 from openproceedings.ingest import urls
 from openproceedings.ingest.dedup import (
     IMPORTED,
-    PROCEEDINGS_SOURCES,
     PROCEEDINGS_TRACKS,
     DedupResult,
     abstract_key,
@@ -539,6 +538,19 @@ SAME_ABSTRACT_OTHER_YEAR = [
     paper("AbCd1234", "A$^2$Search", venue="ICLR", year=2023, abstract=LONG),
     imported(f"iclr-{H[1]}", "ASearch", venue="ICLR", year=2024, abstract=LONG),
 ]
+# a rejected note that is a listing by its own `urls.proceedings` claim, and the import of that paper
+LISTED_REJECTED_NOTE = [
+    paper(
+        "AbCd1234", "Trust in AI", venue="NeurIPS", status="rejected", abstract=LONG, urls_proceedings=nips(1)
+    ),
+    imported(f"nips-{H[1]}", "Trust in Machines", venue="NeurIPS", abstract=LONG),
+]
+# TASK-174's shape: a rejected note, its forum id's RIS row naming a proceedings paper, and the import of that paper
+REJECTED_NOTE_RIS_LISTING = [
+    paper("AbCd1234", "Trust in AI", venue="NeurIPS", status="rejected", abstract=LONG),
+    paper("AbCd1234", "Trust in AI", source="ris", venue="NeurIPS", abstract=LONG, urls_proceedings=nips(1)),
+    imported(f"nips-{H[1]}", "Trust in Machines", venue="NeurIPS", abstract=LONG),
+]
 
 
 @given(pools)
@@ -546,21 +558,12 @@ SAME_ABSTRACT_OTHER_YEAR = [
 @example(TWO_RIS_ROWS)
 @example(SAME_ABSTRACT_OTHER_YEAR)
 @example(TWO_PROCEEDINGS_IDS)
+@example(LISTED_REJECTED_NOTE)
+@example(REJECTED_NOTE_RIS_LISTING)
 def test_an_abstract_merge_always_holds_an_imported_record_and_its_abstract(xs: list[PaperRecord]) -> None:
     """Step 3 (TASK-179): every `abstract_venue_year` row joins two clusters of one venue and year that both keep
     an abstract with the row's key, into a group that held an imported record (sources `ris` alone) before the
     step; and a pool with no imported record has no such row."""
-    # a proceedings page lists accepted papers only (`unknown` is reconcile's absence), so a listing never claims
-    # `rejected`; `records` draws any status for any source, and the status check below holds for real listings
-    # (the nightly profile drew an `iclr_archive` record claiming `rejected`, 2026-10-05)
-    assume(
-        all(
-            c.value in {"accepted", "unknown"}
-            for x in xs
-            for c in x.provenance
-            if c.field == "status" and c.source in PROCEEDINGS_SOURCES
-        )
-    )
     result = dedup(xs)
     note(result)
     rows = [m for m in result.merges if m.rule == "abstract_venue_year"]
@@ -588,11 +591,13 @@ def test_an_abstract_merge_always_holds_an_imported_record_and_its_abstract(xs: 
             if any({c.source for c in x.provenance} != IMPORTED for x in ins)
         ]
         assert len(crawled) <= 1 < len(before)
-        for (
-            cid
-        ) in crawled:  # the cluster's resolved status is one a listing can have, and its forum id survives
+        for cid in (
+            crawled
+        ):  # the cluster's resolved status is one a listing can have, unless it is a listing itself
+            # (decision-037 refuses only a record that is no listing; whether a listing by RIS evidence alone should
+            # count is TASK-198), and its forum id survives
             status = dedup(inputs[cid]).records
-            assert all(r.status in {"accepted", "unknown"} for r in status)
+            assert all(r.status in {"accepted", "unknown"} or is_listing(r) for r in status)
             if any(x.forum_id is not None and x.id == cid for x in inputs[cid]):
                 assert out.id == cid
         if any(x.forum_id is not None for x in members):  # a forum id in the group is always the survivor's

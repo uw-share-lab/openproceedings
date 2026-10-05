@@ -18,10 +18,21 @@ Candidate: `dev` at `63da2318` (PR #106's merge). Base: `main` at `d8eec5fd`.
   The `web-image` push run at `63da2318` (`37352990475`) passed. The `e2e` push run there (`37352990725`) was
   still running when this was written; its result is in the promotion PR. Both were green at PR #105's merge,
   `bed0a6cb`.
-- **Nightly:** the scheduled nightly `37337202193` is still running on `142f3e0e` (`dev` before PR #105),
-  started on 2026-10-05. Its result is in the promotion PR. The previous nightly, `37204685351` (2026-10-04, same sha), passed
-  all jobs. Neither tested PR #105 or #106, so a nightly was also dispatched on the candidate itself
-  (`37353576315`, `63da2318`). The promotion waits for it.
+- **Nightly:** the scheduled nightly `37337202193`, on `142f3e0e` (`dev` before PR #105), passed all 27 jobs,
+  as did `37204685351` (2026-10-04, same sha). Neither tested PR #105 or #106, so a nightly was dispatched on
+  the candidate itself, `37353576315` at `63da2318`. It passed 26 of 27 jobs; `properties (ingest)` failed two
+  properties at the nightly profile. Both failures were in the tests, and the PR that adds this paragraph
+  fixes them:
+  - **`test_caps`:** the property built an abstract that started with `…`, which the record rightly refuses.
+  - **`test_dedup_props`:** the abstract-merge property asserted that a crawled cluster's status is always
+    listable. The product refuses only a record that is no listing (decision-037), and a cluster can be a
+    listing by a RIS row's proceedings URL. The property now asserts that rule, with two such pools as
+    examples. Whether a listing by RIS evidence alone should keep the exemption is TASK-198, an owner
+    decision.
+
+  Both printed blobs replay as `DidNotReproduce` with the fixes. Both properties passed locally at the
+  nightly profile (50,000 examples).
+
 - **Backlog:** `backlog task list --plain` shows no open Must finding. TASK-197, the one known budget miss,
   is a recorded exception (decision-039), not a Must.
 - **Coverage:** the M4 gate passes on this release's index (§3).
