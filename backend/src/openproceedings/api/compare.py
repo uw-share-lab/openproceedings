@@ -17,9 +17,9 @@ The file (the request body, `application/x-research-info-systems`; no form, no m
   they arrive), then its lines, each line's length, its title and venue lines' length and its records
   (`check_caps`, 413 `API_RIS_TOO_LARGE`). A file over a cap is refused whole, never cut;
 - is read only while this request holds one of `ApiConfig.comparison_slots` (503 `API_BUSY` otherwise), so at
-  most that many files are in memory, and within `compare_upload_seconds`. A refusal sent before the file was
-  read discards what arrives of it for a moment first (`middleware.drain`), so the client sending it gets the
-  refusal rather than a reset connection.
+  most that many files are in memory, and within `compare_upload_seconds`. Any refusal sent before the file
+  was read whole discards what arrives of it for a moment first (`middleware.DrainRefusals`), so the client
+  sending it gets the refusal rather than a reset connection.
 
 One request answers everything, exports included (each list as CSV text, the added papers as RIS): a
 comparison is seconds of work, nothing is kept between requests, and a second request would do it all again.
@@ -29,7 +29,8 @@ clauses are charged and bounded as on `/search` (`deps.searchable`, `deps.check_
 slot was held is debited afterwards (`middleware.RateLimit.debit_comparison`), the file's arrival counted
 `compare_upload_weight` times. A network's share of the slots is bounded by `Cooldowns`: one comparison at a
 time per client network, and none for `compare_cooldown_factor` times the slot time its last one used (429
-`API_RATE_LIMITED` with `Retry-After`). The work is bounded by the caps, by `compare_max_results` and
+`API_RATE_LIMITED` with `Retry-After`; the answer's `next_comparison_seconds` says how long). A local instance
+(`compare_local`) has no cooldown. The work is bounded by the caps, by `compare_max_results` and
 `compare_max_response_bytes` (422 `API_COMPARE_TOO_COSTLY`) and by `compare_max_seconds` (503 `API_BUSY`),
 which is checked before every record read, matched and written (`tick`).
 
@@ -43,6 +44,8 @@ from __future__ import annotations
 import csv
 import heapq
 import io
+import json
+import math
 import re
 import threading
 import time
@@ -50,7 +53,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Literal
 
 import anyio
 from fastapi import APIRouter, Depends, FastAPI, Query, Request
@@ -67,7 +70,7 @@ from openproceedings.api.deps import (
 )
 from openproceedings.api.errors import ApiError
 from openproceedings.api.export import sources_of, stored_documents
-from openproceedings.api.middleware import API_PREFIX, BUCKETS, drain, rate_limited
+from openproceedings.api.middleware import API_PREFIX, BUCKETS, rate_limited
 from openproceedings.api.models import (
     MODE_DOC,
     Q_DOC,
@@ -85,10 +88,10 @@ from openproceedings.diagnostics import DiagnosticCode, InternalError
 from openproceedings.engine.protocol import Searchable
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.eval.scholar_compare import (
-    _TITLE_TAGS,
-    _VENUE_TAGS,
     ONLY_OP,
     ONLY_SCHOLAR,
+    TITLE_TAGS,
+    VENUE_TAGS,
     Dropped,
     Entry,
     MatchIndex,
@@ -105,6 +108,7 @@ from openproceedings.eval.scholar_compare import (
 )
 from openproceedings.export import Provenance, check_count, csv_cell, entries, header, utc_date
 from openproceedings.ingest.caps import MAX_TITLE
+from openproceedings.logs import elapsed_ms
 from openproceedings.query.ast import Node
 from openproceedings.query.parser import Mode, ParseResult
 from openproceedings.search import expanded
@@ -121,9 +125,7 @@ NAME = "file"
 # times as many lines, so a body of millions of one-tag lines is refused before any is parsed into a field
 MAX_LINES_PER_RECORD = 64
 _RECORD_START = re.compile(r"(?m)^TY  - ")  # scholarmend's own record boundary
-_SHORT_TAGS = frozenset(
-    (*_TITLE_TAGS, *_VENUE_TAGS)
-)  # the lines normalized for matching: capped like a title
+_SHORT_TAGS = frozenset((*TITLE_TAGS, *VENUE_TAGS))  # the lines normalized for matching: capped like a title
 CSV_COLUMNS = (
     "list",
     "ris_record",
@@ -177,13 +179,16 @@ class Cooldowns:
             self._running.add(network)
             return 0.0
 
-    def leave(self, network: str, used_seconds: float) -> None:
-        """The network's comparison ended, having used `used_seconds` of a slot (0: it never held one)."""
+    def leave(self, network: str, used_seconds: float) -> float:
+        """The network's comparison ended, having used `used_seconds` of a slot (0: it never held one). The
+        seconds until it may start another (0.0: now)."""
+        pause = 0.0
         with self._lock:
             self._running.discard(network)
             now = self.clock()
             if self.factor > 0 and used_seconds > 0:
-                until = now + self.factor * used_seconds
+                pause = self.factor * used_seconds
+                until = now + pause
                 self._until[network] = until
                 heapq.heappush(self._soonest, (until, network))
             # forget the pauses that are over, then the soonest-ending ones beyond the bound
@@ -194,6 +199,7 @@ class Cooldowns:
             if len(self._soonest) > 2 * len(self._until) + 64:  # stale entries of networks that came back
                 self._soonest = [(until, name) for name, until in self._until.items()]
                 heapq.heapify(self._soonest)
+        return pause
 
 
 def slot_seconds(config: ApiConfig, upload_seconds: float, work_seconds: float) -> float:
@@ -212,9 +218,12 @@ class Comparisons:
 
 
 def install(app: FastAPI, config: ApiConfig) -> None:
+    # a local instance (comparisons on by `op serve`'s loopback default) has no cooldown: its one user is its
+    # operator, and the pause bounds strangers sharing a slot (decision-035)
+    factor = 0.0 if config.compare_local else config.rate_limit.compare_cooldown_factor
     app.state.comparisons = Comparisons(
         threading.BoundedSemaphore(config.comparison_slots),
-        Cooldowns(config.rate_limit.compare_cooldown_factor, config.rate_limit.max_clients),
+        Cooldowns(factor, config.rate_limit.max_clients),
     )
 
 
@@ -232,7 +241,14 @@ def _closing(code: DiagnosticCode, message: str, **headers: str) -> ApiError:
     return ApiError(code, message, headers={"Connection": "close", **headers})
 
 
-def _busy(message: str, retry: int) -> ApiError:
+# why a comparison was refused for want of capacity: the access line's `busy` (spec 04 §Logging; with
+# `match_index_failed`, `compare_running` and `compare_cooldown`, set where those refusals are made)
+Busy = Literal["match_index_building", "compare_slots", "compare_deadline"]
+
+
+def _busy(request: Request, why: Busy, message: str, retry: int) -> ApiError:
+    """503 `API_BUSY` with `Retry-After`, and `busy: <why>` on the access line."""
+    access_fields(request)["busy"] = why
     return _closing(
         DiagnosticCode.API_BUSY, f"{message} Try again in {retry} s.", **{"Retry-After": str(retry)}
     )
@@ -334,15 +350,24 @@ def check_caps(text: str, *, max_records: int, max_line_chars: int, max_title_ch
     return records
 
 
-def parse_file(text: str, tick: Callable[[], None] | None = None) -> list[RisRecord]:
+def parse_file(
+    text: str, tick: Callable[[], None] | None = None, max_records: int | None = None
+) -> list[RisRecord]:
     """`read_ris` of the file's text; 422 `API_RIS_INVALID` for a text that holds no record (the parser's own
-    refusals name the file and its size, so the message here is ours)."""
+    refusals name the file and its size, so the message here is ours). `check_caps` counted the records by
+    the parser's boundary before any was parsed; the parser's own count is held to `max_records` again, so
+    the cap never rests on the two agreeing (413 `API_RIS_TOO_LARGE`)."""
     try:
         records = read_ris(text, NAME, tick)
     except ValueError:
         raise _invalid(NOT_RIS) from None
     if not records:
         raise _invalid(NO_RECORD)
+    if max_records is not None and len(records) > max_records:
+        raise _too_large(
+            f"The file holds {len(records):,} records; this instance compares at most {max_records:,} in one "
+            "request. Split it into several files."
+        )
     return records
 
 
@@ -397,7 +422,7 @@ def _csv_row(name: str, r: CompareRow, index_version: str, canonical_hash: str) 
         r.matched_by,
         r.reason,
         r.detail,
-        "" if r.settled else "true",
+        "false" if r.settled else "true",
         _source(r.independent),
         "true" if r.fails_filters else "false",
         "true" if r.abstract_withheld else "false",
@@ -474,17 +499,31 @@ def _admit(request: Request, served: Served, q: str, mode: Mode) -> ParseResult:
     return result
 
 
-def _table(served: Served, retry: int) -> MatchIndex:
-    """The served index's match table (`state.MatchTable`): 503 `API_BUSY` while it is being built."""
+def _table(request: Request, served: Served, retry: int) -> MatchIndex:
+    """The served index's match table (`state.MatchTable`): 503 `API_BUSY` while it is being built (its
+    `Retry-After` the build's expected time left), and while a failed build waits for a reload (no
+    `Retry-After`: retrying won't help; the build's one `match_index_failed` ERROR is the operator's signal, so
+    each refusal here is a state, not another failure)."""
     table = served.matches
-    if table is None or table.failed:
+    if table is None:
         raise InternalError(
             DiagnosticCode.API_INTERNAL, "comparisons are on but the index has no match table"
         )
+    if table.failed:
+        access_fields(request)["busy"] = "match_index_failed"
+        raise _closing(
+            DiagnosticCode.API_BUSY,
+            "Comparisons are not available on this instance now: its comparison table could not be prepared. "
+            "Searching works as usual. Whoever runs this instance can reload the index to try again.",
+        )
     index = table.index
     if index is None:
+        wait = max(retry, math.ceil(table.seconds_left()))
         raise _busy(
-            "This index was loaded a moment ago and its comparison table is still being prepared.", retry
+            request,
+            "match_index_building",
+            "This index was loaded a moment ago and its comparison table is still being prepared.",
+            wait,
         )
     return index
 
@@ -506,6 +545,9 @@ async def _read(request: Request, seconds: float) -> bytearray:
     return body
 
 
+PROXY_HEADERS = ("x-forwarded-for", "forwarded", "via")  # a request a proxy passed on says so in one of these
+
+
 async def offered(request: Request) -> None:
     """403 `API_COMPARE_DISABLED` unless this instance's operator turned comparisons on (decision-035: an
     operator-controlled capability, off by default off loopback). The route's first
@@ -514,10 +556,16 @@ async def offered(request: Request) -> None:
     of the query or the body is looked at. What is refused earlier is what every route refuses before its
     handler, none of it about this feature: an undeclared or repeated parameter (422, `strict_query`), a
     declared `Content-Length` over `max_body_bytes` (413 from `BodyLimit`; the same body sent chunked is
-    drained and gets the 403), another method (405) and a rate-limited client (429)."""
+    drained and gets the 403), another method (405) and a rate-limited client (429). Every refusal of the path
+    reads what is left of the body first (`middleware.DrainRefusals`; at most `max_body_bytes` while
+    comparisons are off).
+
+    On a local instance (`compare_local`: on by `op serve`'s loopback default, not by `--compare`), a request
+    that came through a proxy gets the same 403: a proxy on the same host in front of a loopback bind makes
+    the instance public, and its operator never chose to offer comparisons to the public (SEC-N1)."""
     config: ApiConfig = request.app.state.config
-    if not config.compare_enabled:
-        await drain(request.receive)  # at most `max_body_bytes` on this path while comparisons are off
+    proxied = config.compare_local and any(h in request.headers for h in PROXY_HEADERS)
+    if not config.compare_enabled or proxied:
         raise _closing(
             DiagnosticCode.API_COMPARE_DISABLED,
             "Comparing with a RIS file is not turned on on this instance. Run your own instance (`op "
@@ -526,9 +574,10 @@ async def offered(request: Request) -> None:
 
 
 class _Spent:
-    """What a comparison used of its slot: the wall time its file took to arrive, and the work's CPU time
-    (less what `IndexState.verification_slot` already debits as `verify_cpu_ms`)."""
+    """What a comparison used of its slot: the wall time its file took to arrive (`uploaded` once it did),
+    and the work's CPU time (less what `IndexState.verification_slot` already debits as `verify_cpu_ms`)."""
 
+    uploaded = False
     upload_ms = 0.0
     cpu_ms = 0.0
 
@@ -570,45 +619,62 @@ async def compare_records(
     try:
         check_media(request)
         result = await anyio.to_thread.run_sync(_admit, request, served, q, mode)
-        index = _table(served, retry)
+        index = _table(request, served, retry)
         if network is not None:
             wait = gate.cooldowns.enter(network)
             if wait != 0:
-                raise _cooling(wait, retry)
+                raise _cooling(request, wait, retry)
             entered = True
         if not gate.slots.acquire(blocking=False):
-            raise _busy("This instance is running as many comparisons as it can.", retry)
+            raise _busy(
+                request, "compare_slots", "This instance is running as many comparisons as it can.", retry
+            )
     except Exception:
         if entered and network is not None:
             gate.cooldowns.leave(network, 0.0)  # it never held a slot
-        await drain(request.receive)  # so the refusal reaches a client still sending its file
-        raise
+        raise  # `DrainRefusals` reads what arrives of the file first, so the refusal reaches its sender
     fields = access_fields(request)
     started = _wall()
     spent = _Spent()
+    left = False
     try:
         holder = [await _read(request, config.compare_upload_seconds)]
-        spent.upload_ms = (_wall() - started) * 1000
+        spent.upload_ms, spent.uploaded = (_wall() - started) * 1000, True
         # `holder` is the only reference to the file's bytes: the worker takes them out of it, so they are
         # freed as soon as they are decoded, not when this coroutine's frame goes
-        return await anyio.to_thread.run_sync(
+        answer = await anyio.to_thread.run_sync(
             _compare, request, served, index, result, q, mode, holder, spent
         )
+        pause = 0.0
+        if network is not None:  # the pause starts now, so the answer can say how long it is
+            pause = gate.cooldowns.leave(network, _used(config, spent, (_wall() - started) * 1000))
+            left = True
+        answer = answer.model_copy(update={"next_comparison_seconds": math.ceil(pause)})
+        return await anyio.to_thread.run_sync(_encode, config, answer)
     finally:
         gate.slots.release()
-        held = (_wall() - started) * 1000
-        if spent.upload_ms == 0.0:  # the upload itself failed: all of the hold was the file arriving
+        # the one form of an `ms` field (logs.elapsed_ms), on the slot's clock
+        held = elapsed_ms(started, _wall)
+        if not spent.uploaded:  # the upload itself failed: all of the hold was the file arriving
             spent.upload_ms = held
-        weighted = config.rate_limit.compare_upload_weight * spent.upload_ms
-        if network is not None:
-            used = slot_seconds(config, spent.upload_ms / 1000, (held - spent.upload_ms) / 1000)
-            gate.cooldowns.leave(network, used)
-        fields["compare_ms"] = round(held, 1)
-        fields["compare_cost_ms"] = round(weighted + spent.cpu_ms, 1)
+        if network is not None and not left:
+            gate.cooldowns.leave(network, _used(config, spent, held))
+        fields["compare_ms"] = held
+        # rounded once, here: the debit (`RateLimit.debit_comparison`) reads this same figure
+        fields["compare_cost_ms"] = round(
+            config.rate_limit.compare_upload_weight * spent.upload_ms + spent.cpu_ms, 1
+        )
 
 
-def _cooling(wait: float, retry: int) -> ApiError:
-    """429 `API_RATE_LIMITED`: this network is running a comparison, or ran one a moment ago (decision-035)."""
+def _used(config: ApiConfig, spent: _Spent, held_ms: float) -> float:
+    """The slot seconds a comparison held to account for (`slot_seconds`), `held_ms` after it took the slot."""
+    return slot_seconds(config, spent.upload_ms / 1000, (held_ms - spent.upload_ms) / 1000)
+
+
+def _cooling(request: Request, wait: float, retry: int) -> ApiError:
+    """429 `API_RATE_LIMITED`: this network is running a comparison (`busy: compare_running`), or ran one a
+    moment ago (`busy: compare_cooldown`; decision-035)."""
+    access_fields(request)["busy"] = "compare_running" if wait < 0 else "compare_cooldown"
     error = rate_limited(
         float(retry) if wait < 0 else wait,
         "One comparison at a time from this network, with a pause after each in proportion to how long it "
@@ -626,7 +692,7 @@ def _compare(
     mode: Mode,
     holder: list[bytearray],
     spent: _Spent,
-) -> Response:
+) -> CompareResponse:
     """The work, in a worker thread: its CPU time goes to `spent` whatever happens."""
     fields = access_fields(request)
     cpu, verified = _cpu(), fields.get("verify_cpu_ms", 0.0)
@@ -638,6 +704,29 @@ def _compare(
         spent.cpu_ms = max(0.0, (_cpu() - cpu) * 1000 - already)
 
 
+def _sent(text: str) -> int:
+    """The bytes `text` takes in the JSON answer: its UTF-8 with JSON's escapes (a `"` or `\\` is two bytes, a
+    control character six), so the running count is what is sent, not up to twice under it (SEC-N2)."""
+    return len(json.dumps(text, ensure_ascii=False).encode("utf-8"))
+
+
+def _too_costly(config: ApiConfig) -> ApiError:
+    return ApiError(
+        DiagnosticCode.API_COMPARE_TOO_COSTLY,
+        f"This comparison's answer would be over {config.compare_max_response_bytes:,} bytes, the largest this "
+        "instance sends. Compare a smaller file, or narrow the query.",
+    )
+
+
+def _encode(config: ApiConfig, answer: CompareResponse) -> Response:
+    """The answer as sent, held to `compare_max_response_bytes` once more as encoded (whatever the running
+    count said)."""
+    encoded = answer.model_dump_json().encode("utf-8")
+    if len(encoded) > config.compare_max_response_bytes:
+        raise _too_costly(config)
+    return Response(encoded, media_type="application/json")
+
+
 def _run(
     request: Request,
     served: Served,
@@ -646,7 +735,7 @@ def _run(
     q: str,
     mode: Mode,
     holder: list[bytearray],
-) -> Response:
+) -> CompareResponse:
     config: ApiConfig = request.app.state.config
     engine = served.engine
     deadline = _wall() + config.compare_max_seconds
@@ -657,15 +746,13 @@ def _run(
         nonlocal written
         written += size
         if written > config.compare_max_response_bytes:
-            raise ApiError(
-                DiagnosticCode.API_COMPARE_TOO_COSTLY,
-                f"This comparison's answer would be over {config.compare_max_response_bytes:,} bytes, the "
-                "largest this instance sends. Compare a smaller file, or narrow the query.",
-            )
+            raise _too_costly(config)
 
     def tick() -> None:
         if _wall() > deadline:
             raise _busy(
+                request,
+                "compare_deadline",
                 f"This comparison ran past the {config.compare_max_seconds:g} s this instance gives one: the "
                 "server is busy, or the file and the query are too much to compare here in one request (a "
                 "smaller file or a narrower query takes less).",
@@ -673,15 +760,9 @@ def _run(
             )
 
     body = holder.pop()  # the one reference to the file's bytes (the handler keeps only the empty list)
-    size = len(body)
-    text = decode(body)
-    del body
-    check_caps(text, max_records=config.compare_max_records, max_line_chars=config.compare_max_line_chars)
-    records = parse_file(text, tick)
-    del text
-    annotate(request, ris_bytes=size, ris_records=len(records))
-    side = scope_and_match(records, index, SCOPE, tick=tick)
-    tick()
+    annotate(request, ris_bytes=len(body))  # on the line whatever refuses the file next
+    # the query's one search first: a refusal of its own (a taken verification slot) comes before the
+    # seconds of reading and matching the file, not after them (SEC-N3)
     assert result.effective_ast is not None and result.canonical is not None
     assert result.canonical_hash is not None  # it parsed (`_admit`)
     once = _OneSearch(engine)
@@ -691,8 +772,17 @@ def _run(
         raise InternalError(
             DiagnosticCode.API_INTERNAL, "the served index holds a record its match table doesn't"
         ) from None
+    annotate(request, total=len(found))
+    text = decode(body)
+    del body
+    check_caps(text, max_records=config.compare_max_records, max_line_chars=config.compare_max_line_chars)
+    records = parse_file(text, tick, config.compare_max_records)
+    del text
+    annotate(request, ris_records=len(records))
+    side = scope_and_match(records, index, SCOPE, tick=tick)
+    tick()
     extra = only_in_result(in_scope, side)
-    annotate(request, total=len(found), ris_papers=len(side.entries))
+    annotate(request, ris_papers=len(side.entries))
     if len(extra) > config.compare_max_results:
         raise ApiError(
             DiagnosticCode.API_COMPARE_TOO_COSTLY,
@@ -725,18 +815,18 @@ def _run(
     def row(r: Row) -> CompareRow:
         tick()
         made = _row(r, entries.get(r.scholar_key), hidden)
-        budget(len(made.title.encode()) + len(made.detail.encode()) + len((made.venue or "").encode()) + 256)
+        budget(_sent(made.title) + _sent(made.detail) + _sent(made.venue or "") + 256)
         return made
 
     def left(d: Dropped) -> NotComparedRow:
         tick()
         made = _left_out(d)
-        budget(len(made.title.encode()) + len(made.venue.encode()) + 128)
+        budget(_sent(made.title) + _sent(made.venue) + 128)
         return made
 
     def text_of(name: str, rows: Iterable[tuple[object, ...]]) -> str:
         made = csv_text(rows, tick)
-        budget(len(made.encode()))
+        budget(_sent(made))
         return made
 
     lists: dict[str, list[CompareRow]] = {
@@ -777,12 +867,10 @@ def _run(
             not_compared=text_of("not_compared", (_left_out_csv(r, version, digest) for r in left_out)),
         ),
         added_ris=_added_ris(request, served, extra, digest, tick, budget),
+        next_comparison_seconds=0,  # the handler sets it once the slot time is known
     )
     tick()
-    encoded = response.model_dump_json().encode("utf-8")
-    written = 0
-    budget(len(encoded))  # the answer as sent (JSON escapes included), whatever the running count said
-    return Response(encoded, media_type="application/json")
+    return response
 
 
 def _added_ris(
@@ -803,7 +891,7 @@ def _added_ris(
         "ris", stored_documents(engine, ids), provenance, sources=sources, withheld=withheld, twins=twins
     ):
         tick()
-        budget(len(entry.encode()))
+        budget(_sent(entry))
         written.append(entry)
     check_count(len(written), len(ids))
     return header("ris") + "".join(written)

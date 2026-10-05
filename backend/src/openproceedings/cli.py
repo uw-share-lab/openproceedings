@@ -351,7 +351,8 @@ def build_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=None,
         help="offer POST /api/v1/compare (a reviewer's own RIS file against a query; the file is read in memory "
-        "for the one request, never stored or logged); default on for a loopback --host without --trusted-proxy only",
+        "for the one request, never stored or logged); default on for a loopback --host without --trusted-proxy "
+        "only, with no pause between comparisons; --compare adds the per-network pause after each (decision-035)",
     )
     serve.add_argument(
         "--log-query-text",
@@ -1725,6 +1726,8 @@ def _serve(ns: argparse.Namespace) -> int:
             # an operator's choice on a public instance (TASK-177): on by default only where the one user is
             # the operator (loopback, no proxy in front), as the takedown rule below reads "public"
             compare_enabled=(loopback and not ns.trusted_proxy) if ns.compare is None else ns.compare,
+            # on by that default alone: no cooldown, and no request through a proxy (decision-035)
+            compare_local=ns.compare is None and loopback and not ns.trusted_proxy,
             # a public instance never starts without its takedown list (TASK-067): off loopback, or behind a
             # proxy on the same host (a trusted proxy means clients reach it); an empty list lists nothing
             takedown_list_required=not loopback or bool(ns.trusted_proxy),

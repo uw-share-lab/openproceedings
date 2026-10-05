@@ -344,7 +344,11 @@ class CompareRow(Model):
     fails_filters: bool = Field(
         description="Whether the index record fails one of the query's default filters."
     )
-    abstract_withheld: bool = Field(description=ABSTRACT_WITHHELD_DOC)
+    abstract_withheld: bool = Field(
+        description="Whether the index record's abstract is withheld (decision-022): this row then has an "
+        "empty `detail`, since the evidence can name word forms of the abstract. Its list and `reason` stand. "
+        "False on a `not_in_index` row."
+    )
 
 
 class NotComparedRow(Model):
@@ -413,6 +417,12 @@ class CompareResponse(Versioned):
         "records byte for byte, in id order, each abstract with its source, a withheld one left out and marked "
         "(decision-021, decision-022). The only abstracts in the response, each one `/search` serves for the "
         "same hit; nothing of the file is in it. Empty when nothing is added."
+    )
+    next_comparison_seconds: int = Field(
+        ge=0,
+        description="Whole seconds until this client's network may start another comparison on this instance "
+        "(decision-035: a pause in proportion to the slot time this one used); 0 when it may start one now, "
+        "always on a local instance and with the rate limit off. Sooner is 429 `API_RATE_LIMITED`.",
     )
 
 
@@ -575,8 +585,10 @@ class Limits(Model):
         "same way over its position-verified clauses' matches; more is `groups.not_counted: too_costly`"
     )
     compare: CompareLimits | None = Field(
-        description="`POST /compare`'s caps (TASK-177), or null when this instance's operator has not turned "
-        "comparisons on (the route then answers 403 `API_COMPARE_DISABLED`, and a client doesn't offer it)"
+        description="`POST /compare`'s caps (TASK-177), or null when comparisons are not offered: this "
+        "instance's operator has not turned them on (the route answers 403 `API_COMPARE_DISABLED`), or the "
+        "served index's comparison table could not be built (503 `API_BUSY` until a reload). A client doesn't "
+        "offer comparisons while it is null"
     )
 
 

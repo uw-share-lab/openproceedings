@@ -398,6 +398,7 @@ function ResultsBody({
               indexVersion={response.index_version}
               total={total}
               disabledReason={offReason}
+              onSearchAgain={onSearchAgain}
             />
           </div>
           <p role="status" aria-live="polite" className="sr-only">

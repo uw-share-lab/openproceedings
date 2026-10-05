@@ -295,11 +295,12 @@ and comparisons that each hold a slot for up to a minute of CPU (one network at 
 127.0.0.1 behind a proxy on the same host **without** `--trusted-proxy`, it would take itself for a local
 instance and offer comparisons to everyone the proxy serves, so a proxied instance always passes
 `--trusted-proxy` (as `compose.yml` does) or `--no-compare`. The proxy must then let that one path
-through: a `request_body` and `request_buffers` of 16MB and a longer `read_body` for `/api/v1/compare` only
-(the site-wide 64KB and 10 s stay for everything else), as `deploy/README.md` §Comparisons shows; with the
+through: a `request_body` and `request_buffers` of 16MiB for `/api/v1/compare` only (the site-wide 64KB stays
+for everything else), and a longer `read_body`, which is the server's timeout for every request (Caddy has no
+per-path one), as `deploy/README.md` §Comparisons shows; with the
 proxy buffering the file, a slow upload holds a proxy goroutine, never the API's comparison slot. That proxy
-block has not been run through `deploy/smoke-test.sh`: decision-035 makes that smoke test a condition of any
-public instance enabling comparisons. Swagger UI (`/api/v1/docs`, scripts from a
+block cannot work as written and has not been run through `deploy/smoke-test.sh` (TASK-183): decision-035 makes
+fixing it and passing that smoke test a condition of any public instance enabling comparisons. Swagger UI (`/api/v1/docs`, scripts from a
 CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. `api` mounts `snapshots/` and `takedowns/` read-only, the
 search records' directory `records/` read-write (a host directory, 0700 and owned by the API's uid, 10001 by default; `records.sqlite` and
 the WAL files SQLite writes beside it; spec 04 §Search records), and `indexes/` read-write but closed by file modes: Tantivy opens an index only after taking

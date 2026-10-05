@@ -76,7 +76,7 @@ Checked by `backend/tests/contract/test_contract_v1.py`; keep to them in every n
 - **`ErrorBody.code` is `ErrorCode`**: the registry's codes with an HTTP status, derived, never hand-listed.
 - **Status-specific headers are declared** (`response_header`): an export's 200 (`X-Total`, the three
   versions, `Content-Disposition`, `X-Abstract-Source`: closed enum `attributed`/`unavailable`, decision-021), every 405 (`Allow`) and 429 (`Retry-After`), the 503 `API_BUSY` of every
-  route that runs a query (`Retry-After`, `openapi.BUSY`: `/search`, `/export`, `/papers/{id}`, the record routes), a 201
+  route that runs a query (`Retry-After`, `openapi.BUSY`: `/search`, `/export`, `/papers/{id}`, the record routes; `POST /compare`'s through `openapi.COMPARE_REFUSALS`, with its own 403, 408, 413, 415, 422 and 429), a 201
   (`Location`); CORS exposes each (`app.EXPOSED_HEADERS`).
 - `info.version` is the API version (`v1`), not the package's.
 

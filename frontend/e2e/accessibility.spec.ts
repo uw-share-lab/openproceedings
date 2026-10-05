@@ -27,13 +27,23 @@ async function compare(page: Page): Promise<void> {
   );
   expect(held.ok()).toBe(true);
   await search(page, "benchmark");
-  await page.getByRole("button", { name: /Compare with your records/ }).click();
-  await page.getByLabel("RIS file").setInputFiles({
+  // by keyboard: the trigger, the file input (its chooser is the browser's; the file is set as a user's
+  // pick would), then Compare (A11Y-N13)
+  const trigger = page.getByRole("button", { name: /Compare with your records/ });
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Tab");
+  const input = page.getByLabel("RIS file");
+  await expect(input).toBeFocused();
+  await input.setInputFiles({
     name: "my-records.ris",
     mimeType: "application/x-research-info-systems",
     buffer: await held.body(),
   });
-  await page.getByRole("button", { name: "Compare", exact: true }).click();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Compare", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(
     page.getByRole("table", { name: "What this search does to the papers in your file" }),
   ).toBeVisible({
@@ -143,7 +153,7 @@ const states: State[] = [
     name: "comparison with a RIS file",
     open: async (page) => {
       await compare(page);
-      await page.getByRole("button", { name: /^Show the \d+ dropped papers?$/ }).click();
+      await page.getByRole("button", { name: /^List the \d+ dropped papers?$/ }).click();
       await expect(
         page
           .getByRole("region", { name: /dropped papers?$/ })
@@ -335,13 +345,17 @@ test("a comparison with a RIS file is run and read by keyboard, and fits 320px",
     .first()
     .textContent();
   expect(kept + added).toBe(Number((shown ?? "").replace(/[^\d]/g, "")));
-  // from the heading, Tab reaches each list's controls in order; Enter opens a list
+  // from the heading, Tab reaches the summary's Copy, then each list's controls in order; Enter opens a list
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: /^Show the [\d,]+ kept papers?$/ })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Copy this comparison as one sentence" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  const keptToggle = page.getByRole("button", { name: /^List the [\d,]+ kept papers?$/ });
+  await expect(keptToggle).toBeFocused();
   await page.keyboard.press("Enter");
   const keptList = page.getByRole("region", { name: /kept papers?$/ });
   await expect(keptList.getByRole("listitem")).toHaveCount(Math.min(kept, 100));
-  await expect(page.getByRole("button", { name: /^Hide the [\d,]+ kept papers?$/ })).toBeFocused();
+  await expect(keptToggle).toBeFocused(); // the same button, now expanded
+  await expect(keptToggle).toHaveAttribute("aria-expanded", "true");
   await page.keyboard.press("Tab");
   await expect(keptList.getByRole("button", { name: /^Download CSV/ })).toBeFocused();
   for (const target of await page

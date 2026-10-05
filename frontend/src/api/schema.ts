@@ -452,6 +452,11 @@ export interface components {
              * @description Papers of the file the query's result holds.
              */
             kept_total: number;
+            /**
+             * Next Comparison Seconds
+             * @description Whole seconds until this client's network may start another comparison on this instance (decision-035: a pause in proportion to the slot time this one used); 0 when it may start one now, always on a local instance and with the rate limit off. Sooner is 429 `API_RATE_LIMITED`.
+             */
+            next_comparison_seconds: number;
             /** Not Compared */
             not_compared: components["schemas"]["NotComparedRow"][];
             /**
@@ -496,7 +501,7 @@ export interface components {
         CompareRow: {
             /**
              * Abstract Withheld
-             * @description True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.
+             * @description Whether the index record's abstract is withheld (decision-022): this row then has an empty `detail`, since the evidence can name word forms of the abstract. Its list and `reason` stand. False on a `not_in_index` row.
              */
             abstract_withheld: boolean;
             /**
@@ -868,7 +873,7 @@ export interface components {
          *     differ).
          */
         Limits: {
-            /** @description `POST /compare`'s caps (TASK-177), or null when this instance's operator has not turned comparisons on (the route then answers 403 `API_COMPARE_DISABLED`, and a client doesn't offer it) */
+            /** @description `POST /compare`'s caps (TASK-177), or null when comparisons are not offered: this instance's operator has not turned them on (the route answers 403 `API_COMPARE_DISABLED`), or the served index's comparison table could not be built (503 `API_BUSY` until a reload). A client doesn't offer comparisons while it is null */
             compare: components["schemas"]["CompareLimits"] | null;
             /**
              * Max Counted Groups
@@ -1871,7 +1876,7 @@ export interface operations {
                     "application/json": components["schemas"]["CompareResponse"];
                 };
             };
-            /** @description API_COMPARE_DISABLED: this instance's operator has not turned comparisons on (`GET /meta` `limits.compare` is null) */
+            /** @description API_COMPARE_DISABLED: this instance's operator has not turned comparisons on (`GET /meta` `limits.compare` is null), or the instance offers them to its local user only (on by `op serve`'s loopback default) and the request came through a proxy */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1918,7 +1923,16 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached */
+            /** @description API_RIS_INVALID: the file is not UTF-8 RIS (no record, content before the first one, carriage-return-only lines); API_COMPARE_TOO_COSTLY: the result holds more papers the file doesn't than `limits.compare.max_results`, a phrase or NEAR has too many inflected spellings, or the answer would pass `limits.compare.max_response_bytes`; or the query's own refusals, as on /search */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_RATE_LIMITED: this client's token bucket or its network's can't pay for the request (as on every route); or this client's network (IPv4 /24, IPv6 /48) is running a comparison, or ran one less than its pause ago (decision-035: `compare_cooldown_factor` times the slot time it used; none on a local instance). Refused before the file is read */
             429: {
                 headers: {
                     /** @description Whole seconds until the request would be allowed */
@@ -1929,7 +1943,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_BUSY (with Retry-After): every comparison slot is taken (refused before the file is read), the served index's comparison table is still being built, the comparison ran past the time this instance gives one, or the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet; no Retry-After) */
+            /** @description API_BUSY (with Retry-After): every comparison slot is taken (refused before the file is read), the served index's comparison table is still being built (Retry-After: the build's expected time left), the comparison ran past the time this instance gives one, or the query needs a slow position check and every verification slot is taken; API_BUSY without Retry-After: the table could not be built, until the operator reloads the index (`limits.compare` is then null); or API_INDEX_NOT_LOADED (no index loaded yet; no Retry-After) */
             503: {
                 headers: {
                     /** @description Sent with API_BUSY: whole seconds to wait before retrying */

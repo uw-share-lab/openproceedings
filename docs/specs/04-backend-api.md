@@ -85,8 +85,9 @@ reviews without the UI.
     `Content-Disposition`, `X-Abstract-Source` (decision-021) and `X-Abstracts-Withheld` (decision-022); every route's 405 declares `Allow` and its 429 `Retry-After` (not `/healthz`'s,
     which is never limited; the 429's description names every bucket that can refuse: the client's, its
     network's, a query's position-verified clauses, the save ceilings); every route that runs a query
-    (`/search`, `/export`, `/papers/{id}`, `POST /records`, `GET /records/{id}`, `/diff`) declares its 503 with `Retry-After`
-    (sent with `API_BUSY`); `POST /records`'s 201 declares `Location`. CORS exposes all of them.
+    (`/search`, `/export`, `/papers/{id}`, `POST /records`, `GET /records/{id}`, `/diff`, `POST /compare`) declares its 503 with `Retry-After`
+    (sent with `API_BUSY`); `POST /compare` also declares its 403, 408, 413, 415, 422 and its own 429 (the
+    per-network comparison cooldown beside the buckets); `POST /records`'s 201 declares `Location`. CORS exposes all of them.
   - `info.version` is the API version, `v1`. operationIds are `verb_noun`: `search`, `parse_query`, `export`,
     `get_paper`, `get_coverage`, `get_meta`, `get_healthz`, `create_record`, `get_record`, `get_record_diff`,
     `compare_records`.
@@ -567,9 +568,10 @@ route execution.
 
 ## Comparing with a RIS file (`POST /compare`, TASK-177, decision-035)
 
-A reviewer who already holds a set of records (a Google Scholar export, another database's) asks what a
+A reviewer who already holds a set of records (a Google Scholar export, another database's) can ask what a
 query does to it: which of those papers the query **keeps**, which it **drops**, which it **adds**, and which
-the index doesn't hold at all. `POST /compare?q=&mode=` answers that for the RIS file sent as the
+the index doesn't hold at all. (The project's own review asked it, n=1; that other reviewers do is an
+assumption until TASK-032 and TASK-047.) `POST /compare?q=&mode=` answers that for the RIS file sent as the
 request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one implementation, which
 `op eval scholar` reports from), run on the served index for one query and one file.
 
@@ -583,6 +585,10 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   earlier is what every route refuses before its handler, and none of it is about this feature: an undeclared
   or repeated parameter (422), a declared `Content-Length` over `max_body_bytes` (413 from `BodyLimit`; the
   same body sent chunked gets the 403), another method (405 for GET) and a rate-limited client (429).
+  **A local instance** is one whose comparisons are on by that loopback default alone, not by `--compare`
+  (`ApiConfig.compare_local`): it has no per-network cooldown (below), and a request that came through a
+  proxy (an `X-Forwarded-For`, `Forwarded` or `Via` header) gets the same 403, since a proxy on the same host
+  in front of a loopback bind makes the instance public, which its operator never chose (decision-035).
 - **What it may disclose** (audited 2026-10-05; each point below has a test in `test_compare.py` or
   `test_compare_review.py`, the takedown ones through a listed id, a merged id, a rekeyed id and a twin
   link). Timing was not made a guarantee: the reviewer measured no withheld-specific signal in process
@@ -631,7 +637,9 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   index), the file's accounting (`records_total` = `not_compared_total` + `duplicates_total` + `papers_total`;
   `papers_total` = `kept_total` + `dropped_total` + `not_in_index_total`; `kept_total` + `added_total` =
   `total`), `reason_totals` (per list, how many rows have each `reason`, in 07 §B's order, with
-  `kept_ris_only_total` and `dropped_ris_only_total`: a client never counts rows), and five lists. Each row of `kept`, `dropped`, `not_in_index` and `added` has `ris_record` (the
+  `kept_ris_only_total` and `dropped_ris_only_total`: a client never counts rows), `next_comparison_seconds`
+  (whole seconds until this client's network may start another comparison: the cooldown below; 0 when it may
+  start one now, always on a local instance and with the rate limit off), and five lists. Each row of `kept`, `dropped`, `not_in_index` and `added` has `ris_record` (the
   record's position in the file, from 1), `copies`, `id`, `title` (the file's own for a paper of the file),
   `venue`, `year`, `matched_by` (`forum_id`, `proceedings_id`, `title_venue_year`; or why it has no index
   record: `not_found`, `ambiguous`, `no_year`, `no_venue`, `truncated_title`), `reason` and `detail` (07 §B's
@@ -643,7 +651,8 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   can name word forms its abstract holds). `not_compared` rows carry the file's venue string and why.
 - **Exports are in the answer.** `csv` holds each list as a CSV file's text (BOM, one header row; the columns
   `list`, `ris_record`, `copies`, `id`, `title`, `venue`, `year`, `matched_by`, `reason`, `detail`,
-  `needs_review`, `record_source` (`crawled` or `ris_only`), `fails_filters`, `abstract_withheld`,
+  `needs_review`, `record_source` (`crawled` or `ris_only`), `fails_filters`, `abstract_withheld` (the three
+  yes-or-no columns each `true` or `false`, never empty),
   `index_version`, `canonical_hash`), every cell through `export.csv_cell`, so no cell starts a formula and a
   client saves the text as it is. `added_ris` is the papers the query adds as `GET /export` writes RIS: the
   same writer over the same records, byte for byte, each abstract with its source, a withheld one left out
@@ -666,9 +675,12 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   before the file is read). So one network holds a slot at most 1 / (1 + 3) = 25% of the time with
   comparisons back to back, and 7.7% with uploads that stall until their 408, whatever number of addresses it
   uses (decision-035) (simulated with the real buckets at their defaults for 1, 2, 3, 8 and 64 addresses:
-  `test_compare_review.py`); a reviewer waits 54 s after an 18 s comparison, and searches meanwhile. Many
+  `test_compare_review.py`, which simulates an instance the cooldown applies to); a reviewer waits 54 s after
+  an 18 s comparison, and searches meanwhile, and each answer's `next_comparison_seconds` says how long. Many
   networks together can still fill the slot: comparisons are then refused (503) and searches are not. The
-  cooldown applies while the rate limit is on. The work is bounded: the caps above,
+  cooldown applies while the rate limit is on, and only where strangers share the slot: with `--compare`, or
+  off loopback. A local instance has none (decision-035): its one user waited for no one's benefit. The
+  access line says which capacity refused a comparison (`busy`, below). The work is bounded: the caps above,
   `max_results` (5,000 papers of the result that the file doesn't hold: more is 422
   `API_COMPARE_TOO_COSTLY`, as is a phrase or NEAR with more than 512 inflected spellings), and
   `max_seconds` (60 s of wall time: past it 503 `API_BUSY` with `Retry-After`), which is checked before every
@@ -680,9 +692,12 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   scholarmend's split into records, the JSON encoding), each bounded by the caps, not by the clock: before
   the per-link check, one record holding every link line of a 16 MiB file ran about 2 s between checks (the security review's measurement). `comparison_slots` (1)
   comparisons run at once; another is 503 `API_BUSY` before its file is read, so at most that many files are
-  in memory. A refusal sent before the file was read (that 503, a 429, a query refusal) first reads and
-  discards what arrives of the file for up to 2 s (`middleware.drain`; nothing is held), so the client
-  sending it gets the refusal rather than a reset connection. The file must arrive within `compare_upload_seconds` (30 s; 408 `API_UPLOAD_TIMEOUT`); behind the
+  in memory. Every refusal sent before the file was read whole (that 503, a 429, a query refusal, and those
+  made before the handler runs: an undeclared parameter, a missing `q`, no index loaded yet) first reads and
+  discards what arrives of the file for up to 2 s and closes the connection (`middleware.DrainRefusals`, one
+  layer for the path; nothing is held), so the client sending it gets the refusal rather than a reset
+  connection. The query's one search runs before the file is decoded, so a refusal of its own (a taken
+  verification slot) comes before the seconds of reading and matching the file. The file must arrive within `compare_upload_seconds` (30 s; 408 `API_UPLOAD_TIMEOUT`); behind the
   reverse proxy it arrives whole (08 §Deploy). Measured on index `05a0541717f6` (95,877 records) with the
   Trust-Evals export (1,834 records, 3.7 MB) and the review's `$` string in Scholar mode, on a loaded
   laptop: 20 to 24 s for the request (17.8 s debited: 36 tokens, beside the 10 of the route, the query's
@@ -695,15 +710,32 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   build's transient records and one comparison included), and lives on the served bundle (`state.Served.matches`), so one request reads the engine, the
   records and the table of one `index_version`: a hot swap can't pair one index's result with another's
   table, and a comparison in flight finishes on the index it started on. Until it is built the route answers
-  503 `API_BUSY` with `Retry-After`; searches are served meanwhile (`match_index_built`, INFO). A table that
-  can't be built is one `match_index_failed` ERROR: comparisons answer 500 and `/meta` `limits.compare` is null
-  (the web app stops offering them) until a reload, and every reload (SIGHUP), whether or not `current` moved,
+  503 `API_BUSY` with `Retry-After` the build's expected time left (its records at about 6,000 a second, never
+  under `busy_retry_seconds`); searches are served meanwhile (`match_index_built`, INFO). A table that can't be
+  built is one `match_index_failed` ERROR (with `ms`): comparisons are refused as a state, 503 `API_BUSY` with
+  `busy: match_index_failed` and no `Retry-After` (retrying won't help; no ERROR per request), and `/meta`
+  `limits.compare` is null (the web app stops offering them) until a reload, and every reload (SIGHUP), whether or not `current` moved,
   builds a failed table again. Builds run one at a time, and one whose index was swapped out while it waited
   is skipped, so quick promotions never run several at once. A reload that keeps the index (a new
-  takedown list) keeps a table that was built.
+  takedown list) keeps a table that was built. **At a swap** the old bundle, its table included (about 80 MB),
+  stays in memory until the requests holding it finish, while the new table builds: the peak is then about
+  420 MB of resident memory on the 95,877-record index (the 340 MB above plus the old table; an estimate from
+  those two measurements, not measured as one).
+- **Searches meanwhile** (PERF-S3; measured 2026-10-05 on the 5k fixture, an M1 Pro laptop at a 1-minute load
+  of 4 to 12, commit e11b303b plus this change, 300 `/search` calls of five queries, first 20 hits, in process):
+  idle, 6.7 ms median and 13.4 ms p95; with match tables built back to back in the background, 74 ms median
+  and 326 ms p95 when the build held the GIL, so the build now releases it before every record it reads
+  (`state._yielding`), and searches took 32 ms median and 64 ms p95 (a build alone, 258 against 270 ms);
+  with comparisons back to back (a 256-record file, 0.13 to 0.18 s each), 10 to 14 ms median and 69 to 75 ms
+  p95. Both are within 03's 100 ms p95; neither was measured on the full index.
 - **And `op eval scholar`.** The CLI writes the dated report of 07 §B for the project's own strings: several
   queries, `--years`/`--venues` scopes, the review file, percentages, a spot check. `POST /compare` is one
   query against one file for whoever asks, with the same matching and the same classes and no report.
+- **What a methods section may cite** (prisma-reporting). A comparison is a search-development aid, never a
+  number in a PRISMA flow diagram: it changes no search and records nothing. A figure from it is cited with
+  the reviewer's own file (its sha256 and the date it was exported) beside the CSV's `index_version` and
+  `canonical_hash`, since the server keeps neither the file nor the answer; the citable comparison is the
+  dated `op eval scholar` report (07 §B). A copyable summary and a place in the search record are TASK-195.
 
 ## Search records (reproducibility, PRISMA)
 
@@ -913,15 +945,15 @@ once released: changing one is a breaking change under `/api/v1`.
 | A pinned `index_version` is not available on this instance (an export's; a record save's `index_version` that is not the served index, TASK-091) | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
 | Export requested for a record whose replay status is `mismatch` | 409 | `API_RECORD_MISMATCH` |
 | A request body over `max_body_bytes` (64 KiB), by `Content-Length` or by the bytes of a chunked body, refused before it is read and before any other check (task-079); for `POST /compare`, a file over `limits.compare.max_body_bytes` (16 MiB), by `Content-Length` before it is read, else as its bytes arrive | 413 | `API_BODY_TOO_LARGE` |
-| `POST /compare` on an instance whose operator has not turned comparisons on (TASK-177) | 403 | `API_COMPARE_DISABLED` |
+| `POST /compare` on an instance whose operator has not turned comparisons on (TASK-177), or a proxied request to a local instance (comparisons on by the loopback default alone; decision-035) | 403 | `API_COMPARE_DISABLED` |
 | `POST /compare` with a body not declared `application/x-research-info-systems` in UTF-8 (a form, multipart, another type), or with a `Content-Encoding` | 415 | `API_UNSUPPORTED_MEDIA_TYPE` |
 | `POST /compare`'s file didn't arrive within `compare_upload_seconds` (30 s) | 408 | `API_UPLOAD_TIMEOUT` |
 | `POST /compare`'s file is not UTF-8, holds no RIS record, has content before its first record, or ends its lines with a carriage return only. The message never quotes the file | 422 | `API_RIS_INVALID` |
 | `POST /compare`'s file has more records, more lines, a longer line or a longer title or venue line than `limits.compare` allows: refused whole before it is parsed, never cut | 413 | `API_RIS_TOO_LARGE` |
-| `POST /compare` would read more papers of the result than `limits.compare.max_results`, or a phrase or NEAR of the query has more than 512 inflected spellings | 422 | `API_COMPARE_TOO_COSTLY` |
-| Rate limit exceeded: the client's or its network's bucket, a position-verified query's extra weight, or the record-save ceiling (its network's or the instance-wide one) | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
+| `POST /compare` would read more papers of the result than `limits.compare.max_results`, a phrase or NEAR of the query has more than 512 inflected spellings, or the answer would pass `limits.compare.max_response_bytes` (counted as it is built, JSON escapes included, and again as encoded) | 422 | `API_COMPARE_TOO_COSTLY` |
+| Rate limit exceeded: the client's or its network's bucket, a position-verified query's extra weight, the record-save ceiling (its network's or the instance-wide one), or on `POST /compare` the per-network comparison cooldown (the network is running a comparison, or ran one less than its pause ago; decision-035) | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
 | A search record can't be saved: the record store is over its size cap or its disk under the free-space floor (task-037) | 503 | `API_RECORDS_STORE_FULL` |
-| A query needs a cold position verification and every verification slot is taken (refused, never queued); or a pinned `index_version` (an export's, a record's replay or diff) waits longer than `pinned_open_wait_seconds` for another version's open, or another request's open of the same version (TASK-067; its access line says `busy: pinned_open`); or, on `POST /compare`, every comparison slot is taken (refused before the file is read), the served index's match table is still being built, or the comparison ran past `max_seconds` | 503 | `API_BUSY` (with `Retry-After`) |
+| A query needs a cold position verification and every verification slot is taken (refused, never queued); or a pinned `index_version` (an export's, a record's replay or diff) waits longer than `pinned_open_wait_seconds` for another version's open, or another request's open of the same version (TASK-067; its access line says `busy: pinned_open`); or, on `POST /compare`, every comparison slot is taken (refused before the file is read; `busy: compare_slots`), the served index's match table is still being built (`busy: match_index_building`; `Retry-After` its expected time left), or the comparison ran past `max_seconds` (`busy: compare_deadline`); and without `Retry-After`, on `POST /compare`, a match table that could not be built, until a reload (`busy: match_index_failed`) | 503 | `API_BUSY` (with `Retry-After`, but for a failed match table) |
 | A query has more position-verified clauses than `ApiConfig.max_verified_clauses` (default 16, a backstop), refused before it compiles (decision-010; a replay over it is withheld, 200, §Search records) | 422 | `API_TOO_MANY_VERIFIED_CLAUSES` (diagnostics: one per clause, spanning it in `q`) |
 | A query's position checks would read more than `ApiConfig.max_verification_candidates` (default 300,000) candidate documents, summed over its verified clauses and their fields, refused before any is verified (decision-010; a replay over it is withheld, 200) | 422 | `API_QUERY_TOO_COSTLY` (diagnostics: one per verified clause, spanning it in `q`, with its count per field) |
 | No index loaded yet (startup, or the first load failed; a failed swap keeps serving the old index) | 503 | `API_INDEX_NOT_LOADED` |
@@ -1057,7 +1089,14 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     `groups.not_counted`, one of its six constants),
     `verify_ms` (the wall time the request held a verification slot; absent when it held none), `busy`
     (`pinned_open` on a 503 `API_BUSY` because another version's open, or another request's open of the same
-    version, outlasted `pinned_open_wait_seconds`; TASK-067),
+    version, outlasted `pinned_open_wait_seconds`; TASK-067; on `POST /compare`, the capacity that refused it:
+    `match_index_building`, `match_index_failed`, `compare_slots` and `compare_deadline` on a 503,
+    `compare_running` and `compare_cooldown` on the network's 429), the comparison's counts (`POST /compare`
+    only, never a title, venue string or file name: `ris_bytes` as soon as the file's size is known, then
+    `ris_records`, `ris_papers`, `kept`, `dropped`, `not_in_index`, `added`), `compare_ms` (the wall time it
+    held a comparison slot, the file arriving included), `compare_cost_ms` (what of it is debited: the file's
+    arrival counted `compare_upload_weight` times, plus the work's CPU) and `compare_tokens` (that, in
+    tokens),
     `verify_cpu_ms` (the verifying thread's CPU in those holds), `verify_tokens` (what that CPU time was
     debited; absent likewise), and `code`, the error
     envelope's code, on every refusal (the body cap's 413, the rate limit's 429, a routing 404, `API_BUSY`, …)
@@ -1070,7 +1109,8 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     `SnapshotError`'s reason or an OSError's errno name, e.g. `ENOENT` for a snapshot that vanished under
     `/papers`), and a 500 whose message names the request id; nothing is re-raised to the server. Layers,
     outermost first: the access line, CORS, the last catch (`LastCatch`), the body cap (`BodyLimit`), the
-    rate limit, then the app (whose app-wide `strict_query` dependency refuses unknown or repeated
+    comparison drain (`DrainRefusals`: a refusal of `POST /compare` whose file is still arriving reads the rest
+    first), the rate limit, then the app (whose app-wide `strict_query` dependency refuses unknown or repeated
     parameters), so a 500 or a 413 carries the CORS headers like any response. If the exception comes after the response started (a stream), the client has its status, so
     the access line keeps `status` as sent and adds `aborted: true`. A CORS preflight from an origin that
     isn't allowed is Starlette's plain-text 400 `Disallowed CORS origin`, not the envelope (it never reaches
@@ -1086,7 +1126,7 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   - `op serve [--host] [--port] [--index] [--cors-origin …] [--trusted-proxy …] [--rate-capacity]
     [--rate-refill] [--export-weight] [--no-rate-limit] [--max-verified-clauses]
     [--max-verification-candidates] [--max-verification-seconds] [--max-counted-groups] [--max-counted-terms]
-    [--max-counted-ids] [--log-query-text]` refuses an invalid combination as usage, naming each
+    [--max-counted-ids] [--docs|--no-docs] [--compare|--no-compare] [--log-query-text]` refuses an invalid combination as usage, naming each
     option and the validator's reason (never the value pydantic would quote), and runs one uvicorn process with
     its own access log off, `proxy_headers` off, and a 64 KiB request-head limit (uvicorn's 16 KiB would
     refuse a valid 2,000-code-point query in the URL). **Deploy note:** `GET /search?q=…` carries the query

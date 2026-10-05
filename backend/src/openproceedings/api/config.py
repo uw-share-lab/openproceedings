@@ -183,11 +183,16 @@ class ApiConfig(BaseModel):
     # Swagger UI at /api/v1/docs (it loads its script and styles from a CDN). Off unless asked for: `op serve`
     # turns it on for a loopback --host only (a local instance), or with --docs. openapi.json is always served
     serve_docs: bool = False
-    # `POST /compare` (TASK-177, decision pending): a reviewer's own RIS file against a query, parsed in memory
+    # `POST /compare` (TASK-177, decision-035): a reviewer's own RIS file against a query, parsed in memory
     # for the one request and never stored or logged. Off unless asked for: `op serve` turns it on for a
     # loopback --host without a trusted proxy (a local instance), or with --compare. While off, the route
     # answers 403 `API_COMPARE_DISABLED`, `/meta`'s `limits.compare` is null and no match table is built
     compare_enabled: bool = False
+    # comparisons are on by `op serve`'s loopback default, not by --compare: a local instance whose one user is
+    # its operator. It has no per-network cooldown (the pause bounds strangers sharing a slot, and there are
+    # none), and a request that came through a proxy (`X-Forwarded-For`, `Forwarded` or `Via`) is refused 403
+    # `API_COMPARE_DISABLED`: a same-host proxy in front of a loopback bind makes it public (decision-035)
+    compare_local: bool = False
     # the file's caps, each refused with a typed error, never cut (`/meta` `limits.compare` states them).
     # 16 MiB: the Trust-Evals export is 3.7 MB for 1,834 records with abstracts (2 KB a record), so the record
     # cap's worth of such records is ~10 MB. A body over it is 413 `API_BODY_TOO_LARGE` before it is read

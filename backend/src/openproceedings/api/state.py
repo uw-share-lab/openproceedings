@@ -73,7 +73,7 @@ import signal
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -101,6 +101,7 @@ if TYPE_CHECKING:
     from openproceedings.api.models import CoverageResponse
     from openproceedings.engine.tantivy_engine import TantivyEngine
     from openproceedings.eval.scholar_compare import MatchIndex
+    from openproceedings.ingest.record import PaperRecord
 
 log = logging.getLogger(__name__)
 # the access-line key (never logged) holding a request's verification deadline, on the wall clock `_wall`
@@ -124,9 +125,24 @@ class MatchTable:
     """One served index's `MatchIndex` (module docstring), built once by `build`: `index` is None until then,
     and stays None with `failed` set if the build failed. Read `index` once per request."""
 
+    # records the build reads a second, on the laptop that measured it (95,877 in 13 to 15 s): what
+    # `seconds_left` expects of a build in progress
+    RECORDS_PER_SECOND = 6_000
+
     def __init__(self) -> None:
         self.index: MatchIndex | None = None
         self.failed = False
+        self._started: float | None = None  # when the build began (`time.monotonic`); None before
+        self._records = 0
+
+    def seconds_left(self, clock: Callable[[], float] = time.monotonic) -> float:
+        """About how long the build has still to run: its expected time (its records at
+        `RECORDS_PER_SECOND`) less what it has run, or that expected time if it has not started (it waits
+        for the build ahead of it). 0 once built, or failed."""
+        if self.index is not None or self.failed:
+            return 0.0
+        expected = self._records / self.RECORDS_PER_SECOND
+        return expected if self._started is None else max(0.0, expected - (clock() - self._started))
 
     def build(self, records: RecordFile, index_version: str) -> None:
         """Build the table from `records`' snapshot (one validating pass, as `op eval scholar` reads it) and
@@ -135,15 +151,20 @@ class MatchTable:
         from openproceedings.ingest.snapshot import iter_records
 
         started = time.perf_counter()
+        self._records, self._started = len(records), time.monotonic()
         try:
-            index = MatchIndex.build(iter_records(records.path.parent))
+            index = MatchIndex.build(_yielding(iter_records(records.path.parent)))
             if index.cells.keys() != records.ids():  # the table must be this bundle's snapshot's, id for id
                 raise SnapshotError(
                     "the match table's records are not the served snapshot's", reason="match_index_mismatch"
                 )
         except Exception as e:  # the handling layer: logged once; comparisons answer 500 until a reload
             self.failed = True
-            fields: dict[str, object] = {"index_version": index_version, "error": type(e).__name__}
+            fields: dict[str, object] = {
+                "index_version": index_version,
+                "error": type(e).__name__,
+                "ms": elapsed_ms(started),
+            }
             if (reason := reason_of(e)) is not None:
                 fields["reason"] = reason
             if not isinstance(e, OSError | SnapshotError):
@@ -155,6 +176,20 @@ class MatchTable:
             "match_index_built",
             extra={"index_version": index_version, "records": len(index.cells), "ms": elapsed_ms(started)},
         )
+
+
+YIELD_EVERY = 1  # records the match-table build reads between two GIL releases (`_yielding`)
+
+
+def _yielding(records: Iterable[PaperRecord], every: int = YIELD_EVERY) -> Iterator[PaperRecord]:
+    """`records`, releasing the GIL every `every` of them (`time.sleep(0)`): the build is pure Python in a
+    background thread, and a search that waits for the GIL behind it missed spec 03's 100 ms p95 (on the 5k
+    fixture, builds back to back: 326 ms p95 without a release, 107 ms every 4 records, 64 ms every record;
+    the build alone 258 ms against 270 ms; spec 04 §Comparing with a RIS file, The match table; PERF-S3)."""
+    for i, record in enumerate(records):
+        if i % every == 0:
+            time.sleep(0)
+        yield record
 
 
 @dataclass(frozen=True, slots=True)
