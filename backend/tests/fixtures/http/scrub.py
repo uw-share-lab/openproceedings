@@ -27,6 +27,7 @@ import json
 import re
 import sys
 from collections.abc import Mapping
+from datetime import date
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -494,8 +495,10 @@ def fixture(capture: dict[str, Any]) -> dict[str, Any]:
     else:
         page, trimmed = scrub_html(url, text)
         response["text"] = page
+    fetched = capture.get("date", RECORDED)
+    date.fromisoformat(fetched)  # a capture's own date is a calendar day, `YYYY-MM-DD`: ValueError otherwise
     recorded: dict[str, Any] = {
-        "date": capture.get("date", RECORDED),
+        "date": fetched,
         "run": capture.get("run", "authenticated OpenReview fixture run"),
         "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
     }

@@ -388,6 +388,14 @@ def test_a_string_listed_under_another_track_is_unmapped() -> None:
     assert record.presentation is None and unmapped == {note["id"]}
 
 
+def test_an_icml_2026_main_spotlight_on_a_position_venueid_is_unmapped() -> None:
+    note = note_with_venue("icml-2026/notes-presentation-conference.json", "ICML 2026 spotlight")
+    note["content"]["venueid"]["value"] = "ICML.cc/2026/Position_Paper_Track"  # the venueid says position
+    record, unmapped = unmapped_after(note, "ICML", 2026)
+    assert isinstance(record, PaperRecord) and record.track == "position"
+    assert record.presentation is None and unmapped == {note["id"]}
+
+
 @pytest.mark.parametrize(
     ("fixture", "venue", "year"),
     [
@@ -395,6 +403,8 @@ def test_a_string_listed_under_another_track_is_unmapped() -> None:
         ("iclr-2024/notes-withdrawn.json", "ICLR", 2024),
         ("neurips-2025/notes-creative-ai.json", "NeurIPS", 2025),  # status unknown
         ("neurips-2025/notes-workshop-city.json", "NeurIPS", 2025),  # accepted workshop: not the conference's
+        ("icml-2026/notes-rejected.json", "ICML", 2026),  # `Submitted to ICML 2026`, an opt-in rejection
+        ("icml-2026/notes-workshop-submission.json", "ICML", 2026),  # an undecided workshop submission
     ],
 )
 def test_only_accepted_non_workshop_notes_are_looked_up(fixture: str, venue: str, year: int) -> None:

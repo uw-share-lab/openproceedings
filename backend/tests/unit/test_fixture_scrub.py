@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from tests.fixtures.http import scrub
 
 
@@ -83,3 +85,5 @@ def test_a_capture_states_its_own_fetch_date_and_one_without_it_takes_the_defaul
     }
     assert scrub.fixture(capture)["_recorded"]["date"] == scrub.RECORDED
     assert scrub.fixture({**capture, "date": "2026-10-05"})["_recorded"]["date"] == "2026-10-05"
+    with pytest.raises(ValueError):
+        scrub.fixture({**capture, "date": "5 October 2026"})

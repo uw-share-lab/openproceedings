@@ -119,6 +119,13 @@ LIVE: list[tuple[str, str | None, int | None, str, str]] = [
         "workshop",
         "withdrawn",
     ),  # 1lNr7gL71D
+    (
+        "ICLR.cc/2026/Workshop/AFAA/Rejected_Submission",
+        "ICLR",
+        2026,
+        "workshop",
+        "rejected",
+    ),  # 17; S8YlUOWpPz
     # a workshop whose name ends in `_Track` is still a workshop (42 notes; P39YgSzQwI)
     ("ICLR.cc/2026/Workshop/ML4RS_Main_Track", "ICLR", 2026, "workshop", "accepted"),
 ]

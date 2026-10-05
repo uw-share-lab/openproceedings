@@ -107,7 +107,7 @@ note under `backend/tests/fixtures/http/openreview/v2/`:
 | ICML 2023 | `ICML 2023 OralPoster` 155 | | `ICML 2023 Poster` 1,673 | |
 | ICML 2024 | `ICML 2024 Oral` 144 | `ICML 2024 Spotlight` 191 | `ICML 2024 Poster` 2,275 | |
 | ICML 2025 | `ICML 2025 oral` 108; position `… Position Paper Track oral` 12 | `ICML 2025 spotlightposter` 211; position `… spotlightposter` 12 | `ICML 2025 poster` 2,938; position `… poster` 49 | |
-| ICML 2026 | | `ICML 2026 spotlight` 536; position `ICML 2026 Position Paper Track spotlight` 38 | | (unmapped, below: `ICML 2026 regular` 5,805; position `… regular` 175) |
+| ICML 2026 | | `ICML 2026 spotlight` 536; position `ICML 2026 Position Paper Track spotlight` 38 | | |
 | NeurIPS 2023 | `NeurIPS 2023 oral` 67; D&B `NeurIPS 2023 Datasets and Benchmarks Oral` 10 | `… spotlight` 378; D&B `… Spotlight` 22 | `… poster` 2,773; D&B `… Poster` 290 | |
 | NeurIPS 2024 | `NeurIPS 2024 oral` 61; D&B `NeurIPS 2024 Track Datasets and Benchmarks Oral` 11 | `… spotlight` 326; D&B `… Spotlight` 56 | `… poster` 3,648; D&B `… Poster` 392 | `NeurIPS 2024 Competition Track` 16 |
 | NeurIPS 2025 | `NeurIPS 2025 oral` 77; D&B `NeurIPS 2025 Datasets and Benchmarks Track oral` 7; position `NeurIPS 2025 Position Paper Track Oral` 9 | `… spotlight` 687; D&B `… spotlight` 56 | `… poster` 4,522; D&B `… poster` 434 | `NeurIPS 2025 Position Paper Track` 31 |
@@ -120,10 +120,13 @@ no spotlight tier (224 + 5,127 = its 5,351 accepted notes).
 two tiers, `spotlight` and `regular` (536 + 5,805 = its 6,341 accepted main-track notes; 38 + 175 = the 213
 position papers). `spotlight` is mapped. `ICML 2026 regular` and `ICML 2026 Position Paper Track regular` are
 left out of the table: `regular` is not a presentation word, and nothing recorded says a regular paper was a
-poster. So ICML 2026 reports `presentation_unmapped` 5,980 on every crawl and replay, its records show no
-presentation, and both strings have a recorded note and a test that keeps them unmapped
-(`icml-2026/notes-presentation-*.json`). Mapping them (to `poster`, or as a stated string with no
-presentation) is the owner's call. NeurIPS 2026's strings get rows when its notes are public.
+poster. Both strings have a recorded note and a test that keeps them unmapped
+(`icml-2026/notes-presentation-*.json`), and their records show no presentation. **They await an owner
+decision** (`poster`, a stated string with no presentation, or left as they are). Until then ICML 2026 reports
+`presentation_unmapped` 5,980 (5,805 + 175) and raises the `openreview_crawl_attention` WARNING on every crawl
+and replay. The DEBUG line carries only a forum id, so the count is the only signal: **any ICML 2026 count
+other than 5,980 means a string this table has not seen** (or a changed listing), and is chased by listing the
+cache's distinct `content.venue` values. NeurIPS 2026's strings get rows when its notes are public.
 
 ## Sources
 
