@@ -22,7 +22,7 @@ from openproceedings import search
 from openproceedings.engine.protocol import EngineInputError
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.engine.tantivy_engine import Scope, TantivyEngine
-from openproceedings.query.ast import And, Node, Not
+from openproceedings.query.ast import And, Filter, Node, Not
 from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.groups import Groups, split
@@ -340,7 +340,7 @@ def test_a_count_that_fails_leaves_the_search_whole(
         if pool_down:
             closed = ThreadPoolExecutor(1)
             closed.shutdown()
-            monkeypatch.setattr(search, "_POOL", closed)
+            monkeypatch.setattr(search, "_GROUP_POOL", closed)
         caplog.clear()
         got = search.run(tantivy, parsed, facets=True, highlight=True, groups=10)
         assert got.groups == search.GroupCounts((), 3, 10, "count_failed")
@@ -380,6 +380,113 @@ def test_a_count_that_is_late_leaves_the_search_whole(
     search.shutdown()  # the released worker finishes before the next test reads the engine's memos
 
 
+def test_a_worker_that_raises_a_timeout_of_its_own_failed_and_did_not_time_out(
+    engines: Engines, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`TimeoutError` is also what waiting on a future raises: a job that finished by raising one is a failed
+    count, not a late one."""
+    _reference, tantivy, _other = engines
+
+    def broken(*_a: Any, **_kw: Any) -> list[int]:
+        raise TimeoutError("not the wait's")
+
+    monkeypatch.setattr(tantivy, "counts", broken)
+    got = search.run(tantivy, parse("trust model calibration"), facets=True, groups=10)
+    assert got.groups == search.GroupCounts((), 3, 10, "count_failed")
+
+
+def test_a_timed_out_job_stops_within_one_collection(tmp_path: Any) -> None:
+    """A job its search stopped waiting for does no more than finish the collection it is in: of the six a
+    three-group query has, it makes one."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    parsed = parse("trust model calibration")
+    release, inside = threading.Event(), threading.Event()
+    collected: list[str] = []
+    combos = engine.combos
+
+    def slow(*a: Any, **kw: Any) -> Any:
+        if threading.current_thread().name.startswith("op-groups"):
+            collected.append(threading.current_thread().name)
+            inside.set()
+            release.wait(30)  # the collection the job is in when its search gives up
+        return combos(*a, **kw)
+
+    engine.combos = slow  # type: ignore[method-assign]
+    try:
+        got = search.run(engine, parsed, facets=True, groups=10, groups_wait=0.2)
+        assert inside.wait(10)
+    finally:
+        release.set()
+    search.shutdown()  # the job has ended, one way or the other
+    assert got.groups == search.GroupCounts((), 3, 10, "timed_out")
+    assert len(collected) == 1
+    # and a search of the same query afterwards counts all of it
+    engine.combos = combos  # type: ignore[method-assign]
+    again = search.run(engine, parsed, facets=True, groups=10).groups
+    assert again is not None and again.not_counted is None and len(again.counts) == 3
+
+
+def test_facets_are_served_while_slow_counting_jobs_hold_every_counting_worker(
+    engines: Engines, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Eight concurrent searches whose counting never finishes (every counting worker held, the rest queued):
+    each still answers with its facets, `timed_out` for its groups, after its own wait and no longer. The
+    counts have their own workers, so no facet job queues behind one."""
+    _reference, tantivy, other = engines
+    parsed = parse("trust model calibration")
+    plain = search.run(other, parsed, facets=True)
+    release = threading.Event()
+
+    def stuck(*_a: Any, **_kw: Any) -> list[int]:
+        release.wait(60)
+        raise RuntimeError("released")
+
+    monkeypatch.setattr(tantivy, "counts", stuck)
+
+    def one(_i: int) -> tuple[search.Search, float]:
+        started = time.monotonic()
+        got = search.run(tantivy, parsed, facets=True, groups=10, groups_wait=0.3)
+        return got, time.monotonic() - started
+
+    try:
+        with ThreadPoolExecutor(8) as pool:
+            answers = list(pool.map(one, range(8)))
+        assert search._GROUP_POOL is not None and search._GROUP_POOL._max_workers == search.GROUP_WORKERS
+        for got, took in answers:
+            assert got.groups == search.GroupCounts((), 3, 10, "timed_out")
+            assert dataclasses.replace(got, groups=None) == plain
+            assert took < 20  # its own 0.3 s wait, not the 60 s the counting workers are held
+        # a search that asks for no counts is untouched while they are still held
+        assert search.run(tantivy, parsed, facets=True) == plain
+    finally:
+        release.set()
+        search.shutdown()
+
+
+def test_a_kept_verified_clause_of_many_ids_is_too_costly(engines: Engines) -> None:
+    """The other costly shape: few terms, but a position-verified kept clause whose id set every tree's
+    collection resolves. Its ids are counted before anything is counted (`_ids_read`: N·G + 2·N·K in ids)."""
+    reference, tantivy, other = engines
+    parsed = parse("trust model NOT (model NEAR/10 model*)")
+    assert parsed.effective_ast is not None
+    found = split(parsed.effective_ast)
+    (near,) = [k for k in found.kept if isinstance(k, Not) and not isinstance(k.child, Filter)]
+    matched = reference.match_ids(near.child)  # the clause's matches, in either field
+    scope = Scope()
+    tantivy.compile(parsed.effective_ast, scope)
+    read = search._ids_read(found, scope)
+    assert read == 2 * 2 * sum(len(ids) for ids in scope.ids.values()) >= 2 * 2 * len(matched) > 0
+    assert (
+        found.terms_read(tantivy.expansions(parsed.effective_ast)) < 1_000
+    )  # few terms: only the ids say so
+    plain = search.run(other, parsed, facets=True)
+    at = search.run(tantivy, parsed, facets=True, groups=10, groups_ids=read)
+    assert at.groups is not None and at.groups.counts == expected_pairs(reference, found)
+    over = search.run(tantivy, parsed, facets=True, groups=10, groups_ids=read - 1)
+    assert over.groups == search.GroupCounts((), 2, 10, "too_costly")
+    assert dataclasses.replace(over, groups=None) == plain
+
+
 def test_counting_groups_verifies_no_clause_again(tmp_path: Any) -> None:
     """A group's tree holds only clauses of the query, verified once in the caller's thread before the counting
     worker starts: the worker never enters the verification gate (decision-010: no cost of its own)."""
@@ -396,7 +503,7 @@ def test_counting_groups_verifies_no_clause_again(tmp_path: Any) -> None:
     got = search.run(engine, parsed, facets=True, groups=10)
     assert got.groups is not None and len(got.groups.counts) == 3
     assert len(entered) == 4  # 2 clauses × title and abstract, each verified once
-    assert not [name for name in entered if name.startswith("op-facets")]
+    assert not [name for name in entered if name.startswith(("op-facets", "op-groups"))]
 
 
 def measured(engine: TantivyEngine, parsed: Any, **kw: Any) -> tuple[search.Search, int, set[str], int, int]:
@@ -538,7 +645,7 @@ def test_a_counting_worker_that_would_verify_is_recounted_in_the_caller(
     counts = engine.counts
 
     def cold_in_the_worker(*a: Any, **kw: Any) -> Any:
-        if threading.current_thread().name.startswith("op-facets"):
+        if threading.current_thread().name.startswith("op-groups"):
             engine.verified.clear(), engine.compiled.clear(), engine.faceted.clear()
         return counts(*a, **kw)
 
@@ -559,7 +666,7 @@ def test_a_pool_shut_down_under_a_search_counts_the_groups_in_the_caller(
     expected = search.run(other, parsed, facets=True, groups=10)
     closed = ThreadPoolExecutor(1)
     closed.shutdown()
-    monkeypatch.setattr(search, "_POOL", closed)
+    monkeypatch.setattr(search, "_GROUP_POOL", closed)
     tantivy.faceted.clear()
     assert search.run(tantivy, parsed, facets=True, groups=10) == expected
 

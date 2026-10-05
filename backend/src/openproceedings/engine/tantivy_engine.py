@@ -421,7 +421,9 @@ class TantivyEngine:
         """How many documents match `ast`: `len(match_ids(ast))`, without reading an id (`counts` of one)."""
         return self.counts([ast], scope=scope)[0]
 
-    def counts(self, trees: Sequence[Node], *, scope: Scope | None = None) -> list[int]:
+    def counts(
+        self, trees: Sequence[Node], *, scope: Scope | None = None, check: Callable[[], None] | None = None
+    ) -> list[int]:
         """How many documents match each of `trees`, without reading an id (TASK-176: a query's concept groups,
         each alone and the query without each; `search.run`). Counted as a facet is: a tree's top-level
         filters (`Filter`, or `NOT` of one) are set aside, the rest is collected once per combination of
@@ -434,10 +436,15 @@ class TantivyEngine:
         distinct conjunct is compiled at most once per call, whatever the number of trees, and only when some
         base misses the memo; a base's query is those conjuncts' queries ANDed, as `Compiler.node` builds an
         AND. None of it is stored in `compiled`: a tree counted here is never searched, and storing one entry
-        a tree would hold every kept verified clause's ids once per group against the memo's shared budget."""
+        a tree would hold every kept verified clause's ids once per group against the memo's shared budget.
+
+        `check` is called before each tree: a caller that no longer wants the counts raises from it, so the
+        work stops within one collection (what is already collected stays memoised)."""
         parts = _Parts(self, scope)
         out: list[int] = []
         for ast in trees:
+            if check is not None:
+                check()
             self.expansions(ast)  # the cap applies, as for every tree an engine is given
             conjuncts = _conjuncts(ast)
             filters = [(COMBO.index(f), c) for c in conjuncts if (f := _filter_field(c)) is not None]

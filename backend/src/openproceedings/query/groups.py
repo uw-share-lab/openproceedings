@@ -19,7 +19,7 @@ the AST is read here; an engine counts the trees.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 
 from openproceedings.query.ast import And, Filter, Near, Node, Not, Or, Phrase, Term, Wildcard
@@ -39,17 +39,19 @@ class Groups:
         Only asked of a query with two or more groups, so another group is always left."""
         return _and((*(g for g in self.groups if g is not group), *self.kept))
 
-    def terms_read(self, expansions: Mapping[tuple[str, str], Collection[str]]) -> int:
-        """How many terms counting every group reads, summed over the trees counted (each group alone, and the
-        query without each): what the counting costs, known before any of it is done. A tree's collection
-        reads every term of its text conjuncts (a wildcard's every expansion; a filter reads none: it is
-        applied to the collected combinations), so with N groups of G terms in all and K kept terms the
-        alone trees read G + N·K and the without trees (N − 1)·G + N·K: N·G + 2·N·K together. A long kept
-        clause (`NOT (… many wildcards …)`) is read by every tree, which is what makes a query costly."""
+    def read(self, weight: Callable[[Node], int]) -> int:
+        """What counting every group reads, summed over the trees counted (each group alone, and the query
+        without each), when a conjunct's collection reads `weight(conjunct)`: with N groups weighing G in all
+        and kept conjuncts weighing K, the alone trees read G + N·K and the without trees (N − 1)·G + N·K:
+        **N·G + 2·N·K** together. A heavy kept clause is read by every tree, which is what makes a query
+        costly. Known before any counting is done."""
         n = len(self.groups)
-        in_groups = sum(_terms(g, expansions) for g in self.groups)
-        in_kept = sum(_terms(k, expansions) for k in self.kept)
-        return n * in_groups + 2 * n * in_kept
+        return n * sum(map(weight, self.groups)) + 2 * n * sum(map(weight, self.kept))
+
+    def terms_read(self, expansions: Mapping[tuple[str, str], Collection[str]]) -> int:
+        """`read` in terms: a tree's collection reads every term of its text conjuncts (a wildcard's every
+        expansion; a filter reads none: it is applied to the collected combinations)."""
+        return self.read(lambda c: _terms(c, expansions))
 
 
 def _terms(n: Node, expansions: Mapping[tuple[str, str], Collection[str]]) -> int:

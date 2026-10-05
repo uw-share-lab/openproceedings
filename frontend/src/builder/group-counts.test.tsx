@@ -115,19 +115,46 @@ describe("groupTotals", () => {
     ]);
   });
 
-  it("says a group written exactly as an earlier counted one is the same group, and nothing for any other", () => {
-    const named = (id: number, termId: number, text: string): BuilderGroup => ({
-      id,
-      terms: [{ id: termId, text, scope: "any", phrased: false }],
+  it("says a group that means what an earlier counted one means is the same group, by the server's reading", () => {
+    // typed differently (`ＬＬＭ` full-width, `llm`), read alike: the server's `ast` holds one token for both
+    const leaf = (token: string, span: [number, number]): AstNode => ({
+      kind: "term",
+      field: null,
+      token,
+      span,
     });
+    const ast: AstNode = {
+      kind: "and",
+      span: [0, 68],
+      children: [
+        leaf("llm", [1, 19]),
+        leaf("llm", [59, 68]),
+        { kind: "or", span: [20, 55], children: [leaf("llm", [23, 26]), leaf("llm", [33, 44])] },
+        leaf("other", [70, 75]),
+      ],
+    };
+    const named = (id: number, ...terms: number[]): BuilderGroup => ({
+      id,
+      terms: terms.map((t) => ({ id: t, text: `typed ${t}`, scope: "any", phrased: false })),
+    });
+    const more = new Map<number, CodePoints>([...spans, [5, [70, 75]]]);
+    const one: GroupCounts["counts"] = [{ span: [0, 27], total: 6343, total_without: 139 }];
     const shown = groupTotals(
-      counts,
-      [named(10, 1, "LLM"), named(11, 4, "llm"), named(12, 99, "llm"), named(13, 4, "other")],
-      spans,
+      one,
+      [named(10, 1), named(11, 4), named(12, 2, 3), named(13, 5), named(14, 99)],
+      more,
+      ast,
     );
     expect([...shown]).toEqual([
       [10, { kind: "counted", total: 6343, totalWithout: 139 }],
-      [11, { kind: "same", as: 1 }], // in the query (it has a place), not counted, the same terms
+      [11, { kind: "same", as: 1 }], // not counted, and the same token
+      // (group 12's first term lies in the counted span: counted, as a repeated-term group is)
+      [12, { kind: "counted", total: 6343, totalWithout: 139 }],
+      // 13 means something else; 14 has no place in the query: nothing
+    ]);
+    // without the server's reading nothing is called the same: typed text is never compared
+    expect([...groupTotals(one, [named(10, 1), named(11, 4)], more)]).toEqual([
+      [10, { kind: "counted", total: 6343, totalWithout: 139 }],
     ]);
   });
 

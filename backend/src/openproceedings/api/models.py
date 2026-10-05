@@ -246,7 +246,7 @@ class GroupCounts(Model):
     not_counted: NotCounted | None = Field(
         description="Why `counts` is empty, null when it isn't: `fewer_than_two_groups` (the query is not an "
         "AND of groups), `too_many_groups` (`groups_total` is over `limit`), `too_costly` (counting them would read more "
-        "terms than this instance allows: shorten the `NOT` clauses or use longer wildcard stems), `count_failed` or `timed_out` "
+        "terms or verified ids than this instance allows, `/meta` `limits`: shorten the `NOT` clauses or use longer wildcard stems), `count_failed` or `timed_out` "
         "(the counts could not be computed, or not in time; search again). The search itself is complete "
         "in every case."
     )
@@ -407,6 +407,19 @@ class Limits(Model):
     max_verification_candidates: int = Field(
         description="the most candidate documents a query's position-verified clauses may read, summed over "
         "each clause's fields; more is 422 `API_QUERY_TOO_COSTLY`"
+    )
+    max_counted_groups: int = Field(
+        description="TASK-176: the most concept groups `/search` counts for one query; a query with more "
+        "gets its result with `groups.not_counted: too_many_groups`"
+    )
+    max_counted_terms: int = Field(
+        description="TASK-176: the most terms the group counts of one query may read, summed over the trees "
+        "counted (N groups of G terms in all, K terms in the kept text clauses: N·G + 2·N·K; a wildcard "
+        "counts its expansions); more is `groups.not_counted: too_costly`, never a refusal of the search"
+    )
+    max_counted_ids: int = Field(
+        description="TASK-176: the most verified ids the group counts of one query may read, summed the "
+        "same way over its position-verified clauses' matches; more is `groups.not_counted: too_costly`"
     )
 
 

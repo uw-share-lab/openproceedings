@@ -130,6 +130,14 @@ def test_a_query_whose_counting_reads_too_many_terms_gets_its_whole_result_witho
         over = ok(under, q)
     assert counted["groups"]["not_counted"] is None and len(counted["groups"]["counts"]) == 2
     assert over["groups"] == {"counts": [], "groups_total": 2, "limit": 10, "not_counted": "too_costly"}
+    # the other bound: a kept position-verified clause's ids, read by every tree counted
+    near = "trust model NOT (model NEAR/10 model*)"
+    with TestClient(make_app(store.indexes.parent, max_counted_ids=1)) as few:
+        costly = ok(few, near)
+    with TestClient(make_app(store.indexes.parent)) as default:
+        cheap = ok(default, near)
+    assert costly["groups"] == {"counts": [], "groups_total": 2, "limit": 10, "not_counted": "too_costly"}
+    assert cheap["groups"]["not_counted"] is None and len(cheap["groups"]["counts"]) == 2
     assert {k: v for k, v in over.items() if k != "groups"} == {
         k: v for k, v in counted.items() if k != "groups"
     }

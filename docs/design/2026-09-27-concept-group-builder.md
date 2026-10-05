@@ -191,7 +191,7 @@ differs from or adds to the design above:
   §SearchResponse `groups`). `SearchView` passes the last answered `/search`'s query, `total` and `groups` to
   the workspace (`searchedGroups`), which passes them to the builder; `group-counts.ts` applies them only to
   the draft that was searched (`countsFor`) and gives each builder group the counts whose span holds one of
-  its terms, or "same as group N" for an exact repeat (`groupTotals`); a polite status says when they arrive. Tests: `group-counts.test.tsx` (the rule; each state of the line in the editable
+  its terms, or "same as group N" for a group the server's `ast` reads as an earlier one (`groupTotals`); a polite status says when they arrive. Tests: `group-counts.test.tsx` (the rule; each state of the line in the editable
   and the read-only builder; dropped on an edit), `search-view.test.tsx` (the `/search` answer reaches the
   builder), and `backend/tests/contract/test_group_counts.py` (the rule against the server's groups on every
   query of the read golden).

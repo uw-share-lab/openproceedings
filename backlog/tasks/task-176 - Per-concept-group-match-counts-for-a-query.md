@@ -4,7 +4,7 @@ title: Per-concept-group match counts for a query
 status: In Progress
 assignee: []
 created_date: '2026-10-05 01:47'
-updated_date: '2026-10-05 04:41'
+updated_date: '2026-10-05 05:00'
 labels:
   - api
   - frontend
@@ -59,5 +59,10 @@ Needs a decision record (id to be assigned by the main session). Not done: an e2
 created: 2026-10-05 04:41
 ---
 Review round 2 (cost Must): TantivyEngine.counts compiles each conjunct once per request and stores nothing in the compiled memo (the 158-wildcard kept-clause shape: 2 entries / 19,106 units with or without counts, was 12 / 114,356); residual collection cost bounded by ApiConfig.max_counted_terms (default 5,000 terms read, N*G + 2*N*K), over which not_counted is too_costly.
+---
+
+created: 2026-10-05 05:00
+---
+Review round 2 (final): the pre-flight bound also covers verified ids (max_counted_ids, default 300,000); both bounds and the group limit are in /meta limits; counting runs on its own two workers and a timed-out job stops before its next collection; a worker's own TimeoutError is count_failed; 'same as group N' follows the server's ast.
 ---
 <!-- COMMENTS:END -->

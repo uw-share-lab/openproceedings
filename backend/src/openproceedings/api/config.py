@@ -134,6 +134,10 @@ class ApiConfig(BaseModel):
     # by every one). Over it: the result without counts, `too_costly`. 5,000 admits every Trust-Evals string
     # (the widest, main-2-pop, reads 243 on the real index) and refuses a query built to make 20 collections of thousands of terms
     max_counted_terms: int = Field(default=5_000, ge=1)
+    # nor more than this many verified ids, summed the same way: a position-verified clause is an id set in
+    # its tree's query, resolved id by id by every collection that reads it (a kept `NOT (model NEAR/10
+    # model*)`: few terms, tens of thousands of ids, read by all 2 × N trees)
+    max_counted_ids: int = Field(default=300_000, ge=1)
     # a request holding a verification slot longer than this logs `verification_slow` (WARNING)
     slow_verification_seconds: float = Field(default=5.0, gt=0)
     # a request's cold verifications together get this much wall time from its first slot; past it the verify

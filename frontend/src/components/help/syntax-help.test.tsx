@@ -21,6 +21,9 @@ const LIMITS = {
   max_query_depth: 64,
   max_verified_clauses: 3,
   max_verification_candidates: 12345,
+  max_counted_groups: 4,
+  max_counted_terms: 777,
+  max_counted_ids: 8888,
 };
 
 function page(

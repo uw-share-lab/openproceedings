@@ -11,7 +11,8 @@
  */
 import type { SearchResponse } from "@/components/search/use-search";
 import type { Mode } from "@/lib/search-state";
-import { termWritten, type BuilderGroup, type CodePoints } from "./model";
+import type { AstNode, BuilderGroup, CodePoints } from "./model";
+import { spanOf } from "./read";
 
 /** `/search`'s `groups`, as the typed client returns it (a span is `number[]`). */
 export type GroupCounts = SearchResponse["groups"];
@@ -33,24 +34,77 @@ export function countsFor(
   return searched != null && searched.q === text && searched.mode === mode ? searched : null;
 }
 
-/** What a builder group shows: its two counts, or the earlier group (1-based) it exactly repeats. */
+/** What a builder group shows: its two counts, or the earlier group (1-based) it repeats. */
 export type GroupShown =
   | { readonly kind: "counted"; readonly total: number; readonly totalWithout: number }
   | { readonly kind: "same"; readonly as: number };
 
+type Leaf = Extract<AstNode, { kind: "term" | "wildcard" | "phrase" }>;
+
+/** Every term, wildcard and phrase of `ast`, by its span (`"start,end"`). */
+function leavesBySpan(ast: AstNode, into = new Map<string, Leaf>()): Map<string, Leaf> {
+  switch (ast.kind) {
+    case "term":
+    case "wildcard":
+    case "phrase":
+      into.set(spanOf(ast).join(","), ast);
+      break;
+    case "and":
+    case "or":
+      for (const child of ast.children) leavesBySpan(child, into);
+      break;
+    case "not":
+      leavesBySpan(ast.child, into);
+      break;
+    case "near":
+      leavesBySpan(ast.left, into);
+      leavesBySpan(ast.right, into);
+      break;
+    default:
+      break;
+  }
+  return into;
+}
+
+/** A node as the server compares two of them: everything but where it was written. */
+const meaning = (node: unknown): string =>
+  JSON.stringify(node, (key: string, value: unknown) => (key === "span" ? undefined : value));
+
+/**
+ * What a group means to the server, which holds two groups that mean the same once: its terms as the
+ * server's `ast` reads them (normalised tokens, stems and scopes, never the typed text), each once, in order
+ * (the canonical form: an OR's repeated branches are one). Null when a term has no leaf in `ast`.
+ */
+function groupMeaning(
+  group: BuilderGroup,
+  spans: ReadonlyMap<number, CodePoints>,
+  leaves: ReadonlyMap<string, Leaf>,
+): string | null {
+  const terms: string[] = [];
+  for (const t of group.terms) {
+    const leaf = leaves.get(spans.get(t.id)?.join(",") ?? "");
+    if (leaf === undefined) return null;
+    const m = meaning(leaf);
+    if (!terms.includes(m)) terms.push(m);
+  }
+  return terms.length === 0 ? null : JSON.stringify(terms);
+}
+
 /**
  * Per builder group id, the server's counts of the group whose span holds a term of it. A group with none
- * that is written exactly as an earlier counted group (the same terms and scopes, in order) is that group
- * to the server, which holds it once: it says so rather than showing nothing.
+ * that means what an earlier counted group means (`groupMeaning`, read from the server's `ast` of the query:
+ * the server's own rule for "the same group", not a comparison of typed text) is that group to the server,
+ * which holds it once: it says so rather than showing nothing.
  */
 export function groupTotals(
   counts: GroupCounts["counts"],
   groups: readonly BuilderGroup[],
   spans: ReadonlyMap<number, CodePoints>,
+  ast: AstNode | null = null,
 ): Map<number, GroupShown> {
   const shown = new Map<number, GroupShown>();
-  const written = (g: BuilderGroup) => JSON.stringify(g.terms.map((t) => termWritten(t).toLowerCase()));
-  const counted = new Map<string, number>(); // a counted group's terms → its number
+  const leaves = ast === null ? new Map<string, Leaf>() : leavesBySpan(ast);
+  const counted = new Map<string, number>(); // a counted group's meaning → its number
   groups.forEach((group, index) => {
     const terms = group.terms.flatMap((t) => {
       const span = spans.get(t.id);
@@ -60,14 +114,14 @@ export function groupTotals(
       const [from, to] = [span[0] ?? 0, span[1] ?? 0];
       return terms.some(([s, e]) => s >= from && e <= to);
     });
-    const key = written(group);
+    const key = groupMeaning(group, spans, leaves);
     if (count !== undefined) {
       shown.set(group.id, { kind: "counted", total: count.total, totalWithout: count.total_without });
-      if (!counted.has(key)) counted.set(key, index + 1);
+      if (key !== null && !counted.has(key)) counted.set(key, index + 1);
       return;
     }
-    const as = counted.get(key);
-    if (as !== undefined && terms.length > 0) shown.set(group.id, { kind: "same", as });
+    const as = key === null ? undefined : counted.get(key);
+    if (as !== undefined) shown.set(group.id, { kind: "same", as });
   });
   return shown;
 }

@@ -211,12 +211,14 @@ warnings, the save's index check), the design doc says so; its open questions li
    query without it: the group whose removal adds the most papers narrows the search most. The query's
    limits, leave-out terms and default filters apply to every count."). The numbers are `/search`'s `groups`
    and `total` as sent (04 §SearchResponse), never computed here; a builder group is given the counts whose
-   span holds one of its terms, and a group written exactly as an earlier counted one says "Same as group
-   N, so it is counted once." (the canonical query holds it once). They are shown only while the draft is the
+   span holds one of its terms, and a group that means what an earlier counted one means says "Same as group
+   N, so it is counted once." (the canonical query holds it once; "means" is the server's reading, the
+   group's leaves in the server's `ast` of the query with their normalised tokens, never the typed text). They are shown only while the draft is the
    searched query, in the same mode: an edit drops every count at once, since a count is a fact about the
    query searched (an expansion, a fact about the index, stays). A query that is not an AND of groups shows
    none; one whose counts the search doesn't have says why (`groups.not_counted`: more groups than the
-   instance counts; more terms to read than it allows, with how to shorten the query; the counts failed; they weren't ready in time, each of the last two with "Search again
+   instance counts; more terms or position-checked matches to read than it allows, with how to shorten the query (the
+   syntax help's instance limits name the three bounds from `/meta`); the counts failed; they weren't ready in time, each of the last two with "Search again
    to see them."; a reason this build doesn't know reads as a failure, the set being open). The read-only
    builder shows the counts of each part that fits. The Exclude row has none: it is applied to every count.
    The counts are text inside their group (no colour; the `·` between them is hidden from a screen reader,

@@ -41,6 +41,7 @@ import {
   emptyModel,
   SCOPE_LABELS,
   termWritten,
+  type AstNode,
   type Blocker,
   type BuilderGroup,
   type BuilderModel,
@@ -98,8 +99,9 @@ type Initial =
       /** The parts that fit, shown dimmed under the notice (design B2). */
       readonly fitting: BuilderModel;
       readonly keys: WildcardKeys;
-      /** Each fitting term's place in the query (its group's count is found by them). */
+      /** Each fitting term's place in the query (its group's count is found by them), and the query's `ast`. */
       readonly spans: ReadonlyMap<number, CodePoints>;
+      readonly ast: AstNode;
     }
   | { readonly kind: "unchecked" };
 
@@ -127,6 +129,7 @@ function initialOf(text: string, mode: Mode, outcome: ParseOutcome | null): Init
       fitting,
       keys: termWildcards(result.ast, spans),
       spans,
+      ast: result.ast,
     };
   }
   const model = modelOf(text, reading.shape);
@@ -232,16 +235,6 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
   }, [focusOnOpen, onFocused, initial?.kind, current]);
 
   const written = useMemo(() => (current === null ? null : writeModel(current.model)), [current]);
-  // the last search's counts, only while the draft is the query it searched
-  const searched = countsFor(props.searched, text, mode);
-  const totals = useMemo(
-    () =>
-      searched === null || current === null
-        ? new Map<number, GroupShown>()
-        : groupTotals(searched.groups.counts, current.model.groups, current.spans),
-    [searched, current],
-  );
-
   // The server's answer for the text shown: per-term diagnostics, the check of the builder's own query, and
   // each term's wildcards (kept from before the edit while it is in flight)
   const parsed =
@@ -254,6 +247,15 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
           ? termWildcards(parsed.ast, current.spans)
           : current.keys,
     [current, parsed],
+  );
+  // the last search's counts, only while the draft is the query it searched
+  const searched = countsFor(props.searched, text, mode);
+  const totals = useMemo(
+    () =>
+      searched === null || current === null
+        ? new Map<number, GroupShown>()
+        : groupTotals(searched.groups.counts, current.model.groups, current.spans, parsed?.ast ?? null),
+    [searched, current, parsed],
   );
 
   /** An edit: the model changes and the draft is rewritten from it. */
@@ -947,12 +949,14 @@ function FittingParts({
   keys,
   expansions,
   spans,
+  ast,
   searched,
 }: {
   model: BuilderModel;
   keys: WildcardKeys;
   expansions: Expansions | null;
   spans: ReadonlyMap<number, CodePoints>;
+  ast: AstNode;
   searched: SearchedGroups | null;
 }) {
   const headingId = useId();
@@ -960,7 +964,7 @@ function FittingParts({
   const totals =
     searched === null
       ? new Map<number, GroupShown>()
-      : groupTotals(searched.groups.counts, model.groups, spans);
+      : groupTotals(searched.groups.counts, model.groups, spans, ast);
   if (n === 0 && model.exclude === null && model.limits.length === 0) return null;
   const terms = (group: BuilderGroup) => (
     <>
@@ -1081,6 +1085,7 @@ function ReadOnly({
             keys={initial.keys}
             expansions={expansions}
             spans={initial.spans}
+            ast={initial.ast}
             searched={searched}
           />
         </>

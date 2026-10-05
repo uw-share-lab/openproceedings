@@ -322,6 +322,13 @@ def build_parser() -> argparse.ArgumentParser:
         "query over it gets its result without group counts",
     )
     serve.add_argument(
+        "--max-counted-ids",
+        type=int,
+        default=300_000,
+        help="verified ids the group counts of one query may read, summed over the trees counted (default "
+        "300000); a query over it gets its result without group counts",
+    )
+    serve.add_argument(
         "--max-verification-seconds",
         type=float,
         default=30.0,
@@ -1677,6 +1684,7 @@ def _serve(ns: argparse.Namespace) -> int:
             max_verification_seconds=ns.max_verification_seconds,
             max_counted_groups=ns.max_counted_groups,
             max_counted_terms=ns.max_counted_terms,
+            max_counted_ids=ns.max_counted_ids,
             serve_docs=loopback if ns.docs is None else ns.docs,
             # a public instance never starts without its takedown list (TASK-067): off loopback, or behind a
             # proxy on the same host (a trusted proxy means clients reach it); an empty list lists nothing

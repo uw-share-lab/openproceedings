@@ -27,9 +27,10 @@ beside the facets. Those trees hold only clauses of the effective tree, compiled
 verifies either; the counts read nothing the page, `total`, the facets or `excluded` are computed from, and
 change none of them. They are an extra, so they can never cost the search its answer: a worker that fails,
 or isn't done `GROUP_COUNT_WAIT_SECONDS` after everything else is, leaves the search whole with no counts and
-the reason (`count_failed`, `timed_out`). And they are bounded before they start: a query whose counting would
-read more than `groups_terms` terms (`Groups.terms_read`: every tree counted reads the kept clauses again)
-gets no counts and `too_costly` (`tests/unit/test_group_counts.py`).
+the reason (`count_failed`, `timed_out`), and the late job stops before its next collection. And they are
+bounded before they start: a query whose counting would read more than `groups_terms` terms or `groups_ids`
+verified ids (`Groups.read`: every tree counted reads the kept clauses again) gets no counts and `too_costly`.
+They run on their own two workers, so the facets never queue behind them (`tests/unit/test_group_counts.py`).
 """
 
 from __future__ import annotations
@@ -41,13 +42,13 @@ import os
 import threading
 from collections.abc import Callable, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
-from concurrent.futures import TimeoutError as WaitTimeout
+from concurrent.futures import wait as wait_for
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Literal
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
-from openproceedings.engine.compile import wildcards
+from openproceedings.engine.compile import FIELDS, verified_clauses, wildcards
 from openproceedings.engine.exclusions import ORDER, Excluded, excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInputError, EngineInternalError, Expansions
@@ -63,6 +64,16 @@ NotCounted = Literal["fewer_than_two_groups", "too_many_groups", "too_costly", "
 # (`Groups.terms_read`): over it the search answers without counts (`too_costly`). The API passes its own
 # (`ApiConfig.max_counted_terms`)
 MAX_COUNTED_TERMS = 5_000
+# and the most verified ids: a position-verified clause (a wildcard phrase, a NEAR) is an id set in its tree's
+# query, resolved id by id in every collection that reads it, however few terms it has
+MAX_COUNTED_IDS = 300_000
+
+
+class _Abandoned(Exception):
+    """A counting job whose search no longer waits for it (it timed out, or failed): stopped between
+    collections, never reported."""
+
+
 # how long a finished search waits for its counting worker before answering without the counts: the page,
 # the facets and the exclusion accounting are done by then, so this is the most the counts can add to a
 # response (they take milliseconds; a worker this late is queued behind others or stuck)
@@ -135,12 +146,13 @@ def run(
     highlight: bool = False,
     groups: int | None = None,
     groups_terms: int = MAX_COUNTED_TERMS,
+    groups_ids: int = MAX_COUNTED_IDS,
     groups_wait: float = GROUP_COUNT_WAIT_SECONDS,
 ) -> Search:
     """One page of `parsed`'s search on `engine`, with its total, exclusion accounting and expansions (and,
     when asked, the disjunctive facets, each hit's code-point highlight spans, and each concept group's counts
-    when the query has from two to `groups` of them and counting them reads at most `groups_terms` terms,
-    waited for at most `groups_wait` seconds once the rest is done). `parsed` must have
+    when the query has from two to `groups` of them and counting them reads at most `groups_terms` terms and
+    `groups_ids` verified ids, waited for at most `groups_wait` seconds once the rest is done). `parsed` must have
     parsed: a query with errors never reaches an engine (spec 03 §Error handling)."""
     ast = _runnable(engine, parsed)
     expansions = expanded(engine, ast)
@@ -150,6 +162,7 @@ def run(
     why = None if found is None or groups is None else _uncountable(found, groups, groups_terms, expansions)
     countable = found is not None and why is None
     counting: Future[tuple[Pair, ...]] | None = None
+    abandoned = threading.Event()  # set when this search stops waiting for its counting job
     if facets or countable:
         engine.check_page(sort, offset, limit)  # a bad argument is refused before any work, as before
         # compiled first, here: a cold verified clause takes its slot in this thread, and the worker's facet
@@ -157,8 +170,10 @@ def run(
         engine.compile(ast, scope)
     if facets:
         faceting = _submit(engine, ast, scope)
+    if found is not None and countable and _ids_read(found, scope) > groups_ids:
+        why, countable = "too_costly", False  # known only now: the ids are the compile's
     if found is not None and countable:
-        counting = _start(partial(_alone, engine, found, scope.reader()))
+        counting = _start(partial(_alone, engine, found, scope.reader(), abandoned), counts=True)
     try:
         # one collection: ids and scores
         total, page = engine.page(ast, sort=sort, offset=offset, limit=limit, scope=scope)
@@ -175,6 +190,7 @@ def run(
             for i, score in page
         )
     except BaseException:
+        abandoned.set()  # a counting job already running stops before its next collection
         for started in (faceting, counting):
             if started is not None:
                 started.cancel()  # not started yet: never run; running: its result (or error) is dropped
@@ -200,14 +216,14 @@ def run(
         if why is not None:
             grouped = GroupCounts((), len(found.groups), groups, why)
         else:
-            grouped = _grouped(engine, found, groups, counting, scope, groups_wait)
+            grouped = _grouped(engine, found, groups, counting, scope, groups_wait, abandoned)
     return Search(total, hits, gone, expansions, counted, grouped)
 
 
 def _uncountable(found: Groups, limit: int, terms: int, expansions: Expansions) -> NotCounted | None:
-    """Why `found`'s groups are not counted, decided from the query and its expansions before any counting:
-    it is not an AND of groups, has more groups than `limit`, or counting them would read more than `terms`
-    terms. None when they are counted."""
+    """Why `found`'s groups are not counted, decided from the query and its expansions before anything is
+    compiled for them: it is not an AND of groups, has more groups than `limit`, or counting them would read
+    more than `terms` terms. None when they may be (`run` then checks the verified ids too: `_ids_read`)."""
     n = len(found.groups)
     if n < 2:
         return "fewer_than_two_groups"
@@ -216,11 +232,37 @@ def _uncountable(found: Groups, limit: int, terms: int, expansions: Expansions) 
     return "too_costly" if found.terms_read(expansions) > terms else None
 
 
-def _alone(engine: TantivyEngine, found: Groups, scope: Scope) -> tuple[Pair, ...]:
+def _ids_read(found: Groups, scope: Scope) -> int:
+    """How many verified ids counting `found`'s groups reads, summed over the trees counted (`Groups.read`):
+    each position-verified clause's ids, per field, as the request's compile of the query left them in
+    `scope`. A clause's id set is resolved id by id in every collection whose tree holds the clause, so a kept
+    `NOT (model NEAR/10 model*)` of few terms and many ids costs every tree its ids. An upper bound: a clause
+    most of whose candidates match is compiled as the candidates that fail, a shorter list."""
+
+    def ids(conjunct: Node) -> int:
+        return sum(
+            len(scope.ids.get((f, clause.model_dump_json()), ()))
+            for clause in verified_clauses(conjunct)
+            for f in ((clause.field,) if clause.field else FIELDS)
+        )
+
+    return found.read(ids)
+
+
+def _alone(
+    engine: TantivyEngine, found: Groups, scope: Scope, abandoned: threading.Event
+) -> tuple[Pair, ...]:
     """Each group's two counts, in query order: alone, and the query without it (`TantivyEngine.counts`: at
-    most two collections a group, memoised; every conjunct compiled at most once for all of them)."""
+    most two collections a group, memoised; every conjunct compiled at most once for all of them). Stops
+    before its next collection once `abandoned` is set (`_Abandoned`): nobody is waiting for the rest."""
+
+    def wanted() -> None:
+        if abandoned.is_set():
+            raise _Abandoned
+
     n = len(found.groups)
-    totals = engine.counts([*map(found.alone, found.groups), *map(found.without, found.groups)], scope=scope)
+    trees = [*map(found.alone, found.groups), *map(found.without, found.groups)]
+    totals = engine.counts(trees, scope=scope, check=wanted)
     return tuple(zip(totals[:n], totals[n:], strict=True))
 
 
@@ -231,26 +273,28 @@ def _grouped(
     counting: Future[tuple[Pair, ...]] | None,
     scope: Scope,
     wait: float,
+    abandoned: threading.Event,
 ) -> GroupCounts:
     """`run`'s `groups` for a query whose groups are counted: the worker's counts (or the caller's own, when
     no worker took them). Never raises for a count: the search is already computed, and a count that fails or
-    is late is reported in `not_counted`, not as the search's failure."""
+    is late is reported in `not_counted`, not as the search's failure. A job not done after `wait` seconds is
+    abandoned: cancelled if still queued, stopped before its next collection if running."""
     n = len(found.groups)
+    if counting is not None and not wait_for([counting], timeout=wait).done:
+        abandoned.set()
+        counting.cancel()
+        log.warning("group_count_timed_out", extra={"groups": n, "wait_ms": round(wait * 1000)})
+        return GroupCounts((), n, limit, "timed_out")
     try:
         if counting is None:  # no worker (the pool is shutting down): counted here instead
-            totals = _alone(engine, found, scope)
+            totals = _alone(engine, found, scope, abandoned)
         else:
             try:
-                totals = counting.result(timeout=wait)
+                totals = counting.result()  # done: its counts, or its error (a TimeoutError of its own too)
             except WouldVerify:
                 # as for the facets: a clause the request should have held (a bug, never the client's)
                 log.warning("group_worker_recounted", extra={"reason": "would_verify"})
-                totals = _alone(engine, found, scope)
-    except WaitTimeout:
-        if counting is not None:
-            counting.cancel()  # queued: never runs; running: it finishes its bounded work, memoised
-        log.warning("group_count_timed_out", extra={"groups": n, "wait_ms": round(wait * 1000)})
-        return GroupCounts((), n, limit, "timed_out")
+                totals = _alone(engine, found, scope, abandoned)
     except Exception as e:  # any failure of the extra: logged by type, never the message (it may quote input)
         log.error("group_count_failed", extra={"groups": n, "error": type(e).__name__})
         return GroupCounts((), n, limit, "count_failed")
@@ -317,9 +361,14 @@ def _located(engine: TantivyEngine, ast: Node, error: EngineInputError) -> Engin
 # The facet workers (task-088): the aggregation is Tantivy's collection (the GIL released) plus a few ms of
 # Python, so more workers than CPUs only queue. Started on first use, forgotten in a forked child (its threads
 # don't survive the fork, and the lock may have been held when it happened), and shut down at interpreter exit.
+# The group counts (TASK-176) have a small pool of their own: a search waits for its facets without a
+# timeout, so no counting job, however slow or however many, may hold a thread the facets need; counting
+# jobs queue only behind each other, and one whose search stopped waiting is cancelled or stops itself.
 log = logging.getLogger(__name__)
 _POOL: ThreadPoolExecutor | None = None
+_GROUP_POOL: ThreadPoolExecutor | None = None
 _POOL_LOCK = threading.Lock()
+GROUP_WORKERS = 2
 
 
 def _submit(engine: TantivyEngine, ast: Node, scope: Scope) -> Future[dict[str, dict[str, int]]] | None:
@@ -328,13 +377,19 @@ def _submit(engine: TantivyEngine, ast: Node, scope: Scope) -> Future[dict[str, 
     return _start(partial(engine.facets, ast, scope=scope.reader()))
 
 
-def _start[T](job: Callable[[], T]) -> Future[T] | None:
-    """`job` started on a worker, in a copy of the caller's context, or None if the pool is shutting down."""
-    global _POOL
+def _start[T](job: Callable[[], T], *, counts: bool = False) -> Future[T] | None:
+    """`job` started on a worker (a facet worker, or with `counts` a group-count worker), in a copy of the
+    caller's context, or None if the pool is shutting down."""
+    global _POOL, _GROUP_POOL
     with _POOL_LOCK:
-        if _POOL is None:
-            _POOL = ThreadPoolExecutor(max(4, os.cpu_count() or 4), thread_name_prefix="op-facets")
-        pool = _POOL
+        if counts:
+            if _GROUP_POOL is None:
+                _GROUP_POOL = ThreadPoolExecutor(GROUP_WORKERS, thread_name_prefix="op-groups")
+            pool = _GROUP_POOL
+        else:
+            if _POOL is None:
+                _POOL = ThreadPoolExecutor(max(4, os.cpu_count() or 4), thread_name_prefix="op-facets")
+            pool = _POOL
     try:
         return pool.submit(contextvars.copy_context().run, job)
     except RuntimeError:  # shut down between the lock and the submit (interpreter exit, or `shutdown()`)
@@ -342,17 +397,19 @@ def _start[T](job: Callable[[], T]) -> Future[T] | None:
 
 
 def shutdown() -> None:
-    """Stop the facet workers (waiting for any in flight); a later search starts new ones. Registered at exit."""
-    global _POOL
+    """Stop the facet and group-count workers (waiting for any in flight); a later search starts new ones.
+    Registered at exit."""
+    global _POOL, _GROUP_POOL
     with _POOL_LOCK:
-        pool, _POOL = _POOL, None
-    if pool is not None:
-        pool.shutdown(wait=True)  # queued work runs too: a search waiting on it gets its counts
+        pools, _POOL, _GROUP_POOL = (_POOL, _GROUP_POOL), None, None
+    for pool in pools:
+        if pool is not None:
+            pool.shutdown(wait=True)  # queued work runs too: a search waiting on it gets its counts
 
 
 def _forget_after_fork() -> None:
-    global _POOL, _POOL_LOCK
-    _POOL, _POOL_LOCK = None, threading.Lock()
+    global _POOL, _GROUP_POOL, _POOL_LOCK
+    _POOL, _GROUP_POOL, _POOL_LOCK = None, None, threading.Lock()
 
 
 atexit.register(shutdown)
