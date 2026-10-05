@@ -1032,6 +1032,140 @@ def test_a_table_must_be_its_bundles_snapshot(
     assert line["reason"] == "match_index_mismatch"
 
 
+# --- what a comparison may disclose (the 2026-10-05 audit of api/compare.py) -----------------------------------
+def test_a_disabled_instance_answers_every_request_alike(corpus_dir: Path, tmp_path: Path) -> None:
+    """Off, the path says one thing whatever is sent: nothing of the query, the body or the index is read."""
+    with TestClient(make_app(corpus_dir)) as c:
+        body = the_file().encode()
+        answers = [
+            c.post(COMPARE, params={"q": Q}, content=body, headers=RIS),
+            c.post(COMPARE, content=body, headers=RIS),  # no q
+            c.post(COMPARE, params={"q": "(unbalanced", "mode": "nonsense"}, content=body, headers=RIS),
+            c.post(COMPARE, params={"q": Q}, content=body, headers={"Content-Type": "multipart/form-data"}),
+            c.post(COMPARE, params={"q": Q}, content=b"\xff\xfe", headers=RIS),
+            c.post(COMPARE, params={"q": Q}, content=body, headers={**RIS, "Origin": "https://evil.example"}),
+        ]
+        assert {r.status_code for r in answers} == {403}
+        assert len({r.content for r in answers}) == 1
+        e = error(answers[0], 403, "API_COMPARE_DISABLED")
+        assert set(e) == {"code", "message"} and "access-control-allow-origin" not in answers[-1].headers
+    (tmp_path / "indexes").mkdir()
+    with TestClient(make_app(tmp_path)) as c:  # no index loaded: still the one answer, not the index's state
+        assert c.post(COMPARE, params={"q": Q}, content=b"x", headers=RIS).content == answers[0].content
+
+
+def test_a_withheld_abstract_is_never_returned_or_located(corpus_dir: Path) -> None:
+    """Decision-022: a takedown withholds what is shown. A comparison says which list a withheld paper is in
+    (whether the query matches it, as `/search` does: the accepted leak) and nothing more: no abstract, no
+    evidence naming words or the field they are in, in the rows, the CSV or the RIS."""
+    listed = [*sorted(i for i in RESULT - set(KEPT) if BY_ID[i].abstract)[:2], STEMMED[0], UNMATCHED[0]]
+    (data := corpus_dir / "takedowns").mkdir(exist_ok=True)
+    (data / "withheld.txt").write_text("".join(f"{i}  # logged\n" for i in listed), encoding="utf-8")
+    try:
+        with app_of(corpus_dir) as c:
+            before = compared(c, the_file())  # the same file on the same index, the list applied
+            raw = post(c, the_file()).text
+            hits = c.get("/api/v1/search", params={"q": Q, "limit": 200}).json()["hits"]
+    finally:
+        (data / "withheld.txt").unlink()
+        data.rmdir()
+    rows = {r["id"]: r for name in ("kept", "dropped", "added") for r in before[name]}
+    for i in listed:
+        assert rows[i]["abstract_withheld"] is True and rows[i]["detail"] == ""
+        abstract = BY_ID[i].abstract
+        assert abstract is not None and one_line(abstract)[:40] not in raw and abstract[:40] not in raw
+    # the list each is in is what /search already says of it: a hit or not
+    assert {i for i in listed if any(i == r["id"] for r in before["added"])} == set(listed) & {
+        h["id"] for h in hits
+    }
+    assert [rows[i]["reason"] for i in listed[2:]] == ["stemming", "full_text"]  # the class, not its evidence
+    for name in ("dropped", "added"):
+        assert all(r["detail"] == "" for r in rows_of(before["csv"][name]) if r["id"] in listed)
+    withheld = [r for r in parse_ris(before["added_ris"], "added.ris") if r.fields["ID"][0] in listed]
+    assert len(withheld) == 2
+    assert all("AB" not in r.fields and exporter.TAKEDOWN in r.fields["N1"] for r in withheld)
+    # every other row still explains itself
+    assert all(r["detail"] for r in before["dropped"] if r["id"] not in listed)
+
+
+def test_a_filtered_paper_is_one_search_serves_when_asked(shared: TestClient) -> None:
+    """Decision-012: rejected, withdrawn and other-track records are indexed and public, excluded by default
+    and served by a query that names them. A `filtered` row says no more than that query's hit does."""
+    body = compared(shared, the_file())
+    filtered = [r for r in body["dropped"] if r["reason"] == "filtered"]
+    assert {r["id"] for r in filtered} == set(FILTERED)
+    for row in filtered:
+        p = BY_ID[row["id"]]
+        q = f"{Q} status:{p.status} track:{p.track}"
+        hit = next(h for h in shared.get("/api/v1/search", params={"q": q, "limit": 200}).json()["hits"]
+                   if h["id"] == row["id"])  # fmt: skip
+        said = dict(part.split("=") for part in row["detail"].split(", "))
+        assert said and all(hit[field] == value for field, value in said.items())
+        assert set(said) <= {"track", "status"}
+
+
+def test_every_id_a_comparison_names_is_a_paper_the_index_serves(shared: TestClient) -> None:
+    """The match table holds the served snapshot's records and no others: every id in a row, in its evidence,
+    in a CSV or in the RIS answers on `/papers/{id}`."""
+    import re
+
+    twin = BY_ID[next(i for i in BY_ID if i.endswith("Fx0516"))]
+    file = the_file() + entry(one_line(twin.title), twin.venue, twin.year)  # an ambiguous match names two ids
+    file += entry(
+        one_line(BY_ID[KEPT[3]].title), BY_ID[KEPT[3]].venue, BY_ID[KEPT[3]].year + 1
+    )  # "elsewhere"
+    raw = post(shared, file).text
+    named = set(re.findall(r"op:[a-z]+:[0-9]{4}:[A-Za-z0-9_-]+", raw))
+    assert len(named) > 30 and named <= set(BY_ID)
+    assert all(shared.get(f"/api/v1/papers/{i}").status_code == 200 for i in sorted(named))
+
+
+def test_one_requests_file_never_reaches_another(corpus_dir: Path) -> None:
+    """Nothing parsed from a file outlives its request: the next client's answer holds none of it, and an
+    answer is the same whatever was compared before it."""
+    mine = entry(f"{SECRET} unpublished review protocol", "NeurIPS", 2024) + by_title(BY_ID[KEPT[0]])
+    with app_of(corpus_dir) as c:
+        fresh = post(c, the_file()).content
+        assert SECRET in post(c, mine).text  # the sender gets their own titles back
+        after = post(c, the_file())
+        assert after.content == fresh and SECRET not in after.text
+        assert SECRET not in c.get("/api/v1/search", params={"q": Q}).text
+        state: IndexState = c.app.state.index  # type: ignore[attr-defined]
+        assert state.served is not None and state.served.matches is not None
+        table = state.served.matches.index
+        assert table is not None and not any(SECRET in key for key in table.any_cell)
+    # and no module or app object keeps a parsed file: the route's only shared state is its slots
+    assert set(vars(c.app.state.comparisons)) == {"slots"}  # type: ignore[attr-defined]
+
+
+def test_no_refusal_or_failure_says_what_the_file_held(
+    corpus_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 4xx names a line number or a count, never content; a 500 names only the request id."""
+    secret_file = entry(f"{SECRET} title", f"{SECRET} venue", 2024)
+    with app_of(corpus_dir, compare_max_records=1, compare_max_line_chars=64) as c:
+        refusals = [
+            post(c, secret_file * 2),  # records
+            post(c, secret_file + f"AB  - {SECRET}" + "x" * 80 + "\n"),  # a line
+            post(c, f"{SECRET}\n" + secret_file),  # content before the first record
+            post(c, secret_file.encode() + b"\xff"),  # not UTF-8
+        ]
+        assert [r.status_code for r in refusals] == [413, 413, 422, 422]
+
+        def broken(*a: Any, **k: Any) -> None:
+            raise RuntimeError(f"failed on {SECRET} at /srv/data/indexes")
+
+        monkeypatch.setattr(scholar_compare, "scope_and_match", broken)
+        monkeypatch.setattr(route, "scope_and_match", broken)
+        failed = post(c, secret_file)
+        refusals.append(failed)
+        e = error(failed, 500, "API_INTERNAL")
+        assert set(e) == {"code", "message"}
+    for r in refusals:
+        assert SECRET not in r.text and "/srv/" not in r.text and "Traceback" not in r.text
+        assert "scholarmend" not in r.text and ".py" not in r.text
+
+
 # --- CORS -----------------------------------------------------------------------------------------------------------
 def test_cors_allows_the_upload_from_a_listed_origin_only(corpus_dir: Path) -> None:
     origin = "https://review.example"

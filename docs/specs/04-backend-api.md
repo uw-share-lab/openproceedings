@@ -432,6 +432,15 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   `--no-compare` turns it off. While off, the route answers 403 `API_COMPARE_DISABLED`, `GET /meta`
   `limits.compare` is null (the web app then doesn't offer it), no match table is built, and the path reads no
   body larger than any other route's (`max_body_bytes`).
+  The check is the route's first dependency, so a disabled instance answers every request to the path with
+  that one 403 whatever its query, body or origin, and whether or not an index is loaded (only an undeclared
+  parameter is refused earlier, as on every route).
+- **What it may disclose** (audited 2026-10-05; each point has a test in `test_compare.py`). A withheld
+  abstract (decision-022) is never returned and its row has no `detail`; the list and class a withheld paper
+  falls in say only whether the query, or a stated variant of it, matches, which `/search` and
+  `/papers/{id}?q=` already say (the accepted leak). A `filtered` row names a track or status that a query
+  naming it serves (decision-012). Every id in the answer is a paper `/papers/{id}` serves. Nothing parsed
+  from a file outlives its request. No refusal quotes the file, and a 500 names only its request id.
 - **The request.** `q` and `mode` as on `/search` (the query is admitted exactly as `/search` and `/export`
   admit it: its refusals are theirs, diagnostics included). The body is the RIS file itself,
   `Content-Type: application/x-research-info-systems`, UTF-8 (a BOM and CRLF are accepted). Anything else is

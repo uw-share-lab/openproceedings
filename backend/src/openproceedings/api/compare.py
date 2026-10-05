@@ -48,7 +48,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import anyio
-from fastapi import APIRouter, FastAPI, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, Query, Request
 from fastapi.responses import Response
 from starlette.requests import ClientDisconnect
 
@@ -423,6 +423,21 @@ async def _read(request: Request, seconds: float) -> bytearray:
     return body
 
 
+async def offered(request: Request) -> None:
+    """403 `API_COMPARE_DISABLED` unless this instance's operator turned comparisons on. The route's first
+    dependency, so an instance that doesn't offer them answers every request to the path alike (whatever its
+    query, its body or the index's state; only an undeclared parameter is refused earlier, as on any route):
+    it says nothing about the served index, and nothing of the query or the body is looked at."""
+    config: ApiConfig = request.app.state.config
+    if not config.compare_enabled:
+        await drain(request.receive)  # at most `max_body_bytes` on this path while comparisons are off
+        raise _closing(
+            DiagnosticCode.API_COMPARE_DISABLED,
+            "Comparing with a RIS file is not turned on on this instance. Run your own instance (`op "
+            "serve` on your machine offers it), or use `op eval scholar`.",
+        )
+
+
 class _Spent:
     """What a comparison used of its slot: the wall time its file took to arrive, and the work's CPU time
     (less what `IndexState.verification_slot` already debits as `verify_cpu_ms`)."""
@@ -435,6 +450,7 @@ class _Spent:
     "/compare",
     response_model=CompareResponse,
     responses=COMPARE_REFUSALS,
+    dependencies=[Depends(offered)],
     openapi_extra={
         "requestBody": {
             "required": True,
@@ -463,12 +479,6 @@ async def compare_records(
     gate: Comparisons = request.app.state.comparisons
     retry = config.busy_retry_seconds
     try:
-        if not config.compare_enabled:
-            raise _closing(
-                DiagnosticCode.API_COMPARE_DISABLED,
-                "Comparing with a RIS file is not turned on on this instance. Run your own instance (`op "
-                "serve` on your machine offers it), or use `op eval scholar`.",
-            )
         check_media(request)
         result = await anyio.to_thread.run_sync(_admit, request, served, q, mode)
         index = _table(served, retry)
