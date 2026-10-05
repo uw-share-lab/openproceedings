@@ -27,12 +27,14 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    first release a public instance serves); verify the index (the served one, or a new one when
    `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy changes) and replay sampled records with `--json`
    (`reproduced` or `drifted` as the versions say; `mismatch` blocks); freeze `dev` and cut `release/X.Y.Z`:
-   bump `backend/pyproject.toml` and `frontend/package.json`, relock, set `CITATION.cff`'s `version` (= the release version) and `date-released` (the planned tag day; spec 08 §Release step 4, checked again at step 6 before tagging: plan the promotion and the tag for one UTC day, since a promotion tagged later needs a new re-dated release branch, as on 2026-10-05; when the version is already right and a different local npm rewrites `package-lock.json` anyway, restore it), add the `docs/releases.toml` table
+   bump `backend/pyproject.toml` and `frontend/package.json`, relock, set `CITATION.cff`'s `version` (= the release version) and `date-released` (the planned tag day; spec 08 §Release step 4, checked again at step 6 before tagging), add the `docs/releases.toml` table
    from the index manifest, `make changelog RELEASE=X.Y.Z` (never hand-edit `CHANGELOG.md`),
    `/record-learnings`, `/review-gate`, `/open-pr`; promote with `gh pr create --base main --head dev` (not
    `/open-pr`), which requires green checks but no mandatory approving review under the
    solo-maintainer policy (never bypass required checks); tag with `gh release create --target` and notes from `changelog.py --notes` (a `git push` of
    a tag is blocked by `require-review.sh`); back-merge `main` into `dev` on `release/X.Y.Z-back-merge`, whose PR goes through `dev`'s merge queue like any other (spec 08 §Release step 7).
+   - Promote and tag on one UTC day: a later tag needs a re-dated release branch (2026-10-05). If a
+     different npm rewrites the lockfile while the version is unchanged, restore it.
 2. **Versions.** Any change of `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy (which always bumps
    `SCHEMA_VERSION` too) or `QUERY_VERSION` is at least MINOR and is called out at the top of the notes.
    Retained supported pins still reproduce when `QUERY_VERSION` matches; changed replay inputs report

@@ -18,7 +18,7 @@ Candidate: `dev` at `63da2318` (PR #106's merge). Base: `main` at `d8eec5fd`.
   The `web-image` push run at `63da2318` (`37352990475`) passed. The `e2e` push run there (`37352990725`) was
   still running when this was written; its result is in the promotion PR. Both were green at PR #105's merge,
   `bed0a6cb`.
-- **Nightly:** the scheduled nightly `37337202193` ran on `142f3e0e` (`dev` before PR #105) on 2026-10-05.
+- **Nightly:** the scheduled nightly `37337202193` (still running when this was written) is on `142f3e0e` (`dev` before PR #105) on 2026-10-05.
   Its result is in the promotion PR. The previous nightly, `37204685351` (2026-10-04, same sha), passed
   all jobs. Neither tested PR #105 or #106, so a nightly was also dispatched on the candidate itself
   (`37353576315`, `63da2318`). The promotion waits for it.
@@ -90,11 +90,12 @@ diagnostic store. The rows were copied into two scratch data directories. The co
 | Replay                                                    | Outcome                                                                                                         |
 | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | On each record's retained pin `05a0541717f6` (14)          | `reproduced`, ids and exclusions match                                                                          |
-| On `fd13d8d27535` alone, `--index fd13d8d27535` (14)       | `drifted`, naming exactly `snapshot_hash` (corpus), `tokenizer_version` and `schema_version` (method) 2 → 3     |
+| On `fd13d8d27535` alone, `--index fd13d8d27535` (14)       | `drifted`, naming exactly `snapshot_hash` (corpus), and `tokenizer_version` and `schema_version` 2 → 3 (method)     |
 | All 28 `op record replay --json` calls                     | exit 0, no refused replay, no mismatch                                                                          |
 
 On the new index, 2 of the 14 records keep identical membership. The other 12 gain 2–44 ids and lose 0–18,
-which the corpus change (the 2026 crawl and dedup) accounts for, and their replays name that change.
+which the corpus change (the 2026 crawl and dedup) accounts for, and their replays name that change. The
+per-record JSON, exit codes and source hashes are kept outside the repository, in `/private/tmp/claude-501/-Users-jeevanparmar-school-Research-Ferguson/06380199-f19b-4b93-b3e2-45129af1a2e2/scratchpad/release/replay/`.
 
 ## 4. Release branch
 
@@ -117,13 +118,16 @@ which the corpus change (the 2026 crawl and dedup) accounts for, and their repla
 
 - **PR #106's branch, `make test` (both suites):** backend 7,418 passed and 3 optional skipped; frontend
   4,842 passed in 46 files. This branch changes only `CITATION.cff`, `docs/releases.toml`, `CHANGELOG.md`,
-  this file and a learnings addendum; its own run is in the release PR.
+  this file and a learnings addendum; its own `make test` was running when this was written, and its result
+  is in the release PR.
 - **TASK-196 known exception:** PR #106 re-measured group-count latency at a 1-minute load under 5. Every
   Trust-Evals string is within spec 03's 100 ms budget except a cold first page of `main-2-pop` with its
   counts (p95 190.1 ms). That is spec 03's exception "as measured" (decision-039), and TASK-197 brings it
   under the budget.
 
 ## Remaining steps
+
+These follow the release PR's merge into `dev`.
 
 5. **Promotion:** `dev → main`, with this file's evidence.
 6. **Tag:** `gh release create v0.1.0` on `main` the same UTC day (2026-10-05). First check `CITATION.cff`,
