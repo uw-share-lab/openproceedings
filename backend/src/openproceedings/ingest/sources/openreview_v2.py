@@ -59,6 +59,7 @@ from openproceedings.ingest.record import (
     PaperRecord,
     Source,
     Urls,
+    title_controls_replaced,
     title_evidence,
     title_text,
 )
@@ -128,6 +129,7 @@ class CrawlReport(Report):
     unknown_track: int = 0
     presentation_unmapped: int = 0  # accepted, non-workshop records whose content.venue isn't in the table
     abstract_missing: int = 0
+    title_control_characters: int = 0  # records whose title had a control character replaced (decision-036)
     track_status: dict[str, Counter[str]] = field(default_factory=dict)
     would_fetch: list[str] = field(default_factory=list)  # dry run: the uncached requests met first
 
@@ -150,6 +152,12 @@ class CrawlReport(Report):
             "unknown_track": self.unknown_track,
             "presentation_unmapped": self.presentation_unmapped,
             "abstract_missing": self.abstract_missing,
+            # listed only when there are any, so a crawl with none keeps its manifest shape
+            **(
+                {"title_control_characters": self.title_control_characters}
+                if self.title_control_characters
+                else {}
+            ),
             "track_status": {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())},
             "crawl_window": self.crawl_window(),
         }
@@ -440,12 +448,14 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     # only notes that became records: one skipped as invalid, or a re-listed duplicate, isn't counted twice
     report.presentation_unmapped = sum(f"op:{venue.lower()}:{year}:{n}" in records for n in unmapped)
     report.abstract_missing = sum(r.abstract is None for r in records.values())
+    report.title_control_characters = sum(title_controls_replaced(r) > 0 for r in records.values())
     incompatible = client.incompatible - purged  # this crawl's share of the client's count
     log.info("openreview_crawl_finished",
              extra={"api": report.api, "venue": venue, "year": year, "complete": report.complete, "groups": len(report.groups),
                     "notes_read": report.notes_read, "imported": report.imported,
                     "skipped": sum(report.skipped.values()), "unknown_track": report.unknown_track,
                     "presentation_unmapped": report.presentation_unmapped,
+                    "title_control_characters": report.title_control_characters,
                     "requests": client.requests, "cached": client.cached, "cache_incompatible": incompatible,
                     "ms": elapsed_ms(began, time.monotonic)})  # fmt: skip
     anomalies = {k: report.skipped[k] for k in ("out_of_scope", "invalid", "duplicate")}

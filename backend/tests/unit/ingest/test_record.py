@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 from openproceedings.ingest.record import DERIVED, Claim, PaperRecord, Urls, content_hash, title_text
 from openproceedings.ingest.snapshot import record_line
@@ -463,13 +463,28 @@ def test_a_control_character_in_a_title_becomes_a_space(raw: str, stored: str, r
         assert record(title=stored).title == stored  # the record model accepts it
 
 
-@given(st.text(alphabet=st.sampled_from([*"abAB12 -\\{}^_.,é́​", *"\x00\x02\x08\x0b\x1c\x7f\x85\x9f\n"]), max_size=20))  # fmt: skip
+_CONTROLS = "\x00\x02\x08\x0b\x1c\x7f\x85\x9f\n"
+
+
+@given(st.text(alphabet=st.sampled_from([*"abAB12 -\\{}^_.,é́​", *_CONTROLS]), max_size=20))
 def test_the_stored_title_keeps_the_raw_titles_tokens(raw: str) -> None:
     """The tokenizer reads a control character as a separator, so replacing it with a space changes no token
     (token-contract). `$` is left out of the alphabet: the one exception is below."""
     stored, _ = title_text(raw)
     assert normalize(stored) == normalize(raw)
     assert not any(unicodedata.category(c) == "Cc" for c in stored) and stored == " ".join(stored.split())
+
+
+@given(st.text(alphabet=st.sampled_from([*"abAB12 -\\{}^_.,é́​$", *_CONTROLS]), max_size=20))
+def test_with_math_the_stored_title_keeps_the_raw_titles_tokens_unless_a_control_touches_a_dollar(
+    raw: str,
+) -> None:
+    """The property above with `$` in the alphabet: the tokens are the raw title's whenever no control character
+    is next to a `$` (the exception below is the only one)."""
+    controls = {i for i, c in enumerate(raw) if unicodedata.category(c) == "Cc" and not c.isspace()}
+    assume(not any(raw[j] == "$" for i in controls for j in (i - 1, i + 1) if 0 <= j < len(raw)))
+    stored, _ = title_text(raw)
+    assert normalize(stored) == normalize(raw)
 
 
 def test_a_control_character_beside_a_math_delimiter_is_the_one_token_exception() -> None:

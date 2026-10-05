@@ -45,8 +45,10 @@ fixes.
 - A `forum_link` merge across venue or year, or one that joins two proceedings ids.
 - An `abstract_venue_year` row (decision-037) with no imported cluster (sources `ris` alone) in its group; on
   an abstract under 50 tokens, or one that is not the import's own page's text; joining two crawled clusters;
-  into a note that is rejected, withdrawn or desk-rejected; or whose survivor is the import's id when a crawled
-  forum id was in the group.
+  with a record that is no listing and is rejected, withdrawn or desk-rejected (a note, or a forum id's RIS row
+  alone); or whose survivor is the import's id when a crawled forum id was in the group.
+- A `title_venue_year` merge of such a non-accepted record that is no listing with imported records alone (no
+  crawled listing to outrank its status).
 - A merge that picks field values by input order instead of precedence.
 - Dedup whose output depends on input order.
 - Records lost without a `merges.csv` row.

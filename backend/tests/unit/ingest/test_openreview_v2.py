@@ -580,6 +580,26 @@ def test_unmapped_presentations_are_counted_per_venue_year_in_one_attention_warn
     assert finished.__dict__["presentation_unmapped"] == 3
 
 
+def test_titles_that_lost_a_control_character_are_counted_in_the_report_and_the_finished_line(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """decision-036: each title says so in its evidence and a DEBUG line; the crawl counts the titles (never an
+    attention WARNING: the papers are kept). A crawl with none keeps its manifest shape."""
+    server = world(accepted=4)
+    server.notes[CONF][0]["content"]["title"]["value"] = "A SPEC\x02TRUM\x02"
+    server.notes[CONF][1]["content"]["title"]["value"] = "Trust\x00AI"
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        result = orv.crawl(client(tmp_path, server), "ICLR", 2024)
+    assert (
+        result.report.title_control_characters == 2 == result.report.to_manifest()["title_control_characters"]
+    )
+    [finished] = lines(caplog, "openreview_crawl_finished")
+    assert finished.__dict__["title_control_characters"] == 2
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    plain = orv.crawl(client(tmp_path / "plain", world()), "ICLR", 2024).report
+    assert plain.title_control_characters == 0 and "title_control_characters" not in plain.to_manifest()
+
+
 def test_a_crawl_whose_strings_are_all_mapped_has_no_attention_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

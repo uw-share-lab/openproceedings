@@ -109,6 +109,18 @@ def title_evidence(evidence: str, replaced: int) -> str:
     return f"{evidence} ({replaced} control character{'' if replaced == 1 else 's'} replaced by a space)"
 
 
+_REPLACED = re.compile(r" \(([1-9][0-9]*) control characters? replaced by a space\)\Z")
+
+
+def title_controls_replaced(record: PaperRecord) -> int:
+    """How many control characters `title_text` replaced in the record's title, read back from its title claims'
+    evidence (`title_evidence`); 0 when none were. The crawl reports count the titles this is above 0 for."""
+    return sum(
+        int(m.group(1)) for c in record.provenance
+        if c.field == "title" and (m := _REPLACED.search(c.evidence or ""))
+    )  # fmt: skip
+
+
 # Every string a record or claim holds: strict, and encodable, so a snapshot can always be written.
 Text = Annotated[StrictStr, AfterValidator(_utf8)]
 type ClaimValue = Text | StrictInt | tuple[Text, ...] | None

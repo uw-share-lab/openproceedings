@@ -50,14 +50,25 @@ over-merge silently deletes a paper from someone's systematic review.
    - **An imported record must be in the group**, and **at most one record that isn't imported**: an abstract
      never joins two crawled records, so an import can't bridge a listing and a note. A crawled listing and a
      note sharing only an abstract stay apart (NeurIPS 2023 D&B `3sRR2u72oQ` and `nips-39736af1…`, the one such
-     pair on the 2026-10-05 crawl; extending the rule is deferred, decision-037).
-   - **Never into a note that isn't accepted or `unknown`**, even a lone one (`_mergeable` ignores status, and
-     the import would take the note's status): an `abstract_key` row instead.
-   - **Rows on the output records**: a refused group, and a rival a merge set aside (the merged record is a
-     listing that keeps the import's abstract claim, so `_abstract_buckets(merged_too=True)` finds it again on
-     every run). Abstracts are normalised only in venue-years that still hold an
+     pair on the 2026-10-05 crawl; extending the rule is deferred, decision-037, TASK-187). The guard is
+     belt-and-braces: no input reaches it, since an import passing `_mergeable` beside two crawled clusters
+     carries one's id and step 1 has merged it there (a hand-built group pins it).
+   - **Never with a record that is no listing and isn't accepted or `unknown`**, even a lone one, whether a
+     note or another import (a forum id's RIS row with no note crawled): `ris` ranks last for status, so the
+     record would keep the note's status, or whichever RIS row was fetched last. `_abstract_aside` sets it
+     aside, with an `abstract_key` row. Step 2 has the same rule (`_import_would_take_its_status` in
+     `_mergeable`): such a record never merges on its title with imported records alone; a crawled listing,
+     which outranks its status, may still take a lone rejected note.
+   - **Rows on the output records**: a refused group, and a rival a merge set aside. The merged record is a
+     listing holding a `ris` claim, and `_abstract_buckets(merged_too=True)` anchors on **every own-page
+     abstract** it keeps, not only its `ris` one: a newer RIS row of the note's forum id may have replaced the
+     import's abstract claim, while the note's own claim still holds the text they merged on. So the rival's
+     row is found again on every run. A pair a title key already reported gets no `abstract_key` row (the 14
+     such pairs on the 2026-10-05 crawl were each a listing and its same-title workshop version). Abstracts are
+     normalised only in venue-years that still hold an
    imported record. Never loosen the title key instead: `A$^2$Search` and `ASearch` with different abstracts are
-   two papers.
+   two papers. The title step never consults the abstract, so a symbol-stripped import title equal to another
+   paper's title key would merge with it (no instance on the 2026-10-05 crawl; TASK-189).
 
 Step 2 only runs **across sources**: the clusters' provenance source sets must be disjoint
 (OpenReview ↔ proceedings), **`ris` aside** (TASK-179): RIS is a route, each RIS row names its paper by a forum
@@ -278,6 +289,10 @@ fixtures: `test_dedup_forum_link.py`.
   clusters of one venue-year that both keep the row's abstract, in a group that held an imported record and at
   most one cluster that wasn't one, whose status is `accepted` or `unknown` and whose forum id, if it has one,
   is the survivor's; a pool with no imported record has none.
+- A status no listing has is never kept by merging with imports alone (decision-037): wherever a title or an
+  abstract joins clusters, one that is no listing and is rejected, withdrawn or desk-rejected has a companion
+  that is no import. The `imports` strategy gives the import, and each forum's RIS row (sometimes with no note
+  crawled), a status of its own; `@example`s pin the import-only and the crawled-note shapes.
 - No output record combines inputs with different `(venue, year)`.
 - Idempotent: `dedup(dedup(xs)).records == dedup(xs).records`, and the same conflict rows apart from
   `newest:`/`tie:`.
@@ -290,6 +305,6 @@ fixtures: `test_dedup_forum_link.py`.
   proceedings ids, never share a record, and a merge into a proceedings listing keeps a proceedings track, or
   `other` only where every input is Creative AI.
 - A Creative AI listing merges with its own Creative AI note (TASK-137; the `creative` strategy: the listing,
-  its RIS copy, its bare or rejected note, same-title `Education_Program`, evidence-less `other`, workshop and
+  its RIS copy, its bare or rejected note (a rejected one never merges with the RIS copy alone), same-title `Education_Program`, evidence-less `other`, workshop and
   main-track notes, a second Creative AI note or a main-track listing) unless another candidate blocks it; every
   other-family record is set aside with its row, and only Creative AI inputs ever share its record.
