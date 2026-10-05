@@ -241,6 +241,8 @@ def test_the_group_counts_report_writes_a_row_per_page(
     from tests.bench import group_counts_report as report
 
     monkeypatch.setattr(report, "ROUNDS", 1)
+    # a patient grace, as in the test above: what is checked is the rows, not a busy runner's timing
+    monkeypatch.setattr(report, "GROUPS", {**GROUPS, "groups_grace": 30.0, "groups_wait": 30.0})
     engine, _snapshot = served
     name = next(iter(STRINGS))
     rows = report.table(engine, [(f"`{name}`", trust_evals(name))]).splitlines()[2:]
