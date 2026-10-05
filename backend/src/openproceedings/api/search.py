@@ -117,11 +117,16 @@ def search(
         groups=request.app.state.config.max_counted_groups,
         groups_terms=request.app.state.config.max_counted_terms,
         groups_ids=request.app.state.config.max_counted_ids,
+        groups_wait=request.app.state.config.group_count_wait_seconds,
+        groups_grace=request.app.state.config.group_count_grace_seconds,
     )
     annotate(request, total=found.total)
     assert found.groups is not None  # asked for
-    # the access line: how many groups the query has and how many were counted (two integers, never a span)
+    # the access line: how many groups the query has, how many were counted (two integers, never a span) and,
+    # when none were, why (a `NotCounted` constant)
     access_fields(request).update(groups=found.groups.found, groups_counted=len(found.groups.counts))
+    if found.groups.not_counted is not None:
+        access_fields(request)["groups_not_counted"] = found.groups.not_counted
     sources = page_attributions(served.records, [h.id for h in found.hits])
     hidden = served.withheld_in(served.records)  # the takedown list, as this bundle's load read it
     assert result.canonical is not None and result.canonical_hash is not None  # it parsed

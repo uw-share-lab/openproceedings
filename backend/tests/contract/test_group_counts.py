@@ -5,6 +5,8 @@ else in the response changed by it; and an access line that carries two integers
 from __future__ import annotations
 
 import json
+import threading
+import time
 from typing import Any
 
 import pytest
@@ -22,13 +24,6 @@ from tests.contract.test_frontend_builder_golden import READ_GOLDEN
 from tests.contract.test_search import SEARCH, engine_of, ok, pages, reference
 
 __all__ = ["reference"]  # the oracle fixture, shared with test_search.py
-
-
-@pytest.fixture(autouse=True)
-def a_patient_grace(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A counting job gets 30 s to be taken by a worker here, not a served search's 50 ms: these tests are
-    about the counts, on a machine that may be busy (`busy` itself is tested in tests/unit)."""
-    monkeypatch.setattr(search, "GROUP_COUNT_GRACE_SECONDS", 30.0)
 
 
 GROUPED = [
@@ -172,6 +167,8 @@ def test_the_access_line_counts_the_groups_and_holds_no_span(client: TestClient,
     counted, single = access(logs)
     assert (counted["groups"], counted["groups_counted"]) == (2, 2)
     assert (single["groups"], single["groups_counted"]) == (1, 0)
+    # why none were counted, as the response says it; absent when they were
+    assert "groups_not_counted" not in counted and single["groups_not_counted"] == "fewer_than_two_groups"
     assert SECRET not in logs.raw.getvalue()  # type: ignore[attr-defined]
     for line in (counted, single):
         assert not {"span", "spans", "q", "counts"} & set(line)
@@ -225,5 +222,46 @@ def test_a_count_that_fails_is_reported_and_the_search_is_whole(
     }
     (failed,) = [line for line in logs() if line["event"] == "group_count_failed"]
     assert (failed["level"], failed["groups"], failed["error"]) == ("ERROR", 2, "RuntimeError")
+    assert any(f.startswith("test_group_counts.py:") and f.endswith(" broken") for f in failed["frames"])
+    assert "reason" not in failed  # a RuntimeError has none; never a null
     assert SECRET not in logs.raw.getvalue()  # type: ignore[attr-defined]
-    assert [(line["groups"], line["groups_counted"]) for line in access(logs)] == [(2, 2), (2, 0)]
+    lines = access(logs)
+    assert [(line["groups"], line["groups_counted"]) for line in lines] == [(2, 2), (2, 0)]
+    assert [line.get("groups_not_counted") for line in lines] == [None, "count_failed"]
+
+
+# --- the production waits, as an instance started with no flags has them -------------------------------------------
+def test_at_the_default_waits_a_search_is_answered_at_once_while_the_counting_workers_are_taken(
+    store: Store, logs: Logs
+) -> None:
+    """`ApiConfig`'s own grace (50 ms) and wait (2 s), which the other tests' instance raises: with both
+    counting workers held by other jobs the route answers 200, the search whole, its groups `busy`, in well
+    under the 2 s it would wait for a running job of its own; the access line says why none were counted."""
+    defaults = ApiConfig.model_fields
+    grace, wait = defaults["group_count_grace_seconds"].default, defaults["group_count_wait_seconds"].default
+    assert (grace, wait) == (search.GROUP_COUNT_GRACE_SECONDS, search.GROUP_COUNT_WAIT_SECONDS) == (0.05, 2.0)
+    q = "trust model"
+    with TestClient(make_app(store.indexes.parent)) as patient:
+        whole = ok(patient, q)
+    assert whole["groups"]["not_counted"] is None
+    release = threading.Event()
+    held = [search._start(lambda: release.wait(60), counts=True) for _ in range(search.GROUP_WORKERS)]
+    assert all(h is not None for h in held)
+    try:
+        app = make_app(store.indexes.parent, group_count_grace_seconds=grace, group_count_wait_seconds=wait)
+        with TestClient(app) as c:
+            ok(c, "trust")  # the index is loaded and warm: what is timed is the search
+            started = time.monotonic()
+            r = c.get(SEARCH, params={"q": q})
+            took = time.monotonic() - started
+    finally:
+        release.set()
+        search.shutdown()
+    assert r.status_code == 200
+    body = r.json()
+    assert body["groups"] == {"counts": [], "groups_total": 2, "limit": 10, "not_counted": "busy"}
+    assert {k: v for k, v in body.items() if k != "groups"} == {
+        k: v for k, v in whole.items() if k != "groups"
+    }
+    assert took < 1.5  # the grace and the search, never the 2 s wait
+    assert access(logs)[-1]["groups_not_counted"] == "busy"

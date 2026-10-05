@@ -155,6 +155,12 @@ class ApiConfig(BaseModel):
     # its tree's query, resolved id by id by every collection that reads it (a kept `NOT (model NEAR/10
     # model*)`: few terms, tens of thousands of ids, read by all 2 × N trees)
     max_counted_ids: int = Field(default=300_000, ge=1)
+    # how long a finished search waits for its group counts: for a counting job no worker has taken (then
+    # `busy`: the workers are counting for other searches), and for one that is running (then `timed_out`).
+    # `search.GROUP_COUNT_GRACE_SECONDS` and `GROUP_COUNT_WAIT_SECONDS`; a test instance on a busy machine
+    # raises them (decision-034)
+    group_count_grace_seconds: float = Field(default=0.05, gt=0)
+    group_count_wait_seconds: float = Field(default=2.0, gt=0)
     # a request holding a verification slot longer than this logs `verification_slow` (WARNING)
     slow_verification_seconds: float = Field(default=5.0, gt=0)
     # a request's cold verifications together get this much wall time from its first slot; past it the verify
