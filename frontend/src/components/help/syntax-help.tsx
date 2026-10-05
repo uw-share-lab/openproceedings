@@ -441,13 +441,15 @@ export function SyntaxHelp({
           one string&apos;s figure, not a rule for every query.
         </p>
         <p>
-          When a string still finds fewer papers here than in Google Scholar, three tools show why, in this
-          order. First, <strong>Add $</strong> brings back the word forms Google Scholar&apos;s stemming would
-          have matched. Then, after a search, the <strong>group counts</strong> in the Builder tab show how
-          many papers each group of the query matches by itself and how many the query finds without it: the
-          group whose removal adds the most papers is the one narrowing the search. Last, where this instance
-          offers it, <strong>Compare with your records</strong> under the results checks your own exported
-          records against the query and says why each one it doesn&apos;t find is missed.
+          For what title and abstract can explain, three tools can help you find out why a string still finds
+          fewer papers here than in Google Scholar, in this order. First, <strong>Add $</strong> matches one
+          more letter or digit on the terms it names (<code className={CODE}>benchmark$</code>:{" "}
+          <code className={CODE}>benchmarks</code>); it is not Google Scholar&apos;s stemming. Then, after a
+          search, the <strong>group counts</strong> in the Builder tab show how many papers each group of the
+          query matches by itself and how many the query finds without it: the group whose removal adds the
+          most papers is the one narrowing the search. Last, where this instance offers it,{" "}
+          <strong>Compare with your records</strong> under the results checks your own exported records
+          against the query and says why each one it doesn&apos;t find is missed.
         </p>
         <Examples items={data.sections.scholar} />
       </Section>

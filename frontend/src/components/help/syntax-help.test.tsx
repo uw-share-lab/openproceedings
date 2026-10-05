@@ -153,6 +153,12 @@ describe("the sections", () => {
     expect(at.every((i) => i >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(text).toContain("the group whose removal adds the most papers is the one narrowing the search");
+    expect(text).toContain("For what title and abstract can explain, three tools can help you find out why");
+    expect(text).toContain(
+      "First, Add $ matches one more letter or digit on the terms it names (benchmark$: benchmarks); it is not Google Scholar's stemming.",
+    );
+    expect(text).not.toContain("show why");
+    expect(text).not.toContain("stemming would have matched");
   });
 
   it("takes every number and value list from the golden, none written into the page", () => {

@@ -87,7 +87,7 @@ async function setup(c: Report, state: Partial<SearchState> = {}) {
 /** Said under the notice in both its states (copy ED-19): full text, not word forms, is most of the gap. */
 const FULL_TEXT =
   "Google Scholar also reads the full text of a paper; openproceedings matches titles and abstracts only. " +
-  "Most of a difference in counts usually comes from that, and $ does not recover it.";
+  "Most of a difference in counts can come from that, and $ does not recover it.";
 
 describe("Add $ on the no-stemming notice", () => {
   it("writes $ after every term the server offered, as a draft: nothing is searched until Search", async () => {
