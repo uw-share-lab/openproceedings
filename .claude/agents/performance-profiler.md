@@ -46,6 +46,10 @@ the p95 isn't the slowest round (200 warm searches in the 80k report). A 20-roun
 for a search whose quiet 200-round p95 was 68.7 ms (a separate probe: 95 ms), and a task was filed, then
 archived, on it (2026-09-26). A cold run clears every cache (`verified`, `expanded`, `compiled`): clearing
 one left a 10.5 s query (10.9 s then) reading 77 ms (a report run at 04ea8d9, discarded rather than committed).
+Record the 1-minute load at the start and the end and cite a budget figure only when both are under 5, and
+time every Trust-Evals string (`tests/golden/test_trust_evals.py`), not a few representative queries: a
+110.8 ms miss read at a load of 4.5 to 9.8 was 84.4 ms quietly, and the real miss was a string the report had
+never timed (`main-2-pop`, 190.1 ms; decision-039, TASK-197).
 
 ## Output
 A table of benchmark · branch · main · Δ% · budget · pass/fail, each regression's cause with a profile
