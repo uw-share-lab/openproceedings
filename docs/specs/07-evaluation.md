@@ -99,11 +99,14 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   Scholar's reading and says so for each such string (`main-2-pop`).
 - **`stemming`** adds each searched word's other English inflections found in the compared records (`s`/`es`/
   `ies`, `ed`, `ing`; no derivation). Google Scholar's stemmer is undocumented, so the rule is a stated
-  stand-in, and which stemmer should stand for Scholar's is an open decision for the project owner. `full_text`
+  stand-in, not Scholar's rule, and the `stemming` and `full_text` counts are relative to it. Decision-038 keeps
+  it and adopts no published stemmer (below). `full_text`
   is not a lower bound: a wider stemmer moves rows out of it. The report therefore gives a sensitivity figure
   per string: how many `full_text` rows would match if every searched word were replaced by its inflection stem
   read as a prefix (`benchmarks` → `benchmark*`). It measures that and no more: it is not a stemmer, and one that
-  strips derivational endings could move more rows.
+  strips derivational endings could move more rows. On index `5ec5231adae2` it moves 0 of 1,753 `full_text` rows
+  for `main-7-most-updated` and 2 of 1,709 for `main-2-pop`, which is why decision-038 adds no stemmer
+  dependency; a string whose figure is not near zero reopens the decision.
 - **`scholar_cap`** needs the size of each Scholar search: the set's Publish or Perish query dates group its
   records by search, and a group at 1,000 or more marks its venues and years as capped.
 - A report never replaces a review file a person has filled in, and names its inputs by file name and sha256,
