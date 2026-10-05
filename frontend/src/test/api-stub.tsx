@@ -97,6 +97,7 @@ export function parsed(q: string, over: Partial<ParseResponse> = {}): ParseRespo
     warnings: [],
     translations: [],
     filters: null,
+    word_forms: [],
     identification_query: q,
     index_version: "idx1",
     mode: "native",

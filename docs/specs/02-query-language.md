@@ -85,7 +85,9 @@ name, and a word after an operator command starts after the operator's name. The
 - **Latin, Greek and Cyrillic accents fold** (`resume` ≡ `résumé`), as in every mainstream search engine.
 - **No stemming.** `benchmark` does not match `benchmarks`, and `LLM` does not match `LLMs`; plurals and
   other endings count only through an explicit `$` or `*`. Google Scholar stems, so a Scholar string run
-  unchanged identifies fewer records here; in Scholar mode `COMPAT_NO_STEMMING` lists the terms affected.
+  unchanged identifies fewer records here; in Scholar mode `COMPAT_NO_STEMMING` lists the terms affected,
+  and the UI offers to write `$` after them in the query text (§Word forms). That is an edit of the string,
+  never a way of matching: `benchmark$` is `benchmark` or `benchmarks`, not every form Scholar counts.
 - **Title and abstract only.** Scholar also searches full text; openproceedings never does (guarantee 2).
 - **Math is matched by its Unicode spelling** (decision-006): a Greek letter is searched as the letter
   (`α`, not `alpha`; `WARN_SPELLED_GREEK` says so when a query spells the name), an operator by its LaTeX
@@ -356,6 +358,58 @@ Goldens: `frontend/src/lib/filter-clause-golden.json` (clicks) and `frontend/src
 (year actions, with `MAX_YEAR_RANGES` and the year bounds), read by `backend/tests/unit/test_clauses.py`,
 `backend/tests/contract/test_parse_filters.py` and the reducer's test.
 
+### Word forms (what "Add `$`" edits)
+
+Scholar mode's `COMPAT_NO_STEMMING` notice tells the reader to add `$` or `*` where other endings should
+count. The UI can write the `$` for them (spec 05 §Components 1), as an edit of `q` the reader triggers and
+sees: the engine, tokenizer and index are untouched (guarantee 1), the `$` is in the query string (guarantee
+3), and its expansions are reported like any wildcard's (guarantee 6). The UI never re-parses the query to
+find the terms: `POST /parse` reports each place a `$` can go as `word_forms` (TASK-175), which is
+`query/wordforms.py::word_forms(q, parse(q, mode))`, a separate function for the reason `filter_clauses` is.
+
+```python
+WordForm = {term: str,            # as the notice names it: normalised tokens, a phrase's joined by spaces
+            at: int,              # code-point offset in q: the end of the word, or of a phrase's last word, as the
+                                  #   lexer ends it: after an invisible character that joins the word (a
+                                  #   zero-width space after `trust` gives 6, not 5)
+            insert: str}          # the text to insert at `at`, as it is: "$" or "$ "
+word_forms -> [WordForm] | None   # in order of `at`; None exactly when errors is non-empty; [] in native mode
+```
+
+A term is offered when the notice names it (a word or phrase with no wildcard; `NEAR` operands and terms
+under `NOT` included; one entry per place it is written) and `$` is a valid wildcard on it **as written**:
+
+| Term | Offered | Why |
+|---|---|---|
+| `trust`, `LLM`, `title:trust`, `-bias`, `(model)` | `trust$`, `LLM$`, `title:trust$`, `-bias$`, `(model$)` | a word of at least 3 letters or digits |
+| `"large language model"`, Scholar's unquoted `large language model \| …` | `"large language model$"`, `large language model$` | a phrase takes `$` on its **last word** only, as the review's strings write it; the earlier words count toward the stem, so `"generative AI"` is offered. Inner words are left alone: a `$` there is valid (§Grammar) but the notice names the phrase as one term, and the reader can type it |
+| `vision-language`, `gpt-4` | `vision-language$`, `gpt-4$` | a word of several tokens is a phrase; the same rule |
+| `model$`, `bench*`, `"large$ language model"` | no | already a wildcard; a phrase holding one is not named by the notice |
+| `AI`, `"a b"` | no | under 3 letters or digits: `AI$` would be `WILDCARD_STEM_TOO_SHORT` |
+| `C++`, `trust?`, `"what is trust?"` | no | `$` must directly follow a letter or digit (`PARSE_WILDCARD_DETACHED`) |
+| `US$5`, `$f(x)$-DP`, `G\"odel`, `LLM` in `(model$\|LLM)` | no | the unspaced run the word is in (up to whitespace or a quote, where the lexer looks for LaTeX math) already holds a `$` or a backslash, and a second `$` would close math |
+| a lowercase `and`, `or`, `not` or `near/3` (any case or width: `And`, `ｏｒ`) | no | the lexer's `WARN_LOWERCASE_OPERATOR` and Scholar mode's phrase grouping (decision-002) know the word by its text: `and$` would lose the warning, and `trust \| LLM and` would become `trust$ \| "LLM$ and$"`, another query. As the last word of a quoted phrase it is an ordinary word (`"supply and"` → `"supply and$"`) |
+| `venue:ICLR`, `year:2020..2024`, `source:PMLR` values | never | filter values are not terms and take no wildcards |
+
+Two offered words in one unspaced run (`(model|LLM)`) would read as LaTeX math once both had a `$`
+(`(model$|LLM$)`), so every one but the last gets `insert` `"$ "`: `(model$ |LLM$)`. The space changes
+nothing else, and with it any subset of the edits is sound.
+
+The report is then **read back**: the server makes every edit at once, parses the result in the query's mode,
+and requires the tree to be the original with exactly those leaves made `$` wildcards. If it is not, nothing
+is offered (`[]`). The rules above are meant to allow only what the read-back accepts; the one thing they
+cannot see is the edited query, or its canonical form, passing the 2,000-code-point cap, and then nothing is
+offered although single edits would fit. `test_wordforms.py` pins each row above and checks, for generated
+queries and every Trust-Evals string, that every subset of the edits (each alone, all together, and every
+combination of the first six, since the reader may tick any) changes only the terms it names, and that the
+read-back refuses nothing the rules allow short of the cap. That last check is a test, not a proof: it is how
+the operator-word row was found (review of TASK-175), and a new text-dependent rule in the lexer or `compat.py`
+needs its row here. The UI's splice is checked against the server's own
+(`frontend/src/lib/word-forms-golden.json`, generated by `test_frontend_word_forms_golden.py`).
+
+`$` is not stemming: `benchmark$` matches `benchmark` and `benchmarks` (and any other indexed word one
+character longer), never `benchmarking`. A reader who wants every ending types `*`.
+
 ## Compatibility input modes
 
 The review's existing strings must work **unchanged** or come back with a precise explanation:
@@ -401,6 +455,8 @@ ParseResult = {               # `query/parser.py`; every Optional below is None 
 }
 filter_clauses(q, parse(q, mode)) -> ParsedFilters | None   # `query/clauses.py`: None exactly when errors
                                                               #   is non-empty (§Filter clauses; /parse `filters`)
+word_forms(q, parse(q, mode)) -> [WordForm] | None           # `query/wordforms.py`: None exactly when errors
+                                                              #   is non-empty (§Word forms; /parse `word_forms`)
 ```
 
 `canonical` is deterministic: `parse(canonical).canonical == canonical`. That idempotence is tested with

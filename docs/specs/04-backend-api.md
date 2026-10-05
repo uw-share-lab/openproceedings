@@ -96,7 +96,7 @@ reviews without the UI.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side), plus `filters`: each filter field's top-level clause (span, values, `toggleable`, `reason`, and for a clause blocked by other clauses their `blocking_spans`) for facet clicks (02 §Filter clauses; decision-011). Called as you type, debounced. |
+| `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side), plus `filters`: each filter field's top-level clause (span, values, `toggleable`, `reason`, and for a clause blocked by other clauses their `blocking_spans`) for facet clicks (02 §Filter clauses; decision-011), and `word_forms`: each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names (`term`, code-point `at`, `insert`; 02 §Word forms; TASK-175). Called as you type, debounced. |
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | `GET` | `/papers/{id}` | The full record, provenance included; with an optional `q` (and `mode`), whether that query matches it and its `highlights`, exactly as `/search` gives them for that paper (task-087) |
 | `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` (with `mode` at most `native`) → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; with `record_id`, exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if that index is gone, 409 `API_RECORD_MISMATCH` if its replay is a `mismatch`) |
@@ -852,6 +852,11 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     `/export`, `POST /records`). **Correction to TASK-035 AC #2** (the task is completed, so the CLI can't
     edit it): the AC says "Parse errors are 422", but that holds only for endpoints that run the query.
     `/parse` reports them in a 200 (task-035 review, Should 5).
+  - `POST /parse`'s `word_forms` (TASK-175, additive) is `query.wordforms.word_forms(q, result)`: a list of
+    `{term, at, insert}`, every key always sent, in order of `at`; empty in native mode and when no named term
+    can take a `$`; null exactly when `errors` is non-empty. It costs one lex and one parse of the edited
+    string in Scholar mode, none in native mode (02 §Word forms has the rules). `/search` does not carry it:
+    the UI's action edits the draft, which `/parse` has always just read.
   - `POST /parse`'s `filters` (TASK-078, decision-011) is `query.clauses.filter_clauses(q, result)`, the one
     call the route adds: `{venue, year, track, status}`, each `{field, negated, span, toggleable, reason}`
     plus `values` (venue, track, status) or `ranges` (year), every key always sent (a null included); null

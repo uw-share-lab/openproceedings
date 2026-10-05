@@ -410,6 +410,23 @@ export function SyntaxHelp({
           translation is shown with the results. Google Scholar stems words and searches full text; here words
           match exactly, in titles and abstracts only.
         </p>
+        <p>
+          So a Google Scholar string usually finds fewer papers here until its terms carry a wildcard. The
+          notice that lists the terms matched exactly offers <strong>Add $</strong>: it writes{" "}
+          <code className={CODE}>$</code> after every listed term that can take one, or after the terms you
+          tick under Choose terms, in the editor. A phrase gets it on its last word. Terms that already have a
+          wildcard, terms with fewer than {count(c.min_wildcard_stem)} letters or digits, terms that end in a
+          symbol or have another <code className={CODE}>$</code> beside them, a lowercase{" "}
+          <code className={CODE}>and</code>, <code className={CODE}>or</code> or{" "}
+          <code className={CODE}>not</code>, and filter values are left as typed; when no term can take one,
+          or the query would be over the length limit with them added, the notice says so and offers nothing.
+          Nothing is searched until you press Search, and the editor&apos;s undo takes the change back.{" "}
+          <code className={CODE}>$</code> adds at most one character (<code className={CODE}>benchmark$</code>{" "}
+          matches <code className={CODE}>benchmark</code> and <code className={CODE}>benchmarks</code>, not{" "}
+          <code className={CODE}>benchmarking</code>), which is fewer forms than Google Scholar counts; type{" "}
+          <code className={CODE}>*</code> for any ending. After a search, the expansions show every word each
+          wildcard matched.
+        </p>
         <Examples items={data.sections.scholar} />
       </Section>
 

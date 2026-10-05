@@ -31,7 +31,9 @@ authoritative):
   page (`/help/syntax`).
 - **Scholar and Publish or Perish syntax** (`mode=scholar`, `op search --mode scholar`): `|`, `source:`
   (mapped to `venue:`) and PoP's `$` are accepted. Each rewrite is reported, so an existing review string runs
-  unchanged or comes back with a precise explanation.
+  unchanged or comes back with a precise explanation. Scholar stems words and openproceedings never does, so
+  the web app lists the terms it matched exactly and offers to write `$` after them in the query text
+  ("Add $": `benchmark$` matches `benchmark` and `benchmarks`); nothing is expanded unless the query says so.
 - **Default filters with exclusion accounting**: workshop, competition and rejected papers are indexed too.
   A query without a `track:` clause gets `track:(main OR datasets_benchmarks OR position)`, and one without a
   `status:` clause gets `status:accepted`, both written out in the canonical string; write your own clause to

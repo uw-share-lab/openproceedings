@@ -159,6 +159,29 @@ warnings, the save's index check), the design doc says so; its open questions li
    `reading` field over its span in the draft (never searching); with no `reading` it isn't offered. The
    client never parses a diagnostic's `message` (TASK-099).
 
+   The Scholar-mode `COMPAT_NO_STEMMING` line offers **Add `$`** (TASK-175; 02 §Word forms), because a
+   Scholar string run as typed identifies fewer records than it means in Scholar (the review's primary string:
+   27 as typed, 67 with `$` on five terms, 2026-10-04). "Add $ to all N terms" writes `$` at every place
+   `/parse` reported in `word_forms`; **Choose terms** (shown for two or more terms) opens a group of
+   checkboxes, one per term (a phrase is marked "on its last word", a repeated term "written N times" and gets
+   its `$` in every place), with "Add $ to the ticked terms" (`aria-disabled`, saying why, until one is
+   ticked). Both are an edit of the **draft**, exactly like Load with parentheses: one change in the editor
+   (so the editor's undo and **Revert edits** take it back), focus moves to the editor, the row is labelled a
+   draft, and nothing is searched or put in the URL until Search; then `q` holds the `$` (guarantee 3),
+   browser Back returns to the query as typed, and the expansions row lists what each `$` matched (guarantee
+   6). The client only splices (`src/lib/word-forms.ts`, checked against the server's own strings in
+   `word-forms-golden.json`): it never finds a term, and offers nothing while the editor holds other text
+   than the one reported on. When the notice is shown and `word_forms` is empty (no named term can take a
+   `$`, or the query would pass the length cap with them added; the client can't tell which, so it names
+   both) the line says so in place of the buttons: "`$` can't be added to these terms for you. A term is
+   left as typed when it has too few letters or digits, has a symbol or another `$` beside it, or is a
+   lowercase `and`, `or` or `not`. The same happens when the query would be over the length limit with `$`
+   added. Type a wildcard yourself where one is valid." The chooser ends with the same reasons for a named
+   term it doesn't list. A line under the notice says what `$` is: "`$` after a
+   term also matches it with one more letter or digit: `benchmark$` matches `benchmark` and `benchmarks`, not
+   `benchmarking`. That is fewer forms than Google Scholar counts; type `*` for any ending." The action never
+   claims to reproduce Scholar's stemming, and there is no "stem" setting anywhere (guarantee 1).
+
    The highlighting lexer selects tokenizer 2 or 3 from `/meta.tokenizer_version`, using 3 while metadata
    is absent (or names an unsupported version). A language compartment reconfigures when the served version
    changes, preserving the editor document, selection and undo history. Both versions are checked against

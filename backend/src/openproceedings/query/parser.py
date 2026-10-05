@@ -780,24 +780,32 @@ class _Parser:
         return cls(span=(nodes[0].span[0], nodes[-1].span[1]), children=tuple(nodes))
 
 
-def _exact_terms(n: Node) -> list[str]:
-    """Words and phrases matched exactly (no wildcard), in order: what Scholar would have stemmed."""
+def exact_leaves(n: Node) -> list[Term | Phrase]:
+    """Words and phrases matched exactly (no wildcard), in order: what Scholar would have stemmed. The
+    no-stemming notice names them, and `wordforms.py` offers `$` on the ones that can take it."""
     if isinstance(n, Term):
-        return [n.token]
+        return [n]
     if isinstance(n, Phrase) and not any(isinstance(i, Wildcard) for i in n.items):
-        return [" ".join(i.token for i in n.items if isinstance(i, Term))]
+        return [n]
     if isinstance(n, Near):
-        return _exact_terms(n.left) + _exact_terms(n.right)
+        return exact_leaves(n.left) + exact_leaves(n.right)
     if isinstance(n, Not):
-        return _exact_terms(n.child)
+        return exact_leaves(n.child)
     if isinstance(n, And | Or):
-        return [t for c in n.children for t in _exact_terms(c)]
+        return [t for c in n.children for t in exact_leaves(c)]
     return []
+
+
+def exact_name(leaf: Term | Phrase) -> str:
+    """An exact leaf as the no-stemming notice names it: its normalised tokens."""
+    if isinstance(leaf, Term):
+        return leaf.token
+    return " ".join(i.token for i in leaf.items if isinstance(i, Term))
 
 
 def _stemming_notice(ast: Node, end: int) -> list[Diagnostic]:
     """Scholar mode: one notice that exact matching differs from Scholar's stemming (methods-reportable)."""
-    terms = list(dict.fromkeys(_exact_terms(ast)))
+    terms = list(dict.fromkeys(exact_name(leaf) for leaf in exact_leaves(ast)))
     if not terms:
         return []
     shown = ", ".join(f"`{clip(t)}`" for t in terms[:8]) + (

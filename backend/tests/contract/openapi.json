@@ -1566,7 +1566,7 @@
         "type": "object"
       },
       "ParseResponse": {
-        "description": "02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus\n`filters` (`query.clauses.filter_clauses`, TASK-078). A query with errors is still a 200 here: `errors`\nholds them, and every Optional is null.",
+        "description": "02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus\n`filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` (`query.wordforms.word_forms`,\nTASK-175). A query with errors is still a 200 here: `errors` holds them, and every Optional is null.",
         "properties": {
           "ast": {
             "anyOf": [
@@ -1764,6 +1764,21 @@
             },
             "title": "Warnings",
             "type": "array"
+          },
+          "word_forms": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WordForm"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order (spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the query text the reader triggers and sees. The server has parsed `q` with every one inserted. Empty outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty.",
+            "title": "Word Forms"
           }
         },
         "required": [
@@ -1780,7 +1795,8 @@
           "warnings",
           "errors",
           "translations",
-          "filters"
+          "filters",
+          "word_forms"
         ],
         "title": "ParseResponse",
         "type": "object"
@@ -3478,6 +3494,34 @@
           "field"
         ],
         "title": "Wildcard",
+        "type": "object"
+      },
+      "WordForm": {
+        "properties": {
+          "at": {
+            "description": "The code-point offset in `q` to insert at: the end of the word, or of a phrase's last word, as the lexer ends it, so after any invisible character that joins the word (a zero-width space).",
+            "minimum": 0,
+            "title": "At",
+            "type": "integer"
+          },
+          "insert": {
+            "description": "The text to insert at `at`, as it is: `$`, or `$` and a space where another offered word follows in the same unspaced run (`(model|LLM)`), so that the two `$` are not read as LaTeX math.",
+            "pattern": "^\\$ ?$",
+            "title": "Insert",
+            "type": "string"
+          },
+          "term": {
+            "description": "The term as the `COMPAT_NO_STEMMING` notice names it: its normalised tokens, a phrase's joined by spaces. One term written in several places has one entry per place.",
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term",
+          "at",
+          "insert"
+        ],
+        "title": "WordForm",
         "type": "object"
       },
       "YearRange": {
