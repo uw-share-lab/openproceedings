@@ -108,6 +108,7 @@ from openproceedings.ingest.sources.openreview_v2 import (
     _pages,
     _strings,
     _text,
+    _title,
     marker_key,
 )
 from openproceedings.logs import elapsed_ms
@@ -688,7 +689,7 @@ def note_record(
     if not FORUM_ID.fullmatch(nid):
         return "invalid"
     content: Mapping[str, Any] = note["content"] if isinstance(note.get("content"), Mapping) else {}
-    title = _text(content.get("title"))
+    title, title_evidence = _title(content.get("title"), nid)
     if title is None:
         return "no_title"
     verdict = judge(ad, listing, note, listing_page, read_forum)
@@ -716,7 +717,7 @@ def note_record(
         claim("year", year, f"invitation={listing.invitation}"),
         claim("track", verdict.track, verdict.track_evidence, verdict.track_page),
         claim("status", verdict.status, verdict.status_evidence, verdict.status_page),
-        claim("title", title, "content.title"),
+        claim("title", title, title_evidence),
         claim("authors", authors, _authors_evidence(raw_authors, count, authors_how, authors)),
         claim("urls.forum", urls.forum, "note.id"),
     ]  # fmt: skip

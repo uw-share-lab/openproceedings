@@ -13,7 +13,7 @@ build.
 | Field | Type | Notes |
 |---|---|---|
 | `id` | str | Stable ID `op:<venue>:<year>:<native>`, e.g. `op:iclr:2024:iilhN2MycO`. `native` is the OpenReview forum ID, or `pmlr-v202-<key>` (ICML) / `nips-<hash>` (NeurIPS; `nips-<hash>-round1`/`-round2` on the 2021 Datasets and Benchmarks host: the suffix is the link's round token, because that host numbers each round and the main track separately, so its hash alone can name three papers; a D&B link without a round, or dated other than 2021, gets no id (miner `no_round`, RIS `unresolved`), never a bare `nips-<hash>`; `urls.proceedings_native` is the one rule) / `iclr-<hash>` (ICLR) for proceedings-only papers. |
-| `title` | str | Raw, whitespace-collapsed. Normalization for search happens in 03, not here. The snapshot build caps it at 1,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
+| `title` | str | Raw, whitespace-collapsed. No control character: the record refuses one, and the OpenReview importers replace each with a space first (§Pipeline 2, TASK-180). Normalization for search happens in 03, not here. The snapshot build caps it at 1,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
 | `abstract` | str \| null | Raw. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. The snapshot build caps it at 20,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
 | `authors` | list[str] | Display order. |
 | `venue` | enum | `NeurIPS` \| `ICLR` \| `ICML`. Extensible. |
@@ -216,6 +216,27 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    longest abstract is 4,995 characters and its longest run of marks is 1. It rebuilds byte-identically. Two
    sources' texts that differ only past a cap compare equal once trimmed, so they get no `conflicts.csv` row;
    their claims still carry the note.
+   **Control characters in a title (TASK-180).** A record's title holds no control character (Unicode category
+   `Cc`: C0, DEL, C1), and a source can leave one in: a PDF's soft line break pasted as U+0002
+   (`A SPEC␂TRUM FROM …`, ICLR 2026 `xHMNX3l8rx`; ICLR 2024 `PqjQmLNuJt`), a trailing NUL (NeurIPS 2026
+   `KlvYZ17FPi`). Until TASK-180 such a note was skipped as `invalid` and the paper was missing. The OpenReview
+   importers (API v1 and v2; `record.title_text`) now replace **each control character with a space** and then
+   collapse whitespace; the stored title is otherwise the source's, byte for byte. A space, not a deletion:
+   - the tokenizer already reads a control character as a separator (03), so the stored title's tokens are
+     exactly the raw title's (`spec`, `trum`), and nothing about tokenization changes. The one exception is a
+     control character just inside `$…$`: a space there stops the span reading as math, so those tokens can
+     differ (pinned by a test; no real title has it);
+   - U+0002 stands for a line-break hyphen in some texts (`modal␂ity`) and a real hyphen in others
+     (`state␂of-the-art`, `decision␂making`), so deleting it would fuse two words about as often as it would
+     mend one. A reader sees `SPEC TRUM`; a search for `spectrum` does not find that title.
+   Nothing is silent: the title claim's evidence says `content.title (<n> control characters replaced by a
+   space)` (whitespace controls such as U+000B, which collapsing always turned into a space, are not counted and
+   leave the evidence as it was), and a DEBUG `openreview_title_control_characters` line names the forum and
+   the count, never the title. A title with nothing left is `no_title`. **Abstracts, authors and keywords are
+   not changed**: the record never refused a control character there, dozens of crawled abstracts hold U+0002,
+   and they are stored and tokenized as before (the tokenizer splits on it). The RIS and proceedings importers
+   are unchanged too: a title with a control character is still refused there and counted (none seen). No
+   existing record's bytes change, so no tokenizer, index-schema or record-schema version moves.
 3. **Classify.** Derive `track`, `status` and `presentation` using the rules above. Every classification
    records its evidence claim.
 4. **Deduplicate.** The same paper appears on OpenReview and in the proceedings (NeurIPS, ICML 2023+).

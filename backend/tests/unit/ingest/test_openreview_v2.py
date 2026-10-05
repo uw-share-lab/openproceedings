@@ -146,6 +146,57 @@ def test_each_recorded_venueid_form(fixture: str, venue: str, year: int, track: 
     assert record.venue_id_raw == note["content"]["venueid"]["value"]
 
 
+# --- control characters in a title (TASK-180) -----------------------------------------------------------------
+
+
+def test_a_title_with_control_characters_is_imported_with_spaces_and_says_so(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """ICLR 2026 `xHMNX3l8rx` (two U+0002 in its title) was skipped as `invalid`: a real paper lost to invisible
+    characters. The title keeps everything else; the abstract, which the record never refused, is untouched."""
+    note = recorded_note("iclr-2026/notes-accepted.json")
+    note["content"]["title"]["value"] = "A SPEC\x02TRUM FROM STATISTICAL TO CAUSAL\x02"
+    note["content"]["abstract"]["value"] = "the LiDAR modal\x02ity"
+    with caplog.at_level(logging.DEBUG):
+        record = build(note, "ICLR", 2026)
+    assert isinstance(record, PaperRecord)
+    assert (
+        record.title == "A SPEC TRUM FROM STATISTICAL TO CAUSAL"
+        and record.abstract == "the LiDAR modal\x02ity"
+    )
+    [title] = record.claims("title")
+    assert title.evidence == "content.title (2 control characters replaced by a space)"
+    [line] = [r for r in caplog.records if r.getMessage() == "openreview_title_control_characters"]
+    assert (line.levelno, line.__dict__["forum"], line.__dict__["replaced"]) == (logging.DEBUG, note["id"], 2)
+    assert "title" not in line.__dict__  # a title is never logged
+
+
+@pytest.mark.parametrize(
+    ("title", "evidence"),
+    [
+        ("Trust\x00AI", "content.title (1 control character replaced by a space)"),
+        (
+            "Details  through\x0b Chain",
+            "content.title",
+        ),  # whitespace controls always collapsed: evidence unchanged
+        ("Trust in AI", "content.title"),
+    ],
+)
+def test_the_title_claims_evidence_counts_only_what_was_replaced(title: str, evidence: str) -> None:
+    note = recorded_note("iclr-2024/notes-accepted.json")
+    note["content"]["title"]["value"] = title
+    record = build(note)
+    assert isinstance(record, PaperRecord) and [c.evidence for c in record.claims("title")] == [evidence]
+    assert record.title == " ".join(title.replace("\x00", " ").split())
+
+
+@pytest.mark.parametrize("title", ["\x00\x02", " \x02 ", "", None, 7])
+def test_a_title_of_only_control_characters_is_no_title(title: object) -> None:
+    note = recorded_note("iclr-2024/notes-accepted.json")
+    note["content"]["title"] = {"value": title}
+    assert build(note) == "no_title"
+
+
 @pytest.mark.parametrize(("fixture", "venue", "year"), DELEGATED)
 def test_forms_classify_py_owns_follow_it(fixture: str, venue: str, year: int) -> None:
     note = recorded_note(fixture)
