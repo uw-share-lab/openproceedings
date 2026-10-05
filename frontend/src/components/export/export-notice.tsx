@@ -26,7 +26,8 @@ export function Countdown({
   auto = false,
 }: {
   seconds: number | null;
-  onRetry: () => void;
+  /** `byItself`: the countdown's own retry at 0 (with `auto`), not a press of Retry. */
+  onRetry: (byItself: boolean) => void;
   auto?: boolean;
 }) {
   const [left, setLeft] = useState(seconds ?? 0);
@@ -35,7 +36,7 @@ export function Countdown({
     if (left <= 0) {
       if (auto && !retried.current) {
         retried.current = true;
-        onRetry();
+        onRetry(true);
       }
       return;
     }
@@ -56,7 +57,7 @@ export function Countdown({
         type="button"
         aria-disabled={waiting ? true : undefined}
         onClick={() => {
-          if (!waiting) onRetry();
+          if (!waiting) onRetry(false);
         }}
         className={`${button} ${waiting ? "opacity-60" : ""}`}
       >
@@ -70,6 +71,9 @@ export function Countdown({
     </div>
   );
 }
+
+/** The server's closing "Try again in N s." on a wait, said instead by a countdown that retries by itself. */
+const TRY_AGAIN = / ?Try again in \d+ s\.$/;
 
 /** A wait that ends in a retry by itself, as shown and as its caller announces it once. */
 export function autoRetryText(seconds: number): string {
@@ -87,9 +91,11 @@ export function Report({ code }: { code: string }) {
 /**
  * A refusal or no answer, worded from the envelope (never a raw status), with Retry. `onRetry` null: the same
  * request would be refused again (a file the server refused), so no Retry is offered; the caller says what to
- * do instead. `autoRetry`: a wait (429, `API_BUSY`) ends in the retry itself, not in a button to press; it is
- * then no alert, since a busy server can be met several times in a row and each would interrupt again: the
- * caller announces it once, politely (`autoRetryText`; A11Y-R2-2).
+ * do instead; its argument is true only for a countdown's own retry, never for a press of Retry. `autoRetry`: a
+ * wait (429, `API_BUSY`) ends in the retry itself, not in a button to press; it is then no alert, since a busy
+ * server can be met several times in a row and each would interrupt again: the caller announces it once,
+ * politely (`autoRetryText`; A11Y-R2-2). The server's own "Try again in N s." is then left out: the countdown
+ * says when.
  */
 export function FailureNotice({
   failure,
@@ -97,10 +103,10 @@ export function FailureNotice({
   autoRetry = false,
 }: {
   failure: Failure;
-  onRetry: (() => void) | null;
+  onRetry: ((byItself: boolean) => void) | null;
   autoRetry?: boolean;
 }) {
-  const retry = onRetry ?? (() => {});
+  const retry = () => onRetry?.(false);
   if (failure.kind === "unreachable") {
     return (
       <div role="alert" className={box}>
@@ -129,7 +135,7 @@ export function FailureNotice({
     const auto = autoRetry && failure.retryAfter !== null;
     return (
       <div role={auto ? undefined : "alert"} className={warnBox}>
-        <p className="break-words">{error.message}</p>
+        <p className="break-words">{auto ? error.message.replace(TRY_AGAIN, "") : error.message}</p>
         <Countdown
           key={`${error.code}:${failure.retryAfter ?? ""}`}
           seconds={failure.retryAfter}
@@ -147,7 +153,7 @@ export function FailureNotice({
       {(onRetry !== null || error.code === "API_INTERNAL") && (
         <div className="flex flex-wrap items-center gap-3">
           {onRetry !== null && (
-            <button type="button" onClick={onRetry} className={button}>
+            <button type="button" onClick={retry} className={button}>
               Retry
             </button>
           )}

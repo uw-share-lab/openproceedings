@@ -186,12 +186,14 @@ export function CompareRecords({
       compareButton.current?.focus();
   };
 
+  /** `byItself`: the countdown's own retry, which uses up one of `AUTO_RETRIES` and is not announced again.
+   * `keepCount`: a press of Retry on a busy notice, which neither uses up a retry nor starts the count over. */
   const start = useCallback(
-    (byItself = false) => {
+    ({ byItself = false, keepCount = false }: { byItself?: boolean; keepCount?: boolean } = {}) => {
       const problem = file === null || limits === null ? null : fileProblem(file, limits);
       if (disabledReason !== null || file === null || problem !== null || run.kind === "running") return;
       if (pause > 0) return; // Compare is aria-disabled, not disabled: a click still lands (USAB-R2-2)
-      const tries = byItself ? autoTries + 1 : 0;
+      const tries = byItself ? autoTries + 1 : keepCount ? autoTries : 0;
       setAutoTries(tries);
       aborter.current?.abort();
       const controller = new AbortController();
@@ -372,13 +374,13 @@ export function CompareRecords({
             {current === null ? (
               <p className="font-medium">
                 {retrying
-                  ? "The comparison hasn't run yet: this instance is busy, and it will try again by itself."
+                  ? "The comparison hasn't run yet: this instance is busy; this page will try again by itself."
                   : "The comparison didn't run. Nothing was compared."}
               </p>
             ) : (
               <p className="font-medium break-words">
                 {retrying
-                  ? "The new comparison hasn't run yet: this instance is busy, and it will try again by itself."
+                  ? "The new comparison hasn't run yet: this instance is busy; this page will try again by itself."
                   : "The new comparison didn't run."}{" "}
                 The results below are from the earlier comparison with{" "}
                 <span className="break-all">{current.fileName}</span>.
@@ -386,7 +388,7 @@ export function CompareRecords({
             )}
             <FailureNotice
               failure={run.failure}
-              onRetry={refusedFile ? null : () => start(busy)}
+              onRetry={refusedFile ? null : (byItself) => start({ byItself, keepCount: busy })}
               autoRetry={retrying}
             />
             {refusedFile && (
