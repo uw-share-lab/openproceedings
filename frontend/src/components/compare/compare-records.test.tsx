@@ -148,7 +148,7 @@ describe("CompareRecords", () => {
     expect([...dropped.querySelectorAll(":scope > p")].map((p) => p.textContent)).toEqual([
       expect.stringMatching(/^2 papers are excluded by a default filter: to include such a paper/),
       expect.stringMatching(
-        /^2 papers match only as another word form: type \$ after that word \(e.g. word\$\)/,
+        /^2 papers match only as another word form: type \* after its stem \(e\.g\. evaluat\*\)/,
       ),
       expect.stringMatching(
         /^2 papers have no exact match in their title or abstract: no form of this query/,
