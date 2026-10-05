@@ -17,7 +17,8 @@ export const button = "min-h-8 rounded-md border px-3 hover:bg-muted";
 
 /**
  * `seconds` counted down to 0, then "You can retry now" and Retry (announced at the start and at 0 only). With
- * `auto`, the retry happens by itself at 0 instead ("Retrying in N s", then "Retrying…").
+ * `auto`, the retry happens by itself at 0 instead ("Busy; retrying by itself in N s", then "Retrying…"), and
+ * nothing here is a live region: the caller announces the wait once, in its own (A11Y-R2-2).
  */
 export function Countdown({
   seconds,
@@ -44,15 +45,13 @@ export function Countdown({
   const waiting = left > 0;
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <p role="status" aria-live="polite">
-        {auto
-          ? waiting
-            ? `Retrying by itself in ${seconds ?? 0} s`
-            : "Retrying…"
-          : waiting
-            ? `Retry in ${seconds ?? 0} s`
-            : "You can retry now"}
-      </p>
+      {auto ? (
+        <p>{waiting ? autoRetryText(seconds ?? 0) : "Retrying…"}</p>
+      ) : (
+        <p role="status" aria-live="polite">
+          {waiting ? `Retry in ${seconds ?? 0} s` : "You can retry now"}
+        </p>
+      )}
       <button
         type="button"
         aria-disabled={waiting ? true : undefined}
@@ -72,6 +71,11 @@ export function Countdown({
   );
 }
 
+/** A wait that ends in a retry by itself, as shown and as its caller announces it once. */
+export function autoRetryText(seconds: number): string {
+  return `Busy; retrying by itself in ${seconds} s`;
+}
+
 export function Report({ code }: { code: string }) {
   return (
     <a href={reportHref(code, new Date())} rel="noopener noreferrer" className="underline underline-offset-4">
@@ -83,7 +87,9 @@ export function Report({ code }: { code: string }) {
 /**
  * A refusal or no answer, worded from the envelope (never a raw status), with Retry. `onRetry` null: the same
  * request would be refused again (a file the server refused), so no Retry is offered; the caller says what to
- * do instead. `autoRetry`: a wait (429, `API_BUSY`) ends in the retry itself, not in a button to press.
+ * do instead. `autoRetry`: a wait (429, `API_BUSY`) ends in the retry itself, not in a button to press; it is
+ * then no alert, since a busy server can be met several times in a row and each would interrupt again: the
+ * caller announces it once, politely (`autoRetryText`; A11Y-R2-2).
  */
 export function FailureNotice({
   failure,
@@ -120,14 +126,15 @@ export function FailureNotice({
   }
   const { error } = failure;
   if ((failure.status === 429 || error.code === "API_BUSY") && onRetry !== null) {
+    const auto = autoRetry && failure.retryAfter !== null;
     return (
-      <div role="alert" className={warnBox}>
+      <div role={auto ? undefined : "alert"} className={warnBox}>
         <p className="break-words">{error.message}</p>
         <Countdown
           key={`${error.code}:${failure.retryAfter ?? ""}`}
           seconds={failure.retryAfter}
           onRetry={onRetry}
-          auto={autoRetry && failure.retryAfter !== null}
+          auto={auto}
         />
       </div>
     );

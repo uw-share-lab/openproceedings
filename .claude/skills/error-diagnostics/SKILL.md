@@ -40,7 +40,10 @@ class Diagnostic(BaseModel):  # frozen, extra="forbid"
   counts, decision-010), and for `POST /compare` (TASK-177) 403 `API_COMPARE_DISABLED`, 415
   `API_UNSUPPORTED_MEDIA_TYPE`, 408 `API_UPLOAD_TIMEOUT`, 422 `API_RIS_INVALID`, 413 `API_RIS_TOO_LARGE` and 422
   `API_COMPARE_TOO_COSTLY` (none carries diagnostics: they are about the file or the cost, not a span of `q`;
-  no message quotes the file), 500
+  no message quotes the file), and its own 503 `API_BUSY`s, each with its access line's `busy` value
+  (`match_index_building` and `compare_slots` with `Retry-After`; `compare_deadline` and `match_index_failed`
+  without: retrying the same request won't help) and 429s (`compare_running`, `compare_cooldown`), listed in
+  spec 04 §Logging (the access line), 500
   `API_INTERNAL`, and 404 `API_NOT_FOUND` / 405 `API_METHOD_NOT_ALLOWED` for routing (task-034). A new or changed pair is a spec 04 change first (and breaking once released). An error envelope's `code` is typed by the `ErrorCode` schema: exactly the codes with an HTTP status, derived from the registry (`api/errors.py`); a spec 04 test reads the §Error handling table and compares it with the registry both ways, so a new `API_` code needs its table row.
 - The frontend uses the generated `Diagnostic` type and draws squiggles directly from `span`. It never
   recomputes positions (`typescript-standards`).

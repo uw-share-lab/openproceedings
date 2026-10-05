@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
+from openproceedings.api.compare import proxied
 from openproceedings.api.config import ApiConfig
 from openproceedings.api.deps import EngineDep, ServedDep
 from openproceedings.api.middleware import API_PREFIX
@@ -41,8 +42,11 @@ def get_meta(request: Request, engine: EngineDep, served: ServedDep) -> MetaResp
             max_counted_groups=config.max_counted_groups,
             max_counted_terms=config.max_counted_terms,
             max_counted_ids=config.max_counted_ids,
-            # not offered either while the served index's match table failed to build (a reload retries it)
-            compare=None if served.matches is None or served.matches.failed else compare_limits(config),
+            # not offered either while the served index's match table failed to build (a reload retries it),
+            # nor to a request `POST /compare` would refuse as a stranger's on a local instance (API-R2-N)
+            compare=None
+            if served.matches is None or served.matches.failed or proxied(request, config)
+            else compare_limits(config),
         ),
     )
 

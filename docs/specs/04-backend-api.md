@@ -587,8 +587,12 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   same body sent chunked gets the 403), another method (405 for GET) and a rate-limited client (429).
   **A local instance** is one whose comparisons are on by that loopback default alone, not by `--compare`
   (`ApiConfig.compare_local`): it has no per-network cooldown (below), and a request that came through a
-  proxy (an `X-Forwarded-For`, `Forwarded` or `Via` header) gets the same 403, since a proxy on the same host
-  in front of a loopback bind makes the instance public, which its operator never chose (decision-035).
+  proxy (an `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Real-IP`, `Forwarded`, `Via` or
+  `CF-Connecting-IP` header) or from a web page not on that machine (an `Origin` that is not `localhost` or a
+  loopback address; `null` included) gets the same 403, since a proxy on the same host in front of a loopback
+  bind makes the instance public, which its operator never chose (decision-035). One predicate decides it
+  (`compare.proxied`): `GET /meta` answers such a request `limits.compare: null`, so the web app doesn't
+  offer what the route would refuse, and the refusal's access line says `compare_refused: proxied`.
 - **What it may disclose** (audited 2026-10-05; each point below has a test in `test_compare.py` or
   `test_compare_review.py`, the takedown ones through a listed id, a merged id, a rekeyed id and a twin
   link). Timing was not made a guarantee: the reviewer measured no withheld-specific signal in process
@@ -683,7 +687,9 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   access line says which capacity refused a comparison (`busy`, below). The work is bounded: the caps above,
   `max_results` (5,000 papers of the result that the file doesn't hold: more is 422
   `API_COMPARE_TOO_COSTLY`, as is a phrase or NEAR with more than 512 inflected spellings), and
-  `max_seconds` (60 s of wall time: past it 503 `API_BUSY` with `Retry-After`), which is checked before every
+  `max_seconds` (60 s of wall time: past it 503 `API_BUSY` without `Retry-After`, since the same file and
+  query would run as long again and an automatic retry would hold the slot that long each time), which is
+  checked before every
   record read (and every 256 links within one record), every record matched, every oracle evaluation,
   every row and CSV line written and the final encoding (5,000 records of 1,000-character titles built to be
   slow to normalize stopped 0.01 s after a 2 s and a 5 s limit; the longest stretch between two checks in
@@ -727,7 +733,14 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   and 326 ms p95 when the build held the GIL, so the build now releases it before every record it reads
   (`state._yielding`), and searches took 32 ms median and 64 ms p95 (a build alone, 258 against 270 ms);
   with comparisons back to back (a 256-record file, 0.13 to 0.18 s each), 10 to 14 ms median and 69 to 75 ms
-  p95. Both are within 03's 100 ms p95; neither was measured on the full index.
+  p95. The comparison's checks (`tick`) now release the GIL too; re-measured with the same script
+  (2026-10-05, load 6 to 9, this branch): with that release 8.3 to 13.4 ms median and 67 to 77 ms p95 over
+  three runs, without it 8.2 to 8.3 ms and 67 ms over two, so the release changes nothing measurable there
+  and what delays a search during a comparison is not the stretch between two checks. Both are within 03's
+  100 ms p95; neither was measured on the full index. The build's tail (after its last record, the merge-key
+  tables made into tuples) is one stretch that holds the GIL: 32 ms on the 5k fixture, 79 ms on 95,000
+  synthetic records, once per index load; it is left without a release (a hook into `scholar_compare`'s
+  builder for one stretch of under 0.1 s per load).
 - **And `op eval scholar`.** The CLI writes the dated report of 07 §B for the project's own strings: several
   queries, `--years`/`--venues` scopes, the review file, percentages, a spot check. `POST /compare` is one
   query against one file for whoever asks, with the same matching and the same classes and no report.
@@ -953,7 +966,7 @@ once released: changing one is a breaking change under `/api/v1`.
 | `POST /compare` would read more papers of the result than `limits.compare.max_results`, a phrase or NEAR of the query has more than 512 inflected spellings, or the answer would pass `limits.compare.max_response_bytes` (counted as it is built, JSON escapes included, and again as encoded) | 422 | `API_COMPARE_TOO_COSTLY` |
 | Rate limit exceeded: the client's or its network's bucket, a position-verified query's extra weight, the record-save ceiling (its network's or the instance-wide one), or on `POST /compare` the per-network comparison cooldown (the network is running a comparison, or ran one less than its pause ago; decision-035) | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
 | A search record can't be saved: the record store is over its size cap or its disk under the free-space floor (task-037) | 503 | `API_RECORDS_STORE_FULL` |
-| A query needs a cold position verification and every verification slot is taken (refused, never queued); or a pinned `index_version` (an export's, a record's replay or diff) waits longer than `pinned_open_wait_seconds` for another version's open, or another request's open of the same version (TASK-067; its access line says `busy: pinned_open`); or, on `POST /compare`, every comparison slot is taken (refused before the file is read; `busy: compare_slots`), the served index's match table is still being built (`busy: match_index_building`; `Retry-After` its expected time left), or the comparison ran past `max_seconds` (`busy: compare_deadline`); and without `Retry-After`, on `POST /compare`, a match table that could not be built, until a reload (`busy: match_index_failed`) | 503 | `API_BUSY` (with `Retry-After`, but for a failed match table) |
+| A query needs a cold position verification and every verification slot is taken (refused, never queued); or a pinned `index_version` (an export's, a record's replay or diff) waits longer than `pinned_open_wait_seconds` for another version's open, or another request's open of the same version (TASK-067; its access line says `busy: pinned_open`); or, on `POST /compare`, every comparison slot is taken (refused before the file is read; `busy: compare_slots`), or the served index's match table is still being built (`busy: match_index_building`; `Retry-After` its expected time left); and without `Retry-After`, on `POST /compare`, a comparison that ran past `max_seconds` (`busy: compare_deadline`: the same request would run as long again) and a match table that could not be built, until a reload (`busy: match_index_failed`) | 503 | `API_BUSY` (with `Retry-After`, but for a comparison past its time and a failed match table) |
 | A query has more position-verified clauses than `ApiConfig.max_verified_clauses` (default 16, a backstop), refused before it compiles (decision-010; a replay over it is withheld, 200, §Search records) | 422 | `API_TOO_MANY_VERIFIED_CLAUSES` (diagnostics: one per clause, spanning it in `q`) |
 | A query's position checks would read more than `ApiConfig.max_verification_candidates` (default 300,000) candidate documents, summed over its verified clauses and their fields, refused before any is verified (decision-010; a replay over it is withheld, 200) | 422 | `API_QUERY_TOO_COSTLY` (diagnostics: one per verified clause, spanning it in `q`, with its count per field) |
 | No index loaded yet (startup, or the first load failed; a failed swap keeps serving the old index) | 503 | `API_INDEX_NOT_LOADED` |
@@ -1091,7 +1104,9 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     (`pinned_open` on a 503 `API_BUSY` because another version's open, or another request's open of the same
     version, outlasted `pinned_open_wait_seconds`; TASK-067; on `POST /compare`, the capacity that refused it:
     `match_index_building`, `match_index_failed`, `compare_slots` and `compare_deadline` on a 503,
-    `compare_running` and `compare_cooldown` on the network's 429), the comparison's counts (`POST /compare`
+    `compare_running` and `compare_cooldown` on the network's 429), `compare_refused` (`proxied` on a local
+    instance's 403 to a request `compare.proxied` calls a stranger's, so it is told from comparisons being off),
+    the comparison's counts (`POST /compare`
     only, never a title, venue string or file name: `ris_bytes` as soon as the file's size is known, then
     `ris_records`, `ris_papers`, `kept`, `dropped`, `not_in_index`, `added`), `compare_ms` (the wall time it
     held a comparison slot, the file arriving included), `compare_cost_ms` (what of it is debited: the file's
@@ -1126,7 +1141,7 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   - `op serve [--host] [--port] [--index] [--cors-origin …] [--trusted-proxy …] [--rate-capacity]
     [--rate-refill] [--export-weight] [--no-rate-limit] [--max-verified-clauses]
     [--max-verification-candidates] [--max-verification-seconds] [--max-counted-groups] [--max-counted-terms]
-    [--max-counted-ids] [--docs|--no-docs] [--compare|--no-compare] [--log-query-text]` refuses an invalid combination as usage, naming each
+    [--max-counted-ids] [--pinned-indexes] [--docs|--no-docs] [--compare|--no-compare] [--log-query-text]` refuses an invalid combination as usage, naming each
     option and the validator's reason (never the value pydantic would quote), and runs one uvicorn process with
     its own access log off, `proxy_headers` off, and a 64 KiB request-head limit (uvicorn's 16 KiB would
     refuse a valid 2,000-code-point query in the URL). **Deploy note:** `GET /search?q=…` carries the query

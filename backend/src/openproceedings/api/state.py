@@ -56,8 +56,9 @@ served meanwhile). It lives on the bundle (`Served.matches`), so a request reads
 table of one index_version in one reference, and a swap can never pair one index's results with another's
 table; a reload that keeps the index keeps its table, unless the table failed to build: then every reload
 builds it again. Builds run one at a time, and one whose index was swapped out while it waited is skipped.
-`POST /compare` answers 503 `API_BUSY` until it is built (`match_index_built`; `match_index_failed` ERROR if
-it can't be, and `/meta` then says comparisons are not offered).
+`POST /compare` answers 503 `API_BUSY` until it is built (`match_index_built`); if it can't be, one
+`match_index_failed` ERROR, then 503 `API_BUSY` without `Retry-After` (`busy: match_index_failed`) until a
+reload, and `/meta` says comparisons are not offered.
 
 Every failure line carries a `reason` constant, never a message (messages name paths): an
 `IndexSelectionError`'s (`name_invalid`, `not_found`, `outside_indexes`), an `IndexBuildError`'s
@@ -135,10 +136,15 @@ class MatchTable:
         self._started: float | None = None  # when the build began (`time.monotonic`); None before
         self._records = 0
 
+    def queue(self, records: int) -> None:
+        """Note the records a build will read, when it is queued: a table waiting for the build ahead of it
+        expects its whole time, not 0 (CODE-R2-N)."""
+        self._records = records
+
     def seconds_left(self, clock: Callable[[], float] = time.monotonic) -> float:
         """About how long the build has still to run: its expected time (its records at
         `RECORDS_PER_SECOND`) less what it has run, or that expected time if it has not started (it waits
-        for the build ahead of it). 0 once built, or failed."""
+        for the build ahead of it: `queue`). 0 once built, or failed."""
         if self.index is not None or self.failed:
             return 0.0
         expected = self._records / self.RECORDS_PER_SECOND
@@ -158,7 +164,7 @@ class MatchTable:
                 raise SnapshotError(
                     "the match table's records are not the served snapshot's", reason="match_index_mismatch"
                 )
-        except Exception as e:  # the handling layer: logged once; comparisons answer 500 until a reload
+        except Exception as e:  # the handling layer: logged once; comparisons are a 503 state until a reload
             self.failed = True
             fields: dict[str, object] = {
                 "index_version": index_version,
@@ -630,6 +636,7 @@ class IndexState:
         table = bundle.matches
         if table is None:
             return
+        table.queue(len(bundle.records))
 
         def build() -> None:
             with self._matches_building:

@@ -39,9 +39,12 @@ one IPv6 /48, held the slot 100% of the time.
    route answers 403 `API_COMPARE_DISABLED` as its first act, `/meta` `limits.compare` is null (the web app
    then offers nothing), no match table is built, and the path reads no body over `max_body_bytes`. On by
    the loopback default alone (`ApiConfig.compare_local`, a local instance whose one user is its operator),
-   a request that came through a proxy (`X-Forwarded-For`, `Forwarded` or `Via`) gets the same 403: a proxy on
-   the same host in front of a loopback bind makes the instance public, which its operator never chose
-   (gate finding SEC-N1, 2026-10-05).
+   a request that came through a proxy (`X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Proto`,
+   `X-Real-IP`, `Forwarded`, `Via` or `CF-Connecting-IP`) or from a page not on that machine (a non-loopback
+   `Origin`) gets the same 403: a proxy on the same host in front of a loopback bind makes the instance
+   public, which its operator never chose (gate findings SEC-N1 and SEC-R2-N1, 2026-10-05). One predicate
+   (`compare.proxied`) decides it for the route and for `/meta`, which answers such a request
+   `limits.compare: null`; the refusal's access line says `compare_refused: proxied`.
 2. **No retained upload.** The file is the raw request body (`application/x-research-info-systems`, UTF-8; no
    form, no content encoding), read into memory for that one request and released once decoded. It is never
    written to disk, stored, logged (the access line carries counts only), cached between requests, or added
@@ -54,7 +57,8 @@ one IPv6 /48, held the slot 100% of the time.
 4. **Caps**, stated in `/meta` `limits.compare`, each a typed refusal, nothing cut: 16 MiB body (as it
    arrives), 5,000 records, 64 lines per allowed record, 32,768 characters a line, 1,000 a title or venue
    line, 5,000 papers of the result that the file lacks, a 16 MiB answer, 60 s of work (checked per record
-   and per row), 30 s for the file to arrive, one comparison at a time.
+   and per row; past it 503 `API_BUSY` without `Retry-After`, so nothing retries the same minute of work by
+   itself: SEC-R2-N2), 30 s for the file to arrive, one comparison at a time.
 5. **Cost and the per-network cooldown.** The request costs `export_weight` and its query's verified charge
    like an export (decision-010), and the slot time is debited afterwards at one token per 500 ms, the
    upload's wall time counted four times. The bound on the slot is a cooldown: a client network (IPv4 /24,
@@ -70,9 +74,14 @@ one IPv6 /48, held the slot 100% of the time.
    surprise 429.
 6. **The match table** (each index record's merge keys; 13 to 15 s and about 80 MB for 95,877 records) is
    built once per served index after the swap and lives on the served bundle, so a hot swap cannot pair one
-   index's result with another's table; a failed build is retried on every reload. Meanwhile comparisons are
-   refused as a state (503 `API_BUSY`, `busy: match_index_failed`, no `Retry-After`), not logged as a failure
-   per request: the build's one `match_index_failed` ERROR is the operator's signal.
+   index's result with another's table. Two states refuse a comparison, neither logged as a failure per
+   request:
+   - **Building** (and queued behind another build): 503 `API_BUSY`, `busy: match_index_building`, with
+     `Retry-After` the build's expected time left (its records at about 6,000 a second, never under
+     `busy_retry_seconds`); the web app retries by itself.
+   - **Failed**: 503 `API_BUSY`, `busy: match_index_failed`, no `Retry-After` until a reload (retrying won't
+     help), and `/meta` `limits.compare` null. A failed build is retried on every reload; its one
+     `match_index_failed` ERROR is the operator's signal.
 
 ## Consequences
 

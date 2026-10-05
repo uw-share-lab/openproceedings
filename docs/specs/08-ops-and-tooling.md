@@ -292,13 +292,19 @@ for a public instance means accepting uploads of up to 16 MiB from anyone (read 
 request, one at a time, never stored or logged), about 80 MB more memory for the served index's match table,
 and comparisons that each hold a slot for up to a minute of CPU (one network at most a quarter of the time:
 04 §Comparing with a RIS file, Cost). "Loopback" is what `op serve` binds, not who can reach it: run on
-127.0.0.1 behind a proxy on the same host **without** `--trusted-proxy`, it would take itself for a local
-instance and offer comparisons to everyone the proxy serves, so a proxied instance always passes
+127.0.0.1 behind a proxy on the same host **without** `--trusted-proxy`, it takes itself for a local instance,
+and then refuses a comparison (403) to every request the proxy forwards (one carrying `X-Forwarded-For`,
+`X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Real-IP`, `Forwarded`, `Via` or `CF-Connecting-IP`) and to every
+page not on that machine (a non-loopback `Origin`), and `/meta` doesn't offer them to those requests (04
+§Comparing with a RIS file); a proxy that sets none of those headers, in front of a client that sends no
+`Origin`, would still offer comparisons to everyone it serves. So a proxied instance always passes
 `--trusted-proxy` (as `compose.yml` does) or `--no-compare`. The proxy must then let that one path
 through: a `request_body` and `request_buffers` of 16MiB for `/api/v1/compare` only (the site-wide 64KB stays
 for everything else), and a longer `read_body`, which is the server's timeout for every request (Caddy has no
 per-path one), as `deploy/README.md` §Comparisons shows; with the
-proxy buffering the file, a slow upload holds a proxy goroutine, never the API's comparison slot. That proxy
+proxy buffering the file, a slow upload holds a proxy goroutine, never the API's comparison slot, and up to
+16 MiB of the proxy's memory, with no limit on how many arrive at once: budget 16 MiB per concurrent upload
+and give the `caddy` service a memory limit when turning comparisons on. That proxy
 block cannot work as written and has not been run through `deploy/smoke-test.sh` (TASK-183): decision-035 makes
 fixing it and passing that smoke test a condition of any public instance enabling comparisons. Swagger UI (`/api/v1/docs`, scripts from a
 CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. `api` mounts `snapshots/` and `takedowns/` read-only, the

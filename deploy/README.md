@@ -280,15 +280,17 @@ decision as the operator (decision-035), and not before the proxy block below ha
 They are off here because `compose.yml` passes `--trusted-proxy`. If you run `op serve` yourself on 127.0.0.1
 behind a proxy on the same host, pass `--trusted-proxy <the proxy's address>` (or `--no-compare`): without
 either, the API takes a loopback bind for a local instance. It then refuses a comparison to every request the
-proxy forwards (one carrying `X-Forwarded-For`, `Forwarded` or `Via`), so a proxy that sets none of them would
-offer comparisons to everyone it serves.
+proxy forwards (one carrying `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Real-IP`,
+`Forwarded`, `Via` or `CF-Connecting-IP`) and to every page not on that machine (a non-loopback `Origin`), and
+`GET /api/v1/meta` doesn't offer comparisons to those requests; a proxy that sets none of those headers, in
+front of a client that sends no `Origin`, would still offer comparisons to everyone it serves.
 
 A network (IPv4 /24, IPv6 /48) runs one comparison at a time and then waits three times as long as its
 comparison held the slot, so one network holds the slot at most a quarter of the time; many networks together
 can still fill it, and comparisons are then refused while searches are not.
 
 To turn them on: add `--compare` to the `api` service's `command` in `compose.yml`, and let that one path
-through the proxy with a larger body (everything else keeps 64KB and 10 s), by adding to the `Caddyfile`'s
+through the proxy with a larger body (everything else keeps 64KB), by adding to the `Caddyfile`'s
 site block, before the general `reverse_proxy /api/*`:
 
 ```

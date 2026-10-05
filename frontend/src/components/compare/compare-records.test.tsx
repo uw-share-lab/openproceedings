@@ -147,7 +147,9 @@ describe("CompareRecords", () => {
     // each reason's count with what to do about it (USAB-S3)
     expect([...dropped.querySelectorAll(":scope > p")].map((p) => p.textContent)).toEqual([
       expect.stringMatching(/^2 papers are excluded by a default filter: to include such a paper/),
-      expect.stringMatching(/^2 papers match only as another word form: add \$ to that word/),
+      expect.stringMatching(
+        /^2 papers match only as another word form: type \$ after that word \(e.g. word\$\)/,
+      ),
       expect.stringMatching(
         /^2 papers have no exact match in their title or abstract: no form of this query/,
       ),
@@ -317,6 +319,69 @@ describe("CompareRecords", () => {
     expect(asked).toBe(2);
   });
 
+  it("announces a busy wait once, politely, and never says it didn't run while a retry is to come", async () => {
+    let asked = 0;
+    const busy = {
+      error: {
+        code: "API_BUSY",
+        message: "This instance is running as many comparisons as it can. Try again in 1 s.",
+      },
+    };
+    await draw(
+      serve(() => {
+        asked += 1;
+        return asked === 1 ? json(busy, 503, { "Retry-After": "1" }) : json(R);
+      }),
+    );
+    await compareWith();
+    const panel = screen.getByRole("region", { name: "Compare with your records" });
+    await waitFor(() => expect(announced().textContent).toBe("Busy; retrying by itself in 1 s."));
+    expect(screen.queryByRole("alert")).toBeNull(); // no alert per busy cycle (A11Y-R2-2)
+    expect(within(panel).queryAllByRole("status")).toEqual([]); // and no second live region in the panel
+    expect(panel.textContent).toContain("Busy; retrying by itself in 1 s");
+    expect(panel.textContent).not.toContain("didn't run");
+    const heard: string[] = [];
+    const watcher = new MutationObserver(() => heard.push(announced().textContent ?? ""));
+    watcher.observe(announced(), { childList: true, characterData: true, subtree: true });
+    await screen.findByRole("table", { name: /What this search does/ }, { timeout: 3000 });
+    watcher.disconnect();
+    expect(asked).toBe(2);
+    expect(heard.filter((x) => x.startsWith("Comparing"))).toEqual([]); // the retry isn't "Comparing…" again
+  });
+
+  it("leaves focus where the reader went while a retry by itself was pending", async () => {
+    let asked = 0;
+    const busy = { error: { code: "API_BUSY", message: "Busy. Try again in 1 s." } };
+    await draw(
+      serve(() => {
+        asked += 1;
+        return asked === 1 ? json(busy, 503, { "Retry-After": "1" }) : json(R);
+      }),
+    );
+    await compareWith();
+    await waitFor(() => expect(announced().textContent).toContain("retrying by itself"));
+    const input = screen.getByLabelText("RIS file");
+    input.focus(); // the reader moved on while it waited (A11Y-R2-1)
+    await screen.findByRole("table", { name: /What this search does/ }, { timeout: 3000 });
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("sends nothing from Compare during the pause, though a click lands on it", async () => {
+    const { calls } = await draw(serve(() => json({ ...R, next_comparison_seconds: 54 })));
+    await compareWith();
+    await screen.findByRole("table", { name: /What this search does/ });
+    const before = calls.filter((c) => c.path === "/api/v1/compare").length;
+    const compare = screen.getByRole("button", { name: "Compare" });
+    fireEvent.click(compare); // aria-disabled, not disabled: the click still reaches it (USAB-R2-2)
+    fireEvent.keyDown(compare, { key: "Enter" });
+    expect(screen.getByRole("region", { name: "Compare with your records" }).textContent).not.toContain(
+      "Comparing my-records.ris",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50)); // the file is read before it is sent
+    expect(calls.filter((c) => c.path === "/api/v1/compare").length).toBe(before);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("counts down a rate limit's Retry-After, then compares again on Retry", async () => {
     let asked = 0;
     const limited = {
@@ -354,10 +419,12 @@ describe("CompareRecords", () => {
     await screen.findByRole("table", { name: /What this search does/ });
     fireEvent.change(screen.getByLabelText("RIS file"), { target: { files: [ris("second.ris")] } });
     fireEvent.click(screen.getByRole("button", { name: "Compare" }));
-    await screen.findByRole("alert");
     const panel = screen.getByRole("region", { name: "Compare with your records" });
-    expect(panel.textContent).toContain(
-      "The new comparison didn't run. The results below are from the earlier comparison with first.ris.",
+    await waitFor(() =>
+      expect(panel.textContent).toContain(
+        "The new comparison hasn't run yet: this instance is busy, and it will try again by itself. The " +
+          "results below are from the earlier comparison with first.ris.",
+      ),
     );
     expect(panel.textContent).not.toContain("Nothing was compared");
     // the earlier answer is still there, under its own file's name
