@@ -1,10 +1,10 @@
 ---
 id: TASK-180
 title: 'Ingest: a title holding a C0 control character drops the paper'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-05 05:12'
-updated_date: '2026-10-05 07:36'
+updated_date: '2026-10-05 08:38'
 labels:
   - ingest
 milestone: m-4
@@ -35,3 +35,9 @@ Rule built: the OpenReview importers (v1 and v2, record.title_text) replace each
 
 Review fix (2026-10-05): the rule now runs in every importer (RIS, NeurIPS, PMLR and ICLR archive as well), where a control character would have failed the import or dropped the listing; the rebuild's records are byte-identical to the first scratch build. decision-036.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+A control character (Unicode Cc) in a title is replaced by one space at import in every importer (OpenReview v1 and v2, RIS, NeurIPS, PMLR, ICLR archive), whitespace collapsed, the count stated in the claim's evidence (decision-036). Four papers that were being refused are now imported (op:iclr:2026:xHMNX3l8rx, op:neurips:2026:KlvYZ17FPi, op:iclr:2024:PqjQmLNuJt, op:iclr:2023:6l46OaYQvu3); no existing record's bytes change, so no version bump. Known cost: a control character inside a word splits it (xHMNX3l8rx reads SPEC TRUM). Abstracts with control characters are a follow-up.
+<!-- SECTION:FINAL_SUMMARY:END -->

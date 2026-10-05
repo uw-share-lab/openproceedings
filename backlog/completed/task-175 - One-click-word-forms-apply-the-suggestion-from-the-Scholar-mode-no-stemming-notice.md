@@ -3,10 +3,10 @@ id: TASK-175
 title: >-
   One-click word forms: apply the $ suggestion from the Scholar-mode no-stemming
   notice
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-05 01:47'
-updated_date: '2026-10-05 02:16'
+updated_date: '2026-10-05 08:38'
 labels:
   - frontend
   - query
@@ -51,3 +51,9 @@ Design: POST /parse reports word_forms ({term, at, insert}) from query/wordforms
 AC1: no engine/tokenizer/index change; test_parse_word_forms.py shows the unedited query expands nothing. AC2: draft edit (one undoable change, Revert edits), URL on Search; canonical replays natively to the same ids. AC3: /search query.expansions has a key per added $. AC4: test_wordforms.py table (phrase inner words, filter and source: values, existing wildcards, short stems, symbols, LaTeX runs) + property. AC5: spec 05 Components 1, spec 02 Word forms, spec 04, copy deck ED-19, /help/syntax Scholar section.
 Not done: no Playwright step for the action (e2e not run under machine load); nothing offered when all edits together would exceed the 2,000-code-point cap.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+POST /parse reports word_forms (term, at, insert) from query/wordforms.py; under the COMPAT_NO_STEMMING notice the UI offers Add $ to all N terms and a per-term chooser, which edit the draft query text and never search. Rules are the lexer's own stem conditions (query/exact.py since TASK-181); lowercase operator words, phrases' inner words, existing wildcards, short stems and filter values are never offered; the server reads the fully edited query back before offering anything. No engine, tokenizer or index change (guarantee 1). One review round: 1 Must (lowercase and/not), 3 Shoulds, fixed. e2e in TASK-182.
+<!-- SECTION:FINAL_SUMMARY:END -->

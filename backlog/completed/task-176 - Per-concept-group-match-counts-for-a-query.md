@@ -1,10 +1,10 @@
 ---
 id: TASK-176
 title: Per-concept-group match counts for a query
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-05 01:47'
-updated_date: '2026-10-05 05:00'
+updated_date: '2026-10-05 08:38'
 labels:
   - api
   - frontend
@@ -66,3 +66,9 @@ created: 2026-10-05 05:00
 Review round 2 (final): the pre-flight bound also covers verified ids (max_counted_ids, default 300,000); both bounds and the group limit are in /meta limits; counting runs on its own two workers and a timed-out job stops before its next collection; a worker's own TimeoutError is count_failed; 'same as group N' follows the server's ast.
 ---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+/search always sends groups: for each top-level text conjunct of the canonical tree, total (that group alone under the query's filters and NOTs) and total_without (the query with that group removed), with groups_total, limit and an open not_counted enum (fewer_than_two_groups, too_many_groups, too_costly, count_failed, timed_out, busy). Counted by TantivyEngine.counts on its own 2-worker pool, each conjunct compiled once per request, nothing stored in the compiled memo; bounded before any counting by max_counted_groups 10, max_counted_terms 5,000 and max_counted_ids 300,000 (in /meta); a 50 ms grace for a queued job and a 2 s bound for a running one; a failure or timeout never fails the search. Oracle-checked by property. The builder shows both numbers per group. decision-034. Three review rounds: 2 Musts (failure isolation, uncharged cost) and 5 Shoulds, fixed. e2e in TASK-182.
+<!-- SECTION:FINAL_SUMMARY:END -->

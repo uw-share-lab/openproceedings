@@ -1,10 +1,10 @@
 ---
 id: TASK-178
 title: Crawl the 2026 venue-years from OpenReview and rebuild the snapshot and index
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-05 02:43'
-updated_date: '2026-10-05 08:25'
+updated_date: '2026-10-05 08:38'
 labels:
   - ingest
   - eval
@@ -59,3 +59,9 @@ Scholar comparison: 1,813 papers in scope (2 Scholar records now repeat a paper 
 
 ACs 1 and 2 ticked on the session lead's statement that the crawl's strings are classified and the diff reviewed; 3 and 4 on the reports above.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+ICLR 2026 (22,825 notes), ICML 2026 (11,078) and NeurIPS 2026 (4,375, workshops only: the main conference is not public yet) crawled from OpenReview on 2026-10-05; unknown_track 0. ICLR 2026 Oral and ICML 2026 spotlight (main and position) mapped from recorded fixtures; ICML 2026 regular left unmapped (no evidence it means poster), so that crawl reports 5,980 unmapped. Final snapshot 2026-10-05-10b5a205a63f (133,629 records) and index fd13d8d27535, parity 0 differences; every RIS-only 2026 import merged into its crawled record. Coverage on it: M4 gate PASS, 45 of 46 gated cells within 1% plus the ICLR 2013 exception; ICLR 2026 main 5,351 vs 5,357 (fact sheet), ICML 2026 main 6,341 vs 6,341 (a count of the conference's own paper list minus its position listing, to be replaced by the PMLR volume). Scholar comparison re-run on the same index (TASK-056).
+<!-- SECTION:FINAL_SUMMARY:END -->

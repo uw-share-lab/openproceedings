@@ -3,10 +3,10 @@ id: TASK-179
 title: >-
   Dedup: an imported RIS copy whose title lost a math symbol, or that shares a
   ris claim, is not merged with its crawled paper
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-05 05:12'
-updated_date: '2026-10-05 07:36'
+updated_date: '2026-10-05 08:38'
 labels:
   - ingest
   - dedup
@@ -38,3 +38,9 @@ Real causes (snapshot 2026-10-05-47d4e190ca81, merges.csv, conflicts.csv, resolv
 
 Review fixes (2026-10-05): the import's abstract counts only from its own page; a group holds at most one record that isn't imported; never into a rejected, withdrawn or desk-rejected note; matching on the whole digest; set-aside rivals get their abstract_key row on the output records. Second scratch rebuild: the same snapshot hash as the first (10b5a205a63f), so the same 7 merges and 4 additions and no other record changed; conflicts.csv 9,126 (14 new abstract_key track_not_merged rows: a listing keeping an imported abstract beside a different-track note sharing it). decision-037.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Two dedup changes (spec 01, decision-037): sharing only the ris source is no ambiguity, and a cluster whose only source is ris after the id and title steps merges with the one same-venue-year crawled record that has its abstract (full normalised key, at least 50 tokens), only when the import's abstract claim cites its own proceedings page or forum, never into a rejected, withdrawn or desk-rejected record, never joining two crawled records; refusals and set-aside rivals are conflicts.csv rows. On the real cache the 7 imported second copies merge (1 by title, 6 by abstract; five had lost a math symbol in Google Scholar, one was retitled) and RIS-only accepted records go from 7 to 0, with no other record changed. One review round: no Must, 7 Shoulds, fixed. Abstract matching for crawled listings is deferred to a follow-up.
+<!-- SECTION:FINAL_SUMMARY:END -->

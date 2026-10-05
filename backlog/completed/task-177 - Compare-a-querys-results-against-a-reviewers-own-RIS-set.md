@@ -1,10 +1,10 @@
 ---
 id: TASK-177
 title: Compare a query's results against a reviewer's own RIS set
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-05 01:47'
-updated_date: '2026-10-05 05:06'
+updated_date: '2026-10-05 08:38'
 labels:
   - api
   - frontend
@@ -29,7 +29,7 @@ A reviewer moving from Google Scholar to openproceedings asks what they lose and
 <!-- AC:BEGIN -->
 - [x] #1 Given a RIS file and a query, the user sees the counts and lists of records kept, dropped and added, with records matched to the index by the merge rules of spec 01, and records that are not in the index reported separately
 - [x] #2 The comparison reuses TASK-056's matching code; there is one implementation
-- [ ] #3 An upload is size- and record-capped, parsed without executing or storing it, never logged (logging-standards), and reviewed by security-reviewer; the design says whether it runs in the CLI only or also on a public instance, and why
+- [x] #3 An upload is size- and record-capped, parsed without executing or storing it, never logged (logging-standards), and reviewed by security-reviewer; the design says whether it runs in the CLI only or also on a public instance, and why
 - [x] #4 The comparison never changes the query's result set (00 guarantee 5), and the kept, dropped and added lists are exportable
 - [x] #5 Specs and help as built
 <!-- AC:END -->
@@ -47,3 +47,9 @@ Built on branch task-177-ris-compare (off feat/review-comparison-tools).
 - AC#3 is left unchecked only for its last clause: security-reviewer has not reviewed this yet (the review gate is the main session's). Everything else in it is built and tested (backend/tests/contract/test_compare.py).
 - Measured on index 05a0541717f6 with the review's export (1,834 records) and its $ string: 51 kept, 1,756 dropped, 8 not in the index, 16 added, 19 not compared; 20 to 24 s.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+POST /api/v1/compare takes a reviewer's RIS file as the raw body and returns which records the query keeps, drops, cannot find in the index and which papers it adds, with each list as CSV and the added papers as RIS, reusing TASK-056's core (one implementation). Operator-controlled (off by default; on for a loopback instance or with --compare); the file is parsed in memory for one request and never stored or logged; caps on body, records, lines, results, response size and time, all in /meta; one comparison slot with a per-network cooldown (3x the slot time used, upload time x4), so one network holds at most 25% of it; the match table is built once per served index and rebuilt after a failure. Withheld abstracts and their twins and aliases are never returned or located. decision-035. Three security review rounds: no Must, 4 Shoulds (slot monopoly, unenforced time limit, echo amplification, permanent table failure), fixed. The Caddy block for enabling it publicly is untested: a follow-up task and a precondition in decision-035. e2e in TASK-182.
+<!-- SECTION:FINAL_SUMMARY:END -->

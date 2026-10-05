@@ -1,10 +1,10 @@
 ---
 id: TASK-056
 title: Scholar comparison report
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-05 05:09'
+updated_date: '2026-10-05 08:38'
 labels:
   - eval
 milestone: m-4
@@ -22,7 +22,7 @@ Spec 07 §B (scholar-comparison-protocol skill).
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every disagreement classified; 'our bug' class is 0
+- [x] #1 Every disagreement classified; 'our bug' class is 0
 - [x] #2 docs/results/<date>-scholar-comparison.md with review.csv for human calls
 - [x] #3 Report notes decision-002: in Scholar mode the PoP string main-2-pop reads unquoted multi-word | items as phrases, unlike Google Scholar; its differences are classed compat_reading, not misses
 <!-- AC:END -->
@@ -59,3 +59,9 @@ More for the main session to file: (f) dedup miss: the RIS import's iclr-c3eb94d
 
 2026-10-05: re-run on index 5ec5231adae2 after the 2026 crawl (TASK-178): 1,800 of 1,807 matches now rest on a crawled record, 7 RIS-only; report docs/results/2026-10-05-scholar-comparison.md. The 2026-10-04 report is kept as the run on index 05a0541717f6.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+op eval scholar compares a Scholar RIS set with the review's strings on one pinned index (eval/scholar_compare.py core, eval/scholar_report.py writer), matching by forum id, proceedings id in its venue-year, then title with venue and year, and classing every disagreement in the protocol's order with the reference engine. Final run on index fd13d8d27535 (docs/results/2026-10-05-scholar-comparison.md): 1,813 Scholar papers in scope, 1,805 matched, all to crawled records; main-7-most-updated returns 33 (21 in both, 12 only here), the $ string 101 (51 in both, 50 only here); 1,752 Scholar-only papers (96.6%) are full_text; our_bug 0. The 48 unresolved rows of the review file carry calls made by an AI assistant at the owner's direction (stated in the report's notes), and the report's Human calls section reads them back: every disagreement classified. The stemming stand-in is decision-038. Two review rounds; the 2026-10-04 run on 05a0541717f6 is kept as history.
+<!-- SECTION:FINAL_SUMMARY:END -->
