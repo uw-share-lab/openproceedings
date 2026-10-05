@@ -244,7 +244,7 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
   memo forgotten) of the Trust-Evals string `main-2-pop` (`tests/golden/test_trust_evals.py`) took p95
   190.1 ms (median 178.9 ms) on index `fd13d8d27535`, over the 100 ms search budget; without the counts 62.1 ms, and a later page with them
   62.3 ms (`docs/results/2026-10-05-bench-group-counts.md`, a 1-minute load of 3.9 at the start and 3.3 at the
-  end). Its first group (nine alternatives, six of them `$` phrases; about 35 ms a run) is in three of the six
+  end). Its first group (nine alternatives, seven of them `$` phrases; about 35 ms a run) is in three of the six
   trees counted, and each count runs it again. Every other measured query, first page or later, is within the
   budget with its counts, the wildcard-phrase query `("large language model$" OR LLM*) AND (trust* OR
   calibrat*) AND (benchmark* OR evaluat*)` included (p95 84.4 ms; TASK-196's 110.8 ms was measured at a load

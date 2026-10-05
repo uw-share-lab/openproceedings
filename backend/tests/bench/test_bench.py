@@ -246,6 +246,7 @@ def test_the_group_counts_report_writes_a_row_per_page(
     rows = report.table(engine, [(f"`{name}`", trust_evals(name))]).splitlines()[2:]
     assert [r.split(" | ")[0] for r in rows] == [f"| `{name}`"] * 2
     assert [r.split(" | ")[2] for r in rows] == ["first page", "later page"]
+    assert all(r.endswith(" counted ×1 |") for r in rows), rows  # each round's groups came back counted
 
 
 def test_the_endpoint_bench_builds_attributions(served: tuple[TantivyEngine, RecordFile]) -> None:

@@ -324,7 +324,8 @@ Two readings follow from "the canonical form decides", and are worth knowing:
   Measured (`docs/results/2026-10-05-bench-group-counts.md`, `backend/tests/bench/group_counts_report.py`:
   `search.run` with facets and highlights as `/search` runs it, with and without its counts at the default
   bounds, alternated, median and p95 of 200 rounds of wall time; Apple M1 Pro, a 1-minute load of 3.9 at the
-  start and 3.3 at the end, commit `bed0a6cb` with this report's Trust-Evals table, TASK-196). On the real corpus (index `fd13d8d27535`, 133,629 records), a
+  start and 3.3 at the end, the report code of `b96c121c`, run before that commit and so recorded as
+  `bed0a6cb-dirty`; TASK-196). On the real corpus (index `fd13d8d27535`, 133,629 records), a
   first page (the facet memo forgotten every round, so every collection is made again) of `(trust OR
   reliance) AND calibrat* AND model*` took a median 16.4 ms and p95 17.6 ms without its three counts and
   23.1 / 24.0 ms with them; `("large language model$" OR LLM*) AND (trust* OR calibrat*) AND (benchmark* OR
