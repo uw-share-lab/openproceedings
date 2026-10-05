@@ -192,7 +192,7 @@ and `unclassified_total` is `excluded.track.unknown + excluded.status.unknown`. 
 `facets` are disjunctive: each facet field is counted over the matched set with every filter applied **except that field's own top-level conjuncts** (a filter nested under an `OR` stays applied; decision-001). So the track facet still shows how many workshop papers you would get by including them. Clicking a facet in the UI
 rewrites the query (guarantee 3). No hidden facet state exists.
 
-`groups` (TASK-176, additive) shows which concept group narrows a query that is an AND of several:
+`groups` (TASK-176, additive; decision-034) shows which concept group narrows a query that is an AND of several:
 
 ```jsonc
 "groups": { "counts": [ { "span": [0, 75],    "total": 6343, "total_without": 139 },
