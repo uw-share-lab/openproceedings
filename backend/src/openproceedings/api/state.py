@@ -124,9 +124,24 @@ class MatchTable:
     """One served index's `MatchIndex` (module docstring), built once by `build`: `index` is None until then,
     and stays None with `failed` set if the build failed. Read `index` once per request."""
 
+    # records the build reads a second, on the laptop that measured it (95,877 in 13 to 15 s): what
+    # `seconds_left` expects of a build in progress
+    RECORDS_PER_SECOND = 6_000
+
     def __init__(self) -> None:
         self.index: MatchIndex | None = None
         self.failed = False
+        self._started: float | None = None  # when the build began (`time.monotonic`); None before
+        self._records = 0
+
+    def seconds_left(self, clock: Callable[[], float] = time.monotonic) -> float:
+        """About how long the build has still to run: its expected time (its records at
+        `RECORDS_PER_SECOND`) less what it has run, or that expected time if it has not started (it waits
+        for the build ahead of it). 0 once built, or failed."""
+        if self.index is not None or self.failed:
+            return 0.0
+        expected = self._records / self.RECORDS_PER_SECOND
+        return expected if self._started is None else max(0.0, expected - (clock() - self._started))
 
     def build(self, records: RecordFile, index_version: str) -> None:
         """Build the table from `records`' snapshot (one validating pass, as `op eval scholar` reads it) and
@@ -135,6 +150,7 @@ class MatchTable:
         from openproceedings.ingest.snapshot import iter_records
 
         started = time.perf_counter()
+        self._records, self._started = len(records), time.monotonic()
         try:
             index = MatchIndex.build(iter_records(records.path.parent))
             if index.cells.keys() != records.ids():  # the table must be this bundle's snapshot's, id for id
@@ -143,7 +159,11 @@ class MatchTable:
                 )
         except Exception as e:  # the handling layer: logged once; comparisons answer 500 until a reload
             self.failed = True
-            fields: dict[str, object] = {"index_version": index_version, "error": type(e).__name__}
+            fields: dict[str, object] = {
+                "index_version": index_version,
+                "error": type(e).__name__,
+                "ms": elapsed_ms(started),
+            }
             if (reason := reason_of(e)) is not None:
                 fields["reason"] = reason
             if not isinstance(e, OSError | SnapshotError):

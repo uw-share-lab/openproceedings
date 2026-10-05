@@ -3,7 +3,8 @@
 Layers, outermost first: `AccessLog` (request id, the one access line, preflights included) → CORS
 (exact allowlist, no credentials; a disallowed preflight is Starlette's plain-text 400) → `LastCatch`
 (an unexpected exception becomes a logged 500, which CORS then decorates) → `BodyLimit` (413 for a body
-over `max_body_bytes`, before it is read) → `RateLimit` (per-client and per-network token buckets) →
+over `max_body_bytes`, before it is read) → `DrainRefusals` (a refusal of `POST /compare` reads the rest of
+the file it won't use, then closes the connection) → `RateLimit` (per-client and per-network token buckets) →
 FastAPI (the error envelope handlers, the app-wide `strict_query` dependency, then the `/api/v1` routers).
 `POST /compare`'s body (a file) has its own cap and is counted as the route reads it, not read by `BodyLimit`
 (TASK-177): with comparisons off, its cap is every other route's `max_body_bytes`.
@@ -39,6 +40,7 @@ from openproceedings.api.middleware import (
     COMPARE_PATH,
     AccessLog,
     BodyLimit,
+    DrainRefusals,
     LastCatch,
     NoStore,
     RateLimit,
@@ -141,6 +143,8 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
     document_head_as_get(app)  # the committed snapshot is this document (`op openapi`, task-040)
     # added innermost first: the last one added wraps everything
     app.add_middleware(RateLimit, config=config.rate_limit, trusted=config.trusted_proxies)
+    # every refusal of a comparison whose file is still arriving reads the rest first, then closes (API-S2)
+    app.add_middleware(DrainRefusals, paths=frozenset({COMPARE_PATH}))
     app.add_middleware(  # before anything reads the body
         BodyLimit,
         max_bytes=config.max_body_bytes,
@@ -150,6 +154,8 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
         streamed={
             COMPARE_PATH: config.compare_max_body_bytes if config.compare_enabled else config.max_body_bytes
         },
+        # worded as a file only where a file is compared: with comparisons off it is any other request body
+        files=frozenset({COMPARE_PATH}) if config.compare_enabled else frozenset(),
     )
     app.add_middleware(LastCatch)  # inside CORS: a 500 gets the CORS headers like any response
     app.add_middleware(

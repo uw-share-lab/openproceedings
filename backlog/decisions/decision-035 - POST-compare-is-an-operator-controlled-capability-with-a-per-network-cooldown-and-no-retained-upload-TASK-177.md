@@ -8,8 +8,9 @@ status: accepted
 ---
 ## Context
 
-A reviewer moving from Google Scholar asks what a query does to the records they already hold: which it keeps,
-drops and adds. TASK-056 built that comparison for the project's own report (`op eval scholar`,
+The project's own review (one team, one session: n=1) asked what a query does to the records it already held
+from Google Scholar: which it keeps, drops and adds. That other reviewers ask it too is an assumption, untested
+until the user research and usability rounds (TASK-032, TASK-047). TASK-056 built that comparison for the project's own report (`op eval scholar`,
 `eval/scholar_compare.py`); TASK-177 serves it to any user as `POST /api/v1/compare` and the search page's
 "Compare with your records". That makes it the API's first route that takes a file from a stranger, and its
 most expensive one: the classes are decided by the reference matcher, about 10 s of CPU per 1,000 records
@@ -17,7 +18,8 @@ most expensive one: the classes are decided by the reference matcher, about 10 s
 24 s; 51 kept, 1,756 dropped, 8 not in the index, 16 added).
 
 Options considered:
-1. CLI only. No upload surface, but the question is asked by people who will never run a checkout.
+1. CLI only. No upload surface, but if the question is asked by reviewers who will never run a checkout (the
+   assumption above), they could not ask it.
 2. Always on, like `/export`. Every public instance would accept megabyte uploads and minute-long requests
    because the software shipped them.
 3. On for a local instance, an operator's explicit choice anywhere else (chosen).
@@ -35,7 +37,11 @@ one IPv6 /48, held the slot 100% of the time.
 1. **Operator-controlled.** `ApiConfig.compare_enabled` is off by default. `op serve` turns it on for a
    loopback `--host` with no `--trusted-proxy`, or with `--compare`; `--no-compare` turns it off. Off, the
    route answers 403 `API_COMPARE_DISABLED` as its first act, `/meta` `limits.compare` is null (the web app
-   then offers nothing), no match table is built, and the path reads no body over `max_body_bytes`.
+   then offers nothing), no match table is built, and the path reads no body over `max_body_bytes`. On by
+   the loopback default alone (`ApiConfig.compare_local`, a local instance whose one user is its operator),
+   a request that came through a proxy (`X-Forwarded-For`, `Forwarded` or `Via`) gets the same 403: a proxy on
+   the same host in front of a loopback bind makes the instance public, which its operator never chose
+   (gate finding SEC-N1, 2026-10-05).
 2. **No retained upload.** The file is the raw request body (`application/x-research-info-systems`, UTF-8; no
    form, no content encoding), read into memory for that one request and released once decoded. It is never
    written to disk, stored, logged (the access line carries counts only), cached between requests, or added
@@ -56,10 +62,17 @@ one IPv6 /48, held the slot 100% of the time.
    used (upload time counted four times). One network therefore holds a slot at most 25% of the time with
    comparisons back to back and 7.7% with uploads that stall, whatever number of addresses it uses. The
    token price stays at 500 ms rather than the verification slot's 100 ms: at 100 one ordinary comparison
-   would lock a reviewer out of search for minutes, and the cooldown already bounds the slot.
+   would lock a reviewer out of search for minutes, and the cooldown already bounds the slot. **The cooldown
+   applies where strangers share the slot**: with `--compare`, or off loopback. A local instance
+   (`compare_local`) has none: its one user waited 54 s after an 18 s comparison for no one's benefit, which
+   read as a bug (gate finding USAB-S2, decided 2026-10-05). Every answer says how long the pause is
+   (`next_comparison_seconds`), so the panel shows "Next comparison in N s" beside Compare instead of a
+   surprise 429.
 6. **The match table** (each index record's merge keys; 13 to 15 s and about 80 MB for 95,877 records) is
    built once per served index after the swap and lives on the served bundle, so a hot swap cannot pair one
-   index's result with another's table; a failed build is retried on every reload.
+   index's result with another's table; a failed build is retried on every reload. Meanwhile comparisons are
+   refused as a state (503 `API_BUSY`, `busy: match_index_failed`, no `Retry-After`), not logged as a failure
+   per request: the build's one `match_index_failed` ERROR is the operator's signal.
 
 ## Consequences
 
@@ -69,19 +82,21 @@ one IPv6 /48, held the slot 100% of the time.
 - **Stated limits.** Many distinct networks together can still fill the slot: comparisons are then refused
   (503) while searches are not; the cooldown bounds one network, not a crowd. With the rate limit off
   (`--no-rate-limit`, loopback only) there is no cooldown and no debit: only the slot, the caps and the time
-  limit bound a comparison. A reviewer waits about three times a comparison's length before the next one
-  from the same network (54 s after 18 s), a whole lab behind one /24 included.
-- **Before any public instance enables comparisons**, the proxy block in `deploy/README.md` (a 16MB body and
-  buffer for `/api/v1/compare` only) must pass `deploy/smoke-test.sh` on that stack. It is written from
-  Caddy's documentation and has not been run; it is what keeps a slow upload off the API's slot. A loopback
-  bind behind a same-host proxy must pass `--trusted-proxy` or `--no-compare`, or it takes itself for a local
-  instance.
+  limit bound a comparison. Where the cooldown applies, a reviewer waits about three times a comparison's
+  length before the next one from the same network (54 s after 18 s), a whole lab behind one /24 included.
+- **Before any public instance enables comparisons**, the proxy block in `deploy/README.md` must be fixed and
+  pass `deploy/smoke-test.sh` on that stack (TASK-183). As written it cannot work (the site-wide 64 KB body
+  cap wraps it first, and Caddy's `16MB` is less than the 16 MiB the API advertises); it is what keeps a slow
+  upload off the API's slot. A loopback bind behind a same-host proxy should pass `--trusted-proxy` or
+  `--no-compare`; without them, comparisons on by the loopback default refuse every proxied request.
 - The comparison's classes and matching are the report's (spec 07 §B): a change to either changes both. The
   inflection-only stand-in for Scholar's stemmer is decision-038's.
 - Turning the capability on costs an instance about 80 MB for the table and up to a minute of CPU per
   comparison, during which searches are slower.
 - Not decided here: `op serve` flags for the caps, the cooldown factor and the upload weight (only
-  `--compare` exists); matching on DOI for files from other databases; a class of its own for a file's paper
-  outside the query's own `year:` or `venue:` limit (today `full_text`).
+  `--compare` exists; TASK-184); matching on DOI for files from other databases (TASK-186); a class of its own
+  for a file's paper outside the query's own `year:` or `venue:` limit (today `full_text`; TASK-185).
 - Pinned by `backend/tests/contract/test_compare.py` and `test_compare_review.py` (the cooldown's shares are
-  a simulation with the real buckets at their defaults); spec 04 §Comparing with a RIS file, spec 08 §Deploy.
+  a simulation with the real buckets at their defaults, so it covers an instance with the cooldown: one run
+  with `--compare` or off loopback; a local instance has no cooldown and is pinned separately); spec 04
+  §Comparing with a RIS file, spec 08 §Deploy.

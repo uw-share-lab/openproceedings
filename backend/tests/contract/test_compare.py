@@ -12,6 +12,7 @@ another (an ambiguous match)."""
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import gzip
 import io
@@ -373,9 +374,15 @@ def test_it_is_the_cores_answer(shared: TestClient) -> None:
 
 
 def test_the_enums_are_the_cores(shared: TestClient) -> None:
+    """The API's enums are the core's own vocabularies, value for value (API-S3), and the core produces no
+    value outside them on this test's file."""
     assert set(get_args(CompareReason)) == {*ONLY_SCHOLAR, *ONLY_OP}
-    assert set(get_args(MatchedBy)) >= {"forum_id", "proceedings_id", "title_venue_year"}
-    assert set(get_args(NotComparedReason)) == {"venue_unrecognised", "venue", "year"}
+    assert get_args(MatchedBy) == (*scholar_compare.MATCH_RULES, *scholar_compare.MATCH_PROBLEMS)
+    assert get_args(NotComparedReason) == scholar_compare.NOT_COMPARED_REASONS
+    side = scholar_compare.scope_and_match(read_ris(the_file(), "file"), INDEX, Scope())
+    assert {e.match.rule for e in side.entries} - {""} <= set(scholar_compare.MATCH_RULES)
+    assert {e.match.problem for e in side.entries} - {""} <= set(scholar_compare.MATCH_PROBLEMS)
+    assert {d.reason for d in side.out_of_scope} <= set(scholar_compare.NOT_COMPARED_REASONS)
     paths = shared.get("/api/v1/openapi.json").json()["paths"]
     assert paths["/api/v1/compare"]["post"]["operationId"] == "compare_records"
 
@@ -426,8 +433,10 @@ def test_it_is_off_unless_configured(corpus_dir: Path, logs: Logs) -> None:
         e = error(post(c, the_file()), 403, "API_COMPARE_DISABLED")
         assert "not turned on" in e["message"]
         assert c.get("/api/v1/meta").json()["limits"]["compare"] is None
-        # and no body larger than any other route's is ever read on that path
-        error(post(c, b"x" * 70_000), 413, "API_BODY_TOO_LARGE")
+        # and no body larger than any other route's is ever read on that path, refused as a request body is
+        # (no file is compared here, so no word of one: CODE-S2)
+        e = error(post(c, b"x" * 70_000), 413, "API_BODY_TOO_LARGE")
+        assert e["message"].startswith("The request body is over") and "Split it" not in e["message"]
         state: IndexState = c.app.state.index  # type: ignore[attr-defined]
         assert state.served is not None and state.served.matches is None  # no table is built
     assert not [x for x in logs() if x["event"].startswith("match_index")]
@@ -465,6 +474,8 @@ def test_op_serve_offers_it_on_a_local_instance_only_by_default(
     monkeypatch.setattr(api_server, "serve", lambda config, *a: served.append(config))
     assert cli.main(["--data-dir", str(tmp_path), "serve", *flags]) == 0
     assert served[0].compare_enabled is on
+    # local: on by the loopback default alone (no cooldown, nothing through a proxy); --compare is not
+    assert served[0].compare_local is (on and "--compare" not in flags)
 
 
 # --- what is accepted as a body ---------------------------------------------------------------------------------
@@ -758,6 +769,18 @@ def test_the_csv_lists_are_the_rows(shared: TestClient) -> None:
     assert all((s == "crawled") == (i in INDEX.independent) for i, s in sources.items())
 
 
+def test_every_yes_or_no_column_says_true_or_false(shared: TestClient) -> None:
+    """`needs_review`, `fails_filters` and `abstract_withheld` in one form: `true` or `false`, never empty
+    (EXP-N5: `needs_review` was empty for no)."""
+    body = compared(shared, the_file())
+    for name in ("kept", "dropped", "not_in_index", "added"):
+        for row in rows_of(body["csv"][name]):
+            assert {row["needs_review"], row["fails_filters"], row["abstract_withheld"]} <= {"true", "false"}
+        assert [r["needs_review"] for r in rows_of(body["csv"][name])] == [
+            "false" if r["settled"] else "true" for r in body[name]
+        ]
+
+
 # --- nothing of the file is kept -----------------------------------------------------------------------------------
 def tree(root: Path) -> dict[str, tuple[int, int]]:
     return {
@@ -849,7 +872,7 @@ def test_the_time_a_comparison_held_its_slot_is_debited(corpus_dir: Path) -> Non
 
 
 def test_a_second_comparison_is_refused_while_the_slot_is_taken(
-    corpus_dir: Path, monkeypatch: pytest.MonkeyPatch
+    corpus_dir: Path, monkeypatch: pytest.MonkeyPatch, logs: Logs
 ) -> None:
     entered, release = threading.Event(), threading.Event()
     real = route._run
@@ -874,14 +897,18 @@ def test_a_second_comparison_is_refused_while_the_slot_is_taken(
         assert first[0].status_code == 200
         monkeypatch.setattr(route, "_run", real)
         assert post(c, the_file()).status_code == 200  # the slot came back
+    (busy,) = [x for x in logs() if x["event"] == "request" and x["route"] == COMPARE and x["status"] == 503]
+    assert busy["busy"] == "compare_slots"
 
 
-def test_a_comparison_past_its_time_is_stopped(corpus_dir: Path) -> None:
+def test_a_comparison_past_its_time_is_stopped(corpus_dir: Path, logs: Logs) -> None:
     with app_of(corpus_dir, compare_max_seconds=1e-9) as c:
         r = post(c, the_file())
         e = error(r, 503, "API_BUSY")
         assert r.headers["retry-after"] == "5" and "ran past" in e["message"]
         assert c.app.state.comparisons.slots.acquire(blocking=False)  # type: ignore[attr-defined]
+    line = next(x for x in logs() if x["event"] == "request" and x["route"] == COMPARE)
+    assert line["busy"] == "compare_deadline"
 
 
 def test_the_core_stops_at_a_tick_that_raises() -> None:
@@ -987,13 +1014,30 @@ def test_the_table_is_built_once_per_served_index(own_dir: Path, logs: Logs) -> 
     assert len(built) == 1 and built[0]["records"] == len(PAPERS) and built[0]["ms"] >= 0
 
 
-def test_a_comparison_waits_for_the_table(corpus_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_comparison_waits_for_the_table(
+    corpus_dir: Path, monkeypatch: pytest.MonkeyPatch, logs: Logs
+) -> None:
     monkeypatch.setattr(MatchTable, "build", lambda self, records, version: None)  # still being built
     with app_of(corpus_dir) as c:
         r = post(c, the_file())
         e = error(r, 503, "API_BUSY")
         assert r.headers["retry-after"] == "5" and "still being prepared" in e["message"]
         assert c.get("/api/v1/search", params={"q": Q}).status_code == 200
+    line = next(x for x in logs() if x["event"] == "request" and x["route"] == COMPARE)
+    assert line["busy"] == "match_index_building"
+
+
+def test_a_table_being_built_says_about_how_long_it_has_left() -> None:
+    """The 503's `Retry-After` while the table is built is the build's expected time left, not a fixed 5 s
+    that has a client retry two or three times (USAB-S8)."""
+    table = MatchTable()
+    table._records = 120_000  # 20 s at `RECORDS_PER_SECOND`
+    assert table.seconds_left() == pytest.approx(20)  # waiting for the build ahead of it
+    table._started = 100.0
+    assert table.seconds_left(clock=lambda: 112.0) == pytest.approx(8)
+    assert table.seconds_left(clock=lambda: 150.0) == 0
+    table.failed = True
+    assert table.seconds_left() == 0
 
 
 def test_a_table_that_cannot_be_built_is_logged_once(
@@ -1004,10 +1048,16 @@ def test_a_table_that_cannot_be_built_is_logged_once(
 
     monkeypatch.setattr(MatchIndex, "build", broken)
     with app_of(corpus_dir) as c:
-        error(post(c, the_file()), 500, "API_INTERNAL")
+        for _ in range(3):  # each a refusal (a state), never another ERROR
+            r = post(c, the_file())
+            error(r, 503, "API_BUSY")
+            assert "retry-after" not in r.headers and r.headers["connection"] == "close"
         assert c.get("/api/v1/search", params={"q": Q}).status_code == 200  # the index is served all the same
-    (line,) = [x for x in logs() if x["event"] == "match_index_failed"]
-    assert line["level"] == "ERROR" and line["error"] == "RuntimeError" and SECRET not in json.dumps(logs())
+    (line,) = [x for x in logs() if x["level"] == "ERROR"]
+    assert line["event"] == "match_index_failed" and line["error"] == "RuntimeError" and line["ms"] >= 0
+    assert SECRET not in json.dumps(logs())
+    lines = [x for x in logs() if x["event"] == "request" and x["route"] == COMPARE]
+    assert [x["busy"] for x in lines] == ["match_index_failed"] * 3
 
 
 def test_a_swap_never_pairs_one_indexs_result_with_anothers_table(
@@ -1054,7 +1104,7 @@ def test_a_table_must_be_its_bundles_snapshot(
     other = MatchIndex.build(PAPERS[:10])
     monkeypatch.setattr(MatchIndex, "build", lambda records: other)
     with app_of(corpus_dir) as c:
-        error(post(c, the_file()), 500, "API_INTERNAL")
+        error(post(c, the_file()), 503, "API_BUSY")  # comparisons wait for a reload; nothing is compared
     (line,) = [x for x in logs() if x["event"] == "match_index_failed"]
     assert line["reason"] == "match_index_mismatch"
 
@@ -1279,3 +1329,143 @@ def test_every_record_is_counted_once_and_the_result_is_the_searchs(
     assert body["records_total"] == len(picked) + unknown + elsewhere
     assert sum(x["copies"] for x in [*body["kept"], *body["dropped"]]) == len(picked)
     assert not [x for name in ("kept", "dropped", "added") for x in body[name] if x["reason"] == "our_bug"]
+
+
+# --- the review gate's fixes (2026-10-05) ------------------------------------------------------------------------
+def raw_post(app: Any, query: bytes, chunks: list[bytes]) -> tuple[list[dict[str, Any]], list[bytes]]:
+    """POST /compare straight to the ASGI app, its body in `chunks`: what was sent, and what of the body was
+    never read. A response that starts before the body is read whole fails the test there."""
+    left = list(chunks)
+    sent: list[dict[str, Any]] = []
+
+    async def receive() -> dict[str, Any]:
+        if not left:  # the body is done: what a server answers next is the client going away
+            return {"type": "http.disconnect"}
+        return {"type": "http.request", "body": left.pop(0), "more_body": bool(left)}
+
+    async def send(message: dict[str, Any]) -> None:
+        if message["type"] == "http.response.start":
+            assert not left, "the refusal was sent while the file was still arriving"
+        sent.append(message)
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": COMPARE,
+        "raw_path": COMPARE.encode(),
+        "root_path": "",
+        "query_string": query,
+        "headers": [(b"host", b"testserver"), (b"content-type", RIS["Content-Type"].encode())],
+        "client": ("127.0.0.1", 50000),
+        "server": ("testserver", 80),
+    }
+    anyio.run(app, scope, receive, send)
+    return sent, left
+
+
+@pytest.mark.parametrize(
+    ("loaded", "query", "status", "code"),
+    [
+        (False, b"q=benchmark&bogus=1", 422, b"API_BAD_PARAM"),  # the app-wide `strict_query`
+        (False, b"q=benchmark", 503, b"API_INDEX_NOT_LOADED"),  # `ServedDep`: no index loaded yet
+        (True, b"mode=native", 422, b"API_BAD_PARAM"),  # parameter validation: `q` is missing
+        (True, b"q=benchmark&mode=other", 422, b"API_BAD_PARAM"),
+    ],
+)
+def test_a_refusal_made_before_the_handler_still_drains_the_file(
+    corpus_dir: Path, loaded: bool, query: bytes, status: int, code: bytes
+) -> None:
+    """API-S2: the refusals raised before the handler runs (a dependency, validation) read the rest of the file
+    first and close the connection, as the handler's own do, so the client still sending gets the answer."""
+    app = make_app(corpus_dir, compare_enabled=True, rate_limit=NO_COOLDOWN)
+    with contextlib.ExitStack() as stack:
+        if loaded:
+            stack.enter_context(TestClient(app))  # its lifespan loads the index
+        sent, left = raw_post(app, query, [b"TY  - JOUR\n" + b"x" * 1000] * 5)
+    start = sent[0]
+    assert start["status"] == status and not left
+    assert (b"connection", b"close") in start["headers"]
+    assert code in b"".join(m.get("body", b"") for m in sent)
+
+
+def test_a_file_whose_records_the_parser_counts_over_the_cap_is_refused(
+    corpus_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CODE-N6: the cap holds on the parser's own count too, not only on `check_caps`' reading of the record
+    boundary before the parse."""
+    monkeypatch.setattr(route, "_RECORD_START", re.compile(r"(?!)"))  # the pre-parse count sees no record
+    with app_of(corpus_dir, compare_max_records=2) as c:
+        e = error(post(c, the_file()), 413, "API_RIS_TOO_LARGE")
+        assert "at most 2 in one request" in e["message"]
+
+
+def test_a_local_instance_has_no_cooldown_and_says_when_the_next_may_start(corpus_dir: Path) -> None:
+    """USAB-S2: comparisons on by the loopback default (`compare_local`) have no pause; with `--compare` (or
+    off loopback) the answer says how long the network's pause is, and a comparison sooner is the 429 it
+    announced."""
+    with app_of(corpus_dir, compare_local=True, rate_limit=RateLimit(capacity=10_000)) as c:
+        bodies = [compared(c, the_file()) for _ in range(3)]
+        assert [b["next_comparison_seconds"] for b in bodies] == [0, 0, 0]
+    with app_of(corpus_dir, rate_limit=RateLimit(capacity=10_000, compare_cooldown_factor=200)) as c:
+        body = compared(c, the_file())
+        assert body["next_comparison_seconds"] >= 1
+        r = post(c, the_file())
+        error(r, 429, "API_RATE_LIMITED")
+        assert int(r.headers["retry-after"]) <= body["next_comparison_seconds"]
+    with app_of(corpus_dir, rate_limit=RateLimit(enabled=False)) as c:  # no rate limit, no pause
+        assert compared(c, the_file())["next_comparison_seconds"] == 0
+
+
+@pytest.mark.parametrize(
+    "header",
+    [{"X-Forwarded-For": "203.0.113.9"}, {"Forwarded": "for=203.0.113.9"}, {"Via": "1.1 caddy"}],
+)
+def test_a_local_instance_refuses_a_comparison_that_came_through_a_proxy(
+    corpus_dir: Path, header: dict[str, str]
+) -> None:
+    """SEC-N1: a loopback bind with a proxy on the same host in front of it is public. Comparisons on by the
+    loopback default alone are refused to a proxied request; on by `--compare` (the operator's choice), not."""
+    with app_of(corpus_dir, compare_local=True) as c:
+        r = c.post(COMPARE, params={"q": Q}, content=the_file().encode(), headers={**RIS, **header})
+        error(r, 403, "API_COMPARE_DISABLED")
+        assert compared(c, the_file())["records_total"] == 13  # the local user's own request
+    with app_of(corpus_dir) as c:  # on by --compare
+        r = c.post(COMPARE, params={"q": Q}, content=the_file().encode(), headers={**RIS, **header})
+        assert r.status_code == 200
+
+
+def test_the_file_size_is_on_the_line_of_a_file_refused_unread(corpus_dir: Path, logs: Logs) -> None:
+    """OBS-S5: `ris_bytes` is noted as soon as the size is known, so a refused file's line says how big it was."""
+    with app_of(corpus_dir) as c:
+        error(post(c, b"\xff\xfe not utf-8"), 422, "API_RIS_INVALID")
+    line = next(x for x in logs() if x["event"] == "request" and x["route"] == COMPARE)
+    assert line["ris_bytes"] == 12 and "ris_records" not in line
+
+
+def test_the_querys_search_runs_before_the_file_is_read(
+    corpus_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SEC-N3: a refusal of the query's one search (a taken verification slot) comes before the seconds of
+    reading and matching the file."""
+
+    def busy(*a: Any) -> Any:
+        raise route.ApiError(route.DiagnosticCode.API_BUSY, "slots taken.", headers={"Retry-After": "5"})
+
+    def never(*a: Any) -> Any:
+        raise AssertionError("the file was parsed before the search")
+
+    monkeypatch.setattr(route, "result_in_scope", busy)
+    monkeypatch.setattr(route, "read_ris", never)
+    with app_of(corpus_dir) as c:
+        error(post(c, the_file()), 503, "API_BUSY")
+
+
+def test_the_running_answer_size_counts_what_json_escapes_add() -> None:
+    """SEC-N2: the running count is the encoded size: a quote or backslash is two bytes, a control character
+    six, so a quote-heavy file can't build twice the cap before the final check."""
+    assert route._sent("abc") == 5
+    assert route._sent('"' * 10) == 22 and route._sent("\\" * 10) == 22
+    assert route._sent("\x01") == 8 and route._sent("é") == 4

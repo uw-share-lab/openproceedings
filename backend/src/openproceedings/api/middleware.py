@@ -35,6 +35,7 @@ import time
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from types import MappingProxyType
 from urllib.parse import parse_qs
 
@@ -224,26 +225,34 @@ def body_too_large(max_bytes: int, *, file: bool = False) -> ApiError:
 class BodyLimit:
     """413 `API_BODY_TOO_LARGE` for a body over `max_bytes` (module docstring). A body within the cap is
     read here, whole, and replayed to the app; after it, `receive` is the server's own (a disconnect). A path
-    in `streamed` (path → its own cap) is counted as the route reads it instead, never read here."""
+    in `streamed` (path → its own cap) is counted as the route reads it instead, never read here. A path in
+    `files` is refused in a file's words (its body is a file the route compares); any other in a request's."""
 
     def __init__(
-        self, app: ASGIApp, max_bytes: int, streamed: Mapping[str, int] = MappingProxyType({})
+        self,
+        app: ASGIApp,
+        max_bytes: int,
+        streamed: Mapping[str, int] = MappingProxyType({}),
+        files: AbstractSet[str] = frozenset(),
     ) -> None:
         self.app = app
         self.max_bytes = max_bytes
         self.streamed = dict(streamed)
+        self.files = frozenset(files)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
         declared = _content_length(scope)
-        cap = self.streamed.get(scope.get("path", ""))
+        path = scope.get("path", "")
+        cap = self.streamed.get(path)
         if cap is not None:
+            file = path in self.files
             if declared is not None and declared > cap:
-                await self._refuse(scope, receive, send, body_too_large(cap, file=True))
+                await self._refuse(scope, receive, send, body_too_large(cap, file=file))
                 return
-            await self.app(scope, _counted(receive, cap), send)
+            await self.app(scope, _counted(receive, cap, file=file), send)
             return
         if declared is not None and declared > self.max_bytes:
             await self._refuse(scope, receive, send)
@@ -297,7 +306,7 @@ async def drain(receive: Receive, seconds: float = DRAIN_SECONDS) -> None:
         return
 
 
-def _counted(receive: Receive, max_bytes: int) -> Receive:
+def _counted(receive: Receive, max_bytes: int, *, file: bool = False) -> Receive:
     """`receive`, counting the body bytes it hands on: the read that takes the total past `max_bytes` raises
     413 `API_BODY_TOO_LARGE` instead of returning (the route's reader, inside FastAPI, turns it into the
     envelope). For a body sent without a length, or with a false one."""
@@ -309,10 +318,45 @@ def _counted(receive: Receive, max_bytes: int) -> Receive:
         if message["type"] == "http.request":
             size += len(message.get("body", b""))
             if size > max_bytes:
-                raise body_too_large(max_bytes, file=True)
+                raise body_too_large(max_bytes, file=file)
         return message
 
     return counted
+
+
+class DrainRefusals:
+    """On a path in `paths` (`POST /compare`, whose body is a file of megabytes), a refusal whose body was
+    not yet read whole first reads and discards the rest (`drain`) and closes the connection, so the client
+    still sending its file gets the refusal rather than a reset connection. One place for every refusal of
+    the path, whatever sends it: the rate limit, the app-wide `strict_query`, parameter validation, a
+    dependency (the index not loaded, the feature off), the route itself, or a 500 the app answers (API-S2).
+    Sits between `BodyLimit` (so what it discards is still counted against the cap) and `RateLimit`."""
+
+    def __init__(self, app: ASGIApp, paths: AbstractSet[str]) -> None:
+        self.app = app
+        self.paths = frozenset(paths)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope.get("path", "") not in self.paths:
+            await self.app(scope, receive, send)
+            return
+        ended = False
+
+        async def tracked() -> Message:
+            nonlocal ended
+            message = await receive()
+            if message["type"] != "http.request" or not message.get("more_body", False):
+                ended = True
+            return message
+
+        async def guarded(message: Message) -> None:
+            if message["type"] == "http.response.start" and message["status"] >= 400 and not ended:
+                await drain(tracked)
+                headers = [(k, v) for k, v in message.get("headers", ()) if k.lower() != b"connection"]
+                message = {**message, "headers": [*headers, (b"connection", b"close")]}
+            await send(message)
+
+        await self.app(scope, tracked, guarded)
 
 
 def _content_length(scope: Scope) -> int | None:

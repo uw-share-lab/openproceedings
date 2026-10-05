@@ -92,7 +92,8 @@ COMPARE_REFUSALS: dict[int | str, dict[str, Any]] = {
     403: {
         "model": ErrorEnvelope,
         "description": "API_COMPARE_DISABLED: this instance's operator has not turned comparisons on "
-        "(`GET /meta` `limits.compare` is null)",
+        "(`GET /meta` `limits.compare` is null), or the instance offers them to its local user only (on by "
+        "`op serve`'s loopback default) and the request came through a proxy",
     },
     408: {
         "model": ErrorEnvelope,
@@ -110,13 +111,36 @@ COMPARE_REFUSALS: dict[int | str, dict[str, Any]] = {
         "`application/x-research-info-systems` (a form or multipart upload is not read), or has a "
         "`Content-Encoding`",
     },
+    422: {
+        "model": ErrorEnvelope,
+        "description": "API_RIS_INVALID: the file is not UTF-8 RIS (no record, content before the first one, "
+        "carriage-return-only lines); API_COMPARE_TOO_COSTLY: the result holds more papers the file doesn't "
+        "than `limits.compare.max_results`, a phrase or NEAR has too many inflected spellings, or the answer "
+        "would pass `limits.compare.max_response_bytes`; or the query's own refusals, as on /search",
+    },
+    429: {
+        "model": ErrorEnvelope,
+        "description": (
+            "API_RATE_LIMITED: this client's token bucket or its network's can't pay for the request (as on "
+            "every route); or this client's network (IPv4 /24, IPv6 /48) is running a comparison, or ran one "
+            "less than its pause ago (decision-035: `compare_cooldown_factor` times the slot time it used; "
+            "none on a local instance). Refused before the file is read"
+        ),
+        "headers": {
+            "Retry-After": response_header(
+                "Whole seconds until the request would be allowed", {"type": "integer", "minimum": 1}
+            )
+        },
+    },
     503: {
         "model": ErrorEnvelope,
         "description": (
             "API_BUSY (with Retry-After): every comparison slot is taken (refused before the file is read), "
-            "the served index's comparison table is still being built, the comparison ran past the time this "
-            "instance gives one, or the query needs a slow position check and every verification slot is "
-            "taken; or API_INDEX_NOT_LOADED (no index loaded yet; no Retry-After)"
+            "the served index's comparison table is still being built (Retry-After: the build's expected time "
+            "left), the comparison ran past the time this instance gives one, or the query needs a slow "
+            "position check and every verification slot is taken; API_BUSY without Retry-After: the table "
+            "could not be built, until the operator reloads the index (`limits.compare` is then null); or "
+            "API_INDEX_NOT_LOADED (no index loaded yet; no Retry-After)"
         ),
         "headers": {
             "Retry-After": response_header(

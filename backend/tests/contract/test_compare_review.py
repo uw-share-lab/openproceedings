@@ -63,8 +63,12 @@ class Clock:
 def share_of_the_slot(addresses: int, *, upload: float, work: float, hours: float = 1.0) -> float:
     """The fraction of `hours` one comparison slot is held by `addresses` clients of one /24, each starting a
     comparison the moment the server lets it: the real token buckets and cooldown at their defaults, charged as
-    the route charges them (the route's weight up front, the slot time debited after, the cooldown on leaving)."""
+    the route charges them (the route's weight up front, the slot time debited after, the cooldown on leaving).
+    The instance simulated is one the cooldown applies to: run with `--compare`, or off loopback, where strangers
+    share the slot. A local instance (`compare_local`, on by the loopback default) has no cooldown, by
+    decision-035; `test_a_local_instance_has_no_cooldown_and_says_when_the_next_may_start` pins that."""
     config = ApiConfig(data_dir=Path("x"))
+    assert not config.compare_local
     limit = config.rate_limit
     clock = Clock()
     clients = TokenBucket(limit.capacity, limit.refill_per_second, limit.max_clients, clock)
@@ -157,6 +161,10 @@ def test_a_network_waits_after_a_comparison_and_search_is_untouched(corpus_dir: 
             and "One comparison at a time from this network" in e["message"]
         )
         assert c.get("/api/v1/search", params={"q": Q}).status_code == 200
+    first = next(x for x in logs() if x["event"] == "request" and x["route"] == COMPARE)
+    assert "busy" not in first
+    line = [x for x in logs() if x["event"] == "request" and x["route"] == COMPARE][1]
+    assert line["busy"] == "compare_cooldown" and line["status"] == 429
     with app_of(
         corpus_dir, rate_limit=RateLimit(enabled=False)
     ) as c:  # a local instance without a rate limit
@@ -183,6 +191,7 @@ def test_a_network_runs_one_comparison_at_a_time_whatever_the_slots(
         assert entered.wait(30)
         r = post(c, the_file())  # a slot is free, but this network already has one
         error(r, 429, "API_RATE_LIMITED")
+        assert c.app.state.comparisons.cooldowns._running  # type: ignore[attr-defined]
         assert r.headers["retry-after"] == "5" and r.headers["connection"] == "close"
         release.set()
         t.join(30)
@@ -369,12 +378,15 @@ def test_an_answer_over_the_size_bound_is_refused(corpus_dir: Path) -> None:
         entry(f"{'long title ' * 80}{n}", "AISTATS", 2024) for n in range(200)
     )  # ~180 KB echoed twice
     with app_of(corpus_dir, compare_max_response_bytes=100_000) as c:
+        assert c.get("/api/v1/meta").json()["limits"]["compare"]["max_response_bytes"] == 100_000
         e = error(post(c, file), 422, "API_COMPARE_TOO_COSTLY")
         assert "100,000 bytes" in e["message"] and "long title" not in e["message"]
         assert (
             compared(c, by_title(BY_ID[KEPT[0]]), "trust benchmark agent")["records_total"] == 1
         )  # a small one
     with app_of(corpus_dir) as c:
+        # the default cap, as `/meta` states it, is the one the answer was held to
+        assert c.get("/api/v1/meta").json()["limits"]["compare"]["max_response_bytes"] == 16 * 1024 * 1024
         big = post(c, file)
         assert big.status_code == 200 and 100_000 < len(big.content) < 16 * 1024 * 1024
 
@@ -403,7 +415,9 @@ def test_a_failed_table_is_built_again_on_reload_and_meta_says_so_meanwhile(
     with app_of(corpus_dir) as c:
         state: IndexState = c.app.state.index  # type: ignore[attr-defined]
         assert c.get("/api/v1/meta").json()["limits"]["compare"] is None  # not offered while it can't run
-        error(post(c, the_file()), 500, "API_INTERNAL")
+        r = post(c, the_file())
+        error(r, 503, "API_BUSY")  # a state, not a failure: no ERROR per request, no Retry-After
+        assert "retry-after" not in r.headers and "reload the index" in r.json()["error"]["message"]
         assert state.load()  # a reload while it still fails: tried again, still failed
         assert c.get("/api/v1/meta").json()["limits"]["compare"] is None
         broken = False
@@ -416,6 +430,9 @@ def test_a_failed_table_is_built_again_on_reload_and_meta_says_so_meanwhile(
         assert state.load() and state.served is served  # and a healthy table is not rebuilt
     events = [x["event"] for x in logs() if x["event"].startswith(("match_index", "index_unchanged"))]
     assert events == ["match_index_failed", "match_index_failed", "match_index_built", "index_unchanged"]
+    assert not [x for x in logs() if x["event"] == "request_failed"]
+    refused = [x for x in logs() if x["event"] == "request" and x["route"] == COMPARE and x["status"] == 503]
+    assert [x["busy"] for x in refused] == ["match_index_failed"]
 
 
 def test_a_superseded_build_is_skipped_and_builds_never_overlap(

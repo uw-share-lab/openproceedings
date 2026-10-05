@@ -98,13 +98,17 @@ SCHOLAR_MISSED = "scholar_missed"
 UNSETTLED = "unsettled"  # no class: the automation can't tell, and says why in the evidence
 ONLY_SCHOLAR = (OUR_BUG, FILTERED, COMPAT_READING, COVERAGE_GAP, STEMMING, FULL_TEXT, UNSETTLED)
 ONLY_OP = (OUR_BUG, SCHOLAR_CAP, COMPAT_READING, SCHOLAR_MISSED)
+# `Match.rule`, `Match.problem` and `Dropped.reason`, every value they take (the API's enums are pinned to them)
+MATCH_RULES = ("forum_id", "proceedings_id", "title_venue_year")
+MATCH_PROBLEMS = ("not_found", "ambiguous", "no_year", "no_venue", "truncated_title")
+NOT_COMPARED_REASONS = ("venue_unrecognised", "venue", "year")
 
 SCHOLAR_CAP_RESULTS = 1000  # what one Google Scholar search returns at most
 MAX_PHRASE_FORMS = (
     512  # a phrase's (or a NEAR's) inflected spellings, all positions combined; more is refused
 )
-_VENUE_TAGS = ("JF", "JO", "T2", "J2", "JA", "BT")  # where a RIS writer puts the venue; the first one present
-_TITLE_TAGS = ("TI", "T1")
+VENUE_TAGS = ("JF", "JO", "T2", "J2", "JA", "BT")  # where a RIS writer puts the venue; the first one present
+TITLE_TAGS = ("TI", "T1")
 _YEAR_TAGS = ("PY", "Y1", "DA")
 _URL_TAGS = ("UR", "L1", "L2")
 _YEAR = re.compile(r"\s*([0-9]{4})(?![0-9])")
@@ -205,13 +209,13 @@ def read_ris(text: str, name: str, tick: Callable[[], None] | None = None) -> li
                 listings[p] = None
             if len(hosts) < MAX_HOSTS and (h := _named(link_host, u)) is not None:
                 hosts[h] = None
-        venue_raw = _first(rec.fields, _VENUE_TAGS)
+        venue_raw = _first(rec.fields, VENUE_TAGS)
         year = _YEAR.match(_first(rec.fields, _YEAR_TAGS))
         dates = [m.group(1) for v in rec.fields.get("M1", ()) if (m := _QUERY_DATE.fullmatch(v.strip()))]
         out.append(
             RisRecord(
                 key=f"{name}#{n}",
-                title=_first(rec.fields, _TITLE_TAGS),
+                title=_first(rec.fields, TITLE_TAGS),
                 venue=SOURCE_ALIASES.get(source_key(venue_raw)),
                 venue_raw=venue_raw,
                 year=int(year.group(1)) if year else None,
