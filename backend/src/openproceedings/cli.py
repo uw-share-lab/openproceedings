@@ -870,6 +870,7 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         Meta,
         failing_summary,
         gate,
+        imported_only_accepted,
         load_cause_file,
         load_unresolved,
         missing_decisions,
@@ -878,6 +879,7 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         stale_exceptions,
         write,
     )  # fmt: skip
+    from openproceedings.ingest.snapshot import iter_records
 
     started = time.perf_counter()
     try:
@@ -924,6 +926,7 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         exceptions=exceptions,
         locate=locate,
         unresolved=unresolved,
+        imported_only=imported_only_accepted(iter_records(records.path.parent)),
     )
     written, replaced = write(text, out, day)
     verdict = gate(coverage, official, exceptions, locate)

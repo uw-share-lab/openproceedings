@@ -7,14 +7,14 @@ notice's own suggestion, `$`, into the query text: an edit of `q` the reader tri
 and 6), never a change to how a query is matched. The UI must not re-parse the query to find the terms, so the
 server reports each place a `$` can go: `at`, a code-point offset in `q`, and `insert`, the text to put there.
 
-A term is offered when the notice names it (`parser.exact_leaves`: a word or phrase with no wildcard, in a
+A term is offered when the notice names it (`exact.exact_leaves`: a word or phrase with no wildcard, in a
 NEAR or under a NOT too) and `$` would be a valid wildcard on it as written:
 - a phrase takes the `$` on its **last word** only (`"large language model"` → `"large language model$"`, as
   the review's own strings write it); its inner words are left alone, and a phrase that already holds a
   wildcard is not named by the notice;
 - the stem keeps at least `MIN_STEM` letters or digits, counting a phrase's earlier words (`AI` is left
   alone, `"generative AI"` is offered), and the `$` would directly follow a letter or digit (`C++` is left
-  alone): the lexer's own conditions (`_Lexer.check_stem`);
+  alone): the lexer's own conditions (`_Lexer.check_stem`, restated in `exact.takes_dollar`);
 - the unspaced run the word sits in (up to whitespace or a quote: where the lexer looks for LaTeX math) holds
   no `$` or backslash already, since a second `$` in a run would close math (`US$5`, `(model$|LLM)`);
 - a lowercase operator word (`and`, `or`, `not`, `near/3`) is left alone: the lexer's "did you mean AND?"
@@ -22,6 +22,9 @@ NEAR or under a NOT too) and `$` would be a valid wildcard on it as written:
   could join the words around it into a phrase (`trust | LLM and` → `trust$ | "LLM$ and$"`). Inside a quoted
   phrase it is an ordinary last word (`"supply and"`);
 - filter and `source:` values are never offered: they are not terms, and take no wildcards.
+
+The rules themselves are `exact.dollar_places`, below both this module and `parser.py`, so the notice's own
+example ("e.g. `trust$`") is always a term offered here (TASK-181).
 
 Two offered words in one unspaced run (`(model|LLM)`) would read as math once both had a `$`
 (`(model$|LLM$)`), so every one but the last gets `insert` `"$ "`, the `$` and a space: `(model$ |LLM$)`.
@@ -41,32 +44,13 @@ not need. `POST /parse` serves it as `word_forms`.
 
 from __future__ import annotations
 
-import bisect
-import re
-import unicodedata
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from openproceedings.query.ast import And, Leaf, Near, Node, Not, Or, Phrase, Term, Wildcard, structure
 from openproceedings.query.compat import group_phrases
-from openproceedings.query.lexer import (
-    DOLLARS,
-    LATEX_LOOKALIKES,
-    MIN_STEM,
-    OPERATOR_WORDS,
-    QUOTES,
-    Kind,
-    Lexeme,
-    letters,
-    lex,
-)
-from openproceedings.query.normalize import tokenize_with_tail
-from openproceedings.query.parser import ParseResult, exact_leaves, exact_name, parse
-
-# a run holding one of these may already have LaTeX math or an escape in it: a `$` added there is not offered
-_BACKSLASHES = frozenset({"\\"} | {c for c, to in LATEX_LOOKALIKES.items() if to == "\\"})
-_LOWER_NEAR = re.compile(r"near/[0-9]+")
-_LATEX = DOLLARS | frozenset(LATEX_LOOKALIKES) | _BACKSLASHES
+from openproceedings.query.exact import dollar_places
+from openproceedings.query.lexer import lex
+from openproceedings.query.parser import ParseResult, parse
 
 
 class WordForm(BaseModel):
@@ -85,49 +69,6 @@ class WordForm(BaseModel):
         description="The text to insert at `at`, as it is: `$`, or `$` and a space where another offered word "
         "follows in the same unspaced run (`(model|LLM)`), so that the two `$` are not read as LaTeX math.",
     )
-
-
-def _takes_dollar(word: Lexeme, before: int, tokenizer: str) -> bool:
-    """Whether `word` + `$` is a valid wildcard: the lexer's stem conditions (`_Lexer.check_stem`). `before`
-    is the letters and digits of the phrase words before it."""
-    if word.kind is not Kind.WORD or word.wildcard is not None:
-        return False
-    toks, tail = tokenize_with_tail(word.text, tokenizer)
-    return (
-        bool(toks)
-        and before + sum(len(t.text) for t in toks) >= MIN_STEM
-        and not toks[-1].op
-        and not tail.pieces
-    )
-
-
-def _reads_as_operator(word: Lexeme) -> bool:
-    """Whether the lexer and Scholar mode's phrase grouping know `word` by its text: a lowercase (or
-    full-width) `and`, `or`, `not` or `near/n`. With a `$` it would be another word to both."""
-    key = unicodedata.normalize("NFKC", word.text).casefold()
-    return key in OPERATOR_WORDS or word.text.casefold() in OPERATOR_WORDS or bool(_LOWER_NEAR.fullmatch(key))
-
-
-def _runs(q: str) -> list[int]:
-    """For each offset `i` in `0..len(q)`, where the unspaced run ending at `i` starts, or -1 when that run
-    holds LaTeX syntax (or `i` follows a break, so there is no word to end there). A backslash keeps the
-    character after it in the run, as it does in the lexer's word (`G\\"odel`)."""
-    out = [-1] * (len(q) + 1)
-    start, latex, escaped = 0, False, False
-    marks: list[int] = []  # the offsets of the current run, rewritten to -1 if LaTeX syntax turns up in it
-    for i, c in enumerate(q):
-        if not escaped and (c.isspace() or c in QUOTES):
-            start, latex, marks = i + 1, False, []
-            continue
-        escaped = not escaped and c in _BACKSLASHES
-        if c in _LATEX and not latex:
-            latex = True
-            for m in marks:
-                out[m] = -1
-        if not latex:
-            out[i + 1] = start
-            marks.append(i + 1)
-    return out
 
 
 def _leaf_with_dollar(n: Leaf, ends: frozenset[int]) -> Leaf:
@@ -166,45 +107,21 @@ def apply(q: str, forms: list[WordForm]) -> str:
 
 
 def _candidates(q: str, ast: Node, result: ParseResult) -> list[tuple[WordForm, int]]:
-    """Each edit the rules allow, in order, with the end of the leaf it rewrites: not yet read back."""
-    # An exact leaf's span holds its one word or phrase lexeme, and may be wider: a field prefix, the
-    # parentheses of a group of one (`(model)`). Leaves never overlap, so a lexeme has at most one.
-    leaves = sorted(exact_leaves(ast), key=lambda leaf: leaf.span)
-    starts = [leaf.span[0] for leaf in leaves]
+    """Each edit the rules allow (`exact.dollar_places`), in order, with the end of the leaf it rewrites: not
+    yet read back."""
     tokenizer = result.tokenizer_version
     lexemes, _, _ = group_phrases(q, lex(q, tokenizer).lexemes, tokenizer)
-    runs = _runs(q)
-    found: dict[int, tuple[str, int, int] | None] = {}  # the leaf's end → (term, at, the run's start)
-    for x in lexemes:
-        if x.kind not in (Kind.WORD, Kind.PHRASE):
-            continue
-        i = bisect.bisect_right(starts, x.start) - 1
-        if i < 0 or x.end > leaves[i].span[1]:
-            continue
-        leaf = leaves[i]
-        if leaf.span[1] in found:  # a second lexeme in one leaf: not a shape this knows, so not offered
-            found[leaf.span[1]] = None
-            continue
-        found[leaf.span[1]] = None
-        if x.kind is Kind.PHRASE:
-            if not x.parts:
-                continue
-            word, before = x.parts[-1], sum(letters(p.stem or "", tokenizer) for p in x.parts[:-1])
-        elif _reads_as_operator(x):
-            continue
-        else:
-            word, before = x, 0
-        if runs[word.end] >= 0 and _takes_dollar(word, before, tokenizer):
-            found[leaf.span[1]] = (exact_name(leaf), word.end, runs[word.end])
-    offered = sorted((v[1], v[0], v[2], end) for end, v in found.items() if v is not None)
+    places = dollar_places(q, ast, lexemes, tokenizer)
     return [
         (
             WordForm(
-                term=term, at=at, insert="$ " if i + 1 < len(offered) and offered[i + 1][2] == run else "$"
+                term=place.term,
+                at=place.at,
+                insert="$ " if i + 1 < len(places) and places[i + 1].run == place.run else "$",
             ),
-            end,
+            place.leaf_end,
         )
-        for i, (at, term, run, end) in enumerate(offered)
+        for i, place in enumerate(places)
     ]
 
 

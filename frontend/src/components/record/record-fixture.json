@@ -1625,7 +1625,7 @@
           "translations": [
             {
               "code": "COMPAT_NO_STEMMING",
-              "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `language$`).",
+              "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `\"large language$\"`).",
               "span": [0, 36],
               "reading": null
             },
@@ -1730,7 +1730,7 @@
           "translations": [
             {
               "code": "COMPAT_NO_STEMMING",
-              "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `language$`).",
+              "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `\"large language$\"`).",
               "span": [0, 36],
               "reading": null
             },

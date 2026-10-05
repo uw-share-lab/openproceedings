@@ -158,6 +158,8 @@ MESSAGES: tuple[tuple[DiagnosticCode, str, Mode, str | None, str | None], ...] =
     (DiagnosticCode.COMPAT_POP_DOLLAR, "model$", "scholar", None, None),
     (DiagnosticCode.COMPAT_POP_PHRASE, "(large language model | LLM)", "scholar", None, None),
     (DiagnosticCode.COMPAT_NO_STEMMING, "trust", "scholar", "trust$", None),
+    # no term here can take a `$` as written (too short), so the message gives no example (TASK-181)
+    (DiagnosticCode.COMPAT_NO_STEMMING, "AI ML", "scholar", None, None),
 )
 # said beside a message whose text depends on the index it ran on
 NOTES = {
