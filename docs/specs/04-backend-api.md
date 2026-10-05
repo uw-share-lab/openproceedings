@@ -329,7 +329,7 @@ Two readings follow from "the canonical form decides", and are worth knowing:
   calibrat* AND model*` took a median 17.2 ms and p95 19.2 ms without its three counts and 23.8 / 28.9 ms with
   them; `("large language model$" OR LLM*) AND (trust* OR calibrat*) AND (benchmark* OR evaluat*)` (wildcard
   phrases) 34.3 / 50.6 ms and 80.2 / 110.8 ms, the one p95 over the 03 search budget, on this first-page
-  protocol only; `trust model NOT (model NEAR/10 model*)` 29.6 / 39.3 and 47.7 / 63.4 ms; ten one-word
+  protocol only (03's exception "as measured", TASK-196); `trust model NOT (model NEAR/10 model*)` 29.6 / 39.3 and 47.7 / 63.4 ms; ten one-word
   groups of common words (20 collections) 2.4 / 5.0 and 30.6 / 44.5 ms. A later page reads the counts from the
   memo and costs what it costs without them (the wildcard-phrase query 32.3 / 47.9 and 32.3 / 38.8 ms). On
   the 5k fixture the same shapes add 4–26 ms to a first page's median, every round counted at the default

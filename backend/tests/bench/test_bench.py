@@ -49,13 +49,15 @@ ROUNDS = 30
 ENDPOINT_ROUNDS = 100  # the `/search` rows: its p95 over fewer rounds is little more than the slowest one
 # what the `/search` route passes `search.run` for its concept groups, at an instance's defaults (api/search.py)
 _DEFAULTS = {name: field.default for name, field in ApiConfig.model_fields.items()}
-GROUPS: dict[str, Any] = {
-    "groups": _DEFAULTS["max_counted_groups"],
-    "groups_terms": _DEFAULTS["max_counted_terms"],
-    "groups_ids": _DEFAULTS["max_counted_ids"],
-    "groups_wait": _DEFAULTS["group_count_wait_seconds"],
-    "groups_grace": _DEFAULTS["group_count_grace_seconds"],
+# each `search.run` argument and the `ApiConfig` field the route passes as it
+GROUP_FIELDS = {
+    "groups": "max_counted_groups",
+    "groups_terms": "max_counted_terms",
+    "groups_ids": "max_counted_ids",
+    "groups_wait": "group_count_wait_seconds",
+    "groups_grace": "group_count_grace_seconds",
 }
+GROUPS: dict[str, Any] = {arg: _DEFAULTS[field] for arg, field in GROUP_FIELDS.items()}
 # ten one-word groups (`max_counted_groups`), the fixture's commonest words: 20 collections when counted
 TEN_GROUPS = "agent ai benchmark calibration language bias dataset human trust model"
 

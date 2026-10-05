@@ -2,14 +2,15 @@
 
 Regenerate with `uv run python -m tests.bench.group_counts_report --index <a copy of an index>` (from
 `backend/`, on a quiet machine: other load inflates the timings); never edit by hand. TASK-176; cited by spec
-04 §SearchResponse (`groups`, Cost) and spec 07 §E.
+04 §SearchResponse (`groups`, Cost) and spec 07 §E. A cold first page over spec 03's 100 ms p95 with its counts
+is spec 03's exception "as measured", which TASK-196 decides, re-measured at a sustained 1-minute load under 5.
 
 - Machine: Apple M1 Pro, macOS-15.6.1-arm64-arm-64bit, 8 CPUs; load average 4.5 / 17.9 / 28.6 at the
   start and 9.8 / 14.8 / 25.7 at the end (1, 5, 15 min); Python 3.12.9, tantivy
   0.26.2; commit `c41ea508`.
 - Protocol: `search.run` with facets and highlights, a 50-hit page, as `/search` runs it
   (`tests/bench/test_bench.py::search_endpoint`), with its groups counted at `ApiConfig`'s defaults
-  (`groups` 10, `groups_terms` 5000, `groups_ids` 300000, `groups_wait` 2.0, `groups_grace` 0.05) and without them, alternated within each of 200 rounds after one warm-up; wall time (the
+  (`max_counted_groups` 10, `max_counted_terms` 5000, `max_counted_ids` 300000, `group_count_wait_seconds` 2.0, `group_count_grace_seconds` 0.05) and without them, alternated within each of 200 rounds after one warm-up; wall time (the
   facets and the counts run on worker threads, overlapping the page). A first page forgets the facet memo
   every round, so its counts' collections are made again; a later page (offset 50) reads them from the memo.
   "Groups, per round" is how each round's groups came back: counted, or the `not_counted` reason.
