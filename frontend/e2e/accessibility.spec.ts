@@ -15,6 +15,32 @@ async function search(page: Page, q = "trust"): Promise<void> {
   await expect(page.getByText(/\d+ papers/).first()).toBeVisible();
 }
 
+/**
+ * Search `benchmark`, then compare it with a RIS file a reviewer could hold: this instance's own export of
+ * another search (`trust`), so some of its papers are kept, some dropped and others added (TASK-177).
+ */
+async function compare(page: Page): Promise<void> {
+  // the fixture API's port: 8000 unless OP_E2E_API_PORT moves it (playwright.config.ts)
+  const api = `http://127.0.0.1:${process.env.OP_E2E_API_PORT ?? "8000"}`;
+  const held = await page.request.get(
+    `${api}/api/v1/export?${new URLSearchParams({ q: "trust venue:ICLR", format: "ris" })}`,
+  );
+  expect(held.ok()).toBe(true);
+  await search(page, "benchmark");
+  await page.getByRole("button", { name: /Compare with your records/ }).click();
+  await page.getByLabel("RIS file").setInputFiles({
+    name: "my-records.ris",
+    mimeType: "application/x-research-info-systems",
+    buffer: await held.body(),
+  });
+  await page.getByRole("button", { name: "Compare", exact: true }).click();
+  await expect(
+    page.getByRole("table", { name: "What this search does to the papers in your file" }),
+  ).toBeVisible({
+    timeout: 60_000,
+  });
+}
+
 /** A record's "See also" line (copy RH-18, PA-10): the fixture's two twins draw one each. */
 const seeAlso = (page: Page) => page.locator("p").filter({ hasText: /^See also \(the same paper/ });
 
@@ -111,6 +137,19 @@ const states: State[] = [
       await expect(link).toBeVisible();
       await link.click();
       await expect(page.getByText(/Reproduced on .*same .* papers/i)).toBeVisible();
+    },
+  },
+  {
+    name: "comparison with a RIS file",
+    open: async (page) => {
+      await compare(page);
+      await page.getByRole("button", { name: /^Show the \d+ dropped papers?$/ }).click();
+      await expect(
+        page
+          .getByRole("region", { name: /dropped papers?$/ })
+          .getByRole("listitem")
+          .first(),
+      ).toBeVisible();
     },
   },
   {
@@ -271,4 +310,51 @@ test("every page ends with the takedown contact footer (decision-018)", async ({
       });
     }
   }
+});
+
+test("a comparison with a RIS file is run and read by keyboard, and fits 320px", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 320, height: 900 });
+  await compare(page);
+  // the answer's heading has focus, so a screen reader starts at the result; the counts come first
+  const heading = page.getByRole("heading", { name: /^Comparison with my-records\.ris$/ });
+  await expect(heading).toBeFocused();
+  const table = page.getByRole("table", { name: "What this search does to the papers in your file" });
+  await expect(table.getByRole("rowheader")).toHaveText([/^Kept/, /^Dropped/, /^Not in the index/, /^Added/]);
+  const counts = (await table.getByRole("cell").allTextContents()).map((text) =>
+    Number(text.replace(/,/g, "")),
+  );
+  expect(counts.every((count) => Number.isInteger(count))).toBe(true);
+  const [kept = 0, dropped = 0, , added = 0] = counts;
+  expect(kept).toBeGreaterThan(0);
+  expect(dropped).toBeGreaterThan(0);
+  expect(added).toBeGreaterThan(0);
+  // kept and added are this search's papers, as the results header counts them
+  const shown = await page
+    .getByText(/^[\d,]+ papers$/)
+    .first()
+    .textContent();
+  expect(kept + added).toBe(Number((shown ?? "").replace(/[^\d]/g, "")));
+  // from the heading, Tab reaches each list's controls in order; Enter opens a list
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: /^Show the [\d,]+ kept papers?$/ })).toBeFocused();
+  await page.keyboard.press("Enter");
+  const keptList = page.getByRole("region", { name: /kept papers?$/ });
+  await expect(keptList.getByRole("listitem")).toHaveCount(Math.min(kept, 100));
+  await expect(page.getByRole("button", { name: /^Hide the [\d,]+ kept papers?$/ })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(keptList.getByRole("button", { name: /^Download CSV/ })).toBeFocused();
+  for (const target of await page
+    .getByRole("region", { name: "Compare with your records" })
+    .getByRole("button")
+    .all()) {
+    const bounds = await target.boundingBox();
+    expect(bounds?.height).toBeGreaterThanOrEqual(24);
+    expect(bounds?.width).toBeGreaterThanOrEqual(24);
+  }
+  const widths = await page.evaluate(() => ({
+    client: document.documentElement.clientWidth,
+    scroll: document.documentElement.scrollWidth,
+  }));
+  expect(widths.scroll).toBeLessThanOrEqual(widths.client);
 });

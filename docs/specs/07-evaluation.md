@@ -109,6 +109,15 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   dependency; a string whose figure is not near zero reopens the decision.
 - **`scholar_cap`** needs the size of each Scholar search: the set's Publish or Perish query dates group its
   records by search, and a group at 1,000 or more marks its venues and years as capped.
+- **Any reviewer's own file** (TASK-177): the same comparison is served as `POST /compare` (04 §Comparing with
+  a RIS file) and drawn by the web app's "Compare with your records" panel (05 §Components 9): one query
+  against one file, every indexed venue and year on both sides (a limit is written in the query), with the
+  matching and the classes of this section and no report. `compare_query` takes a `tick` the route raises its
+  time limit from; `result_in_scope` and `only_in_result` are the result and the added ids as both callers
+  compute them. The route is tested against the core's own rows (`backend/tests/contract/test_compare.py`).
+  Since that route echoes a row's evidence to whoever uploaded the file (decision-035), the evidence of a
+  record the index doesn't hold names its links' hosts only as valid host names, at most three a record
+  (`link_host`, `MAX_HOSTS`), in the report too; a link no URL parser takes names no paper and no host.
 - A report never replaces a review file a person has filled in, and names its inputs by file name and sha256,
   never by path. Notes about one set of inputs come from the file `--notes` names (for the review's export,
   `docs/results/scholar-comparison-notes.md`), printed verbatim under its hash; there is no default, since

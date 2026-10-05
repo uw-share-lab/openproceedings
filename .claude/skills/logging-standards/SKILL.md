@@ -120,7 +120,12 @@ held none; added by `IndexState.verification_slot` through the `errors.current_a
 the request having no handle there). A request whose slot holds pass `slow_verification_seconds` logs one
 `verification_slow` WARNING (`verify_ms`, `threshold_ms`): every other cold verification was refused
 meanwhile. `verify_cpu_ms` is the verifying thread's CPU in those holds, and `verify_tokens` what that CPU
-time was debited after the fact (`RateLimit`; never wall time, which other requests' load inflates). A facet worker
+time was debited after the fact (`RateLimit`; never wall time, which other requests' load inflates). A comparison (`POST /compare`, TASK-177) adds counts only: `ris_bytes`, `ris_records`, `ris_papers`, `kept`,
+`dropped`, `not_in_index`, `added`, `compare_ms` (wall time it held its slot), `compare_cost_ms` (what is
+debited: the file's arrival plus the work's CPU) and `compare_tokens`. Never a title, a venue string or a file
+name from the uploaded file (none is sent; a test greps every line for them). The served index's match table
+logs `match_index_built` (INFO: `index_version`, `records`, `ms`) once per served index, or `match_index_failed`
+(ERROR: `error`, `reason` when there is one, frames for an unexpected type). A facet worker
 that would have had to verify (a bug) logs `facet_worker_recounted` (WARNING) and the caller recounts; the group-count worker likewise, `group_worker_recounted` (TASK-176); any other failure of it is one ERROR `group_count_failed` (`groups`, `error`: the type, never the message) a late answer one WARNING `group_count_timed_out` (`groups`, `wait_ms`), and a job no counting worker took within the grace one DEBUG `group_count_busy` (`groups`: a state under load, not an alarm), the search answering without its counts either way. `/search`'s line also carries `groups` (how many concept groups the query has) and `groups_counted` (how many were counted: all or 0), two integers, never a span. Health checks log at DEBUG. An unexpected failure is one `request_failed` ERROR line beside it: `code`, `error`, `frames`,
 and for a wrapped one (only then: never `cause: null`) `cause`, `cause_frames` (where it really failed: Starlette wraps an error its handler
 catches after a stream started in a RuntimeError whose frames stop at the handler) and `cause_reason`. `status` is what the client was sent. If a handler fails after the response started (a

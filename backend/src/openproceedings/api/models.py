@@ -1,4 +1,4 @@
-"""The response models of `/parse`, `/search`, `/papers/{id}`, `/meta` and `/coverage`: the contract (spec 04; api-contract
+"""The response models of `/parse`, `/search`, `/papers/{id}`, `/compare`, `/meta` and `/coverage`: the contract (spec 04; api-contract
 skill). Every response carries `index_version`, `tokenizer_version` and `query_version` (`Versioned`).
 
 Spans are half-open `[start, end)` code-point ranges over the raw source: the stored title or abstract for
@@ -263,6 +263,159 @@ class SearchResponse(Versioned):
     hits: list[Hit]
 
 
+# --- /compare (TASK-177; spec 04 §Comparing with a RIS file) ---------------------------------------------
+# how a record of the file was matched to an index record, or why it has none (`scholar_compare.Match`:
+# its `rule`s, then its `problem`s; a test pins the two lists equal)
+MatchedBy = Literal[
+    "forum_id",
+    "proceedings_id",
+    "title_venue_year",
+    "not_found",
+    "ambiguous",
+    "no_year",
+    "no_venue",
+    "truncated_title",
+]
+# why a paper is on one side only (`scholar_compare`'s classes: `ONLY_SCHOLAR` and `ONLY_OP`; pinned by a test)
+CompareReason = Literal[
+    "our_bug",
+    "filtered",
+    "compat_reading",
+    "coverage_gap",
+    "stemming",
+    "full_text",
+    "scholar_cap",
+    "scholar_missed",
+    "unsettled",
+]
+NotComparedReason = Literal["venue_unrecognised", "venue", "year"]  # `scholar_compare.Dropped.reason`
+
+
+class CompareQuery(Model):
+    input: str
+    mode: Mode
+    canonical: str
+    canonical_hash: str
+
+
+class CompareRow(Model):
+    """One paper of a comparison. A row of `kept`, `dropped` or `not_in_index` is a paper of the file (its
+    first record, `ris_record`; its title as the file wrote it); a row of `added` is an index record."""
+
+    ris_record: int | None = Field(
+        description="The record's position in the file, from 1 (the paper's first record when the file "
+        "repeats it). Null on an `added` row."
+    )
+    copies: int = Field(description="How many records of the file are this paper; 0 on an `added` row.")
+    id: str | None = Field(
+        description="The index record's id (`/papers/{id}`). Null on a `not_in_index` row."
+    )
+    title: str = Field(
+        description="The file's title for a paper of the file, the index record's for an `added` row."
+    )
+    venue: str | None = Field(
+        description="The index record's venue when it has one, else the venue the file names (as written)."
+    )
+    year: int | None
+    matched_by: MatchedBy | None = Field(
+        description="How the file's record was matched to the index, by spec 01's merge rules in their order "
+        "(`forum_id`, `proceedings_id`, `title_venue_year`), or why it has no index record (`not_found`, "
+        "`ambiguous`: its id or title names several records, `no_year`, `no_venue`, `truncated_title`). Null "
+        "on an `added` row."
+    )
+    reason: CompareReason | None = Field(
+        description="Why the paper is on one side only (spec 07 §B's classes): for `dropped`, `filtered` (a "
+        "default filter removes it: its track or status), `full_text` (no title or abstract match), "
+        "`stemming` (it matches only with another inflected form), `compat_reading` (it matches as Google "
+        "Scholar reads the string); for `not_in_index`, `coverage_gap` or `unsettled`; for `added`, "
+        "`scholar_missed`, `compat_reading` or `scholar_cap`. `unsettled`: a person must decide. `our_bug`: "
+        "the reference matcher and the served index disagree (report it). Null on a `kept` row that has none."
+    )
+    detail: str = Field(
+        description="The evidence for `reason`, in words (which filter, which word forms, which group of the "
+        "query); empty when there is none, and for a record whose abstract is withheld."
+    )
+    settled: bool = Field(description="False when the automation can't decide and a person must.")
+    independent: bool | None = Field(
+        description="Whether the index record has a source other than an imported RIS set (a crawl). False: "
+        "the index holds this paper only because a RIS set was imported, so a match to it says nothing about "
+        "the index's coverage. Null without an index record."
+    )
+    fails_filters: bool = Field(
+        description="Whether the index record fails one of the query's default filters."
+    )
+    abstract_withheld: bool = Field(description=ABSTRACT_WITHHELD_DOC)
+
+
+class NotComparedRow(Model):
+    """A record of the file left out before comparing: it is not a paper of the three venues."""
+
+    ris_record: int
+    title: str
+    venue: str = Field(description="The venue the file names, as written (may be empty).")
+    year: int | None
+    reason: NotComparedReason = Field(
+        description="`venue_unrecognised`: its venue string is none of the indexed venues' names; `venue`, "
+        "`year`: it matched an index record outside the compared venues or years."
+    )
+
+
+class CompareCsv(Model):
+    """Each list as a CSV file's text (UTF-8, to be saved with its BOM as sent; one header row), written by
+    the server with the export's cell guard, so a client saves it as it is and never builds a cell itself."""
+
+    kept: str
+    dropped: str
+    not_in_index: str
+    added: str
+    not_compared: str
+
+
+class ReasonTotals(Model):
+    """How many rows of each list have each `reason` (only the reasons that occur, in spec 07 §B's order), so
+    a client shows why papers were dropped without counting rows itself."""
+
+    kept: dict[str, int]
+    dropped: dict[str, int]
+    not_in_index: dict[str, int]
+    added: dict[str, int]
+
+
+class CompareResponse(Versioned):
+    """A RIS file against a query's result on the served index. Every record of the file is counted once:
+    `records_total` = `not_compared_total` + `duplicates_total` + `papers_total`, and `papers_total` =
+    `kept_total` + `dropped_total` + `not_in_index_total`. `kept_total` + `added_total` = `total`."""
+
+    query: CompareQuery
+    total: int = Field(description="`/search`'s `total` for the same query and index: the whole result.")
+    records_total: int = Field(description="Records read from the file.")
+    not_compared_total: int = Field(description="Of them, records outside the indexed venues.")
+    duplicates_total: int = Field(description="Of them, records that repeat a paper already counted.")
+    papers_total: int = Field(description="Papers of the file that were compared.")
+    kept_total: int = Field(description="Papers of the file the query's result holds.")
+    dropped_total: int = Field(description="Papers of the file the index holds and the result doesn't.")
+    not_in_index_total: int = Field(description="Papers of the file with no index record.")
+    added_total: int = Field(description="Papers of the result that the file doesn't hold.")
+    kept_ris_only_total: int = Field(
+        description="Of `kept_total`, papers whose index record has no source but an imported RIS set "
+        "(`independent` false): the index holds them only because of an import."
+    )
+    dropped_ris_only_total: int = Field(description="Of `dropped_total`, the same.")
+    reason_totals: ReasonTotals
+    kept: list[CompareRow]
+    dropped: list[CompareRow]
+    not_in_index: list[CompareRow]
+    added: list[CompareRow]
+    not_compared: list[NotComparedRow]
+    csv: CompareCsv
+    added_ris: str = Field(
+        description="The papers the query adds (`added`), as `GET /export` writes RIS for them: the same "
+        "records byte for byte, in id order, each abstract with its source, a withheld one left out and marked "
+        "(decision-021, decision-022). The only abstracts in the response, each one `/search` serves for the "
+        "same hit; nothing of the file is in it. Empty when nothing is added."
+    )
+
+
 # --- /papers/{id} ------------------------------------------------------------------------------------
 PAPER_Q_DOC = (
     f"Optional: a query (spec 02 grammar) whose highlights to return for this paper, admitted exactly as "
@@ -420,6 +573,41 @@ class Limits(Model):
     max_counted_ids: int = Field(
         description="TASK-176: the most verified ids the group counts of one query may read, summed the "
         "same way over its position-verified clauses' matches; more is `groups.not_counted: too_costly`"
+    )
+    compare: CompareLimits | None = Field(
+        description="`POST /compare`'s caps (TASK-177), or null when this instance's operator has not turned "
+        "comparisons on (the route then answers 403 `API_COMPARE_DISABLED`, and a client doesn't offer it)"
+    )
+
+
+class CompareLimits(Model):
+    """What `POST /compare` takes on this instance (TASK-177): each cap refuses a request over it with a typed
+    error, never cuts it short."""
+
+    max_body_bytes: int = Field(
+        description="the largest RIS file, in bytes; a larger body is 413 `API_BODY_TOO_LARGE`, before it is read"
+    )
+    max_records: int = Field(
+        description="the most records one file may hold; more is 413 `API_RIS_TOO_LARGE`"
+    )
+    max_line_length: int = Field(
+        description="the longest line of the file, in Unicode code points, tag included; a longer one is 413 "
+        "`API_RIS_TOO_LARGE`"
+    )
+    max_title_length: int = Field(
+        description="the longest title or venue line's value, in Unicode code points (the corpus's own title "
+        "cap); a longer one is 413 `API_RIS_TOO_LARGE`"
+    )
+    max_results: int = Field(
+        description="the most papers of the query's result that the file doesn't hold; more is 422 "
+        "`API_COMPARE_TOO_COSTLY`"
+    )
+    max_seconds: float = Field(
+        description="the wall time one comparison's work gets; past it, 503 `API_BUSY` with `Retry-After`"
+    )
+    max_response_bytes: int = Field(
+        description="the largest answer, in bytes; a comparison whose answer would be larger is 422 "
+        "`API_COMPARE_TOO_COSTLY`"
     )
 
 

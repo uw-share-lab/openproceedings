@@ -2,10 +2,15 @@
 and each abstract's source claim (`attributed`, TASK-134), so the results list's attribution is exercised. The
 first two results of the default `trust` search are made twins (a `twin` claim each, decision-029; TASK-162),
 so the "See also" line is drawn on the first results page and the first result's paper page: a claim is
-provenance only, so the ranking that picks them is the final index's."""
+provenance only, so the ranking that picks them is the final index's. Comparisons are on (`POST /compare`,
+TASK-177), as on a local instance, so the search page's "Compare with your records" panel is exercised.
+
+The ports are 8000 (API) and 3000 (web) unless `OP_E2E_API_PORT` / `OP_E2E_WEB_PORT` say otherwise
+(`frontend/playwright.config.ts` reads the same two), so a run can sit beside an instance already on them."""
 
 from __future__ import annotations
 
+import os
 import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -55,13 +60,15 @@ def main() -> None:
         (data / "indexes" / "current").symlink_to(version)
         config = ApiConfig(
             data_dir=data,
-            cors_origins=("http://127.0.0.1:3000",),
+            cors_origins=(f"http://127.0.0.1:{int(os.environ.get('OP_E2E_WEB_PORT', '3000'))}",),
             rate_limit=RateLimit(enabled=False),
             load_in_background=False,
             handle_sighup=False,
             records_min_free_bytes=0,
+            compare_enabled=True,
         )
-        serve(config, "127.0.0.1", 8000, log_level="WARNING", log_format="text")
+        port = int(os.environ.get("OP_E2E_API_PORT", "8000"))
+        serve(config, "127.0.0.1", port, log_level="WARNING", log_format="text")
 
 
 if __name__ == "__main__":
