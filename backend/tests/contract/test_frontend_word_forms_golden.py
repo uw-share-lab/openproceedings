@@ -45,6 +45,8 @@ CASES: list[tuple[str, str, Mode]] = [
     ("each place a term is written", "trust OR (trust AND model)", "scholar"),
     ("field prefix, NOT and NEAR", 'title:trust -bias model NEAR/3 "language model"', "scholar"),
     ("astral letters before the terms", "𝒜𝒜𝒜 (model|LLM) \U0001f600\U0001f600trust", "scholar"),
+    ("lowercase operator words are left alone", "trust | LLM and model not", "scholar"),
+    ("no named term can take a $", "AI C++ or", "scholar"),
     ("nothing the notice names", "bench* model$", "scholar"),
     ("native syntax has no notice", "LLM benchmark", "native"),
     ("a query with errors", "(LLM benchmark", "scholar"),
@@ -88,6 +90,7 @@ def test_the_golden_covers_each_kind_of_answer() -> None:
     assert any(c["word_forms"] is None for c in cases)  # errors
     assert any(c["word_forms"] == [] and c["mode"] == "native" for c in cases)
     assert any(f["insert"] == "$ " for c in cases for f in c["word_forms"] or [])
+    assert any(c["word_forms"] == [] and c["notice"] for c in cases)  # a notice with nothing to offer
     assert any(
         len(c["q"].encode("utf-16-le")) // 2 != len(c["q"]) for c in cases
     )  # astral: UTF-16 ≠ code points

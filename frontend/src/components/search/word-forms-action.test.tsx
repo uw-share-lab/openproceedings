@@ -201,11 +201,52 @@ describe("Add $ on the no-stemming notice", () => {
     expect(view.state.doc.toString()).toBe('AI C++ US$5 "generative AI$"');
     cleanup();
 
-    const none: Report = { q: "AI C++", mode: "scholar", notice: "exact", word_forms: [] };
-    const again = await setup(none);
-    expect(again.notice().textContent).toContain("exact");
+    // the notice names `ai`, `c` and `or`, and the server found no place for a `$`: said, with the reasons
+    const again = await setup(caseOf("no named term can take a $"));
     expect(screen.queryByRole("button", { name: /^Add \$/ })).toBeNull();
+    expect(again.notice().textContent).toContain(
+      "$ can't be added to these terms for you. A term is left as typed when it has too few letters or " +
+        "digits, has a symbol or another $ beside it, or is a lowercase and, or or not. The same happens " +
+        "when the query would be over the length limit with $ added. Type a wildcard yourself where one is valid.",
+    );
     expect(again.notice().textContent).not.toContain("benchmark$");
+  });
+
+  it("says nothing more when the editor holds other text than the notice's", async () => {
+    const { view } = await setup(caseOf("no named term can take a $"));
+    expect(screen.getByText(/can't be added to these terms for you/)).toBeTruthy();
+    act(() => {
+      view.dispatch({ changes: { from: 0, insert: "x " } });
+    });
+    expect(screen.queryByText(/can't be added to these terms for you/)).toBeNull();
+  });
+
+  it("ticking only the first word of an unspaced run writes its $ and the space, and leaves the second", async () => {
+    const c = caseOf("two words in one unspaced run");
+    const { view } = await setup(c);
+    fireEvent.click(screen.getByRole("button", { name: "Choose terms" }));
+    const group = screen.getByRole("group", { name: "Add $ to" });
+    fireEvent.click(within(group).getByRole("checkbox", { name: /^model/ }));
+    fireEvent.click(within(group).getByRole("button", { name: "Add $ to the ticked terms" }));
+    expect(view.state.doc.toString()).toBe("(model$ |LLM) trust");
+    expect(c.each).toContain("(model$ |LLM) trust"); // a string the server's own apply writes
+  });
+
+  it("leaves a lowercase and/not out of the offer and says why in the chooser", async () => {
+    const c = caseOf("lowercase operator words are left alone");
+    const { view, notice } = await setup(c);
+    fireEvent.click(within(notice()).getByRole("button", { name: "Choose terms" }));
+    const group = screen.getByRole("group", { name: "Add $ to" });
+    const labels = within(group)
+      .getAllByRole("checkbox")
+      .map((b) => b.closest("label")?.textContent);
+    expect(labels).toEqual(["trust", "llm", "model"]);
+    expect(group.textContent).toContain(
+      "A term the notice names that is not listed here can't take $ as typed. A term is left as typed when " +
+        "it has too few letters or digits, has a symbol or another $ beside it, or is a lowercase and, or or not.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add $ to all 3 terms" }));
+    expect(view.state.doc.toString()).toBe("trust$ | LLM$ and model$ not");
   });
 
   it("is withdrawn while the editor holds text the forms were not reported for", async () => {

@@ -9,11 +9,12 @@ together, parses to the same query with exactly those terms made `$` wildcards.
 from __future__ import annotations
 
 from collections import Counter
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
 import pytest
-from hypothesis import event, given
+from hypothesis import event, example, given
 from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.query import wordforms
@@ -75,7 +76,18 @@ CASES: list[tuple[str, str, str]] = [
     ("NOT and -", "trust NOT bias -harm", "trust$ NOT bias$ -harm$"),
     ("NEAR operands", 'trust NEAR/3 "language model"', 'trust$ NEAR/3 "language model$"'),
     ("each place a term is written", "trust OR (trust AND model)", "trust$ OR (trust$ AND model$)"),
-    ("lowercase operator word", "trust and model", "trust$ and$ model$"),
+    ("lowercase operator word", "trust and model", "trust$ and model$"),
+    ("lowercase operator word ending a Scholar | item", "x | trust and", "x | trust$ and"),
+    ("lowercase not after a Scholar | item", "trust | model not", "trust$ | model$ not"),
+    ("lowercase operator word inside a | item", "a | trust and model", "a | trust$ and model$"),
+    (
+        "operator words in any case or width, and near/n",
+        "trust And model ｏｒ agent near/3 judge",
+        "trust$ And model$ ｏｒ agent$ near/3 judge$",
+    ),
+    ("an operator word ends a quoted phrase", '"supply and" "to be or not"', '"supply and$" "to be or not$"'),
+    ("near alone is a word", "trust near model", "trust$ near$ model$"),
+    ("zero-width space after the word", "trust\u200b model", "trust\u200b$ model$"),
     ("astral letters before the term", "𝒜𝒜𝒜 model", "𝒜𝒜𝒜$ model$"),
     ("CJK run", "大语言模型", "大语言模型$"),
 ]
@@ -134,6 +146,21 @@ def test_every_term_offered_is_one_the_notice_names() -> None:
     assert all(f"`{t}`" in note.message for t in list(dict.fromkeys(f.term for f in forms_of(q)))[:8])
 
 
+def test_a_lowercase_operator_keeps_its_warning_and_its_reading() -> None:
+    """`and$` would no longer be warned about, and in Scholar mode would join a phrase: it is never offered."""
+    q = "trust and model"
+    assert [f.term for f in forms_of(q)] == ["trust", "model"]
+    edited = scholar(apply(q, forms_of(q)))
+    assert [
+        (w.code, w.span) for w in edited.warnings if w.code is DiagnosticCode.WARN_LOWERCASE_OPERATOR
+    ] == [(DiagnosticCode.WARN_LOWERCASE_OPERATOR, (7, 10))]
+    assert [w.code for w in scholar(q).warnings] == [w.code for w in edited.warnings]
+    # the three strings the read-back used to refuse whole (no parse error, nothing offered)
+    assert apply("trust | LLM and", forms_of("trust | LLM and")) == "trust$ | LLM$ and"
+    assert apply("trust | model not", forms_of("trust | model not")) == "trust$ | model$ not"
+    assert apply("a | trust and model", forms_of("a | trust and model")) == "a | trust$ and model$"
+
+
 def _plain(n: Any) -> Any:
     """A tree's structure with every `$` wildcard put back as the term it was."""
     if isinstance(n, dict):
@@ -149,9 +176,13 @@ def _dollars(n: Any) -> int:
     return sum(_dollars(v) for v in n) if isinstance(n, list | tuple) else 0
 
 
+MAX_SUBSET_FORMS = 6  # every combination of up to this many forms: at most 57 parses on top of the singles
+
+
 def check_edits(q: str) -> list[WordForm]:
-    """Every offered edit, alone and all together, parses to `q`'s tree with exactly those exact terms made
-    `$` wildcards: nothing else in the query is read differently."""
+    """Every subset of the offered edits (each alone, all together, and every combination of the first
+    `MAX_SUBSET_FORMS`: what ticking terms can apply) parses to `q`'s tree with exactly those exact terms
+    made `$` wildcards: nothing else in the query is read differently."""
     before = scholar(q)
     assert before.ast is not None
     forms = word_forms(q, before)
@@ -159,7 +190,9 @@ def check_edits(q: str) -> list[WordForm]:
     tree = structure(before.ast)
     names = Counter(exact_name(leaf) for leaf in exact_leaves(before.ast))
     assert [f.at for f in forms] == sorted({f.at for f in forms})  # in order, one per place
-    for chosen in [*([f] for f in forms), forms]:
+    few = forms[:MAX_SUBSET_FORMS]
+    subsets = [list(c) for r in range(2, len(few) + 1) for c in combinations(few, r)]
+    for chosen in [*([f] for f in forms), *subsets, forms]:
         after = parse(apply(q, chosen), "scholar")
         assert after.errors == [], (q, chosen, after.errors)
         assert after.ast is not None
@@ -184,7 +217,8 @@ def test_the_review_strings_take_their_edits(name: str) -> None:
 # words that take a `$`, and ones that must not (short, wildcarded, symbols, LaTeX, escapes, operators' look-alikes)
 _WORDS = st.sampled_from(
     ["trust", "LLM", "model", "gpt-4", "AI", "ab", "C++", ".NET", "trust?", "US$5", "$x$", "$f(x)$-DP", "bench*",
-     "model$", 'G\\"odel', "a\\$b", "＄y＄", "𝒜𝒜𝒜", "and", "or", "2024", "naïve", "大语言模型", "x×y", "~"]
+     "model$", 'G\\"odel', "a\\$b", "＄y＄", "𝒜𝒜𝒜", "and", "or", "not", "And",
+     "near/3", "2024", "naïve", "大语言模型", "x×y", "~"]
 )  # fmt: skip
 _PHRASES = st.lists(_WORDS, min_size=1, max_size=3).map(lambda ws: '"' + " ".join(ws) + '"')
 _LEAVES = st.one_of(
@@ -219,6 +253,9 @@ _TIGHT = st.lists(
 
 
 @given(st.one_of(hostile_queries(), _TIGHT, queries()))
+@example("trust | LLM and")  # `and$` joined `LLM$` in a phrase, so the read-back refused every edit
+@example("trust | model not")
+@example("a | trust and model")
 def test_offered_edits_are_sound_on_generated_queries(q: str) -> None:
     result = parse(q, "scholar")
     if result.errors:

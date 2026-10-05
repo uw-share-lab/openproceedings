@@ -239,6 +239,44 @@
    ]
   },
   {
+   "name": "lowercase operator words are left alone",
+   "q": "trust | LLM and model not",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `trust`, `llm`, `and`, `model`, `not` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `trust$`).",
+   "word_forms": [
+    {
+     "term": "trust",
+     "at": 5,
+     "insert": "$"
+    },
+    {
+     "term": "llm",
+     "at": 11,
+     "insert": "$"
+    },
+    {
+     "term": "model",
+     "at": 21,
+     "insert": "$"
+    }
+   ],
+   "all": "trust$ | LLM$ and model$ not",
+   "each": [
+    "trust$ | LLM and model not",
+    "trust | LLM$ and model not",
+    "trust | LLM and model$ not"
+   ]
+  },
+  {
+   "name": "no named term can take a $",
+   "q": "AI C++ or",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `ai`, `c`, `or` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `ai$`).",
+   "word_forms": [],
+   "all": "AI C++ or",
+   "each": []
+  },
+  {
    "name": "nothing the notice names",
    "q": "bench* model$",
    "mode": "scholar",

@@ -17,6 +17,10 @@ NEAR or under a NOT too) and `$` would be a valid wildcard on it as written:
   alone): the lexer's own conditions (`_Lexer.check_stem`);
 - the unspaced run the word sits in (up to whitespace or a quote: where the lexer looks for LaTeX math) holds
   no `$` or backslash already, since a second `$` in a run would close math (`US$5`, `(model$|LLM)`);
+- a lowercase operator word (`and`, `or`, `not`, `near/3`) is left alone: the lexer's "did you mean AND?"
+  warning and Scholar mode's phrase grouping both go by the word's text, so `and$` would lose the warning and
+  could join the words around it into a phrase (`trust | LLM and` → `trust$ | "LLM$ and$"`). Inside a quoted
+  phrase it is an ordinary last word (`"supply and"`);
 - filter and `source:` values are never offered: they are not terms, and take no wildcards.
 
 Two offered words in one unspaced run (`(model|LLM)`) would read as math once both had a `$`
@@ -25,8 +29,11 @@ Whitespace there changes nothing else, and with it any subset of the edits is so
 
 The answer is then checked by making every edit at once and parsing the result with the parser itself, in the
 query's mode: it must parse, and its tree must be the original with exactly those leaves made `$` wildcards.
-If it is not (for example the edited query would be over the length cap), nothing is offered, so an offered
-edit is always one the server has read back. `test_wordforms.py` checks every single edit as well.
+If it is not, nothing is offered, so an offered edit is always one the server has read back. The rules above
+are meant to allow only what the read-back accepts, with one exception they can't see: the edited query, or
+its canonical form, being over the length cap. `test_wordforms.py` holds them to that (a generated query whose
+candidates are refused for any other reason fails it; that is how the operator-word rule was found) and checks
+every subset of the edits a reader can tick, not only all of them.
 
 Not part of `parse` (as `clauses.filter_clauses` is not): the edited string is work `/search` and replay do
 not need. `POST /parse` serves it as `word_forms`.
@@ -35,6 +42,8 @@ not need. `POST /parse` serves it as `word_forms`.
 from __future__ import annotations
 
 import bisect
+import re
+import unicodedata
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -44,6 +53,7 @@ from openproceedings.query.lexer import (
     DOLLARS,
     LATEX_LOOKALIKES,
     MIN_STEM,
+    OPERATOR_WORDS,
     QUOTES,
     Kind,
     Lexeme,
@@ -55,6 +65,7 @@ from openproceedings.query.parser import ParseResult, exact_leaves, exact_name, 
 
 # a run holding one of these may already have LaTeX math or an escape in it: a `$` added there is not offered
 _BACKSLASHES = frozenset({"\\"} | {c for c, to in LATEX_LOOKALIKES.items() if to == "\\"})
+_LOWER_NEAR = re.compile(r"near/[0-9]+")
 _LATEX = DOLLARS | frozenset(LATEX_LOOKALIKES) | _BACKSLASHES
 
 
@@ -66,7 +77,8 @@ class WordForm(BaseModel):
     )
     at: int = Field(
         ge=0,
-        description="The code-point offset in `q` to insert at: the end of the word, or of a phrase's last word.",
+        description="The code-point offset in `q` to insert at: the end of the word, or of a phrase's last word, "
+        "as the lexer ends it, so after any invisible character that joins the word (a zero-width space).",
     )
     insert: str = Field(
         pattern=r"^\$ ?$",
@@ -87,6 +99,13 @@ def _takes_dollar(word: Lexeme, before: int, tokenizer: str) -> bool:
         and not toks[-1].op
         and not tail.pieces
     )
+
+
+def _reads_as_operator(word: Lexeme) -> bool:
+    """Whether the lexer and Scholar mode's phrase grouping know `word` by its text: a lowercase (or
+    full-width) `and`, `or`, `not` or `near/n`. With a `$` it would be another word to both."""
+    key = unicodedata.normalize("NFKC", word.text).casefold()
+    return key in OPERATOR_WORDS or word.text.casefold() in OPERATOR_WORDS or bool(_LOWER_NEAR.fullmatch(key))
 
 
 def _runs(q: str) -> list[int]:
@@ -171,6 +190,8 @@ def _candidates(q: str, ast: Node, result: ParseResult) -> list[tuple[WordForm, 
             if not x.parts:
                 continue
             word, before = x.parts[-1], sum(letters(p.stem or "", tokenizer) for p in x.parts[:-1])
+        elif _reads_as_operator(x):
+            continue
         else:
             word, before = x, 0
         if runs[word.end] >= 0 and _takes_dollar(word, before, tokenizer):

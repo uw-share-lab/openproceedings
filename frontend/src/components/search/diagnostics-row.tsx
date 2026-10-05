@@ -121,6 +121,15 @@ function Actions({ group, props }: { group: Group; props: DiagnosticsRowProps })
 
 const BUTTON = "min-h-6 rounded-sm border px-1.5 text-xs hover:bg-muted";
 
+/** Why a term the notice names has no `$` on offer (spec 02 §Word forms; copy ED-19). */
+const NOT_OFFERED = (
+  <>
+    A term is left as typed when it has too few letters or digits, has a symbol or another{" "}
+    <code className="font-mono">$</code> beside it, or is a lowercase <code className="font-mono">and</code>,{" "}
+    <code className="font-mono">or</code> or <code className="font-mono">not</code>.
+  </>
+);
+
 /**
  * "Add `$`" under the no-stemming notice (TASK-175): the notice's own suggestion, written into the draft at
  * the places the server reported (`word_forms`), for every term or for the ones ticked. Offered only while the
@@ -131,8 +140,16 @@ function WordForms({ props }: { props: DiagnosticsRowProps }) {
   const [choosing, setChoosing] = useState(false);
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const terms = byTerm(props.wordForms);
-  if (!props.textIsDraft || terms.length === 0 || withWordForms(props.text, props.wordForms) === null) {
-    return null;
+  if (!props.textIsDraft || withWordForms(props.text, props.wordForms) === null) return null;
+  if (terms.length === 0) {
+    // the notice names terms, and the server found no place for a `$` (or the query can't grow): say so
+    return (
+      <p className="mt-1 text-muted-foreground">
+        <code className="font-mono">$</code> can&apos;t be added to these terms for you. {NOT_OFFERED} The
+        same happens when the query would be over the length limit with <code className="font-mono">$</code>{" "}
+        added. Type a wildcard yourself where one is valid.
+      </p>
+    );
   }
   const picked = terms.filter((t) => ticked.has(t.term));
   const add = (forms: readonly WordForm[]) => {
@@ -223,8 +240,7 @@ function WordForms({ props }: { props: DiagnosticsRowProps }) {
           </p>
           <p className="text-muted-foreground">
             A term the notice names that is not listed here can&apos;t take{" "}
-            <code className="font-mono">$</code> as typed: it has too few letters or digits, or a symbol or
-            another <code className="font-mono">$</code> beside it.
+            <code className="font-mono">$</code> as typed. {NOT_OFFERED}
           </p>
         </fieldset>
       )}

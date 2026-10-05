@@ -1453,7 +1453,7 @@ export interface components {
         WordForm: {
             /**
              * At
-             * @description The code-point offset in `q` to insert at: the end of the word, or of a phrase's last word.
+             * @description The code-point offset in `q` to insert at: the end of the word, or of a phrase's last word, as the lexer ends it, so after any invisible character that joins the word (a zero-width space).
              */
             at: number;
             /**

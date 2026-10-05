@@ -122,8 +122,9 @@ describe("the sections", () => {
     expect(text).toContain("offers Add $: it writes $ after every listed term that can take one");
     expect(text).toContain("A phrase gets it on its last word.");
     expect(text).toContain(
-      `terms with fewer than ${golden.constants.min_wildcard_stem} letters or digits, terms that end in a symbol and filter values are left as typed`,
+      `terms with fewer than ${golden.constants.min_wildcard_stem} letters or digits, terms that end in a symbol or have another $ beside them, a lowercase and, or or not, and filter values are left as typed`,
     );
+    expect(text).toContain("the notice says so and offers nothing");
     expect(text).toContain("Nothing is searched until you press Search");
     expect(text).toContain("benchmark$ matches benchmark and benchmarks, not benchmarking");
     expect(text).toContain("fewer forms than Google Scholar counts");

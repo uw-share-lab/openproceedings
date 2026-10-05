@@ -41,7 +41,8 @@ Normalize the stem first with `normalize.py` (`LLM$` → stem `llm`). Then, for 
 PoP's `$` gets the WoS reading above, with a notice in `translations[]`. See
 `.claude/skills/scholar-syntax-compat/SKILL.md`. The UI's "Add `$`" (TASK-175) writes `$` into the query text
 at the places `/parse` reports (`word_forms`, spec 02 §Word forms): the last word of a phrase, never a stem
-under 3, never after a symbol, never a second `$` in an unspaced run (it would close LaTeX math:
+under 3, never after a symbol, never on a lowercase `and`/`or`/`not`/`near/n` (the lexer's warning and
+Scholar mode's phrase grouping go by the word's text), never a second `$` in an unspaced run (it would close LaTeX math:
 `(model$|LLM$)`; the report asks for `$` and a space there). It is an explicit wildcard like any other,
 not an expansion the engine adds.
 
