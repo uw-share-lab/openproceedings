@@ -39,7 +39,11 @@ Normalize the stem first with `normalize.py` (`LLM$` → stem `llm`). Then, for 
 
 ## Scholar/PoP mode
 PoP's `$` gets the WoS reading above, with a notice in `translations[]`. See
-`.claude/skills/scholar-syntax-compat/SKILL.md`.
+`.claude/skills/scholar-syntax-compat/SKILL.md`. The UI's "Add `$`" (TASK-175) writes `$` into the query text
+at the places `/parse` reports (`word_forms`, spec 02 §Word forms): the last word of a phrase, never a stem
+under 3, never after a symbol, never a second `$` in an unspaced run (it would close LaTeX math:
+`(model$|LLM$)`; the report asks for `$` and a space there). It is an explicit wildcard like any other,
+not an expansion the engine adds.
 
 ## Budget
 Up to 200 terms must expand in **< 50 ms** (spec 03 §Performance). Stream the FST by prefix. Never scan the

@@ -47,6 +47,7 @@ from openproceedings.ingest.record import Urls
 from openproceedings.ingest.snapshot import RecordFile
 from openproceedings.query.clauses import filter_clauses
 from openproceedings.query.parser import Mode
+from openproceedings.query.wordforms import word_forms
 from openproceedings.search import Hit as Found
 from openproceedings.search import expansions_json, run
 
@@ -72,6 +73,7 @@ def parse_query(request: Request, engine: EngineDep, body: ParseRequest) -> Pars
         errors=result.errors,
         translations=result.translations,
         filters=filter_clauses(body.q, result),
+        word_forms=word_forms(body.q, result),
     )
 
 

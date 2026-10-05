@@ -427,6 +427,7 @@ export function SearchWorkspace({
           }
           text={shown.text}
           textIsDraft={shown.text === draft.text}
+          wordForms={shown.parsed?.word_forms ?? []}
           nativeMode={draft.mode === "native"}
           searchedAs={!shownDirty ? (shown.parsed?.canonical ?? null) : null}
           treeAvailable={shown.parsed != null && shown.parsed.effective_ast !== null}

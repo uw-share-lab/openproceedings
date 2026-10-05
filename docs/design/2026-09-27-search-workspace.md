@@ -275,7 +275,9 @@ Component rules:
   S7). It is never applied automatically.
 - **Translations** (Scholar mode) get their own row, before the warnings, headed "Read as native syntax:",
   one line per translation message, then `Searched as: <canonical>` in monospace with **Copy**. `COMPAT_NO_STEMMING`
-  is one line naming the terms (the server already lists them).
+  is one line naming the terms (the server already lists them), with **Add `$`** under it while the editor
+  holds the text it was reported for (TASK-175; spec 05 §Components 1, copy ED-19): "Add $ to all N terms",
+  and **Choose terms** for a subset. Like Load with parentheses it edits the draft and never searches.
 - **Expansion chips**: one line per wildcard key of `query.expansions`, `stem → term, term, …`. Show the
   first 8, then `+N more` (a button, ≥24×24 px) that expands the line in place to the full list; never
   truncate without `+N`. A wildcard that expanded to **0 terms** reads `model$ → (no indexed words)` so a

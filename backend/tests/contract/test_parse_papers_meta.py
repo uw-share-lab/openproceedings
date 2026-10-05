@@ -16,6 +16,7 @@ from openproceedings.query.ast import FILTER_FIELDS
 from openproceedings.query.clauses import filter_clauses
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import MAX_QUERY_LENGTH, parse
+from openproceedings.query.wordforms import word_forms
 from openproceedings.vocab import STATUSES, TRACKS, VENUES, venue_name
 
 from tests.contract.conftest import SECRET, Store, make_app
@@ -63,6 +64,8 @@ def test_parse_is_02s_parse_result_without_identification_ast_plus_filters(
     expected = result.model_dump(mode="json", exclude={"identification_ast", "tokenizer_version"})
     filters = filter_clauses(q, result)  # TASK-078: served beside the ParseResult
     expected["filters"] = None if filters is None else filters.model_dump(mode="json")
+    forms = word_forms(q, result)  # TASK-175: served beside it too
+    expected["word_forms"] = None if forms is None else [f.model_dump(mode="json") for f in forms]
     assert {k: v for k, v in body.items() if k not in VERSIONS} == expected
 
 

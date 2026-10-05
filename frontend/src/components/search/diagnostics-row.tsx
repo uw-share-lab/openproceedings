@@ -4,9 +4,11 @@
  * The diagnostics row (spec 05 §Components 1; ui-design-system §Transparency; design W3, W5–W7; copy ED-8–17).
  * Errors, then the translations ("Read as native syntax:"), then warnings, each in span order, every message
  * the server's, verbatim. A code that repeats is one line ("9 ×", the first message, "Show all 9"). Each line has
- * a Help link, and three codes carry an action: `WARN_MIXED_AND_OR` (Show how it was read, when the tree can
- * render; Load with parentheses, when it has a reading), `FIELD_COMPAT_ONLY` (Read as Google Scholar syntax)
- * and `WILDCARD_TOO_MANY_EXPANSIONS` (why it appeared only after Search). The row is absent when there is nothing to say.
+ * a Help link, and four codes carry an action: `WARN_MIXED_AND_OR` (Show how it was read, when the tree can
+ * render; Load with parentheses, when it has a reading), `FIELD_COMPAT_ONLY` (Read as Google Scholar syntax),
+ * `WILDCARD_TOO_MANY_EXPANSIONS` (why it appeared only after Search) and `COMPAT_NO_STEMMING` (Add `$`, to
+ * every term the server says can take one or to the ones ticked: an edit of the draft, never a search;
+ * TASK-175). The row is absent when there is nothing to say.
  */
 import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
@@ -19,6 +21,8 @@ import {
   type Item,
   type Severity,
 } from "@/editor/diagnostics";
+import { clip } from "@/lib/clip";
+import { byTerm, withWordForms, type WordForm } from "@/lib/word-forms";
 
 const GLYPH: Readonly<Record<Severity, { glyph: string; prefix: string; className: string }>> = {
   error: { glyph: "✖", prefix: "Error:", className: "text-diag-error" },
@@ -37,6 +41,8 @@ export interface DiagnosticsRowProps {
   /** The text the items were reported for, and whether it is still the editor's text. */
   readonly text: string;
   readonly textIsDraft: boolean;
+  /** `/parse`'s `word_forms` for `text`: where a `$` can be added to the terms `COMPAT_NO_STEMMING` names. */
+  readonly wordForms: readonly WordForm[];
   /** The draft is read as native syntax, so "Read as Google Scholar syntax" can be offered. */
   readonly nativeMode: boolean;
   /** The canonical string the translations produced ("Searched as:"), when the row is the searched query's. */
@@ -113,6 +119,119 @@ function Actions({ group, props }: { group: Group; props: DiagnosticsRowProps })
   return <span className="ml-2 inline-flex flex-wrap items-center gap-2 align-middle">{buttons}</span>;
 }
 
+const BUTTON = "min-h-6 rounded-sm border px-1.5 text-xs hover:bg-muted";
+
+/**
+ * "Add `$`" under the no-stemming notice (TASK-175): the notice's own suggestion, written into the draft at
+ * the places the server reported (`word_forms`), for every term or for the ones ticked. Offered only while the
+ * editor still holds the text the forms were reported for.
+ */
+function WordForms({ props }: { props: DiagnosticsRowProps }) {
+  const id = useId();
+  const [choosing, setChoosing] = useState(false);
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
+  const terms = byTerm(props.wordForms);
+  if (!props.textIsDraft || terms.length === 0 || withWordForms(props.text, props.wordForms) === null) {
+    return null;
+  }
+  const picked = terms.filter((t) => ticked.has(t.term));
+  const add = (forms: readonly WordForm[]) => {
+    const text = withWordForms(props.text, forms);
+    if (text === null) return;
+    setTicked(new Set());
+    props.onLoad(text);
+  };
+  const n = terms.length.toLocaleString("en-US");
+  return (
+    <div className="mt-1 space-y-1.5">
+      <p className="text-muted-foreground">
+        <code className="font-mono">$</code> after a term also matches it with one more letter or digit:{" "}
+        <code className="font-mono">benchmark$</code> matches <code className="font-mono">benchmark</code> and{" "}
+        <code className="font-mono">benchmarks</code>, not <code className="font-mono">benchmarking</code>.
+        That is fewer forms than Google Scholar counts; type <code className="font-mono">*</code> for any
+        ending.
+      </p>
+      <p className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className={BUTTON}
+          aria-describedby={`${id}-all`}
+          onClick={() => add(props.wordForms)}
+        >
+          {terms.length === 1 ? "Add $ to 1 term" : `Add $ to all ${n} terms`}
+        </button>
+        <span id={`${id}-all`} className="sr-only">
+          Puts $ in the editor after each term this notice names that can take one. A phrase gets it on its
+          last word. Nothing is searched until you press Search.
+        </span>
+        {terms.length > 1 && (
+          <button
+            type="button"
+            className={BUTTON}
+            aria-expanded={choosing}
+            aria-controls={`${id}-terms`}
+            onClick={() => setChoosing(!choosing)}
+          >
+            Choose terms
+          </button>
+        )}
+      </p>
+      {terms.length > 1 && choosing && (
+        <fieldset id={`${id}-terms`} className="space-y-1 rounded-sm border px-2 pb-2">
+          <legend className="px-1 text-xs font-semibold">Add $ to</legend>
+          <ul className="flex flex-wrap gap-x-4 gap-y-0.5">
+            {terms.map(({ term, forms }) => (
+              <li key={term}>
+                <label className="flex min-h-6 items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="size-4 shrink-0"
+                    checked={ticked.has(term)}
+                    onChange={(e) => {
+                      const next = new Set(ticked);
+                      if (e.target.checked) next.add(term);
+                      else next.delete(term);
+                      setTicked(next);
+                    }}
+                  />
+                  <span>
+                    <code className="font-mono">{clip(term)}</code>
+                    {term.includes(" ") && " (phrase: on its last word)"}
+                    {forms.length > 1 && ` (written ${forms.length.toLocaleString("en-US")} times)`}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <p className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={`${BUTTON} ${picked.length === 0 ? "opacity-60" : ""}`}
+              aria-disabled={picked.length === 0 ? true : undefined}
+              aria-describedby={`${id}-picked`}
+              onClick={() => {
+                if (picked.length > 0) add(picked.flatMap((t) => t.forms));
+              }}
+            >
+              Add $ to the ticked terms
+            </button>
+            <span id={`${id}-picked`} className="sr-only">
+              {picked.length === 0
+                ? "Tick at least one term first."
+                : "Puts $ in the editor after each ticked term. Nothing is searched until you press Search."}
+            </span>
+          </p>
+          <p className="text-muted-foreground">
+            A term the notice names that is not listed here can&apos;t take{" "}
+            <code className="font-mono">$</code> as typed: it has too few letters or digits, or a symbol or
+            another <code className="font-mono">$</code> beside it.
+          </p>
+        </fieldset>
+      )}
+    </div>
+  );
+}
+
 function Line({ group, props }: { group: Group; props: DiagnosticsRowProps }) {
   const [all, setAll] = useState(false);
   const { glyph, prefix, className } = GLYPH[group.severity];
@@ -128,6 +247,7 @@ function Line({ group, props }: { group: Group; props: DiagnosticsRowProps }) {
       {n > 1 && <span className="font-semibold tabular-nums">{n.toLocaleString("en-US")} × </span>}
       {first.message}
       <Actions group={group} props={props} />
+      {group.code === "COMPAT_NO_STEMMING" && <WordForms props={props} />}
       {group.code === "WILDCARD_TOO_MANY_EXPANSIONS" && (
         <span className="block text-muted-foreground">
           Only a search can count expansions, so this appears after Search, not while typing.

@@ -1,0 +1,346 @@
+{
+ "_generated": "by (cd backend && uv run python -m tests.contract.test_frontend_word_forms_golden --write); do not edit",
+ "cases": [
+  {
+   "name": "words",
+   "q": "LLM benchmark",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `llm`, `benchmark` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `llm$`).",
+   "word_forms": [
+    {
+     "term": "llm",
+     "at": 3,
+     "insert": "$"
+    },
+    {
+     "term": "benchmark",
+     "at": 13,
+     "insert": "$"
+    }
+   ],
+   "all": "LLM$ benchmark$",
+   "each": [
+    "LLM$ benchmark",
+    "LLM benchmark$"
+   ]
+  },
+  {
+   "name": "phrase: last word only",
+   "q": "(\"large language model\" OR LLM) trust",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `large language model`, `llm`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `model$`).",
+   "word_forms": [
+    {
+     "term": "large language model",
+     "at": 22,
+     "insert": "$"
+    },
+    {
+     "term": "llm",
+     "at": 30,
+     "insert": "$"
+    },
+    {
+     "term": "trust",
+     "at": 37,
+     "insert": "$"
+    }
+   ],
+   "all": "(\"large language model$\" OR LLM$) trust$",
+   "each": [
+    "(\"large language model$\" OR LLM) trust",
+    "(\"large language model\" OR LLM$) trust",
+    "(\"large language model\" OR LLM) trust$"
+   ]
+  },
+  {
+   "name": "Scholar | item read as a phrase",
+   "q": "(large language model | LLM)",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `large language model`, `llm` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `model$`).",
+   "word_forms": [
+    {
+     "term": "large language model",
+     "at": 21,
+     "insert": "$"
+    },
+    {
+     "term": "llm",
+     "at": 27,
+     "insert": "$"
+    }
+   ],
+   "all": "(large language model$ | LLM$)",
+   "each": [
+    "(large language model$ | LLM)",
+    "(large language model | LLM$)"
+   ]
+  },
+  {
+   "name": "wildcards and filter values are left alone",
+   "q": "model$ bench* trust year:2020..2024 source:PMLR",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `trust` matches only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `trust$`).",
+   "word_forms": [
+    {
+     "term": "trust",
+     "at": 19,
+     "insert": "$"
+    }
+   ],
+   "all": "model$ bench* trust$ year:2020..2024 source:PMLR",
+   "each": [
+    "model$ bench* trust$ year:2020..2024 source:PMLR"
+   ]
+  },
+  {
+   "name": "short stems and symbols are left alone",
+   "q": "AI C++ US$5 \"generative AI\"",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `ai`, `c`, `us 5`, `generative ai` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `ai$`).",
+   "word_forms": [
+    {
+     "term": "generative ai",
+     "at": 26,
+     "insert": "$"
+    }
+   ],
+   "all": "AI C++ US$5 \"generative AI$\"",
+   "each": [
+    "AI C++ US$5 \"generative AI$\""
+   ]
+  },
+  {
+   "name": "two words in one unspaced run",
+   "q": "(model|LLM) trust",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `model`, `llm`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `model$`).",
+   "word_forms": [
+    {
+     "term": "model",
+     "at": 6,
+     "insert": "$ "
+    },
+    {
+     "term": "llm",
+     "at": 10,
+     "insert": "$"
+    },
+    {
+     "term": "trust",
+     "at": 17,
+     "insert": "$"
+    }
+   ],
+   "all": "(model$ |LLM$) trust$",
+   "each": [
+    "(model$ |LLM) trust",
+    "(model|LLM$) trust",
+    "(model|LLM) trust$"
+   ]
+  },
+  {
+   "name": "each place a term is written",
+   "q": "trust OR (trust AND model)",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `trust`, `model` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `trust$`).",
+   "word_forms": [
+    {
+     "term": "trust",
+     "at": 5,
+     "insert": "$"
+    },
+    {
+     "term": "trust",
+     "at": 15,
+     "insert": "$"
+    },
+    {
+     "term": "model",
+     "at": 25,
+     "insert": "$"
+    }
+   ],
+   "all": "trust$ OR (trust$ AND model$)",
+   "each": [
+    "trust$ OR (trust AND model)",
+    "trust OR (trust$ AND model)",
+    "trust OR (trust AND model$)"
+   ]
+  },
+  {
+   "name": "field prefix, NOT and NEAR",
+   "q": "title:trust -bias model NEAR/3 \"language model\"",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `trust`, `bias`, `model`, `language model` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `trust$`).",
+   "word_forms": [
+    {
+     "term": "trust",
+     "at": 11,
+     "insert": "$"
+    },
+    {
+     "term": "bias",
+     "at": 17,
+     "insert": "$"
+    },
+    {
+     "term": "model",
+     "at": 23,
+     "insert": "$"
+    },
+    {
+     "term": "language model",
+     "at": 46,
+     "insert": "$"
+    }
+   ],
+   "all": "title:trust$ -bias$ model$ NEAR/3 \"language model$\"",
+   "each": [
+    "title:trust$ -bias model NEAR/3 \"language model\"",
+    "title:trust -bias$ model NEAR/3 \"language model\"",
+    "title:trust -bias model$ NEAR/3 \"language model\"",
+    "title:trust -bias model NEAR/3 \"language model$\""
+   ]
+  },
+  {
+   "name": "astral letters before the terms",
+   "q": "𝒜𝒜𝒜 (model|LLM) 😀😀trust",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `aaa`, `model`, `llm`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `aaa$`).",
+   "word_forms": [
+    {
+     "term": "aaa",
+     "at": 3,
+     "insert": "$"
+    },
+    {
+     "term": "model",
+     "at": 10,
+     "insert": "$ "
+    },
+    {
+     "term": "llm",
+     "at": 14,
+     "insert": "$"
+    },
+    {
+     "term": "trust",
+     "at": 23,
+     "insert": "$"
+    }
+   ],
+   "all": "𝒜𝒜𝒜$ (model$ |LLM$) 😀😀trust$",
+   "each": [
+    "𝒜𝒜𝒜$ (model|LLM) 😀😀trust",
+    "𝒜𝒜𝒜 (model$ |LLM) 😀😀trust",
+    "𝒜𝒜𝒜 (model|LLM$) 😀😀trust",
+    "𝒜𝒜𝒜 (model|LLM) 😀😀trust$"
+   ]
+  },
+  {
+   "name": "nothing the notice names",
+   "q": "bench* model$",
+   "mode": "scholar",
+   "notice": null,
+   "word_forms": [],
+   "all": "bench* model$",
+   "each": []
+  },
+  {
+   "name": "native syntax has no notice",
+   "q": "LLM benchmark",
+   "mode": "native",
+   "notice": null,
+   "word_forms": [],
+   "all": "LLM benchmark",
+   "each": []
+  },
+  {
+   "name": "a query with errors",
+   "q": "(LLM benchmark",
+   "mode": "scholar",
+   "notice": null,
+   "word_forms": null,
+   "all": null,
+   "each": null
+  },
+  {
+   "name": "the review's primary string",
+   "q": "(\"foundation model\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `foundation model`, `large language model`, `llm`, `generative ai`, `trustworthiness`, `trustworthy`, `trust`, `trustworthy ai` and 3 more match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `model$`).",
+   "word_forms": [
+    {
+     "term": "foundation model",
+     "at": 18,
+     "insert": "$"
+    },
+    {
+     "term": "large language model",
+     "at": 44,
+     "insert": "$"
+    },
+    {
+     "term": "llm",
+     "at": 52,
+     "insert": "$"
+    },
+    {
+     "term": "generative ai",
+     "at": 70,
+     "insert": "$"
+    },
+    {
+     "term": "trustworthiness",
+     "at": 93,
+     "insert": "$"
+    },
+    {
+     "term": "trustworthy",
+     "at": 108,
+     "insert": "$"
+    },
+    {
+     "term": "trust",
+     "at": 118,
+     "insert": "$"
+    },
+    {
+     "term": "trustworthy ai",
+     "at": 138,
+     "insert": "$"
+    },
+    {
+     "term": "benchmark",
+     "at": 155,
+     "insert": "$"
+    },
+    {
+     "term": "leaderboard",
+     "at": 170,
+     "insert": "$"
+    },
+    {
+     "term": "evaluation framework",
+     "at": 195,
+     "insert": "$"
+    }
+   ],
+   "all": "(\"foundation model$\" OR \"large language model$\" OR LLM$ OR \"generative AI$\") AND (trustworthiness$ OR trustworthy$ OR \"trust$\" OR \"trustworthy AI$\") AND (benchmark$ OR leaderboard$ OR \"evaluation framework$\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
+   "each": [
+    "(\"foundation model$\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
+    "(\"foundation model\" OR \"large language model$\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
+    "(\"foundation model\" OR \"large language model\" OR LLM$ OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
+    "(\"foundation model\" OR \"large language model\" OR LLM OR \"generative AI$\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
+    "(\"foundation model\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness$ OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
+    "(\"foundation model\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy$ OR \"trust\" OR \"trustworthy AI\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
+    "(\"foundation model\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust$\" OR \"trustworthy AI\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
+    "(\"foundation model\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI$\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
+    "(\"foundation model\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark$ OR leaderboard OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
+    "(\"foundation model\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark OR leaderboard$ OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
+    "(\"foundation model\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark OR leaderboard OR \"evaluation framework$\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")"
+   ]
+  }
+ ]
+}

@@ -20,6 +20,7 @@ from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import MIN_YEAR, FilterField, Node, TextField
 from openproceedings.query.clauses import ParsedFilters
 from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode
+from openproceedings.query.wordforms import WordForm
 from openproceedings.records import Excluded as Excluded  # one schema for the exclusion accounting
 from openproceedings.records import SearchRecord
 from openproceedings.timestamps import CrawlWindow, Timestamp
@@ -84,8 +85,8 @@ class ParseRequest(Model):
 
 class ParseResponse(Versioned):
     """02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus
-    `filters` (`query.clauses.filter_clauses`, TASK-078). A query with errors is still a 200 here: `errors`
-    holds them, and every Optional is null."""
+    `filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` (`query.wordforms.word_forms`,
+    TASK-175). A query with errors is still a 200 here: `errors` holds them, and every Optional is null."""
 
     mode: Mode
     ast: Node | None  # as typed, spans into q
@@ -102,6 +103,12 @@ class ParseResponse(Versioned):
         "clauses; decision-011): its code-point span in `q` and the values it admits, or a zero-width span at "
         "the end for an applied default or an unrestricted field; `toggleable` false with a `reason` when a "
         "click can't rewrite it. Null exactly when `errors` is non-empty."
+    )
+    word_forms: list[WordForm] | None = Field(
+        description="Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order "
+        "(spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the "
+        "query text the reader triggers and sees. The server has parsed `q` with every one inserted. Empty "
+        "outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty."
     )
 
 

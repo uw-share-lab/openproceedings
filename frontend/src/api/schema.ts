@@ -766,8 +766,8 @@ export interface components {
         /**
          * ParseResponse
          * @description 02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus
-         *     `filters` (`query.clauses.filter_clauses`, TASK-078). A query with errors is still a 200 here: `errors`
-         *     holds them, and every Optional is null.
+         *     `filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` (`query.wordforms.word_forms`,
+         *     TASK-175). A query with errors is still a 200 here: `errors` holds them, and every Optional is null.
          */
         ParseResponse: {
             /** Ast */
@@ -801,6 +801,11 @@ export interface components {
             translations: components["schemas"]["Diagnostic"][];
             /** Warnings */
             warnings: components["schemas"]["Diagnostic"][];
+            /**
+             * Word Forms
+             * @description Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order (spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the query text the reader triggers and sees. The server has parsed `q` with every one inserted. Empty outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty.
+             */
+            word_forms: components["schemas"]["WordForm"][] | null;
         };
         /**
          * ParsedClause
@@ -1443,6 +1448,24 @@ export interface components {
             ];
             /** Stem */
             stem: string;
+        };
+        /** WordForm */
+        WordForm: {
+            /**
+             * At
+             * @description The code-point offset in `q` to insert at: the end of the word, or of a phrase's last word.
+             */
+            at: number;
+            /**
+             * Insert
+             * @description The text to insert at `at`, as it is: `$`, or `$` and a space where another offered word follows in the same unspaced run (`(model|LLM)`), so that the two `$` are not read as LaTeX math.
+             */
+            insert: string;
+            /**
+             * Term
+             * @description The term as the `COMPAT_NO_STEMMING` notice names it: its normalised tokens, a phrase's joined by spaces. One term written in several places has one entry per place.
+             */
+            term: string;
         };
         /** YearRange */
         YearRange: {
