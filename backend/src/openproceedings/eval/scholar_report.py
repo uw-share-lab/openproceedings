@@ -45,21 +45,21 @@ from openproceedings.eval.scholar_compare import (
     ScholarSide,
     Scope,
 )
-from openproceedings.export import _cell as csv_cell  # the one CSV-injection guard: titles come from anyone
+from openproceedings.export import csv_cell  # the one CSV-injection guard: titles come from anyone
 
 SPOT_CHECK = 0.1  # the share of a query's settled disagreements a person re-checks
 REVIEW_COLUMNS = (
     "query_name", "side", "scholar_key", "op_id", "title", "venue", "year", "auto_class", "auto_evidence",
-    "human_class", "reviewer_role", "note", "row_kind", "index_version",
+    "human_class", "reviewer_role", "note", "row_kind", "index_version", "record_source", "abstract_source",
 )  # fmt: skip
 UNRESOLVED, SPOT = "unresolved", "spot_check"
 _MEANING = {
     OUR_BUG: "the oracle and the served engine disagree (must be 0)",
-    FILTERED: "in the corpus; matches once the default track and status filters are removed",
+    FILTERED: "in the corpus; fails the default track or status filters and matches once they are removed",
     COMPAT_READING: "decided by how Scholar mode read the string (decision-002 phrases, `$`), not by the corpus",
     COVERAGE_GAP: "no record in the snapshot by forum id, proceedings id or title+venue+year",
     STEMMING: "matches title or abstract only with an inflected form added",
-    FULL_TEXT: "in the corpus; no reading matches its title or abstract, inflected forms included",
+    FULL_TEXT: "in the corpus with an abstract; no reading matches its title or abstract, inflected forms included",
     UNSETTLED: "the automation can't tell (see the row's evidence)",
     SCHOLAR_CAP: "a Scholar search covering its venue and year returned the result cap",
     SCHOLAR_MISSED: "an exact title or abstract match that the Scholar set lacks",
@@ -122,7 +122,9 @@ def review_rows(comparisons: Sequence[QueryComparison]) -> list[ReviewRow]:
 
 
 def render_review(rows: Sequence[ReviewRow], index_version: str) -> str:
-    """`review.csv`: the protocol's twelve columns, then `row_kind` (why the row is here) and `index_version`."""
+    """`review.csv`: the protocol's twelve columns, then `row_kind` (why the row is here), `index_version`, and
+    what the row's index record rests on: `record_source` (`crawled`, or `ris_only` for a record only an imported
+    RIS set holds) and `abstract_source`."""
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
     writer.writerow(REVIEW_COLUMNS)
@@ -131,6 +133,7 @@ def render_review(rows: Sequence[ReviewRow], index_version: str) -> str:
         cells = (
             x.query_name, r.side, r.scholar_key, r.op_id, r.title, r.venue, "" if r.year is None else r.year,
             r.auto_class, r.auto_evidence, "", "", "", x.kind, index_version,
+            {True: "crawled", False: "ris_only", None: ""}[r.independent], r.abstract_source,
         )  # fmt: skip
         writer.writerow(csv_cell(c) for c in cells)
     return buffer.getvalue()
@@ -163,6 +166,9 @@ class Meta:
     notes_name: str | None = None
     notes_sha256: str | None = None
     query_files: tuple[tuple[str, str], ...] = ()  # (file name, sha256) of each query file read
+    answers: str | None = (
+        None  # the query the Scholar set is the answer to, when the caller says (`--answers`)
+    )
 
 
 def _n(k: int) -> str:
@@ -178,15 +184,26 @@ def _md(text: str) -> str:
     return " ".join(text.split()).replace("|", "\\|")
 
 
-def _class_table(counts: Counter[str], order: Sequence[str], of: int, of_label: str) -> list[str]:
-    total = sum(counts.values())
-    lines = [f"| class | records | of these | of {of_label} | meaning |", "|---|---|---|---|---|"]
+def _class_table(rows: Sequence[Row], order: Sequence[str], of: int, of_label: str) -> list[str]:
+    """Class counts, and under each how many of its records a crawl holds and how many only the imported set."""
+    counts = Counter(r.auto_class for r in rows)
+    crawled = Counter(r.auto_class for r in rows if r.independent is True)
+    imported = Counter(r.auto_class for r in rows if r.independent is False)
+    total = len(rows)
+    lines = [
+        f"| class | records | of these | of {of_label} | crawled record | RIS-only record | meaning |",
+        "|---|---|---|---|---|---|---|",
+    ]
     lines += [
-        f"| `{cls}` | {_n(counts[cls])} | {_pct(counts[cls], total)} | {_pct(counts[cls], of)} | {_MEANING[cls]} |"
+        f"| `{cls}` | {_n(counts[cls])} | {_pct(counts[cls], total)} | {_pct(counts[cls], of)} | {_n(crawled[cls])} "
+        f"| {_n(imported[cls])} | {_MEANING[cls]} |"
         for cls in order
         if counts[cls] or cls == OUR_BUG
     ]
-    lines.append(f"| total | {_n(total)} | {_pct(total, total)} | {_pct(total, of)} | |")
+    lines.append(
+        f"| total | {_n(total)} | {_pct(total, total)} | {_pct(total, of)} | {_n(sum(crawled.values()))} "
+        f"| {_n(sum(imported.values()))} | |"
+    )
     return lines
 
 
@@ -200,10 +217,72 @@ def _row_list(rows: Sequence[Row]) -> list[str]:
     return lines
 
 
+def _provenance(side: ScholarSide, index: MatchIndex, meta: Meta) -> list[str]:
+    """What the matches rest on: per venue and year, the matched papers a crawl holds and those only the imported
+    set holds, beside the crawled records the index has there at all."""
+    matched = [e.match.op_id for e in side.entries if e.match.op_id is not None]
+    own = [i for i in matched if i not in index.independent]
+    cells = sorted({index.cells[i] for i in matched})
+    per = Counter(index.cells[i] for i in matched)
+    per_own = Counter(index.cells[i] for i in own)
+    abstracts = Counter(index.abstracts.get(i, "") for i in matched)
+    years = range(meta.scope.years[0], meta.scope.years[1] + 1) if meta.scope.years else ()
+    empty = [f"{v} {y}" for v in sorted(meta.scope.venues) for y in years if not index.crawled.get((v, y))]
+    shared = [e for e in side.entries if e.match.shared]
+    same_cell = sum(
+        any(index.cells[i] == index.cells[e.match.op_id] for i in e.match.shared)
+        for e in shared
+        if e.match.op_id is not None
+    )
+    lines = [
+        "### What the matches rest on",
+        "",
+        f"Matched to a record with an independent source (a crawl of OpenReview or the proceedings): "
+        f"**{_n(len(matched) - len(own))}**. Matched to a record whose only source is an imported RIS set "
+        f"(RIS-only): **{_n(len(own))}**.",
+        "",
+        "A RIS-only record is in the index because a Scholar set was imported into it. When the set compared here "
+        "is that set, such a match is the set matching itself: it shows nothing about coverage, and the title and "
+        "abstract the classes are judged on are the ones the import carried. Counts below are given for both "
+        "kinds.",
+        "",
+        "| venue | year | matched papers | crawled record | RIS-only record | crawled records the index holds |",
+        "|---|---|---|---|---|---|",
+        *(
+            f"| {v} | {y} | {_n(per[(v, y)])} | {_n(per[(v, y)] - per_own[(v, y)])} | {_n(per_own[(v, y)])} "
+            f"| {_n(index.crawled.get((v, y), 0))} |"
+            for v, y in cells
+        ),
+        "",
+        "Abstract source of the matched records: "
+        + "; ".join(f"`{src or 'unknown'}` {_n(k)}" for src, k in sorted(abstracts.items(), key=lambda x: (-x[1], x[0])))
+        + ". `ris:` is text the import carried (what scholarmend read from the proceedings page or the OpenReview "
+        "API), not a crawl of this project.",
+        "",
+    ]  # fmt: skip
+    if empty:
+        lines += [
+            f"The index holds **no crawled record** for {', '.join(empty)}. There, every match is to a RIS-only "
+            "record, and no record can be only in openproceedings: that side of the comparison is empty by "
+            "construction, not by agreement.",
+            "",
+        ]
+    if shared:
+        lines += [
+            f"{_n(len(shared))} papers matched a RIS-only record whose title key another index record has "
+            f"too ({_n(same_cell)} in the same venue and year: one paper under two ids, so the set can count it "
+            "twice; the others in another venue or year: the import's venue or year may be wrong). The match is "
+            "kept, and each such row that is a disagreement is `unsettled`, for a person.",
+            "",
+        ]
+    return lines
+
+
 def _matching(side: ScholarSide, index: MatchIndex, meta: Meta) -> list[str]:
     rules = Counter((e.match.rule or f"no match ({e.match.problem})").replace("_", " ") for e in side.entries)
     reasons = Counter(d.reason for d in side.out_of_scope)
     largest = max(side.searches.values(), default=0)
+    unvenued = sum(e.match.problem == "no_venue" for e in side.entries)
     lines = [
         "## Matching the Scholar set to the index",
         "",
@@ -219,41 +298,34 @@ def _matching(side: ScholarSide, index: MatchIndex, meta: Meta) -> list[str]:
         f"| outside the scope ({meta.scope.describe()}) | {_n(len(side.out_of_scope))} |",
         f"| in scope | {_n(side.read - len(side.out_of_scope))} |",
         f"| repeats of a paper already counted | {_n(side.duplicates)} |",
-        f"| **papers in scope** | **{_n(len(side.entries))}** |",
+        f"| **papers in scope** (the denominator of every percentage of the Scholar set) | **{_n(len(side.entries))}** |",
         "",
         "| matched by | papers |",
         "|---|---|",
         *(f"| {rule} | {_n(k)} |" for rule, k in sorted(rules.items(), key=lambda x: (-x[1], x[0]))),
         "",
     ]  # fmt: skip
+    if unvenued:
+        lines += [
+            f"`no match (no venue)`: {_n(unvenued)} records whose venue string is not a venue (Scholar cut it, or "
+            "left it out) and whose URLs name no indexed paper, but whose title key an in-scope index record has. "
+            "A title alone is never a match, so they are counted in scope and listed as `unsettled` for a person, "
+            "with that record named.",
+            "",
+        ]
     if reasons:
         by_venue = Counter(d.record.venue_raw or "(no venue)" for d in side.out_of_scope)
         lines += [
             "Outside the scope: "
             + "; ".join(f"{_n(k)} {reason.replace('_', ' ')}" for reason, k in sorted(reasons.items()))
             + ". `venue unrecognised` means the record's venue string is not exactly one of Scholar mode's source "
-            "names (Scholar cuts long venue names with `…`) and no URL of it names an indexed paper. Venue strings: "
+            "names (Scholar cuts long venue names with `…`), no URL of it names an indexed paper, and no in-scope "
+            "index record has its title. Venue strings: "
             + "; ".join(f"{_md(v)} ({k})" for v, k in sorted(by_venue.items(), key=lambda x: (-x[1], x[0])))
             + ".",
             "",
         ]
-    near = [d for d in side.out_of_scope if d.near]
-    if near:
-        lines += [
-            f"{_n(len(near))} of them share a title key with an in-scope index record. That is never a match "
-            "(no venue to check it against); a person may want to look:",
-            "",
-            "| Scholar record | title | venue string | year | index record with that title |",
-            "|---|---|---|---|---|",
-            *(
-                f"| `{d.record.key}` | {_md(d.record.title)} | {_md(d.record.venue_raw) or '—'} "
-                f"| {d.record.year or '—'} | "
-                + ", ".join(f"`{i}` ({index.cells[i][0]} {index.cells[i][1]})" for i in d.near)
-                + " |"
-                for d in near
-            ),
-            "",
-        ]
+    lines += _provenance(side, index, meta)
     lines += [
         f"Scholar searches in the set (Publish or Perish query dates): {_n(len(side.searches))}; the largest holds "
         f"{_n(largest)} records. Google Scholar returns at most {_n(SCHOLAR_CAP_RESULTS)} per search; a search at "
@@ -268,14 +340,26 @@ def _matching(side: ScholarSide, index: MatchIndex, meta: Meta) -> list[str]:
     return lines
 
 
-def _query(c: QueryComparison, review: Sequence[ReviewRow]) -> list[str]:
+def _other_set(c: QueryComparison, meta: Meta) -> str | None:
+    """The caveat for a query the Scholar set is not the answer to."""
+    if meta.answers is None or meta.answers == c.name:
+        return None
+    return (
+        f"The Scholar set is Google Scholar's answer to `{meta.answers}`, not to this string. The numbers below "
+        "are what this string keeps, drops and adds against that set; they say nothing about what Scholar would "
+        "return for it."
+    )
+
+
+def _query(c: QueryComparison, review: Sequence[ReviewRow], meta: Meta) -> list[str]:
     only = c.counts("scholar")
-    extra = c.counts("openproceedings")
+    scholar_rows = [r for r in c.disagreements if r.side == "scholar"]
     unresolved = sum(x.query_name == c.name and x.kind == UNRESOLVED for x in review)
     spot = sum(x.query_name == c.name and x.kind == SPOT for x in review)
-    lines = [
-        f"## Query `{c.name}`",
-        "",
+    lines = [f"## Query `{c.name}`", ""]
+    if (caveat := _other_set(c, meta)) is not None:
+        lines += [caveat, ""]
+    lines += [
         f"Run in `mode={c.mode}`, exactly as written (`canonical_hash` `{c.canonical_hash}`):",
         "",
         "```",
@@ -308,23 +392,27 @@ def _query(c: QueryComparison, review: Sequence[ReviewRow]) -> list[str]:
             "it is not a record either side missed.",
             "",
         ]
+    kept_own = sum(r.independent is False for r in c.kept)
     lines += [
         "| | records |",
         "|---|---|",
         f"| Scholar set, in scope | {_n(c.scholar_in_scope)} |",
         f"| openproceedings `total` (default filters; every venue and year) | {_n(c.total)} |",
         f"| openproceedings, in scope | {_n(c.in_scope)} |",
-        f"| in both | {_n(len(c.kept))} |",
+        f"| in both | {_n(len(c.kept))} ({_n(len(c.kept) - kept_own)} crawled records, {_n(kept_own)} RIS-only) |",
         f"| only in the Scholar set | {_n(len(c.only_scholar))} |",
         f"| only in openproceedings | {_n(len(c.added))} |",
         "",
         "### Only in the Scholar set",
         "",
-        *_class_table(only, ONLY_SCHOLAR, c.scholar_in_scope, "the Scholar set"),
+        *_class_table(scholar_rows, ONLY_SCHOLAR, c.scholar_in_scope, "the Scholar set"),
+        "",
+        "`crawled record` and `RIS-only record` say what the row's index record rests on (a row with no index "
+        "record is in neither).",
         "",
         "### Only in openproceedings",
         "",
-        *_class_table(extra, ONLY_OP, c.in_scope, "the result"),
+        *_class_table(c.added, ONLY_OP, c.in_scope, "the result"),
         "",
         f"`our_bug`: **{c.our_bug}**. Rows for a person in `review.csv`: {_n(unresolved)} unresolved, {_n(spot)} "
         "spot check.",
@@ -357,12 +445,29 @@ def _query(c: QueryComparison, review: Sequence[ReviewRow]) -> list[str]:
         lines += ["### Scholar-only records listed", "", *_row_list(listed), ""]
     if c.added:
         lines += ["### Records only in openproceedings", "", *_row_list(c.added), ""]
-    full, stem = only[FULL_TEXT], only[STEMMING]
+    full_rows = [r for r in scholar_rows if r.auto_class == FULL_TEXT]
+    full, stem = len(full_rows), only[STEMMING]
+    full_own = sum(r.independent is False for r in full_rows)
+    full_filtered = sum(r.fails_filters for r in full_rows)
+    prefix = (
+        "not computed: a prefix expands past the engine's cap"
+        if c.full_text_by_prefix is None
+        else f"{_n(c.full_text_by_prefix)} of the {_n(full)} ({_pct(c.full_text_by_prefix, full)})"
+    )
     lines += [
         f"**Finding.** Of the {_n(c.scholar_in_scope)} in-scope papers of the Scholar set, {_n(full)} "
         f"({_pct(full, c.scholar_in_scope)}) match this string nowhere in title or abstract, inflected forms "
         f"included (`full_text`), and {_n(stem)} ({_pct(stem, c.scholar_in_scope)}) match only through an inflected "
         f"form (`stemming`). {_n(len(c.kept))} ({_pct(len(c.kept), c.scholar_in_scope)}) are in the exact result.",
+        "",
+        f"- Of the {_n(full)} `full_text` papers, {_n(full - full_own)} rest on a crawled record and {_n(full_own)} "
+        "on a RIS-only record, whose title and abstract are the import's own.",
+        f"- {_n(full_filtered)} of them also fail the default track or status filters.",
+        f"- **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in (see Method); "
+        f"which stemmer stands for Scholar's is an open decision for the project owner. Under the widest suffix "
+        f"reading, every searched word as a prefix (`word*`), {prefix} `full_text` papers would match title or "
+        "abstract. That is how far a stemmer that only strips or adds endings could move this count; it is "
+        "not a bound for one that rewrites the stem.",
         "",
     ]
     return lines
@@ -372,21 +477,30 @@ _METHOD = """## Method
 
 - **Order of the tests** (scholar-comparison-protocol). Only in the Scholar set: `our_bug`, `filtered`,
   `compat_reading`, `coverage_gap`, `stemming`, then `full_text`. Only in openproceedings: `our_bug`, `scholar_cap`,
-  `compat_reading`, then `scholar_missed`. A record gets the first class whose test it passes; a second cause is
-  named in its evidence (`also filtered`).
-- **Oracle.** Every class rests on `ReferenceEngine`, built over the compared records: each matched paper of the
-  Scholar set and each in-scope match of the served index. `our_bug` counts every compared record on which the
-  oracle and the served index disagree about the query as run.
+  `compat_reading`, then `scholar_missed`. A record gets the first class whose test it passes, and a second cause
+  is named in its evidence. The filters come before the text: a record that fails the default track or status
+  filters and matches with them removed, as run, as Scholar reads the string or with an inflected form, is
+  `filtered`, and its evidence says which (`also stemming`, `also compat_reading`).
+- **Oracle.** Every class rests on `ReferenceEngine`, built over the compared records only: each matched paper of
+  the Scholar set and each in-scope match of the served index. A wildcard (`$`, `*`) therefore expands over the
+  compared records' vocabulary, not the snapshot's; for these records the matches are the same. `our_bug` counts
+  every compared record on which the oracle and the served index disagree about the query as run. A record
+  neither side holds is not compared, so a disagreement about one is outside this report (the differential suite
+  covers it).
 - **`compat_reading`.** The string is rewritten as Google Scholar reads it (`$` is no wildcard; an unquoted
   multi-word `|` item is separate words, with `|` binding tighter than juxtaposition) and run again. The evidence
   names the rewrite that decides the record.
 - **`stemming`.** Each searched word also matches its other English inflections found in the compared records:
   plural or third-person `s`/`es`/`ies`, `ed`, `ing` (`eval.scholar_compare.inflection_stem`). Inflection only: no
-  derivation (`trustworthy` is not a form of `trust`). Google Scholar's stemmer is undocumented, so this is a
-  stated stand-in; it errs towards `stemming` (it pairs `suite` with `suit`), which keeps `full_text` a lower
-  bound. Quoted words get forms too, for the same reason.
+  derivation (`trustworthy` is not a form of `trust`), and it over-pairs in places (`suite` with `suit`). Google
+  Scholar's stemmer is undocumented, so this is a stated stand-in, not Scholar's rule; quoted words get forms too.
+  A wider stemmer would move papers from `full_text` to `stemming`; each query's sensitivity line says how many
+  a prefix reading of every word would move.
 - **`full_text`** is the residue: the record is in the corpus with an abstract, and the oracle confirms that no
-  reading above matches its title or abstract. A record the corpus holds without an abstract is `unsettled`.
+  reading above matches its title or abstract. It may also fail the filters (counted under each finding). A
+  record the corpus holds without an abstract is `unsettled`.
+- **Provenance.** Each row says whether its index record has an independent source or only an imported RIS set
+  (`crawled record`, `RIS-only record`), and `review.csv` carries it with the abstract's source.
 - **`scholar_missed`** rows all go to `review.csv`: a person confirms the exact tokens are in the title or abstract.
 - **`coverage_gap`** rows all go to `review.csv` too: a record the corpus lacks and a record Scholar filed under
   the wrong venue or year look the same to the matching, so a person checks each against the coverage report.
@@ -405,6 +519,9 @@ def render(
     """The report's Markdown."""
     bugs = sum(c.our_bug for c in comparisons)
     unresolved = sum(x.kind == UNRESOLVED for x in review)
+    matched = [e.match.op_id for e in side.entries if e.match.op_id is not None]
+    own = sum(i not in index.independent for i in matched)
+    others = [c.name for c in comparisons if meta.answers is not None and c.name != meta.answers]
     lines = [
         f"# Scholar comparison, {meta.date.isoformat()}",
         "",
@@ -425,22 +542,36 @@ def render(
             else ". Each one is a Must-fix with a golden case before this report is cited (spec 07 §Error handling)."
         ),
         "",
+        f"**What the matches rest on.** Of the {_n(len(side.entries))} in-scope papers of the Scholar set, "
+        f"{_n(len(matched))} match an index record: {_n(len(matched) - own)} a record with an independent source "
+        f"(a crawl), {_n(own)} a record whose only source is an imported RIS set. A match of the second kind is the "
+        "set matching its own import, and says nothing about coverage (see Matching).",
+        "",
         "| query | Scholar set in scope | openproceedings in scope | both | only Scholar | only openproceedings "
-        "| `full_text` | `stemming` | unresolved |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| `full_text` | of them RIS-only | `stemming` | unresolved |",
+        "|---|---|---|---|---|---|---|---|---|---|",
         *(
-            f"| `{c.name}` | {_n(c.scholar_in_scope)} | {_n(c.in_scope)} | {_n(len(c.kept))} "
-            f"| {_n(len(c.only_scholar))} | {_n(len(c.added))} "
+            f"| `{c.name}`{' †' if c.name in others else ''} | {_n(c.scholar_in_scope)} | {_n(c.in_scope)} "
+            f"| {_n(len(c.kept))} | {_n(len(c.only_scholar))} | {_n(len(c.added))} "
             f"| {_n(c.counts('scholar')[FULL_TEXT])} ({_pct(c.counts('scholar')[FULL_TEXT], c.scholar_in_scope)}) "
+            f"| {_n(sum(r.auto_class == FULL_TEXT and r.independent is False for r in c.dropped))} "
             f"| {_n(c.counts('scholar')[STEMMING])} ({_pct(c.counts('scholar')[STEMMING], c.scholar_in_scope)}) "
             f"| {_n(sum(not r.settled for r in c.disagreements))} |"
             for c in comparisons
         ),
         "",
-        *_matching(side, index, meta),
     ]
+    if others:
+        lines += [
+            f"† The Scholar set is Google Scholar's answer to `{meta.answers}` only. For "
+            + ", ".join(f"`{n}`" for n in others)
+            + " the columns are what the string keeps, drops and adds against that same set, not a comparison with "
+            "what Scholar returns for it.",
+            "",
+        ]
+    lines += _matching(side, index, meta)
     for c in comparisons:
-        lines += _query(c, review)
+        lines += _query(c, review, meta)
     lines += [_METHOD]
     if meta.notes:
         lines += ["## Notes on these inputs", "", meta.notes.strip(), ""]

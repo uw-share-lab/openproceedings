@@ -38,9 +38,11 @@ from openproceedings.eval.scholar_report import (
     write,
 )
 from openproceedings.ingest.dedup import DedupResult
+from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import render as render_snapshot
 
-from tests.unit.test_scholar_compare import NAME, POP, QUERY, SET, compare, corpus, entry, nid
+from tests.unit.ingest.test_dedup import paper
+from tests.unit.test_scholar_compare import NAME, POP, QUERY, SET, compare, corpus, entry, imported, nid
 
 DAY = date(2026, 10, 4)
 BUILT = datetime(2026, 9, 29, tzinfo=UTC)
@@ -164,15 +166,15 @@ def test_header_names_every_input_the_numbers_depend_on() -> None:
 def test_the_tables_hold_the_runs_counts_and_percentages() -> None:
     lines = report(compare(QUERY, SET, corpus(), scope=META.scope)).splitlines()
     for line in (
-        "| `q` | 8 | 2 | 1 | 7 | 1 | 1 (12.5%) | 2 (25.0%) | 3 |",  # the summary row
+        "| `q` | 8 | 2 | 1 | 7 | 1 | 1 (12.5%) | 0 | 1 (12.5%) | 3 |",  # the summary row
         "| read | 8 |",
-        "| **papers in scope** | **8** |",
+        "| **papers in scope** (the denominator of every percentage of the Scholar set) | **8** |",
         "| title venue year | 6 |",
         "| forum id | 1 |",
         "| no match (not found) | 1 |",
         "| Scholar set, in scope | 8 |",
         "| openproceedings `total` (default filters; every venue and year) | 2 |",
-        "| in both | 1 |",
+        "| in both | 1 (1 crawled records, 0 RIS-only) |",
         "| only in the Scholar set | 7 |",
         "| only in openproceedings | 1 |",
         '| 1. `(llm OR "foundation model")` | 4 | 6 |',
@@ -183,15 +185,15 @@ def test_the_tables_hold_the_runs_counts_and_percentages() -> None:
         for ln in lines
         if ln.startswith("| `")
     }
-    assert by_class["`filtered`"] == ["2", "28.6%", "25.0%"]
-    assert by_class["`stemming`"] == ["2", "28.6%", "25.0%"]
+    assert by_class["`filtered`"] == ["3", "42.9%", "37.5%"]
+    assert by_class["`stemming`"] == ["1", "14.3%", "12.5%"]
     assert by_class["`full_text`"] == ["1", "14.3%", "12.5%"]
     assert by_class["`coverage_gap`"] == ["1", "14.3%", "12.5%"]
     assert by_class["`scholar_missed`"] == ["1", "100.0%", "50.0%"]
     assert by_class["`our_bug`"] == ["0", "0.0%", "0.0%"]  # always shown: it must be 0
     assert (
         "**Finding.** Of the 8 in-scope papers of the Scholar set, 1 (12.5%) match this string nowhere in title or "
-        "abstract, inflected forms included (`full_text`), and 2 (25.0%) match only through an inflected form "
+        "abstract, inflected forms included (`full_text`), and 1 (12.5%) match only through an inflected form "
         "(`stemming`). 1 (12.5%) are in the exact result."
     ) in lines
 
@@ -307,7 +309,7 @@ def test_op_eval_scholar_writes_the_report_and_the_review_rows(
     ]
     text = (out / "2026-10-04-scholar-comparison.md").read_text(encoding="utf-8")
     assert f"`index_version` `{index_name(data_dir)}`" in text and "- Queries: `main`, `pop`" in text
-    assert "| `main` | 8 | 2 | 1 | 7 | 1 | 1 (12.5%) | 2 (25.0%) | 3 |" in text  # the served index agrees
+    assert "| `main` | 8 | 2 | 1 | 7 | 1 | 1 (12.5%) | 0 | 1 (12.5%) | 3 |" in text  # the served index agrees
     assert "**`our_bug`: 0** across 2 queries." in text
     assert (
         f"- Command: `op eval scholar --ris set.ris --query-file strings.txt --years 2020..2026 --index "
@@ -383,3 +385,150 @@ def test_the_default_strings_are_the_trust_evals_fixture(
     assert "- Queries: `main-7-most-updated`, `main-2-pop`" in text
     assert "- Query file: `trust-evals.txt`, sha256 `" in text
     assert "**Decision-002.** This string has 10 unquoted multi-word `|` items." in text  # main-2-pop (AC 3)
+
+
+# --- review round 2: provenance, denominators, the stemmer's sensitivity, the set's own string -----------------
+
+
+def own_import() -> tuple[str, list[PaperRecord]]:
+    """A set whose 2026 papers the index holds only because the set was imported into it."""
+    records = [
+        paper("crwl0001", "LLM trust benchmark", abstract="An abstract."),
+        paper("crwl0002", "Graph theory", track="workshop", abstract="No query word."),
+        paper("crwl0003", "LLM trustworthiness benchmark", abstract="An abstract."),
+        imported("ris00001", "Graph networks", abstract="The import's own text.", year=2026),
+        imported("ris00002", "Another LLM trust benchmark", abstract="The import's own text.", year=2026),
+        imported("ris00003", "Graph theory", abstract="The import's own text.", year=2026),
+    ]
+    text = (
+        entry("LLM trust benchmark")
+        + entry("Graph theory")
+        + entry("LLM trustworthiness benchmark")
+        + entry("Graph networks", year=2026)
+        + entry("Another LLM trust benchmark", year=2026)
+        + entry("Graph theory", year=2026)
+        + entry("Graph theory", venue="… Information Processing …", year=2026)
+    )
+    return text, records
+
+
+def own_report(meta: Meta = META) -> str:
+    text, records = own_import()
+    index = MatchIndex.build(records)
+    side = scope_and_match(read_ris(text, NAME), index, meta.scope)
+    c = compare(QUERY, text, records, scope=meta.scope)
+    return render(meta, side, index, [c], review_rows([c]))
+
+
+def test_the_report_says_how_many_matches_are_the_sets_own_import() -> None:
+    lines = own_report().splitlines()
+    for line in (
+        "**What the matches rest on.** Of the 7 in-scope papers of the Scholar set, 6 match an index record: 3 a "
+        "record with an independent source (a crawl), 3 a record whose only source is an imported RIS set. A match "
+        "of the second kind is the set matching its own import, and says nothing about coverage (see Matching).",
+        "Matched to a record with an independent source (a crawl of OpenReview or the proceedings): **3**. Matched "
+        "to a record whose only source is an imported RIS set (RIS-only): **3**.",
+        "| NeurIPS | 2024 | 3 | 3 | 0 | 3 |",
+        "| NeurIPS | 2026 | 3 | 0 | 3 | 0 |",
+        "| in both | 2 (1 crawled records, 1 RIS-only) |",
+        "| `q` | 7 | 2 | 2 | 5 | 0 | 3 (42.9%) | 1 | 0 (0.0%) | 2 |",
+        "- Of the 3 `full_text` papers, 2 rest on a crawled record and 1 on a RIS-only record, whose title and "
+        "abstract are the import's own.",
+        "- 1 of them also fail the default track or status filters.",
+    ):
+        assert line in lines, line
+    text = "\n".join(lines)
+    assert "Abstract source of the matched records: `openreview_v2` 3; `ris` 3." in text
+    assert (
+        "The index holds **no crawled record** for" in text
+        and "NeurIPS 2026." in text.split("no crawled record")[1]
+    )
+    assert "no record can be only in openproceedings" in text
+    # the class table splits each count by what the record rests on
+    assert "| `full_text` | 3 | 60.0% | 42.9% | 2 | 1 |" in text
+
+
+def test_a_shared_title_on_an_import_only_match_and_a_no_venue_record_are_counted_and_listed() -> None:
+    text = own_report()
+    assert (
+        "1 papers matched a RIS-only record whose title key another index record has too (0 in the same venue and "
+        "year: one paper under two ids, so the set can count it twice; the others in another venue or year: the "
+        "import's venue or year may be wrong). The match is kept, and each such row that is a disagreement is "
+        "`unsettled`, for a person."
+    ) in text
+    assert "`no match (no venue)`: 1 records whose venue string is not a venue" in text
+    assert "| no match (no venue) | 1 |" in text
+    assert (
+        "| `set.ris#7` | Graph theory | … Information Processing … | 2026 | `unsettled` | its venue string is no "
+        "venue, so no title match is made; same title: op:neurips:2024:crwl0002 (NeurIPS 2024); "
+        "op:neurips:2026:ris00003 (NeurIPS 2026) |"
+    ) in text
+    assert (
+        "| `op:neurips:2026:ris00003` | Graph theory | NeurIPS | 2026 | `unsettled` | matched by title venue year"
+        in text
+    )
+
+
+def test_the_stemmer_sensitivity_is_stated_and_no_lower_bound_is_claimed() -> None:
+    text = own_report()
+    assert (
+        "Under the widest suffix reading, every searched word as a prefix (`word*`), 1 of the 3 (33.3%) "
+        "`full_text` papers would match title or abstract."
+    ) in text
+    assert "which stemmer stands for Scholar's is an open decision for the project owner" in text
+    assert "lower bound" not in text
+
+
+def test_the_other_strings_are_marked_as_not_the_sets_own() -> None:
+    from dataclasses import replace
+
+    c = compare(QUERY, SET, corpus())
+    other = QueryComparison(**{**c.__dict__, "name": "pop"})
+    index = MatchIndex.build(corpus())
+    side = scope_and_match(read_ris(SET, NAME), index, META.scope)
+    text = render(replace(META, answers="q"), side, index, [c, other], review_rows([c, other]))
+    assert "| `q` | 8 |" in text and "| `pop` † | 8 |" in text
+    assert (
+        "† The Scholar set is Google Scholar's answer to `q` only. For `pop` the columns are what the string keeps, "
+        "drops and adds against that same set, not a comparison with what Scholar returns for it."
+    ) in text
+    q_section, pop_section = text.split("## Query `q`")[1].split("## Query `pop`")
+    assert "The Scholar set is Google Scholar's answer to `q`, not to this string." in pop_section
+    assert "not to this string" not in q_section
+    assert "†" not in report(c)  # nobody said which string the set answers: no claim either way
+
+
+def test_review_csv_says_what_each_rows_record_rests_on() -> None:
+    text, records = own_import()
+    c = compare(QUERY, text, records)
+    rows = list(csv.DictReader(io.StringIO(render_review(review_rows([c]), "v"))))
+    assert REVIEW_COLUMNS[-2:] == ("record_source", "abstract_source")
+    by_id = {r["op_id"] or r["scholar_key"]: (r["record_source"], r["abstract_source"]) for r in rows}
+    assert by_id[nid("ris00003", 2026)] == ("ris_only", "ris")
+    assert by_id["set.ris#7"] == ("", "")
+    assert {v for v in by_id.values()} <= {("ris_only", "ris"), ("crawled", "openreview_v2"), ("", "")}
+
+
+def test_answers_must_name_a_query_and_is_part_of_the_command(
+    data_dir: Path, inputs: tuple[Path, Path], tmp_path: Path
+) -> None:
+    ris, queries = inputs
+    out = tmp_path / "results"
+    assert main(args(data_dir, out, ris, "--query-file", str(queries), "--answers", "absent")) == 1
+    assert not out.exists()
+    notes = tmp_path / "in" / "notes.md"
+    notes.write_text("About this set.\n", encoding="utf-8")
+    extra = ["--query-file", str(queries), "--answers", "main", "--notes", str(notes)]
+    assert main(args(data_dir, out, ris, *extra)) == 0
+    text = (out / "2026-10-04-scholar-comparison.md").read_text(encoding="utf-8")
+    assert "| `pop` † |" in text and "--answers main --notes notes.md --index" in text
+    assert text.endswith("## Notes on these inputs\n\nAbout this set.\n")
+
+
+def test_notes_are_never_a_default(data_dir: Path, inputs: tuple[Path, Path], tmp_path: Path) -> None:
+    ris, queries = inputs
+    assert main(args(data_dir, tmp_path / "r", ris, "--query-file", str(queries))) == 0
+    text = (tmp_path / "r" / "2026-10-04-scholar-comparison.md").read_text(encoding="utf-8")
+    assert (
+        "- Notes: none" in text and "## Notes on these inputs" not in text
+    )  # another set's notes would be wrong

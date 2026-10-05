@@ -17,14 +17,20 @@ Three steps, each a pure function of its arguments (no clock, no environment, no
    the result), each disagreement with its class and evidence.
 
 The classes and their order are the protocol's. Only in the RIS set: `our_bug` (the oracle and the served engine
-disagree) → `filtered` (it matches with the default filters removed) → `compat_reading` (it matches the string as
-Google Scholar reads it: `scholar_reading`) → `coverage_gap` (no record in the snapshot) → `stemming` (it matches
-with inflected forms added: `with_variants`) → `full_text` (`ReferenceEngine` confirms none of those readings
-matches its title or abstract). Only in the result: `our_bug` → `scholar_cap` → `compat_reading` →
+disagree) → `filtered` (it fails a default filter and matches with them removed, under any reading below, which
+its evidence names) → `compat_reading` (it matches the string as Google Scholar reads it: `scholar_reading`) →
+`coverage_gap` (no record in the snapshot) → `stemming` (it matches with inflected forms added: `with_variants`)
+→ `full_text` (`ReferenceEngine` confirms none of those readings matches its title or abstract; whether it also
+fails the filters is in its evidence and in `Row.fails_filters`). Only in the result: `our_bug` → `scholar_cap` → `compat_reading` →
 `scholar_missed`. What the automation can't settle is `unsettled`, or a class with `settled=False`: a person
 decides it in `review.csv`. That is every `our_bug`, every `scholar_missed` (the protocol sends them all to a
 person) and every `coverage_gap` (a real gap and a record Scholar filed under the wrong venue look the same from
 here).
+
+A row also says what its index record rests on (`Row.independent`, `Row.abstract_source`). An index built with an
+imported RIS set holds that set's own records: a match to one of them is the set matching itself. It shows
+nothing about coverage, its text is whatever the import carried, and where the index holds no crawled record at
+all (a year not yet crawled) nothing can be only in the result. The report counts the two kinds apart.
 
 The oracle (`ReferenceEngine`) is built over the compared records only: every matched record of the RIS set and
 every in-scope match of the served engine. That is every record a row is written about, so a class never rests
@@ -40,13 +46,14 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal, Protocol
 from urllib.parse import parse_qs, urlparse
 
 from scholarmend.parse import parse_ris
 
 from openproceedings.diagnostics import DiagnosticCode
-from openproceedings.engine.protocol import Searchable
+from openproceedings.engine.protocol import EngineInputError, Searchable
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.ingest import dedup, urls
 from openproceedings.ingest.record import FORUM_ID, PaperRecord
@@ -68,8 +75,9 @@ from openproceedings.query.ast import (
 from openproceedings.query.canonical import render
 from openproceedings.query.compat import SOURCE_ALIASES, source_key
 from openproceedings.query.defaults import DEFAULT_CLAUSES, Defaulted, apply_defaults
+from openproceedings.query.lexer import MIN_STEM, letters
 from openproceedings.query.parser import Mode, parse
-from openproceedings.vocab import TEXT_FIELDS, VENUES
+from openproceedings.vocab import BOOTSTRAP_SOURCES, TEXT_FIELDS, VENUES
 
 type Cell = tuple[str, int]  # (venue, year)
 # a proceedings paper: its native id within its venue and year (a NeurIPS hash repeats from year to year: it is
@@ -92,7 +100,9 @@ ONLY_SCHOLAR = (OUR_BUG, FILTERED, COMPAT_READING, COVERAGE_GAP, STEMMING, FULL_
 ONLY_OP = (OUR_BUG, SCHOLAR_CAP, COMPAT_READING, SCHOLAR_MISSED)
 
 SCHOLAR_CAP_RESULTS = 1000  # what one Google Scholar search returns at most
-MAX_PHRASE_FORMS = 512  # a phrase's inflected spellings, all positions combined; more is refused, never cut
+MAX_PHRASE_FORMS = (
+    512  # a phrase's (or a NEAR's) inflected spellings, all positions combined; more is refused
+)
 _VENUE_TAGS = ("JF", "JO", "T2", "J2", "JA", "BT")  # where a RIS writer puts the venue; the first one present
 _TITLE_TAGS = ("TI", "T1")
 _YEAR_TAGS = ("PY", "Y1", "DA")
@@ -196,6 +206,21 @@ class Match:
     problem: str = ""
     near: tuple[str, ...] = ()
     candidates: tuple[str, ...] = ()  # an ambiguous match's records
+    # a matched record no crawl holds (its only source is an imported RIS set) whose title key another index
+    # record has too: the id may have led to an import's copy of a paper the index also holds under another id
+    shared: tuple[str, ...] = ()
+
+
+def abstract_source(r: PaperRecord) -> str:
+    """Where a record's abstract comes from: the source of the claim it resolves to (`dedup.abstract_claim`);
+    for an imported RIS set, `ris:` and what scholarmend fetched it from; `none` without an abstract."""
+    claim = dedup.abstract_claim(r.abstract, r.provenance)
+    if claim is None:
+        return "none"
+    if claim.source not in BOOTSTRAP_SOURCES:
+        return str(claim.source)
+    route = (claim.evidence or "").split(" ", 1)[0].removeprefix("scholarmend:")
+    return f"{claim.source}:{route}" if route else str(claim.source)
 
 
 def _several[K](found: Mapping[K, list[str]]) -> dict[K, tuple[str, ...]]:
@@ -213,6 +238,12 @@ class MatchIndex:
     proceedings: Mapping[ProceedingsKey, tuple[str, ...]]
     titles: Mapping[tuple[str, int, str], tuple[str, ...]]  # (venue, year, title key) → record ids
     any_cell: Mapping[str, tuple[str, ...]]  # title key → record ids, whatever the venue and year
+    # provenance, so a match can say what it rests on: the records some crawl holds (a source other than an
+    # imported RIS set, `vocab.BOOTSTRAP_SOURCES`), each record's abstract source, and each cell's crawled count
+    independent: frozenset[str] = frozenset()
+    abstracts: Mapping[str, str] = MappingProxyType({})
+    crawled: Mapping[Cell, int] = MappingProxyType({})
+    keys: Mapping[str, str] = MappingProxyType({})  # record id → its title key
 
     @classmethod
     def build(cls, records: Iterable[PaperRecord]) -> MatchIndex:
@@ -221,13 +252,22 @@ class MatchIndex:
         proceedings: dict[ProceedingsKey, list[str]] = {}
         titles: dict[tuple[str, int, str], list[str]] = {}
         any_cell: dict[str, list[str]] = {}
+        independent: set[str] = set()
+        abstracts: dict[str, str] = {}
+        crawled: Counter[Cell] = Counter()
+        keys: dict[str, str] = {}
         for r in records:
             cells[r.id] = (r.venue, r.year)
+            abstracts[r.id] = abstract_source(r)
+            if {c.source for c in r.provenance if not dedup.is_absence(c)} - BOOTSTRAP_SOURCES:
+                independent.add(r.id)
+                crawled[(r.venue, r.year)] += 1
             for f in dedup.forum_ids(r):
                 forums.setdefault(f, []).append(r.id)
             for p in dedup.proceedings_ids(r.provenance):
                 proceedings.setdefault((r.venue, r.year, p), []).append(r.id)
             if key := dedup.title_key(r.title):
+                keys[r.id] = key
                 titles.setdefault((r.venue, r.year, key), []).append(r.id)
                 any_cell.setdefault(key, []).append(r.id)
         return cls(
@@ -236,17 +276,29 @@ class MatchIndex:
             _several(proceedings),
             {k: tuple(sorted(v)) for k, v in titles.items()},
             _several(any_cell),
+            frozenset(independent),
+            abstracts,
+            dict(crawled),
+            keys,
         )
+
+    def _matched(self, op_id: str, rule: str) -> Match:
+        others: tuple[str, ...] = ()
+        if op_id not in self.independent:
+            others = tuple(i for i in self.any_cell.get(self.keys.get(op_id, ""), ()) if i != op_id)
+        return Match(op_id, rule, shared=others)
 
     def match(self, r: RisRecord) -> Match:
         """`r`'s index record by the merge rules, in their order: an id first (a forum id, then a proceedings
         id), then the title key within `r`'s venue and year. An id or a key that names two records is ambiguous,
-        never a pick; a record with no year, or whose venue is not one of the three, is matched by id only."""
+        never a pick, and so are a forum id and a proceedings id that name different records; a record with no year, or whose venue is not one of the three, is matched by id only."""
         by_forum = {rid for f in r.forum_ids for rid in self.forums.get(f, ())}
         by_listing = {rid for p in r.proceedings_ids for rid in self.proceedings.get(p, ())}
+        if by_forum and by_listing and by_forum != by_listing:  # its two ids name different records
+            return Match(None, problem="ambiguous", candidates=tuple(sorted(by_forum | by_listing)))
         for rule, ids in (("forum_id", by_forum), ("proceedings_id", by_listing)):
             if len(ids) == 1:
-                return Match(min(ids), rule)
+                return self._matched(min(ids), rule)
             if ids:
                 return Match(None, problem="ambiguous", candidates=tuple(sorted(ids)))
         key = dedup.title_key(r.title)
@@ -257,7 +309,7 @@ class MatchIndex:
             return Match(None, problem="no_year", near=near)
         found = list(self.titles.get((r.venue, r.year, key), ())) if key else []
         if len(found) == 1:
-            return Match(found[0], "title_venue_year")
+            return self._matched(found[0], "title_venue_year")
         if found:
             return Match(None, problem="ambiguous", candidates=tuple(found))
         if r.title.rstrip().endswith(_ELLIPSES):
@@ -325,8 +377,10 @@ def scope_and_match(
 ) -> ScholarSide:
     """Every RIS record matched, scoped and counted once per paper. A matched record is scoped by its index
     record's venue and year (the two sides then share one definition of the scope); an unmatched one by its own.
-    An unmatched record with no year can't be scoped: it stays in, for a person (`unsettled`). Two records are
-    one paper when they match one index record, or, unmatched, share venue, year and title key."""
+    An unmatched record with no year can't be scoped: it stays in, for a person (`unsettled`). So does an
+    unmatched record whose venue string is no venue but whose title key an in-scope index record has: it may be
+    that paper, and only a person can say. Two records are one paper when they match one index record, or,
+    unmatched, share venue, year and title key."""
     entries: dict[tuple[object, ...], Entry] = {}
     dropped: list[Dropped] = []
     duplicates = 0
@@ -342,7 +396,11 @@ def scope_and_match(
             cells = by_search.setdefault(r.search, [])
             if cell[0] is not None and cell[1] is not None:
                 cells.append((cell[0], cell[1]))
-        in_scope = scope.holds(*cell) or (m.op_id is None and r.year is None and r.venue in scope.venues)
+        near = tuple(i for i in m.near if scope.holds(*index.cells[i]))
+        in_scope = scope.holds(*cell) or (
+            m.op_id is None
+            and ((r.year is None and r.venue in scope.venues) or (m.problem == "no_venue" and bool(near)))
+        )
         if not in_scope:
             reason = (
                 "venue_unrecognised"
@@ -351,7 +409,6 @@ def scope_and_match(
                 if cell[0] not in scope.venues
                 else "year"
             )
-            near = tuple(i for i in m.near if scope.holds(*index.cells[i]))
             dropped.append(Dropped(r, reason, near))
             continue
         paper: tuple[object, ...] = (
@@ -364,7 +421,7 @@ def scope_and_match(
             duplicates += 1
         else:
             entries[paper] = Entry(r, m, cell[0], cell[1])
-    searches = {s: sum(r.search == s for r in records) for s in by_search}
+    searches = dict(Counter(r.search for r in records if r.search is not None))
     capped = frozenset(c for s, cells in by_search.items() if searches[s] >= cap for c in cells)
     return ScholarSide(len(records), tuple(entries.values()), tuple(dropped), duplicates, searches, capped)
 
@@ -477,6 +534,14 @@ def forms_of(vocabulary: Iterable[str]) -> dict[str, tuple[str, ...]]:
     return {stem: tuple(sorted(tokens)) for stem, tokens in found.items()}
 
 
+class TooManyForms(ValueError):
+    """A phrase or a NEAR would have more inflected spellings than MAX_PHRASE_FORMS: refused, never cut."""
+
+    def __init__(self, what: str, count: int) -> None:
+        super().__init__(f"a {what} has {count} inflected spellings (more than {MAX_PHRASE_FORMS})")
+        self.count = count
+
+
 def _other_forms(token: str, forms: Mapping[str, Sequence[str]]) -> list[str]:
     return [t for t in forms.get(inflection_stem(token), ()) if t != token]
 
@@ -494,7 +559,7 @@ def _leaf_forms(leaf: Leaf, forms: Mapping[str, Sequence[str]]) -> list[Leaf]:
     for p in positions:
         count *= len(p)
     if count > MAX_PHRASE_FORMS:
-        raise ValueError(f"a phrase has {count} inflected spellings (more than {MAX_PHRASE_FORMS})")
+        raise TooManyForms("phrase", count)
     return [Phrase(span=leaf.span, items=combo, field=leaf.field) for combo in itertools.product(*positions)]
 
 
@@ -505,10 +570,13 @@ def with_variants(n: Node, forms: Mapping[str, Sequence[str]]) -> Node:
     if isinstance(n, Term | Wildcard | Phrase):
         return _combine(Or, _leaf_forms(n, forms), n.span)
     if isinstance(n, Near):
+        lefts, rights = _leaf_forms(n.left, forms), _leaf_forms(n.right, forms)
+        if len(lefts) * len(rights) > MAX_PHRASE_FORMS:
+            raise TooManyForms("NEAR", len(lefts) * len(rights))
         pairs = [
             Near(span=n.span, left=left, right=right, distance=n.distance)
-            for left in _leaf_forms(n.left, forms)
-            for right in _leaf_forms(n.right, forms)
+            for left in lefts
+            for right in rights
         ]
         return _combine(Or, pairs, n.span)
     if isinstance(n, Not):
@@ -518,12 +586,41 @@ def with_variants(n: Node, forms: Mapping[str, Sequence[str]]) -> Node:
     return n
 
 
+def with_prefixes(n: Node, tokenizer: str) -> Node:
+    """`n` with every searched word read as a prefix (`word*`): the widest reading a suffix stemmer could give,
+    for the report's sensitivity figure, never for a class. A word under the wildcard's minimum stem stays a
+    word; a `$` wildcard becomes `*`; filters are untouched."""
+
+    def wide(item: Term | Wildcard, field: TextField | None) -> Term | Wildcard:
+        stem = item.stem if isinstance(item, Wildcard) else item.token
+        if letters(stem, tokenizer) < MIN_STEM:
+            return Term(span=item.span, token=stem, field=field) if isinstance(item, Term) else item
+        return Wildcard(span=item.span, stem=stem, op="*", field=field)
+
+    def leaf(x: Leaf) -> Leaf:
+        if isinstance(x, Phrase):
+            return Phrase(span=x.span, items=tuple(wide(i, None) for i in x.items), field=x.field)
+        return wide(x, x.field)
+
+    if isinstance(n, Term | Wildcard | Phrase):
+        return leaf(n)
+    if isinstance(n, Near):
+        return Near(span=n.span, left=leaf(n.left), right=leaf(n.right), distance=n.distance)
+    if isinstance(n, Not):
+        return Not(span=n.span, child=with_prefixes(n.child, tokenizer))
+    if isinstance(n, And | Or):
+        return type(n)(span=n.span, children=tuple(with_prefixes(c, tokenizer) for c in n.children))
+    return n
+
+
 def _tokens(n: Node) -> set[str]:
-    """Every exact token a tree searches (wildcard stems aside)."""
+    """Every word a tree searches: its exact tokens and its wildcards' stems."""
     if isinstance(n, Term):
         return {n.token}
+    if isinstance(n, Wildcard):
+        return {n.stem}
     if isinstance(n, Phrase):
-        return {i.token for i in n.items if isinstance(i, Term)}
+        return {i.stem if isinstance(i, Wildcard) else i.token for i in n.items}
     if isinstance(n, Near):
         return _tokens(n.left) | _tokens(n.right)
     if isinstance(n, Not):
@@ -577,6 +674,11 @@ class Row:
     auto_class: str
     auto_evidence: str
     settled: bool = True
+    # what the row's index record rests on (None and "" without one): whether some crawl holds it, or only an
+    # imported RIS set (a match to the set's own import says nothing about coverage, and its text is the import's)
+    independent: bool | None = None
+    abstract_source: str = ""
+    fails_filters: bool = False  # its index record fails a default filter of the query
 
 
 @dataclass(frozen=True)
@@ -610,6 +712,9 @@ class QueryComparison:
     groups: tuple[Group, ...]
     matched: int  # RIS papers with an index record: what `groups` counts over
     variants: Mapping[str, tuple[str, ...]]  # query token → its other inflected forms in the compared records
+    # of the `full_text` rows, how many a prefix reading of every word (`word*`) matches; None when a prefix
+    # expands past the engine's cap (then no figure is given, never a partial one)
+    full_text_by_prefix: int | None = None
 
     @property
     def only_scholar(self) -> tuple[Row, ...]:
@@ -635,23 +740,37 @@ def _text_conjuncts(n: Node | None) -> list[Node]:
     return [c for c in conjuncts if not isinstance(c.child if isinstance(c, Not) else c, Filter)]
 
 
-def _not_in_index(e: Entry, index: MatchIndex) -> Row:
+def _cells_of(ids: Iterable[str], index: MatchIndex) -> str:
+    return "; ".join(f"{i} ({index.cells[i][0]} {index.cells[i][1]})" for i in ids)
+
+
+def _not_in_index(e: Entry, index: MatchIndex, scope: Scope) -> Row:
     m, r = e.match, e.record
-    cells = "; ".join(f"{i} ({index.cells[i][0]} {index.cells[i][1]})" for i in m.near)
+    cells = _cells_of(m.near, index)
+    same = f"; same title: {cells}" if cells else ""
     if m.problem == "ambiguous":
-        cls, evidence, settled = UNSETTLED, f"its id or title names {len(m.candidates)} records: {', '.join(m.candidates)}", False  # fmt: skip
+        cls, evidence = (
+            UNSETTLED,
+            f"its id or title names {len(m.candidates)} records: {', '.join(m.candidates)}",
+        )
     elif m.problem == "no_year":
-        cls, evidence, settled = UNSETTLED, "no year and no id: matched by id only" + (f"; same title: {cells}" if cells else ""), False  # fmt: skip
+        cls, evidence = UNSETTLED, f"no year and no id: matched by id only{same}"
+    elif m.problem == "no_venue":  # kept only because an in-scope record has its title (`scope_and_match`)
+        here = _cells_of((i for i in m.near if scope.holds(*index.cells[i])), index)
+        cls, evidence = (
+            UNSETTLED,
+            f"its venue string is no venue, so no title match is made; same title: {here}",
+        )
     elif m.problem == "truncated_title":
-        cls, evidence, settled = UNSETTLED, "the title is cut (…), so its key can't match" + (f"; same title: {cells}" if cells else ""), False  # fmt: skip
+        cls, evidence = UNSETTLED, f"the title is cut (…), so its key can't match{same}"
     else:  # a gap, or a record Scholar filed under the wrong venue or year: a person checks which
         where = f"; its links are on {', '.join(r.hosts)}" if r.hosts else ""
-        cls, settled = COVERAGE_GAP, False
+        cls = COVERAGE_GAP
         if m.near:  # the same title in another venue or year is never a match
             evidence = f"no id or title match in {e.venue} {e.year}; same title elsewhere: {cells}{where}"
         else:
             evidence = f"no forum id, proceedings id or title+venue+year match in the snapshot{where}"
-    return Row("scholar", r.key, "", r.title, e.venue or r.venue_raw, e.year, cls, evidence, settled)
+    return Row("scholar", r.key, "", r.title, e.venue or r.venue_raw, e.year, cls, evidence, False)
 
 
 def compare_query(
@@ -667,7 +786,8 @@ def compare_query(
 ) -> QueryComparison:
     """`q` run in `mode` on `engine`, compared with `side`. `fetch` returns the compared records (title,
     abstract, track, status) by id: every id it is asked for must come back. The result set is exactly
-    `engine.match_ids` of the query's effective tree, limited to `scope`: nothing here changes what matches."""
+    `engine.match_ids` of the query's effective tree, limited to `scope`: nothing here changes what matches.
+    `TooManyForms` when a phrase or NEAR of the query has more inflected spellings than the cap."""
     parsed = parse(q, mode, engine.tokenizer_version)
     if parsed.effective_ast is None or parsed.ast is None or parsed.canonical is None:
         raise QueryRefused(name, [str(d.code) for d in parsed.errors])
@@ -683,6 +803,8 @@ def compare_query(
     docs = fetch(compared)
     if missing := sorted(compared - set(docs)):
         raise ValueError(f"{len(missing)} compared record(s) could not be read (first: {missing[0]})")
+    # the oracle holds the compared records only, so a wildcard expands over their vocabulary, not the snapshot's:
+    # the same matches for these records (a record matches a wildcard through its own tokens), a shorter expansion
     oracle = ReferenceEngine(docs.values(), tokenizer=engine.tokenizer_version)
     forms = forms_of(oracle.vocabulary)
 
@@ -710,14 +832,15 @@ def compare_query(
     only_dollars = apply_defaults(scholar_reading(parsed.ast, pop, phrases=False), len(q))
     o_run, o_ident = ids(run.effective), ids(run.identification)
     o_sch, o_sch_ident = ids(both.effective), ids(both.identification)
-    stemmed = [with_variants(t, forms) for t in (run.identification, both.identification) if t is not None]
-    o_stem = frozenset().union(*(ids(t) for t in stemmed)) if stemmed else oracle.universe
+    readings = [t for t in (run.identification, both.identification) if t is not None]
+    o_stem = (
+        frozenset().union(*(ids(with_variants(t, forms)) for t in readings)) if readings else oracle.universe
+    )
     bugs = o_run ^ (served & compared)  # the oracle and the served engine must agree on every compared record
     groups = _text_conjuncts(run.identification)
     group_ids = [(ids(g), ids(with_variants(g, forms))) for g in groups]
-    queried = sorted({t for tree in (run.identification, both.identification) if tree for t in _tokens(tree)})
+    queried = sorted({t for tree in readings for t in _tokens(tree)})
     variants = {t: tuple(_other_forms(t, forms)) for t in queried if _other_forms(t, forms)}
-    variant_tokens = {v for vs in variants.values() for v in vs}
 
     def fields(i: str, leaf: Term | Wildcard | Phrase | Near) -> str:
         """Where `leaf` matches record `i`: `title`, `abstract`, `title+abstract`, or "" for no match."""
@@ -732,9 +855,6 @@ def compare_query(
     def filters_failed(d: Searchable) -> str:
         failed = [f"{f}={getattr(d, f)}" for f in run.defaults if getattr(d, f) not in DEFAULT_CLAUSES[f]]
         return ", ".join(failed)
-
-    def also_filtered(d: Searchable) -> str:
-        return f"; also filtered ({failed})" if (failed := filters_failed(d)) else ""
 
     def rewrites(i: str, eff: bool) -> str:
         """Which Scholar-reading rewrite alone accounts for record `i` (with or without the defaults)."""
@@ -751,30 +871,60 @@ def compare_query(
             names.append("`$`: a zero-or-one wildcard here, no wildcard in Scholar")
         return "; ".join(names) or "decision-002 phrases and `$` together"
 
+    def deciding(i: str) -> str:
+        """The inflected forms that make record `i` match: for each group it fails as run and holds with forms,
+        the forms of that group's words the record has. (Every form it has, when no single group explains it:
+        the match then comes through Scholar's reading.)"""
+        held = {v for vs in variants.values() for v in vs if i in ids(Term(span=(0, 0), token=v))}
+        named = {
+            v
+            for g, (exact, loose) in zip(groups, group_ids, strict=True)
+            if i not in exact and i in loose
+            for t in _tokens(g)
+            for v in variants.get(t, ())
+        }
+        return ", ".join(sorted(held & named or held))
+
+    def provenance(i: str, d: Searchable) -> tuple[bool, str, bool]:
+        return i in index.independent, index.abstracts.get(i, ""), bool(filters_failed(d))
+
     def dropped(e: Entry) -> Row:
+        """A matched record the result lacks. The filters are judged before the text (the protocol's order): a
+        record that fails them and matches under any reading is `filtered`, and its evidence names the reading."""
         i = e.match.op_id
         assert i is not None
-        d = docs[i]
+        d, failed = docs[i], filters_failed(docs[i])
+        settled = True
         if i in bugs:
             cls, evidence, settled = OUR_BUG, "the oracle matches it and the served engine doesn't", False
         elif i in o_ident:
-            cls, evidence, settled = FILTERED, filters_failed(d) or "fails a filter of the query", True
+            cls, evidence = FILTERED, failed or "fails a filter of the query"
         elif differs and i in o_sch_ident:
-            cls, evidence, settled = COMPAT_READING, rewrites(i, eff=False) + also_filtered(d), True
+            cls, evidence = (FILTERED, f"{failed}; also compat_reading ({rewrites(i, eff=False)})") if failed else (COMPAT_READING, rewrites(i, eff=False))  # fmt: skip
         elif i in o_stem:
-            seen = [v for v in sorted(variant_tokens) if i in ids(Term(span=(0, 0), token=v))]
-            cls, evidence, settled = STEMMING, f"matches with {', '.join(seen)}" + also_filtered(d), True
+            cls, evidence = (FILTERED, f"{failed}; also stemming (matches with {deciding(i)})") if failed else (STEMMING, f"matches with {deciding(i)}")  # fmt: skip
         elif d.abstract is None:
-            cls, evidence, settled = UNSETTLED, "no title match, and the corpus has no abstract for it" + also_filtered(d), False  # fmt: skip
+            cls, evidence, settled = UNSETTLED, "no title match, and the corpus has no abstract for it", False
         else:
             failing = [str(k) for k, (_, loose) in enumerate(group_ids, 1) if i not in loose]
-            cls, settled = FULL_TEXT, True
+            cls = FULL_TEXT
             evidence = (
                 f"no title or abstract match for group {', '.join(failing)}, inflected forms included"
                 if failing
                 else "no title or abstract match, inflected forms included"
-            ) + also_filtered(d)
-        return Row("scholar", e.record.key, i, e.record.title, d.venue, d.year, cls, evidence, settled)
+            )
+        if cls in (FULL_TEXT, UNSETTLED) and failed:
+            evidence += f"; also fails the filters ({failed})"
+        if (
+            e.match.shared and cls != OUR_BUG
+        ):  # the id led to an import's record whose title the index has twice
+            evidence = (
+                f"matched by {e.match.rule.replace('_', ' ')} to a record only the imported set holds, whose title "
+                f"is also on {_cells_of(e.match.shared, index)}: possibly one paper under two ids; otherwise "
+                f"`{cls}` ({evidence})"
+            )
+            cls, settled = UNSETTLED, False
+        return Row("scholar", e.record.key, i, e.record.title, d.venue, d.year, cls, evidence, settled, *provenance(i, d))  # fmt: skip
 
     def added(i: str) -> Row:
         d = docs[i]
@@ -795,14 +945,12 @@ def compare_query(
                 )
             ]
             cls, evidence, settled = SCHOLAR_MISSED, "exact match on " + "; ".join(hits), False
-        return Row(
-            "openproceedings", "", i, " ".join(d.title.split()), d.venue, d.year, cls, evidence, settled
-        )
+        return Row("openproceedings", "", i, " ".join(d.title.split()), d.venue, d.year, cls, evidence, settled, *provenance(i, d))  # fmt: skip
 
     kept, only, gaps = [], [], []
     for e in side.entries:
         if e.match.op_id is None:
-            gaps.append(_not_in_index(e, index))
+            gaps.append(_not_in_index(e, index, scope))
         elif e.match.op_id not in in_scope:
             only.append(dropped(e))
         else:  # in both; served without the oracle's agreement is still a bug, and is never hidden as kept
@@ -813,11 +961,15 @@ def compare_query(
                 if bug
                 else ("", e.match.rule)
             )
-            kept.append(
-                Row("scholar", e.record.key, d.id, e.record.title, d.venue, d.year, cls, evidence, not bug)
-            )
+            kept.append(Row("scholar", e.record.key, d.id, e.record.title, d.venue, d.year, cls, evidence, not bug, *provenance(d.id, d)))  # fmt: skip
     members = frozenset(by_id)
     notices = Counter(str(d.code) for d in (*parsed.translations, *parsed.warnings))
+    full = frozenset(r.op_id for r in only if r.auto_class == FULL_TEXT)
+    try:
+        wide = frozenset().union(*(ids(with_prefixes(t, engine.tokenizer_version)) for t in readings))
+        by_prefix: int | None = len(full & wide)
+    except EngineInputError:  # a prefix expands past the cap: no figure, never a partial one
+        by_prefix = None
     return QueryComparison(
         name=name,
         query=q,
@@ -839,4 +991,5 @@ def compare_query(
         ),
         matched=len(members),
         variants=variants,
+        full_text_by_prefix=by_prefix,
     )

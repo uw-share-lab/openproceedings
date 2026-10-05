@@ -22,7 +22,10 @@ from openproceedings.eval.scholar_compare import (
     MatchIndex,
     QueryComparison,
     QueryRefused,
+    RisRecord,
     Scope,
+    TooManyForms,
+    abstract_source,
     compare_query,
     forms_of,
     inflection_stem,
@@ -31,6 +34,7 @@ from openproceedings.eval.scholar_compare import (
     read_ris,
     scholar_reading,
     scope_and_match,
+    with_prefixes,
     with_variants,
 )
 from openproceedings.ingest.record import PaperRecord
@@ -38,7 +42,7 @@ from openproceedings.query.ast import Node
 from openproceedings.query.canonical import render
 from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.normalize import TOKENIZER_VERSION
-from openproceedings.query.parser import parse
+from openproceedings.query.parser import Mode, parse
 
 from tests.unit.ingest.test_dedup import H, paper
 
@@ -95,6 +99,7 @@ def compare(
     scope: Scope | None = None,
     engine: Lying | None = None,
     cap: int = 1000,
+    mode: Mode = "scholar",
 ) -> QueryComparison:
     scope = scope or Scope()
     index = MatchIndex.build(corpus)
@@ -108,6 +113,7 @@ def compare(
         engine=engine or ReferenceEngine(corpus),
         fetch=lambda ids: {i: by_id[i] for i in ids},
         scope=scope,
+        mode=mode,
     )
 
 
@@ -243,9 +249,10 @@ def test_scope_drops_before_comparing_and_counts_a_paper_once() -> None:
         + entry("Says 2026, held in 2025", year=2026, url=forum("yr250001"))  # scoped by the index's year
     )
     side = scope_and_match(read_ris(text, NAME), MatchIndex.build(corpus), Scope(years=(2020, 2025)))
-    assert (side.read, len(side.entries), side.duplicates) == (8, 3, 1)
+    assert (side.read, len(side.entries), side.duplicates) == (8, 4, 1)
     assert [(e.record.key, e.match.op_id, e.year, e.copies) for e in side.entries] == [
         ("set.ris#1", nid("frm00001"), 2024, 2),
+        ("set.ris#6", None, 2025, 1),  # no venue, but an in-scope record has its title: kept for a person
         ("set.ris#7", None, None, 1),
         ("set.ris#8", nid("yr250001", 2025), 2025, 1),
     ]
@@ -253,7 +260,6 @@ def test_scope_drops_before_comparing_and_counts_a_paper_once() -> None:
         ("set.ris#3", "year", ()),
         ("set.ris#4", "year", ()),
         ("set.ris#5", "venue_unrecognised", ()),
-        ("set.ris#6", "venue_unrecognised", (nid("yr250001", 2025),)),
     ]
     assert side.searches == {"s1": 1, "s2": 1} and side.capped == frozenset()
 
@@ -303,7 +309,7 @@ def test_every_disagreement_gets_its_class_in_protocol_order() -> None:
         nid("work0001"): FILTERED,
         nid("rjct0001"): FILTERED,
         nid("stem0001"): STEMMING,
-        nid("stwk0001"): STEMMING,  # the first class in order; the filter is in its evidence
+        nid("stwk0001"): FILTERED,  # the filters are judged first; the inflected forms are in its evidence
         nid("full0001"): FULL_TEXT,
         nid("noab0001"): UNSETTLED,
         "set.ris#8": COVERAGE_GAP,
@@ -315,7 +321,7 @@ def test_every_disagreement_gets_its_class_in_protocol_order() -> None:
     assert evidence[nid("rjct0001")] == "status=rejected"
     assert evidence[nid("stem0001")] == "matches with benchmarking, llms, trusted"
     assert evidence[nid("stwk0001")] == (
-        "matches with benchmarks, models, trusting; also filtered (track=workshop)"
+        "track=workshop; also stemming (matches with benchmarks, models, trusting)"
     )
     assert evidence[nid("full0001")] == "no title or abstract match for group 2, 3, inflected forms included"
     assert evidence[nid("miss0001")] == (
@@ -340,7 +346,7 @@ def test_sizes_add_up_and_the_result_is_exactly_the_engines() -> None:
     assert (c.total, c.in_scope, c.scholar_in_scope, c.matched) == (2, 2, 8, 7)
     assert len(c.kept) + len(c.dropped) + len(c.not_in_index) == c.scholar_in_scope
     assert [r.side for r in c.added] == ["openproceedings"] and c.added[0].scholar_key == ""
-    assert c.counts("scholar") == {FILTERED: 2, STEMMING: 2, FULL_TEXT: 1, UNSETTLED: 1, COVERAGE_GAP: 1}
+    assert c.counts("scholar") == {FILTERED: 3, STEMMING: 1, FULL_TEXT: 1, UNSETTLED: 1, COVERAGE_GAP: 1}
     assert c.counts("openproceedings") == {SCHOLAR_MISSED: 1}
 
 
@@ -540,3 +546,229 @@ def test_a_query_that_does_not_parse_is_refused_by_code() -> None:
     with pytest.raises(QueryRefused) as e:
         compare("(LLM AND", SET, corpus())
     assert e.value.codes and "LLM" not in str(e.value)  # the codes, never the query's text
+
+
+# --- review round 2: provenance, id conflicts, the filter-first order, caps and bounds ----------------------
+
+
+def test_an_id_matches_a_record_with_no_year_or_venue_and_scopes_it_by_the_index() -> None:
+    side = scope_and_match(
+        read_ris(entry("Scholar's title", venue=None, year=None, url=forum("frm00001")), NAME),
+        MatchIndex.build(records()),
+        Scope(years=(2024, 2024)),
+    )
+    [e] = side.entries
+    assert (e.match.op_id, e.match.rule, e.venue, e.year) == (nid("frm00001"), "forum_id", "NeurIPS", 2024)
+
+
+def test_a_forum_id_two_records_carry_is_ambiguous() -> None:
+    linked = paper(
+        "pmlr-v235-smith24a", "A listing", source="pmlr", venue="ICML", urls_forum="https://openreview.net/forum?id=frm00001"
+    )  # fmt: skip
+    index = MatchIndex.build([*records(), linked])
+    [r] = read_ris(entry("x", url=forum("frm00001")), NAME)
+    m = index.match(r)
+    assert (m.op_id, m.problem) == (None, "ambiguous")
+    assert m.candidates == (nid("pmlr-v235-smith24a", venue="icml"), nid("frm00001"))
+
+
+def test_a_forum_id_and_a_proceedings_id_naming_different_records_are_ambiguous() -> None:
+    index = MatchIndex.build(records())
+    text = "\n".join(
+        ["TY  - JOUR", "TI  - x", f"UR  - {forum('frm00001')}", f"UR  - {listing(1, 2024)}", "ER  - ", ""]
+    )
+    [r] = read_ris(text, NAME)
+    m = index.match(r)
+    assert (m.op_id, m.problem) == (None, "ambiguous")
+    assert set(m.candidates) == {nid("frm00001"), nid(f"nips-{H[1]}", 2024)}
+
+
+def test_a_record_with_no_venue_and_a_same_year_title_goes_to_a_person() -> None:
+    records = corpus()
+    text = entry("Graph networks", venue="… Information Processing …") + entry("Elsewhere", venue="AISTATS")
+    c = compare(QUERY, text, records)
+    assert c.scholar_in_scope == 1  # the denominator: the no-venue record is in, the unrelated one is out
+    [row] = c.not_in_index
+    assert (row.scholar_key, row.auto_class, row.settled, row.venue) == (
+        "set.ris#1", UNSETTLED, False, "… Information Processing …",
+    )  # fmt: skip
+    assert row.auto_evidence == (
+        "its venue string is no venue, so no title match is made; same title: "
+        "op:neurips:2024:full0001 (NeurIPS 2024)"
+    )
+
+
+def test_full_text_says_when_the_record_also_fails_the_filters() -> None:
+    records = [*corpus(), paper("fwrk0001", "Graph theory", track="workshop", abstract="No query word.")]
+    c = compare(QUERY, SET + entry("Graph theory"), records)
+    row = next(r for r in c.dropped if r.op_id == nid("fwrk0001"))
+    assert (row.auto_class, row.fails_filters, row.settled) == (FULL_TEXT, True, True)
+    assert row.auto_evidence == (
+        "no title or abstract match for group 1, 2, 3, inflected forms included; also fails the filters "
+        "(track=workshop)"
+    )
+    plain = next(r for r in c.dropped if r.op_id == nid("full0001"))
+    assert (plain.auto_class, plain.fails_filters) == (FULL_TEXT, False)
+    assert {r.op_id for r in c.dropped if r.fails_filters} == {
+        nid("work0001"), nid("rjct0001"), nid("stwk0001"), nid("fwrk0001"),
+    }  # fmt: skip
+
+
+def test_a_filtered_record_scholar_reads_differently_is_filtered_and_says_so() -> None:
+    records = [
+        paper("schw0001", "A model of a foundation for trust", track="workshop", abstract="An abstract.")
+    ]
+    [row] = compare(POP, entry("A model of a foundation for trust"), records).dropped
+    assert row.auto_class == FILTERED
+    assert row.auto_evidence.startswith("track=workshop; also compat_reading (decision-002")
+
+
+def test_the_cap_is_reached_at_exactly_a_thousand_records() -> None:
+    index = MatchIndex.build(records())
+
+    def capped(n: int) -> frozenset[tuple[str, int]]:
+        text = "".join(entry(f"Unindexed paper {i}", search="s1") for i in range(n))
+        return scope_and_match(read_ris(text, NAME), index, Scope()).capped
+
+    assert capped(999) == frozenset()
+    assert capped(1000) == frozenset({("NeurIPS", 2024)})
+
+
+def test_many_searches_cost_no_more_than_one() -> None:
+    """One search per record must not make the count quadratic (20,000 records once took 10.9 s)."""
+    import time
+
+    index = MatchIndex.build(records())
+    same = read_ris("".join(entry(f"Paper {i}", search="s") for i in range(20_000)), NAME)
+    each = read_ris("".join(entry(f"Paper {i}", search=f"s{i}") for i in range(20_000)), NAME)
+
+    def cost(rs: list[RisRecord]) -> float:
+        started = time.thread_time()
+        side = scope_and_match(rs, index, Scope())
+        assert sum(side.searches.values()) == 20_000
+        return time.thread_time() - started
+
+    pairs = [(cost(same), cost(each)) for _ in range(3)]
+    assert min(b for _, b in pairs) < 3 * min(a for a, _ in pairs) + 0.5
+
+
+def test_not_and_near_take_inflected_forms_inside_a_comparison() -> None:
+    records = [
+        paper("near0001", "LLMs for benchmarks", abstract="An abstract."),  # NEAR holds only with both forms
+        paper("nots0001", "Trusted benchmarks", abstract="An abstract."),  # `trusted`, but NOT benchmark(s)
+    ]
+    near = compare("LLM NEAR/2 benchmark", entry("LLMs for benchmarks"), records, mode="native")
+    assert [(r.auto_class, r.auto_evidence) for r in near.dropped] == [
+        (STEMMING, "matches with benchmarks, llms")
+    ]
+    negated = compare("trust -benchmark", entry("Trusted benchmarks"), records)
+    [row] = negated.dropped
+    assert row.auto_class == FULL_TEXT  # a form of the negated word excludes it, as the word itself would
+
+
+def test_a_near_with_too_many_spellings_is_refused_not_cut() -> None:
+    forms = {inflection_stem("word"): tuple(f"word{i}" for i in range(30))}
+    parsed = parse("word NEAR/2 word", "native")
+    assert parsed.ast is not None
+    with pytest.raises(TooManyForms, match="a NEAR has 961 inflected spellings") as e:
+        with_variants(parsed.ast, forms)
+    assert e.value.count == 961
+
+
+def imported(native: str, title: str, **kw: object) -> PaperRecord:
+    """A record only an imported RIS set holds."""
+    return paper(native, title, source="ris", **kw)  # type: ignore[arg-type]
+
+
+def test_rows_say_whether_their_record_is_crawled_or_only_the_imported_set() -> None:
+    records = [
+        paper("crwl0001", "LLM trust benchmark", abstract="An abstract."),
+        imported("ris00001", "Graph networks", abstract="The import's own text."),
+        imported("ris00002", "Another LLM trust benchmark", abstract="The import's own text.", year=2026),
+        paper("miss0001", "A benchmark of trust", abstract="For every LLM."),
+    ]
+    index = MatchIndex.build(records)
+    assert index.independent == {nid("crwl0001"), nid("miss0001")}
+    assert index.crawled == {("NeurIPS", 2024): 2}  # none in 2026: nothing can be `added` there
+    assert index.abstracts[nid("ris00001")] == "ris" and index.abstracts[nid("crwl0001")] == "openreview_v2"
+    text = (
+        entry("LLM trust benchmark")
+        + entry("Graph networks")
+        + entry("Another LLM trust benchmark", year=2026)
+    )
+    c = compare(QUERY, text, records)
+    assert {r.op_id: r.independent for r in c.kept} == {nid("crwl0001"): True, nid("ris00002", 2026): False}
+    [dropped] = c.dropped
+    assert (dropped.auto_class, dropped.independent, dropped.abstract_source) == (FULL_TEXT, False, "ris")
+    [added] = c.added
+    assert (added.independent, added.abstract_source) == (True, "openreview_v2")
+    assert all(r.independent is None and r.abstract_source == "" for r in c.not_in_index)
+
+
+def test_an_imported_abstract_names_what_scholarmend_read_it_from() -> None:
+    from openproceedings.ingest.dedup import resolve
+    from openproceedings.ingest.record import Claim
+
+    from tests.unit.ingest.test_dedup import T0
+
+    def claim(field: str, value: object, evidence: str | None = None) -> Claim:
+        return Claim(field=field, value=value, source="ris", fetched_at=T0, evidence=evidence)  # type: ignore[arg-type]
+
+    record, _ = resolve(
+        "op:iclr:2026:ris00009",
+        [
+            claim("title", "An imported paper"), claim("venue", "ICLR"), claim("year", 2026),
+            claim("track", "main"), claim("status", "accepted"),
+            claim("abstract", "Text.", "scholarmend:proceedings_page https://proceedings.iclr.cc/x"),
+        ],
+    )  # fmt: skip
+    assert abstract_source(record) == "ris:proceedings_page"
+    assert abstract_source(paper("noab0002", "No abstract")) == "none"
+
+
+def test_two_set_records_hitting_one_paper_under_two_ids_are_flagged_not_merged() -> None:
+    records = [
+        paper("dupe0001", "One paper twice", abstract="No query word."),
+        imported("dupe0002", "One paper twice", abstract="No query word."),  # the import's copy, never merged
+        imported("solo0001", "Only the import has this", abstract="No query word."),
+    ]
+    text = (
+        entry("One paper twice", url=forum("dupe0001"))
+        + entry("One paper twice", url=forum("dupe0002"))
+        + entry("Only the import has this", url=forum("solo0001"))
+    )
+    index = MatchIndex.build(records)
+    side = scope_and_match(read_ris(text, NAME), index, Scope())
+    assert [(e.match.op_id, e.match.shared) for e in side.entries] == [
+        (nid("dupe0001"), ()),  # a crawled record: its title elsewhere is ordinary (a workshop copy, a twin)
+        (nid("dupe0002"), (nid("dupe0001"),)),
+        (nid("solo0001"), ()),
+    ]
+    assert side.duplicates == 0  # two ids, so the set counts the paper twice: said, not hidden
+    c = compare(QUERY, text, records)
+    assert [(r.op_id, r.auto_class, r.settled) for r in c.dropped] == [
+        (nid("dupe0001"), FULL_TEXT, True),
+        (nid("dupe0002"), UNSETTLED, False),
+        (nid("solo0001"), FULL_TEXT, True),
+    ]
+    assert c.dropped[1].auto_evidence == (
+        "matched by forum id to a record only the imported set holds, whose title is also on "
+        "op:neurips:2024:dupe0001 (NeurIPS 2024): possibly one paper under two ids; otherwise `full_text` "
+        "(no title or abstract match for group 1, 2, 3, inflected forms included)"
+    )
+
+
+def test_the_prefix_reading_bounds_how_far_a_wider_stemmer_could_move_full_text() -> None:
+    records = [
+        paper(
+            "pref0001", "LLM trustworthiness benchmark", abstract="An abstract."
+        ),  # `trust*`, not a form of trust
+        paper("none0001", "Graph networks", abstract="No query word."),
+    ]
+    c = compare(QUERY, entry("LLM trustworthiness benchmark") + entry("Graph networks"), records)
+    assert [r.auto_class for r in c.dropped] == [FULL_TEXT, FULL_TEXT]
+    assert c.full_text_by_prefix == 1
+    parsed = parse('"AI agent$" OR LLM', "scholar")
+    assert parsed.ast is not None
+    tree = apply_defaults(with_prefixes(parsed.ast, TOKENIZER_VERSION), 0).identification
+    assert tree is not None and render(tree) == '("ai agent*" OR llm*)'  # a two-letter word stays a word

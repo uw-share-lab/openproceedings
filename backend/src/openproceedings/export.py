@@ -337,7 +337,7 @@ def _csv(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         yield _csv_row(_cell(row[c]) for c in CSV_COLUMNS)
 
 
-def _cell(value: object) -> object:
+def csv_cell(value: object) -> object:
     """A CSV cell a spreadsheet won't run: text starting with `=`, `+`, `-`, `@`, a tab or a carriage return
     is prefixed with `'` (OWASP's CSV-injection guard; titles and abstracts come from anyone)."""
     if value is None:
@@ -348,6 +348,9 @@ def _cell(value: object) -> object:
         if head in ("=", "+", "-", "@") or value[:1] in ("\t", "\r"):
             return "'" + value
     return value
+
+
+_cell = csv_cell  # the name this module's writers use
 
 
 class _Line:

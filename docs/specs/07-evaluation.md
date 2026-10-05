@@ -64,16 +64,29 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
 - **Matching** follows 01's merge rules in order: the OpenReview forum id a URL names (`/forum?id=` or
   `/pdf?id=`), then the proceedings paper a URL names, then the dedup title key within the same venue and year. A
   proceedings id is matched **within its venue and year**, as dedup merges on it: a NeurIPS hash is md5 of the
-  paper's number and repeats every year. An id or key that names two records is ambiguous, never a pick; a
-  title alone never matches; the venue is one of Scholar mode's source names exactly (a venue string Scholar cut
-  with `…` is no venue, and such a record is out of scope unless a URL of it names an indexed paper).
+  paper's number and repeats every year. An id or key that names two records is ambiguous, never a pick, and
+  so are a forum id and a proceedings id that name different records; a title alone never matches; the venue is
+  one of Scholar mode's source names exactly. A venue string Scholar cut with `…` is no venue: such a record is
+  out of scope unless a URL of it names an indexed paper, or an in-scope index record has its title, in which
+  case it is in scope and `unsettled`, for a person, with that record named.
+- **Provenance.** An index that an RIS set was imported into holds that set's records, and comparing the set
+  with it matches them to themselves. So every match records whether its index record has an independent
+  source (a crawl) or only the import (`ris`), and its abstract's source; the report states both counts, a
+  table per venue and year beside the crawled records the index holds there, and each class count for the two
+  kinds apart. Where the index has no crawled record (2026, on the first report's index) nothing can be only in
+  openproceedings, and the report says so. A RIS-only match whose title another index record shares is
+  `unsettled` (one paper under two ids, or a wrong venue or year in the import).
 - **Scope** is `--years` and `--venues`, applied to both sides: the result is the engine's match set for the
   string as written, limited to records of those venues and years; a matched Scholar record is scoped by its
   index record's venue and year, an unmatched one by its own.
 - **Classes**, in the protocol's order, each decided by `ReferenceEngine` over the compared records (every matched
   Scholar paper and every in-scope match): `our_bug` (the oracle and the served index disagree on a compared
   record, on either side or in both), `filtered`, `compat_reading` (below), `coverage_gap`, `stemming`,
-  `full_text`; and `scholar_cap`, `compat_reading`, `scholar_missed` for records only in the result. A record the
+  `full_text`; and `scholar_cap`, `compat_reading`, `scholar_missed` for records only in the result. The filters
+  are judged before the text: a record that fails the default filters and matches without them under any
+  reading (as run, Scholar's, or with inflected forms) is `filtered`, with the reading in its evidence; one that
+  matches under none is `full_text` whether or not it passes the filters, and the report counts the
+  `full_text` rows that fail them. A record the
   corpus holds without an abstract can't be `full_text`: it is `unsettled`, for a person. Every `coverage_gap` and
   `scholar_missed` row goes to a person too, with a tenth of the settled rows as a spot check.
 - **`compat_reading`** (decision-002 and `$`): the string is rewritten as Google Scholar reads it and run again.
@@ -83,12 +96,16 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   Scholar's reading and says so for each such string (`main-2-pop`).
 - **`stemming`** adds each searched word's other English inflections found in the compared records (`s`/`es`/
   `ies`, `ed`, `ing`; no derivation). Google Scholar's stemmer is undocumented, so the rule is a stated
-  stand-in that errs towards `stemming`, which keeps `full_text` a lower bound.
+  stand-in, and which stemmer should stand for Scholar's is an open decision for the project owner. `full_text`
+  is not a lower bound: a wider stemmer moves rows out of it. The report therefore gives a sensitivity figure
+  per string: how many `full_text` rows would match if every searched word were read as a prefix (`word*`).
 - **`scholar_cap`** needs the size of each Scholar search: the set's Publish or Perish query dates group its
   records by search, and a group at 1,000 or more marks its venues and years as capped.
 - A report never replaces a review file a person has filled in, and names its inputs by file name and sha256,
-  never by path. Notes about one set of inputs come from `docs/results/scholar-comparison-notes.md`, printed
-  verbatim under its hash.
+  never by path. Notes about one set of inputs come from the file `--notes` names (for the review's export,
+  `docs/results/scholar-comparison-notes.md`), printed verbatim under its hash; there is no default, since
+  another set would get the wrong notes. `--answers <name>` names the string the set is Scholar's answer to:
+  the report then marks every other string's numbers as a comparison against that set only.
 
 ## C. Coverage (report plus a soft gate at M4)
 

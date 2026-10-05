@@ -388,8 +388,12 @@ def build_parser() -> argparse.ArgumentParser:
     sch.add_argument("--date", help="the report's date, YYYY-MM-DD (default today, UTC)")
     sch.add_argument(
         "--notes", type=Path, metavar="FILE",
-        help="Markdown printed verbatim under `Notes on these inputs` (default "
-        "docs/results/scholar-comparison-notes.md when it exists)",
+        help="Markdown about these inputs, printed verbatim under `Notes on these inputs` with its sha256",
+    )  # fmt: skip
+    sch.add_argument(
+        "--answers", metavar="NAME",
+        help="the query the Scholar set is Scholar's answer to; the report then says the other queries are "
+        "only compared against that set",
     )  # fmt: skip
     sch.add_argument("--check", action="store_true", help="exit 1 when any `our_bug` row is found")
     sch.set_defaults(run=_eval_scholar)
@@ -987,7 +991,8 @@ def _scholar_command(ns: argparse.Namespace, index_version: str, day: str) -> st
         words.append("--query '<the string under `query`>'")
     if ns.mode != "scholar":
         words.append(f"--mode {ns.mode}")
-    words += [f"--{k} {v}" for k in ("years", "venues") if (v := getattr(ns, k))]
+    words += [f"--{k} {v}" for k in ("years", "venues", "answers") if (v := getattr(ns, k))]
+    words += [f"--notes {ns.notes.name}"] if ns.notes else []
     return " ".join([*words, f"--index {index_version}", f"--date {day}"])
 
 
@@ -1029,9 +1034,9 @@ def _eval_scholar(ns: argparse.Namespace) -> int:
         raise _usage("pass --out: the default is the checkout's docs/results")
     out = ns.out or (root / "docs" / "results" if root else Path())
     queries, query_files = _scholar_queries(ns, root)
-    notes = ns.notes or (root / "docs" / "results" / "scholar-comparison-notes.md" if root else None)
-    if ns.notes is None and notes is not None and not notes.is_file():
-        notes = None
+    if ns.answers is not None and ns.answers not in [n for n, _ in queries]:
+        raise _usage(f"--answers names no query of this run: {ns.answers!r}")
+    notes = ns.notes  # about one set of inputs, so never a default: another set would get the wrong notes
     names = [p.name for p in ns.ris]
     if len(set(names)) != len(names):  # a row's key is `<file name>#<n>`
         raise _usage("two --ris files share a name: rename one")
@@ -1077,6 +1082,7 @@ def _eval_scholar(ns: argparse.Namespace) -> int:
         notes_name=notes.name if notes else None,
         notes_sha256=hashlib.sha256(notes.read_bytes()).hexdigest() if notes else None,
         query_files=tuple((p.name, hashlib.sha256(p.read_bytes()).hexdigest()) for p in query_files),
+        answers=ns.answers,
     )
     text = render(meta, side, index, comparisons, review)
     written, rows, replaced = write(text, render_review(review, engine.index_version), out, day)
@@ -1084,7 +1090,9 @@ def _eval_scholar(ns: argparse.Namespace) -> int:
     unresolved = sum(x.kind == UNRESOLVED for x in review)
     log.log(logging.ERROR if bugs else logging.INFO, "scholar_report_written", extra={
         "index_version": engine.index_version, "queries": len(comparisons), "ris_records": len(ris),
-        "in_scope": len(side.entries), "our_bug": bugs, "unresolved": unresolved, "review_rows": len(review),
+        "in_scope": len(side.entries),
+        "ris_only_matches": sum(e.match.op_id is not None and e.match.op_id not in index.independent for e in side.entries),
+        "our_bug": bugs, "unresolved": unresolved, "review_rows": len(review),
         "replaced": replaced, "ms": elapsed_ms(started),
     })  # fmt: skip
     print(f"wrote {written}", file=sys.stderr)

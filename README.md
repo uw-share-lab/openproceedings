@@ -214,7 +214,8 @@ exit status).
 Scholar RIS set with the review's search strings on that index ([spec 07](docs/specs/07-evaluation.md) §B). It
 writes `docs/results/<date>-scholar-comparison.md`, with every record only one side holds classified (filtered,
 read differently by Scholar, matched only through an inflected form, matched nowhere in title or abstract, not
-in the corpus), and `<date>-scholar-comparison-review.csv`, the rows a person decides. `--query-file` and
+in the corpus), and `<date>-scholar-comparison-review.csv`, the rows a person decides. It also says how many
+of the set's papers match a crawled record and how many only a record the set's own import put in the index. `--query-file` and
 `--query` run other strings; the first report is
 [`docs/results/2026-10-04-scholar-comparison.md`](docs/results/2026-10-04-scholar-comparison.md).
 

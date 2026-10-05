@@ -17,6 +17,11 @@
 - **Earlier counts.** On this index the 2026-09-30 runs gave 27 records for the literal string and 67 for the `$`
   string, 51 of them among the review's records and 16 not. This report reproduces all four numbers:
   `main-7-most-updated` limited to 2020–2026 is the literal string.
-- **Matched papers.** 1,805 of the set's records were imported into the snapshot as its `ris` source (their ids
-  come from scholarmend's claims). This report matches the set by URL and title instead, as it would any RIS
-  file, and finds those 1,805 and 2 more, by title, venue and year.
+- **The set is in the index.** This index's snapshot was built with the set imported as its `ris` source
+  (1,805 of the set's records, their ids from scholarmend's claims). Where a crawl holds the paper too, the two
+  were merged and the record has an independent source. Where no crawl holds it, the index record is the import
+  alone: above all in 2026, which no crawl had reached when the snapshot was built. "What the matches rest on"
+  counts the two kinds apart. On an index built without the import, the RIS-only papers would be reported as not
+  in the index, and their classes could not be judged at all.
+- **Matching.** This report matches the set by URL and title, as it would any RIS file, not by the import's
+  ids.
