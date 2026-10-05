@@ -15,14 +15,16 @@ from hypothesis import event, example, given
 from hypothesis import strategies as st
 from openproceedings.ingest import urls
 from openproceedings.ingest.dedup import (
+    IMPORTED,
     PROCEEDINGS_TRACKS,
     DedupResult,
+    abstract_key,
     dedup,
     is_creative_ai,
 )
 from openproceedings.ingest.record import PaperRecord
 
-from tests.unit.ingest.test_dedup import T0, T1, T2, H, archive, nips, paper
+from tests.unit.ingest.test_dedup import LONG, OTHER, T0, T1, T2, H, archive, nips, paper
 
 TITLES = ["Trust in AI", "trust in AI!", "Trust in Machines", "—"]
 FORUMS = ["AbCd1234", "EfGh5678", "IjKl9012"]
@@ -67,7 +69,8 @@ def records(draw: st.DrawFn) -> PaperRecord:
             st.sampled_from(["main", "workshop", "position", "datasets_benchmarks", "unknown", "other"])
         ),
         status=draw(st.sampled_from(["accepted", "rejected", "unknown"])),
-        abstract=draw(st.sampled_from([None, "An abstract.", "Another abstract."])),
+        # two abstracts long enough to be step 3's evidence (TASK-179), and two that never are
+        abstract=draw(st.sampled_from([None, "An abstract.", "Another abstract.", LONG, OTHER])),
         fetched=draw(st.sampled_from([T0, T1, T2])),
         **extra,
     )
@@ -117,6 +120,34 @@ def links(draw: st.DrawFn) -> list[PaperRecord]:
             )
         )  # fmt: skip
     return base + draw(st.lists(records(), max_size=3))
+
+
+@st.composite
+def imports(draw: st.DrawFn) -> list[PaperRecord]:
+    """An imported record (RIS only) whose title is not its paper's, and the records its abstract may or may not
+    tie it to (TASK-179): its note, sometimes with the note's own RIS row, a second note, a crawled listing, each
+    with the import's abstract or another, in its venue-year or not, plus noise."""
+    venue, prefix = draw(st.sampled_from([("NeurIPS", "nips"), ("ICLR", "iclr")]))
+    year = draw(st.sampled_from([2023, 2024]))
+    abstracts = st.sampled_from([LONG, LONG, OTHER, "An abstract.", None])
+    xs = [paper(f"{prefix}-{H[1]}", "Trust in Machines", source="ris", venue=venue, year=year, abstract=LONG,
+                track=draw(st.sampled_from(["main", "main", "unknown"])))]  # fmt: skip
+    for fid in draw(st.lists(st.sampled_from(FORUMS), min_size=1, max_size=2, unique=True)):
+        where = dict(venue=venue, year=draw(st.sampled_from([year, year, year, 2023, 2024])))
+        title = draw(st.sampled_from(["Trust in AI", "Trust in AI", "Trust in Machines"]))
+        xs.append(paper(fid, title, source=draw(st.sampled_from(["openreview_v2", "openreview_v1"])),
+                        track=draw(st.sampled_from(["main", "main", "workshop", "unknown"])),
+                        status=draw(st.sampled_from(["accepted", "accepted", "rejected"])),
+                        abstract=draw(abstracts), **where))  # fmt: skip
+        if draw(st.booleans()):  # the RIS row of the note's forum id
+            xs.append(paper(fid, title, source="ris", abstract=draw(abstracts), fetched=T1, **where))
+    if draw(
+        st.booleans()
+    ):  # a crawled listing: never joined by its abstract unless the import is in the group
+        source = "neurips_proceedings" if venue == "NeurIPS" else "iclr_archive"
+        xs.append(paper(f"{prefix}-{H[draw(st.sampled_from([1, 2]))]}", draw(st.sampled_from(TITLES)), source=source,
+                        venue=venue, year=year, abstract=draw(abstracts)))  # fmt: skip
+    return xs + draw(st.lists(records(), max_size=3))
 
 
 # a rival that can never be the listed paper (TASK-126): a track the proceedings don't host, or not accepted
@@ -223,6 +254,7 @@ pools = st.one_of(
     links(),
     rivals().map(lambda t: t[0]),
     creative().map(lambda t: t[0]),
+    imports(),
 )  # links() twice: weighted
 
 # the reviewer's two over-merges, pinned
@@ -471,3 +503,69 @@ def test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings(xs: l
         if orv and official:
             event("track:openreview-over-proceedings")
             assert orv[0] in PROCEEDINGS_TRACKS or (is_creative_ai(r) and set(official) == {"other"})
+
+
+# TASK-179: the six pairs and the retitled seventh of snapshot 2026-10-05-47d4e190ca81, as shapes
+LOST_SYMBOL = [
+    paper("AbCd1234", "A$^2$Search", venue="ICLR", abstract=LONG),
+    paper(f"iclr-{H[1]}", "ASearch", source="ris", venue="ICLR", abstract=LONG),
+]
+TWO_RIS_ROWS = [
+    paper("AbCd1234", venue="ICLR", abstract=LONG),
+    paper("AbCd1234", "Trust in Machines", source="ris", venue="ICLR", abstract=LONG),
+    paper(f"iclr-{H[1]}", "Trust in Machines", source="ris", venue="ICLR", abstract=LONG, fetched=T1),
+]
+SAME_ABSTRACT_OTHER_YEAR = [
+    paper("AbCd1234", "A$^2$Search", venue="ICLR", year=2023, abstract=LONG),
+    paper(f"iclr-{H[1]}", "ASearch", source="ris", venue="ICLR", year=2024, abstract=LONG),
+]
+
+
+@given(pools)
+@example(LOST_SYMBOL)
+@example(TWO_RIS_ROWS)
+@example(SAME_ABSTRACT_OTHER_YEAR)
+@example(TWO_PROCEEDINGS_IDS)
+def test_an_abstract_merge_always_holds_an_imported_record_and_its_abstract(xs: list[PaperRecord]) -> None:
+    """Step 3 (TASK-179): every `abstract_venue_year` row joins two clusters of one venue and year that both keep
+    an abstract with the row's key, into a group that held an imported record (sources `ris` alone) before the
+    step; and a pool with no imported record has no such row."""
+    result = dedup(xs)
+    note(result)
+    rows = [m for m in result.merges if m.rule == "abstract_venue_year"]
+    if not any({c.source for c in x.provenance} == IMPORTED for x in xs):
+        assert rows == []
+    ends = final_ids(result)
+    by_id = {r.id: r for r in result.records}
+    for m in rows:
+        out = by_id[ends[m.merged_id]]
+        assert (out.venue, out.year) == (m.venue, m.year) and m.key.startswith("sha256:")
+        members = [x for x in xs if ends[x.id] == out.id]
+        assert {(x.venue, x.year) for x in members} == {(m.venue, m.year)}
+        # both sides held the abstract: the merged cluster's inputs, and the rest of the group
+        mine = [x for x in members if x.id == m.merged_id or final_before(result, x.id) == m.merged_id]
+        rest = [x for x in members if x not in mine]
+        for side in (mine, rest):
+            assert any(x.abstract is not None and abstract_key(x.abstract) == m.key for x in side)
+        # an imported record: some cluster in the group whose every input, before step 3, came from `ris` alone
+        before = Counter(final_before(result, x.id) for x in members)
+        assert any(
+            all(
+                {c.source for c in x.provenance} == IMPORTED
+                for x in members
+                if final_before(result, x.id) == cid
+            )
+            for cid in before
+        )
+
+
+def final_before(result: DedupResult, rid: str) -> str:
+    """The cluster an input id was in before step 3: follow every row but the `abstract_venue_year` ones."""
+    step = {
+        m.merged_id: m.survivor_id
+        for m in result.merges
+        if m.merged_id != m.survivor_id and m.rule != "abstract_venue_year"
+    }
+    while rid in step:
+        rid = step[rid]
+    return rid

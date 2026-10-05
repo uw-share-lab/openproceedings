@@ -19,6 +19,18 @@ a review, a duplicate only shows in the hit count.
    accepted/unknown) are set aside as rivals and the rest merge if they may; the set-aside clusters stay
    separate records.
 
+3. An **imported record** that matched nothing (a cluster whose only source is `ris`, after steps 1 and 2) then
+   merges on `(venue, year, abstract key)` (TASK-179): its title is Google Scholar's rendering, which drops math
+   (`$R^2$-Guard` arrives as `-Guard`) and can be a preprint's earlier title, while its abstract is the
+   publisher's own page text. The abstract key is the title key's normalisation of the abstract, and counts only
+   from `MIN_ABSTRACT_TOKENS` tokens. Every refusal of step 2 holds here too (forum ids, proceedings ids, the
+   track rule, the set-aside rivals), and a group with no imported record is never joined by its abstracts.
+
+`ris` is a route, not a publisher: each RIS row names its paper by a forum id or a proceedings id. So two
+candidates that share only `ris` are judged by those ids (at most one of each in a merged record), not refused
+as two candidates from one source (TASK-179: a note's cluster holds the RIS row of its forum id, and the same
+paper's RIS row under its proceedings id is no rival to it).
+
 The track rule, wherever a listing (a record with a proceedings id or a proceedings source) is involved: every
 record is on a `PROCEEDINGS_TRACKS` track (a listing's own `unknown` included, never one an OpenReview claim
 gives: TASK-174), or every record is NeurIPS Creative AI (`is_creative_ai`, TASK-137: track `other` that each
@@ -35,11 +47,13 @@ only on the set of inputs (sorted ids, set-based decisions).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Literal, Protocol
 
 from openproceedings.ingest import classify, urls
@@ -86,15 +100,20 @@ ABSENT = "unknown"  # the status a crawled listing gives a paper it doesn't hold
 ABSENT_EVIDENCE = "not listed:"  # how an absence claim's evidence starts; no miner writes it
 # A listing names only accepted papers; `unknown` may still be one (unresolved v1 evidence), so it stays a rival.
 _LISTABLE_STATUSES = frozenset({"accepted", "unknown"})
+# The import route (TASK-179). A RIS row is scholarmend's reading of a Google Scholar hit: it names its paper by a
+# forum id or a proceedings id, so sharing `ris` is no sign of two candidates, and a cluster with no other source
+# (an imported record) carries Scholar's title, the one text of it that is not the publisher's.
+IMPORTED: frozenset[str] = frozenset({"ris"})
+MIN_ABSTRACT_TOKENS = 50  # a shorter abstract (a placeholder, a one-liner) is never merge evidence
 
 
 @dataclass(frozen=True, order=True)
 class Merge:
     survivor_id: str
     merged_id: str
-    rule: str  # forum_id | native_id | forum_link | title_venue_year
+    rule: str  # forum_id | native_id | forum_link | title_venue_year | abstract_venue_year
     # forum_link: the shared forum id; title_venue_year: the title key that joined the merged cluster to the
-    # group (in a chain, not always the survivor's)
+    # group (in a chain, not always the survivor's); abstract_venue_year: the abstract key (`sha256:<16 hex>`)
     key: str
     venue: str
     year: int
@@ -128,6 +147,17 @@ def title_key(title: str) -> str:
     decomposed letter starts a command: NFD `Caf\\e\u0301` lost its `e` (`caf`) where NFC `Caf\\é` keeps it
     (`caf e`), and `Erd\\H{o\u030b}s` was no accent macro (`erd o s`, not `erdos`)."""
     return " ".join(normalize(unicodedata.normalize("NFC", title)))
+
+
+@lru_cache(maxsize=1 << 18)
+def abstract_key(abstract: str) -> str:
+    """The dedup key of an abstract (step 3, TASK-179): `sha256:` and the first 16 hex digits of the hash of its
+    `title_key` (the same token-contract normalisation, so no second normaliser), or `""` when it has fewer than
+    `MIN_ABSTRACT_TOKENS` tokens. Hashed because the key is written to merges.csv and an abstract is long."""
+    key = title_key(abstract)
+    if key.count(" ") + 1 < MIN_ABSTRACT_TOKENS:
+        return ""
+    return "sha256:" + hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
 def _text(v: object) -> str:
@@ -466,7 +496,9 @@ def _family(c: _Cluster) -> str | None:
 def _mergeable(group: Sequence[_Cluster], *, linked: bool = False) -> str | None:
     """Why these step-1 clusters must not share a record, or None if they may. `linked`: they share a forum
     id (the forum link), so one source on two sides is no ambiguity: the id says which paper each is."""
-    srcs = [c.sources for c in group]
+    # `ris` on two sides is no ambiguity (TASK-179): each RIS row names its paper by id, and the two id checks
+    # below refuse two forum ids or two proceedings ids whatever their sources
+    srcs = [c.sources - IMPORTED for c in group]
     if not linked and any(srcs[i] & srcs[j] for i in range(len(srcs)) for j in range(i + 1, len(srcs))):
         return "ambiguous_not_merged"  # two candidates from one source: which one is the paper?
     if len(frozenset[str]().union(*(c.forum_ids for c in group))) > 1:
@@ -553,12 +585,58 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
     clusters, linked = _link(same_id)
     merges += linked
     # Step 2: (venue, year, title key) across sources.
-    buckets: dict[tuple[str, int, str], set[int]] = defaultdict(set)
+    titled: dict[tuple[str, int, str], set[int]] = defaultdict(set)
     for ci, c in enumerate(clusters):
         for key in c.keys:  # a title of only punctuation or math has no key and never matches
-            buckets[(c.summary.venue, c.summary.year, key)].add(ci)
-    step2 = _Clusters(len(clusters))
-    joined_by: dict[int, str] = {}  # cluster → the first title key it merged on
+            titled[(c.summary.venue, c.summary.year, key)].add(ci)
+    clusters, found = _join(clusters, titled, "title_venue_year")
+    merges += found
+    # Step 3: an imported record that matched nothing, on (venue, year, abstract key).
+    clusters, found = _join(clusters, _abstract_buckets(clusters), "abstract_venue_year")
+    merges += found
+
+    out: list[PaperRecord] = []
+    for cluster in clusters:
+        merged, rows = resolve(cluster.id, [c for r in cluster.members for c in r.provenance])
+        out.append(merged)
+        conflicts.update(rows)
+    conflicts |= _refusals(out)
+    return DedupResult(
+        tuple(sorted(out, key=lambda r: r.id)), tuple(sorted(merges)), tuple(sorted(conflicts))
+    )
+
+
+def _abstract_keys(c: _Cluster) -> frozenset[str]:
+    """The key of every abstract claim the cluster keeps (as `keys` is of its titles) that is long enough."""
+    return frozenset(
+        k for claim in c.summary.provenance
+        if claim.field == "abstract" and isinstance(claim.value, str) and (k := abstract_key(claim.value))
+    )  # fmt: skip
+
+
+def _abstract_buckets(clusters: Sequence[_Cluster]) -> dict[tuple[str, int, str], set[int]]:
+    """Step 3's groups: clusters of one venue and year sharing an abstract key, kept only where one of them is an
+    imported record (its sources are `IMPORTED` alone). Abstracts are normalised only in the venue-years that
+    hold one."""
+    scope = {
+        (c.summary.venue, c.summary.year) for c in clusters if c.sources == IMPORTED and _abstract_keys(c)
+    }
+    buckets: dict[tuple[str, int, str], set[int]] = defaultdict(set)
+    for ci, c in enumerate(clusters):
+        if (c.summary.venue, c.summary.year) in scope:
+            for key in _abstract_keys(c):
+                buckets[(c.summary.venue, c.summary.year, key)].add(ci)
+    return {k: cis for k, cis in buckets.items() if any(clusters[ci].sources == IMPORTED for ci in cis)}
+
+
+def _join(
+    clusters: Sequence[_Cluster], buckets: dict[tuple[str, int, str], set[int]], rule: str
+) -> tuple[list[_Cluster], list[Merge]]:
+    """Merge the clusters each bucket's key joins, where `_merging` lets them, into new clusters (sorted by id),
+    with one `rule` row per merged cluster, from its id to the survivor's. Used for title keys (step 2) and
+    abstract keys (step 3)."""
+    joined = _Clusters(len(clusters))
+    joined_by: dict[int, str] = {}  # cluster → the first key it merged on
     for (_, _, key), cis in sorted(buckets.items()):
         if len(cis) < 2:
             continue
@@ -567,11 +645,11 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
         if merging is None:
             continue  # reported by _refusals, against the output records
         for ci in (ordered[i] for i in merging):
-            step2.union(ordered[merging[0]], ci)
+            joined.union(ordered[merging[0]], ci)
             joined_by.setdefault(ci, key)
-
-    out: list[PaperRecord] = []
-    for group in step2.groups():
+    out: list[_Cluster] = []
+    merges: list[Merge] = []
+    for group in joined.groups():
         chained = [clusters[ci] for ci in group]
         # keys chained clusters that must not share a record: keep every cluster on its own. A cluster set
         # aside on one key (TASK-126) never merges through another. A track one never merges: a key's group with a
@@ -580,22 +658,20 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
         # its own forum id (dedup refuses one naming neither a forum id nor its proceedings URL), unlike the
         # note the listing merged with. The chain splits: the safe direction, never a merge
         refused = len(group) > 1 and _mergeable(chained) is not None
-        parts = [[ci] for ci in group] if refused else [group]
-        for part in parts:
+        for part in [[ci] for ci in group] if refused else [group]:
             members = [clusters[ci] for ci in part]
+            if len(members) == 1:
+                out.append(members[0])
+                continue
             survivor = _survivor_id(members)
-            merged, found = resolve(survivor, [c for m in members for r in m.members for c in r.provenance])
-            out.append(merged)
-            conflicts.update(found)
+            cluster = _cluster([r for m in members for r in m.members], survivor)
+            out.append(cluster)
             merges += [
-                Merge(survivor, clusters[ci].id, "title_venue_year", joined_by[ci], merged.venue, merged.year,
+                Merge(survivor, clusters[ci].id, rule, joined_by[ci], cluster.summary.venue, cluster.summary.year,
                       "+".join(sorted(clusters[ci].sources)))
                 for ci in part if clusters[ci].id != survivor
             ]  # fmt: skip
-    conflicts |= _refusals(out)
-    return DedupResult(
-        tuple(sorted(out, key=lambda r: r.id)), tuple(sorted(merges)), tuple(sorted(conflicts))
-    )
+    return sorted(out, key=lambda c: c.id), merges
 
 
 def _link(same_id: Sequence[_Cluster]) -> tuple[list[_Cluster], list[Merge]]:
@@ -662,24 +738,26 @@ def _refusals(out: Sequence[PaperRecord]) -> set[Conflict]:
                 reason = _mergeable(group, linked=True)
                 fld = "forum_id" if reason else "forum_id_chain"
                 rows.update(_pair(group[0], c, reason or "ambiguous_not_merged", fld) for c in group[1:])
-    buckets: dict[tuple[str, int, str], list[_Cluster]] = defaultdict(list)
-    for c in clusters:
+    buckets: dict[tuple[str, int, str], set[int]] = defaultdict(set)
+    for ci, c in enumerate(clusters):
         for key in c.keys:
-            buckets[(c.summary.venue, c.summary.year, key)].append(c)
-    for bucket in buckets.values():
-        if len(bucket) < 2:
-            continue
-        # a cluster that can't be a listing's paper (TASK-126) is reported against the first listing, with
-        # its own reason; the rest as before (a key whose records could merge alone was refused in a chain)
-        aside: dict[str, str] = {}
-        if _mergeable(bucket) is not None and any(c.listed for c in bucket):
-            aside = {c.id: why for c in bucket if (why := _not_the_listed_paper(c, bucket))}
-        if aside:
-            listing = next(c for c in bucket if c.listed)
-            rows.update(_pair(listing, c, aside[c.id]) for c in bucket if c.id in aside)
-        rest = [c for c in bucket if c.id not in aside]
-        if len(rest) > 1:
-            reason = _mergeable(rest)
-            fld = "title_key" if reason else "title_key_chain"
-            rows.update(_pair(rest[0], c, reason or "ambiguous_not_merged", fld) for c in rest[1:])
+            buckets[(c.summary.venue, c.summary.year, key)].add(ci)
+    for fld, found in (("title_key", buckets), ("abstract_key", _abstract_buckets(clusters))):
+        for cis in found.values():
+            bucket = [clusters[ci] for ci in sorted(cis)]
+            if len(bucket) < 2:
+                continue
+            # a cluster that can't be a listing's paper (TASK-126) is reported against the first listing, with
+            # its own reason; the rest as before (a key whose records could merge alone was refused in a chain)
+            aside: dict[str, str] = {}
+            if _mergeable(bucket) is not None and any(c.listed for c in bucket):
+                aside = {c.id: why for c in bucket if (why := _not_the_listed_paper(c, bucket))}
+            if aside:
+                listing = next(c for c in bucket if c.listed)
+                rows.update(_pair(listing, c, aside[c.id], fld) for c in bucket if c.id in aside)
+            rest = [c for c in bucket if c.id not in aside]
+            if len(rest) > 1:
+                reason = _mergeable(rest)
+                named = fld if reason else f"{fld}_chain"
+                rows.update(_pair(rest[0], c, reason or "ambiguous_not_merged", named) for c in rest[1:])
     return rows

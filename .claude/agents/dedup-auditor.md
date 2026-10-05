@@ -22,12 +22,16 @@ fixes.
 2. Run `uv run pytest backend/tests/unit/ingest -q -k dedup` and report the counts. Confirm the property
    tests exist and cover: no cross venue/year, idempotence, order independence, conservation, and no
    merge between distinct forum ids.
-3. **Key audit.** The key must be `(venue, year, title_key)` with no fallback key. The title key must
+3. **Key audit.** The key must be `(venue, year, title_key)` with no fallback key; the one other key,
+   `(venue, year, abstract_key)`, only ever joins a group that holds an imported record, and never an abstract
+   under 50 tokens. The title key must
    come from `normalize()`, not a second normaliser. Empty keys and missing years are rejected before the
    merge.
 4. **On a snapshot:** in `merges.csv`, check that every `title_venue_year` row has matching venue and
-   year on both sides, that no survivor absorbed more than one record from the same source, and that no
-   survivor has a `workshop` track alongside a proceedings claim. Read `conflicts.csv` for
+   year on both sides, that no survivor absorbed more than one record from the same source (`ris` aside: a
+   paper's forum-id and proceedings-id RIS rows may both be in it, TASK-179), and that no
+   survivor has a `workshop` track alongside a proceedings claim. Check every `abstract_venue_year` row the
+   same way, and that its merged side was an imported record (sources `ris` alone) or its survivor was. Read `conflicts.csv` for
    `ambiguous_not_merged` clusters and check that none of them were merged anyway.
 5. **Conservation.** The input record count minus the `merges.csv` rows must equal the `records.jsonl`
    line count. Run `op snapshot diff <current> <new>`, and treat every removed id in a venue-year whose

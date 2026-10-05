@@ -260,7 +260,33 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    and the two families never mix. When a title group holds a listing, a note that can't be the listed paper (a
    track the rule keeps from every listing in the group, or rejected, withdrawn or desk-rejected: proceedings list
    only accepted papers; an `unknown` track or status stays a rival) is no rival for it (TASK-126): the rest merge
-   if they may, and that note stays its own record with a `conflicts.csv` row. A merged record's fields are re-resolved from the union of its claims by the decision-005 precedence table. Track is decided
+   if they may, and that note stays its own record with a `conflicts.csv` row.
+
+   **`ris` is a route, not a publisher (TASK-179).** A RIS row names its paper by a forum id or a proceedings
+   id, so two candidates that share only the `ris` source are not "two candidates from one source": the id
+   checks decide (a merged record holds at most one forum id and one proceedings id). So a note whose cluster
+   already holds the RIS row of its forum id still merges with the same paper's RIS row under its proceedings
+   id (ICLR 2024 `QHROe7Mfcb`). Sharing any other source is still ambiguous.
+
+   Then (c) **an imported record that matched nothing, on its abstract (TASK-179).** A cluster whose only
+   source is `ris` after (a)–(b) carries Google Scholar's title, the one text of it that is not the
+   publisher's: Scholar drops math (`$R^2$-Guard` arrives as `-Guard`, `A$^2$Search` as `ASearch`) and can
+   give a preprint's earlier title. Its abstract is the publisher's page text (scholarmend's
+   `proceedings_page` or `openreview_api` claim, never a Scholar snippet). Such a record merges with the
+   records of the **same venue and year** that keep an abstract with the same **abstract key**: the title
+   key's normalisation of the abstract, counted only from 50 tokens, written to `merges.csv` as
+   `sha256:<16 hex>` with rule `abstract_venue_year`. Every refusal of (b) holds: never two forum ids or two
+   proceedings ids, never against the track rule, and the same set-aside of rivals that can't be the listed
+   paper; a refused group is a `conflicts.csv` row with field `abstract_key` (or `abstract_key_chain`). A
+   group with no imported record is never joined by its abstracts, so a crawled listing whose paper was
+   retitled stays two records (NeurIPS 2023 D&B `3sRR2u72oQ`, the one such pair on the 2026-10-05 crawl). The
+   title key is never loosened: two papers whose titles differ only by a symbol and whose abstracts differ
+   stay two records. The merged record's differing titles are a `precedence:` row, as for any merge. On the
+   2026-10-05 crawl (a) – (c) merge all 7 accepted records that existed only as the import's second copy of a
+   crawled ICLR paper: one by its title once `ris` on both sides stopped blocking it, six by their abstract
+   (five lost a math symbol; `CwoM9T55lG` is under its earlier title).
+
+   A merged record's fields are re-resolved from the union of its claims by the decision-005 precedence table. Track is decided
    per track (decision-005, the owner's decision of 2026-09-29): the proceedings decide a paper's track wherever
    OpenReview doesn't hold that venue-year's track (ICLR 2016 main, from the archive, stays `main`), and an
    OpenReview track claim, the note's own `content.venueid`, wins wherever the record carries one. Within a track
@@ -499,7 +525,10 @@ refuses the crawl.
 - A venueid-parsing table test covering every venueid form seen in scholarmend's 90 validated cases, plus
   the known workshop forms.
 - Dedup property tests. Never merge across venue or year. Merging is idempotent and order-independent,
-  and never folds two forum ids (own or linked). The forum link has table tests from the recorded v235
+  and never folds two forum ids (own or linked). Every `abstract_venue_year` merge holds an imported record
+  and the shared abstract on both sides (TASK-179), with table tests for the lost-symbol titles, a paper's two
+  RIS rows, and the cases that must stay apart (another abstract, a short one, another venue or year, no
+  imported record). The forum link has table tests from the recorded v235
   index and ICML 2024 note (`test_dedup_forum_link.py`).
 - Reconcile table and property tests (`test_reconcile.py`): only unlisted OpenReview acceptances in a covered
   track of a completely crawled venue-year change, only to `unknown`; conflicts rows only appear, except a

@@ -33,8 +33,25 @@ over-merge silently deletes a paper from someone's systematic review.
    lost its `e` to a `\e` command and `Erd\H{o\u030b}s` was no accent macro. `test_every_canonically_equivalent_title_has_one_key`
    pins `title_key(NFC(t)) == title_key(NFD(t)) == title_key(t)`. The real corpus held no non-NFC title (2026-09-29).
 
+3. **An imported record that matched nothing: same abstract key, same `venue`, same `year` (TASK-179).** An
+   imported record is a cluster whose only source is `ris` after steps 1 and 2 (`dedup.IMPORTED`). Its title is
+   Google Scholar's, which drops math (`$R^2$-Guard` → `-Guard`) and may be a preprint's earlier title; its
+   abstract is the publisher's page text. It merges with the same venue-year's clusters that keep an abstract
+   with its **abstract key**: `dedup.abstract_key`, `sha256:` + 16 hex of the abstract's `title_key`, and `""`
+   (never a match) under `MIN_ABSTRACT_TOKENS` = 50 tokens. Same machinery as step 2 (`_join`, `_merging`,
+   `_mergeable`, the chain re-check), so every never-merge rule below holds, set-aside rivals included. A bucket
+   with no imported record is never formed: a crawled listing and a note sharing only an abstract stay apart
+   (NeurIPS 2023 D&B `3sRR2u72oQ` and its retitled listing, the one such pair on the 2026-10-05 crawl; lifting
+   the restriction is an owner decision). Abstracts are normalised only in venue-years that still hold an
+   imported record. Never loosen the title key instead: `A$^2$Search` and `ASearch` with different abstracts are
+   two papers.
+
 Step 2 only runs **across sources**: the clusters' provenance source sets must be disjoint
-(OpenReview ↔ proceedings ↔ RIS). Two OpenReview notes with different forum ids are different submissions
+(OpenReview ↔ proceedings), **`ris` aside** (TASK-179): RIS is a route, each RIS row names its paper by a forum
+id or a proceedings id, and the id checks (at most one forum id and one proceedings id per record) judge two RIS
+rows. So a note's cluster that holds the RIS row of its forum id still merges with the same paper's RIS row
+under its proceedings id (ICLR 2024 `QHROe7Mfcb`); two RIS rows naming two forum ids or two proceedings ids
+never merge. Two OpenReview notes with different forum ids are different submissions
 even when their titles match. For example, a main-track paper and a same-year workshop version share a
 title, and both must survive. Each step-1 cluster is judged by the record its claims resolve to: its
 track, its sources, and the key of every title claim it **keeps**. A same-source title that a newer
@@ -48,7 +65,8 @@ safe direction.
   validation). This is the venuetriage lesson: a `(title, "")` key merged every year-less record that
   shared a title.
 - When `title_key` is empty (a title of punctuation or math only).
-- When the key matches **more than one** candidate from one source, two different forum ids (own or
+- When the key matches **more than one** candidate from one source (`ris` aside: its rows are judged by the
+  ids they name, TASK-179), two different forum ids (own or
   linked: a PMLR listing whose link names forum Y never title-merges with note X), or two
   different proceedings papers (proceedings ids come from native ids *and* `urls.proceedings`/`urls.pdf`
   claims, `ingest/urls.py`). That's ambiguous: write a `conflicts.csv` row and keep them all separate.
@@ -207,12 +225,14 @@ it needs to know which listings were crawled, and whether completely.
 
 ## Audit files (in the snapshot directory)
 `merges.csv`: `survivor_id,merged_id,rule,key,venue,year,sources`, where `rule` is `forum_id`,
-`native_id` (the same proceedings id), `forum_link` or `title_venue_year`, and `key` is the forum id, the
-native id, the linked forum id or the first shared title key. Step-1 rows point from a cluster's id to
+`native_id` (the same proceedings id), `forum_link`, `title_venue_year` or `abstract_venue_year`, and `key` is
+the forum id, the native id, the linked forum id, the first shared title key or the abstract key
+(`sha256:<16 hex>`; recompute it with `dedup.abstract_key` on either side's abstract). Step-1 rows point from a cluster's id to
 itself (`survivor_id == merged_id`: one row per extra copy of that id); a `forum_link` row points from a
 linked cluster's id (the PMLR listing) to the forum id's; a `title_venue_year` row then points from the
-cluster id to the final survivor. So every input id is an output id or a `merged_id`, once per copy, and
-following the `forum_link` and `title_venue_year` rows from any `merged_id` reaches an output record
+cluster id to the step-2 survivor, and an `abstract_venue_year` row from a step-2 cluster's id to the final
+survivor. So every input id is an output id or a `merged_id`, once per copy, and
+following the `forum_link`, `title_venue_year` and `abstract_venue_year` rows from any `merged_id` reaches an output record
 (`snapshot.with_crawl_conflicts` follows them the same way).
 
 `conflicts.csv`: `id,field,value_a,source_a,value_b,source_b,resolution`, where `resolution` is
@@ -222,7 +242,8 @@ values; the kept one is `value_a`), `ambiguous_not_merged`, `track_not_merged`,
 `venue_year_not_merged`, or `unresolved:openreview_v1` (not dedup's: a v1 crawl found one note's own evidence
 disagreeing, such as a withdrawn invitation and an accepted `content.venue`, or an accepted note whose pdf a
 withdrawn note shares, decision-020; the record holds `unknown` for that
-field, and `value_a`/`value_b` name each value with its evidence; `snapshot.with_crawl_conflicts` adds it). For the not-merged resolutions, `field` is `title_key`, `title_key_chain`,
+field, and `value_a`/`value_b` name each value with its evidence; `snapshot.with_crawl_conflicts` adds it). For the not-merged resolutions, `field` is `title_key`, `title_key_chain`, `abstract_key`,
+`abstract_key_chain` (an imported record and the records sharing its abstract key that stayed apart, TASK-179),
 `forum_id` (one forum id, own or linked, on records that stayed apart) or `forum_id_chain`, and the values
 are the two record ids, with their sources (a set-aside rival's row is paired with the first listing of its
 title group, TASK-126). Every row names an output record:
@@ -240,6 +261,9 @@ that builds the chain shape and a `links` strategy that builds the forum link's 
 listings linking it or another forum, from its venue-year or another); `@example` rows pin the two
 over-merges a review found and the link cases. Table tests from the recorded v235 and ICML 2024 note
 fixtures: `test_dedup_forum_link.py`.
+- An `abstract_venue_year` row (TASK-179; the `imports` strategy, and two long abstracts in every pool) joins
+  clusters of one venue-year that both keep the row's abstract, in a group that held an imported record; a pool
+  with no imported record has none.
 - No output record combines inputs with different `(venue, year)`.
 - Idempotent: `dedup(dedup(xs)).records == dedup(xs).records`, and the same conflict rows apart from
   `newest:`/`tie:`.
