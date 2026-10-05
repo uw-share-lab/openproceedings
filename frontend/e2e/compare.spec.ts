@@ -153,6 +153,92 @@ test("a file's papers land in the four lists, each opens, and each downloads as 
   expect(left.text).toBe(answer.csv.not_compared);
 });
 
+test("a row's title opens its paper in a new tab, and the comparison stays", async ({ page, context }) => {
+  test.setTimeout(90_000);
+  await search(page, Q);
+  await compare(page, await heldFile(page));
+  const heading = panel(page).getByRole("heading", { name: /^Comparison with my-records\.ris$/ });
+  await expect(heading).toBeVisible({ timeout: 60_000 });
+  const kept = list(page, /kept papers?$/);
+  await kept.getByRole("button", { name: /^Show the / }).click();
+  const link = kept.getByRole("listitem").first().getByRole("link");
+  const [paper] = await Promise.all([context.waitForEvent("page", { timeout: 10_000 }), link.click()]);
+  await paper.waitForLoadState();
+  expect(new URL(paper.url()).pathname).toMatch(/^\/paper\//);
+  await paper.close();
+  await expect(link).toHaveAccessibleName(/\(opens in a new tab\)$/); // said before it is followed
+  // this tab never left the search: the file's answer is still drawn, the list still open
+  expect(new URL(page.url()).pathname).toBe("/search");
+  await expect(heading).toBeVisible();
+  await expect(kept.getByRole("listitem").first()).toBeVisible();
+});
+
+test("Cancel, pressed by keyboard, hands focus back to Compare", async ({ page }) => {
+  await search(page, Q);
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/v1/compare?**", async (route) => {
+    await held; // the comparison is still running when Cancel is pressed
+    await route.continue().catch(() => {});
+  });
+  await choose(page, Buffer.from(UNKNOWN));
+  const start = panel(page).getByRole("button", { name: "Compare", exact: true });
+  await start.focus();
+  await page.keyboard.press("Enter");
+  const cancel = panel(page).getByRole("button", { name: "Cancel" });
+  await tabTo(page, cancel, 3);
+  await page.keyboard.press("Enter");
+  await expect(cancel).toHaveCount(0);
+  await expect(start).toBeFocused();
+  await expect(panel(page).getByRole("status").first()).toHaveText("Comparison cancelled.");
+  release();
+});
+
+test("Retry, pressed by keyboard, hands focus to Compare while the new comparison runs", async ({ page }) => {
+  test.setTimeout(90_000);
+  await search(page, Q);
+  let calls = 0;
+  await page.route("**/api/v1/compare?**", async (route) => {
+    calls += 1;
+    if (calls === 1)
+      await route.abort("connectionrefused"); // the first try never reaches the server
+    else await route.continue();
+  });
+  await choose(page, Buffer.from(UNKNOWN));
+  await panel(page).getByRole("button", { name: "Compare", exact: true }).click();
+  const alert = panel(page).getByRole("alert");
+  await expect(alert).toContainText("Couldn't reach the server.");
+  const retry = alert.getByRole("button", { name: "Retry" });
+  await tabTo(page, retry, 6);
+  await page.keyboard.press("Enter");
+  await expect(retry).toHaveCount(0);
+  await expect(panel(page).getByRole("button", { name: "Compare", exact: true })).toBeFocused();
+  // then the answer takes focus, as after Compare
+  await expect(panel(page).getByRole("heading", { name: /^Comparison with my-records\.ris$/ })).toBeFocused({
+    timeout: 60_000,
+  });
+});
+
+test("the last Show more hands focus to the first row it drew", async ({ page }) => {
+  test.setTimeout(90_000);
+  await search(page, Q);
+  // 101 records from another venue: one more than a list draws at once
+  const others = Array.from({ length: 101 }, (_, i) => record(`a workshop paper number ${i + 1}`, "AISTATS"));
+  await compare(page, Buffer.from(UNKNOWN + others.join("")));
+  const out = panel(page).getByRole("region", { name: /^Not compared/ });
+  await expect(out).toBeVisible({ timeout: 60_000 });
+  await out.getByRole("button", { name: /^Show the / }).click();
+  await expect(out.getByRole("listitem")).toHaveCount(100);
+  const more = out.getByRole("button", { name: /^Show more/ });
+  await tabTo(page, more, 10);
+  await page.keyboard.press("Enter");
+  await expect(more).toHaveCount(0); // it was the last
+  await expect(out.getByRole("listitem")).toHaveCount(101);
+  await expect(out.getByRole("listitem").nth(100)).toBeFocused();
+});
+
 test("an instance without comparisons doesn't offer the panel", async ({ page }) => {
   await useInstance(page, "plain");
   const meta = page.waitForResponse((r) => r.url().includes("/api/v1/meta") && r.status() === 200);

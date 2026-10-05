@@ -136,9 +136,15 @@ describe("CompareRecords", () => {
     expect(show.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(show);
     const items = within(dropped).getAllByRole("listitem");
+    // each title opens its paper in a new tab, and says so (the comparison lives on this page only)
     expect(items.map((li) => within(li).getByRole("link").textContent)).toEqual(
-      R.dropped.map((r) => r.title),
+      R.dropped.map((r) => `${r.title} ↗ (opens in a new tab)`),
     );
+    expect(
+      within(items[0] as HTMLElement)
+        .getByRole("link")
+        .getAttribute("target"),
+    ).toBe("_blank");
     const first = R.dropped[0];
     expect(items[0]?.textContent).toContain(`record ${first?.ris_record} of your file`);
     expect(items[0]?.textContent).toContain(`excluded by a default filter — ${first?.detail}`);

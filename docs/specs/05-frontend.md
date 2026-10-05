@@ -380,7 +380,7 @@ warnings, the save's index check), the design doc says so; its open questions li
      default filter`, `no exact match in its title or abstract`, `matches only as another word form`, …; an
      unknown `reason` is shown as sent, the enum being open), a Show/Hide button (`aria-expanded`), and its
      downloads. A row is the title (the file's own; a link to `/paper/[id]` with the query when the index
-     holds the paper), venue and year, its position in the file, how it was matched or why it wasn't, the
+     holds the paper, opened in a new tab and named so: the comparison is held by this page only), venue and year, its position in the file, how it was matched or why it wasn't, the
      reason and the server's `detail`, and "import only" / "needs a person to decide" / "abstract withheld"
      as text. A list draws 100 rows at a time ("Show more").
    - **Downloads** are the response's own text saved as sent: each list's `csv`, and for Added also
@@ -393,7 +393,8 @@ warnings, the save's index check), the design doc says so; its open questions li
    - **Accessibility.** A native file input with a visible label; the result's heading takes focus when the
      answer lands and a polite live region says "Comparison done: 51 kept, 1,756 dropped, 8 not in the index,
      16 added."; refusals are alerts worded from the envelope, a 429 or `API_BUSY` with its countdown and
-     Retry; a running comparison can be cancelled. It fits 320 px (the table has two columns; titles wrap).
+     Retry; a running comparison can be cancelled. Focus never falls to the page: Cancel and Retry hand it to
+     Compare, and the last "Show more" to the first row it drew. It fits 320 px (the table has two columns; titles wrap).
 
 ## Error handling
 

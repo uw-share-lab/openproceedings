@@ -119,7 +119,8 @@ C3, answered (numbers from the 2026-10-05 run on index `05a0541717f6`; each is a
 │ ─ Not compared · 19           [Show the 19 records not compared] [Download CSV]     │
 ```
 
-A row, opened: the title (a link to the paper page when the index holds it), then `ICLR 2024 · record 212 of
+A row, opened: the title (a link to the paper page when the index holds it, opened in a new tab and saying so:
+the comparison lives on this page only, so a same-tab link and Back would lose it and the chosen file), then `ICLR 2024 · record 212 of
 your file · matched by title, venue and year`, then the reason and the server's detail (`excluded by a
 default filter — track=workshop`), then `import only · needs a person to decide` when they apply.
 
@@ -127,7 +128,9 @@ default filter — track=workshop`), then `import only · needs a person to deci
 
 - **Keyboard.** The trigger is a button (`aria-expanded`, `aria-controls`); the panel is a labelled region.
   Tab order inside: file input → Compare (→ Cancel while running) → the answer. When the answer lands, focus
-  moves to its heading (`tabindex="-1"`), so the next Tab is the first list's Show button. Every Show/Hide is a
+  moves to its heading (`tabindex="-1"`), so the next Tab is the first list's Show button. A control that removes
+  itself never drops focus to the page: Cancel and Retry hand it to Compare, and the last "Show more" to the
+  first row it drew (`tabindex="-1"`). Every Show/Hide is a
   button with `aria-expanded`; Enter and Space work as on any button. No drag and drop: the native file input
   is the only way to choose a file, so there is nothing a keyboard can't do.
 - **Screen reader.** A polite status region says "Comparing `<name>` with this search." then "Comparison done:

@@ -80,6 +80,7 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
   const [announcement, setAnnouncement] = useState("");
   const aborter = useRef<AbortController | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const compareButton = useRef<HTMLButtonElement>(null);
   const focusResult = useRef(false);
   const panelId = useId();
   const fileId = useId();
@@ -107,6 +108,8 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
     const controller = new AbortController();
     aborter.current = controller;
     const asked = key;
+    // a Retry that started this run is gone with its notice: focus goes to Compare, never to the page
+    compareButton.current?.focus();
     setRun({ kind: "running", fileName: file.name, size: file.size });
     setAnnouncement(`Comparing ${file.name} with this search.`);
     void postCompare(api, { q, mode }, file, controller.signal).then(
@@ -132,6 +135,7 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
 
   const cancel = () => {
     aborter.current?.abort();
+    compareButton.current?.focus(); // Cancel is gone once the run is
     setRun({ kind: "idle" });
     setAnnouncement("Comparison cancelled.");
   };
@@ -180,6 +184,7 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
             />
           </div>
           <button
+            ref={compareButton}
             type="button"
             aria-disabled={off ? true : undefined}
             aria-describedby={disabledReason !== null ? reasonId : undefined}
@@ -372,6 +377,32 @@ function Result({
   );
 }
 
+/**
+ * The rows drawn so far, and "Show more", which hands focus to the first row it drew: the last Show more
+ * removes itself, and focus must not fall to the page (WCAG 2.4.3).
+ */
+function useRowsShown() {
+  const [shown, setShown] = useState(ROWS_SHOWN);
+  const drawn = useRef<HTMLLIElement>(null);
+  const moved = useRef(false);
+  useEffect(() => {
+    if (moved.current) {
+      moved.current = false;
+      drawn.current?.focus();
+    }
+  }, [shown]);
+  return {
+    shown,
+    more: () => {
+      moved.current = true;
+      setShown(shown + ROWS_SHOWN);
+    },
+    /** The ref and tab stop of row `i`: the first one the last Show more drew takes focus. */
+    row: (i: number) =>
+      shown > ROWS_SHOWN && i === shown - ROWS_SHOWN ? { ref: drawn, tabIndex: -1 } : { tabIndex: undefined },
+  };
+}
+
 function save(text: string, type: string, name: string) {
   saveBlob(new Blob([text], { type }), name);
 }
@@ -386,7 +417,7 @@ function ListSection({ name, c, q, mode }: { name: ListName; c: Comparison; q: s
   };
   const total = totals[name];
   const [open, setOpen] = useState(false);
-  const [shown, setShown] = useState(ROWS_SHOWN);
+  const { shown, more, row: rowProps } = useRowsShown();
   const listId = useId();
   const reasons = reasonsLine(name, c.reason_totals[name]);
   const label = LIST_LABELS[name];
@@ -433,13 +464,13 @@ function ListSection({ name, c, q, mode }: { name: ListName; c: Comparison; q: s
         <div id={listId} className="space-y-2">
           <ol className="space-y-2">
             {rows.slice(0, shown).map((row, i) => (
-              <li key={`${row.id ?? ""}:${row.ris_record ?? i}`} className="break-words">
+              <li key={`${row.id ?? ""}:${row.ris_record ?? i}`} {...rowProps(i)} className="break-words">
                 <RowLine name={name} row={row} q={q} mode={mode} />
               </li>
             ))}
           </ol>
           {rows.length > shown && (
-            <button type="button" onClick={() => setShown(shown + ROWS_SHOWN)} className={button}>
+            <button type="button" onClick={more} className={button}>
               Show more ({n(Math.min(shown, rows.length))} of {n(rows.length)} shown)
             </button>
           )}
@@ -464,8 +495,16 @@ function RowLine({ name, row, q, mode }: { name: ListName; row: CompareRow; q: s
         {row.id === null ? (
           row.title
         ) : (
-          <Link href={paperHref(row.id, q, mode)} className="underline underline-offset-4">
+          // a new tab: the comparison lives on this page only, and Back would lose it and its file (USAB-M1)
+          <Link
+            href={paperHref(row.id, q, mode)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-4"
+          >
             {row.title}
+            <span aria-hidden="true"> ↗</span>
+            <span className="sr-only"> (opens in a new tab)</span>
           </Link>
         )}
       </span>
@@ -494,7 +533,7 @@ function RowLine({ name, row, q, mode }: { name: ListName; row: CompareRow; q: s
 
 function NotCompared({ c }: { c: Comparison }) {
   const [open, setOpen] = useState(false);
-  const [shown, setShown] = useState(ROWS_SHOWN);
+  const { shown, more, row: rowProps } = useRowsShown();
   const listId = useId();
   const total = c.not_compared_total;
   if (total === 0) return null;
@@ -531,8 +570,8 @@ function NotCompared({ c }: { c: Comparison }) {
       {open && (
         <div id={listId} className="space-y-2">
           <ol className="space-y-2">
-            {c.not_compared.slice(0, shown).map((row) => (
-              <li key={row.ris_record} className="break-words">
+            {c.not_compared.slice(0, shown).map((row, i) => (
+              <li key={row.ris_record} {...rowProps(i)} className="break-words">
                 <span className="block font-medium">{row.title === "" ? "(no title)" : row.title}</span>
                 <span className="block text-xs text-muted-foreground">
                   {[
@@ -548,7 +587,7 @@ function NotCompared({ c }: { c: Comparison }) {
             ))}
           </ol>
           {c.not_compared.length > shown && (
-            <button type="button" onClick={() => setShown(shown + ROWS_SHOWN)} className={button}>
+            <button type="button" onClick={more} className={button}>
               Show more ({n(Math.min(shown, c.not_compared.length))} of {n(c.not_compared.length)} shown)
             </button>
           )}
