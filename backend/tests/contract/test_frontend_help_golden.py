@@ -55,6 +55,9 @@ def test_parse_serves_each_examples_message(client: TestClient) -> None:
 def test_the_limits_are_the_served_defaults(client: TestClient) -> None:
     """The fallback the page shows when `/meta` fails is what an instance with default flags serves."""
     served = client.get("/api/v1/meta").json()["limits"]
+    assert (
+        served.pop("compare") is None
+    )  # `POST /compare`'s caps are no query limit: null by default (TASK-177)
     assert {k: COMMITTED["constants"][k] for k in served} == served
 
 

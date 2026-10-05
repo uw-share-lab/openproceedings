@@ -26,7 +26,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   `create_app`, `config.py`, `state.py` (the served index and `pinned`, the one loader of
   other index_versions), `deps.py`, `errors.py`, `middleware.py`, `models.py` (the response
   contract), routers `search.py` (parse and search), `papers.py`, `records.py`, `meta.py`, `coverage.py`, `health.py`, `export.py`
-  (streamed exports, `op export`'s writers), `server.py` → `op serve`, `openapi.py` → `op openapi`);
+  (streamed exports, `op export`'s writers), `compare.py` (`POST /compare`: a reviewer's own RIS file against a query, read in memory for the one request, off unless `op serve` is local or run with `--compare`; TASK-177), `server.py` → `op serve`, `openapi.py` → `op openapi`);
   `eval/` (`coverage_report.py` → `op eval coverage`, TASK-054; `scholar_compare.py` (a RIS set against a query's result on one index: matching by the merge rules, scope, and every disagreement's class; the one implementation, TASK-056/TASK-177) and `scholar_report.py` → `op eval scholar`; the other reports arrive with their tasks),
   no `semantic/` in v1: spec 06 is deferred to phase 2 by decision-017). Tests in `backend/tests/`; `uv run pytest` from the root.
 - **API contract:** after changing a route or a response model, run `make openapi` and commit both
@@ -53,7 +53,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   also has the results, banner, sidebar and paging, and the paper page the full record (TASK-042); the search
   page's Export menu and Save, the record page and the methods text are `src/components/export/`,
   `src/components/record/` and `src/lib/{export,methods-text,replay-status}.ts` (TASK-044; tested against
-  `record-fixture.json`, real API answers kept current by `test_frontend_record_fixture.py`). Tests are Vitest + Testing Library
+  `record-fixture.json`, real API answers kept current by `test_frontend_record_fixture.py`); the search page's "Compare with your records" panel is `src/components/compare/` and `src/lib/compare.ts` (TASK-177; tested against `compare-fixture.json`, kept current by `test_frontend_compare_fixture.py`). Tests are Vitest + Testing Library
   (`src/**/*.test.{ts,tsx}`); `npm test --workspace frontend`. Full-stack browser, accessibility and
   visual tests live in `frontend/e2e/`, backed by `backend/tests/e2e/`; run them with `make e2e`.
 - `deploy/`: `compose.yml` (api + web + Caddy, plus the `ops` and `takedown-check` one-offs), `Caddyfile`, `api.Dockerfile`, `caddy.Dockerfile`, `index-permissions.sh`, `smoke-test.sh` (the stack over a fixture, by hand) and `README.md` (the operator's runbook), TASK-065; `web.Dockerfile` and `web-build-gate.sh` (the `web` image; a public build needs a takedown contact, TASK-136; built by CI's advisory `web-image` workflow, TASK-148); every base image digest-pinned (TASK-149). `backend/tests/deploy/fixture_data.py` writes the smoke test's data directory.

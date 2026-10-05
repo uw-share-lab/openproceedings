@@ -326,6 +326,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="serve Swagger UI at /api/v1/docs (it loads from a CDN); default on for a loopback --host only",
     )
     serve.add_argument(
+        "--compare",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="offer POST /api/v1/compare (a reviewer's own RIS file against a query; the file is read in memory "
+        "for the one request, never stored or logged); default on for a loopback --host without --trusted-proxy only",
+    )
+    serve.add_argument(
         "--log-query-text",
         action="store_true",
         help="let the log formatter keep query-text fields (a local dev instance only); no log line passes one today",
@@ -1662,6 +1669,9 @@ def _serve(ns: argparse.Namespace) -> int:
             max_verification_candidates=ns.max_verification_candidates,
             max_verification_seconds=ns.max_verification_seconds,
             serve_docs=loopback if ns.docs is None else ns.docs,
+            # an operator's choice on a public instance (TASK-177): on by default only where the one user is
+            # the operator (loopback, no proxy in front), as the takedown rule below reads "public"
+            compare_enabled=(loopback and not ns.trusted_proxy) if ns.compare is None else ns.compare,
             # a public instance never starts without its takedown list (TASK-067): off loopback, or behind a
             # proxy on the same host (a trusted proxy means clients reach it); an empty list lists nothing
             takedown_list_required=not loopback or bool(ns.trusted_proxy),

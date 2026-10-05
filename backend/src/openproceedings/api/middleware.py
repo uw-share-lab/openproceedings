@@ -12,7 +12,11 @@ failed, is a client that went away mid-stream: the line says `client_disconnecte
 `BodyLimit` refuses a request body over `ApiConfig.max_body_bytes` with 413 `API_BODY_TOO_LARGE` before
 the app reads it: on its `Content-Length`, or, for a body without one (chunked), once the bytes received pass
 the cap. It reads a body (at most the cap) before the app runs, so the refusal comes before routing and
-before any other check (an index that isn't loaded yet included).
+before any other check (an index that isn't loaded yet included). A path in its `streamed` map (`POST /compare`,
+whose body is a file of megabytes; TASK-177) has a cap of its own and is not read here: a declared length over
+the cap is refused at once, and otherwise the route's own reads are counted and the read that passes the cap
+raises the same 413. Nothing of such a body is held before the route asks for it, so the route can refuse (the
+feature off, its slot taken) without the file ever being in memory.
 
 `RateLimit` is a token bucket per client, and a coarser one per client network (IPv4 /24, IPv6 /48), both
 checked for every request. The client is the TCP peer, unless the peer is a configured trusted proxy: then it
@@ -30,9 +34,11 @@ import threading
 import time
 import uuid
 from collections import OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from types import MappingProxyType
 from urllib.parse import parse_qs
 
+import anyio
 from pydantic import TypeAdapter, ValidationError
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -54,6 +60,7 @@ API_PREFIX = "/api/v1"
 HEALTH_PATH = f"{API_PREFIX}/healthz"
 EXPORT_PATH = f"{API_PREFIX}/export"
 RECORDS_PATH = f"{API_PREFIX}/records"  # POST /records, GET /records/{id}, /diff: each runs a whole query
+COMPARE_PATH = f"{API_PREFIX}/compare"  # POST /compare: a whole query against a whole file (TASK-177)
 BUCKETS = "openproceedings.rate"  # scope key: the request's rate-limit buckets and keys, for `charge`
 # fields a route may add to the access line (api/deps.py); anything else in the dict is not logged
 ANNOTATIONS = (
@@ -73,6 +80,17 @@ ANNOTATIONS = (
     "verify_cpu_ms",  # the verifying thread's CPU time in those holds: what is debited (round 5)
     "verify_tokens",  # what that time was debited after the fact (RateLimit.debit_verification)
     "code",  # the error envelope's code, on every refusal and every 500 (api/errors.py::note_code)
+    # a comparison (`POST /compare`, api/compare.py): counts only, never a title, a venue string or a file name
+    "ris_bytes",  # the file's size
+    "ris_records",  # the records read from it
+    "ris_papers",  # of them, papers compared (in scope, counted once)
+    "kept",
+    "dropped",
+    "not_in_index",
+    "added",
+    "compare_ms",  # wall time the request held a comparison slot (its file arriving, then the work)
+    "compare_cost_ms",  # what of it is debited: the file's arrival (wall) plus the work's CPU time
+    "compare_tokens",  # that, in tokens (RateLimit.debit_comparison)
 )
 
 type Network = ipaddress.IPv4Network | ipaddress.IPv6Network
@@ -190,19 +208,41 @@ class LastCatch:
                 await response(scope, receive, send)
 
 
+def body_too_large(max_bytes: int, *, file: bool = False) -> ApiError:
+    """413 `API_BODY_TOO_LARGE`; the connection is closed, since the rest of the body is never read."""
+    message = (
+        f"The file is over {max_bytes:,} bytes, the most this instance compares in one request. Split it, or "
+        "leave the abstracts out: only titles, venues, years and links are read."
+        if file
+        else f"The request body is over {max_bytes:,} bytes; a query fits in far less."
+    )
+    return ApiError(DiagnosticCode.API_BODY_TOO_LARGE, message, headers={"Connection": "close"})
+
+
 class BodyLimit:
     """413 `API_BODY_TOO_LARGE` for a body over `max_bytes` (module docstring). A body within the cap is
-    read here, whole, and replayed to the app; after it, `receive` is the server's own (a disconnect)."""
+    read here, whole, and replayed to the app; after it, `receive` is the server's own (a disconnect). A path
+    in `streamed` (path → its own cap) is counted as the route reads it instead, never read here."""
 
-    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+    def __init__(
+        self, app: ASGIApp, max_bytes: int, streamed: Mapping[str, int] = MappingProxyType({})
+    ) -> None:
         self.app = app
         self.max_bytes = max_bytes
+        self.streamed = dict(streamed)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
         declared = _content_length(scope)
+        cap = self.streamed.get(scope.get("path", ""))
+        if cap is not None:
+            if declared is not None and declared > cap:
+                await self._refuse(scope, receive, send, body_too_large(cap, file=True))
+                return
+            await self.app(scope, _counted(receive, cap), send)
+            return
         if declared is not None and declared > self.max_bytes:
             await self._refuse(scope, receive, send)
             return
@@ -228,14 +268,49 @@ class BodyLimit:
 
         await self.app(scope, replay, send)
 
-    async def _refuse(self, scope: Scope, receive: Receive, send: Send) -> None:
-        refused(scope, DiagnosticCode.API_BODY_TOO_LARGE)
-        response = error_response(
-            DiagnosticCode.API_BODY_TOO_LARGE,
-            f"The request body is over {self.max_bytes:,} bytes; a query fits in far less.",
-            headers={"Connection": "close"},  # the rest of the body is never read
-        )
+    async def _refuse(
+        self, scope: Scope, receive: Receive, send: Send, error: ApiError | None = None
+    ) -> None:
+        error = error or body_too_large(self.max_bytes)
+        refused(scope, error.code)
+        response = error_response(error.code, error.message, headers=error.headers)
         await response(scope, receive, send)
+
+
+DRAIN_SECONDS = 2.0  # how long a refusal waits for the rest of a file it won't read (`drain`)
+
+
+async def drain(receive: Receive, seconds: float = DRAIN_SECONDS) -> None:
+    """Read and discard what is left of a request body, for at most `seconds`: a refusal sent while a client
+    is still sending a file (megabytes, on `POST /compare`) reaches it as a reset connection, not as the
+    refusal, unless the rest is read first. Discarded as it arrives (nothing is held) and still counted against
+    the body cap. Whatever ends the drain (the cap, a disconnect, the time), the refusal is sent next."""
+    try:
+        with anyio.move_on_after(seconds):
+            while True:
+                message = await receive()
+                if message["type"] != "http.request" or not message.get("more_body", False):
+                    return
+    except ApiError:  # the body cap: the refusal being sent stands, and closes the connection
+        return
+
+
+def _counted(receive: Receive, max_bytes: int) -> Receive:
+    """`receive`, counting the body bytes it hands on: the read that takes the total past `max_bytes` raises
+    413 `API_BODY_TOO_LARGE` instead of returning (the route's reader, inside FastAPI, turns it into the
+    envelope). For a body sent without a length, or with a false one."""
+    size = 0
+
+    async def counted() -> Message:
+        nonlocal size
+        message = await receive()
+        if message["type"] == "http.request":
+            size += len(message.get("body", b""))
+            if size > max_bytes:
+                raise body_too_large(max_bytes, file=True)
+        return message
+
+    return counted
 
 
 def _content_length(scope: Scope) -> int | None:
@@ -480,8 +555,8 @@ def stored_read(scope: Scope) -> bool:
 
 class RateLimit:
     """429 `API_RATE_LIMITED` with `Retry-After` once a client's bucket is empty. `/healthz` is free; an
-    export and each record route cost `export_weight` (a `GET /records/{id}?replay=false` without ids reads
-    one, `stored_read`). Runs on the event loop only, so the buckets need no lock."""
+    export, a comparison and each record route cost `export_weight` (a `GET /records/{id}?replay=false`
+    without ids reads one, `stored_read`). Runs on the event loop only, so the buckets need no lock."""
 
     def __init__(
         self,
@@ -501,9 +576,9 @@ class RateLimit:
         if scope["type"] != "http" or not self.config.enabled or path == HEALTH_PATH:
             await self.app(scope, receive, send)
             return
-        heavy = (path in (EXPORT_PATH, RECORDS_PATH) or path.startswith(RECORDS_PATH + "/")) and not (
-            stored_read(scope)
-        )
+        heavy = (
+            path in (EXPORT_PATH, RECORDS_PATH, COMPARE_PATH) or path.startswith(RECORDS_PATH + "/")
+        ) and not (stored_read(scope))
         cost = self.config.export_weight if heavy else 1.0
         client = client_key(scope, self.trusted)
         held = [(self.buckets, client), (self.networks, network_key(client))]
@@ -511,6 +586,8 @@ class RateLimit:
         if wait > 0:
             error = rate_limited(wait)
             refused(scope, error.code)
+            if path == COMPARE_PATH:  # a file is on its way: let the 429 reach the client that is sending it
+                await drain(receive)
             response = error_response(error.code, error.message, headers=error.headers)
             await response(scope, receive, send)
             return
@@ -523,6 +600,7 @@ class RateLimit:
                 if fields.get("code") in REFUNDED:
                     refund_charged(scope)
                 self.debit_verification(held, fields)
+                self.debit_comparison(held, fields)
 
     def debit_verification(self, held: Sequence[tuple[TokenBucket, str]], fields: dict[str, object]) -> None:
         """Charge the cold verification time this request used, after the fact, to its client's and network's
@@ -541,3 +619,16 @@ class RateLimit:
             for bucket, key in held:
                 bucket.debit(key, tokens)
             fields["verify_tokens"] = round(tokens, 2)
+
+    def debit_comparison(self, held: Sequence[tuple[TokenBucket, str]], fields: dict[str, object]) -> None:
+        """Charge what a comparison (`POST /compare`, TASK-177) used of its slot, after the fact, to its client's
+        and network's buckets: one token per `compare_token_ms` of `compare_cost_ms` (the wall time its file
+        took to arrive, which the client sets, plus the CPU time of the work, as `debit_verification` counts
+        it). The cost is bounded: the upload and the work each have a time limit. The buckets may go below
+        zero, so a client's share of the comparison slot is at most refill × `compare_token_ms`."""
+        used = fields.get("compare_cost_ms")
+        if isinstance(used, int | float) and used > 0:
+            tokens = used / self.config.compare_token_ms
+            for bucket, key in held:
+                bucket.debit(key, tokens)
+            fields["compare_tokens"] = round(tokens, 2)

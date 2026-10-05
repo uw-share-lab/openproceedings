@@ -756,6 +756,25 @@ def _cells_of(ids: Iterable[str], index: MatchIndex) -> str:
     return "; ".join(f"{i} ({index.cells[i][0]} {index.cells[i][1]})" for i in ids)
 
 
+def result_in_scope(
+    engine: Served, ast: Node, index: MatchIndex, scope: Scope
+) -> tuple[frozenset[str], frozenset[str]]:
+    """The query's result on `engine` (`match_ids` of its effective tree, nothing else) and the part of it in
+    `scope`. ValueError if the engine holds a record `index` doesn't: the two are not one index's."""
+    served = engine.match_ids(ast)
+    unknown = sorted(i for i in served if i not in index.cells)
+    if unknown:
+        raise ValueError(
+            f"the index holds {len(unknown)} record(s) the snapshot doesn't (first: {unknown[0]})"
+        )
+    return served, frozenset(i for i in served if scope.holds(*index.cells[i]))
+
+
+def only_in_result(in_scope: AbstractSet[str], side: ScholarSide) -> list[str]:
+    """The ids of the result that no record of the RIS set matched (the `added` rows), ascending."""
+    return sorted(in_scope - frozenset(side.by_id))
+
+
 def _not_in_index(e: Entry, index: MatchIndex, scope: Scope) -> Row:
     m, r = e.match, e.record
     cells = _cells_of(m.near, index)
@@ -797,21 +816,18 @@ def compare_query(
     fetch: Fetch,
     scope: Scope,
     mode: Mode = "scholar",
+    tick: Callable[[], None] | None = None,
 ) -> QueryComparison:
     """`q` run in `mode` on `engine`, compared with `side`. `fetch` returns the compared records (title,
     abstract, track, status) by id: every id it is asked for must come back. The result set is exactly
     `engine.match_ids` of the query's effective tree, limited to `scope`: nothing here changes what matches.
-    `TooManyForms` when a phrase or NEAR of the query has more inflected spellings than the cap."""
+    `TooManyForms` when a phrase or NEAR of the query has more inflected spellings than the cap. `tick`, when
+    given, is called before each of the oracle's evaluations (the comparison's cost): a caller with a time
+    limit raises from it (`POST /compare`), and nothing is returned."""
     parsed = parse(q, mode, engine.tokenizer_version)
     if parsed.effective_ast is None or parsed.ast is None or parsed.canonical is None:
         raise QueryRefused(name, [str(d.code) for d in parsed.errors])
-    served = engine.match_ids(parsed.effective_ast)
-    unknown = sorted(i for i in served if i not in index.cells)
-    if unknown:
-        raise ValueError(
-            f"the index holds {len(unknown)} record(s) the snapshot doesn't (first: {unknown[0]})"
-        )
-    in_scope = frozenset(i for i in served if scope.holds(*index.cells[i]))
+    served, in_scope = result_in_scope(engine, parsed.effective_ast, index, scope)
     by_id = side.by_id
     compared = frozenset(by_id) | in_scope
     docs = fetch(compared)
@@ -830,6 +846,8 @@ def compare_query(
             return oracle.universe
         key = n.model_dump_json()
         if key not in memo:
+            if tick is not None:
+                tick()
             memo[key] = oracle.match_ids(n)
         return memo[key]
 
@@ -998,7 +1016,7 @@ def compare_query(
         kept=tuple(kept),
         dropped=tuple(only),
         not_in_index=tuple(gaps),
-        added=tuple(added(i) for i in sorted(in_scope - members)),
+        added=tuple(added(i) for i in only_in_result(in_scope, side)),
         groups=tuple(
             Group(render(g), len(exact & members), len(loose & members))
             for g, (exact, loose) in zip(groups, group_ids, strict=True)

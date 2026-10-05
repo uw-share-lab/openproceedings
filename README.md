@@ -47,6 +47,12 @@ authoritative):
   `mismatch`. The web app also writes a methods paragraph you can copy.
 - **Exports with provenance**: RIS (checked against Covidence), CSV, BibTeX and JSONL of the entire matched
   set. Each record names the source of its abstract and links to it.
+- **Compare with your records** ([spec 04](docs/specs/04-backend-api.md) §Comparing with a RIS file): give the
+  search page a RIS file of papers you already hold (a Google Scholar export) and see which of them the query
+  keeps, which it drops and why (excluded by a default filter, no exact match in title or abstract, a match
+  only as another word form), which it adds, and which the index doesn't hold; every list downloads as CSV,
+  the added papers as RIS. The file is read in memory for that one request and never stored or logged. It is
+  on for a local instance and off on a public one unless its operator turns it on (`op serve --compare`).
 - **Coverage page** (`/coverage`, `GET /api/v1/coverage`, `op eval coverage`): indexed counts per venue, year,
   track and status, compared with official accepted counts ([spec 07](docs/specs/07-evaluation.md) §C).
 - **Takedowns** ([decision-022](backlog/decisions/decision-022%20-%20A-takedown-withholds-an-abstracts-display-not-its-matching-on-every-loaded-index-version-the-takedown-list-and-log-live-in-the-data-directory-TASK-136.md)):
@@ -184,7 +190,10 @@ uv run op serve --cors-origin http://localhost:3000   # http://127.0.0.1:8000, s
 ```
 `curl http://127.0.0.1:8000/api/v1/healthz` should report `"index_loaded": true`. The interactive API docs are
 at <http://127.0.0.1:8000/api/v1/docs>. `--index <index_version>` serves another index; `--cors-origin` lets
-the development UI (another origin) call the API.
+the development UI (another origin) call the API. On a loopback host the API also offers `POST
+/api/v1/compare` (the search page's "Compare with your records"); its table of the index's merge keys is built
+in the background after the index loads (about 15 s for 96,000 records), and a comparison asked for before
+then is told to retry.
 
 ### 6. Run the UI
 Development (hot reload), in a second terminal:
@@ -219,7 +228,9 @@ read differently by Scholar, matched only through an inflected form, matched now
 in the corpus), and `<date>-scholar-comparison-review.csv`, the rows a person decides. It also says how many
 of the set's papers match a crawled record and how many only a record the set's own import put in the index. `--query-file` and
 `--query` run other strings; the first report is
-[`docs/results/2026-10-04-scholar-comparison.md`](docs/results/2026-10-04-scholar-comparison.md).
+[`docs/results/2026-10-04-scholar-comparison.md`](docs/results/2026-10-04-scholar-comparison.md). For one
+query against your own file, without a report, use the search page's "Compare with your records" (the same
+matching and classes, `POST /api/v1/compare`).
 
 ## Run it with Docker Compose
 

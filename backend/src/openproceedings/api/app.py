@@ -5,6 +5,8 @@ Layers, outermost first: `AccessLog` (request id, the one access line, preflight
 (an unexpected exception becomes a logged 500, which CORS then decorates) → `BodyLimit` (413 for a body
 over `max_body_bytes`, before it is read) → `RateLimit` (per-client and per-network token buckets) →
 FastAPI (the error envelope handlers, the app-wide `strict_query` dependency, then the `/api/v1` routers).
+`POST /compare`'s body (a file) has its own cap and is counted as the route reads it, not read by `BodyLimit`
+(TASK-177): with comparisons off, its cap is every other route's `max_body_bytes`.
 Nothing is served outside `/api/v1`, the OpenAPI document included, and a trailing slash is never
 redirected (`/search/` is a 404).
 
@@ -28,11 +30,19 @@ import anyio
 from fastapi import APIRouter, Depends, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
-from openproceedings.api import coverage, export, health, meta, papers, records, search
+from openproceedings.api import compare, coverage, export, health, meta, papers, records, search
 from openproceedings.api.config import ApiConfig
 from openproceedings.api.deps import strict_query
 from openproceedings.api.errors import install_error_handlers
-from openproceedings.api.middleware import API_PREFIX, AccessLog, BodyLimit, LastCatch, NoStore, RateLimit
+from openproceedings.api.middleware import (
+    API_PREFIX,
+    COMPARE_PATH,
+    AccessLog,
+    BodyLimit,
+    LastCatch,
+    NoStore,
+    RateLimit,
+)
 from openproceedings.api.openapi import (
     API_VERSION,
     ERROR_RESPONSES,
@@ -50,6 +60,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     health.router,
     coverage.router,
     export.router,
+    compare.router,
 )
 # spec 04 §Conventions, §Exports, §Error handling; `Location` names a new search record (201)
 EXPOSED_HEADERS = (
@@ -84,6 +95,8 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
         open_wait_seconds=config.pinned_open_wait_seconds,
         slow_verification_seconds=config.slow_verification_seconds,
         max_verification_seconds=config.max_verification_seconds,
+        compare=config.compare_enabled,
+        matches_in_background=config.load_in_background,
     )
 
     @asynccontextmanager
@@ -119,6 +132,7 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
     app.state.index = state
     app.state.config = config
     records.install(app, config, state)
+    compare.install(app, config)
     install_error_handlers(app)
     for router in ROUTERS:
         if router.prefix != API_PREFIX:
@@ -127,7 +141,16 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
     document_head_as_get(app)  # the committed snapshot is this document (`op openapi`, task-040)
     # added innermost first: the last one added wraps everything
     app.add_middleware(RateLimit, config=config.rate_limit, trusted=config.trusted_proxies)
-    app.add_middleware(BodyLimit, max_bytes=config.max_body_bytes)  # before anything reads the body
+    app.add_middleware(  # before anything reads the body
+        BodyLimit,
+        max_bytes=config.max_body_bytes,
+        # a comparison's file is megabytes: counted against its own cap as the route reads it, so the route can
+        # refuse first (a taken slot) without the file in memory; with comparisons off, nothing larger than
+        # any other body is ever read on that path
+        streamed={
+            COMPARE_PATH: config.compare_max_body_bytes if config.compare_enabled else config.max_body_bytes
+        },
+    )
     app.add_middleware(LastCatch)  # inside CORS: a 500 gets the CORS headers like any response
     app.add_middleware(
         CORSMiddleware,

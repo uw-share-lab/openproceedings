@@ -23,6 +23,7 @@ def test_meta_serves_the_parser_cap_and_the_default_verification_limits(client: 
         "max_query_depth": MAX_DEPTH,
         "max_verified_clauses": DEFAULTS["max_verified_clauses"].default,
         "max_verification_candidates": DEFAULTS["max_verification_candidates"].default,
+        "compare": None,  # comparisons are off by default (TASK-177; test_compare.py has the caps when on)
     }
 
 
@@ -48,6 +49,7 @@ def test_limits_are_required_in_the_meta_schema(client: TestClient) -> None:
     schemas = client.get("/api/v1/openapi.json").json()["components"]["schemas"]
     assert "limits" in schemas["MetaResponse"]["required"]
     assert sorted(schemas["Limits"]["required"]) == [
+        "compare",
         "max_query_depth",
         "max_query_length",
         "max_verification_candidates",

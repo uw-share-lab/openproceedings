@@ -15,8 +15,9 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | POST | `/records` | freeze a search as an immutable search record → 201 `{record_id, page}` plus the three versions, + `Location: /api/v1/records/<id>` (`.claude/skills/search-records/SKILL.md`); optional `index_version` pin: 409 `API_INDEX_VERSION_UNAVAILABLE` unless it is the served index (TASK-091) |
 | GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`; a replay over this instance's verification limits is withheld: 200, `refused`, never a 422); `replay=false`: the stored record, `replay: null`, no run, one token without `include=ids` (full weight with ids; TASK-091, decision-014) |
 | GET | `/records/{id}/diff` | for a record of any status: added and removed ids (with titles, paged), and which `index_version` inputs changed |
+| POST | `/compare` | `q, mode` + a RIS file as the body (`application/x-research-info-systems`; no form, no encoding) → `CompareResponse`: the file's papers the query keeps, drops (with `reason`/`detail`) and adds, the ones the index doesn't hold, the records not compared, `*_total` for each, `reason_totals`, each list as CSV text (`csv`) and the added papers as RIS (`added_ris`); `total` is `/search`'s. Off unless the operator turned it on (403 `API_COMPARE_DISABLED`); spec 04 §Comparing with a RIS file, TASK-177 |
 | GET | `/coverage` | counts per venue × year × track × status, abstract-missing counts, snapshot date; `snapshot.crawl_dates_kind` and `identification_citable`, a record's derivation (TASK-091) |
-| GET | `/meta` | current and servable `index_version`s, field names, venue, track and status vocabularies, and `limits` (`max_query_length`, the parser's; `max_verified_clauses` and `max_verification_candidates`, the served config's; task-089) |
+| GET | `/meta` | current and servable `index_version`s, field names, venue, track and status vocabularies, and `limits` (`max_query_length`, the parser's; `max_verified_clauses` and `max_verification_candidates`, the served config's; task-089; `compare`: `POST /compare`'s caps, or null when comparisons are off, which is how a client knows not to offer them) |
 | GET | `/healthz` | liveness, index loaded |
 | GET | `/near-misses` | M5 only (deferred to phase 2, decision-017; not in v1), a separate resource (`.claude/skills/specter2-embeddings/SKILL.md`) |
 
@@ -118,6 +119,16 @@ same way; CSV appends `abstract_withheld_reason` (`takedown`, `source_unavailabl
 `openproceedings_twins`, a last CSV column `twins`, a JSONL `twins` list only on a record with one), and a
 record without one exports byte for byte as before except CSV's one more empty cell.
 
+## A file as a request body (`POST /compare`, TASK-177)
+The one route that takes a file takes it as the raw body, never a form: no multipart parser runs (Starlette's
+spools large parts to disk), the declared type must be RIS and unencoded (415 otherwise), and `BodyLimit`
+counts the bytes against the route's own cap as the route reads them (`streamed`), so the route can refuse
+first without the file in memory. In the OpenAPI document the body is `openapi_extra`'s `requestBody`
+(`type: string, format: binary`); `openapi-typescript` types it `string`, and the client sends the `File` through
+`bodySerializer` (`frontend/src/lib/compare.ts`). Whatever a second request would have to recompute from the
+file goes in the one response (the lists' CSV text, the added papers' RIS): nothing of a file is kept between
+requests. Counts a client would otherwise derive by counting rows are fields (`reason_totals`).
+
 ## Versioning rules
 Allowed within `v1` (additive): a new endpoint, a new response field (always sent, so required in the
 schema; an old client ignores it: response schemas carry no `additionalProperties: false`,
@@ -166,7 +177,7 @@ commit both files it writes. Never edit either by hand; never resolve a merge co
    `git diff --exit-code` on both files.
 4. Validity rules the app enforces (`api/app.py`, `api/openapi.py`): an **operationId is the handler's
    function name, `verb_noun`**: `search`, `parse_query`, `export`, `get_paper`, `get_coverage`, `get_meta`,
-   `get_healthz`, `create_record`, `get_record`, `get_record_diff` (a test pins the list), so it must be
+   `get_healthz`, `create_record`, `get_record`, `get_record_diff`, `compare_records` (a test pins the list), so it must be
    unique across routers; every route documents the error envelope (`ErrorEnvelope`) as its **`default`
    response**, which replaces FastAPI's `HTTPValidationError` 422 (never sent here), plus its 405 (`Allow`)
    and 429 (`Retry-After`; not `/healthz`, never limited), and each route that runs a query its 503

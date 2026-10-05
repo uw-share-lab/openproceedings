@@ -44,6 +44,12 @@ class RateLimit(BaseModel):
     # one token per this many ms of cold verification a request used, debited when it finishes (the bucket may
     # go below zero): a client's share of the verification slot is at most refill × this (round 4)
     verify_token_ms: float = Field(default=100.0, gt=0)
+    # one token per this many ms a comparison (`POST /compare`, TASK-177) held its slot: the wall time its file
+    # took to arrive plus the CPU time of the comparison, debited when it finishes like `verify_token_ms`. A
+    # client's share of the comparison slot is at most refill × this (50% at the defaults), a network's 4 × that.
+    # 500 ms, not 100: a comparison is seconds of work by design (about 10 s per 1,000 records), and at 100 one
+    # run would lock a reviewer out of search for minutes
+    compare_token_ms: float = Field(default=500.0, gt=0)
     max_clients: int = Field(default=100_000, ge=1)  # buckets held in memory; the least recent is dropped
 
     @property
@@ -146,6 +152,32 @@ class ApiConfig(BaseModel):
     # Swagger UI at /api/v1/docs (it loads its script and styles from a CDN). Off unless asked for: `op serve`
     # turns it on for a loopback --host only (a local instance), or with --docs. openapi.json is always served
     serve_docs: bool = False
+    # `POST /compare` (TASK-177, decision pending): a reviewer's own RIS file against a query, parsed in memory
+    # for the one request and never stored or logged. Off unless asked for: `op serve` turns it on for a
+    # loopback --host without a trusted proxy (a local instance), or with --compare. While off, the route
+    # answers 403 `API_COMPARE_DISABLED`, `/meta`'s `limits.compare` is null and no match table is built
+    compare_enabled: bool = False
+    # the file's caps, each refused with a typed error, never cut (`/meta` `limits.compare` states them).
+    # 16 MiB: the Trust-Evals export is 3.7 MB for 1,834 records with abstracts (2 KB a record), so the record
+    # cap's worth of such records is ~10 MB. A body over it is 413 `API_BODY_TOO_LARGE` before it is read
+    compare_max_body_bytes: int = Field(default=16 * 1024 * 1024, ge=1024)
+    # records one file may hold (413 `API_RIS_TOO_LARGE`). A comparison costs about 10 s of CPU per 1,000
+    # records (the oracle decides every class), so 5,000 is what fits `compare_max_seconds` with room
+    compare_max_records: int = Field(default=5_000, ge=1)
+    # characters in one line of the file, tag included (413 `API_RIS_TOO_LARGE`): above the ingest cap on an
+    # abstract (20,000, decision-026), so no line this corpus could hold is refused
+    compare_max_line_chars: int = Field(default=32_768, ge=64)
+    # papers of the query's result that the file doesn't hold (422 `API_COMPARE_TOO_COSTLY`): each is read from
+    # the snapshot and judged by the oracle, so an unbounded result is unbounded work
+    compare_max_results: int = Field(default=5_000, ge=1)
+    # comparisons running at once; one more is 503 `API_BUSY` with Retry-After, before its file is read (so at
+    # most this many files are in memory)
+    comparison_slots: int = Field(default=1, ge=1)
+    # the wall time one comparison's work gets from the moment its file is read; past it, 503 `API_BUSY`
+    compare_max_seconds: float = Field(default=60.0, gt=0)
+    # the wall time a file gets to arrive once the slot is held; past it, 408 `API_UPLOAD_TIMEOUT`. Behind the
+    # reverse proxy the body arrives whole (spec 08 §Deploy), so this bounds a direct client only
+    compare_upload_seconds: float = Field(default=30.0, gt=0)
 
     @property
     def verified_cost(self) -> float:

@@ -207,6 +207,7 @@ export function SyntaxHelp({
     max_query_depth: c.max_query_depth,
     max_verified_clauses: c.max_verified_clauses,
     max_verification_candidates: c.max_verification_candidates,
+    compare: null, // `POST /compare`'s caps are no query limit: the help page doesn't show them (TASK-177)
   };
   return (
     <div className="space-y-8 text-sm">

@@ -14,7 +14,9 @@ export interface Call {
   readonly path: string;
   /** The request's query parameters (GET /search, /papers/{id}). */
   readonly query: URLSearchParams;
+  /** A JSON body parsed; any other body (a RIS file, `POST /compare`) as its text; `null` without one. */
   readonly body: unknown;
+  readonly contentType: string | null;
   readonly signal: AbortSignal;
 }
 
@@ -34,11 +36,14 @@ export function stubFetch(handler: Handler): { fetch: typeof globalThis.fetch; c
     if (!(input instanceof Request)) throw new Error("the typed client always passes a Request");
     const url = new URL(input.url);
     const text = input.method === "GET" ? "" : await input.text();
+    const contentType = input.headers.get("Content-Type");
+    const isJson = contentType === null || contentType.startsWith("application/json");
     const call: Call = {
       method: input.method,
       path: url.pathname,
       query: url.searchParams,
-      body: text === "" ? null : JSON.parse(text),
+      body: text === "" ? null : isJson ? JSON.parse(text) : text,
+      contentType,
       signal: input.signal,
     };
     calls.push(call);
@@ -117,6 +122,7 @@ export const META: Schemas["MetaResponse"] = {
     max_query_depth: 64,
     max_verification_candidates: 1,
     max_verified_clauses: 1,
+    compare: null,
   },
   query_version: "q1",
   tokenizer_version: "t1",

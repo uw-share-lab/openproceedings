@@ -253,6 +253,42 @@ outside the data directory, at `$OP_TAKEDOWN_LOG_HOST/log.jsonl`.
 `withheld.txt`, and SIGHUP. Versions that still hold the text show it again. A snapshot built while the id
 was listed keeps it withheld until a rebuild without the id is promoted.
 
+## Comparisons with a reviewer's own RIS file (off by default)
+
+`POST /api/v1/compare` and the search page's "Compare with your records" (spec 04 §Comparing with a RIS file)
+are off on this stack: `op serve` behind a proxy doesn't offer them unless told to. Turning them on is your
+decision as the operator. What it means:
+
+- anyone can upload a RIS file of up to 16 MiB and 5,000 records. It is read in memory for that one request
+  and dropped: never written to disk, never logged (the access line has counts only), never added to the
+  index. One comparison runs at a time (another is told to retry), so at most one file is in memory;
+- each comparison is up to a minute of CPU in the `api` process (about 10 s per 1,000 records: the reference
+  matcher decides why each paper was dropped), during which searches are slower. Its client pays for the
+  time from its rate-limit bucket;
+- the served index's match table takes about 80 MB more memory (95,877 records), built in the background
+  after each load (`match_index_built` in the log).
+
+To turn them on: add `--compare` to the `api` service's `command` in `compose.yml`, and let that one path
+through the proxy with a larger body (everything else keeps 64KB and 10 s), by adding to the `Caddyfile`'s
+site block, before the general `reverse_proxy /api/*`:
+
+```
+	@compare path /api/v1/compare
+	handle @compare {
+		request_body {
+			max_size 16MB
+		}
+		reverse_proxy api:8000 {
+			request_buffers 16MB # the whole file is read here before the API sees the request
+		}
+	}
+```
+
+Check the edited file with `caddy validate` before reloading (this block is written from Caddy's
+documentation; it has not been run through `smoke-test.sh` yet), and raise the server's `read_body` timeout to what a 16 MiB upload needs on your users' links (`read_body 60s`
+admits 2 Mbit/s). `GET /api/v1/meta` then shows `limits.compare`, and the web app offers the panel; no rebuild
+of the `web` image is needed. To turn them off again, remove `--compare` and restart `api`.
+
 ## Backups
 
 `$OP_DATA_HOST/records/records.sqlite` holds the only copy of every saved search. Losing it also unpins
