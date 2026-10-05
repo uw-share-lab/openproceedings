@@ -1,7 +1,10 @@
 # Compare with your records — design
 
-Status: **draft, built** (not yet through the heuristic pass or a review gate) · Backlog: TASK-177 · Spec: 04
-§Comparing with a RIS file; 05 §Components 9; 07 §B · Index: [search workspace](2026-09-27-search-workspace.md)
+Status: **built; heuristic pass done** (the batch review gate's usability-auditor and ux-reviewer, 2026-10-05;
+dispositions in §Heuristic pass) · Ethics: no study with people has been run; any (TASK-032, TASK-047) needs
+University of Waterloo ORE clearance first (`hci-methods`) · Backlog: TASK-177, follow-ups TASK-183–186 and
+TASK-195 · Spec: 04 §Comparing with a RIS file; 05 §Components 9; 07 §B · Index:
+[search workspace](2026-09-27-search-workspace.md) · Copy deck pointer: [copy deck §10](2026-09-27-copy-deck.md)
 
 ## Problem and job
 
@@ -12,8 +15,10 @@ Status: **draft, built** (not yet through the heuristic pass or a review gate) �
 
 **Evidence.** On 2026-10-04 the question was answered for the Trust-Evals review by script, from
 [`docs/results/2026-10-04-scholar-comparison.md`](../results/2026-10-04-scholar-comparison.md): the review's `$`
-string keeps 51 of the export's papers and adds 16. Everything else here is an assumption until a reviewer
-other than the owner uses it (see Open questions).
+string keeps 51 of the export's papers and adds 16. That is one team's one session (n=1). Everything else here,
+that other reviewers ask the question and read the panel as meant, is an assumption until a reviewer other than
+the owner uses it: the user research and usability rounds (TASK-032, TASK-047) carry the questions in §Open
+questions.
 
 ## Options considered
 
@@ -63,13 +68,14 @@ result set, and the comparison is about it).
 | Open, no file | button | what it does, the file input, `[Compare]` off, where the file goes, the caps |
 | File refused locally | size 0 or over `max_body_bytes` | an alert with the size and the cap; nothing sent |
 | Off | dirty draft or stale results | `[Compare]` off with the same reason Export shows |
-| Running | Compare | "Comparing `<name>` (3.5 MB) with this search… up to 60 seconds", `[Cancel]` |
+| Running | Compare | "Comparing `<name>` (3.5 MB) with this search… up to 60 s. 12 s so far." (the counter ticks, hidden from screen readers), `[Cancel]` |
 | Answered | 200 | C3 below |
-| Refused | envelope | "The comparison didn't run. Nothing was compared." + the server's code and message; 429 and `API_BUSY` count down to Retry |
+| Refused | envelope | "The comparison didn't run. Nothing was compared." + the server's code and message; a 429 counts down to Retry; a 503 `API_BUSY` with `Retry-After` (a table still being built: its expected time left) retries by itself, up to 3 times in a row; a refusal of the file (413, 415, 422) offers no Retry: "Choose another file, then Compare." |
+| Pausing | a 200 with `next_comparison_seconds` > 0 (`--compare`, or off loopback) | `[Compare]` off, beside it "Next comparison in 54 s: this instance pauses between one network's comparisons." counting down |
 | No answer | not JSON / unreachable | the export's wording for the same case, Retry |
 | Stale | `(q, mode, index)` changed | "The search changed since the last comparison…" (no numbers), file kept |
-| Index moved | answer's `index_version` ≠ shown | refused in place: search again, then compare again |
-| Total differs | same index, another `total` | refused in place, worded as a bug |
+| Index moved | answer's `index_version` ≠ shown | refused in place, with `[Search again]` as the export's notice has |
+| Total differs | same index, another `total` | refused in place, worded as a bug, with "Report it ▸" |
 | Large list | thousands of rows | 100 rows, then "Show more (100 of 1,756 shown)"; downloads hold every row |
 | Narrow | 320 px | the table is two columns; titles and file names wrap; no sideways scroll |
 
@@ -85,7 +91,7 @@ C1, open:
 │ Scholar export. You will see which of them this search keeps, which it   │
 │ drops and why, and which papers it adds.                                 │
 │ RIS file  [Choose file] mended.ris                 [Compare]             │
-│ The file is sent to this server for this one comparison. It is not       │
+│ The file is sent to this instance for this one comparison. It is not     │
 │ stored, not logged and not added to the index. Up to 16.0 MB and 5,000   │
 │ records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it).    │
 └──────────────────────────────────────────────────────────────────────────┘
@@ -109,31 +115,40 @@ C3, answered (numbers from the 2026-10-05 run on index `05a0541717f6`; each is a
 │ ⚠ 21 of the 51 kept and 509 of the 1,756 dropped papers are in this      │
 │   index only because a RIS file was imported into it (marked "import     │
 │   only"). …                                                              │
+│ This comparison in one sentence, for your notes … [Copy]                 │
 │ ─ Kept · 51                                                              │
-│   [Show the 51 kept papers] [Download CSV]                               │
+│   [List the 51 kept papers ▸] [Download CSV]                             │
 │ ─ Dropped · 1,756                                                        │
-│   2 papers match only as another word form · 1,713 papers have no exact  │
-│   match in their title or abstract · 41 papers can't be decided …        │
-│   [Show the 1,756 dropped papers] [Download CSV]                         │
-│ ─ Not in the index · 8        … ─ Added · 16  [Show…] [Download RIS] [Download CSV] │
-│ ─ Not compared · 19           [Show the 19 records not compared] [Download CSV]     │
+│   2 papers match only as another word form: add $ to that word (the Add  │
+│   $ action under the query) to match its other forms.                    │
+│   1,713 papers have no exact match in their title or abstract: no form   │
+│   of this query finds such a paper …; keep it from your own file …       │
+│   [List the 1,756 dropped papers ▸] [Download CSV]                       │
+│ ─ Not in the index · 8        … ─ Added · 16  [List…] [Download RIS] [Download CSV] │
+│ ─ Not compared · 19           [List the 19 records not compared ▸] [Download CSV]   │
 ```
 
 A row, opened: the title (a link to the paper page when the index holds it, opened in a new tab and saying so:
 the comparison lives on this page only, so a same-tab link and Back would lose it and the chosen file), then `ICLR 2024 · record 212 of
 your file · matched by title, venue and year`, then the reason and the server's detail (`excluded by a
-default filter — track=workshop`), then `import only · needs a person to decide` when they apply.
+default filter — track=workshop`; a missing paper's evidence without what its match line already says), then
+`import only · to check: is it in the index under another title, venue or year?` when they apply (the
+question named, never "needs a person to decide"). The `·` between facts is hidden from screen readers, which
+read "; " instead.
 
 ## Interaction spec
 
 - **Keyboard.** The trigger is a button (`aria-expanded`, `aria-controls`); the panel is a labelled region.
   Tab order inside: file input → Compare (→ Cancel while running) → the answer. When the answer lands, focus
-  moves to its heading (`tabindex="-1"`), so the next Tab is the first list's Show button. A control that removes
+  moves to its heading (`tabindex="-1"`), so the next Tab is the summary's Copy, then the first list's toggle. A control that removes
   itself never drops focus to the page: Cancel and Retry hand it to Compare, and the last "Show more" to the
-  first row it drew (`tabindex="-1"`). Every Show/Hide is a
-  button with `aria-expanded`; Enter and Space work as on any button. No drag and drop: the native file input
+  first row it drew (`tabindex="-1"`). Each list's toggle is one button whose name never changes ("List the 51
+  kept papers"), its state in `aria-expanded` and the arrow; Enter and Space work as on any button. An
+  `aria-disabled` Compare always says why beside it ("Choose a RIS file first.", "Choose a smaller file.", the
+  pause), and the file input is `aria-invalid` while its file is refused. No drag and drop: the native file input
   is the only way to choose a file, so there is nothing a keyboard can't do.
-- **Screen reader.** A polite status region says "Comparing `<name>` with this search." then "Comparison done:
+- **Screen reader.** A polite status region (beside the panel, not in it, so an answer that lands while the
+  panel is closed is still announced; the heading then takes no focus) says "Comparing `<name>` with this search." then "Comparison done:
   51 kept, 1,756 dropped, 8 not in the index, 16 added." (or "The comparison didn't run." / "Comparison
   cancelled."). Refusals are `role="alert"`. The counts are a real table with a caption, row headers and
   right-aligned `tabular-nums`. Each download's accessible name says which list and how many ("Download CSV of
@@ -147,45 +162,78 @@ default filter — track=workshop`), then `import only · needs a person to deci
 |---|---|
 | CM-1 | Trigger and heading: "Compare with your records" |
 | CM-2 | Intro: "Choose a RIS file of papers you already hold, for example a Google Scholar export. You will see which of them this search keeps, which it drops and why, and which papers it adds." |
-| CM-3 | Under the input: "The file is sent to this server for this one comparison. It is not stored, not logged and not added to the index. Up to `<max_body_bytes>` MB and `<max_records>` records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it)." |
+| CM-3 | Under the input: "The file is sent to this instance for this one comparison. It is not stored, not logged and not added to the index. Up to `<max_body_bytes>` MB and `<max_records>` records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it)." |
 | CM-4 | Meanings: Kept "in your file and in this search's results"; Dropped "in your file and in the index, but not in this search's results"; Not in the index "in your file; the index has no record of them, so the search can't find them"; Added "in this search's results, not in your file" |
-| CM-5 | "What “dropped” means. The index holds the paper, and this search doesn't return it: the query's words are not in its title or abstract as written, or a default filter excludes it. Google Scholar also matches full text and other word forms, which this search never does. A dropped paper is not judged irrelevant: check the reasons before leaving it out of a review." |
-| CM-6 | List buttons: "Show the 1,756 dropped papers" / "Hide the …"; "Show the 8 papers not in the index"; "Download CSV", "Download RIS" |
-| CM-7 | Reasons (dropped): "excluded by a default filter", "no exact match in its title or abstract", "matches only as another word form", "matches only as Google Scholar reads the query", "can't be decided automatically", "the two matchers disagree (a bug in openproceedings)"; (added): "an exact match your file doesn't hold", "matches as this search reads the query, not as Google Scholar reads it", "its venue and year hit Google Scholar's 1,000-result cap in your file" |
+| CM-5 | "What “dropped” means. The index holds the paper, and this search doesn't return it: the query's words are not in its title or abstract as written (other word forms only where the query asks for them, with $ or *), or a default filter excludes it. Google Scholar also matches full text and other word forms. A dropped paper is not judged irrelevant: check the reasons before leaving it out of a review." |
+| CM-6 | List toggles (one name, state in `aria-expanded`): "List the 1,756 dropped papers ▸/▾"; "List the 8 papers not in the index"; "Download CSV", "Download RIS" |
+| CM-7 | Reasons on a row (dropped): "excluded by a default filter", "no exact match in its title or abstract", "matches only as another word form", "matches only as Google Scholar reads the query", "can't be decided automatically", "openproceedings judges it both ways (a bug: please report it)"; (added): "an exact match your file doesn't hold", "matches as this search reads the query, not as Google Scholar reads it", "its venue and year hit Google Scholar's 1,000-result cap in your file" |
 | CM-8 | Import warning: "`<n>` of the `<kept>` kept and `<m>` of the `<dropped>` dropped papers are in this index only because a RIS file was imported into it (marked “import only”). Matching such a paper shows that the import holds it, not that the index covers it from its own sources." |
 | CM-9 | Announcements: "Comparison done: `<k>` kept, `<d>` dropped, `<n>` not in the index, `<a>` added."; "The comparison didn't run."; "Comparison cancelled." |
-| CM-10 | Running: "Comparing `<name>` (`<size>` MB) with this search… Each paper is checked against the query, so a large file can take up to `<max_seconds>` seconds." |
-| CM-11 | Local refusals: "This file is empty. Choose a RIS export that holds records."; "This file is `<size>` MB; this server compares files up to `<cap>` MB. Export it without abstracts (only titles, venues, years and links are compared), or split it." |
-| CM-12 | Refused: "The comparison didn't run. Nothing was compared." then the server's code and message. With an earlier answer for the same search still shown: "The new comparison didn't run. The results below are from the earlier comparison with `<its file>`." |
-| CM-18 | A list's reasons, each count a sentence (singular for 1): dropped "`<n>` papers are excluded by a default filter", "… have no exact match in their title or abstract", "… match only as another word form", "… match only as Google Scholar reads the query", "… can't be decided automatically", "… are judged differently by the two matchers (a bug in openproceedings)"; not in the index "… are not in the index"; added "… match exactly and are not in your file", "… match as this search reads the query, not as Google Scholar reads it", "… are from a venue and year that hit Google Scholar's 1,000-result cap in your file"; joined by " · " |
-| CM-17 | A 429 (the network's cooldown, decision-035; the server's message gives the seconds, the countdown follows `Retry-After`): "Comparisons are limited more tightly than searches: you can keep searching while you wait." |
+| CM-10 | Running: "Comparing `<name>` (`<size>` MB) with this search… Each paper is checked against the query, so a large file can take up to `<max_seconds>` s." then "`<n>` s so far." (not announced) |
+| CM-11 | Local refusals: "This file is empty. Choose a RIS export that holds records."; "This file is `<size>` MB; this instance compares files up to `<cap>` MB. Export it without abstracts (only titles, venues, years and links are compared), or split it." |
+| CM-12 | Refused: "The comparison didn't run. Nothing was compared." then the server's code and message. With an earlier answer for the same search still shown: "The new comparison didn't run. The results below are from the earlier comparison with `<its file>`." A refusal of the file adds "Choose another file, then Compare." (no Retry); `API_COMPARE_TOO_COSTLY` adds "Compare a smaller file, or narrow the query and search again." |
 | CM-13 | Stale: "The search changed since the last comparison, so its numbers are no longer shown. Compare again to see what the current query keeps, drops and adds." |
-| CM-14 | Index moved: "The index changed after this search: the comparison ran on index `<a>`, and the results shown are from `<b>`, so its numbers are not shown. Search again, then compare again." |
-| CM-15 | Total differs: "The comparison counted `<n>` papers for this search, not the `<m>` shown, on the same index. That shouldn't happen: it is a bug in openproceedings. Its numbers are not shown." |
+| CM-14 | Index moved: "The index changed after this search: the comparison ran on index `<a>`, and the results shown are from `<b>`, so its numbers are not shown. Search again, then compare again." `[Search again]` |
+| CM-15 | Total differs: "The comparison counted `<n>` papers for this search, not the `<m>` shown, on the same index. That shouldn't happen: it is a bug in openproceedings. Its numbers are not shown." "Report it ▸" |
 | CM-16 | Not compared: "Records of your file that are not NeurIPS, ICLR or ICML papers as far as their venue and links say. They are in none of the lists above." |
+| CM-17 | Retired (UX-S1): the client's own 429 line ("…you can keep searching while you wait") was untrue for a token-bucket 429; the server's cooldown message says "searching is not affected" itself. |
+| CM-18 | A list's reasons, each count a sentence of its own (singular for 1), followed by CM-19's step: dropped "`<n>` papers are excluded by a default filter", "… have no exact match in their title or abstract", "… match only as another word form", "… match only as Google Scholar reads the query", "… can't be decided automatically", "… are judged both ways by openproceedings (a bug: please report it)"; not in the index "… are not in the index"; added "… match exactly and are not in your file", "… match as this search reads the query, not as Google Scholar reads it", "… are from a venue and year that hit Google Scholar's 1,000-result cap in your file" |
+| CM-19 | What to do, after a dropped or missing count (USAB-S3): filtered "to include such a paper, write its track or status into the query (its row says which)"; full text "no form of this query finds such a paper by its title or abstract; keep it from your own file if it belongs in the review"; word form "add $ to that word (the Add $ action under the query) to match its other forms"; Scholar's reading "write the query as Google Scholar reads it (its translation notice shows how) to match such a paper"; not in the index "keep such a paper from your own file: no query here can find it"; undecided "check such a paper by hand (its row says what is undecided)"; a bug "please report it with this query" |
+| CM-20 | What is undecided, on a row (UX-S4): "to check: is it in the index under another title, venue or year?" (not in the index); "to check: does the paper itself match the query? (its row says what is undecided)" (dropped); "to check: is it the paper your file holds under another record?" (added); "to report: openproceedings judged it both ways" |
+| CM-21 | Summary (USAB-S7): "This comparison in one sentence, for your notes (nothing of it is kept here):" `[Copy]` → "On `<date>`, the query `<canonical>` (canonical_hash `<hash>`) on openproceedings index `<v>`, compared with `<file>` (`<r>` records read, `<p>` papers compared): `<k>` kept, `<d>` dropped, `<n>` not in the index; it adds `<a>` papers the file doesn't hold." |
+| CM-22 | Why Compare is off, beside it (A11Y-S5, USAB-S2): "Choose a RIS file first."; "Choose a smaller file."; "Next comparison in `<n>` s: this instance pauses between one network's comparisons."; or the search page's own reason (a dirty draft, stale results) |
+
+Units: sizes in the panel are MB or KB to one decimal (binary, as the caps are); the server's own messages give
+exact bytes, which the panel shows verbatim. Times are "s" everywhere in the panel, as in the server's
+messages and the countdown.
 
 Server messages (registry, shown verbatim) are in spec 04 §Error handling and `api/compare.py`.
 
 ## API fields needed
 
 All exist (TASK-177): `GET /meta` `limits.compare`; `POST /compare` → `CompareResponse` (`*_total`,
-`reason_totals`, the five lists, `csv`, `added_ris`).
+`reason_totals`, the five lists, `csv`, `added_ris`, and `next_comparison_seconds`, added by the gate's
+USAB-S2).
 
 ## Evidence
 
 Assumption, not evidence: that reviewers read "dropped" as a verdict unless told otherwise (hence CM-5 beside
-the counts, not behind a disclosure). No study has been run; the wording follows the report's own distinction
-between `full_text`, `stemming` and `filtered`.
+the counts, not behind a disclosure), and that a next step per reason (CM-19) is what they need to act. No
+study has been run (n=1: the owner's own session); the wording follows the report's own distinction between
+`full_text`, `stemming` and `filtered`. Untested; for the usability test (TASK-047).
 
 ## Heuristic pass
 
-Not run yet (`usability-auditor`). Known weak points to look at: the panel is long once several lists are
-open; the reasons' wording is Scholar-centric for a file that came from another database.
+Done 2026-10-05 by the batch review gate's `usability-auditor` and `ux-reviewer` (Nielsen's ten and the six
+search heuristics, `heuristic-evaluation`), on the built panel. Dispositions:
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| USAB-M1 a row's title was a same-tab link: Back lost the comparison and its file | Must | fixed: new tab, said in the link's name |
+| A11Y-M1–M3 Cancel, Retry and the last Show more dropped focus to the page | Must | fixed: Compare, Compare, the first row drawn |
+| USAB-S2 a 54 s pause read as a bug on a local instance | Should | fixed (owner's decision): no pause on a local instance; the pause said beside Compare |
+| USAB-S3 a dropped reason said a cause, no next step | Should | fixed: CM-19 |
+| USAB-S7 the counts can't be kept | Should | fixed in part: CM-21's sentence to copy; citable record is TASK-195 |
+| USAB-S8 a static "running" line; a fixed 5 s retry while the table builds | Should | fixed: a counter; the build's expected time; retried by itself |
+| UX-S1 "you can keep searching" on every 429 | Should | fixed: CM-17 retired |
+| UX-S4 "needs a person to decide" never said what | Should | fixed: CM-20 |
+| UX-S5 no Search again or Report where export has them; internal "two matchers" | Should | fixed: CM-14, CM-15, CM-7 |
+| UX-S6 "this server" beside "this instance" | Should | fixed: "this instance" |
+| UX-S7 CM-5 said this search never matches other word forms (wrong with $ or *) | Should | fixed |
+| A11Y-S5, S6, N9, N10 | Should/Nit | fixed: the reason beside Compare; the live region outside the panel; `·` hidden; one toggle name |
+| USAB-N1 a refused file offered Retry with the same file | Nit | fixed: "Choose another file" |
+| USAB-N3, UX-N the missing paper's row said the same thing twice; units | Nit | fixed: CM-10, units line |
+| Long panel with several lists open; Scholar-centric reasons for Scopus/WoS files; "records" naming; "dropped" as a verdict | research question | for TASK-032/TASK-047 (§Open questions), not a fix |
 
 ## Open questions
 
 - Should a comparison be saved with a search record (the file's hash and the counts, never the file), so a
   methods section can cite "kept 51 of 1,815"? Not built: the owner ruled that nothing of the file is stored.
-- The stemmer that stands for Google Scholar's is still an open owner decision (07 §B); `stemming` vs
-  `full_text` counts move with it.
-- A file from another database (Scopus, Web of Science) has DOIs, which the merge rules don't match on.
+  The copyable sentence (CM-21) is the stopgap; the citable form and its place in the record are TASK-195.
+- The stemmer that stands for Google Scholar's is decided (decision-038: inflected forms only); `stemming` vs
+  `full_text` counts move if it changes.
+- A file from another database (Scopus, Web of Science) has DOIs, which the merge rules don't match on
+  (TASK-186), and the reasons are worded for Scholar.
+- For the user research and usability rounds (TASK-032, TASK-047; each needs ORE clearance first): do reviewers
+  read "dropped" as a verdict; do they call their file's entries "records" or "papers"; is the panel too long
+  with several lists open; does the next step after each reason lead them to act on it.

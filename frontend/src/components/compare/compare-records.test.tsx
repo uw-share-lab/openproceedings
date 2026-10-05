@@ -59,6 +59,14 @@ async function draw(handler: Handler = serve(), over: Partial<CompareRecordsProp
   return { ...r, trigger };
 }
 
+/** The panel's live region: outside the panel, so an answer is announced even while it is closed. */
+function announced(): HTMLElement {
+  const panel = screen.getByRole("region", { name: "Compare with your records" });
+  const own = screen.getAllByRole("status", { hidden: true }).find((el) => !panel.contains(el));
+  if (own === undefined) throw new Error("no live region beside the panel");
+  return own;
+}
+
 async function compareWith(file: File = ris()) {
   fireEvent.click(screen.getByRole("button", { name: /Compare with your records/ }));
   fireEvent.change(screen.getByLabelText("RIS file"), { target: { files: [file] } });
@@ -85,8 +93,14 @@ describe("CompareRecords", () => {
     const input = within(panel).getByLabelText("RIS file");
     expect(input.getAttribute("type")).toBe("file");
     expect(input.getAttribute("aria-describedby")).toBeTruthy();
-    // nothing can be compared before a file is chosen, and the button says so to assistive technology
-    expect(within(panel).getByRole("button", { name: "Compare" }).getAttribute("aria-disabled")).toBe("true");
+    // nothing can be compared before a file is chosen, and the button says why, visibly and to assistive
+    // technology (A11Y-S5)
+    const compare = within(panel).getByRole("button", { name: "Compare" });
+    expect(compare.getAttribute("aria-disabled")).toBe("true");
+    expect(document.getElementById(compare.getAttribute("aria-describedby") ?? "")?.textContent).toBe(
+      "Choose a RIS file first.",
+    );
+    expect(panel.textContent).toContain("sent to this instance");
   });
 
   it("sends the chosen file for the searched query and shows the counts first", async () => {
@@ -120,22 +134,30 @@ describe("CompareRecords", () => {
     expect(panel.textContent).toContain(`${R.duplicates_total} record that repeats a paper already counted`);
     expect(panel.textContent).toContain("What “dropped” means.");
     expect(panel.textContent).toContain("A dropped paper is not judged irrelevant");
-    expect(within(panel).getByRole("status").textContent).toBe(
+    expect(announced().textContent).toBe(
       `Comparison done: ${R.kept_total} kept, ${R.dropped_total} dropped, ${R.not_in_index_total} not in the index, ${R.added_total} added.`,
     );
+    expect(panel.contains(announced())).toBe(false);
   });
 
   it("says why papers were dropped, with the server's counts, and lists them on demand", async () => {
     await draw();
     await compareWith();
     const dropped = await screen.findByRole("region", { name: `${R.dropped_total} dropped papers` });
-    expect(dropped.textContent).toContain(
-      "2 papers are excluded by a default filter · 2 papers match only as another word form · 2 papers have no exact match in their title or abstract",
-    );
-    const show = within(dropped).getByRole("button", { name: `Show the ${R.dropped_total} dropped papers` });
+    // each reason's count with what to do about it (USAB-S3)
+    expect([...dropped.querySelectorAll(":scope > p")].map((p) => p.textContent)).toEqual([
+      expect.stringMatching(/^2 papers are excluded by a default filter: to include such a paper/),
+      expect.stringMatching(/^2 papers match only as another word form: add \$ to that word/),
+      expect.stringMatching(
+        /^2 papers have no exact match in their title or abstract: no form of this query/,
+      ),
+    ]);
+    // one name whatever its state: `aria-expanded` says whether it is open (A11Y-N10)
+    const show = within(dropped).getByRole("button", { name: `List the ${R.dropped_total} dropped papers` });
     expect(show.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(show);
-    const items = within(dropped).getAllByRole("listitem");
+    expect(show.getAttribute("aria-expanded")).toBe("true");
+    const items = [...dropped.querySelectorAll<HTMLElement>("ol > li")];
     // each title opens its paper in a new tab, and says so (the comparison lives on this page only)
     expect(items.map((li) => within(li).getByRole("link").textContent)).toEqual(
       R.dropped.map((r) => `${r.title} ↗ (opens in a new tab)`),
@@ -153,17 +175,16 @@ describe("CompareRecords", () => {
         .getByRole("link")
         .getAttribute("href"),
     ).toBe(`/paper/${encodeURIComponent(first?.id ?? "")}?q=${encodeURIComponent(fixture.q)}&mode=native`);
-    fireEvent.click(
-      within(dropped).getByRole("button", { name: `Hide the ${R.dropped_total} dropped papers` }),
-    );
-    expect(within(dropped).queryAllByRole("listitem")).toEqual([]);
+    fireEvent.click(show);
+    expect(show.getAttribute("aria-expanded")).toBe("false");
+    expect(dropped.querySelector("ol")).toBeNull();
   });
 
   it("shows how kept records matched, repeats, and which rest on an import only", async () => {
     await draw();
     await compareWith();
     const kept = await screen.findByRole("region", { name: `${R.kept_total} kept papers` });
-    fireEvent.click(within(kept).getByRole("button", { name: /^Show/ }));
+    fireEvent.click(within(kept).getByRole("button", { name: /^List the/ }));
     const items = within(kept).getAllByRole("listitem");
     expect(items[0]?.textContent).toContain("matched by its OpenReview link");
     expect(items[1]?.textContent).toContain("matched by title, venue and year");
@@ -183,14 +204,16 @@ describe("CompareRecords", () => {
     const gaps = await screen.findByRole("region", {
       name: `${R.not_in_index_total} paper not in the index`,
     });
-    fireEvent.click(within(gaps).getByRole("button", { name: /^Show/ }));
-    const item = within(gaps).getByRole("listitem");
+    fireEvent.click(within(gaps).getByRole("button", { name: /^List the/ }));
+    const item = gaps.querySelector("ol li") as HTMLElement;
     expect(within(item).queryByRole("link")).toBeNull();
     expect(item.textContent).toContain(R.not_in_index[0]?.title);
     expect(item.textContent).toContain("no record with this title in that venue and year");
-    expect(item.textContent).toContain("needs a person to decide");
+    // what is to be decided is named (UX-S4), and the match line is not said twice (USAB-N3)
+    expect(item.textContent).toContain("to check: is it in the index under another title, venue or year?");
+    expect(item.textContent).not.toContain("no forum id, proceedings id");
     const out = screen.getByRole("region", { name: `Not compared, ${R.not_compared_total} record` });
-    fireEvent.click(within(out).getByRole("button", { name: /^Show/ }));
+    fireEvent.click(within(out).getByRole("button", { name: /^List the/ }));
     expect(within(out).getByRole("listitem").textContent).toContain("its venue is not NeurIPS, ICLR or ICML");
   });
 
@@ -235,12 +258,15 @@ describe("CompareRecords", () => {
     );
     await compareWith();
     const added = await screen.findByRole("region", { name: `${many.length} added papers` });
-    fireEvent.click(within(added).getByRole("button", { name: /^Show the/ }));
-    expect(within(added).getAllByRole("listitem")).toHaveLength(ROWS_SHOWN);
+    fireEvent.click(within(added).getByRole("button", { name: /^List the/ }));
+    const rows = () => added.querySelectorAll("ol > li");
+    expect(rows()).toHaveLength(ROWS_SHOWN);
     fireEvent.click(within(added).getByRole("button", { name: `Show more (100 of ${many.length} shown)` }));
-    expect(within(added).getAllByRole("listitem")).toHaveLength(ROWS_SHOWN * 2);
+    expect(rows()).toHaveLength(ROWS_SHOWN * 2);
+    await waitFor(() => expect(document.activeElement).toBe(rows()[ROWS_SHOWN])); // the first row it drew
     fireEvent.click(within(added).getByRole("button", { name: /^Show more/ }));
-    expect(within(added).getAllByRole("listitem")).toHaveLength(many.length);
+    expect(rows()).toHaveLength(many.length);
+    await waitFor(() => expect(document.activeElement).toBe(rows()[ROWS_SHOWN * 2]));
     expect(within(added).queryByRole("button", { name: /^Show more/ })).toBeNull();
   });
 
@@ -250,28 +276,34 @@ describe("CompareRecords", () => {
     Object.defineProperty(big, "size", { value: LIMITS.max_body_bytes + 1 });
     await compareWith(big);
     expect(screen.getByRole("alert").textContent).toMatch(
-      /^This file is 16\.0 MB; this server compares files up to/,
+      /^This file is 16\.0 MB; this instance compares files up to/,
     );
     expect(calls.filter((c) => c.path === "/api/v1/compare")).toEqual([]);
+    expect(screen.getByLabelText("RIS file").getAttribute("aria-invalid")).toBe("true");
   });
 
-  it("shows the server's refusal and what it means for the file", async () => {
+  it("shows the server's refusal of a file, and asks for another file instead of a Retry", async () => {
     await draw(serve(() => json(fixture.invalid, 422)));
     await compareWith();
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("API_RIS_INVALID");
     expect(alert.textContent).toContain(fixture.invalid.error.message);
+    // the same file would be refused again (USAB-N1)
+    expect(within(alert).queryByRole("button", { name: "Retry" })).toBeNull();
     const panel = screen.getByRole("region", { name: "Compare with your records" });
     expect(panel.textContent).toContain("The comparison didn't run. Nothing was compared.");
+    expect(panel.textContent).toContain("Choose another file, then Compare.");
+    expect(screen.getByLabelText("RIS file").getAttribute("aria-invalid")).toBe("true");
     expect(screen.queryByRole("table")).toBeNull();
   });
 
-  it("counts down a busy server's Retry-After, then compares again on Retry", async () => {
+  it("retries a busy server by itself when its Retry-After is up", async () => {
     let asked = 0;
     const busy = {
       error: {
         code: "API_BUSY",
-        message: "This instance is running as many comparisons as it can. Try again in 5 s.",
+        message:
+          "This index was loaded a moment ago and its comparison table is still being prepared. Try again in 0 s.",
       },
     };
     await draw(
@@ -281,8 +313,24 @@ describe("CompareRecords", () => {
       }),
     );
     await compareWith();
+    await screen.findByRole("table", { name: /What this search does/ }); // no button pressed (USAB-S8)
+    expect(asked).toBe(2);
+  });
+
+  it("counts down a rate limit's Retry-After, then compares again on Retry", async () => {
+    let asked = 0;
+    const limited = {
+      error: { code: "API_RATE_LIMITED", message: "Too many requests; try again in 1 s." },
+    };
+    await draw(
+      serve(() => {
+        asked += 1;
+        return asked === 1 ? json(limited, 429, { "Retry-After": "0" }) : json(R);
+      }),
+    );
+    await compareWith();
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("as many comparisons as it can");
+    expect(alert.textContent).toContain("Too many requests");
     fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
     await screen.findByRole("table", { name: /What this search does/ });
     expect(asked).toBe(2);
@@ -331,8 +379,40 @@ describe("CompareRecords", () => {
     expect(alert.textContent).toContain("try again in 54 s.");
     expect(alert.textContent).toContain("Retry in 54 s");
     expect(within(alert).getByRole("button", { name: "Retry" }).getAttribute("aria-disabled")).toBe("true");
+    // the server's message says searching is not affected; the panel adds no claim of its own (UX-S1)
     const panel = screen.getByRole("region", { name: "Compare with your records" });
-    expect(panel.textContent).toContain("you can keep searching while you wait");
+    expect(panel.textContent).not.toContain("you can keep searching while you wait");
+  });
+
+  it("says when the next comparison may start, beside Compare", async () => {
+    await draw(serve(() => json({ ...R, next_comparison_seconds: 54 })));
+    await compareWith();
+    await screen.findByRole("table", { name: /What this search does/ });
+    const compare = screen.getByRole("button", { name: "Compare" });
+    expect(compare.getAttribute("aria-disabled")).toBe("true");
+    expect(document.getElementById(compare.getAttribute("aria-describedby") ?? "")?.textContent).toMatch(
+      /^Next comparison in 5[34] s: this instance pauses between one network's comparisons\.$/,
+    );
+  });
+
+  it("has no pause to show when the instance has none", async () => {
+    await draw(serve(() => json({ ...R, next_comparison_seconds: 0 })));
+    await compareWith();
+    await screen.findByRole("table", { name: /What this search does/ });
+    expect(screen.getByRole("button", { name: "Compare" }).getAttribute("aria-disabled")).toBeNull();
+  });
+
+  it("gives the comparison as one sentence to copy", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await draw();
+    await compareWith();
+    await screen.findByRole("table", { name: /What this search does/ });
+    fireEvent.click(screen.getByRole("button", { name: "Copy this comparison as one sentence" }));
+    expect(writeText).toHaveBeenCalledOnce();
+    const text = (writeText.mock.calls[0] as unknown as [string])[0];
+    expect(text).toContain(`index ${R.index_version}, compared with my-records.ris`);
+    expect(text).toContain(R.query.canonical_hash);
   });
 
   it("is off, with the reason, while the results shown aren't the searched query's", async () => {
@@ -366,12 +446,25 @@ describe("CompareRecords", () => {
   it("does not show numbers from another index, or a total that isn't the search's", async () => {
     await draw(serve(() => json({ ...R, index_version: "ffffffffffff" })));
     await compareWith();
-    expect((await screen.findByRole("alert")).textContent).toContain("The index changed after this search");
+    const moved = await screen.findByRole("alert");
+    expect(moved.textContent).toContain("The index changed after this search");
+    expect(within(moved).queryByRole("button", { name: "Search again" })).toBeNull(); // none offered here
     expect(screen.queryByRole("table")).toBeNull();
+    cleanup();
+    const onSearchAgain = vi.fn();
+    await draw(
+      serve(() => json({ ...R, index_version: "ffffffffffff" })),
+      { onSearchAgain },
+    );
+    await compareWith();
+    fireEvent.click(within(await screen.findByRole("alert")).getByRole("button", { name: "Search again" }));
+    expect(onSearchAgain).toHaveBeenCalledOnce(); // as the export's notice offers (UX-S5)
     cleanup();
     await draw(serve(() => json({ ...R, total: R.total + 1 })));
     await compareWith();
-    expect((await screen.findByRole("alert")).textContent).toContain("it is a bug in openproceedings");
+    const bug = await screen.findByRole("alert");
+    expect(bug.textContent).toContain("it is a bug in openproceedings");
+    expect(within(bug).getByRole("link", { name: /Report it/ })).toBeTruthy();
     expect(screen.queryByRole("table")).toBeNull();
   });
 
@@ -381,10 +474,11 @@ describe("CompareRecords", () => {
     await compareWith();
     const panel = screen.getByRole("region", { name: "Compare with your records" });
     await waitFor(() => expect(panel.textContent).toContain("Comparing my-records.ris"));
-    expect(panel.textContent).toContain("can take up to 60 seconds");
+    expect(panel.textContent).toContain("can take up to 60 s.");
+    expect(panel.textContent).toMatch(/\d+ s so far\./); // a counter, not a static sentence (USAB-S8)
     fireEvent.click(within(panel).getByRole("button", { name: "Cancel" }));
     release(json(R));
-    await waitFor(() => expect(within(panel).getByRole("status").textContent).toBe("Comparison cancelled."));
+    await waitFor(() => expect(announced().textContent).toBe("Comparison cancelled."));
     expect(screen.queryByRole("table")).toBeNull();
     expect(panel.textContent).not.toContain("didn't run");
   });

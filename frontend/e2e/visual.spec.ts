@@ -62,7 +62,7 @@ const surfaces: { name: string; open: (page: Page) => Promise<Locator> }[] = [
       });
       await panel.getByRole("button", { name: "Compare", exact: true }).click();
       await expect(panel.getByRole("table")).toBeVisible({ timeout: 60_000 });
-      await panel.getByRole("button", { name: /^Show the \d+ papers? not in the index$/ }).click();
+      await panel.getByRole("button", { name: /^List the \d+ papers? not in the index$/ }).click();
       return panel;
     },
   },

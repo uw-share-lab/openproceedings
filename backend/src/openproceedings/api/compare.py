@@ -108,6 +108,7 @@ from openproceedings.eval.scholar_compare import (
 )
 from openproceedings.export import Provenance, check_count, csv_cell, entries, header, utc_date
 from openproceedings.ingest.caps import MAX_TITLE
+from openproceedings.logs import elapsed_ms
 from openproceedings.query.ast import Node
 from openproceedings.query.parser import Mode, ParseResult
 from openproceedings.search import expanded
@@ -652,12 +653,14 @@ async def compare_records(
         return await anyio.to_thread.run_sync(_encode, config, answer)
     finally:
         gate.slots.release()
-        held = (_wall() - started) * 1000
+        # the one form of an `ms` field (logs.elapsed_ms), on the slot's clock
+        held = elapsed_ms(started, _wall)
         if not spent.uploaded:  # the upload itself failed: all of the hold was the file arriving
             spent.upload_ms = held
         if network is not None and not left:
             gate.cooldowns.leave(network, _used(config, spent, held))
-        fields["compare_ms"] = round(held, 1)
+        fields["compare_ms"] = held
+        # rounded once, here: the debit (`RateLimit.debit_comparison`) reads this same figure
         fields["compare_cost_ms"] = round(
             config.rate_limit.compare_upload_weight * spent.upload_ms + spent.cpu_ms, 1
         )

@@ -565,9 +565,10 @@ route execution.
 
 ## Comparing with a RIS file (`POST /compare`, TASK-177, decision-035)
 
-A reviewer who already holds a set of records (a Google Scholar export, another database's) asks what a
+A reviewer who already holds a set of records (a Google Scholar export, another database's) can ask what a
 query does to it: which of those papers the query **keeps**, which it **drops**, which it **adds**, and which
-the index doesn't hold at all. `POST /compare?q=&mode=` answers that for the RIS file sent as the
+the index doesn't hold at all. (The project's own review asked it, n=1; that other reviewers do is an
+assumption until TASK-032 and TASK-047.) `POST /compare?q=&mode=` answers that for the RIS file sent as the
 request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one implementation, which
 `op eval scholar` reports from), run on the served index for one query and one file.
 

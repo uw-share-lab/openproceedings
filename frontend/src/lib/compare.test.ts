@@ -12,7 +12,10 @@ import {
   megabytes,
   notComparedText,
   postCompare,
-  reasonsLine,
+  reasonLines,
+  detailText,
+  summaryText,
+  undecidedText,
   reasonText,
   RIS_MEDIA,
   type CompareLimits,
@@ -102,24 +105,28 @@ describe("the words", () => {
     expect(matchedByText(null)).toBe("");
   });
 
-  it("writes each reason's count as a sentence, with the server's counts in the server's order", () => {
-    expect(reasonsLine("dropped", fixture.response.reason_totals.dropped)).toBe(
-      "2 papers are excluded by a default filter · 2 papers match only as another word form · " +
-        "2 papers have no exact match in their title or abstract",
-    );
-    expect(reasonsLine("kept", fixture.response.reason_totals.kept)).toBe("");
-    expect(reasonsLine("added", { scholar_missed: 154 })).toBe(
-      "154 papers match exactly and are not in your file",
-    );
-    expect(reasonsLine("added", { scholar_missed: 1 })).toBe(
-      "1 paper matches exactly and is not in your file",
-    );
-    expect(reasonsLine("dropped", { full_text: 1, unsettled: 41 })).toBe(
-      "1 paper has no exact match in its title or abstract · 41 papers can't be decided automatically",
-    );
-    expect(reasonsLine("not_in_index", { coverage_gap: 3 })).toBe("3 papers are not in the index");
-    expect(reasonsLine("dropped", { a_new_class: 2 })).toBe("2 papers: a_new_class"); // open enum
-    // every reason the API documents has its sentence, in both lists it can appear in
+  it("writes each reason's count as a sentence with what to do, in the server's order", () => {
+    expect(reasonLines("dropped", fixture.response.reason_totals.dropped)).toEqual([
+      "2 papers are excluded by a default filter: to include such a paper, write its track or status into " +
+        "the query (its row says which).",
+      "2 papers match only as another word form: add $ to that word (the Add $ action under the query) to " +
+        "match its other forms.",
+      "2 papers have no exact match in their title or abstract: no form of this query finds such a paper by " +
+        "its title or abstract; keep it from your own file if it belongs in the review.",
+    ]);
+    expect(reasonLines("kept", fixture.response.reason_totals.kept)).toEqual([]);
+    expect(reasonLines("added", { scholar_missed: 154 })).toEqual([
+      "154 papers match exactly and are not in your file.",
+    ]);
+    expect(reasonLines("added", { scholar_missed: 1 })).toEqual([
+      "1 paper matches exactly and is not in your file.",
+    ]);
+    expect(reasonLines("not_in_index", { coverage_gap: 3 })).toEqual([
+      "3 papers are not in the index: keep such a paper from your own file: no query here can find it.",
+    ]);
+    expect(reasonLines("dropped", { a_new_class: 2 })).toEqual(["2 papers: a_new_class."]); // open enum
+    // every reason the API documents has its sentence, in both lists it can appear in, and a dropped or
+    // missing paper's always says what to do next (USAB-S3)
     for (const reason of [
       "filtered",
       "full_text",
@@ -129,11 +136,43 @@ describe("the words", () => {
       "unsettled",
       "our_bug",
     ]) {
-      expect(reasonsLine("dropped", { [reason]: 2 })).not.toContain(reason);
+      const [line = ""] = reasonLines("dropped", { [reason]: 2 });
+      expect(line).not.toContain(reason);
+      expect(line).toMatch(/: .+\.$/);
+      expect(line).not.toContain("`");
     }
     for (const reason of ["scholar_missed", "compat_reading", "scholar_cap", "our_bug"]) {
-      expect(reasonsLine("added", { [reason]: 2 })).not.toContain(reason);
+      expect(reasonLines("added", { [reason]: 2 })[0]).not.toContain(reason);
     }
+  });
+
+  it("names what a person must decide, never just that one must", () => {
+    expect(undecidedText("dropped", { reason: "full_text", settled: true })).toBe("");
+    expect(undecidedText("not_in_index", { reason: "coverage_gap", settled: false })).toMatch(
+      /^to check: is it in the index/,
+    );
+    expect(undecidedText("dropped", { reason: "unsettled", settled: false })).toMatch(
+      /^to check: does the paper/,
+    );
+    expect(undecidedText("dropped", { reason: "our_bug", settled: false })).toMatch(/^to report/);
+  });
+
+  it("leaves out of a missing paper's evidence what its match line already says", () => {
+    const unmatched = "no forum id, proceedings id or title+venue+year match in the snapshot";
+    expect(detailText("not_in_index", { detail: unmatched })).toBe("");
+    expect(detailText("not_in_index", { detail: `${unmatched}; its links are on a.example` })).toBe(
+      "its links are on a.example",
+    );
+    expect(detailText("dropped", { detail: unmatched })).toBe(unmatched); // only where matched_by says it
+  });
+
+  it("sums a comparison up in one sentence to keep", () => {
+    const c = fixture.response;
+    const text = summaryText(c, "mine.ris", "2026-10-05");
+    expect(text).toContain(`index ${c.index_version}`);
+    expect(text).toContain(c.query.canonical_hash);
+    expect(text).toContain(`${c.kept_total} kept, ${c.dropped_total} dropped`);
+    expect(text.startsWith("On 2026-10-05, the query ")).toBe(true);
   });
 
   it("counts a list with its noun", () => {
@@ -157,7 +196,7 @@ describe("the file", () => {
     expect(fileProblem({ size: 0 }, LIMITS)).toMatch(/empty/);
     expect(fileProblem({ size: LIMITS.max_body_bytes }, LIMITS)).toBeNull();
     expect(fileProblem({ size: LIMITS.max_body_bytes + 1 }, LIMITS)).toBe(
-      "This file is 16.0 MB; this server compares files up to 16.0 MB. Export it without abstracts (only " +
+      "This file is 16.0 MB; this instance compares files up to 16.0 MB. Export it without abstracts (only " +
         "titles, venues, years and links are compared), or split it.",
     );
     expect(fileProblem({ size: 22_334_000 }, LIMITS)).toMatch(/^This file is 21\.3 MB/);
@@ -169,7 +208,7 @@ describe("the file", () => {
     expect(megabytes(104_857)).toBe("102.4 KB");
     expect(megabytes(104_858)).toBe("0.1 MB");
     expect(fileProblem({ size: 3_000 }, { ...LIMITS, max_body_bytes: 2_048 })).toMatch(
-      /^This file is 2\.9 KB; this server compares files up to 2\.0 KB\./,
+      /^This file is 2\.9 KB; this instance compares files up to 2\.0 KB\./,
     );
     expect(limitsLine(LIMITS)).toBe(
       "Up to 16.0 MB and 5,000 records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it).",

@@ -2,25 +2,29 @@
 
 /**
  * "Compare with your records" (spec 05 §Components 9; design docs/design/2026-10-05-ris-comparison.md, C1–C8;
- * copy CM-1–CM-16; TASK-177). A reviewer chooses a RIS file they already hold (a Google Scholar export) and
- * sees what the searched query does to it: the papers it keeps, drops (and why), and adds, and the papers the
- * index doesn't hold. Counts first, each list on demand, each list downloadable.
+ * copy CM-1–CM-22; TASK-177). A reviewer chooses a RIS file they already hold (a Google Scholar export) and
+ * sees what the searched query does to it: the papers it keeps, drops (and why, and what to do), and adds, and
+ * the papers the index doesn't hold. Counts first, each list on demand, each list downloadable, and the whole
+ * in one sentence to copy.
  *
  * Offered only when this instance does comparisons (`GET /meta` `limits.compare`; null draws nothing). The
  * comparison is for the search shown, `(q, mode)` on the shown index: it is off while the draft or the results
  * are stale, and an answer for another query or index is never drawn as the current one. Every number is the
- * server's (`*_total`, `reason_totals`), and each download is the response's own text, saved as sent.
+ * server's (`*_total`, `reason_totals`, `next_comparison_seconds`), and each download is the response's own
+ * text, saved as sent.
  *
  * The file goes to the server for this one request and is not kept there (spec 04). Its name never leaves the
- * browser.
+ * browser. Nor does the comparison: it lives in this component only, so a row's title opens its paper in a
+ * new tab (Back would otherwise lose it).
  */
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useMeta } from "@/api/hooks";
 import type { Failure } from "@/api/outcome";
 import { useApi } from "@/components/providers";
 import { plural } from "@/editor/diagnostics";
 import {
+  detailText,
   doneText,
   downloadName,
   fileProblem,
@@ -33,15 +37,18 @@ import {
   megabytes,
   notComparedText,
   postCompare,
-  reasonsLine,
+  reasonLines,
   reasonText,
+  summaryText,
+  undecidedText,
   type CompareRow,
   type Comparison,
   type ListName,
 } from "@/lib/compare";
 import { saveBlob } from "@/lib/export";
 import type { Mode } from "@/lib/search-state";
-import { box, button, FailureNotice, warnBox } from "../export/export-notice";
+import { CopyButton } from "../copy-button";
+import { box, button, FailureNotice, Report, warnBox } from "../export/export-notice";
 import { paperHref } from "../search/hit-item";
 
 export interface CompareRecordsProps {
@@ -52,25 +59,79 @@ export interface CompareRecordsProps {
   readonly total: number;
   /** Why comparing is off (a dirty draft, stale results), or `null`. */
   readonly disabledReason: string | null;
+  /** Re-run the search shown, to see the current index's results (an answer from another index). */
+  readonly onSearchAgain?: () => void;
 }
 
 /** Rows drawn at once in an open list; "Show more" adds as many again (C6). */
 export const ROWS_SHOWN = 100;
+/** A wait the server answers with `API_BUSY` is retried by itself this many times in a row, then by Retry. */
+export const AUTO_RETRIES = 3;
+/** Refusals of the file itself: the same file would be refused again, so the notice offers another file. */
+const FILE_CODES = new Set([
+  "API_BODY_TOO_LARGE",
+  "API_RIS_TOO_LARGE",
+  "API_RIS_INVALID",
+  "API_UNSUPPORTED_MEDIA_TYPE",
+]);
 
 const n = (x: number) => x.toLocaleString("en-US");
+
+/** " · " between facts, read as "; " (a middle dot means nothing to a screen reader). */
+function Sep() {
+  return (
+    <>
+      <span aria-hidden="true"> · </span>
+      <span className="sr-only">; </span>
+    </>
+  );
+}
+
+function joined(parts: readonly string[]) {
+  return parts.map((part, i) => (
+    <span key={i}>
+      {i > 0 && <Sep />}
+      {part}
+    </span>
+  ));
+}
+
+/** The clock (ms since the epoch), read again once a second while `active`. */
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const first = setTimeout(() => setNow(Date.now()), 0);
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(t);
+    };
+  }, [active]);
+  return now;
+}
 
 interface Done {
   readonly key: string;
   readonly fileName: string;
   readonly comparison: Comparison;
+  /** The UTC day the answer came, for the summary sentence. */
+  readonly date: string;
 }
 
 type Run =
   | { readonly kind: "idle" }
-  | { readonly kind: "running"; readonly fileName: string; readonly size: number }
+  | { readonly kind: "running"; readonly fileName: string; readonly size: number; readonly since: number }
   | { readonly kind: "failed"; readonly key: string; readonly failure: Failure };
 
-export function CompareRecords({ q, mode, indexVersion, total, disabledReason }: CompareRecordsProps) {
+export function CompareRecords({
+  q,
+  mode,
+  indexVersion,
+  total,
+  disabledReason,
+  onSearchAgain,
+}: CompareRecordsProps) {
   const limits = useMeta()?.limits.compare ?? null;
   const api = useApi();
   const [open, setOpen] = useState(false);
@@ -78,64 +139,114 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
   const [run, setRun] = useState<Run>({ kind: "idle" });
   const [done, setDone] = useState<Done | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  // when this network may start the next comparison (ms since the epoch), from the last answer
+  const [nextAt, setNextAt] = useState<number | null>(null);
   const aborter = useRef<AbortController | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const compareButton = useRef<HTMLButtonElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLElement>(null);
   const focusResult = useRef(false);
+  const [autoTries, setAutoTries] = useState(0);
   const panelId = useId();
   const fileId = useId();
   const noteId = useId();
   const reasonId = useId();
   const key = `${q}\u0000${mode}\u0000${indexVersion}`;
+  const now = useNow(run.kind === "running" || nextAt !== null);
+  const elapsed = run.kind === "running" ? Math.max(0, Math.floor((now - run.since) / 1000)) : 0;
+  const pause = nextAt === null ? 0 : Math.max(0, Math.ceil((nextAt - now) / 1000));
 
   useEffect(() => () => aborter.current?.abort(), []);
   useEffect(() => {
     if (focusResult.current && done !== null) {
       focusResult.current = false;
-      heading.current?.focus();
+      if (open) heading.current?.focus(); // never a heading the closed panel hides
     }
-  }, [done]);
+  }, [done, open]);
+
+  /** Focus to Compare when the control that had it is about to go (a Retry's notice, Cancel), never from
+   * elsewhere on the page (an automatic retry must not move it). */
+  const keepFocus = () => {
+    const active = document.activeElement;
+    if (active === null || active === document.body || panel.current?.contains(active))
+      compareButton.current?.focus();
+  };
+
+  const start = useCallback(
+    (byItself = false) => {
+      const problem = file === null || limits === null ? null : fileProblem(file, limits);
+      if (disabledReason !== null || file === null || problem !== null || run.kind === "running") return;
+      setAutoTries(byItself ? autoTries + 1 : 0);
+      aborter.current?.abort();
+      const controller = new AbortController();
+      aborter.current = controller;
+      const asked = key;
+      keepFocus();
+      setRun({ kind: "running", fileName: file.name, size: file.size, since: Date.now() });
+      setAnnouncement(`Comparing ${file.name} with this search.`);
+      void postCompare(api, { q, mode }, file, controller.signal).then(
+        (outcome) => {
+          if (controller.signal.aborted) return;
+          if (outcome.kind === "ok") {
+            focusResult.current = true;
+            setAutoTries(0);
+            const wait = outcome.data.next_comparison_seconds;
+            setNextAt(wait > 0 ? Date.now() + wait * 1000 : null);
+            if (wait > 0) setTimeout(() => setNextAt(null), wait * 1000);
+            setDone({
+              key: asked,
+              fileName: file.name,
+              comparison: outcome.data,
+              date: new Date().toISOString().slice(0, 10),
+            });
+            setRun({ kind: "idle" });
+            setAnnouncement(doneText(outcome.data));
+          } else {
+            setRun({ kind: "failed", key: asked, failure: outcome });
+            setAnnouncement("The comparison didn't run.");
+          }
+        },
+        () => {
+          if (controller.signal.aborted) return;
+          setRun({ kind: "failed", key: asked, failure: { kind: "unreachable" } });
+          setAnnouncement("The comparison didn't run.");
+        },
+      );
+    },
+    [api, autoTries, disabledReason, file, key, limits, mode, q, run.kind],
+  );
 
   if (limits === null) return null; // this instance doesn't offer comparisons (C8)
 
   const problem = file === null ? null : fileProblem(file, limits);
   const running = run.kind === "running";
-  const off = disabledReason !== null || file === null || problem !== null || running;
-
-  const start = () => {
-    if (off || file === null) return;
-    aborter.current?.abort();
-    const controller = new AbortController();
-    aborter.current = controller;
-    const asked = key;
-    // a Retry that started this run is gone with its notice: focus goes to Compare, never to the page
-    compareButton.current?.focus();
-    setRun({ kind: "running", fileName: file.name, size: file.size });
-    setAnnouncement(`Comparing ${file.name} with this search.`);
-    void postCompare(api, { q, mode }, file, controller.signal).then(
-      (outcome) => {
-        if (controller.signal.aborted) return;
-        if (outcome.kind === "ok") {
-          focusResult.current = true;
-          setDone({ key: asked, fileName: file.name, comparison: outcome.data });
-          setRun({ kind: "idle" });
-          setAnnouncement(doneText(outcome.data));
-        } else {
-          setRun({ kind: "failed", key: asked, failure: outcome });
-          setAnnouncement("The comparison didn't run.");
-        }
-      },
-      () => {
-        if (controller.signal.aborted) return;
-        setRun({ kind: "failed", key: asked, failure: { kind: "unreachable" } });
-        setAnnouncement("The comparison didn't run.");
-      },
-    );
-  };
+  const waiting = pause > 0;
+  // why Compare is off, said beside it (WCAG 4.1.2: an aria-disabled button says why)
+  const why =
+    disabledReason ??
+    (file === null
+      ? "Choose a RIS file first."
+      : problem !== null
+        ? "Choose a smaller file."
+        : waiting
+          ? `Next comparison in ${n(pause)} s: this instance pauses between one network's comparisons.`
+          : null);
+  const off = why !== null || running;
+  const refusedFile =
+    run.kind === "failed" &&
+    run.key === key &&
+    run.failure.kind === "refused" &&
+    (FILE_CODES.has(run.failure.error.code) || run.failure.error.code === "API_COMPARE_TOO_COSTLY");
+  const busy =
+    run.kind === "failed" &&
+    run.failure.kind === "refused" &&
+    run.failure.status === 503 &&
+    run.failure.error.code === "API_BUSY";
 
   const cancel = () => {
     aborter.current?.abort();
-    compareButton.current?.focus(); // Cancel is gone once the run is
+    keepFocus(); // Cancel is gone once the run is
     setRun({ kind: "idle" });
     setAnnouncement("Comparison cancelled.");
   };
@@ -146,6 +257,7 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
   return (
     <>
       <button
+        ref={trigger}
         type="button"
         aria-expanded={open}
         aria-controls={panelId}
@@ -155,7 +267,12 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
       >
         Compare with your records <span aria-hidden="true">{open ? "▾" : "▸"}</span>
       </button>
+      {/* outside the panel, so an answer that lands while it is closed is still announced */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
       <section
+        ref={panel}
         id={panelId}
         hidden={!open}
         aria-label="Compare with your records"
@@ -176,6 +293,7 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
               type="file"
               accept=".ris,application/x-research-info-systems,text/plain"
               aria-describedby={noteId}
+              aria-invalid={problem !== null || refusedFile ? true : undefined}
               onChange={(e) => {
                 setFile(e.target.files?.[0] ?? null);
                 if (run.kind === "failed") setRun({ kind: "idle" });
@@ -187,8 +305,8 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
             ref={compareButton}
             type="button"
             aria-disabled={off ? true : undefined}
-            aria-describedby={disabledReason !== null ? reasonId : undefined}
-            onClick={start}
+            aria-describedby={why !== null ? reasonId : undefined}
+            onClick={() => start()}
             className={`${button} ${off ? "opacity-60" : ""}`}
           >
             Compare
@@ -199,28 +317,28 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
             </button>
           )}
         </div>
-        <p id={noteId} className="text-xs break-words text-muted-foreground">
-          The file is sent to this server for this one comparison. It is not stored, not logged and not added
-          to the index. {limitsLine(limits)}
-        </p>
-        {disabledReason !== null && (
+        {why !== null && (
           <p id={reasonId} className="text-xs break-words text-muted-foreground">
-            {disabledReason}
+            {why}
           </p>
         )}
+        <p id={noteId} className="text-xs break-words text-muted-foreground">
+          The file is sent to this instance for this one comparison. It is not stored, not logged and not
+          added to the index. {limitsLine(limits)}
+        </p>
         {problem !== null && (
           <p role="alert" className="break-words">
             {problem}
           </p>
         )}
-        <p role="status" aria-live="polite" className="sr-only">
-          {announcement}
-        </p>
         {run.kind === "running" && (
           <p className="break-words">
             Comparing <span className="break-all">{run.fileName}</span> ({megabytes(run.size)}) with this
             search… Each paper is checked against the query, so a large file can take up to{" "}
-            {n(limits.max_seconds)} seconds.
+            {n(limits.max_seconds)} s.{" "}
+            <span aria-hidden="true" className="tabular-nums">
+              {n(elapsed)} s so far.
+            </span>
           </p>
         )}
         {run.kind === "failed" && run.key === key && (
@@ -233,12 +351,18 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
                 <span className="break-all">{current.fileName}</span>.
               </p>
             )}
-            {run.failure.kind === "refused" && run.failure.status === 429 && (
+            <FailureNotice
+              failure={run.failure}
+              onRetry={refusedFile ? null : () => start(busy)}
+              autoRetry={busy && autoTries < AUTO_RETRIES}
+            />
+            {refusedFile && (
               <p className="break-words">
-                Comparisons are limited more tightly than searches: you can keep searching while you wait.
+                {FILE_CODES.has(run.failure.kind === "refused" ? run.failure.error.code : "")
+                  ? "Choose another file, then Compare."
+                  : "Compare a smaller file, or narrow the query and search again."}
               </p>
             )}
-            <FailureNotice failure={run.failure} onRetry={start} />
           </div>
         )}
         {stale && run.kind !== "running" && (
@@ -255,6 +379,7 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
             q={q}
             mode={mode}
             heading={heading}
+            onSearchAgain={onSearchAgain}
           />
         )}
       </section>
@@ -269,6 +394,7 @@ function Result({
   q,
   mode,
   heading,
+  onSearchAgain,
 }: {
   done: Done;
   shownIndex: string;
@@ -276,6 +402,7 @@ function Result({
   q: string;
   mode: Mode;
   heading: React.RefObject<HTMLHeadingElement | null>;
+  onSearchAgain: (() => void) | undefined;
 }) {
   const c = done.comparison;
   const title = (
@@ -287,12 +414,19 @@ function Result({
     return (
       <div className="space-y-2">
         {title}
-        <p role="alert" className={box}>
-          <span aria-hidden="true">✖ </span>The index changed after this search: the comparison ran on index{" "}
-          <code className="font-mono break-all">{c.index_version}</code>, and the results shown are from{" "}
-          <code className="font-mono break-all">{shownIndex}</code>, so its numbers are not shown. Search
-          again, then compare again.
-        </p>
+        <div role="alert" className={box}>
+          <p className="break-words">
+            <span aria-hidden="true">✖ </span>The index changed after this search: the comparison ran on index{" "}
+            <code className="font-mono break-all">{c.index_version}</code>, and the results shown are from{" "}
+            <code className="font-mono break-all">{shownIndex}</code>, so its numbers are not shown. Search
+            again, then compare again.
+          </p>
+          {onSearchAgain !== undefined && (
+            <button type="button" onClick={onSearchAgain} className={button}>
+              Search again
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -300,11 +434,14 @@ function Result({
     return (
       <div className="space-y-2">
         {title}
-        <p role="alert" className={`${box} border-destructive`}>
-          <span aria-hidden="true">✖ </span>The comparison counted {plural(c.total, "paper")} for this search,
-          not the {n(shownTotal)} shown, on the same index. That shouldn&apos;t happen: it is a bug in
-          openproceedings. Its numbers are not shown.
-        </p>
+        <div role="alert" className={`${box} border-destructive`}>
+          <p className="break-words">
+            <span aria-hidden="true">✖ </span>The comparison counted {plural(c.total, "paper")} for this
+            search, not the {n(shownTotal)} shown, on the same index. That shouldn&apos;t happen: it is a bug
+            in openproceedings. Its numbers are not shown.
+          </p>
+          <Report code="COMPARE_TOTAL_MISMATCH" />
+        </div>
       </div>
     );
   }
@@ -319,8 +456,9 @@ function Result({
       {title}
       <p className="break-words">
         {plural(c.records_total, "record")} read, {plural(c.papers_total, "paper")} compared with the{" "}
-        {plural(c.total, "paper")} of this search · index{" "}
-        <code className="font-mono break-all">{c.index_version}</code>
+        {plural(c.total, "paper")} of this search
+        <Sep />
+        index <code className="font-mono break-all">{c.index_version}</code>
       </p>
       <table className="w-full border-collapse text-left">
         <caption className="sr-only">What this search does to the papers in your file</caption>
@@ -353,12 +491,21 @@ function Result({
           `, and ${plural(c.duplicates_total, "record")} that ${c.duplicates_total === 1 ? "repeats" : "repeat"} a paper already counted`}
         .
       </p>
+      <div className="flex flex-wrap items-center gap-2 break-words">
+        <span className="text-xs text-muted-foreground">
+          This comparison in one sentence, for your notes (nothing of it is kept here):
+        </span>
+        <CopyButton
+          text={summaryText(c, done.fileName, done.date)}
+          label="Copy this comparison as one sentence"
+        />
+      </div>
       <p className={`${box} break-words`}>
         <span className="font-semibold">What &ldquo;dropped&rdquo; means.</span> The index holds the paper,
         and this search doesn&apos;t return it: the query&apos;s words are not in its title or abstract as
-        written, or a default filter excludes it. Google Scholar also matches full text and other word forms,
-        which this search never does. A dropped paper is not judged irrelevant: check the reasons before
-        leaving it out of a review.
+        written (other word forms only where the query asks for them, with $ or *), or a default filter
+        excludes it. Google Scholar also matches full text and other word forms. A dropped paper is not judged
+        irrelevant: check the reasons before leaving it out of a review.
       </p>
       {c.kept_ris_only_total + c.dropped_ris_only_total > 0 && (
         <p className={`${warnBox} break-words`}>
@@ -407,6 +554,37 @@ function save(text: string, type: string, name: string) {
   saveBlob(new Blob([text], { type }), name);
 }
 
+/** A list's heading: its name and count ("Dropped · 1,756", read "Dropped: 1,756"). */
+function CountHeading({ label, count }: { label: string; count: number }) {
+  return (
+    <h4 className="font-semibold">
+      {label}
+      <span aria-hidden="true"> · </span>
+      <span className="sr-only">: </span>
+      <span className="tabular-nums">{n(count)}</span>
+    </h4>
+  );
+}
+
+/** A list's Show/Hide: one name whatever its state, which `aria-expanded` and the arrow carry (A11Y-N10). */
+function ListToggle({
+  open,
+  controls,
+  name,
+  onToggle,
+}: {
+  open: boolean;
+  controls: string;
+  name: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button type="button" aria-expanded={open} aria-controls={controls} onClick={onToggle} className={button}>
+      List the {name} <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+    </button>
+  );
+}
+
 function ListSection({ name, c, q, mode }: { name: ListName; c: Comparison; q: string; mode: Mode }) {
   const rows = c[name];
   const totals = {
@@ -419,25 +597,23 @@ function ListSection({ name, c, q, mode }: { name: ListName; c: Comparison; q: s
   const [open, setOpen] = useState(false);
   const { shown, more, row: rowProps } = useRowsShown();
   const listId = useId();
-  const reasons = reasonsLine(name, c.reason_totals[name]);
-  const label = LIST_LABELS[name];
+  const reasons = reasonLines(name, c.reason_totals[name]);
   return (
     <section aria-label={listCount(name, total)} className="space-y-1 border-t pt-2">
-      <h4 className="font-semibold">
-        {label} <span className="tabular-nums">· {n(total)}</span>
-      </h4>
-      {reasons !== "" && <p className="break-words">{reasons}</p>}
+      <CountHeading label={LIST_LABELS[name]} count={total} />
+      {reasons.map((line) => (
+        <p key={line} className="break-words">
+          {line}
+        </p>
+      ))}
       {total > 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-controls={listId}
-            onClick={() => setOpen(!open)}
-            className={button}
-          >
-            {open ? "Hide" : "Show"} the {listCount(name, total)}
-          </button>
+          <ListToggle
+            open={open}
+            controls={listId}
+            name={listCount(name, total)}
+            onToggle={() => setOpen(!open)}
+          />
           {name === "added" && (
             <button
               type="button"
@@ -488,7 +664,14 @@ function RowLine({ name, row, q, mode }: { name: ListName; row: CompareRow; q: s
     row.copies > 1 ? `${n(row.copies)} times in your file` : "",
     name === "kept" || name === "not_in_index" ? matchedByText(row.matched_by) : "",
   ].filter((x) => x !== "");
+  // a missing paper's reason is its list's name, and its match line already says why: neither is repeated
   const why = name === "not_in_index" ? "" : reasonText(name, row.reason);
+  const detail = detailText(name, row);
+  const flags = [
+    row.independent === false ? "import only" : "",
+    undecidedText(name, row),
+    row.abstract_withheld ? "abstract withheld" : "",
+  ].filter((x) => x !== "");
   return (
     <>
       <span className="block font-medium">
@@ -508,25 +691,15 @@ function RowLine({ name, row, q, mode }: { name: ListName; row: CompareRow; q: s
           </Link>
         )}
       </span>
-      <span className="block text-xs text-muted-foreground">{facts.join(" · ")}</span>
-      {(why !== "" || row.detail !== "") && (
+      <span className="block text-xs text-muted-foreground">{joined(facts)}</span>
+      {(why !== "" || detail !== "") && (
         <span className="block text-xs">
           {why}
-          {why !== "" && row.detail !== "" && " — "}
-          {row.detail}
+          {why !== "" && detail !== "" && " — "}
+          {detail}
         </span>
       )}
-      {(row.independent === false || !row.settled || row.abstract_withheld) && (
-        <span className="block text-xs">
-          {[
-            row.independent === false ? "import only" : "",
-            row.settled ? "" : "needs a person to decide",
-            row.abstract_withheld ? "abstract withheld" : "",
-          ]
-            .filter((x) => x !== "")
-            .join(" · ")}
-        </span>
-      )}
+      {flags.length > 0 && <span className="block text-xs">{joined(flags)}</span>}
     </>
   );
 }
@@ -539,23 +712,18 @@ function NotCompared({ c }: { c: Comparison }) {
   if (total === 0) return null;
   return (
     <section aria-label={`Not compared, ${plural(total, "record")}`} className="space-y-1 border-t pt-2">
-      <h4 className="font-semibold">
-        {LIST_LABELS.not_compared} <span className="tabular-nums">· {n(total)}</span>
-      </h4>
+      <CountHeading label={LIST_LABELS.not_compared} count={total} />
       <p className="break-words">
         Records of your file that are not NeurIPS, ICLR or ICML papers as far as their venue and links say.
         They are in none of the lists above.
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={listId}
-          onClick={() => setOpen(!open)}
-          className={button}
-        >
-          {open ? "Hide" : "Show"} the {plural(total, "record")} not compared
-        </button>
+        <ListToggle
+          open={open}
+          controls={listId}
+          name={`${plural(total, "record")} not compared`}
+          onToggle={() => setOpen(!open)}
+        />
         <button
           type="button"
           aria-label={`Download CSV of the ${plural(total, "record")} not compared`}
@@ -574,14 +742,14 @@ function NotCompared({ c }: { c: Comparison }) {
               <li key={row.ris_record} {...rowProps(i)} className="break-words">
                 <span className="block font-medium">{row.title === "" ? "(no title)" : row.title}</span>
                 <span className="block text-xs text-muted-foreground">
-                  {[
-                    row.venue === "" ? "no venue" : row.venue,
-                    row.year === null ? "" : String(row.year),
-                    `record ${n(row.ris_record)} of your file`,
-                    notComparedText(row.reason),
-                  ]
-                    .filter((x) => x !== "")
-                    .join(" · ")}
+                  {joined(
+                    [
+                      row.venue === "" ? "no venue" : row.venue,
+                      row.year === null ? "" : String(row.year),
+                      `record ${n(row.ris_record)} of your file`,
+                      notComparedText(row.reason),
+                    ].filter((x) => x !== ""),
+                  )}
                 </span>
               </li>
             ))}

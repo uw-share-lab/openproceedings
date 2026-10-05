@@ -87,7 +87,7 @@ export function fileProblem(file: { readonly size: number }, limits: CompareLimi
   if (file.size === 0) return "This file is empty. Choose a RIS export that holds records.";
   if (file.size > limits.max_body_bytes) {
     return (
-      `This file is ${megabytes(file.size)}; this server compares files up to ` +
+      `This file is ${megabytes(file.size)}; this instance compares files up to ` +
       `${megabytes(limits.max_body_bytes)}. Export it without abstracts (only titles, venues, years and links ` +
       "are compared), or split it."
     );
@@ -127,13 +127,13 @@ const REASONS: Record<string, string> = {
   compat_reading: "matches only as Google Scholar reads the query",
   coverage_gap: "not in the index",
   unsettled: "can't be decided automatically",
-  our_bug: "the two matchers disagree (a bug in openproceedings)",
+  our_bug: "openproceedings judges it both ways (a bug: please report it)",
 };
 const ADDED_REASONS: Record<string, string> = {
   scholar_missed: "an exact match your file doesn't hold",
   compat_reading: "matches as this search reads the query, not as Google Scholar reads it",
   scholar_cap: "its venue and year hit Google Scholar's 1,000-result cap in your file",
-  our_bug: "the two matchers disagree (a bug in openproceedings)",
+  our_bug: "openproceedings judges it both ways (a bug: please report it)",
 };
 
 /** A `reason` in words for one list (an unknown value is shown as sent: the enum is open). */
@@ -167,8 +167,8 @@ const COUNTED: Record<string, readonly [string, string]> = {
   coverage_gap: ["is not in the index", "are not in the index"],
   unsettled: ["can't be decided automatically", "can't be decided automatically"],
   our_bug: [
-    "is judged differently by the two matchers (a bug in openproceedings)",
-    "are judged differently by the two matchers (a bug in openproceedings)",
+    "is judged both ways by openproceedings (a bug: please report it)",
+    "are judged both ways by openproceedings (a bug: please report it)",
   ],
 };
 const COUNTED_ADDED: Record<string, readonly [string, string]> = {
@@ -185,17 +185,68 @@ const COUNTED_ADDED: Record<string, readonly [string, string]> = {
 };
 
 /**
- * "1,713 papers have no exact match in their title or abstract · 2 papers match only as another word form":
- * the server's counts per reason, each a sentence of its own (an unknown reason is shown as sent).
+ * What a reviewer can do about a paper with each reason (copy CM-19): a dropped or missing paper's count is
+ * never left without a next step.
  */
-export function reasonsLine(list: ListName, totals: Readonly<Record<string, number>>): string {
-  return Object.entries(totals)
-    .map(([reason, n]) => {
-      const words = (list === "added" ? COUNTED_ADDED : COUNTED)[reason];
-      const papers = `${n.toLocaleString("en-US")} ${n === 1 ? "paper" : "papers"}`;
-      return words === undefined ? `${papers}: ${reason}` : `${papers} ${n === 1 ? words[0] : words[1]}`;
-    })
-    .join(" · ");
+const NEXT_STEP: Record<string, string> = {
+  filtered: "to include such a paper, write its track or status into the query (its row says which)",
+  full_text:
+    "no form of this query finds such a paper by its title or abstract; keep it from your own file if it belongs in the review",
+  stemming: "add $ to that word (the Add $ action under the query) to match its other forms",
+  compat_reading:
+    "write the query as Google Scholar reads it (its translation notice shows how) to match such a paper",
+  coverage_gap: "keep such a paper from your own file: no query here can find it",
+  unsettled: "check such a paper by hand (its row says what is undecided)",
+  our_bug: "please report it with this query",
+};
+
+/**
+ * "1,713 papers have no exact match in their title or abstract: no form of this query finds …": the server's
+ * counts per reason, each a sentence of its own with what to do (an unknown reason is shown as sent).
+ */
+export function reasonLines(list: ListName, totals: Readonly<Record<string, number>>): string[] {
+  return Object.entries(totals).map(([reason, n]) => {
+    const words = (list === "added" ? COUNTED_ADDED : COUNTED)[reason];
+    const papers = `${n.toLocaleString("en-US")} ${n === 1 ? "paper" : "papers"}`;
+    if (words === undefined) return `${papers}: ${reason}.`;
+    const next = list === "added" && reason !== "our_bug" ? undefined : NEXT_STEP[reason];
+    return `${papers} ${n === 1 ? words[0] : words[1]}${next === undefined ? "" : `: ${next}`}.`;
+  });
+}
+
+/**
+ * What a person must decide about a row the automation couldn't settle (copy CM-20): named, never just
+ * "needs a person".
+ */
+export function undecidedText(list: ListName, row: Pick<CompareRow, "reason" | "settled">): string {
+  if (row.settled) return "";
+  if (row.reason === "our_bug") return "to report: openproceedings judged it both ways";
+  if (list === "not_in_index") return "to check: is it in the index under another title, venue or year?";
+  if (list === "added") return "to check: is it the paper your file holds under another record?";
+  return "to check: does the paper itself match the query? (its row says what is undecided)";
+}
+
+/** The start of a `not_in_index` row's `detail` that `matched_by` already says (copy USAB-N3). */
+const UNMATCHED = "no forum id, proceedings id or title+venue+year match in the snapshot";
+
+/** A row's evidence as shown: what `matched_by` already says is left out, the rest (links, near titles) kept. */
+export function detailText(list: ListName, row: Pick<CompareRow, "detail">): string {
+  if (list !== "not_in_index" || !row.detail.startsWith(UNMATCHED)) return row.detail;
+  return row.detail.slice(UNMATCHED.length).replace(/^;\s*/, "");
+}
+
+/**
+ * One sentence that says what the comparison found and on what, to paste into notes (copy CM-21; the server
+ * keeps nothing of it: a place in the search record is TASK-195).
+ */
+export function summaryText(c: Comparison, fileName: string, date: string): string {
+  const n = (x: number) => x.toLocaleString("en-US");
+  return (
+    `On ${date}, the query ${c.query.canonical} (canonical_hash ${c.query.canonical_hash}) on openproceedings ` +
+    `index ${c.index_version}, compared with ${fileName} (${n(c.records_total)} records read, ` +
+    `${n(c.papers_total)} papers compared): ${n(c.kept_total)} kept, ${n(c.dropped_total)} dropped, ` +
+    `${n(c.not_in_index_total)} not in the index; it adds ${n(c.added_total)} papers the file doesn't hold.`
+  );
 }
 
 const HEX = /^[0-9a-f]+$/;

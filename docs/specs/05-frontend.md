@@ -357,32 +357,40 @@ warnings, the save's index check), the design doc says so; its open questions li
    (`?replay=false`), then its replay; the methods text and the exports appear once the replay has answered (or
    couldn't run: "Replay: waiting" on a 429 or `API_BUSY`), so a `mismatch` never shows either.
 9. **Compare with your records** (TASK-177; `components/compare/compare-records.tsx`, `lib/compare.ts`;
-   design `docs/design/2026-10-05-ris-comparison.md`). A reviewer moving from Google Scholar asks what a query
-   does to the records they already hold. A button beside Export and Save opens a panel under the results
+   design `docs/design/2026-10-05-ris-comparison.md`). The project's own review (one team, n=1) asked what a
+   query does to the records it already held from Google Scholar; that other reviewers ask it too is an
+   assumption, untested until TASK-032 and TASK-047. A button beside Export and Save opens a panel under the results
    header: choose a RIS file, **Compare**, and the searched query `(q, mode)` is compared with it on the shown
    index (`POST /compare`, 04 §Comparing with a RIS file). It is drawn only when `GET /meta`'s
    `limits.compare` is not null: an instance whose operator hasn't turned comparisons on doesn't offer it.
-   - **Before sending**, the panel says where the file goes ("sent to this server for this one comparison;
+   - **Before sending**, the panel says where the file goes ("sent to this instance for this one comparison;
      not stored, not logged and not added to the index") and the caps from `limits.compare`; a file over
-     `max_body_bytes`, or an empty one, is refused in the browser with the size and the cap. The file's bytes
+     `max_body_bytes`, or an empty one, is refused in the browser with the size and the cap (the input is then
+     `aria-invalid`). Compare, while off, says why beside it: no file yet, a file too large, the search's own
+     reason, or the network's pause after a comparison ("Next comparison in N s", from the answer's
+     `next_comparison_seconds`; a local instance has none). The file's bytes
      are sent as they are (never decoded in the browser, so the server can still refuse what isn't UTF-8),
      and its name never leaves the browser.
    - **Counts first.** A four-row table: Kept, Dropped, Not in the index, Added, each with its one-line
      meaning and the server's `*_total`; then the file's accounting (records read, papers compared, records
      from other venues, repeats). Every number is an API field, `reason_totals` included: nothing is counted
      in the browser.
-   - **What "dropped" means** is said in place: the index holds the paper and this search doesn't return it;
-     Google Scholar matches full text and other word forms, which this search never does; a dropped paper is
-     not judged irrelevant. When some kept or dropped papers are in the index only because a RIS file was
+   - **What "dropped" means** is said in place: the index holds the paper and this search doesn't return it
+     (other word forms only where the query asks, with `$` or `*`); Google Scholar matches full text and other
+     word forms; a dropped paper is not judged irrelevant. One sentence to copy says what the comparison found,
+     on what index and query (the server keeps nothing of it; TASK-195). When some kept or dropped papers are in the index only because a RIS file was
      imported (`kept_ris_only_total`, `dropped_ris_only_total`; each such row is marked "import only"), a
      warning says a match to them shows the import holds the paper, not that the index covers it.
    - **Lists on demand.** Each list is a section with its count, the reasons with their counts (`excluded by a
      default filter`, `no exact match in its title or abstract`, `matches only as another word form`, …; an
-     unknown `reason` is shown as sent, the enum being open), a Show/Hide button (`aria-expanded`), and its
+     unknown `reason` is shown as sent, the enum being open), each with what to do next (add `$`, write the
+     filter into the query, keep it from your own file, check it by hand, report it), one toggle button whose
+     name doesn't change (its state in `aria-expanded`), and its
      downloads. A row is the title (the file's own; a link to `/paper/[id]` with the query when the index
      holds the paper, opened in a new tab and named so: the comparison is held by this page only), venue and year, its position in the file, how it was matched or why it wasn't, the
-     reason and the server's `detail`, and "import only" / "needs a person to decide" / "abstract withheld"
-     as text. A list draws 100 rows at a time ("Show more").
+     reason and the server's `detail` (less what the match line already says), and "import only", what a
+     person must check (named: "to check: is it in the index under another title, venue or year?"), and
+     "abstract withheld" as text. A list draws 100 rows at a time ("Show more").
    - **Downloads** are the response's own text saved as sent: each list's `csv`, and for Added also
      `added_ris` (what `GET /export` writes for those papers). The browser builds no cell.
    - **Never a stale answer.** The comparison is keyed by `(q, mode, index_version)`: after another search its
@@ -391,9 +399,12 @@ warnings, the save's index check), the design doc says so; its open questions li
      refused in place (the second is a bug, worded as one). Compare is off, with the reason, while the draft
      is dirty or the results are stale, as Export and Save are.
    - **Accessibility.** A native file input with a visible label; the result's heading takes focus when the
-     answer lands and a polite live region says "Comparison done: 51 kept, 1,756 dropped, 8 not in the index,
-     16 added."; refusals are alerts worded from the envelope, a 429 or `API_BUSY` with its countdown and
-     Retry; a running comparison can be cancelled. Focus never falls to the page: Cancel and Retry hand it to
+     answer lands (unless the panel was closed meanwhile) and a polite live region beside the panel says
+     "Comparison done: 51 kept, 1,756 dropped, 8 not in the index, 16 added."; refusals are alerts worded from
+     the envelope, a 429 with its countdown and Retry, a 503 `API_BUSY` retried by itself when its
+     `Retry-After` is up (up to 3 times in a row), a refused file with "Choose another file" and no Retry; a
+     running comparison shows a seconds counter and can be cancelled; separators (`·`) are hidden from screen
+     readers. Focus never falls to the page: Cancel and Retry hand it to
      Compare, and the last "Show more" to the first row it drew. It fits 320 px (the table has two columns; titles wrap).
 
 ## Error handling
