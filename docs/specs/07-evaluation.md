@@ -53,6 +53,43 @@ added, and check the track). The rest goes to `review.csv` for a person to decid
 `docs/results/<date>-scholar-comparison.md`. This report is also a result the paper itself can use:
 *how much of Scholar's result set comes from full-text matches and stemming.*
 
+As built (TASK-056): `op eval scholar --ris <file>… --years LO..HI --index <v>` writes the report and, beside it,
+`<date>-scholar-comparison-review.csv` (the protocol's `review.csv`, dated like its report). Two modules:
+`eval/scholar_compare.py` is the comparison itself, pure functions that a reviewer's own RIS file goes through
+too (TASK-177: one implementation); `eval/scholar_report.py` picks the review rows and renders.
+
+- **The Scholar set** is any RIS file, read with scholarmend's parser. The first report reads the review's
+  export as scholarmend mended it (`mended.ris`: the same 1,834 records as `clean.ris`, which holds the delta,
+  with the years Scholar left out or guessed corrected), and says so under its hash.
+- **Matching** follows 01's merge rules in order: the OpenReview forum id a URL names (`/forum?id=` or
+  `/pdf?id=`), then the proceedings paper a URL names, then the dedup title key within the same venue and year. A
+  proceedings id is matched **within its venue and year**, as dedup merges on it: a NeurIPS hash is md5 of the
+  paper's number and repeats every year. An id or key that names two records is ambiguous, never a pick; a
+  title alone never matches; the venue is one of Scholar mode's source names exactly (a venue string Scholar cut
+  with `…` is no venue, and such a record is out of scope unless a URL of it names an indexed paper).
+- **Scope** is `--years` and `--venues`, applied to both sides: the result is the engine's match set for the
+  string as written, limited to records of those venues and years; a matched Scholar record is scoped by its
+  index record's venue and year, an unmatched one by its own.
+- **Classes**, in the protocol's order, each decided by `ReferenceEngine` over the compared records (every matched
+  Scholar paper and every in-scope match): `our_bug` (the oracle and the served index disagree on a compared
+  record, on either side or in both), `filtered`, `compat_reading` (below), `coverage_gap`, `stemming`,
+  `full_text`; and `scholar_cap`, `compat_reading`, `scholar_missed` for records only in the result. A record the
+  corpus holds without an abstract can't be `full_text`: it is `unsettled`, for a person. Every `coverage_gap` and
+  `scholar_missed` row goes to a person too, with a tenth of the settled rows as a spot check.
+- **`compat_reading`** (decision-002 and `$`): the string is rewritten as Google Scholar reads it and run again.
+  `$` is no wildcard there, and an unquoted multi-word `|` item is separate words with `|` binding tighter than
+  juxtaposition, so `(large language model | LLM)` is `large AND language AND (model OR llm)`. A record that
+  Scholar's reading matches and ours doesn't, or the reverse, is `compat_reading`, not a miss; the report prints
+  Scholar's reading and says so for each such string (`main-2-pop`).
+- **`stemming`** adds each searched word's other English inflections found in the compared records (`s`/`es`/
+  `ies`, `ed`, `ing`; no derivation). Google Scholar's stemmer is undocumented, so the rule is a stated
+  stand-in that errs towards `stemming`, which keeps `full_text` a lower bound.
+- **`scholar_cap`** needs the size of each Scholar search: the set's Publish or Perish query dates group its
+  records by search, and a group at 1,000 or more marks its venues and years as capped.
+- A report never replaces a review file a person has filled in, and names its inputs by file name and sha256,
+  never by path. Notes about one set of inputs come from `docs/results/scholar-comparison-notes.md`, printed
+  verbatim under its hash.
+
 ## C. Coverage (report plus a soft gate at M4)
 
 For each venue × year × track: indexed accepted count compared with the official accepted count (the table

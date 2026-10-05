@@ -1,0 +1,7 @@
+# The Trust-Evals primary string as run on 2026-09-30 with Publish or Perish's `$` on its plural-taking words,
+# plus a year range (sha256 of the string's own file, without these lines:
+# 39eb22b2fb00b94e43406887c4ac930654c584ce947dddc4bf044a365218c0b6). Copied by program, never retyped.
+# Read by `op eval scholar --query-file` for docs/results/2026-10-04-scholar-comparison.md.
+
+## main-7-dollar
+("foundation model$" OR "large language model$" OR LLM$ OR "generative AI") AND (trustworthiness OR trustworthy OR "trust" OR "trustworthy AI") AND (benchmark$ OR leaderboard$ OR "evaluation framework$") AND (source:"ICLR" OR source:"international conference on learning representations" OR source:ICML OR source:"international conference on machine learning" OR source:PMLR OR source:"proceedings of machine learning research" OR source:NeurIPS OR source:"neural information processing systems" OR source:"advances in neural information processing systems") AND year:2020..2026

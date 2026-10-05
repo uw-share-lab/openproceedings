@@ -23,10 +23,11 @@ exact. Your numbers may go into a paper, so every one must be regenerable from a
 1. **Pin inputs.** `op search --explain` prints the served `index_version`; record it and the
    `sha256sum` of the Scholar export (Trust-Evals `clean.ris` + 2020–2024 delta). Stop if either is
    missing — don't substitute a different export.
-2. **Run.** `uv run op eval scholar [--query "<name>"]` (all strings if none). For each query, also save
+2. **Run.** `uv run op eval scholar --ris <export> --years <lo>..<hi> --index <v> [--name "<name>"]` (every
+   Trust-Evals string if no `--name`, `--query-file` or `--query`). For each query, also save
    `op search --mode scholar "<string>" --ids` and the parse translations/warnings.
 3. **Check the automation's order** on a sample: `our_bug` (oracle vs served, via `op search --engine
-   reference|tantivy --ids`) → `filtered` → `coverage_gap` → `stemming` → `full_text`. Spot-check five rows
+   reference|tantivy --ids`) → `filtered` → `compat_reading` → `coverage_gap` → `stemming` → `full_text`. Spot-check five rows
    per class by hand against the record's title and abstract.
 4. **Every `our_bug` is a stop.** Write the minimal counter-example query, hand it to the main session as a
    Must with a proposed golden case; the report says the count and does not publish until it is 0 or each
