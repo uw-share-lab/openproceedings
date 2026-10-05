@@ -8,6 +8,7 @@ together, parses to the same query with exactly those terms made `$` wildcards.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from itertools import combinations
 from pathlib import Path
@@ -16,10 +17,11 @@ from typing import Any
 import pytest
 from hypothesis import event, example, given
 from hypothesis import strategies as st
-from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.diagnostics import DiagnosticCode, verbatim
 from openproceedings.query import wordforms
 from openproceedings.query.ast import structure
-from openproceedings.query.parser import MAX_QUERY_LENGTH, ParseResult, exact_leaves, exact_name, parse
+from openproceedings.query.exact import exact_leaves, exact_name
+from openproceedings.query.parser import MAX_QUERY_LENGTH, ParseResult, parse
 from openproceedings.query.wordforms import WordForm, apply, word_forms
 
 from tests.strategies import queries
@@ -266,6 +268,18 @@ def test_offered_edits_are_sound_on_generated_queries(q: str) -> None:
     assert result.ast is not None
     # the rules alone decide what is offered: the read-back refuses nothing they allow, short of the length cap
     allowed = [form for form, _ in wordforms._candidates(q, result.ast, result)]
+    # the notice's example (TASK-181) is the first of them, written so that it parses alone, or there is none
+    [note] = [t for t in result.translations if t.code is DiagnosticCode.COMPAT_NO_STEMMING] or [None]
+    example = None if note is None else re.search(r"\(e\.g\. `([^`]*)`\)\.$", note.message)
+    quotable = [
+        f.term for f in allowed if verbatim(f.term) and len(f.term) + 1 + 2 * (" " in f.term) <= 40
+    ]  # a message quotes at most 40 characters, and only text it need not escape
+    if example is not None:
+        event("the notice has an example")
+        assert example.group(1).strip('"').removesuffix("$") == quotable[0]
+        assert parse(example.group(1)).errors == []
+    elif note is not None:
+        assert quotable == []
     if forms != allowed:
         event("over the length cap once edited")
         assert [e.code for e in parse(apply(q, allowed), "scholar").errors] == [DiagnosticCode.PARSE_TOO_LONG]
