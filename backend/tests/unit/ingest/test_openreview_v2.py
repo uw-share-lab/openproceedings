@@ -63,6 +63,9 @@ FORMS = [
     ("icml-2024/notes-accepted.json", "ICML", 2024, "main", "accepted"),
     ("icml-2025/notes-position.json", "ICML", 2025, "position", "accepted"),
     ("icml-2026/notes-accepted.json", "ICML", 2026, "main", "accepted"),
+    # TASK-178, from the 2026 crawl cache: an opt-in public rejection and an undecided workshop submission
+    ("icml-2026/notes-rejected.json", "ICML", 2026, "main", "rejected"),
+    ("icml-2026/notes-workshop-submission.json", "ICML", 2026, "workshop", "unknown"),
 ]
 # classify.py's mapping of these is TASK-094's (position / competition); the crawler must just follow it
 DELEGATED = [
@@ -221,7 +224,8 @@ def test_a_pdf_value_that_is_not_an_openreview_pdf_path_is_dropped() -> None:
 # --- presentation (TASK-101) -------------------------------------------------------------------------------------
 
 # (fixture, content.venue, presentation): every row of classify.V2_PRESENTATION, each on a recorded note
-# (the notes-presentation-* fixtures are one note per string, trimmed from the TASK-054 crawl cache)
+# (the notes-presentation-* fixtures are one note per string, trimmed from the TASK-054 crawl cache; the 2026
+# ones from the TASK-178 cache)
 PRESENTATIONS = [
     ("iclr-2024/notes-presentation-conference.json", "ICLR 2024 oral", "oral"),
     ("iclr-2024/notes-presentation-conference.json", "ICLR 2024 spotlight", "spotlight"),
@@ -235,6 +239,8 @@ PRESENTATIONS = [
     ("iclr-2025/notes-presentation-conference.json", "ICLR 2025 Poster", "poster"),
     ("iclr-2025/notes-presentation-blogposts.json", "ICLR 2025 Blogpost Track", None),
     ("iclr-2026/notes-accepted.json", "ICLR 2026 Poster", "poster"),
+    ("iclr-2026/notes-presentation-conference.json", "ICLR 2026 Oral", "oral"),
+    ("iclr-2026/notes-presentation-conference.json", "ICLR 2026 Poster", "poster"),
     ("icml-2023/notes-presentation-conference.json", "ICML 2023 OralPoster", "oral"),
     ("icml-2023/notes-presentation-conference.json", "ICML 2023 Poster", "poster"),
     ("icml-2024/notes-presentation-conference.json", "ICML 2024 Oral", "oral"),
@@ -247,6 +253,9 @@ PRESENTATIONS = [
     ("icml-2025/notes-presentation-position-paper-track.json", "ICML 2025 Position Paper Track spotlightposter",
      "spotlight"),
     ("icml-2025/notes-presentation-position-paper-track.json", "ICML 2025 Position Paper Track poster", "poster"),
+    ("icml-2026/notes-presentation-conference.json", "ICML 2026 spotlight", "spotlight"),
+    ("icml-2026/notes-presentation-position-paper-track.json", "ICML 2026 Position Paper Track spotlight",
+     "spotlight"),
     ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 oral", "oral"),
     ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 spotlight", "spotlight"),
     ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 poster", "poster"),
@@ -334,6 +343,23 @@ def test_an_unrecognised_string_is_null_counted_and_logged_at_debug(caplog: pyte
     [line] = [r for r in caplog.records if r.getMessage() == "openreview_presentation_unmapped"]
     assert line.levelno == logging.DEBUG and line.__dict__["forum"] == note["id"]
     assert "venue_string" not in line.__dict__  # the string can be free text: never logged
+
+
+# ICML 2026's other tier names no presentation, so it stays out of the table and is counted (TASK-178: 5,805
+# main and 175 position notes in the crawl cache)
+@pytest.mark.parametrize(
+    ("fixture", "venue_string", "track"),
+    [
+        ("icml-2026/notes-presentation-conference.json", "ICML 2026 regular", "main"),
+        ("icml-2026/notes-presentation-position-paper-track.json", "ICML 2026 Position Paper Track regular",
+         "position"),
+    ],
+)  # fmt: skip
+def test_icml_2026_regular_is_left_unmapped(fixture: str, venue_string: str, track: str) -> None:
+    record, unmapped = unmapped_after(note_with_venue(fixture, venue_string), "ICML", 2026)
+    assert isinstance(record, PaperRecord) and (record.track, record.status) == (track, "accepted")
+    assert record.presentation is None and unmapped == {record.id.rsplit(":", 1)[1]}
+    assert "presentation" not in {c.field for c in record.provenance}
 
 
 @pytest.mark.parametrize(

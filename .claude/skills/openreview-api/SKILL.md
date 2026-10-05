@@ -169,7 +169,10 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   `classify.V2_PRESENTATION`, each with the track its venueid must give). An unlisted string is `null` and
   counted (`presentation_unmapped` in the report, the finished line and the attention WARNING; a DEBUG
   `openreview_presentation_unmapped` per note, forum id only). A new venue-year's strings get table rows and
-  a recorded note each (`notes-presentation-*.json`, trimmed from the crawl cache and scrubbed).
+  a recorded note each (`notes-presentation-*.json`, trimmed from the crawl cache and scrubbed; a capture
+  taken on another day than `scrub.RECORDED` carries its own `"date"`). The 2026 crawl (TASK-178) added
+  `ICLR 2026 Oral` and ICML 2026's two `spotlight` strings; ICML 2026's `regular` strings (5,980 notes) stay
+  unmapped on purpose, so that venue-year's attention WARNING is expected.
 - Logs (TASK-116; logging-standards skill §Crawl lines), the same for v1 and v2: `openreview_crawl_started`
   (`api`, `venue`, `year`, `offline`, `page_size`), `openreview_crawl_progress` at most every 30 s of the
   client's monotonic clock (`common.Heartbeat`; notes read, `forums` on v1, imported, skipped, `requests`,
