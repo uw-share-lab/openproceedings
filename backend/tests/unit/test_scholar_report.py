@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -144,6 +145,7 @@ def test_review_csv_has_the_protocol_columns_and_leaves_the_human_ones_empty() -
     )
     assert (missed["title"], missed["venue"], missed["year"]) == ("A benchmark of trust", "NeurIPS", "2024")
     assert missed["row_kind"] == UNRESOLVED
+    assert [r["row_number"] for r in rows] == [str(n) for n in range(1, len(rows) + 1)]
 
 
 def test_a_title_a_spreadsheet_would_run_is_quoted() -> None:
@@ -529,7 +531,7 @@ def test_review_csv_says_what_each_rows_record_rests_on() -> None:
     text, records = own_import()
     c = compare(QUERY, text, records)
     rows = list(csv.DictReader(io.StringIO(render_review(review_rows([c]), "v").removeprefix(BOM))))
-    assert REVIEW_COLUMNS[-2:] == ("record_source", "abstract_source")
+    assert REVIEW_COLUMNS[-3:] == ("record_source", "abstract_source", "row_number")
     by_id = {r["op_id"] or r["scholar_key"]: (r["record_source"], r["abstract_source"]) for r in rows}
     assert by_id[nid("ris00003", 2026)] == ("ris_only", "ris")
     assert by_id["set.ris#7"] == ("", "")
@@ -865,26 +867,117 @@ def test_the_counts_after_the_calls_move_each_called_row_once() -> None:
         dict(after.result) == {}
     )  # the paired record left the rows only in the result: the two are one paper
     assert dict(c.counts("openproceedings")) == {"scholar_missed": 1}  # the automation's counts are untouched
-    alone = HumanCalls("f.csv", "0" * 64, {at[nid("noab0001")]: Call(IN_BOTH, "second reviewer", "")})
-    assert after_calls(c, review, alone).result == {"scholar_missed": 1}  # its own record is no extra row
 
 
-def test_the_report_prints_the_counts_after_the_calls_beside_the_automations(
-    ran: tuple[list[str], Path, Path],
-) -> None:
-    argv, report_file, rows_file = ran
-    fill(
-        rows_file, {**ALL_CALLED, nid("noab0001"): (IN_BOTH, "AI assistant, not an independent reviewer", "")}
+def _paired_review() -> tuple[QueryComparison, list[ReviewRow], dict[str, int]]:
+    """One query's review rows with the coverage-gap row naming the result's only extra record (`miss0001`) as
+    its one same-title record, so an `in_both` on it has a record to pair with; and each row's place."""
+    c = compare(QUERY, SET, corpus())
+    review = review_rows([c])
+    at = {x.row.op_id or x.row.scholar_key: n for n, x in enumerate(review)}
+    gap = at["set.ris#8"]
+    review[gap] = ReviewRow(
+        review[gap].query_name, replace(review[gap].row, near=(nid("miss0001"),)), UNRESOLVED
     )
-    assert main(argv) == 0
-    text = report_file.read_text(encoding="utf-8")
+    return c, review, at
+
+
+@pytest.mark.parametrize(
+    ("calls", "message"),
+    [
+        # noab0001's own record is in the index but not in the result: "in both" would count a paper twice
+        (
+            {"noab0001": IN_BOTH},
+            f"pairs the row with `{nid('noab0001')}`, which is not among query `q`'s records",
+        ),
+        (
+            {"set.ris#8": IN_BOTH, "miss0001": SCHOLAR_MISSED},
+            f"`{nid('miss0001')}` has a call, and the `in_both`",
+        ),
+    ],
+)
+def test_an_in_both_that_would_count_a_paper_twice_is_refused(
+    tmp_path: Path, calls: dict[str, str], message: str
+) -> None:
+    c, review, at = _paired_review()
+    keys = {k: (nid(k) if not k.startswith("set.ris") else k) for k in calls}
+    text = render_review(review, "v")
+    saved = tmp_path / "review.csv"
+    saved.write_bytes(
+        _filled(text, {at[keys[k]]: (cls, "second reviewer", "") for k, cls in calls.items()}).encode("utf-8")
+    )
+    with pytest.raises(ValueError, match=re.escape(message)):
+        read_calls(saved, text, review, [c])
+
+
+def test_two_in_both_calls_on_one_paired_record_are_refused(tmp_path: Path) -> None:
+    c, review, at = _paired_review()
+    noab = at[nid("noab0001")]
+    review[noab] = ReviewRow(
+        review[noab].query_name, replace(review[noab].row, op_id="", near=(nid("miss0001"),)), UNRESOLVED
+    )
+    text = render_review(review, "v")
+    saved = tmp_path / "review.csv"
+    both = ("in_both", "second reviewer", "")
+    saved.write_bytes(_filled(text, {at["set.ris#8"]: both, noab: both}).encode("utf-8"))
+    first, second = sorted((at["set.ris#8"], noab))
+    with pytest.raises(
+        ValueError, match=f"line {second + 2}: .*the `in_both` call on line {first + 2} already pairs"
+    ):
+        read_calls(saved, text, review, [c])
+    saved.write_bytes(_filled(text, {at["set.ris#8"]: both}).encode("utf-8"))
+    calls = read_calls(saved, text, review, [c])  # one pairing is the paper in both, once
+    assert calls is not None and after_calls(c, review, calls).result == {}
+
+
+def test_the_report_prints_the_counts_after_the_calls_beside_the_automations() -> None:
+    c, review, at = _paired_review()
+    calls = HumanCalls("f.csv", "0" * 64, {
+        at["set.ris#8"]: Call(IN_BOTH, "AI assistant, not an independent reviewer", ""),
+        at[nid("noab0001")]: Call("out_of_scope", "second reviewer", ""),
+    })  # fmt: skip
+    index = MatchIndex.build(corpus())
+    side = scope_and_match(read_ris(SET, NAME), index, META.scope)
+    text = render(META, side, index, [c], review, calls)
     for line in (
         "| Scholar set, in scope | 8 | 7 |",
         "| in both | 1 | 2 |",
         "| only in the Scholar set: `unsettled` | 1 | 0 |",
         "| only in the Scholar set: `coverage_gap` | 1 | 0 |",
+        "| only in openproceedings: `scholar_missed` | 1 | 0 |",
     ):
         assert line in text.splitlines(), line
-    assert "made as: `second reviewer` (2 rows); `AI assistant, not an independent reviewer` (1 row)" in text
+    assert "made as: `AI assistant, not an independent reviewer` (1 row); `second reviewer` (1 row)" in text
     assert "- **After the calls** (section Human calls, made as: " in text
     assert "1 of 7 (14.3%) `full_text`" in text
+    # never read as permission to cite: whatever the roles, not until every one is an independent reviewer's
+    assert (
+        "The after-calls figures are not to be cited until every role is an independent reviewer's." in text
+    )
+    assert "only with those roles beside them" not in text
+    assert "(see Notes on these inputs)" in render(replace(META, notes="n"), side, index, [c], review, calls)
+
+
+def test_a_review_file_sorted_in_a_spreadsheet_is_refused_and_reads_once_sorted_back(tmp_path: Path) -> None:
+    c, review, at = _paired_review()
+    text = render_review(review, "v")
+    filled = _filled(text, {at[nid("noab0001")]: ("full_text", "second reviewer", "")})
+    head, *rows = list(csv.reader(io.StringIO(filled.removeprefix(BOM))))
+    saved = tmp_path / "review.csv"
+    for column in ("title", "auto_class", "human_class", "row_number"):  # as a spreadsheet's sort leaves it
+        k = head.index(column)
+        by = sorted(rows, key=lambda r: r[k], reverse=column == "row_number")
+        assert by != rows
+        buffer = io.StringIO()
+        csv.writer(buffer, lineterminator="\r\n").writerows([head, *by])
+        saved.write_bytes((BOM + buffer.getvalue()).encode("utf-8"))
+        with pytest.raises(ValueError, match="its rows were reordered: sort them by `row_number`"):
+            read_calls(saved, text, review, [c])
+    back = sorted(by, key=lambda r: int(r[head.index("row_number")]))  # sorted back by the run's column
+    buffer = io.StringIO()
+    csv.writer(buffer, lineterminator="\r\n").writerows([head, *back])
+    saved.write_bytes((BOM + buffer.getvalue()).encode("utf-8"))
+    calls = read_calls(saved, text, review, [c])
+    assert calls is not None and calls.calls == {
+        at[nid("noab0001")]: Call("full_text", "second reviewer", "")
+    }

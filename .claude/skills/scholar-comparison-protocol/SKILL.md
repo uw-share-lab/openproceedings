@@ -84,7 +84,8 @@ every `coverage_gap` (a gap and a record Scholar filed under the wrong venue loo
 `scholar_missed` and every `our_bug`. The spot check is the tenth of each query's settled rows whose sha256 of
 (query name, side, ids) sorts first: fixed for a run, unrelated to any field. `op eval scholar` refuses to
 replace a review file in which anything is filled in (or which is not UTF-8). Two further columns,
-`record_source` (`crawled` or `ris_only`) and `abstract_source`, say what the row's index record rests on. The
+`record_source` (`crawled` or `ris_only`) and `abstract_source`, say what the row's index record rests on, and
+the last, `row_number` (1, 2, …), is each row's place, to sort a reordered file back by. The
 file is UTF-8 with a BOM and CRLF line ends, like `/compare`'s CSV, so a spreadsheet opens it as UTF-8; cells
 are written through `export.csv_cell` (a value starting `=`, `+`, `-` or `@` gets a leading `'`).
 
@@ -102,26 +103,29 @@ file byte for byte, and rewrites only the report. Its "Human calls" section coun
 automated × called class, names any row called `our_bug`, prints an "After the calls" table per query, and ends
 with **Every disagreement classified: yes/no**. "Yes" needs no `our_bug` by the automation or a call and a call
 on every unresolved row. `--check` exits 1 on an automated `our_bug` and on a call of `our_bug`. A malformed
-call, or a filled file whose rows belong to another run, is refused and nothing is written. The report never
-quotes a note.
+call, or a filled file whose rows belong to another run, is refused and nothing is written; so is a file a
+spreadsheet sorted ("its rows were reordered": sort it by `row_number` and save again). The report never quotes
+a note.
 
 **After the calls.** A class moves its row to that class. `out_of_scope` takes the record out of the Scholar set
 and so out of the denominator. `in_both` moves the record to "in both" and pairs it with one index record: the
 row's own `op_id`, or else the one same-title record its evidence names (`Row.near`: for a record with no venue
-string, the in-scope records of its year named after "same title:"); if that record is a row only in the result,
-the row leaves that table too, the two being one paper. An `in_both` call whose row names none or several is
-refused: the pairing never parses `note`. Rows without a call keep the automation's class. Every table above
+string, the in-scope records of its year named after "same title:"), which must be one of that query's rows only
+in the result: it leaves that table, the two being one paper. An `in_both` call is refused when its row names
+none or several, when the paired record is not among the query's rows only in the result (a row's own `op_id`
+never is), when another `in_both` call pairs the same record, or when that record's own row has a call: no paper
+is counted in both twice. The pairing never parses `note`. Rows without a call keep the automation's class. Every table above
 the Human calls section, and the first figures of each Finding, are the automation's alone; the Finding adds an
 "After the calls" bullet with the roles beside it.
 
 **A call weighs what its role does.** The report prints each distinct `reviewer_role` with its row count in the
 Human calls section and on the closing line, and the command prints them on its verdict line. The tool does not
 judge a role. A call by anyone but an independent reviewer (the analyst, or an AI assistant acting for the
-project) leaves "yes" provisional and spec 07 §B's bar open: a paper cites the automation's figures, cites the
-after-calls figures only with the roles beside them, and as reviewed only once every role is an independent
-reviewer's. The 2026-10-05 review file's 48 calls were made by an AI assistant at the owner's direction; TASK-193
-(an independent reviewer repeats them, reading each `scholar_missed` abstract first) blocks citing them, not
-merging.
+project) leaves "yes" provisional and spec 07 §B's bar open: a paper cites the automation's figures; the
+after-calls figures are not to be cited until every role is an independent reviewer's (the Finding's bullet says
+so), and then with the roles beside them. The 2026-10-05 review file's 48 calls were made by an AI assistant
+at the owner's direction; TASK-193 (an independent reviewer repeats them, reading each `scholar_missed` abstract
+first) blocks citing them, not merging.
 
 ## Report — `docs/results/<YYYY-MM-DD>-scholar-comparison.md`
 Header: date, `index_version`, `tokenizer_version`, Scholar export hash, queries run. Per query: sizes
@@ -129,7 +133,7 @@ Header: date, `index_version`, `tokenizer_version`, Scholar export hash, queries
 percentages, `our_bug` count (must be 0), and the `review.csv` counts (rows left for a call, called). Under the
 only-in-openproceedings table of a string with `$`, a caveat: a `compat_reading` row decided by `$` matches only
 through a plural, the forms `stemming` credits Scholar with, so it is no evidence Scholar would not return the
-paper; and `scholar_missed` counts exact matches only, a floor. Close with the paper
+paper; and, when the string has a `scholar_missed` row, `scholar_missed` counts exact matches only, a floor. Close with the paper
 finding: *share of Scholar's set explained by full-text matches and by stemming*. Numbers come only from
 the run; state the command, with file names only, never paths (`op eval scholar --ris mended.ris --name
 main-7-most-updated --years 2020..2026 --index <v>`). `--years` and `--venues` are part of the result: another

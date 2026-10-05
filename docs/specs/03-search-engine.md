@@ -240,6 +240,13 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
   `groups`; `docs/results/2026-10-05-bench-group-counts.md`), and under 300 ms for `match_ids` with
   exclusion accounting.
 - A wildcard expansion of up to 200 terms: under 50 ms.
+- **Exception, as measured (TASK-196):** with its group counts, the cold first page (the facet memo forgotten)
+  of the wildcard-phrase Trust-Evals query `("large language model$" OR LLM*) AND (trust* OR calibrat*) AND
+  (benchmark* OR evaluat*)` took p95 110.8 ms (median 80.2 ms) on index `fd13d8d27535`, over the 100 ms search
+  budget; without the counts 50.6 ms, and a later page with them 38.8 ms
+  (`docs/results/2026-10-05-bench-group-counts.md`, load 4.5 at the start and 9.8 at the end). TASK-196 brings
+  it under the budget or records how the budget treats the cold group-count case, re-measured at a sustained
+  1-minute load under 5. Every other measured query, first page or later, is within the budget with its counts.
 - **Exception, as built (task-024):** a clause that takes the position-verified fallback (a phrase with a
   wildcard item; NEAR with a phrase or wildcard operand, or a term with itself) costs time linear in its
   candidates' text and can exceed the search and `match_ids` budgets when cold: on a synthetic 80k corpus,

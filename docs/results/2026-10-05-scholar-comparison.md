@@ -167,7 +167,7 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 - Of the 1,752 `full_text` papers, 1,752 rest on a crawled record and 0 on a RIS-only record, whose title and abstract are the import's own.
 - 2 of them also fail the default track or status filters.
 - **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in, kept by decision-038 (see Method); it is not Google Scholar's stemmer, which is undocumented. With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), 0 of the 1,752 (0.0%) `full_text` papers would match title or abstract. That is all this figure measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) or rewrites the stem could move more.
-- **After the calls** (section Human calls, made as: `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows)): 1,756 of 1,810 (97.0%) `full_text`, 33 (1.8%) `stemming`, 21 (1.2%) in the exact result. The figures above this bullet are the automation's and are the ones to cite. Cite the after-calls figures only with those roles beside them, and as reviewed only if every role is an independent reviewer's.
+- **After the calls** (section Human calls, made as: `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows)): 1,756 of 1,810 (97.0%) `full_text`, 33 (1.8%) `stemming`, 21 (1.2%) in the exact result. The figures above this bullet are the automation's and are the ones to cite. The after-calls figures are not to be cited until every role is an independent reviewer's (see Notes on these inputs).
 
 ## Query `main-7-dollar`
 
@@ -314,7 +314,7 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 - Of the 1,752 `full_text` papers, 1,752 rest on a crawled record and 0 on a RIS-only record, whose title and abstract are the import's own.
 - 2 of them also fail the default track or status filters.
 - **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in, kept by decision-038 (see Method); it is not Google Scholar's stemmer, which is undocumented. With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), 0 of the 1,752 (0.0%) `full_text` papers would match title or abstract. That is all this figure measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) or rewrites the stem could move more.
-- **After the calls** (section Human calls, made as: `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows)): 1,756 of 1,810 (97.0%) `full_text`, 2 (0.1%) `stemming`, 52 (2.9%) in the exact result. The figures above this bullet are the automation's and are the ones to cite. Cite the after-calls figures only with those roles beside them, and as reviewed only if every role is an independent reviewer's.
+- **After the calls** (section Human calls, made as: `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows)): 1,756 of 1,810 (97.0%) `full_text`, 2 (0.1%) `stemming`, 52 (2.9%) in the exact result. The figures above this bullet are the automation's and are the ones to cite. The after-calls figures are not to be cited until every role is an independent reviewer's (see Notes on these inputs).
 
 ## Query `main-2-pop`
 
@@ -375,7 +375,7 @@ Google Scholar reads this string differently from Scholar mode. Scholar's readin
 
 `our_bug`: **0**. Rows of `review.csv`: 8 left for a call, 179 spot check.
 
-Read the table above with care. A `compat_reading` row decided by `$` matches only through a plural, the same forms the `stemming` class credits Google Scholar with, so it is no evidence that Scholar would not return the paper. `scholar_missed` counts exact matches only: it is a floor for what Scholar's set lacks, not the whole of it.
+Read the table above with care. A `compat_reading` row decided by `$` matches only through a plural, the same forms the `stemming` class credits Google Scholar with, so it is no evidence that Scholar would not return the paper.
 
 ### Concept groups, over the 1,805 Scholar papers the index holds
 
@@ -461,11 +461,11 @@ Inflected forms added for the `stemming` test (the forms the compared records ho
 - Of the 1,708 `full_text` papers, 1,708 rest on a crawled record and 0 on a RIS-only record, whose title and abstract are the import's own.
 - 2 of them also fail the default track or status filters.
 - **Sensitivity to the stemmer.** The `stemming` class uses an inflection-only stand-in, kept by decision-038 (see Method); it is not Google Scholar's stemmer, which is undocumented. With every searched word replaced by its inflection stem read as a prefix (`benchmarks` → `benchmark*`, `evaluating` → `evaluat*`), 2 of the 1,708 (0.1%) `full_text` papers would match title or abstract. That is all this figure measures: it is not a stemmer, and one that strips derivational endings (`evaluation` to `evaluat`) or rewrites the stem could move more.
-- **After the calls** (section Human calls, made as: `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows)): 1,712 of 1,810 (94.6%) `full_text`, 32 (1.8%) `stemming`, 66 (3.6%) in the exact result. The figures above this bullet are the automation's and are the ones to cite. Cite the after-calls figures only with those roles beside them, and as reviewed only if every role is an independent reviewer's.
+- **After the calls** (section Human calls, made as: `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows)): 1,712 of 1,810 (94.6%) `full_text`, 32 (1.8%) `stemming`, 66 (3.6%) in the exact result. The figures above this bullet are the automation's and are the ones to cite. The after-calls figures are not to be cited until every role is an independent reviewer's (see Notes on these inputs).
 
 ## Human calls
 
-Read from `2026-10-05-scholar-comparison-review.csv` (sha256 `80fcbd04e73686489e44c2227495fd1df5d6af1fe73f70dc66d0b90df7bf7e04`): 48 of its 586 rows have a call. **Who made them** (the file's `reviewer_role`, as written): `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows). Every figure in this section rests on those roles; the tables above this section are the automation's alone. `in_both` means the record is the same paper as one in the result; `out_of_scope` that it is no paper of the scope's venues and years.
+Read from `2026-10-05-scholar-comparison-review.csv` (sha256 `e1c586f1260155094155f442d0b163ad5e4e9d1c1a45968b3e027ea2c92f019f`): 48 of its 586 rows have a call. **Who made them** (the file's `reviewer_role`, as written): `AI assistant acting at the project owner's direction; not an independent reviewer` (48 rows). Every figure in this section rests on those roles; the tables above this section are the automation's alone. `in_both` means the record is the same paper as one in the result; `out_of_scope` that it is no paper of the scope's venues and years.
 
 | query | unresolved rows | called | spot-check rows | called | agree with the automated class |
 |---|---|---|---|---|---|

@@ -36,15 +36,22 @@ def test_search_with_groups_a_comparison_and_a_parse_at_once_each_give_their_sol
     """Two threads searching (with group counts), one comparing and one parsing, while another clears the
     served engine's memos as a busy instance trims them. Each search's ids, scores, facets and `excluded` are
     those of a plain `run` on a second engine nothing else touches, every comparison's the solo one (its
-    `total` that search's), every parse the solo bytes (`word_forms` included); group counts, when given, the
-    solo ones, and otherwise `busy` or `timed_out`."""
+    `total` that search's), every parse the solo bytes (`word_forms` included). Group counts are the second
+    engine's too, solo and under contention, and at least one search under contention is counted: with a
+    patient grace and wait, a search's counts are only ever `busy` (both workers taken), never late."""
     # a slot for each thread's cold verifications (a cleared `verified` makes every one cold): the default one
     # slot answers the others 503 API_BUSY at once, which is that limit's contract, not this test's
-    with app_of(corpus_dir, verification_slots=8) as c:
+    patient = {"group_count_grace_seconds": 30.0, "group_count_wait_seconds": 30.0}
+    with app_of(corpus_dir, verification_slots=8, **patient) as c:
         served = c.app.state.index.served.engine  # type: ignore[attr-defined]
         apart = TantivyEngine(corpus_dir / "indexes" / served.index_version)
-        plain = run(apart, parse(Q), limit=200, facets=True)
+        plain = run(apart, parse(Q), limit=200, facets=True, groups=10, groups_grace=30.0, groups_wait=30.0)
         assert plain.total > 0 and plain.facets is not None
+        assert plain.groups is not None and plain.groups.not_counted is None
+        counts = [
+            {"span": list(span), "total": alone, "total_without": without}
+            for span, alone, without in plain.groups.counts
+        ]
 
         def searched() -> dict[str, Any]:
             return dict(answered(c.get(SEARCH, params={"q": Q, "limit": 200})).json())
@@ -57,6 +64,9 @@ def test_search_with_groups_a_comparison_and_a_parse_at_once_each_give_their_sol
 
         solo_search, solo_compare, solo_parse = searched(), compared(), parsed()
         assert solo_search["groups"]["not_counted"] is None and len(solo_search["groups"]["counts"]) == 2
+        assert (
+            solo_search["groups"]["counts"] == counts
+        )  # an engine nothing else touches: not the served one's
         assert solo_compare["total"] == plain.total and b'"word_forms"' in solo_parse
         searches: list[dict[str, Any]] = []
         compares: list[dict[str, Any]] = []
@@ -99,8 +109,9 @@ def test_search_with_groups_a_comparison_and_a_parse_at_once_each_give_their_sol
         assert [(h["id"], h["score"]) for h in got["hits"]] == [(h.id, h.score) for h in plain.hits]
         assert got["facets"] == plain.facets and got["excluded"] == plain.excluded.to_json()
         if got["groups"]["not_counted"] is None:
-            assert got["groups"] == solo_search["groups"]
+            assert got["groups"] == solo_search["groups"] and got["groups"]["counts"] == counts
         else:
-            assert got["groups"]["not_counted"] in ("busy", "timed_out")
+            assert got["groups"]["not_counted"] == "busy"
+    assert any(got["groups"]["not_counted"] is None for got in searches)  # counted under contention too
     assert all(got == solo_compare for got in compares)
     assert all(got == solo_parse for got in parses)

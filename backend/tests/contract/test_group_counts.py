@@ -265,3 +265,32 @@ def test_at_the_default_waits_a_search_is_answered_at_once_while_the_counting_wo
     }
     assert took < 1.5  # the grace and the search, never the 2 s wait
     assert access(logs)[-1]["groups_not_counted"] == "busy"
+
+
+def test_the_instances_group_count_settings_are_what_the_route_passes_the_search(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each `ApiConfig` group-count field reaches `search.run` as its own argument (QA-R2-N2): values no
+    default has, so a field dropped, swapped or read from the wrong name fails here."""
+    from openproceedings.api import search as route
+
+    seen: list[dict[str, Any]] = []
+
+    def recording(*args: Any, **kwargs: Any) -> search.Search:
+        seen.append({k: v for k, v in kwargs.items() if k.startswith("groups")})
+        return run(*args, **kwargs)
+
+    monkeypatch.setattr(route, "run", recording)
+    settings = {
+        "max_counted_groups": 7,
+        "max_counted_terms": 1234,
+        "max_counted_ids": 5678,
+        "group_count_wait_seconds": 3.5,
+        "group_count_grace_seconds": 2.25,
+    }
+    with TestClient(make_app(store.indexes.parent, **settings)) as c:
+        body = ok(c, "trust model")
+    assert seen == [
+        {"groups": 7, "groups_terms": 1234, "groups_ids": 5678, "groups_wait": 3.5, "groups_grace": 2.25}
+    ]
+    assert body["groups"]["limit"] == 7 and body["groups"]["not_counted"] is None

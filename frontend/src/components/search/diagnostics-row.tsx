@@ -131,7 +131,7 @@ const BUTTON = "min-h-6 rounded-sm border px-1.5 text-xs hover:bg-muted";
 const FULL_TEXT = (
   <p className="text-muted-foreground">
     Google Scholar also reads the full text of a paper; openproceedings matches titles and abstracts only.
-    Most of a difference in counts usually comes from that, and <code className="font-mono">$</code> does not
+    Most of a difference in counts can come from that, and <code className="font-mono">$</code> does not
     recover it.
   </p>
 );

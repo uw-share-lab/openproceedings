@@ -37,6 +37,9 @@ RECORDS = list(records())
 type Engines = tuple[ReferenceEngine, TantivyEngine, TantivyEngine]
 
 
+PRODUCTION_GRACE = search.GROUP_COUNT_GRACE_SECONDS  # read at import, before `a_patient_grace` raises it
+
+
 @pytest.fixture(autouse=True)
 def a_patient_grace(monkeypatch: pytest.MonkeyPatch) -> None:
     """These tests are about the counts, on a machine that may be busy: a counting job gets 30 s to be taken
@@ -772,7 +775,7 @@ def test_at_the_production_waits_a_search_is_busy_at_once_while_the_counting_wor
 ) -> None:
     """`run`'s own grace and wait, which this module's other tests raise: with both counting workers held, a
     ten-group-limit search that passes neither answers `busy` in well under a second, never the 2 s wait."""
-    monkeypatch.undo()  # this module's patient grace: the only patch so far
+    monkeypatch.setattr(search, "GROUP_COUNT_GRACE_SECONDS", PRODUCTION_GRACE)  # back from the patient grace
     assert (search.GROUP_COUNT_GRACE_SECONDS, search.GROUP_COUNT_WAIT_SECONDS) == (0.05, 2.0)
     _reference, tantivy, other = engines
     parsed = parse("trust model calibration")

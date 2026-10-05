@@ -112,7 +112,8 @@ out of 24), ICLR 2023's virtual-site list, and NeurIPS 2025 D&B's former virtual
   each other: the final fact sheet (https://media.iclr.cc/Conferences/ICLR2026/ICLR2026_Fact_Sheet.pdf) says
   5,357 accepted of 19,525 submissions (224 orals), and the program chairs' retrospective
   (https://blog.iclr.cc/2026/03/31/a-retrospective-on-the, read 2026-10-05) says 5,355. Like ICLR 2025's
-  3,703 against 3,704, the proceedings leave out papers withdrawn after acceptance.
+  3,703 against 3,704, the proceedings probably leave out papers withdrawn after acceptance (an inference from
+  the counts; no source states it).
 - **ICML 2024:** the fact sheet gives the main track only as a rounded figure (over 2,600), and gives 75
   position papers. PMLR v235 has 2,610 papers, and 75 titles start with `Position:`, so v235 includes the
   position papers. The rounded figure fits 2,610 but not 2,535 (2,610 − 75), so the row uses 2,610. The

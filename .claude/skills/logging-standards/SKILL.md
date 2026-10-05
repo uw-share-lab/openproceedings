@@ -102,7 +102,11 @@ withheld abstracts, is `index_load_failed` with `reason` `takedowns_invalid`, `t
 `takedowns_missing`. A snapshot whose merges.csv doesn't match its manifest is one ERROR
 `takedown_merges_unavailable` per damaged snapshot (`snapshot`, its directory name; `error`; `reason`), and the
 list applies without that snapshot's merges (in the API and `op export`). Likewise `op export` of another index than `current` logs one ERROR `takedown_twins_unavailable` (`error`; `reason`; `index`, the current index's name) when the current index's snapshot can't be read: the list then follows only the exported snapshot's twin links (TASK-163).
-A 503 `API_BUSY` from the bounded pinned-open wait puts `busy: pinned_open` on the access line (TASK-067). `abstracts_withheld` means three counts,
+A 503 `API_BUSY` from the bounded pinned-open wait puts `busy: pinned_open` on the access line (TASK-067). On
+`POST /compare` (TASK-177) `busy` names the capacity that refused it: `match_index_building`, `compare_slots`
+and `compare_deadline` on a 503 with `Retry-After`; `match_index_failed` on a 503 without one (retrying won't
+help until the index is reloaded); `compare_running` and `compare_cooldown` on the network's 429 (spec 04
+§Logging, the access line's `busy`, is the full list). `abstracts_withheld` means three counts,
 each named by its event: the list's size on a load, the records a build withheld on `snapshot_built`, the
 records of the body on an export's access line (the build's JSON gives the ids themselves, `withheld_ids`). `snapshot_built` / `snapshot_exists` carry
 `abstracts_withheld`, `takedowns_followed`, `takedowns_unmatched` and `takedowns_twins` counts, and `trimmed`: how many records
@@ -126,7 +130,8 @@ time was debited after the fact (`RateLimit`; never wall time, which other reque
 debited: the file's arrival plus the work's CPU) and `compare_tokens`. Never a title, a venue string or a file
 name from the uploaded file (none is sent; a test greps every line for them). The served index's match table
 logs `match_index_built` (INFO: `index_version`, `records`, `ms`) once per served index, or `match_index_failed`
-(ERROR: `error`, `reason` when there is one, frames for an unexpected type). A facet worker
+(ERROR: `index_version`, `error`, `ms`, `reason` when there is one, `frames` for an unexpected type); each
+comparison refused after it is a state on the access line (`busy: match_index_failed`), not another ERROR. A facet worker
 that would have had to verify (a bug) logs `facet_worker_recounted` (WARNING) and the caller recounts; the group-count worker likewise, `group_worker_recounted` (TASK-176); any other failure of it is one ERROR `group_count_failed` (`groups`, `error`: the type, never the message, `frames`, and `reason` when the error has one), a late answer one WARNING `group_count_timed_out` (`groups`, `threshold_ms`: the wait it passed), and a job no counting worker took within the grace one DEBUG `group_count_busy` (`groups`: a state under load, not an alarm), the search answering without its counts either way. `/search`'s line also carries `groups` (how many concept groups the query has) and `groups_counted` (how many were counted: all or 0), two integers, never a span, and, when none were, `groups_not_counted` (why: a `search.NotCounted` constant). Health checks log at DEBUG. An unexpected failure is one `request_failed` ERROR line beside it: `code`, `error`, `frames`,
 and for a wrapped one (only then: never `cause: null`) `cause`, `cause_frames` (where it really failed: Starlette wraps an error its handler
 catches after a stream started in a RuntimeError whose frames stop at the handler) and `cause_reason`. `status` is what the client was sent. If a handler fails after the response started (a

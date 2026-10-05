@@ -1126,7 +1126,7 @@ def _eval_scholar(ns: argparse.Namespace) -> int:
     )
     review_text = render_review(review, engine.index_version)
     calls = read_calls(
-        out / review_name(day), review_text, review
+        out / review_name(day), review_text, review, comparisons
     )  # the calls for exactly these rows, or None
     text = render(meta, side, index, comparisons, review, calls)
     written, rows, replaced = write(text, review_text, out, day, keep_review=calls is not None)

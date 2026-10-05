@@ -189,7 +189,7 @@ warnings, the save's index check), the design doc says so; its open questions li
    term also matches it with one more letter or digit: `benchmark$` matches `benchmark` and `benchmarks`, not
    `benchmarking`. That is fewer forms than Google Scholar counts; type `*` for any ending." Both states then
    say what `$` can't do (gate review, USAB-S4): "Google Scholar also reads the full text of a paper;
-   openproceedings matches titles and abstracts only. Most of a difference in counts usually comes from that,
+   openproceedings matches titles and abstracts only. Most of a difference in counts can come from that,
    and `$` does not recover it." (the figure behind "most" is in help, with its source). The action never
    claims to reproduce Scholar's stemming, and there is no "stem" setting anywhere (guarantee 1).
 

@@ -30,7 +30,7 @@ from openproceedings import search
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.query.parser import ParseResult, parse
 
-from tests.bench.test_bench import GROUPS, TEN_GROUPS
+from tests.bench.test_bench import GROUP_FIELDS, GROUPS, TEN_GROUPS
 from tests.contract.conftest import attributed, build
 from tests.fixtures.corpus.synthetic_5k import records
 from tests.unit.test_group_counts import wide_kept_query
@@ -145,12 +145,13 @@ def main() -> None:
 {table(engine, REAL_QUERIES)}
 """
     today = datetime.now(UTC).date().isoformat()
-    bounds = ", ".join(f"`{k}` {v}" for k, v in GROUPS.items())
+    bounds = ", ".join(f"`{field}` {GROUPS[arg]}" for arg, field in GROUP_FIELDS.items())
     report = f"""# What group counts add to a search ({today})
 
 Regenerate with `uv run python -m tests.bench.group_counts_report --index <a copy of an index>` (from
 `backend/`, on a quiet machine: other load inflates the timings); never edit by hand. TASK-176; cited by spec
-04 §SearchResponse (`groups`, Cost) and spec 07 §E.
+04 §SearchResponse (`groups`, Cost) and spec 07 §E. A cold first page over spec 03's 100 ms p95 with its counts
+is spec 03's exception "as measured", which TASK-196 decides, re-measured at a sustained 1-minute load under 5.
 
 - Machine: {machine}, {platform.platform()}, {os.cpu_count()} CPUs; load average {load(started_load)} at the
   start and {load(os.getloadavg())} at the end (1, 5, 15 min); Python {platform.python_version()}, tantivy
