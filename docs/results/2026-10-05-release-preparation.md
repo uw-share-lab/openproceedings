@@ -15,8 +15,8 @@ Candidate: `dev` at `63da2318` (PR #106's merge). Base: `main` at `d8eec5fd`.
 - **Required checks at `63da2318`, in `dev`'s merge queue:** all green. These were test `37351340289`, lint
   `37351340188`, claude-tooling `37351340283` and pr-gates `37351340172`.
 - **Advisory checks:** `bench` passed on PR #106's head (`37349851173`), on a base that includes group counts.
-  The `web-image` push run at `63da2318` (`37352990475`) passed. The `e2e` push run there (`37352990725`) was
-  still running when this was written; its result is in the promotion PR. Both were green at PR #105's merge,
+  The `web-image` push run at `63da2318` (`37352990475`) passed. The `e2e` push run there (`37352990725`) passed
+  too. Both were green at PR #105's merge,
   `bed0a6cb`.
 - **Nightly:** the scheduled nightly `37337202193`, on `142f3e0e` (`dev` before PR #105), passed all 27 jobs,
   as did `37204685351` (2026-10-04, same sha). Neither tested PR #105 or #106, so a nightly was dispatched on

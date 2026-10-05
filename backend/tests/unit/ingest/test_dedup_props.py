@@ -591,11 +591,10 @@ def test_an_abstract_merge_always_holds_an_imported_record_and_its_abstract(xs: 
             if any({c.source for c in x.provenance} != IMPORTED for x in ins)
         ]
         assert len(crawled) <= 1 < len(before)
-        for cid in (
-            crawled
-        ):  # the cluster's resolved status is one a listing can have, unless it is a listing itself
-            # (decision-037 refuses only a record that is no listing; whether a listing by RIS evidence alone should
-            # count is TASK-198), and its forum id survives
+        # the cluster's resolved status is one a listing can have, unless it is a listing itself (decision-037
+        # refuses only a record that is no listing; whether a listing by RIS evidence alone should count is
+        # TASK-198), and its forum id survives
+        for cid in crawled:
             status = dedup(inputs[cid]).records
             assert all(r.status in {"accepted", "unknown"} or is_listing(r) for r in status)
             if any(x.forum_id is not None and x.id == cid for x in inputs[cid]):
