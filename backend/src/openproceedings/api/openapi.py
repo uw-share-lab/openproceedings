@@ -93,7 +93,8 @@ COMPARE_REFUSALS: dict[int | str, dict[str, Any]] = {
         "model": ErrorEnvelope,
         "description": "API_COMPARE_DISABLED: this instance's operator has not turned comparisons on "
         "(`GET /meta` `limits.compare` is null), or the instance offers them to its local user only (on by "
-        "`op serve`'s loopback default) and the request came through a proxy",
+        "`op serve`'s loopback default) and the request came through a proxy or from a page not on that "
+        "machine (a non-loopback `Origin`)",
     },
     408: {
         "model": ErrorEnvelope,
@@ -137,10 +138,10 @@ COMPARE_REFUSALS: dict[int | str, dict[str, Any]] = {
         "description": (
             "API_BUSY (with Retry-After): every comparison slot is taken (refused before the file is read), "
             "the served index's comparison table is still being built (Retry-After: the build's expected time "
-            "left), the comparison ran past the time this instance gives one, or the query needs a slow "
-            "position check and every verification slot is taken; API_BUSY without Retry-After: the table "
-            "could not be built, until the operator reloads the index (`limits.compare` is then null); or "
-            "API_INDEX_NOT_LOADED (no index loaded yet; no Retry-After)"
+            "left), or the query needs a slow position check and every verification slot is taken; API_BUSY "
+            "without Retry-After: the comparison ran past the time this instance gives one (the same request "
+            "would run as long again), or the table could not be built, until the operator reloads the index "
+            "(`limits.compare` is then null); or API_INDEX_NOT_LOADED (no index loaded yet; no Retry-After)"
         ),
         "headers": {
             "Retry-After": response_header(

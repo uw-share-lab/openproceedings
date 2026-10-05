@@ -586,9 +586,10 @@ class Limits(Model):
     )
     compare: CompareLimits | None = Field(
         description="`POST /compare`'s caps (TASK-177), or null when comparisons are not offered: this "
-        "instance's operator has not turned them on (the route answers 403 `API_COMPARE_DISABLED`), or the "
-        "served index's comparison table could not be built (503 `API_BUSY` until a reload). A client doesn't "
-        "offer comparisons while it is null"
+        "instance's operator has not turned them on (the route answers 403 `API_COMPARE_DISABLED`; on an "
+        "instance on by its loopback default, also to a request that came through a proxy or from a page not "
+        "on that machine), or the served index's comparison table could not be built (503 `API_BUSY` until a "
+        "reload). A client doesn't offer comparisons while it is null"
     )
 
 
@@ -615,7 +616,8 @@ class CompareLimits(Model):
         "`API_COMPARE_TOO_COSTLY`"
     )
     max_seconds: float = Field(
-        description="the wall time one comparison's work gets; past it, 503 `API_BUSY` with `Retry-After`"
+        description="the wall time one comparison's work gets; past it, 503 `API_BUSY` without `Retry-After` "
+        "(the same request would run as long again)"
     )
     max_response_bytes: int = Field(
         description="the largest answer, in bytes; a comparison whose answer would be larger is 422 "

@@ -378,7 +378,7 @@ export interface components {
             max_results: number;
             /**
              * Max Seconds
-             * @description the wall time one comparison's work gets; past it, 503 `API_BUSY` with `Retry-After`
+             * @description the wall time one comparison's work gets; past it, 503 `API_BUSY` without `Retry-After` (the same request would run as long again)
              */
             max_seconds: number;
             /**
@@ -873,7 +873,7 @@ export interface components {
          *     differ).
          */
         Limits: {
-            /** @description `POST /compare`'s caps (TASK-177), or null when comparisons are not offered: this instance's operator has not turned them on (the route answers 403 `API_COMPARE_DISABLED`), or the served index's comparison table could not be built (503 `API_BUSY` until a reload). A client doesn't offer comparisons while it is null */
+            /** @description `POST /compare`'s caps (TASK-177), or null when comparisons are not offered: this instance's operator has not turned them on (the route answers 403 `API_COMPARE_DISABLED`; on an instance on by its loopback default, also to a request that came through a proxy or from a page not on that machine), or the served index's comparison table could not be built (503 `API_BUSY` until a reload). A client doesn't offer comparisons while it is null */
             compare: components["schemas"]["CompareLimits"] | null;
             /**
              * Max Counted Groups
@@ -1876,7 +1876,7 @@ export interface operations {
                     "application/json": components["schemas"]["CompareResponse"];
                 };
             };
-            /** @description API_COMPARE_DISABLED: this instance's operator has not turned comparisons on (`GET /meta` `limits.compare` is null), or the instance offers them to its local user only (on by `op serve`'s loopback default) and the request came through a proxy */
+            /** @description API_COMPARE_DISABLED: this instance's operator has not turned comparisons on (`GET /meta` `limits.compare` is null), or the instance offers them to its local user only (on by `op serve`'s loopback default) and the request came through a proxy or from a page not on that machine (a non-loopback `Origin`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1943,7 +1943,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_BUSY (with Retry-After): every comparison slot is taken (refused before the file is read), the served index's comparison table is still being built (Retry-After: the build's expected time left), the comparison ran past the time this instance gives one, or the query needs a slow position check and every verification slot is taken; API_BUSY without Retry-After: the table could not be built, until the operator reloads the index (`limits.compare` is then null); or API_INDEX_NOT_LOADED (no index loaded yet; no Retry-After) */
+            /** @description API_BUSY (with Retry-After): every comparison slot is taken (refused before the file is read), the served index's comparison table is still being built (Retry-After: the build's expected time left), or the query needs a slow position check and every verification slot is taken; API_BUSY without Retry-After: the comparison ran past the time this instance gives one (the same request would run as long again), or the table could not be built, until the operator reloads the index (`limits.compare` is then null); or API_INDEX_NOT_LOADED (no index loaded yet; no Retry-After) */
             503: {
                 headers: {
                     /** @description Sent with API_BUSY: whole seconds to wait before retrying */

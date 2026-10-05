@@ -902,10 +902,13 @@ def test_a_second_comparison_is_refused_while_the_slot_is_taken(
 
 
 def test_a_comparison_past_its_time_is_stopped(corpus_dir: Path, logs: Logs) -> None:
+    """Without `Retry-After`: the same file and query would run as long again, so nothing retries it by itself
+    (the web app's automatic retry of a busy 503 would hold the slot that long each time; SEC-R2-N2)."""
     with app_of(corpus_dir, compare_max_seconds=1e-9) as c:
         r = post(c, the_file())
         e = error(r, 503, "API_BUSY")
-        assert r.headers["retry-after"] == "5" and "ran past" in e["message"]
+        assert "retry-after" not in r.headers and "ran past" in e["message"]
+        assert "Try again in" not in e["message"]
         assert c.app.state.comparisons.slots.acquire(blocking=False)  # type: ignore[attr-defined]
     line = next(x for x in logs() if x["event"] == "request" and x["route"] == COMPARE)
     assert line["busy"] == "compare_deadline"
@@ -1031,8 +1034,9 @@ def test_a_table_being_built_says_about_how_long_it_has_left() -> None:
     """The 503's `Retry-After` while the table is built is the build's expected time left, not a fixed 5 s
     that has a client retry two or three times (USAB-S8)."""
     table = MatchTable()
-    table._records = 120_000  # 20 s at `RECORDS_PER_SECOND`
-    assert table.seconds_left() == pytest.approx(20)  # waiting for the build ahead of it
+    assert table.seconds_left() == 0  # nothing queued yet
+    table.queue(120_000)  # 20 s at `RECORDS_PER_SECOND`
+    assert table.seconds_left() == pytest.approx(20)  # waiting for the build ahead of it (CODE-R2-N)
     table._started = 100.0
     assert table.seconds_left(clock=lambda: 112.0) == pytest.approx(8)
     assert table.seconds_left(clock=lambda: 150.0) == 0
@@ -1421,20 +1425,57 @@ def test_a_local_instance_has_no_cooldown_and_says_when_the_next_may_start(corpu
 
 @pytest.mark.parametrize(
     "header",
-    [{"X-Forwarded-For": "203.0.113.9"}, {"Forwarded": "for=203.0.113.9"}, {"Via": "1.1 caddy"}],
+    [
+        {"X-Forwarded-For": "203.0.113.9"},
+        {"Forwarded": "for=203.0.113.9"},
+        {"Via": "1.1 caddy"},
+        {"X-Real-IP": "203.0.113.9"},  # SEC-R2-N1: the other headers a proxy or CDN adds
+        {"X-Forwarded-Host": "reviews.example.org"},
+        {"X-Forwarded-Proto": "https"},
+        {"CF-Connecting-IP": "203.0.113.9"},
+        {"Origin": "https://reviews.example.org"},  # a page that is not on this machine
+        {"Origin": "http://192.168.1.20:3000"},
+        {"Origin": "null"},
+    ],
 )
 def test_a_local_instance_refuses_a_comparison_that_came_through_a_proxy(
-    corpus_dir: Path, header: dict[str, str]
+    corpus_dir: Path, header: dict[str, str], logs: Logs
 ) -> None:
     """SEC-N1: a loopback bind with a proxy on the same host in front of it is public. Comparisons on by the
-    loopback default alone are refused to a proxied request; on by `--compare` (the operator's choice), not."""
+    loopback default alone are refused to a proxied request, whose access line says so (OBS-R2-1), and `/meta`
+    doesn't offer them to it (API-R2-N); on by `--compare` (the operator's choice), not."""
     with app_of(corpus_dir, compare_local=True) as c:
         r = c.post(COMPARE, params={"q": Q}, content=the_file().encode(), headers={**RIS, **header})
         error(r, 403, "API_COMPARE_DISABLED")
+        assert c.get("/api/v1/meta", headers=header).json()["limits"]["compare"] is None
+        assert c.get("/api/v1/meta").json()["limits"]["compare"] is not None
         assert compared(c, the_file())["records_total"] == 13  # the local user's own request
+    lines = [x for x in logs() if x["event"] == "request" and x["route"] == COMPARE]
+    assert [x.get("compare_refused") for x in lines] == ["proxied", None]
     with app_of(corpus_dir) as c:  # on by --compare
         r = c.post(COMPARE, params={"q": Q}, content=the_file().encode(), headers={**RIS, **header})
         assert r.status_code == 200
+        assert c.get("/api/v1/meta", headers=header).json()["limits"]["compare"] is not None
+
+
+@pytest.mark.parametrize(
+    "origin", ["http://localhost:3000", "http://127.0.0.1:3048", "http://[::1]:3000", "http://app.localhost"]
+)
+def test_a_local_instance_serves_a_page_on_this_machine(corpus_dir: Path, origin: str) -> None:
+    """The web app on this machine sends a loopback `Origin`: compared as the local user's own (SEC-R2-N1)."""
+    with app_of(corpus_dir, compare_local=True) as c:
+        r = c.post(COMPARE, params={"q": Q}, content=the_file().encode(), headers={**RIS, "Origin": origin})
+        assert r.status_code == 200
+        assert c.get("/api/v1/meta", headers={"Origin": origin}).json()["limits"]["compare"] is not None
+
+
+def test_an_off_instance_logs_no_proxy_refusal(corpus_dir: Path, logs: Logs) -> None:
+    """`compare_refused` tells a local instance's refusal of a stranger from comparisons being off (OBS-R2-1)."""
+    with TestClient(make_app(corpus_dir)) as c:
+        r = c.post(COMPARE, params={"q": Q}, content=b"", headers={**RIS, "Via": "1.1 caddy"})
+        error(r, 403, "API_COMPARE_DISABLED")
+    (line,) = [x for x in logs() if x["event"] == "request" and x["route"] == COMPARE]
+    assert "compare_refused" not in line
 
 
 def test_the_file_size_is_on_the_line_of_a_file_refused_unread(corpus_dir: Path, logs: Logs) -> None:
@@ -1480,3 +1521,48 @@ def test_the_table_build_lets_searches_in(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(served_state.time, "sleep", slept.append)
     assert list(served_state._yielding(iter(PAPERS))) == PAPERS
     assert len(slept) == len(PAPERS) and set(slept) == {0}
+
+
+def test_an_unexpected_failure_still_drains_the_file(
+    corpus_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CODE-R2-1: a 500 is sent by `LastCatch`, outside `DrainRefusals`; the file still arriving is read first,
+    so its sender gets the 500 rather than a reset connection."""
+
+    def broken(request: Any) -> None:
+        raise RuntimeError("a bug")
+
+    monkeypatch.setattr(route, "check_media", broken)
+    app = make_app(corpus_dir, compare_enabled=True, rate_limit=NO_COOLDOWN)
+    with TestClient(app):  # its lifespan loads the index
+        sent, left = raw_post(app, b"q=benchmark", [b"TY  - JOUR\n" + b"x" * 1000] * 5)
+    assert sent[0]["status"] == 500 and not left
+    assert b"API_INTERNAL" in b"".join(m.get("body", b"") for m in sent)
+
+
+def test_a_second_comparison_from_a_network_running_one_is_logged_as_such(
+    corpus_dir: Path, monkeypatch: pytest.MonkeyPatch, logs: Logs
+) -> None:
+    """OBS-R2-N: the 429 for a network already running a comparison says `busy: compare_running` (and one
+    for its pause after, `compare_cooldown`)."""
+    entered, release = threading.Event(), threading.Event()
+    real = route._run
+
+    def held(*a: Any) -> Any:
+        entered.set()
+        assert release.wait(30)
+        return real(*a)
+
+    monkeypatch.setattr(route, "_run", held)
+    with app_of(corpus_dir, rate_limit=RateLimit(capacity=10_000, compare_cooldown_factor=200)) as c:
+        first: list[Any] = []
+        t = threading.Thread(target=lambda: first.append(post(c, the_file())))
+        t.start()
+        assert entered.wait(30)
+        error(post(c, the_file()), 429, "API_RATE_LIMITED")
+        release.set()
+        t.join(30)
+        assert first[0].status_code == 200
+        error(post(c, the_file()), 429, "API_RATE_LIMITED")
+    busy = [x.get("busy") for x in logs() if x["event"] == "request" and x["route"] == COMPARE]
+    assert busy == ["compare_running", None, "compare_cooldown"]

@@ -70,7 +70,10 @@ ANNOTATIONS = (
     "total",
     "abstract_source",  # an export's `X-Abstract-Source`: `unavailable` when it withheld abstracts (decision-021)
     "abstracts_withheld",  # an export's `X-Abstracts-Withheld`: records a takedown withholds (decision-022)
-    "busy",  # `pinned_open` on a 503 API_BUSY from the bounded pinned-open wait (TASK-067)
+    # why a request was refused for capacity: `pinned_open` (503 API_BUSY, the bounded pinned-open wait, TASK-067);
+    # on `POST /compare`, `match_index_building`, `match_index_failed`, `compare_slots`, `compare_deadline`
+    # (503 API_BUSY) and `compare_running`, `compare_cooldown` (429 API_RATE_LIMITED); spec 04 §Logging
+    "busy",
     "token_count",
     "n_errors",
     "error_codes",
@@ -85,6 +88,7 @@ ANNOTATIONS = (
     "verify_tokens",  # what that time was debited after the fact (RateLimit.debit_verification)
     "code",  # the error envelope's code, on every refusal and every 500 (api/errors.py::note_code)
     # a comparison (`POST /compare`, api/compare.py): counts only, never a title, a venue string or a file name
+    "compare_refused",  # `proxied`: a local instance's 403 to a stranger's request (api/compare.py::proxied)
     "ris_bytes",  # the file's size
     "ris_records",  # the records read from it
     "ris_papers",  # of them, papers compared (in scope, counted once)
@@ -357,7 +361,14 @@ class DrainRefusals:
                 message = {**message, "headers": [*headers, (b"connection", b"close")]}
             await send(message)
 
-        await self.app(scope, tracked, guarded)
+        try:
+            await self.app(scope, tracked, guarded)
+        except Exception:
+            # an unexpected exception: `LastCatch`, outside this layer, sends its 500 after it has passed through
+            # here, so the rest of the file is read now, before it goes on (CODE-R2-1)
+            if not ended:
+                await drain(tracked)
+            raise
 
 
 def _content_length(scope: Scope) -> int | None:

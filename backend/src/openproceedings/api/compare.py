@@ -31,8 +31,9 @@ slot was held is debited afterwards (`middleware.RateLimit.debit_comparison`), t
 time per client network, and none for `compare_cooldown_factor` times the slot time its last one used (429
 `API_RATE_LIMITED` with `Retry-After`; the answer's `next_comparison_seconds` says how long). A local instance
 (`compare_local`) has no cooldown. The work is bounded by the caps, by `compare_max_results` and
-`compare_max_response_bytes` (422 `API_COMPARE_TOO_COSTLY`) and by `compare_max_seconds` (503 `API_BUSY`),
-which is checked before every record read, matched and written (`tick`).
+`compare_max_response_bytes` (422 `API_COMPARE_TOO_COSTLY`) and by `compare_max_seconds` (503 `API_BUSY`
+without `Retry-After`: the same file and query would run as long again), which is checked before every record
+read, matched and written (`tick`, which also lets a waiting search take the GIL).
 
 The handler is `async` (the one exception to fastapi-conventions §Handlers): it must take the slot before it
 reads the body, which only a coroutine can order. Everything CPU-bound runs in the thread pool
@@ -44,6 +45,7 @@ from __future__ import annotations
 import csv
 import heapq
 import io
+import ipaddress
 import json
 import math
 import re
@@ -54,6 +56,7 @@ from collections.abc import Callable, Iterable, Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 import anyio
 from fastapi import APIRouter, Depends, FastAPI, Query, Request
@@ -246,9 +249,12 @@ def _closing(code: DiagnosticCode, message: str, **headers: str) -> ApiError:
 Busy = Literal["match_index_building", "compare_slots", "compare_deadline"]
 
 
-def _busy(request: Request, why: Busy, message: str, retry: int) -> ApiError:
-    """503 `API_BUSY` with `Retry-After`, and `busy: <why>` on the access line."""
+def _busy(request: Request, why: Busy, message: str, retry: int | None) -> ApiError:
+    """503 `API_BUSY` with `Retry-After` (none when `retry` is None: waiting would not help), and `busy: <why>`
+    on the access line."""
     access_fields(request)["busy"] = why
+    if retry is None:
+        return _closing(DiagnosticCode.API_BUSY, message)
     return _closing(
         DiagnosticCode.API_BUSY, f"{message} Try again in {retry} s.", **{"Retry-After": str(retry)}
     )
@@ -545,7 +551,48 @@ async def _read(request: Request, seconds: float) -> bytearray:
     return body
 
 
-PROXY_HEADERS = ("x-forwarded-for", "forwarded", "via")  # a request a proxy passed on says so in one of these
+# a request a proxy passed on says so in one of these (each a header some proxy or CDN adds; SEC-R2-N1)
+PROXY_HEADERS = (
+    "x-forwarded-for",
+    "x-forwarded-host",
+    "x-forwarded-proto",
+    "x-real-ip",
+    "forwarded",
+    "via",
+    "cf-connecting-ip",
+)
+
+
+def _loopback_origin(origin: str) -> bool:
+    """Whether a browser's `Origin` is a page on this machine: `localhost` (or a name under it) or a loopback
+    address. `null` (a file or a sandboxed frame) and anything unreadable are not."""
+    try:
+        host = urlsplit(origin).hostname
+    except ValueError:
+        return False
+    if host is None:
+        return False
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def proxied(request: Request, config: ApiConfig) -> bool:
+    """Whether a local instance (`compare_local`: comparisons on by `op serve`'s loopback default, not by
+    `--compare`) must treat this request as a stranger's: it came through a proxy (any of `PROXY_HEADERS`), or
+    from a web page that is not on this machine (a non-loopback `Origin`). A proxy on the same host in front of
+    a loopback bind makes the instance public, and its operator never chose to offer comparisons to the public
+    (SEC-N1). Fail-safe: a header a proxy might add is enough. Never true off a local instance. The one
+    predicate `POST /compare` refuses on and `GET /meta` stops offering on (API-R2-N)."""
+    if not config.compare_local:
+        return False
+    if any(h in request.headers for h in PROXY_HEADERS):
+        return True
+    origin = request.headers.get("origin")
+    return origin is not None and not _loopback_origin(origin)
 
 
 async def offered(request: Request) -> None:
@@ -560,12 +607,13 @@ async def offered(request: Request) -> None:
     reads what is left of the body first (`middleware.DrainRefusals`; at most `max_body_bytes` while
     comparisons are off).
 
-    On a local instance (`compare_local`: on by `op serve`'s loopback default, not by `--compare`), a request
-    that came through a proxy gets the same 403: a proxy on the same host in front of a loopback bind makes
-    the instance public, and its operator never chose to offer comparisons to the public (SEC-N1)."""
+    On a local instance, a request `proxied` says is a stranger's gets the same 403, with `compare_refused:
+    proxied` on its access line, so the operator can tell it from comparisons being off (OBS-R2-1)."""
     config: ApiConfig = request.app.state.config
-    proxied = config.compare_local and any(h in request.headers for h in PROXY_HEADERS)
-    if not config.compare_enabled or proxied:
+    refused = config.compare_enabled and proxied(request, config)
+    if refused:
+        access_fields(request)["compare_refused"] = "proxied"
+    if not config.compare_enabled or refused:
         raise _closing(
             DiagnosticCode.API_COMPARE_DISABLED,
             "Comparing with a RIS file is not turned on on this instance. Run your own instance (`op "
@@ -749,6 +797,9 @@ def _run(
             raise _too_costly(config)
 
     def tick() -> None:
+        # the work is pure Python in a worker thread: release the GIL at every check, so a search waiting
+        # for it is not held behind the comparison (PERF-R2-N; spec 04 §Searches meanwhile)
+        time.sleep(0)
         if _wall() > deadline:
             raise _busy(
                 request,
@@ -756,7 +807,8 @@ def _run(
                 f"This comparison ran past the {config.compare_max_seconds:g} s this instance gives one: the "
                 "server is busy, or the file and the query are too much to compare here in one request (a "
                 "smaller file or a narrower query takes less).",
-                config.busy_retry_seconds,
+                None,  # no `Retry-After`: the same request would run as long again, so nothing retries it by
+                # itself, and a client that did would hold the slot that long each time (SEC-R2-N2)
             )
 
     body = holder.pop()  # the one reference to the file's bytes (the handler keeps only the empty list)
