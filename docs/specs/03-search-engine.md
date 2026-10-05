@@ -235,8 +235,10 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
 ## Performance budgets (for the M4 corpus, about 80k docs; CI benchmarks the 5k fixture and nightly reports a synthetic 80k, 07 §E)
 
 - Index build: under 2 minutes. Index size: under 500 MB.
-- p95 latency: under 100 ms for a search returning the first 50 hits, and under 300 ms for `match_ids`
-  with exclusion accounting.
+- p95 latency: under 100 ms for a search returning the first 50 hits, as `/search` runs it (with its facets,
+  exclusion accounting and each concept group's counts at the instance's default bounds, 04 §SearchResponse
+  `groups`; `docs/results/2026-10-05-bench-group-counts.md`), and under 300 ms for `match_ids` with
+  exclusion accounting.
 - A wildcard expansion of up to 200 terms: under 50 ms.
 - **Exception, as built (task-024):** a clause that takes the position-verified fallback (a phrase with a
   wildcard item; NEAR with a phrase or wildcard operand, or a term with itself) costs time linear in its
