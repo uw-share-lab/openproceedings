@@ -119,8 +119,9 @@ C3, answered (numbers from the 2026-10-05 run on index `05a0541717f6`; each is a
 │ ─ Kept · 51                                                              │
 │   [List the 51 kept papers ▸] [Download CSV]                             │
 │ ─ Dropped · 1,756                                                        │
-│   2 papers match only as another word form: add $ to that word (the Add  │
-│   $ action under the query) to match its other forms.                    │
+│   2 papers match only as another word form: type * after its stem (e.g.  │
+│   evaluat*) to match its other forms; $ adds only one letter or digit    │
+│   (the Add $ action under the query).                                    │
 │   1,713 papers have no exact match in their title or abstract: no form   │
 │   of this query finds such a paper …; keep it from your own file …       │
 │   [List the 1,756 dropped papers ▸] [Download CSV]                       │
@@ -183,7 +184,7 @@ read "; " instead.
 | CM-16 | Not compared: "Records of your file that are not NeurIPS, ICLR or ICML papers as far as their venue and links say. They are in none of the lists above." |
 | CM-17 | Retired (UX-S1): the client's own 429 line ("…you can keep searching while you wait") was untrue for a token-bucket 429; the server's cooldown message says "searching is not affected" itself. |
 | CM-18 | A list's reasons, each count a sentence of its own (singular for 1), followed by CM-19's step: dropped "`<n>` papers are excluded by a default filter", "… have no exact match in their title or abstract", "… match only as another word form", "… match only as Google Scholar reads the query", "… can't be decided automatically", "… are judged both ways by openproceedings (a bug: please report it)"; not in the index "… are not in the index"; added "… match exactly and are not in your file", "… match as this search reads the query, not as Google Scholar reads it", "… are from a venue and year that hit Google Scholar's 1,000-result cap in your file" |
-| CM-19 | What to do, after a dropped or missing count (USAB-S3): filtered "to include such a paper, write its track or status into the query (its row says which)"; full text "no form of this query finds such a paper by its title or abstract; keep it from your own file if it belongs in the review"; word form, in native mode "type $ after that word (e.g. word$) to match its other forms", in Scholar mode, where the Add $ action is, "add $ to that word (the Add $ action under the query) to match its other forms" (USAB-R2-1); Scholar's reading "write the query as Google Scholar reads it (its translation notice shows how) to match such a paper"; not in the index, a sentence of its own after the count ("3 papers are not in the index. Keep such a paper from your own file; no query here can find it."; USAB-R2-N); undecided "check such a paper by hand (its row says what is undecided)"; a bug "please report it with this query" |
+| CM-19 | What to do, after a dropped or missing count (USAB-S3): filtered "to include such a paper, write its track or status into the query (its row says which)"; full text "no form of this query finds such a paper by its title or abstract; keep it from your own file if it belongs in the review"; word form "type * after its stem (e.g. evaluat*) to match its other forms; $ adds only one letter or digit" (a word form can be any number of letters longer, as `evaluated` or `evaluating`, and `$` reaches only one more; R3-2), and in Scholar mode, where the Add $ action is, the same followed by "(the Add $ action under the query)" (USAB-R2-1); Scholar's reading "write the query as Google Scholar reads it (its translation notice shows how) to match such a paper"; not in the index, a sentence of its own after the count ("3 papers are not in the index. Keep such a paper from your own file; no query here can find it."; USAB-R2-N); undecided "check such a paper by hand (its row says what is undecided)"; a bug "please report it with this query" |
 | CM-20 | What is undecided, on a row (UX-S4): "to check: is it in the index under another title, venue or year?" (not in the index); "to check: does the paper itself match the query? (its row says what is undecided)" (dropped); "to check: is it the paper your file holds under another record?" (added); "to report: openproceedings judged it both ways" |
 | CM-21 | Summary (USAB-S7): "This comparison in one sentence, for your notes (nothing of it is kept here):" `[Copy]` → "On `<date>`, the query `<canonical>` (canonical_hash `<hash>`) on openproceedings index `<v>`, compared with `<file>` (`<r>` records read, `<p>` papers compared): `<k>` kept, `<d>` dropped, `<n>` not in the index; it adds `<a>` papers the file doesn't hold." |
 | CM-22 | Why Compare is off, beside it (A11Y-S5, USAB-S2): "Choose a RIS file first."; "Choose a smaller file."; "Next comparison in `<n>` s: this instance pauses between one network's comparisons."; or the search page's own reason (a dirty draft, stale results) |
@@ -233,6 +234,9 @@ search heuristics, `heuristic-evaluation`), on the built panel. Dispositions:
 | USAB-R2-2 Compare, aria-disabled during the pause, still sent the file | Should | fixed |
 | USAB-R2-N two colons in the not-in-the-index line | Nit | fixed: CM-19 |
 | A11Y-R2-1 a retry by itself moved focus; A11Y-R2-2 an alert per busy cycle, "didn't run" while a retry was to come | Should | fixed: CM-9, CM-12, §Interaction spec |
+| R3-1 a press of Retry on a busy notice ran as a retry by itself: not announced, and it used up one | Should | fixed: §Interaction spec |
+| R3-2 the word-form step said $ matches "its other forms", but -ed and -ing forms are more than one letter longer | Should | fixed: CM-19 names `*` |
+| R3 nits "it will try again by itself" (the page does); the server's "Try again in N s." beside the countdown | Nit | fixed: CM-12 |
 
 ## Decided
 

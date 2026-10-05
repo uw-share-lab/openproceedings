@@ -186,14 +186,15 @@ const COUNTED_ADDED: Record<string, readonly [string, string]> = {
 
 /**
  * What a reviewer can do about a paper with each reason (copy CM-19): a dropped or missing paper's count is
- * never left without a next step. A word form's step depends on the mode: the "Add $" action under the query
- * is Scholar mode's only (USAB-R2-1).
+ * never left without a next step. A word form's step names `*`, since such a form can be any number of letters
+ * longer (`evaluated`, `evaluating`) and `$` adds only one; it depends on the mode only in naming the "Add $"
+ * action under the query, Scholar mode's alone (USAB-R2-1, R3-2).
  */
 const NEXT_STEP: Record<string, string> = {
   filtered: "to include such a paper, write its track or status into the query (its row says which)",
   full_text:
     "no form of this query finds such a paper by its title or abstract; keep it from your own file if it belongs in the review",
-  stemming: "type $ after that word (e.g. word$) to match its other forms",
+  stemming: "type * after its stem (e.g. evaluat*) to match its other forms; $ adds only one letter or digit",
   compat_reading:
     "write the query as Google Scholar reads it (its translation notice shows how) to match such a paper",
   coverage_gap: "Keep such a paper from your own file; no query here can find it",
@@ -201,7 +202,8 @@ const NEXT_STEP: Record<string, string> = {
   our_bug: "please report it with this query",
 };
 const SCHOLAR_STEMMING_STEP =
-  "add $ to that word (the Add $ action under the query) to match its other forms";
+  "type * after its stem (e.g. evaluat*) to match its other forms; $ adds only one letter or digit (the Add $ " +
+  "action under the query)";
 
 /**
  * "1,713 papers have no exact match in their title or abstract: no form of this query finds …": the server's
