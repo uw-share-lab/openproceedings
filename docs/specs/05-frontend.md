@@ -482,4 +482,8 @@ warnings, the save's index check), the design doc says so; its open questions li
   with its group counts and an answered comparison are element baselines of their own
   (`word-forms-*`, `group-counts-*`, `comparison-*`; TASK-182). New baselines are written by `npm run
   e2e:update --workspace frontend`, on the platform they are for: the Linux ones on an amd64 `ubuntu-24.04`
-  host or runner, never on an arm64 Mac.
+  host or runner, never on an arm64 Mac. No workflow writes them: without such a host, take them from CI's
+  own run. A test whose baseline is missing fails there and leaves its screenshot as
+  `frontend/test-results/<test>/<name>-actual.png` in the advisory `e2e` job's `playwright-report` artifact;
+  download it (`gh run download <run> -n playwright-report`), copy each to
+  `frontend/e2e/__screenshots__/visual.spec.ts-snapshots/<name>-linux.png`, look at it, and commit.

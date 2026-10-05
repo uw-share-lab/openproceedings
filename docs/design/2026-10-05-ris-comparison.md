@@ -112,8 +112,8 @@ C3, answered (numbers from the 2026-10-05 run on index `05a0541717f6`; each is a
 │ ─ Kept · 51                                                              │
 │   [Show the 51 kept papers] [Download CSV]                               │
 │ ─ Dropped · 1,756                                                        │
-│   2 matches only as another word form · 1,713 no exact match in its      │
-│   title or abstract · 41 can't be decided automatically                  │
+│   2 papers match only as another word form · 1,713 papers have no exact  │
+│   match in their title or abstract · 41 papers can't be decided …        │
 │   [Show the 1,756 dropped papers] [Download CSV]                         │
 │ ─ Not in the index · 8        … ─ Added · 16  [Show…] [Download RIS] [Download CSV] │
 │ ─ Not compared · 19           [Show the 19 records not compared] [Download CSV]     │
@@ -153,7 +153,8 @@ default filter — track=workshop`), then `import only · needs a person to deci
 | CM-9 | Announcements: "Comparison done: `<k>` kept, `<d>` dropped, `<n>` not in the index, `<a>` added."; "The comparison didn't run."; "Comparison cancelled." |
 | CM-10 | Running: "Comparing `<name>` (`<size>` MB) with this search… Each paper is checked against the query, so a large file can take up to `<max_seconds>` seconds." |
 | CM-11 | Local refusals: "This file is empty. Choose a RIS export that holds records."; "This file is `<size>` MB; this server compares files up to `<cap>` MB. Export it without abstracts (only titles, venues, years and links are compared), or split it." |
-| CM-12 | Refused: "The comparison didn't run. Nothing was compared." then the server's code and message |
+| CM-12 | Refused: "The comparison didn't run. Nothing was compared." then the server's code and message. With an earlier answer for the same search still shown: "The new comparison didn't run. The results below are from the earlier comparison with `<its file>`." |
+| CM-18 | A list's reasons, each count a sentence (singular for 1): dropped "`<n>` papers are excluded by a default filter", "… have no exact match in their title or abstract", "… match only as another word form", "… match only as Google Scholar reads the query", "… can't be decided automatically", "… are judged differently by the two matchers (a bug in openproceedings)"; not in the index "… are not in the index"; added "… match exactly and are not in your file", "… match as this search reads the query, not as Google Scholar reads it", "… are from a venue and year that hit Google Scholar's 1,000-result cap in your file"; joined by " · " |
 | CM-17 | A 429 (the network's cooldown, decision-035; the server's message gives the seconds, the countdown follows `Retry-After`): "Comparisons are limited more tightly than searches: you can keep searching while you wait." |
 | CM-13 | Stale: "The search changed since the last comparison, so its numbers are no longer shown. Compare again to see what the current query keeps, drops and adds." |
 | CM-14 | Index moved: "The index changed after this search: the comparison ran on index `<a>`, and the results shown are from `<b>`, so its numbers are not shown. Search again, then compare again." |

@@ -220,7 +220,14 @@ export function CompareRecords({ q, mode, indexVersion, total, disabledReason }:
         )}
         {run.kind === "failed" && run.key === key && (
           <div className="space-y-2">
-            <p className="font-medium">The comparison didn&apos;t run. Nothing was compared.</p>
+            {current === null ? (
+              <p className="font-medium">The comparison didn&apos;t run. Nothing was compared.</p>
+            ) : (
+              <p className="font-medium break-words">
+                The new comparison didn&apos;t run. The results below are from the earlier comparison with{" "}
+                <span className="break-all">{current.fileName}</span>.
+              </p>
+            )}
             {run.failure.kind === "refused" && run.failure.status === 429 && (
               <p className="break-words">
                 Comparisons are limited more tightly than searches: you can keep searching while you wait.

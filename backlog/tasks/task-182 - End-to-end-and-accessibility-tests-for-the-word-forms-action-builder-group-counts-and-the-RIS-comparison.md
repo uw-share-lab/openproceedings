@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-05 05:12'
-updated_date: '2026-10-05 08:11'
+updated_date: '2026-10-05 08:23'
 labels:
   - frontend
   - e2e
@@ -48,4 +48,6 @@ Run on 2026-10-05 with OP_E2E_API_PORT=8018 OP_E2E_WEB_PORT=3018 (ports 8000/300
 AC#4 is ticked only in part, so it is left open: axe (WCAG 2.2 AA, both themes, 1280 and 320 px) and the 320 px reflow check pass on every new state, and the visual snapshots were added through npm run e2e:update, but only the darwin baselines exist. The six Linux baselines (word-forms, group-counts, comparison x light, dark) must be written on an amd64 ubuntu-24.04 host or runner; until then CI's e2e job fails on those six tests.
 
 Product change made: lib/compare.ts megabytes() showed a cap under 0.05 MB as 0.0 MB; it now shows kilobytes under a tenth of a megabyte.
+
+Follow-ups (2026-10-05): the reason lines are sentences; a refused re-compare names the earlier answer's file; grammar.test.ts no longer reads CodeMirror's time-budgeted partial tree (the flake's cause; it failed 4 runs of 4 under 60 CPU hogs before and passed 4 of 4 after). Final run: Playwright 55 passed, Vitest 4,826 passed three times in a row, make lint and make tooling exit 0. Linux baselines: no workflow writes them; take the six -actual.png files from the e2e job's playwright-report artifact (spec 05 Testing has the steps).
 <!-- SECTION:NOTES:END -->

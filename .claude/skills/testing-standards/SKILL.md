@@ -49,6 +49,11 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
   writing the answer in the browser. Tests on `tight` share one client network, so one that needs a
   comparison waits out another's cooldown through the panel's own Retry. Add a configuration there rather
   than a second fixture server.
+- **A test of CodeMirror's parse reads the whole tree.** `syntaxTree(state)` is what CodeMirror parsed within
+  its start-up time budget (wall clock), so under load it can be the tree of a prefix: use
+  `ensureSyntaxTree(state, length, timeout)` in a test (`grammar.test.ts`; it failed about once a run at load
+  100 before, and a test there now pins it with a clock that outruns the budget). A test that passes only
+  when the machine is quick is waiting on a time budget somewhere: find it before raising a timeout.
 - **e2e ports.** Playwright's fixture API and web server listen on 8000 and 3000 unless `OP_E2E_API_PORT` /
   `OP_E2E_WEB_PORT` are set (`playwright.config.ts`, `fixture_server.py`, and every spec that calls the API
   directly read the same two). Locally the config reuses a server already on its port, so with another

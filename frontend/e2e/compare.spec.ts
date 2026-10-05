@@ -124,7 +124,12 @@ test("a file's papers land in the four lists, each opens, and each downloads as 
   await expect(gap).toContainText("a paper no index holds about benchmark");
   await expect(gap).toContainText("2 times in your file");
   await expect(gap.getByRole("link")).toHaveCount(0);
-  await expect(list(page, /dropped papers?$/)).toContainText(/no exact match in its title or abstract/);
+  await expect(list(page, /dropped papers?$/)).toContainText(
+    /papers? (has|have) no exact match in (its|their) title or abstract/,
+  );
+  await expect(list(page, /added papers?$/)).toContainText(
+    `${answer.added_total.toLocaleString("en-US")} papers match exactly and are not in your file`,
+  );
 
   const added = list(page, /added papers?$/);
   expect(await added.getByRole("button", { name: /^Download RIS/ }).count()).toBe(1);
@@ -210,8 +215,12 @@ test("after a comparison the network waits: the refusal counts down, and searchi
   await expect(alert.getByRole("status")).toHaveText(
     new RegExp(`^Retry in ${seconds} s$|^You can retry now$`),
   );
-  await expect(panel(page)).toContainText("The comparison didn't run. Nothing was compared.");
+  await expect(panel(page)).toContainText(
+    "The new comparison didn't run. The results below are from the earlier comparison with my-records.ris.",
+  );
+  await expect(panel(page)).not.toContainText("Nothing was compared");
   await expect(panel(page)).toContainText("you can keep searching while you wait");
+  await expectNoAxeViolations(page, "a refused comparison above an earlier answer");
   // the earlier answer (the same query, index and file) stays, under its own heading: it is still true
   await expect(panel(page).getByRole("heading", { name: /^Comparison with my-records\.ris$/ })).toBeVisible();
   // the countdown ends in a Retry that works

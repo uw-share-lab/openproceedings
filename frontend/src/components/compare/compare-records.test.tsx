@@ -130,7 +130,7 @@ describe("CompareRecords", () => {
     await compareWith();
     const dropped = await screen.findByRole("region", { name: `${R.dropped_total} dropped papers` });
     expect(dropped.textContent).toContain(
-      "2 excluded by a default filter · 2 matches only as another word form · 2 no exact match in its title or abstract",
+      "2 papers are excluded by a default filter · 2 papers match only as another word form · 2 papers have no exact match in their title or abstract",
     );
     const show = within(dropped).getByRole("button", { name: `Show the ${R.dropped_total} dropped papers` });
     expect(show.getAttribute("aria-expanded")).toBe("false");
@@ -280,6 +280,35 @@ describe("CompareRecords", () => {
     fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
     await screen.findByRole("table", { name: /What this search does/ });
     expect(asked).toBe(2);
+  });
+
+  it("labels an earlier answer as the earlier file's when a new comparison is refused", async () => {
+    let asked = 0;
+    const busy = {
+      error: {
+        code: "API_BUSY",
+        message: "This instance is running as many comparisons as it can. Try again in 5 s.",
+      },
+    };
+    await draw(
+      serve(() => {
+        asked += 1;
+        return asked === 1 ? json(R) : json(busy, 503, { "Retry-After": "5" });
+      }),
+    );
+    await compareWith(ris("first.ris"));
+    await screen.findByRole("table", { name: /What this search does/ });
+    fireEvent.change(screen.getByLabelText("RIS file"), { target: { files: [ris("second.ris")] } });
+    fireEvent.click(screen.getByRole("button", { name: "Compare" }));
+    await screen.findByRole("alert");
+    const panel = screen.getByRole("region", { name: "Compare with your records" });
+    expect(panel.textContent).toContain(
+      "The new comparison didn't run. The results below are from the earlier comparison with first.ris.",
+    );
+    expect(panel.textContent).not.toContain("Nothing was compared");
+    // the earlier answer is still there, under its own file's name
+    expect(screen.getByRole("heading", { name: "Comparison with first.ris" })).toBeTruthy();
+    expect(screen.getByRole("table", { name: /What this search does/ })).toBeTruthy();
   });
 
   it("says how long a cooling-down network waits, and that searching still works", async () => {
