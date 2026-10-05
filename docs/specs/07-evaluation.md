@@ -119,13 +119,34 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   Since that route echoes a row's evidence to whoever uploaded the file (decision-035), the evidence of a
   record the index doesn't hold names its links' hosts only as valid host names, at most three a record
   (`link_host`, `MAX_HOSTS`), in the report too; a link no URL parser takes names no paper and no host.
-- **Human calls are read back.** A person fills `human_class` (a protocol class, `in_both` or `out_of_scope`),
-  `reviewer_role` and `note` in the review file. The same command, run again, checks that the file's rows are
-  the run's own, leaves the file untouched and rewrites the report with a "Human calls" section: calls per
-  query, spot-check agreement with the automated class, any row a person called `our_bug`, and the line
-  **Every disagreement classified: yes/no** (no `our_bug` by the automation or a person, and a call on every
-  row left for a person). That line is this section's bar; `--check` fails on a person's `our_bug` as well.
-- A report never replaces a review file a person has filled in, and names its inputs by file name and sha256,
+- **Calls are read back.** Whoever makes a call fills `human_class` (a protocol class, `in_both` or
+  `out_of_scope`), `reviewer_role` (a role, never a name) and `note` in the review file. The same command, run
+  again, checks that the file's rows are the run's own (a cell the run wrote that a spreadsheet changed is named
+  by line and column), leaves the file untouched and rewrites the report with a "Human calls" section: calls per
+  query, spot-check agreement with the automated class ("none called" when no spot-check row has one), any row
+  called `our_bug`, the counts after the calls, and the line **Every disagreement classified: yes/no** (no
+  `our_bug` by the automation or by a call, and a call on every row left for one). `--check` fails on a call of
+  `our_bug` as well as on the automation's. The review file is UTF-8 with a BOM and CRLF line ends, as `/compare`'s
+  CSV: what a spreadsheet opens and saves as "CSV UTF-8"; a file saved in another encoding is refused with that
+  fix, and is never overwritten.
+- **What a call does to the counts** (the "After the calls" tables, and a bullet under each Finding). A class
+  moves its row to that class. `out_of_scope` (Scholar-side rows only) takes the record out of the Scholar set,
+  so out of the denominator. `in_both` (Scholar-side rows only) moves the record to "in both" and pairs it with
+  one index record: the row's own, or else the one same-title record its evidence names (`Row.near`, the
+  record named after "same title:"); when that record is among the rows only in the result, it leaves them, the
+  two being one paper. An `in_both` call on a row whose evidence names no such record, or several, is refused,
+  and the pairing never reads `note`. Rows without a call keep the automation's class. The tables above the
+  Human calls section, and the Finding's first figures, stay the automation's alone.
+- **A call weighs what its role does.** The report prints each distinct `reviewer_role` with its row count beside
+  the Human calls figures, on the closing line and on the command's verdict line, and never quotes a note. The
+  tool does not judge a role: when any call was made by someone other than an independent reviewer (the
+  analyst, or an AI assistant acting for the project), it is recorded like any other, but the "yes" is
+  provisional and this section's bar is not closed. A paper cites the automation's figures; it cites the counts
+  after the calls only with the roles beside them, and as reviewed only once every role is an independent
+  reviewer's. The 2026-10-05 "yes" rests on 48 calls an AI assistant made at the owner's direction: TASK-193
+  (an independent reviewer repeats them) need not block merging, but blocks citing the calls and closing this
+  bar.
+- A report never replaces a review file in which a call is filled in, and names its inputs by file name and sha256,
   never by path. Notes about one set of inputs come from the file `--notes` names (for the review's export,
   `docs/results/scholar-comparison-notes.md`), printed verbatim under its hash; there is no default, since
   another set would get the wrong notes. `--answers <name>` names the string the set is Scholar's answer to:

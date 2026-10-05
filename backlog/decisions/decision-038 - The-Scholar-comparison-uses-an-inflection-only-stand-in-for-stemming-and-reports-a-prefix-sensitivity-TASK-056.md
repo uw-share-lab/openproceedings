@@ -22,11 +22,13 @@ some rule to draw the line. Two options were considered:
 The first review of TASK-056 showed that a wider stemmer moves rows out of `full_text`, so the choice could
 matter. The report therefore measures it: every searched word is replaced by its inflection stem read as a
 prefix (`benchmarks` → `benchmark*`), and the `full_text` rows that then match are counted. On index
-`5ec5231adae2` (`docs/results/2026-10-05-scholar-comparison.md`) that moves 0 of 1,753 `full_text` rows for
+`5ec5231adae2` (the superseded report of 2026-10-05, not kept: `docs/results/2026-10-05-scholar-comparison.md`
+now holds the run on `fd13d8d27535`) that moves 0 of 1,753 `full_text` rows for
 `main-7-most-updated`, 0 of 1,753 for `main-7-dollar` and 2 of 1,709 for `main-2-pop`. (That run was superseded the same day
 by the one on index `fd13d8d27535`, where the figures are 0 of 1,752, 0 of 1,752 and 2 of 1,708.) The prefix reading is not
 a stemmer either: it covers stripped and added endings on the inflection stem, not a stemmer that rewrites
-the stem. The project owner delegated the choice to the session lead on 2026-10-05.
+the stem. On 2026-10-05 the project owner delegated the choice to the AI assistant session working for them,
+which made it on these figures.
 
 ## Decision
 

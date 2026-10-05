@@ -736,6 +736,9 @@ class Row:
     shared_title: bool = (
         False  # matched to a RIS-only record whose title another index record has (`Match.shared`)
     )
+    # for a row with no index record: the index records its evidence names as holding the same title (in scope
+    # and of its year for a record with no venue). One of them is what an `in_both` call pairs the row with.
+    near: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -824,6 +827,7 @@ def _not_in_index(e: Entry, index: MatchIndex, scope: Scope) -> Row:
     m, r = e.match, e.record
     cells = _cells_of(m.near, index)
     same = f"; same title: {cells}" if cells else ""
+    near = m.near
     if m.problem == "ambiguous":
         cls, evidence = (
             UNSETTLED,
@@ -832,12 +836,10 @@ def _not_in_index(e: Entry, index: MatchIndex, scope: Scope) -> Row:
     elif m.problem == "no_year":
         cls, evidence = UNSETTLED, f"no year and no id: matched by id only{same}"
     elif m.problem == "no_venue":  # kept only because an in-scope record has its title (`scope_and_match`)
-        here = _cells_of(
-            (i for i in m.near if scope.holds(*index.cells[i]) and index.cells[i][1] == e.year), index
-        )
+        near = tuple(i for i in m.near if scope.holds(*index.cells[i]) and index.cells[i][1] == e.year)
         cls, evidence = (
             UNSETTLED,
-            f"its venue string is no venue, so no title match is made; same title: {here}",
+            f"its venue string is no venue, so no title match is made; same title: {_cells_of(near, index)}",
         )
     elif m.problem == "truncated_title":
         cls, evidence = UNSETTLED, f"the title is cut (…), so its key can't match{same}"
@@ -848,7 +850,7 @@ def _not_in_index(e: Entry, index: MatchIndex, scope: Scope) -> Row:
             evidence = f"no id or title match in {e.venue} {e.year}; same title elsewhere: {cells}{where}"
         else:
             evidence = f"no forum id, proceedings id or title+venue+year match in the snapshot{where}"
-    return Row("scholar", r.key, "", r.title, e.venue or r.venue_raw, e.year, cls, evidence, False)
+    return Row("scholar", r.key, "", r.title, e.venue or r.venue_raw, e.year, cls, evidence, False, near=near)
 
 
 def compare_query(

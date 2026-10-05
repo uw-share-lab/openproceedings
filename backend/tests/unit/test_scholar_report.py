@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -24,13 +25,20 @@ from openproceedings.eval.scholar_compare import (
     scope_and_match,
 )
 from openproceedings.eval.scholar_report import (
+    BOM,
+    IN_BOTH,
     REVIEW_COLUMNS,
     SPOT,
     UNRESOLVED,
+    Call,
+    HumanCalls,
     Meta,
+    ReviewRow,
     RisFile,
+    after_calls,
     human_calls,
     parse_query_file,
+    read_calls,
     render,
     render_review,
     review_name,
@@ -40,6 +48,7 @@ from openproceedings.eval.scholar_report import (
 from openproceedings.ingest.dedup import DedupResult
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import render as render_snapshot
+from openproceedings.query.ast import Node
 
 from tests.unit.ingest.test_dedup import paper
 from tests.unit.test_scholar_compare import NAME, POP, QUERY, SET, compare, corpus, entry, imported, nid
@@ -117,7 +126,9 @@ def test_the_spot_check_is_a_tenth_rounded_up() -> None:
 
 def test_review_csv_has_the_protocol_columns_and_leaves_the_human_ones_empty() -> None:
     c = compare(QUERY, SET, corpus())
-    rows = list(csv.DictReader(io.StringIO(render_review(review_rows([c]), "abc123def456"))))
+    rows = list(
+        csv.DictReader(io.StringIO(render_review(review_rows([c]), "abc123def456").removeprefix(BOM)))
+    )
     assert tuple(rows[0]) == REVIEW_COLUMNS
     assert REVIEW_COLUMNS[:12] == (
         "query_name", "side", "scholar_key", "op_id", "title", "venue", "year", "auto_class", "auto_evidence",
@@ -157,7 +168,7 @@ def test_header_names_every_input_the_numbers_depend_on() -> None:
         "- Queries: `q`",
         "- Notes: none",
         "- Command: `op eval scholar --ris set.ris --index abc123def456 --date 2026-10-04`",
-        "- Review rows: `2026-10-04-scholar-comparison-review.csv` (4 rows, 3 unresolved)",
+        "- Review rows: `2026-10-04-scholar-comparison-review.csv` (4 rows; 3 left for a call, 0 called)",
         "**`our_bug`: 0** across 1 query.",
     ):
         assert line in text.splitlines()
@@ -251,14 +262,16 @@ def test_write_places_both_files_and_never_erases_a_persons_calls(tmp_path: Path
     assert (path.name, rows.name, replaced) == ("2026-10-04-scholar-comparison.md", review_name(DAY), False)
     assert human_calls(rows) == 0
     assert write("again\n", review, tmp_path, DAY)[2] is True  # nothing filled in: replaced whole
-    filled = rows.read_text(encoding="utf-8").replace(
-        ",,,,unresolved,", ",full_text,second reviewer,,unresolved,", 1
+    filled = (
+        rows.read_bytes()
+        .decode("utf-8")
+        .replace(",,,,unresolved,", ",full_text,second reviewer,,unresolved,", 1)
     )
-    rows.write_text(filled, encoding="utf-8")
+    rows.write_bytes(filled.encode("utf-8"))
     assert human_calls(rows) == 1
-    with pytest.raises(ValueError, match="holds 1 row\\(s\\) a person filled in"):
+    with pytest.raises(ValueError, match="holds 1 filled row"):
         write("third\n", review, tmp_path, DAY)
-    assert path.read_text(encoding="utf-8") == "again\n" and rows.read_text(encoding="utf-8") == filled
+    assert path.read_text(encoding="utf-8") == "again\n" and rows.read_bytes().decode("utf-8") == filled
 
 
 # --- the command -----------------------------------------------------------------------------------------------
@@ -316,7 +329,11 @@ def test_op_eval_scholar_writes_the_report_and_the_review_rows(
         f"{index_name(data_dir)} --date 2026-10-04`"
     ) in text
     assert str(tmp_path) not in text  # file names only: a directory can name a person
-    rows = list(csv.DictReader((out / "2026-10-04-scholar-comparison-review.csv").open(encoding="utf-8")))
+    rows = list(
+        csv.DictReader(
+            (out / "2026-10-04-scholar-comparison-review.csv").open(encoding="utf-8-sig", newline="")
+        )
+    )
     assert {r["query_name"] for r in rows} == {"main", "pop"}
     err = capsys.readouterr().err
     assert (
@@ -370,8 +387,11 @@ def test_the_command_logs_counts_and_never_the_query(
     assert main(args(data_dir, tmp_path / "r", ris, "--query-file", str(queries))) == 0
     lines = [json.loads(ln) for ln in capsys.readouterr().err.splitlines() if ln.startswith("{")]
     [line] = [ln for ln in lines if ln.get("event") == "scholar_report_written"]
-    assert (line["level"], line["queries"], line["ris_records"], line["in_scope"]) == ("INFO", 2, 8, 8)
+    assert (line["level"], line["queries"], line["ris_records"], line["ris_papers"]) == ("INFO", 2, 8, 8)
     assert (line["our_bug"], line["index_version"]) == (0, index_name(data_dir))
+    [start] = [ln for ln in lines if ln.get("event") == "scholar_report_started"]  # before the long part
+    assert (start["queries"], start["ris_records"], start["index_version"]) == (2, 8, index_name(data_dir))
+    assert lines.index(start) < lines.index(line)
     assert not any("foundation" in json.dumps(ln) or "benchmark" in json.dumps(ln) for ln in lines)
 
 
@@ -455,7 +475,7 @@ def test_a_shared_title_on_an_import_only_match_and_a_no_venue_record_are_counte
         "1 papers matched a RIS-only record whose title key another index record has too (0 in the same venue and "
         "year: one paper under two ids, so the set can count it twice; the others in another venue or year: the "
         "import's venue or year may be wrong). The match is kept, and each such row that is a disagreement is "
-        "`unsettled`, for a person."
+        "`unsettled`, for a reviewer."
     ) in text
     assert "`no match (no venue)`: 1 records whose venue string is empty or cut by Scholar (`…`)" in text
     assert "| no match (no venue) | 1 |" in text
@@ -508,7 +528,7 @@ def test_the_other_strings_are_marked_as_not_the_sets_own() -> None:
 def test_review_csv_says_what_each_rows_record_rests_on() -> None:
     text, records = own_import()
     c = compare(QUERY, text, records)
-    rows = list(csv.DictReader(io.StringIO(render_review(review_rows([c]), "v"))))
+    rows = list(csv.DictReader(io.StringIO(render_review(review_rows([c]), "v").removeprefix(BOM))))
     assert REVIEW_COLUMNS[-2:] == ("record_source", "abstract_source")
     by_id = {r["op_id"] or r["scholar_key"]: (r["record_source"], r["abstract_source"]) for r in rows}
     assert by_id[nid("ris00003", 2026)] == ("ris_only", "ris")
@@ -559,12 +579,12 @@ def test_a_kept_record_matched_to_a_shared_title_import_is_counted_under_in_both
 
 def fill(rows_file: Path, calls: dict[str, tuple[str, str, str]]) -> None:
     """Fill `human_class`, `reviewer_role` and `note` on the rows whose op id or Scholar key is named."""
-    with rows_file.open(encoding="utf-8", newline="") as fh:
+    with rows_file.open(encoding="utf-8-sig", newline="") as fh:
         rows = list(csv.DictReader(fh))
     for r in rows:
         if (key := r["op_id"] or r["scholar_key"]) in calls and r["query_name"] == "main":
             r["human_class"], r["reviewer_role"], r["note"] = calls[key]
-    with rows_file.open("w", encoding="utf-8", newline="") as fh:
+    with rows_file.open("w", encoding="utf-8-sig", newline="") as fh:
         writer = csv.DictWriter(fh, REVIEW_COLUMNS, lineterminator="\r\n")  # a spreadsheet's line ends
         writer.writeheader()
         writer.writerows(rows)
@@ -593,8 +613,8 @@ def test_an_unfilled_review_file_leaves_the_disagreements_unclassified(
     text = ran[1].read_text(encoding="utf-8")
     assert "## Human calls\n\nNone yet: no row of the review file has a `human_class`." in text
     assert (
-        "**Every disagreement classified: no.** `our_bug` by the automation: 0; by a person: 0; rows left for a "
-        "person that have no call yet: 3."
+        "**Every disagreement classified: no.** `our_bug` by the automation: 0; by a call: 0; rows left for a "
+        "call that have none yet: 3."
     ) in text
 
 
@@ -608,28 +628,31 @@ def test_a_filled_review_file_is_read_back_and_left_as_it_is(
     assert main(argv) == 0
     assert rows_file.read_bytes() == before  # never rewritten, whatever its line ends
     text = report_file.read_text(encoding="utf-8")
-    assert (
-        f"Read from `{rows_file.name}` (sha256 `" in text and "3 of its 4 rows have a person's call." in text
-    )
-    assert "| `main` | 3 | 3 | 1 | 0 | 0 |" in text
+    assert f"Read from `{rows_file.name}` (sha256 `" in text and "3 of its 4 rows have a call." in text
+    assert "| `main` | 3 | 3 | 1 | none called | — |" in text
     for line in (
         "| `main` | `coverage_gap` | `out_of_scope` | 1 |",
         "| `main` | `scholar_missed` | `scholar_missed` | 1 |",
         "| `main` | `unsettled` | `full_text` | 1 |",
-        "**Every disagreement classified: yes.** `our_bug` by the automation: 0; by a person: 0; rows left for a "
-        "person that have no call yet: 0.",
     ):
         assert line in text.splitlines(), line
-    err = capsys.readouterr().err
-    assert "as it is: 3 of 4 rows have a person's call" in err and "every disagreement classified: yes" in err
     assert (
-        "second reviewer" not in text and "read the PDF" not in text
-    )  # the report counts calls, it quotes none
+        "**Every disagreement classified: yes, on the calls whose roles this line names.** `our_bug` by the automation: 0; "
+        "by a call: 0; rows left for a call that have none yet: 0. The 3 calls were made as: `second reviewer` "
+        "(3 rows). A call weighs what its role does: unless every role is an independent reviewer's, this verdict "
+        "is provisional and spec 07 §B's bar is not closed."
+    ) in text.splitlines()
+    assert "**Who made them** (the file's `reviewer_role`, as written): `second reviewer` (3 rows)." in text
+    assert "(4 rows; 3 left for a call, 3 called)" in text
+    err = capsys.readouterr().err
+    assert "as it is: 3 of 4 rows have a call" in err
+    assert "every disagreement classified: yes (calls made as: second reviewer (3))" in err
+    assert "read the PDF" not in text  # the roles are printed, a note never is
 
 
 def test_a_spot_check_call_is_compared_with_the_automated_class(ran: tuple[list[str], Path, Path]) -> None:
     argv, report_file, rows_file = ran
-    with rows_file.open(encoding="utf-8", newline="") as fh:
+    with rows_file.open(encoding="utf-8-sig", newline="") as fh:
         [spot] = [r for r in csv.DictReader(fh) if r["row_kind"] == SPOT]
     fill(rows_file, {**ALL_CALLED, spot["op_id"]: (spot["auto_class"], "second reviewer", "")})
     assert main(argv) == 0
@@ -641,8 +664,8 @@ def test_a_persons_our_bug_fails_the_check_and_is_named(ran: tuple[list[str], Pa
     fill(rows_file, {**ALL_CALLED, nid("miss0001"): ("our_bug", "second reviewer", "")})
     assert main(argv) == 1  # --check
     text = report_file.read_text(encoding="utf-8")
-    assert "**A person called 1 row(s) `our_bug`.**" in text and f"`main` `{nid('miss0001')}`" in text
-    assert "**Every disagreement classified: no.** `our_bug` by the automation: 0; by a person: 1;" in text
+    assert "**1 row(s) are called `our_bug`.**" in text and f"`main` `{nid('miss0001')}`" in text
+    assert "**Every disagreement classified: no.** `our_bug` by the automation: 0; by a call: 1;" in text
 
 
 @pytest.mark.parametrize(
@@ -679,5 +702,189 @@ def test_calls_for_another_runs_rows_are_refused_not_carried_over(
     other = [a if a != "main" else "pop" for a in argv]  # another query: other rows
     capsys.readouterr()
     assert main(other) == 1
-    assert "holds a person's calls for other rows than this run writes" in capsys.readouterr().err
+    assert "holds calls for other rows than this run writes" in capsys.readouterr().err
     assert (report_file.read_bytes(), rows_file.read_bytes()) == before
+
+
+def test_an_automated_our_bug_fails_the_check_and_only_the_check(
+    ran: tuple[list[str], Path, Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from openproceedings.engine import tantivy_engine
+
+    class Dropping(tantivy_engine.TantivyEngine):  # the served engine loses a paper the oracle matches
+        def match_ids(self, ast: Node) -> frozenset[str]:
+            return super().match_ids(ast) - {nid("both0001")}
+
+    monkeypatch.setattr(tantivy_engine, "TantivyEngine", Dropping)
+    argv, report_file, _ = ran
+    capsys.readouterr()
+    assert main(argv) == 1  # --check
+    err = capsys.readouterr().err
+    assert "our_bug: 1 (must be 0: investigate before the report is cited)" in err
+    [line] = [
+        json.loads(ln) for ln in err.splitlines() if ln.startswith("{") and "scholar_report_written" in ln
+    ]
+    assert (line["level"], line["our_bug"], line["human_our_bug"]) == ("ERROR", 1, 0)
+    assert main([a for a in argv if a != "--check"]) == 0  # reported, not refused, without --check
+    assert "**`our_bug`: 1**" in report_file.read_text(encoding="utf-8")
+
+
+# --- the review file's format, and what a spreadsheet does to it (gate fixes, 2026-10-05) ----------------------
+
+
+def _filled(text: str, calls: dict[int, tuple[str, str, str]]) -> str:
+    """`text` (a review file) with the calls written into the rows at those places, as a spreadsheet saves it."""
+    rows = list(csv.DictReader(io.StringIO(text.removeprefix(BOM))))
+    for n, call in calls.items():
+        rows[n]["human_class"], rows[n]["reviewer_role"], rows[n]["note"] = call
+    buffer = io.StringIO()
+    buffer.write(BOM)
+    writer = csv.DictWriter(buffer, REVIEW_COLUMNS, lineterminator="\r\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return buffer.getvalue()
+
+
+def test_review_csv_is_bom_and_crlf_and_a_non_ascii_title_survives_a_save(tmp_path: Path) -> None:
+    review = review_rows([compare(QUERY, SET, corpus())])
+    review[0] = ReviewRow(
+        review[0].query_name, replace(review[0].row, title="Évaluer la confiance, 信頼"), UNRESOLVED
+    )
+    text = render_review(review, "v")
+    assert text.startswith(BOM) and text.endswith("\r\n") and "\n" not in text.replace("\r\n", "")
+    assert "Évaluer la confiance, 信頼" in text
+    saved = tmp_path / "review.csv"
+    saved.write_bytes(_filled(text, {0: ("full_text", "second reviewer", "lu: résumé")}).encode("utf-8"))
+    calls = read_calls(saved, text, review)
+    assert calls is not None and calls.calls == {0: Call("full_text", "second reviewer", "lu: résumé")}
+    assert calls.roles == [("second reviewer", 1)]
+
+
+def test_a_review_file_saved_in_a_legacy_encoding_is_refused_with_the_fix(tmp_path: Path) -> None:
+    review = review_rows([compare(QUERY, SET, corpus())])
+    review[0] = ReviewRow(
+        review[0].query_name, replace(review[0].row, title="Évaluer la confiance"), UNRESOLVED
+    )
+    text = render_review(review, "v")
+    saved = tmp_path / "review.csv"
+    saved.write_bytes(
+        _filled(text, {0: ("full_text", "second reviewer", "")}).removeprefix(BOM).encode("cp1252")
+    )
+    with pytest.raises(ValueError, match=r"review\.csv is not UTF-8: save it as CSV UTF-8"):
+        read_calls(saved, text, review)
+    assert human_calls(saved) == 1  # counted as filled: never overwritten on a guess
+    (tmp_path / review_name(DAY)).write_bytes(saved.read_bytes())
+    with pytest.raises(ValueError, match="holds 1 filled row"):
+        write("r\n", text, tmp_path, DAY)
+
+
+def test_a_cell_the_run_wrote_and_a_spreadsheet_rewrote_is_named(
+    ran: tuple[list[str], Path, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv, _, rows_file = ran
+    text = rows_file.read_bytes().decode("utf-8")
+    rows = list(csv.reader(io.StringIO(text.removeprefix(BOM))))
+    rows[2][REVIEW_COLUMNS.index("index_version")] = "1.23E+11"  # a spreadsheet reading an all-digit version
+    rows[1][REVIEW_COLUMNS.index("human_class")], rows[1][REVIEW_COLUMNS.index("reviewer_role")] = (
+        "full_text",
+        "r",
+    )
+    buffer = io.StringIO()
+    csv.writer(buffer, lineterminator="\r\n").writerows(rows)
+    rows_file.write_bytes((BOM + buffer.getvalue()).encode("utf-8"))
+    capsys.readouterr()
+    assert main(argv) == 1
+    assert "(line 3, column `index_version`)" in capsys.readouterr().err
+
+
+def test_calls_are_read_back_when_a_cell_carries_the_injection_guard(
+    data_dir: Path, inputs: tuple[Path, Path], tmp_path: Path
+) -> None:
+    ris, _ = inputs
+    queries = tmp_path / "in" / "guarded.txt"
+    queries.write_text(f"## -ablation\n{QUERY}\n", encoding="utf-8")  # a name a spreadsheet would run
+    out = tmp_path / "guarded"
+    argv = args(data_dir, out, ris, "--query-file", str(queries), "--check")
+    assert main(argv) == 0
+    rows_file = out / review_name(DAY)
+    text = rows_file.read_bytes().decode("utf-8")
+    assert "\r\n'-ablation," in text  # guarded as written
+    unresolved = [
+        n
+        for n, r in enumerate(csv.DictReader(io.StringIO(text.removeprefix(BOM))))
+        if r["row_kind"] == UNRESOLVED
+    ]
+    calls = dict.fromkeys(unresolved, ("full_text", "second reviewer", ""))
+    calls[unresolved[1]] = ("out_of_scope", "second reviewer", "")  # set.ris#8, the coverage gap
+    calls[unresolved[2]] = ("scholar_missed", "second reviewer", "")  # miss0001
+    rows_file.write_bytes(_filled(text, calls).encode("utf-8"))
+    assert main(argv) == 0
+    report_text = (out / "2026-10-04-scholar-comparison.md").read_text(encoding="utf-8")
+    assert "3 of its 4 rows have a call." in report_text
+    assert "**Every disagreement classified: yes" in report_text
+
+
+@pytest.mark.parametrize(
+    ("key", "call", "message"),
+    [
+        (nid("miss0001"), "in_both", "`in_both` is a call about a record of the compared set"),
+        (nid("miss0001"), "out_of_scope", "`out_of_scope` is a call about a record of the compared set"),
+        ("set.ris#8", "in_both", "`in_both` needs the one index record the row is the same paper as"),
+    ],
+)
+def test_a_verdict_on_a_row_it_cannot_apply_to_is_refused(
+    ran: tuple[list[str], Path, Path], key: str, call: str, message: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv, report_file, rows_file = ran
+    fill(rows_file, {key: (call, "second reviewer", "")})
+    before = (report_file.read_bytes(), rows_file.read_bytes())
+    capsys.readouterr()
+    assert main(argv) == 1
+    assert message in capsys.readouterr().err
+    assert (report_file.read_bytes(), rows_file.read_bytes()) == before
+
+
+def test_the_counts_after_the_calls_move_each_called_row_once() -> None:
+    c = compare(QUERY, SET, corpus())
+    review = review_rows([c])
+    at = {x.row.op_id or x.row.scholar_key: n for n, x in enumerate(review)}
+    gap = at["set.ris#8"]
+    # the coverage-gap row names the result's only extra record as the one same-title record: `in_both` pairs them
+    review[gap] = ReviewRow(
+        review[gap].query_name, replace(review[gap].row, near=(nid("miss0001"),)), UNRESOLVED
+    )
+    calls = HumanCalls("f.csv", "0" * 64, {
+        gap: Call(IN_BOTH, "second reviewer", ""),
+        at[nid("noab0001")]: Call("out_of_scope", "second reviewer", ""),
+    })  # fmt: skip
+    after = after_calls(c, review, calls)
+    assert (c.scholar_in_scope, len(c.kept)) == (8, 1)
+    assert (after.in_scope, after.both) == (7, 2)  # one record out of the set, one more in both
+    assert "coverage_gap" not in after.scholar and "unsettled" not in after.scholar
+    assert (
+        dict(after.result) == {}
+    )  # the paired record left the rows only in the result: the two are one paper
+    assert dict(c.counts("openproceedings")) == {"scholar_missed": 1}  # the automation's counts are untouched
+    alone = HumanCalls("f.csv", "0" * 64, {at[nid("noab0001")]: Call(IN_BOTH, "second reviewer", "")})
+    assert after_calls(c, review, alone).result == {"scholar_missed": 1}  # its own record is no extra row
+
+
+def test_the_report_prints_the_counts_after_the_calls_beside_the_automations(
+    ran: tuple[list[str], Path, Path],
+) -> None:
+    argv, report_file, rows_file = ran
+    fill(
+        rows_file, {**ALL_CALLED, nid("noab0001"): (IN_BOTH, "AI assistant, not an independent reviewer", "")}
+    )
+    assert main(argv) == 0
+    text = report_file.read_text(encoding="utf-8")
+    for line in (
+        "| Scholar set, in scope | 8 | 7 |",
+        "| in both | 1 | 2 |",
+        "| only in the Scholar set: `unsettled` | 1 | 0 |",
+        "| only in the Scholar set: `coverage_gap` | 1 | 0 |",
+    ):
+        assert line in text.splitlines(), line
+    assert "made as: `second reviewer` (2 rows); `AI assistant, not an independent reviewer` (1 row)" in text
+    assert "- **After the calls** (section Human calls, made as: " in text
+    assert "1 of 7 (14.3%) `full_text`" in text

@@ -64,6 +64,16 @@ text** when `identification_citable` is false; a v1 record (null: not recorded) 
 recorded whether this index is a bootstrap corpus: these counts may not be PRISMA identification numbers"
 and no methods text either.
 
+## Group counts and `/compare` are search-development aids
+Neither is a PRISMA number, and neither goes in the flow diagram. A **group count** (the search response's
+`groups`, TASK-176: each concept group's total, and the total without it) shows which group narrows a
+string while it is being written; a methods section that mentions one cites it with the query (`q`, or its
+`canonical_hash`) and the `index_version` it was counted on. A **`/compare` figure** (a reviewer's own RIS file
+against one query, TASK-177) is about that file: cite it only with the file's own sha256 and the date it was
+run beside the CSV's `index_version` and `canonical_hash`, since the tool keeps neither the file nor a record of
+the run. The citable comparison with Google Scholar is the `op eval scholar` report
+(`scholar-comparison-protocol` skill), which names every input by hash and says whose calls it rests on.
+
 ## Search record fields (04 §Search records) — all required
 The full table is in `.claude/skills/search-records/SKILL.md`: `input`, `mode`, `canonical`,
 `canonical_hash`, `identification_query`, `index_version`, `tokenizer_version`, `query_version`,
