@@ -3,7 +3,8 @@
 Regenerate with `uv run python -m tests.bench.group_counts_report --index <a copy of an index>` (from
 `backend/`, on a quiet machine: other load inflates the timings); never edit by hand. TASK-176; cited by spec
 04 §SearchResponse (`groups`, Cost) and spec 07 §E. A cold first page over spec 03's 100 ms p95 with its counts
-is spec 03's exception "as measured" (decision-039; TASK-197 brings it under), measured at a 1-minute load under 5.
+is spec 03's exception "as measured" (decision-039; TASK-197 brings it under). A run is cited only when its 1-minute load (below) is under 5 at
+the start and the end.
 
 - Machine: Apple M1 Pro, macOS-15.6.1-arm64-arm-64bit, 8 CPUs; load average 3.9 / 4.4 / 6.9 at the
   start and 3.3 / 4.6 / 6.3 at the end (1, 5, 15 min); Python 3.12.9, tantivy
