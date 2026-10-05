@@ -634,7 +634,8 @@ retention (step 8) matter (guarantee 4).
    `git rev-parse vX.Y.Z^{commit}` is that sha.
 7. **Back-merge.** `main` now holds the promotion's merge commit, which `dev` lacks, and the next promotion
    can't merge until `dev` has it. `git switch -c release/X.Y.Z-back-merge origin/dev && git merge --no-ff
-   origin/main` (no file changes), `/review-gate`, `git push -u origin release/X.Y.Z-back-merge` (the review
+   origin/main` (no file changes but `make changelog`'s, when a PR merged into `dev` after the release
+   branch was cut, as #109 did for 0.1.0), `/review-gate`, `git push -u origin release/X.Y.Z-back-merge` (the review
    record covers the merge commit), then `gh pr create --base dev --title "chore: back-merge main after
    X.Y.Z" --body-file <file> --label no-learning` and `record-review.py APPROVE <dispositions> --attest`.
    Merge it with a merge commit, never `--squash` or `--rebase`, which would leave `main`'s commit out of

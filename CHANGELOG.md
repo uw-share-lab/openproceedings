@@ -10,6 +10,12 @@ papers a query matches: a search record pins its `index_version`, `tokenizer_ver
 it with the same QUERY_VERSION; otherwise as `drifted`, naming what changed. Each release's Data section
 names the index it was verified on and which saved records still reproduce.
 
+## Unreleased
+
+### Internal
+
+- ingest: fix two properties the candidate nightly failed (0.1.0) ([#109](https://github.com/uw-share-lab/openproceedings/pull/109))
+
 ## 0.1.0
 
 ### Added
