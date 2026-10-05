@@ -32,11 +32,19 @@ GROUPED = [
 
 
 def expected(reference: ReferenceEngine, q: str, mode: str) -> list[dict[str, Any]]:
-    """Each group's span and the oracle's count of the query with every other group removed."""
+    """Each group's span and the oracle's two counts: the query with every other group removed, and the
+    query with that group removed."""
     ast = parse(q, mode).effective_ast  # type: ignore[arg-type]
     assert ast is not None
     found = split(ast)
-    return [{"span": list(g.span), "total": len(reference.match_ids(found.alone(g)))} for g in found.groups]
+    return [
+        {
+            "span": list(g.span),
+            "total": len(reference.match_ids(found.alone(g))),
+            "total_without": len(reference.match_ids(found.without(g))),
+        }
+        for g in found.groups
+    ]
 
 
 @pytest.mark.parametrize(("q", "mode"), GROUPED)
@@ -51,7 +59,8 @@ def test_each_groups_count_is_the_oracles(
         "limit": ApiConfig.model_fields["max_counted_groups"].default,
         "not_counted": None,
     }
-    assert len(counts) >= 2 and all(c["total"] >= body["total"] for c in counts)
+    assert len(counts) >= 2
+    assert all(min(c["total"], c["total_without"]) >= body["total"] for c in counts)
 
 
 def test_a_groups_span_is_its_code_point_range_in_q(client: TestClient) -> None:
@@ -158,3 +167,26 @@ def test_every_server_group_is_one_builder_groups_on_the_read_golden() -> None:
                 repeats += 1
         fitting, groups = fitting + 1, groups + len(holders)
     assert fitting > 250 and groups > 600 and repeats >= 1  # the golden still holds each case
+
+
+def test_a_count_that_fails_is_reported_and_the_search_is_whole(
+    client: TestClient, logs: Logs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The counts are an extra: when they fail the response is a 200 with everything else as it would be,
+    `not_counted: count_failed`, and one ERROR line with no query text."""
+    q = f"trust AND ({SECRET} OR model*)"
+    whole = ok(client, q)
+
+    def broken(*_a: Any, **_kw: Any) -> list[int]:
+        raise RuntimeError(SECRET)
+
+    monkeypatch.setattr(engine_of(client), "counts", broken)
+    body = ok(client, q)
+    assert body["groups"] == {"counts": [], "groups_total": 2, "limit": 10, "not_counted": "count_failed"}
+    assert {k: v for k, v in body.items() if k != "groups"} == {
+        k: v for k, v in whole.items() if k != "groups"
+    }
+    (failed,) = [line for line in logs() if line["event"] == "group_count_failed"]
+    assert (failed["level"], failed["groups"], failed["error"]) == ("ERROR", 2, "RuntimeError")
+    assert SECRET not in logs.raw.getvalue()  # type: ignore[attr-defined]
+    assert [(line["groups"], line["groups_counted"]) for line in access(logs)] == [(2, 2), (2, 0)]

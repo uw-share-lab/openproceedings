@@ -229,8 +229,8 @@ describe("the builder's group counts come from this /search answer (TASK-176)", 
     };
     const groups: Body["groups"] = {
       counts: [
-        { span: [0, 5], total: 1340 },
-        { span: [10, 14], total: 977 },
+        { span: [0, 5], total: 1340, total_without: 977 },
+        { span: [10, 14], total: 977, total_without: 1340 },
       ],
       groups_total: 2,
       limit: 10,
@@ -246,13 +246,13 @@ describe("the builder's group counts come from this /search answer (TASK-176)", 
     const first = screen.getByRole("group", { name: "Group 1 of 2, any of: trust" });
     const second = screen.getByRole("group", { name: "Group 2 of 2, any of: bias" });
     expect(within(first).getByText(/this group alone/u).textContent).toBe(
-      "1,340 papers match this group alone",
+      "1,340 papers match this group alone ·; 977 match the query without it",
     );
     expect(within(second).getByText(/this group alone/u).textContent).toBe(
-      "977 papers match this group alone",
+      "977 papers match this group alone ·; 1,340 match the query without it",
     );
-    expect(screen.getByText(/match the whole query/u).textContent).toContain(
-      "412 papers match the whole query.",
+    expect(screen.getByRole("status", { name: "Group counts" }).textContent).toBe(
+      "Group counts shown for 2 groups: 412 papers match the whole query.",
     );
   });
 });

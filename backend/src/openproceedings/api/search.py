@@ -141,7 +141,10 @@ def search(
         unclassified_total=unclassified_total(found.excluded.track, found.excluded.status),
         facets=Facets.model_validate(found.facets),
         groups=GroupCounts(
-            counts=[GroupCount(span=span, total=n) for span, n in found.groups.counts],
+            counts=[
+                GroupCount(span=span, total=alone, total_without=without)
+                for span, alone, without in found.groups.counts
+            ],
             groups_total=found.groups.found,
             limit=found.groups.limit,
             not_counted=found.groups.not_counted,

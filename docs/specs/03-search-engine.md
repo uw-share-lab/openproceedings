@@ -260,8 +260,8 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
   synthetic 80k). A first page collects the text query twice: the page, and once without its top-level
   filters for every facet and both exclusion buckets (task-086: counts per (venue, year, track, status) from
   one nested terms aggregation, the rest in Python; memoised per base in `TantivyEngine.faceted`; a concept
-  group's count alone, 04 §SearchResponse `groups`, is one more such collection a group, on a second worker:
-  `TantivyEngine.count`, TASK-176). Two
+  group's two counts, 04 §SearchResponse `groups`, are two more such collections a group, on a second worker,
+  from conjunct queries compiled once and never stored in `compiled`: `TantivyEngine.counts`, TASK-176). Two
   collections are the floor of an exact design (the page needs the effective query's own scores), so the
   second runs on a worker thread, overlapping the first (M3a review gate round 2): `search.run` compiles the
   effective tree in the request's thread (a cold verified clause takes its one verification slot there, and

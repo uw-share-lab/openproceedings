@@ -204,19 +204,25 @@ warnings, the save's index check), the design doc says so; its open questions li
    `backend/tests/contract/test_frontend_builder_golden.py` parses: an unedited rewrite keeps the
    `canonical`, and an edited query means exactly what its chips say). At run time the builder checks the
    server's reading of each query it wrote and says so if it differs.
-   *Group counts (TASK-176, `group-counts.ts`; copy BD-12).* After a search, each group shows how many papers
-   it matches alone ("529 papers match this group alone"), and a line above the groups gives the search's
-   total to compare them with and says what a count is ("67 papers match the whole query. A group's count is
-   the papers that match it with the other groups removed: the query's limits, leave-out terms and default
-   filters still apply."). The numbers are `/search`'s `groups` and `total` as sent (04 §SearchResponse),
-   never computed here; a builder group is given the count whose span holds one of its terms. They are shown
-   only while the draft is the searched query, in the same mode: an edit drops every count at once, since a
-   count is a fact about the query searched (an expansion, a fact about the index, stays). A query that is
-   not an AND of groups shows none; one with more groups than the instance counts says so ("Group counts
-   aren't shown: this query has 14 groups, and this site counts at most 10."). The read-only builder shows
-   the count of each part that fits. The Exclude row has no count: it is applied to every group's. The count
-   is text inside its group (no colour, no live region: it arrives with the results, whose total is already
-   announced).
+   *Group counts (TASK-176, `group-counts.ts`; copy BD-12).* After a search, each group shows its two counts
+   on one line ("529 papers match this group alone · 2,337 match the query without it"), and a line above the
+   groups gives the search's total to compare them with and says how to read them ("67 papers match the whole
+   query. Each group shows how many papers match it with the other groups removed, and how many match the
+   query without it: the group whose removal adds the most papers narrows the search most. The query's
+   limits, leave-out terms and default filters apply to every count."). The numbers are `/search`'s `groups`
+   and `total` as sent (04 §SearchResponse), never computed here; a builder group is given the counts whose
+   span holds one of its terms, and a group written exactly as an earlier counted one says "Same as group
+   N, so it is counted once." (the canonical query holds it once). They are shown only while the draft is the
+   searched query, in the same mode: an edit drops every count at once, since a count is a fact about the
+   query searched (an expansion, a fact about the index, stays). A query that is not an AND of groups shows
+   none; one whose counts the search doesn't have says why (`groups.not_counted`: more groups than the
+   instance counts; the counts failed; they weren't ready in time, each of the last two with "Search again
+   to see them."; a reason this build doesn't know reads as a failure, the set being open). The read-only
+   builder shows the counts of each part that fits. The Exclude row has none: it is applied to every count.
+   The counts are text inside their group (no colour; the `·` between them is hidden from a screen reader,
+   which hears a pause), and a polite status named "Group counts" says when they arrive ("Group counts shown
+   for 3 groups: 67 papers match the whole query.") or why there are none, since they appear without focus
+   moving.
 4. **Filter sidebar.** Venue, year range, track, status. Workshop is **off by default**. Each control shows
    its count and **edits the `track:`/`status:` clauses in `q`**.
 5. **Exclusion banner.** "212 workshop · 4 competition · 88 rejected excluded by default filters", with

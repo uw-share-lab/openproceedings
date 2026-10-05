@@ -4,7 +4,7 @@ title: Per-concept-group match counts for a query
 status: In Progress
 assignee: []
 created_date: '2026-10-05 01:47'
-updated_date: '2026-10-05 02:11'
+updated_date: '2026-10-05 04:22'
 labels:
   - api
   - frontend
@@ -46,8 +46,9 @@ When a Boolean query of several AND-ed concept groups returns few papers, the re
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Design chosen: an additive, always-sent field on GET /search (no parameter, no second endpoint). A group's count is the number of papers the query matches with every other group removed (that group alone under the query's top-level filters, the defaults included, and its NOT clauses). No position verification of its own: a group's tree holds only clauses the request already verified (decision-010's cap, ceiling and charge cover them); at most max_counted_groups (default 10) facet-style collections, memoised in TantivyEngine.faceted, on a second worker. Over the limit: the whole result, counts empty, not_counted too_many_groups.
-Rejected: an opt-in parameter (two shapes of one response, and the UI would always send it); a separate endpoint (a second parse, admission and verified-clause charge, and counts that could come from another index_version than total); the leave-one-out count (the query without this group) as the reported number: more decision-relevant for correlated groups but twice the collections and a second number per row; left as a follow-up, GroupCount can gain it additively.
-Real corpus (index 05a0541717f6, Scholar mode, the 2026-10-04 string with source:NeurIPS/ICLR/ICML and year:2020..2026): total 67; groups 6,343 (LLM), 529 (trust), 9,303 (benchmark).
-Needs a decision record (id to be assigned by the main session): the response-contract addition and its cost rule. Not done here: an e2e/axe case for the builder with counts (ports 3000/8000 were in use), and no learnings entry (INDEX.md is regenerated and would conflict with the parallel TASK-175 branch).
+Design: an additive, always-sent field on GET /search (no parameter, no second endpoint). Each counted group has two counts under the query's top-level filters (defaults included) and NOT clauses: total (the group alone: the query with every other group removed) and total_without (the query with that group removed; owner decision 2026-10-05). No position verification of its own (decision-010's cap, ceiling and charge cover every clause counted). Worst case per request: 2 x max_counted_groups (default 10) facet-style collections memoised in TantivyEngine.faceted, each non-filter conjunct compiled once and nothing stored in the compiled memo, one job on the worker pool, at most 2 s of waiting. The counts never cost the search its answer: a failure or a late worker gives not_counted count_failed / timed_out with the rest of the response whole.
+Rejected: an opt-in parameter (two shapes of one response; the UI would always send it); a separate endpoint (a second parse, admission and verified-clause charge, and counts that could come from another index_version than total).
+Real corpus (index 05a0541717f6, Scholar mode, the 2026-10-04 string with source:NeurIPS/ICLR/ICML and year:2020..2026): total 67; alone 6,343 (LLM), 529 (trust), 9,303 (benchmark); without 139, 2,337, 181.
+Review round 1 (c3c01a74): Must (failure/timeout isolation), Shoulds (compiled-memo cost, property assertions, concurrency test) and Nits (spec sentences, 'same as group N', live status) fixed.
+Needs a decision record (id to be assigned by the main session). Not done: an e2e/axe case for the builder with counts (ports 3000/8000 in use), and no learnings entry (INDEX.md would conflict across parallel branches).
 <!-- SECTION:NOTES:END -->

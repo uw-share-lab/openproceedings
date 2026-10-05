@@ -32,9 +32,13 @@ function astOf(q: string, mode: Mode = "native"): AstNode {
 /**
  * `/search`'s `groups` for a golden query: the server's groups are its top-level AND conjuncts that search
  * text and aren't negated, each at its node's span (`backend/tests/contract/test_group_counts.py` holds the
- * API to that on every golden query), here with the given totals in query order.
+ * API to that on every golden query), here with the given `[alone, without]` totals in query order.
  */
-function counted(q: string, totals: readonly number[], mode: Mode = "native"): GroupCounts {
+function counted(
+  q: string,
+  totals: readonly (readonly [number, number])[],
+  mode: Mode = "native",
+): GroupCounts {
   const ast = astOf(q, mode);
   const onlyFilters = (n: AstNode): boolean =>
     n.kind === "filter" || (n.kind === "or" && n.children.every(onlyFilters));
@@ -43,7 +47,11 @@ function counted(q: string, totals: readonly number[], mode: Mode = "native"): G
   );
   if (groups.length !== totals.length) throw new Error(`${q} has ${groups.length} groups`);
   return {
-    counts: groups.map((n, i) => ({ span: [...spanOf(n)], total: totals[i] ?? 0 })),
+    counts: groups.map((n, i) => ({
+      span: [...spanOf(n)],
+      total: totals[i]?.[0] ?? 0,
+      total_without: totals[i]?.[1] ?? 0,
+    })),
     groups_total: groups.length,
     limit: 10,
     not_counted: null,
@@ -75,7 +83,7 @@ function show(text: string, searched: SearchedGroups | null, mode: Mode = "nativ
 }
 
 const groups = () => screen.getAllByRole("group", { name: /^Group \d+/u });
-const NOTE = /the whole query\. A group's count is the papers that match it with the other groups removed/u;
+const NOTE = /the whole query\. Each group shows how many papers match it with the other groups removed/u;
 
 describe("groupTotals", () => {
   const group = (id: number, ...terms: number[]): BuilderGroup => ({
@@ -89,20 +97,38 @@ describe("groupTotals", () => {
     [4, [59, 68]],
   ]);
   const counts: GroupCounts["counts"] = [
-    { span: [0, 27], total: 6343 },
-    { span: [32, 55], total: 529 },
+    { span: [0, 27], total: 6343, total_without: 139 },
+    { span: [32, 55], total: 529, total_without: 2337 },
   ];
 
   it("gives a group the count of the span that holds its terms", () => {
     expect([...groupTotals(counts, [group(10, 1, 2), group(11, 3)], spans)]).toEqual([
-      [10, 6343],
-      [11, 529],
+      [10, { kind: "counted", total: 6343, totalWithout: 139 }],
+      [11, { kind: "counted", total: 529, totalWithout: 2337 }],
     ]);
   });
 
   it("gives a group of one repeated term the count at the first one's span (the canonical form)", () => {
-    const repeated: GroupCounts["counts"] = [{ span: [1, 19], total: 40 }];
-    expect([...groupTotals(repeated, [group(10, 1, 2)], spans)]).toEqual([[10, 40]]);
+    const repeated: GroupCounts["counts"] = [{ span: [1, 19], total: 40, total_without: 90 }];
+    expect([...groupTotals(repeated, [group(10, 1, 2)], spans)]).toEqual([
+      [10, { kind: "counted", total: 40, totalWithout: 90 }],
+    ]);
+  });
+
+  it("says a group written exactly as an earlier counted one is the same group, and nothing for any other", () => {
+    const named = (id: number, termId: number, text: string): BuilderGroup => ({
+      id,
+      terms: [{ id: termId, text, scope: "any", phrased: false }],
+    });
+    const shown = groupTotals(
+      counts,
+      [named(10, 1, "LLM"), named(11, 4, "llm"), named(12, 99, "llm"), named(13, 4, "other")],
+      spans,
+    );
+    expect([...shown]).toEqual([
+      [10, { kind: "counted", total: 6343, totalWithout: 139 }],
+      [11, { kind: "same", as: 1 }], // in the query (it has a place), not counted, the same terms
+    ]);
   });
 
   it("gives none to a group the server didn't count, or one with no place in the query", () => {
@@ -115,7 +141,11 @@ describe("groupTotals", () => {
       q: "a b",
       mode: "native",
       total: 1,
-      groups: counted(EXAMPLE, [1, 2, 3]),
+      groups: counted(EXAMPLE, [
+        [1, 9],
+        [2, 9],
+        [3, 9],
+      ]),
     };
     expect(countsFor(searched, "a b", "native")).toBe(searched);
     expect(countsFor(searched, "a b ", "native")).toBeNull();
@@ -129,7 +159,11 @@ describe("each group's count after a search (TASK-176)", () => {
     q: EXAMPLE,
     mode: "native",
     total: 67,
-    groups: counted(EXAMPLE, [6343, 529, 1]),
+    groups: counted(EXAMPLE, [
+      [6343, 139],
+      [529, 2337],
+      [1, 1],
+    ]),
   };
 
   it("shows each group's count as the API sent it, beside the search's total, as plain text", async () => {
@@ -137,13 +171,26 @@ describe("each group's count after a search (TASK-176)", () => {
     await pass(10);
     const [g1, g2, g3] = groups();
     if (g1 === undefined || g2 === undefined || g3 === undefined) throw new Error("three groups");
-    expect(within(g1).getByText(/this group alone/u).textContent).toBe("6,343 papers match this group alone");
-    expect(within(g2).getByText(/this group alone/u).textContent).toBe("529 papers match this group alone");
-    expect(within(g3).getByText(/this group alone/u).textContent).toBe("1 paper matches this group alone");
+    // (`·` is hidden from a screen reader, which hears the `;` instead)
+    expect(within(g1).getByText(/this group alone/u).textContent).toBe(
+      "6,343 papers match this group alone ·; 139 match the query without it",
+    );
+    expect(within(g2).getByText(/this group alone/u).textContent).toBe(
+      "529 papers match this group alone ·; 2,337 match the query without it",
+    );
+    expect(within(g3).getByText(/this group alone/u).textContent).toBe(
+      "1 paper matches this group alone ·; 1 matches the query without it",
+    );
+    expect(within(g2).getByText("·").getAttribute("aria-hidden")).toBe("true");
     const note = screen.getByText(NOTE);
     expect(note.textContent).toBe(
-      "67 papers match the whole query. A group's count is the papers that match it with the other groups " +
-        "removed: the query's limits, leave-out terms and default filters still apply.",
+      "67 papers match the whole query. Each group shows how many papers match it with the other groups " +
+        "removed, and how many match the query without it: the group whose removal adds the most papers " +
+        "narrows the search most. The query's limits, leave-out terms and default filters apply to every count.",
+    );
+    // the counts arrive without focus moving, so a polite status says so
+    expect(screen.getByRole("status", { name: "Group counts" }).textContent).toBe(
+      "Group counts shown for 3 groups: 67 papers match the whole query.",
     );
     // the count is content of its group, so a screen reader meets it there; the group keeps its name
     expect(g2.getAttribute("aria-label")).toBe("Group 2 of 3, any of: trustworth star, trust");
@@ -155,6 +202,7 @@ describe("each group's count after a search (TASK-176)", () => {
     expect(groups()).toHaveLength(3);
     expect(screen.queryByText(/this group alone/u)).toBeNull();
     expect(screen.queryByText(NOTE)).toBeNull();
+    expect(screen.getByRole("status", { name: "Group counts" }).textContent).toBe("");
   });
 
   it("shows none for a draft that is not the searched query: its text, or its mode", async () => {
@@ -218,9 +266,30 @@ describe("each group's count after a search (TASK-176)", () => {
     show(EXAMPLE, over);
     await pass(10);
     expect(screen.queryByText(/this group alone/u)).toBeNull();
-    expect(screen.getByText(/Group counts aren't shown/u).textContent).toBe(
+    expect(screen.getAllByText(/Group counts aren't shown/u).map((e) => e.textContent)).toEqual([
       "Group counts aren't shown: this query has 3 groups, and this site counts at most 2.",
-    );
+      "Group counts aren't shown: this query has 3 groups, and this site counts at most 2.", // the status
+    ]);
+  });
+
+  it.each([
+    ["count_failed", "Group counts couldn't be computed for this search. Search again to see them."],
+    ["timed_out", "Group counts weren't ready in time for this search. Search again to see them."],
+    ["a_reason_added_later", "Group counts couldn't be computed for this search. Search again to see them."],
+  ])("says so when the search has no counts because of %s", async (reason, text) => {
+    const none: SearchedGroups = {
+      q: EXAMPLE,
+      mode: "native",
+      total: 67,
+      // the reason is an open set: one this build doesn't know is worded as a failure
+      groups: { counts: [], groups_total: 3, limit: 10, not_counted: reason as GroupCounts["not_counted"] },
+    };
+    show(EXAMPLE, none);
+    await pass(10);
+    expect(groups()).toHaveLength(3);
+    expect(screen.queryByText(/this group alone/u)).toBeNull();
+    expect(screen.getByRole("status", { name: "Group counts" }).textContent).toBe(text);
+    expect(screen.getAllByText(text)).toHaveLength(2);
   });
 
   it("shows the count of each part that fits under the read-only notice", async () => {
@@ -228,7 +297,10 @@ describe("each group's count after a search (TASK-176)", () => {
       q: PARTLY,
       mode: "native",
       total: 3,
-      groups: counted(PARTLY, [40, 12]),
+      groups: counted(PARTLY, [
+        [40, 7],
+        [12, 9],
+      ]),
     };
     show(PARTLY, searched);
     await pass(10);
@@ -236,7 +308,7 @@ describe("each group's count after a search (TASK-176)", () => {
     const [g1, ...rest] = within(parts).getAllByRole("group");
     expect(rest).toHaveLength(0);
     expect(within(g1 as HTMLElement).getByText(/this group alone/u).textContent).toBe(
-      "40 papers match this group alone",
+      "40 papers match this group alone ·; 7 match the query without it",
     );
     expect(within(parts).getByText(NOTE).textContent).toContain("3 papers match the whole query.");
     expect(parts.textContent).not.toContain("12 papers");

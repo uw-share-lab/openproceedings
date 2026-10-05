@@ -21,11 +21,13 @@ a record's save or replay) doesn't pay for every facet combination its exclusion
 it aggregates only the two default fields (`TantivyEngine.facets`' `over`; TASK-166), the same counts.
 
 When asked (`groups`, the API's `max_counted_groups`; TASK-176), a query that is an AND of two or more
-concept groups (`query/groups.py`) also gets each group's count alone: the query with every other group
-removed, counted by `TantivyEngine.count` on a second worker, beside the facets. A group's tree holds only
-clauses of the effective tree, compiled first, so its worker never verifies either; the counts read nothing
-the page, `total`, the facets or `excluded` are computed from, and change none of them
-(`tests/unit/test_group_counts.py`).
+concept groups (`query/groups.py`) also gets two counts a group: the group alone (the query with every other
+group removed) and the query without it (leave-one-out), counted by `TantivyEngine.counts` on a second worker,
+beside the facets. Those trees hold only clauses of the effective tree, compiled first, so their worker never
+verifies either; the counts read nothing the page, `total`, the facets or `excluded` are computed from, and
+change none of them. They are an extra, so they can never cost the search its answer: a worker that fails,
+or isn't done `GROUP_COUNT_WAIT_SECONDS` after everything else is, leaves the search whole with no counts and
+the reason (`count_failed`, `timed_out`) (`tests/unit/test_group_counts.py`).
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ import os
 import threading
 from collections.abc import Callable, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as WaitTimeout
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Literal
@@ -53,7 +56,13 @@ from openproceedings.query.parser import ParseResult
 
 type Spans = Mapping[TextField, list[tuple[int, int]]]
 # why a search asked for its groups' counts has none (spec 04 §SearchResponse, `groups.not_counted`)
-NotCounted = Literal["fewer_than_two_groups", "too_many_groups"]
+NotCounted = Literal["fewer_than_two_groups", "too_many_groups", "count_failed", "timed_out"]
+# how long a finished search waits for its counting worker before answering without the counts: the page,
+# the facets and the exclusion accounting are done by then, so this is the most the counts can add to a
+# response (they take milliseconds; a worker this late is queued behind others or stuck)
+GROUP_COUNT_WAIT_SECONDS = 2.0
+# one group's two counts: the query with every other group removed, and the query with this group removed
+type Pair = tuple[int, int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,9 +92,11 @@ class Hit:
 
 @dataclass(frozen=True, slots=True)
 class GroupCounts:
-    """Each concept group's count alone (`query/groups.py`): the query with every other group removed."""
+    """Each concept group's two counts (`query/groups.py`): the group alone (the query with every other group
+    removed) and the query without it."""
 
-    counts: tuple[tuple[Span, int], ...]  # (the group's span in `q`, its count), in query order
+    # (the group's span in `q`, its count alone, the query's count without it), in query order
+    counts: tuple[tuple[Span, int, int], ...]
     found: int  # how many groups the query has
     limit: int  # the most groups this search would count
     not_counted: NotCounted | None  # why `counts` is empty; None exactly when the groups were counted
@@ -117,10 +128,12 @@ def run(
     facets: bool = False,
     highlight: bool = False,
     groups: int | None = None,
+    groups_wait: float = GROUP_COUNT_WAIT_SECONDS,
 ) -> Search:
     """One page of `parsed`'s search on `engine`, with its total, exclusion accounting and expansions (and,
-    when asked, the disjunctive facets, each hit's code-point highlight spans, and each concept group's count
-    alone when the query has from two to `groups` of them). `parsed` must have
+    when asked, the disjunctive facets, each hit's code-point highlight spans, and each concept group's counts
+    when the query has from two to `groups` of them, waited for at most `groups_wait` seconds once the rest
+    is done). `parsed` must have
     parsed: a query with errors never reaches an engine (spec 03 §Error handling)."""
     ast = _runnable(engine, parsed)
     expansions = expanded(engine, ast)
@@ -128,7 +141,7 @@ def run(
     faceting: Future[dict[str, dict[str, int]]] | None = None
     found = None if groups is None else split(ast)
     countable = found is not None and groups is not None and 2 <= len(found.groups) <= groups
-    counting: Future[tuple[int, ...]] | None = None
+    counting: Future[tuple[Pair, ...]] | None = None
     if facets or countable:
         engine.check_page(sort, offset, limit)  # a bad argument is refused before any work, as before
         # compiled first, here: a cold verified clause takes its slot in this thread, and the worker's facet
@@ -174,38 +187,59 @@ def run(
     # with facets, the combos the worker just collected; without, only the default fields' (TASK-166)
     over = COMBO if facets else ORDER
     gone = excluded(engine, parsed, total, facets=partial(engine.facets, scope=scope, over=over))
-    return Search(total, hits, gone, expansions, counted, _grouped(engine, found, groups, counting, scope))
+    return Search(
+        total, hits, gone, expansions, counted, _grouped(engine, found, groups, counting, scope, groups_wait)
+    )
 
 
-def _alone(engine: TantivyEngine, found: Groups, scope: Scope) -> tuple[int, ...]:
-    """Each group's count alone, in query order (`TantivyEngine.count`: one collection a group, memoised)."""
-    return tuple(engine.count(found.alone(g), scope=scope) for g in found.groups)
+def _alone(engine: TantivyEngine, found: Groups, scope: Scope) -> tuple[Pair, ...]:
+    """Each group's two counts, in query order: alone, and the query without it (`TantivyEngine.counts`: at
+    most two collections a group, memoised; every conjunct compiled at most once for all of them)."""
+    n = len(found.groups)
+    totals = engine.counts([*map(found.alone, found.groups), *map(found.without, found.groups)], scope=scope)
+    return tuple(zip(totals[:n], totals[n:], strict=True))
 
 
 def _grouped(
     engine: TantivyEngine,
     found: Groups | None,
     limit: int | None,
-    counting: Future[tuple[int, ...]] | None,
+    counting: Future[tuple[Pair, ...]] | None,
     scope: Scope,
+    wait: float,
 ) -> GroupCounts | None:
     """`run`'s `groups`: the worker's counts (or the caller's own, when no worker took them), or why there are
-    none. None when they weren't asked for."""
+    none. None when they weren't asked for. Never raises for a count: the search is already computed, and a
+    count that fails or is late is reported in `not_counted`, not as the search's failure."""
     if found is None or limit is None:
         return None
     n = len(found.groups)
     if n < 2 or n > limit:
         return GroupCounts((), n, limit, "fewer_than_two_groups" if n < 2 else "too_many_groups")
-    if counting is None:  # no worker (the pool is shutting down): counted here instead
-        totals = _alone(engine, found, scope)
-    else:
-        try:
-            totals = counting.result()  # the worker's error, re-raised as it was raised
-        except WouldVerify:
-            # as for the facets: a clause the request should have held (a bug, never the client's)
-            log.warning("group_worker_recounted", extra={"reason": "would_verify"})
+    try:
+        if counting is None:  # no worker (the pool is shutting down): counted here instead
             totals = _alone(engine, found, scope)
-    return GroupCounts(tuple((g.span, t) for g, t in zip(found.groups, totals, strict=True)), n, limit, None)
+        else:
+            try:
+                totals = counting.result(timeout=wait)
+            except WouldVerify:
+                # as for the facets: a clause the request should have held (a bug, never the client's)
+                log.warning("group_worker_recounted", extra={"reason": "would_verify"})
+                totals = _alone(engine, found, scope)
+    except WaitTimeout:
+        if counting is not None:
+            counting.cancel()  # queued: never runs; running: it finishes its bounded work, memoised
+        log.warning("group_count_timed_out", extra={"groups": n, "wait_ms": round(wait * 1000)})
+        return GroupCounts((), n, limit, "timed_out")
+    except Exception as e:  # any failure of the extra: logged by type, never the message (it may quote input)
+        log.error("group_count_failed", extra={"groups": n, "error": type(e).__name__})
+        return GroupCounts((), n, limit, "count_failed")
+    return GroupCounts(
+        tuple((g.span, alone, without) for g, (alone, without) in zip(found.groups, totals, strict=True)),
+        n,
+        limit,
+        None,
+    )
 
 
 def highlight(engine: TantivyEngine, parsed: ParseResult, shown: Mapping[str, Any]) -> Spans | None:

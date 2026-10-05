@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import threading
+import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -23,7 +24,8 @@ from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.engine.tantivy_engine import Scope, TantivyEngine
 from openproceedings.query.ast import And, Node, Not
 from openproceedings.query.canonical import canonicalize, render
-from openproceedings.query.groups import split
+from openproceedings.query.defaults import apply_defaults
+from openproceedings.query.groups import Groups, split
 from openproceedings.query.parser import parse
 
 from tests.fixtures.corpus.synthetic_5k import records, vocab
@@ -69,6 +71,13 @@ def spans(q: str, mode: str = "native") -> tuple[list[str], list[str]]:
         # a negated conjunct is kept for every group (the builder's leave-out terms), never a group
         ("trust model NOT survey", "native", ["trust", "model"], ["NOT survey", "", ""]),
         ("NOT NOT (trust OR model) calibration", "native", ["(trust OR model)", "calibration"], ["", ""]),
+        # judged on the canonical form, which has no De Morgan rule: this NOT stays a NOT, so it is kept
+        (
+            "NOT (NOT trust OR NOT model) calibration",
+            "native",
+            ["calibration"],
+            ["NOT (NOT trust OR NOT model)", "", ""],
+        ),
         # a parenthesised AND flattens into groups; an OR of filters searches no text, so it is kept
         (
             "(trust model) (venue:ICLR OR track:workshop)",
@@ -115,11 +124,21 @@ def test_a_group_alone_is_the_query_without_the_other_groups() -> None:
         "(model AND NOT survey AND year:2020..2022 AND track:(datasets_benchmarks OR main OR position) "
         "AND status:accepted)",
     ]
+    assert [render(canonicalize(found.without(g))) for g in found.groups] == [
+        "(model AND NOT survey AND year:2020..2022 AND track:(datasets_benchmarks OR main OR position) "
+        "AND status:accepted)",
+        "((trust OR reliance) AND NOT survey AND year:2020..2022 AND "
+        "track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+    ]
+    three = split(parse("trust model calibration track:workshop status:rejected").effective_ast)  # type: ignore[arg-type]
+    assert render(canonicalize(three.without(three.groups[1]))) == (
+        "(trust AND calibration AND track:workshop AND status:rejected)"
+    )
     lone = split(parse("trust track:workshop status:rejected").effective_ast)  # type: ignore[arg-type]
     assert not split(lone.groups[0]).kept and split(lone.groups[0]).alone(lone.groups[0]) == lone.groups[0]
 
 
-# --- TantivyEngine.count against the oracle ------------------------------------------------------------------
+# --- TantivyEngine.count and counts against the oracle ------------------------------------------------------------------
 @st.composite
 def grouped_asts(draw: st.DrawFn) -> Node:
     """An AND of several trees (each a group, a leave-out, or a filter clause) and extra top-level filters."""
@@ -139,19 +158,79 @@ def outcome(f: Any, *args: Any) -> Any:
         return ("refused", e.code)
 
 
-# each example evaluates up to five trees with the oracle over the 5k corpus: no per-example deadline
+def expected_pairs(reference: ReferenceEngine, found: Groups) -> tuple[tuple[tuple[int, int], int, int], ...]:
+    """Each group's span with the oracle's two counts: the group alone, and the query without it."""
+    return tuple(
+        (g.span, len(reference.match_ids(found.alone(g))), len(reference.match_ids(found.without(g))))
+        for g in found.groups
+    )
+
+
+# each example evaluates up to nine trees with the oracle over the 5k corpus: no per-example deadline
 @settings(max_examples=150, deadline=None)
 @given(tree=grouped_asts())
-def test_each_groups_count_is_the_oracles(engines: Engines, tree: Node) -> None:
+def test_each_groups_counts_are_the_oracles(engines: Engines, tree: Node) -> None:
     reference, tantivy, _other = engines
     tantivy.faceted.clear()  # a fresh collection as often as a memoised one
     ast = canonicalize(tree)
     found = split(ast)
-    for alone in (ast, *map(found.alone, found.groups[:4])):
-        q = render(canonicalize(alone))
-        expected = outcome(lambda n: len(reference.match_ids(n)), alone)
-        assert outcome(tantivy.count, alone) == expected, q
-        assert outcome(lambda n: len(tantivy.match_ids(n)), alone) == expected, q
+    whole = outcome(lambda n: len(reference.match_ids(n)), ast)
+    trees = [ast, *map(found.alone, found.groups[:4])]
+    if len(found.groups) >= 2:
+        trees += map(found.without, found.groups[:4])
+    for counted in trees:
+        q = render(canonicalize(counted))
+        expected = outcome(lambda n: len(reference.match_ids(n)), counted)
+        assert outcome(tantivy.count, counted) == expected, q
+        assert outcome(lambda n: len(tantivy.match_ids(n)), counted) == expected, q
+        if isinstance(expected, int) and isinstance(whole, int):
+            assert expected >= whole, (
+                q
+            )  # a group alone, and the query without a group, hold the query's matches
+    # all of them in one call (shared conjuncts, as `search.run` asks): the same counts
+    assert outcome(lambda ts: tantivy.counts(ts), trees) == outcome(
+        lambda ts: [len(reference.match_ids(t)) for t in ts], trees
+    )
+
+
+class Parsed:
+    """What `search.run` reads of a ParseResult, for a generated tree (no string to parse)."""
+
+    def __init__(self, tree: Node, tokenizer: str) -> None:
+        done = apply_defaults(tree, 0)
+        self.effective_ast, self.identification_ast = done.effective, done.identification
+        self.defaults, self.tokenizer_version = done.defaults, tokenizer
+
+
+# each example runs the search twice and the oracle over the 5k corpus: no per-example deadline
+@settings(max_examples=100, deadline=None)
+@given(tree=grouped_asts())
+def test_a_generated_search_with_groups_is_the_search_without_them(engines: Engines, tree: Node) -> None:
+    """On generated trees, both engines: asking for the groups changes no other field of the search, and the
+    counts are the oracle's, none below the oracle's own count of the query."""
+    reference, tantivy, other = engines
+    parsed: Any = Parsed(tree, tantivy.tokenizer_version)
+    tantivy.faceted.clear()
+
+    def searched(engine: TantivyEngine, **kw: Any) -> Any:
+        try:
+            return search.run(engine, parsed, facets=True, **kw)
+        except EngineInputError as e:
+            return ("refused", e.code)
+
+    got, plain = searched(tantivy, groups=10), searched(other)
+    if not isinstance(got, search.Search):
+        assert got == plain
+        return
+    assert dataclasses.replace(got, groups=None) == plain
+    found = split(parsed.effective_ast)
+    assert got.total == len(reference.match_ids(parsed.effective_ast))
+    assert got.groups is not None and got.groups.found == len(found.groups)
+    if 2 <= len(found.groups) <= 10:
+        assert got.groups.counts == expected_pairs(reference, found)
+        assert all(min(alone, without) >= got.total for _span, alone, without in got.groups.counts)
+    else:
+        assert got.groups.counts == () and got.groups.not_counted is not None
 
 
 def test_a_count_is_the_same_from_the_memo_and_under_a_read_only_scope(engines: Engines) -> None:
@@ -195,21 +274,21 @@ def test_a_search_with_groups_is_the_search_without_them_plus_the_oracles_counts
             assert got.groups == search.GroupCounts((), len(found.groups), 10, "fewer_than_two_groups")
             continue
         assert got.groups.not_counted is None
-        assert got.groups.counts == tuple(
-            (g.span, len(reference.match_ids(found.alone(g)))) for g in found.groups
-        )
-        assert all(n >= got.total for _span, n in got.groups.counts)
+        assert got.groups.counts == expected_pairs(reference, found)
+        assert all(min(alone, without) >= got.total for _span, alone, without in got.groups.counts)
 
 
 def test_some_group_narrows_a_real_review_string(engines: Engines) -> None:
-    """The counts say something: on the fixture, the groups of a Trust-Evals string differ, and each is above
-    the query's total."""
+    """The counts say something: on the fixture, the groups of a Trust-Evals string differ, each is above the
+    query's total, and removing one of them lets more papers in than removing another."""
     _reference, tantivy, _other = engines
     name = next(n for n in STRINGS if len(split(parse(STRINGS[n], "scholar").effective_ast).groups) >= 3)  # type: ignore[arg-type]
     got = search.run(tantivy, parse(STRINGS[name], "scholar"), groups=10)
     assert got.groups is not None
-    totals = [n for _span, n in got.groups.counts]
-    assert len(set(totals)) > 1 and min(totals) > got.total
+    alone = [a for _span, a, _w in got.groups.counts]
+    without = [w for _span, _a, w in got.groups.counts]
+    assert len(set(alone)) > 1 and min(alone) > got.total
+    assert len(set(without)) > 1 and max(without) > got.total
 
 
 def test_a_query_over_the_limit_gets_its_search_and_no_counts(
@@ -219,10 +298,10 @@ def test_a_query_over_the_limit_gets_its_search_and_no_counts(
     parsed = parse("trust model calibration")
     plain = search.run(other, parsed, facets=True)
 
-    def never(*_a: Any, **_kw: Any) -> int:
+    def never(*_a: Any, **_kw: Any) -> list[int]:
         raise AssertionError("a query over the limit counts no group")
 
-    monkeypatch.setattr(tantivy, "count", never)
+    monkeypatch.setattr(tantivy, "counts", never)
     got = search.run(tantivy, parsed, facets=True, groups=2)
     assert got.groups == search.GroupCounts((), 3, 2, "too_many_groups")
     assert dataclasses.replace(got, groups=None) == plain
@@ -240,9 +319,65 @@ def test_group_counts_need_no_facets(engines: Engines) -> None:
     tantivy.verified.clear(), tantivy.compiled.clear(), tantivy.faceted.clear()
     got = search.run(tantivy, parsed, groups=10)
     assert got.facets is None and got.groups is not None
-    assert [n for _span, n in got.groups.counts] == [
-        len(reference.match_ids(found.alone(g))) for g in found.groups
-    ]
+    assert got.groups.counts == expected_pairs(reference, found)
+
+
+# --- the counts are an extra: they never cost the search its answer -------------------------------------------
+def test_a_count_that_fails_leaves_the_search_whole(
+    engines: Engines, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Any error of the counting worker (here a RuntimeError whose message quotes a secret): the search is the
+    plain one, `groups` says `count_failed`, and one ERROR line carries the type and a number, not the message."""
+    _reference, tantivy, other = engines
+    parsed = parse("trust model calibration")
+    plain = search.run(other, parsed, facets=True, highlight=True)
+
+    def broken(*_a: Any, **_kw: Any) -> list[int]:
+        raise RuntimeError("zzsecretreviewdesign")
+
+    monkeypatch.setattr(tantivy, "counts", broken)
+    for pool_down in (False, True):  # the worker's failure, and the caller's own when no worker took the job
+        if pool_down:
+            closed = ThreadPoolExecutor(1)
+            closed.shutdown()
+            monkeypatch.setattr(search, "_POOL", closed)
+        caplog.clear()
+        got = search.run(tantivy, parsed, facets=True, highlight=True, groups=10)
+        assert got.groups == search.GroupCounts((), 3, 10, "count_failed")
+        assert dataclasses.replace(got, groups=None) == plain
+        (line,) = [r for r in caplog.records if r.message == "group_count_failed"]
+        assert (line.levelname, line.groups, line.error) == ("ERROR", 3, "RuntimeError")  # type: ignore[attr-defined]
+        assert "zzsecretreviewdesign" not in caplog.text
+
+
+def test_a_count_that_is_late_leaves_the_search_whole(
+    engines: Engines, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A counting worker still running `groups_wait` after the rest is done: the search answers without the
+    counts (`timed_out`), having waited no longer than that."""
+    _reference, tantivy, other = engines
+    parsed = parse("trust model calibration")
+    plain = search.run(other, parsed, facets=True, highlight=True)
+    release = threading.Event()
+    counts = tantivy.counts
+
+    def held(*a: Any, **kw: Any) -> list[int]:
+        release.wait(30)
+        return counts(*a, **kw)
+
+    monkeypatch.setattr(tantivy, "counts", held)
+    try:
+        started = time.monotonic()
+        got = search.run(tantivy, parsed, facets=True, highlight=True, groups=10, groups_wait=0.05)
+        waited = time.monotonic() - started
+    finally:
+        release.set()
+    assert got.groups == search.GroupCounts((), 3, 10, "timed_out")
+    assert dataclasses.replace(got, groups=None) == plain
+    assert waited < 10  # bounded by the wait, not by the worker (held for 30 s)
+    (line,) = [r for r in caplog.records if r.message == "group_count_timed_out"]
+    assert (line.levelname, line.groups, line.wait_ms) == ("WARNING", 3, 50)  # type: ignore[attr-defined]
+    search.shutdown()  # the released worker finishes before the next test reads the engine's memos
 
 
 def test_counting_groups_verifies_no_clause_again(tmp_path: Any) -> None:
@@ -264,6 +399,43 @@ def test_counting_groups_verifies_no_clause_again(tmp_path: Any) -> None:
     assert not [name for name in entered if name.startswith("op-facets")]
 
 
+def test_counting_groups_stores_nothing_in_the_compiled_memo(tmp_path: Any) -> None:
+    """Ten one-word groups and a kept verified clause (`NOT (model NEAR/10 model*)`): the twenty trees counted
+    are never stored in `compiled` (each would hold the kept clause's ids against the shared budget), and the
+    kept clause's id set is built once more for all of them, not once a tree."""
+    root = tmp_path / "a"
+    plain_engine = tantivy_of(RECORDS, root)
+    (built,) = (p for p in (root / "indexes").iterdir() if p.is_dir() and not p.is_symlink())
+    engine = TantivyEngine(built)
+    q = "trust model data learning method results training network approach performance NOT (model NEAR/10 model*)"
+    parsed = parse(q)
+
+    def measured(e: TantivyEngine, **kw: Any) -> tuple[search.Search, int, set[str], int]:
+        builds = 0
+        id_set = e.id_set
+
+        def counted(ids: list[str]) -> Any:
+            nonlocal builds
+            builds += 1
+            return id_set(ids)
+
+        e.id_set = counted  # type: ignore[method-assign]
+        got = search.run(e, parsed, facets=True, **kw)
+        search.shutdown()  # every worker done: the memos are final
+        return got, builds, set(e.compiled), sum(e.charges["compiled"])
+
+    plain, plain_builds, plain_keys, plain_units = measured(plain_engine)
+    got, builds, keys, units = measured(engine, groups=10)
+    assert got.groups is not None and len(got.groups.counts) == 10
+    assert dataclasses.replace(got, groups=None) == plain
+    assert (keys, units) == (
+        plain_keys,
+        plain_units,
+    )  # not one entry, not one unit, more than the plain search
+    assert builds - plain_builds <= 2  # the kept clause, once a field, whatever the number of groups
+    assert len(engine.faceted) - len(plain_engine.faceted) <= 20  # two memoised collections a group
+
+
 def test_a_counting_worker_that_would_verify_is_recounted_in_the_caller(
     engines: Engines, tmp_path: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -275,19 +447,17 @@ def test_a_counting_worker_that_would_verify_is_recounted_in_the_caller(
     assert parsed.effective_ast is not None
     found = split(parsed.effective_ast)
     monkeypatch.setattr(Scope, "reader", lambda self: Scope({}, may_verify=False))  # the bug: an empty view
-    count = engine.count
+    counts = engine.counts
 
     def cold_in_the_worker(*a: Any, **kw: Any) -> Any:
         if threading.current_thread().name.startswith("op-facets"):
             engine.verified.clear(), engine.compiled.clear(), engine.faceted.clear()
-        return count(*a, **kw)
+        return counts(*a, **kw)
 
-    monkeypatch.setattr(engine, "count", cold_in_the_worker)
+    monkeypatch.setattr(engine, "counts", cold_in_the_worker)
     got = search.run(engine, parsed, groups=10)
     assert got.groups is not None
-    assert [n for _span, n in got.groups.counts] == [
-        len(reference.match_ids(found.alone(g))) for g in found.groups
-    ]
+    assert got.groups.counts == expected_pairs(reference, found)
     assert [r.message for r in caplog.records if r.message == "group_worker_recounted"] == [
         "group_worker_recounted"
     ]
@@ -314,10 +484,55 @@ def test_the_callers_error_comes_before_the_counting_workers(
     def broken(*_a: Any, **_kw: Any) -> Any:
         raise RuntimeError("the page failed")
 
-    def also_broken(*_a: Any, **_kw: Any) -> int:
+    def also_broken(*_a: Any, **_kw: Any) -> list[int]:
         raise ValueError("the count failed")
 
     monkeypatch.setattr(tantivy, "page", broken)
-    monkeypatch.setattr(tantivy, "count", also_broken)
+    monkeypatch.setattr(tantivy, "counts", also_broken)
     with pytest.raises(RuntimeError, match="the page failed"):
         search.run(tantivy, parse("trust model"), groups=10)
+
+
+# --- concurrency: searches with groups from several threads while the memos are cleared -------------------------
+def test_concurrent_searches_with_groups_give_the_oracles_counts(engines: Engines) -> None:
+    """Eight threads search queries with groups over and over while another clears `faceted` and `compiled`
+    under them: every answer has the oracle's counts and the plain search's total (task-080's rules hold for
+    the counting worker too: a cleared memo only costs a recomputation)."""
+    reference, tantivy, other = engines
+    cases = []
+    for q in (
+        "(trust OR reliance) AND calibrat* AND model*",
+        "trust model NOT survey year:2019..2024",
+        "(agents NEAR/3 reliance) AND (trust OR calibrat*)",
+        '"language model" benchmark* evaluation',
+    ):
+        parsed = parse(q)
+        assert parsed.effective_ast is not None
+        want = expected_pairs(reference, split(parsed.effective_ast))
+        cases.append((parsed, want, search.run(other, parsed, facets=True).total))
+    stop = threading.Event()
+
+    def clear() -> None:
+        while not stop.is_set():
+            tantivy.faceted.clear()
+            tantivy.compiled.clear()
+            time.sleep(0.001)
+
+    def searching(worker: int) -> list[str]:
+        wrong = []
+        for round_ in range(12):
+            parsed, want, total = cases[(worker + round_) % len(cases)]
+            got = search.run(tantivy, parsed, facets=True, groups=10, groups_wait=60)
+            if got.groups is None or got.groups.counts != want or got.total != total:
+                wrong.append(f"worker {worker} round {round_}: {got.groups}")
+        return wrong
+
+    clearer = threading.Thread(target=clear)
+    clearer.start()
+    try:
+        with ThreadPoolExecutor(8) as pool:
+            wrong = [w for found in pool.map(searching, range(8)) for w in found]
+    finally:
+        stop.set()
+        clearer.join()
+    assert wrong == []

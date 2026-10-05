@@ -504,9 +504,14 @@ export interface components {
             span: components["schemas"]["Span"];
             /**
              * Total
-             * @description How many papers the query matches with every other group removed: never below the search's `total`.
+             * @description This group alone: how many papers the query matches with every other group removed. Never below the search's `total`.
              */
             total: number;
+            /**
+             * Total Without
+             * @description The query without this group: how many papers it matches with this group removed and every other group kept. Never below the search's `total`; the difference is what this group removes.
+             */
+            total_without: number;
         };
         /** GroupCounts */
         GroupCounts: {
@@ -527,9 +532,9 @@ export interface components {
             limit: number;
             /**
              * Not Counted
-             * @description Why `counts` is empty, null when it isn't: `fewer_than_two_groups` (the query is not an AND of groups), `too_many_groups` (`groups_total` is over `limit`; the search itself is complete).
+             * @description Why `counts` is empty, null when it isn't: `fewer_than_two_groups` (the query is not an AND of groups), `too_many_groups` (`groups_total` is over `limit`), `count_failed` or `timed_out` (the counts could not be computed, or not in time; search again). The search itself is complete in every case.
              */
-            not_counted: ("fewer_than_two_groups" | "too_many_groups") | null;
+            not_counted: ("fewer_than_two_groups" | "too_many_groups" | "count_failed" | "timed_out") | null;
         };
         /** Health */
         Health: {
@@ -1214,7 +1219,7 @@ export interface components {
         SearchResponse: {
             excluded: components["schemas"]["Excluded"];
             facets: components["schemas"]["Facets"];
-            /** @description TASK-176 (additive): for a query that is an AND of concept groups, how many papers each group matches alone, so a reviewer can see which group narrows the search. A group is a top-level AND conjunct that searches text and is not negated; a group's count is the number of papers the query matches with every other group removed, so the query's filters (the default track and status filters included) and its `NOT` clauses still apply and no count is below `total`. Exact, and the same for the same canonical query and `index_version`; it never changes `total`, `hits`, `facets` or `excluded`. */
+            /** @description TASK-176 (additive): for a query that is an AND of concept groups, how many papers each group matches alone and how many the query matches without it, so a reviewer can see which group narrows the search. A group is a top-level AND conjunct that searches text and is not negated. The query's filters (the default track and status filters included) and its `NOT` clauses apply to every count, so none is below `total`. Exact, and the same for the same canonical query and `index_version`; it never changes `total`, `hits`, `facets` or `excluded`. */
             groups: components["schemas"]["GroupCounts"];
             /** Hits */
             hits: components["schemas"]["Hit"][];

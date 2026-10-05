@@ -10,7 +10,8 @@
  * construct that doesn't fit, and is never changed; the parts that do fit are shown under the notice, dimmed
  * and not editable (B2). Builder edits are draft edits: only Search changes the URL. After a search, each group
  * shows its own wildcards' expansions from that `/search` answer (TASK-111) and, while the draft is still the
- * searched query, how many papers the group matches alone (TASK-176, `group-counts.ts`).
+ * searched query, how many papers the group matches alone and how many the query matches without it (TASK-176,
+ * `group-counts.ts`).
  */
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
@@ -48,7 +49,7 @@ import {
   type Scope,
 } from "./model";
 import { termWildcards } from "./expansions";
-import { countsFor, groupTotals, type SearchedGroups } from "./group-counts";
+import { countsFor, groupTotals, type GroupShown, type SearchedGroups } from "./group-counts";
 import { constructText, modelOf, readAst, readFitting, sourceSpans } from "./read";
 import { listItems } from "./terms";
 import { readsAsWritten, writeModel } from "./write";
@@ -236,7 +237,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
   const totals = useMemo(
     () =>
       searched === null || current === null
-        ? new Map<number, number>()
+        ? new Map<number, GroupShown>()
         : groupTotals(searched.groups.counts, current.model.groups, current.spans),
     [searched, current],
   );
@@ -494,6 +495,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
         Papers must match every group. Within a group, any term is enough (OR).
       </p>
       <GroupCountsNote searched={searched} />
+      <GroupCountsStatus searched={searched} />
       <span id={termHelpId} className="sr-only">
         Enter edits the term, Delete removes it.
       </span>
@@ -555,7 +557,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
                 </>
               }
             >
-              <GroupCount total={totals.get(group.id)} />
+              <GroupCount shown={totals.get(group.id)} />
               {renderTerms(index, group)}
               <GroupExpansions group={group} keys={keys} expansions={props.expansions ?? null} />
             </GroupBox>
@@ -864,15 +866,36 @@ function GroupExpansions({
 const num = (n: number) => n.toLocaleString("en-US");
 const papers = (n: number) => `${num(n)} ${n === 1 ? "paper" : "papers"}`;
 
-/** A group's count from the last search of this query (copy BD-12); nothing without one. */
-function GroupCount({ total }: { total: number | undefined }) {
-  if (total === undefined) return null;
+/** A group's two counts from the last search of this query (copy BD-12); nothing without them. */
+function GroupCount({ shown }: { shown: GroupShown | undefined }) {
+  if (shown === undefined) return null;
+  if (shown.kind === "same")
+    return <p className="text-xs text-muted-foreground">Same as group {shown.as}, so it is counted once.</p>;
+  const { total, totalWithout } = shown;
   return (
     <p className="text-xs text-muted-foreground">
       <span className="font-semibold text-foreground tabular-nums">{papers(total)}</span>{" "}
-      {total === 1 ? "matches" : "match"} this group alone
+      {total === 1 ? "matches" : "match"} this group alone <span aria-hidden="true">·</span>
+      <span className="sr-only">;</span>{" "}
+      <span className="font-semibold text-foreground tabular-nums">{num(totalWithout)}</span>{" "}
+      {totalWithout === 1 ? "matches" : "match"} the query without it
     </p>
   );
+}
+
+/** Why a search that could have group counts has none (copy BD-12); null when it has them, or never could. */
+function notCountedText(groups: SearchedGroups["groups"]): string | null {
+  switch (groups.not_counted) {
+    case null:
+    case "fewer_than_two_groups":
+      return null;
+    case "too_many_groups":
+      return `Group counts aren't shown: this query has ${num(groups.groups_total)} groups, and this site counts at most ${num(groups.limit)}.`;
+    case "timed_out":
+      return "Group counts weren't ready in time for this search. Search again to see them.";
+    default: // `count_failed`, or a reason added later (an open set)
+      return "Group counts couldn't be computed for this search. Search again to see them.";
+  }
 }
 
 /**
@@ -882,19 +905,31 @@ function GroupCount({ total }: { total: number | undefined }) {
 function GroupCountsNote({ searched }: { searched: SearchedGroups | null }) {
   if (searched === null) return null;
   const { groups, total } = searched;
-  if (groups.not_counted === "too_many_groups")
-    return (
-      <p className="text-muted-foreground">
-        Group counts aren&apos;t shown: this query has {num(groups.groups_total)} groups, and this site counts
-        at most {num(groups.limit)}.
-      </p>
-    );
+  const why = notCountedText(groups);
+  if (why !== null) return <p className="text-muted-foreground">{why}</p>;
   if (groups.counts.length === 0) return null;
   return (
     <p className="text-muted-foreground">
       <span className="font-semibold text-foreground tabular-nums">{papers(total)}</span>{" "}
-      {total === 1 ? "matches" : "match"} the whole query. A group&apos;s count is the papers that match it
-      with the other groups removed: the query&apos;s limits, leave-out terms and default filters still apply.
+      {total === 1 ? "matches" : "match"} the whole query. Each group shows how many papers match it with the
+      other groups removed, and how many match the query without it: the group whose removal adds the most
+      papers narrows the search most. The query&apos;s limits, leave-out terms and default filters apply to
+      every count.
+    </p>
+  );
+}
+
+/** Says, to a screen reader, that the counts arrived with a search (they appear without focus moving). */
+function GroupCountsStatus({ searched }: { searched: SearchedGroups | null }) {
+  const said =
+    searched === null
+      ? ""
+      : searched.groups.counts.length > 0
+        ? `Group counts shown for ${num(searched.groups.counts.length)} groups: ${papers(searched.total)} ${searched.total === 1 ? "matches" : "match"} the whole query.`
+        : (notCountedText(searched.groups) ?? "");
+  return (
+    <p role="status" aria-label="Group counts" className="sr-only">
+      {said}
     </p>
   );
 }
@@ -921,7 +956,9 @@ function FittingParts({
   const headingId = useId();
   const n = model.groups.length;
   const totals =
-    searched === null ? new Map<number, number>() : groupTotals(searched.groups.counts, model.groups, spans);
+    searched === null
+      ? new Map<number, GroupShown>()
+      : groupTotals(searched.groups.counts, model.groups, spans);
   if (n === 0 && model.exclude === null && model.limits.length === 0) return null;
   const terms = (group: BuilderGroup) => (
     <>
@@ -952,7 +989,7 @@ function FittingParts({
               label={`Group ${index + 1}, any of: ${termList(group)}`}
               heading={<h4 className="font-medium">Group {index + 1}</h4>}
             >
-              <GroupCount total={totals.get(group.id)} />
+              <GroupCount shown={totals.get(group.id)} />
               {terms(group)}
             </GroupBox>
           </li>

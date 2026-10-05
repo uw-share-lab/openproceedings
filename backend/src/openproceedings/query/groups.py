@@ -10,9 +10,11 @@ those conjuncts:
   filters; the default track and status filters included, since the effective tree spells them out) and the
   negated text conjuncts (`NOT survey`, the builder's leave-out terms).
 
-A group **alone** is the query with every other group removed: that group AND everything kept. Its matches
-are a superset of the query's, so its count is never below `total`, and the counts of two groups are
-comparable: both are under the same filters. Only the AST is read here; an engine counts the trees.
+A group **alone** is the query with every other group removed: that group AND everything kept. The query
+**without** a group is every other group AND everything kept (leave-one-out): what the group, given the
+others, removes is that count less `total`. Both trees match a superset of the query's matches, so neither
+count is below `total`, and the counts of two groups are comparable: all are under the same filters. Only
+the AST is read here; an engine counts the trees.
 """
 
 from __future__ import annotations
@@ -29,9 +31,16 @@ class Groups:
 
     def alone(self, group: Node) -> Node:
         """The query with every other group removed: `group` AND everything kept."""
-        if not self.kept:
-            return group
-        return And(span=(0, 0), children=(group, *self.kept))
+        return _and((group, *self.kept))
+
+    def without(self, group: Node) -> Node:
+        """The query with `group` removed: every other group AND everything kept (the leave-one-out tree).
+        Only asked of a query with two or more groups, so another group is always left."""
+        return _and((*(g for g in self.groups if g is not group), *self.kept))
+
+
+def _and(nodes: tuple[Node, ...]) -> Node:
+    return nodes[0] if len(nodes) == 1 else And(span=(0, 0), children=nodes)
 
 
 def _conjuncts(n: Node) -> list[Node]:
