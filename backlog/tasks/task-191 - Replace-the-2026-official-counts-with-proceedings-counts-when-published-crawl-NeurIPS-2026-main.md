@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-05 08:39'
+updated_date: '2026-10-05 08:56'
 labels:
   - ingest
   - eval
@@ -24,3 +25,9 @@ coverage-sources.md's ICML 2026 main row (6,341) is a count of the conference's 
 <!-- AC:BEGIN -->
 - [ ] #1 The ICML row is replaced from the PMLR volume and the ICLR row from proceedings.iclr.cc once each exists; NeurIPS 2026 main, D&B and position are crawled, classified with recorded fixtures and gated; Re-Align is resolved or explained
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-05 (gate, track-classifier-auditor): the ICLR 2026 proceedings index already exists and was counted that day (5,351 Conference entries at proceedings.iclr.cc/paper_files/paper/2026, equal to the index), so the ICLR row is rule 1 now. What remains: the ICML 2026 PMLR volume, NeurIPS 2026 main / D&B / position, and Workshop/Re-Align. NeurIPS 2026 on OpenReview also holds 95 Creative_AI_Track notes (other, unknown) beside its workshops.
+<!-- SECTION:NOTES:END -->
