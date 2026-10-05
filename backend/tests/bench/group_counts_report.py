@@ -6,7 +6,8 @@ Run from `backend/`, on a quiet machine (other load inflates the timings):
 For each query, `test_bench.search_endpoint`'s work (`search.run` with facets and highlights, a 50-hit page)
 with its groups counted at `ApiConfig`'s default bounds and without them, alternated round by round, on the
 synthetic 5k fixture as the API serves it and, with `--index`, on a built index directory (the real corpus: a
-scratch COPY of `data/indexes/<version>`, never the served one). A first page forgets the facet memo each
+scratch COPY of `data/indexes/<version>`, never the served one), where every Trust-Evals string
+(`tests/golden/test_trust_evals.py`) is timed too. A first page forgets the facet memo each
 round, which the counts' collections share; a later page (offset 50) reads it. Wall time, median and p95 of
 ROUNDS rounds, and how each round's groups came back (counted, or why not). Writes
 `docs/results/<date>-bench-group-counts.md` (or OUT). A report, not a gate: regenerate it, never edit it.
@@ -30,9 +31,10 @@ from openproceedings import search
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.query.parser import ParseResult, parse
 
-from tests.bench.test_bench import GROUP_FIELDS, GROUPS, TEN_GROUPS
+from tests.bench.test_bench import GROUP_FIELDS, GROUPS, TEN_GROUPS, trust_evals
 from tests.contract.conftest import attributed, build
 from tests.fixtures.corpus.synthetic_5k import records
+from tests.golden.test_trust_evals import STRINGS
 from tests.unit.test_group_counts import wide_kept_query
 
 REPO = Path(__file__).resolve().parents[3]
@@ -71,12 +73,15 @@ def outcome(found: search.Search) -> str:
     return f"{len(g.counts)} counted" if g.not_counted is None else str(g.not_counted)
 
 
-def rows(engine: TantivyEngine, queries: list[str]) -> list[str]:
+def shown(q: str) -> str:
+    """A query as its row names it: whole, or a long kept NOT's wildcards counted."""
+    return f"`{q}`" if len(q) <= 120 else f"`{q.split(' NOT (')[0]} NOT (… {q.count('*')} wildcards …)`"
+
+
+def rows(engine: TantivyEngine, queries: list[tuple[str, ParseResult]]) -> list[str]:
     out = []
-    for q in queries:
-        shown = q if len(q) <= 120 else f"{q.split(' NOT (')[0]} NOT (… {q.count('*')} wildcards …)"
-        parsed = parse(q)
-        assert parsed.effective_ast is not None, q
+    for name, parsed in queries:
+        assert parsed.effective_ast is not None, name
 
         def page(parsed: ParseResult, offset: int, first: bool, groups: bool) -> search.Search:
             if first:
@@ -101,13 +106,13 @@ def rows(engine: TantivyEngine, queries: list[str]) -> list[str]:
             total = found.total
             how = ", ".join(f"{k} ×{n}" for k, n in seen.most_common())
             out.append(
-                f"| `{shown}` | {total:,} | {label} | {ms(statistics.median(without))} | {ms(p95(without))} | "
+                f"| {name} | {total:,} | {label} | {ms(statistics.median(without))} | {ms(p95(without))} | "
                 f"{ms(statistics.median(with_))} | {ms(p95(with_))} | {how} |"
             )
     return out
 
 
-def table(engine: TantivyEngine, queries: list[str]) -> str:
+def table(engine: TantivyEngine, queries: list[tuple[str, ParseResult]]) -> str:
     head = (
         "| Query | Matches | Page | Without counts: median | p95 | With counts: median | p95 | Groups, per round |\n"
         "|---|---|---|---|---|---|---|---|"
@@ -135,14 +140,18 @@ def main() -> None:
         built = build(list(records()), root / "snapshots", "bench", root / "indexes", attributed)
         fixture = TantivyEngine(root / "indexes" / built)
         queries = [*FIXTURE_QUERIES, wide_kept_query(fixture)]
-        fixture_table = table(fixture, queries)
+        fixture_table = table(fixture, [(shown(q), parse(q)) for q in queries])
     real = ""
     if index is not None:
         engine = TantivyEngine(index)
         real = f"""
 ## The real corpus: index `{engine.index_version}`, {engine.searcher.num_docs:,} records
 
-{table(engine, REAL_QUERIES)}
+{table(engine, [(shown(q), parse(q)) for q in REAL_QUERIES])}
+
+### Every Trust-Evals string (`tests/golden/test_trust_evals.py`, Scholar syntax), as the API serves it
+
+{table(engine, [(f"`{name}`", trust_evals(name)) for name in STRINGS])}
 """
     today = datetime.now(UTC).date().isoformat()
     bounds = ", ".join(f"`{field}` {GROUPS[arg]}" for arg, field in GROUP_FIELDS.items())
@@ -151,7 +160,8 @@ def main() -> None:
 Regenerate with `uv run python -m tests.bench.group_counts_report --index <a copy of an index>` (from
 `backend/`, on a quiet machine: other load inflates the timings); never edit by hand. TASK-176; cited by spec
 04 §SearchResponse (`groups`, Cost) and spec 07 §E. A cold first page over spec 03's 100 ms p95 with its counts
-is spec 03's exception "as measured", which TASK-196 decides, re-measured at a sustained 1-minute load under 5.
+is spec 03's exception "as measured" (decision-039; TASK-197 brings it under). A run is cited only when its 1-minute load (below) is under 5 at
+the start and the end.
 
 - Machine: {machine}, {platform.platform()}, {os.cpu_count()} CPUs; load average {load(started_load)} at the
   start and {load(os.getloadavg())} at the end (1, 5, 15 min); Python {platform.python_version()}, tantivy

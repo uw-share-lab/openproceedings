@@ -252,9 +252,9 @@ default bounds, grace and wait (TASK-176). Beside the first page of every Trust-
 later page of each (`test_search_endpoint_later_page`: facets and counts from the memo) and a query of ten
 one-word groups, the most `/search` counts (`test_search_endpoint_ten_groups`: 20 collections on a first
 page); `test_the_endpoint_bench_counts_groups` checks that these rows do count groups. What the counts add,
-with and without them on the fixture and on the real corpus, is a report
+with and without them on the fixture and on the real corpus (every Trust-Evals string too), is a report
 (`backend/tests/bench/group_counts_report.py` → `docs/results/<date>-bench-group-counts.md`; median and p95
-of 200 rounds), cited by 04 §SearchResponse.
+of 200 rounds, cited only at a 1-minute load under 5 at the start and the end), cited by 04 §SearchResponse.
 
 ## F. Usefulness of near-misses (report, M5: deferred)
 

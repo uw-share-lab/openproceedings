@@ -264,9 +264,12 @@ decision as the operator (decision-035), and not before the proxy block below ha
 - anyone can upload a RIS file of up to 16 MiB and 5,000 records. It is read in memory for that one request
   and dropped: never written to disk, never logged (the access line has counts only), never added to the
   index. One comparison runs at a time (another is told to retry before its file is read), so the `api`
-  process holds at most one file: budget about 250 MB per comparison slot there (one 16 MiB file raised the
+  process holds at most one file: budget about 250 MB (about 238 MiB) per comparison slot there (one 16 MiB file raised the
   process's resident memory by 142 MiB at its peak in the security review: the file, its text, its parsed
-  records and the answer). The proxy is another matter: it buffers **every** upload in flight before the API
+  records and the answer; a file of the same size with a 4-byte character on each long line peaked near
+  210 MiB before matching in the release security review of 2026-10-05 (a traced 192 MiB to decode and
+  parse it, plus the 16 MiB body), since Python then stores its text at 4 bytes a character, so size from the 250 MB,
+  never from either measurement). The proxy is another matter: it buffers **every** upload in flight before the API
   can refuse it (`request_buffers`), up to 16 MiB each, with no limit on how many arrive at once (200
   concurrent uploads ≈ 3.2 GB, and they cost no tokens). Budget 16 MiB per concurrent upload in the proxy, and
   give the `caddy` service a memory limit (`mem_limit` in `compose.yml`, which sets none today) as part of
