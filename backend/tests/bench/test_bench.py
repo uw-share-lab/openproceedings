@@ -233,6 +233,21 @@ def test_the_endpoint_bench_counts_groups(served: tuple[TantivyEngine, RecordFil
     assert any(g is not None and g.not_counted is None for g in counted)
 
 
+def test_the_group_counts_report_writes_a_row_per_page(
+    served: tuple[TantivyEngine, RecordFile], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`group_counts_report.table` (run by hand, never in CI) still runs: one round, a first and a later page
+    of one Trust-Evals string, as its Trust-Evals table times every string."""
+    from tests.bench import group_counts_report as report
+
+    monkeypatch.setattr(report, "ROUNDS", 1)
+    engine, _snapshot = served
+    name = next(iter(STRINGS))
+    rows = report.table(engine, [(f"`{name}`", trust_evals(name))]).splitlines()[2:]
+    assert [r.split(" | ")[0] for r in rows] == [f"| `{name}`"] * 2
+    assert [r.split(" | ")[2] for r in rows] == ["first page", "later page"]
+
+
 def test_the_endpoint_bench_builds_attributions(served: tuple[TantivyEngine, RecordFile]) -> None:
     engine, snapshot = served
     parsed = trust_evals(next(iter(STRINGS)))

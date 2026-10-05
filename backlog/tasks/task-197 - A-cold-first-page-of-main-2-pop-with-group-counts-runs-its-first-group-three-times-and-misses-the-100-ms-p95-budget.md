@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-05 17:21'
+updated_date: '2026-10-05 17:28'
 labels:
   - perf
   - search
@@ -30,3 +31,9 @@ Cause, measured on a scratch copy of the index: the first group (nine alternativ
 - [ ] #2 Every group count is unchanged: test_group_counts.py passes, and its counts still equal match_ids and ReferenceEngine on the shapes it covers
 - [ ] #3 Spec 03's "Exception, as measured (decision-039, TASK-197)" bullet is removed and spec 04's Cost figures are regenerated from that run
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Measure names (2026-10-05, gate round 1 PERF nit): 'about 35 ms a run' is the group's count alone (Tantivy's count collector on its query, best of 5); 'materialising 39 ms' is a search returning every hit's address plus reading their ord fast-field values and building the term set, best of 3. Both on the scratch copy of fd13d8d27535 at a 1-minute load near 4.
+<!-- SECTION:NOTES:END -->
