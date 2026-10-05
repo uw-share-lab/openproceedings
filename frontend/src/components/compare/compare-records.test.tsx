@@ -394,7 +394,8 @@ describe("CompareRecords", () => {
     await waitFor(() => expect(announced().textContent).toBe("The comparison didn't run."), {
       timeout: 3000,
     });
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // no retry by itself is left pending, so no sixth request can follow
+    expect(screen.queryByText(/retrying by itself/i)).toBeNull();
     expect(asked).toBe(5);
   });
 

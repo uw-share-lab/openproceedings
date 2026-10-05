@@ -470,7 +470,8 @@ def _human(
             "",
             "Each call moves its row: a class puts the row in that class; `out_of_scope` takes the record out of "
             'the Scholar set, so out of the denominator; `in_both` moves it to "in both" and takes the index '
-            "record it is paired with (the row's own record, or the one same-title record its evidence names) out "
+            "record it is paired with (the one same-title record its evidence names; a row with an index record "
+            "of its own can't be called `in_both`) out "
             "of the rows only in openproceedings. Rows without a call keep the automation's class.",
             "",
         ]
