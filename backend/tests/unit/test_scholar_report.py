@@ -477,7 +477,12 @@ def test_the_stemmer_sensitivity_is_stated_and_no_lower_bound_is_claimed() -> No
         "all this figure measures"
     ) in text
     assert "strips or adds endings" not in text
-    assert "which stemmer stands for Scholar's is an open decision for the project owner" in text
+    assert (
+        "an inflection-only stand-in, kept by decision-038 (see Method); it is not Google Scholar's stemmer"
+        in text
+    )
+    assert "Decision-038 keeps this stand-in and adopts no published stemmer" in text
+    assert "open decision" not in text
     assert "lower bound" not in text
 
 

@@ -95,8 +95,10 @@ range gives other numbers, so always state them.
 - A forum id and a proceedings id on one Scholar record that name different index records are ambiguous.
 - The `stemming` test is inflection only (`scholar_compare.inflection_stem`: `s`/`es`/`ies`, `ed`, `ing`), a
   stated stand-in for Scholar's undocumented stemmer. A plural acronym needs no vowel in its stem (`llms` →
-  `llm`): the first version required one and missed the commonest variant in the corpus. Which stemmer stands
-  for Scholar's is an open decision for the project owner; don't adopt another one in passing. `full_text` is
+  `llm`): the first version required one and missed the commonest variant in the corpus. Decision-038 keeps
+  this stand-in and adopts no published stemmer; don't add one in passing. The `stemming` and `full_text` counts
+  are relative to the stand-in, never "what Scholar stems". Revisit the decision if a string's prefix
+  sensitivity is not near zero. `full_text` is
   **not** a lower bound: a wider stemmer moves rows out of it. The report gives a sensitivity figure instead,
   how many `full_text` rows match when every word is replaced by its inflection stem read as a prefix
   (`benchmarks` → `benchmark*`): exactly that, not what another stemmer would do.
