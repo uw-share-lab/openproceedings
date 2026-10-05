@@ -33,6 +33,8 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    `/open-pr`), which requires green checks but no mandatory approving review under the
    solo-maintainer policy (never bypass required checks); tag with `gh release create --target` and notes from `changelog.py --notes` (a `git push` of
    a tag is blocked by `require-review.sh`); back-merge `main` into `dev` on `release/X.Y.Z-back-merge`, whose PR goes through `dev`'s merge queue like any other (spec 08 §Release step 7).
+   - Promote and tag on one UTC day: a later tag needs a re-dated release branch (2026-10-05). If a
+     different npm rewrites the lockfile while the version is unchanged, restore it.
 2. **Versions.** Any change of `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy (which always bumps
    `SCHEMA_VERSION` too) or `QUERY_VERSION` is at least MINOR and is called out at the top of the notes.
    Retained supported pins still reproduce when `QUERY_VERSION` matches; changed replay inputs report

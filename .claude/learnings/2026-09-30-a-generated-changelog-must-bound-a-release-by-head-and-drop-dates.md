@@ -125,3 +125,8 @@ change only the required approving-review count through its dedicated API endpoi
 complete before/after branch protection objects to prove CI and other protections were preserved.
 Keep release instructions and agent guidance synchronized with the configured policy, and append
 a dated decision clarification rather than silently rewriting the earlier accepted requirement.
+
+## Addendum — 2026-10-05
+- **A promotion is not a release; the citation date decides when it can be tagged.** `0.1.0` was promoted to `main` on 2026-10-03 with `CITATION.cff` dated that day but not tagged, and spec 08 step 6 refuses a tag on another UTC day, so tagging on 2026-10-05 took a new `release/0.1.0` (re-dated citation, the untagged data table pointed at the new index, regenerated changelog), a second promotion and a back-merge. Evidence: `docs/results/2026-10-05-release-preparation.md`. Lesson: promote and tag on the same UTC day, or expect to redo the release branch; an untagged table may be updated, a tagged one never.
+- **`npm install --package-lock-only` under a different npm rewrites the lockfile with no version change** (npm 10.8.2 dropped optional packages' `libc` fields), as on 2026-10-03. When the version is already right, restore the tracked lockfile instead of committing the rewrite.
+- Propagated to: `.claude/agents/release-manager.md` (one UTC day; restore a rewritten lockfile).

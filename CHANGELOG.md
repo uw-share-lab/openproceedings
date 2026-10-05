@@ -43,6 +43,7 @@ names the index it was verified on and which saved records still reproduce.
 - ingest: link ICLR 2017 workshop copies to their conference twins; read scholarmend 0.1.5's invitation (TASK-159, TASK-157) ([#82](https://github.com/uw-share-lab/openproceedings/pull/82))
 - add tested deployment setup and release runbook ([#89](https://github.com/uw-share-lab/openproceedings/pull/89))
 - Show twin records and follow their takedowns; stabilize dedup and reader tests ([#92](https://github.com/uw-share-lab/openproceedings/pull/92))
+- review-comparison tools, 2026 crawl, and gate fixes (TASK-056, 175–182) ([#105](https://github.com/uw-share-lab/openproceedings/pull/105))
 
 ### Changed
 
@@ -55,6 +56,7 @@ names the index it was verified on and which saved records still reproduce.
 - explain importing and filtering existing Scholar RIS collections ([#90](https://github.com/uw-share-lab/openproceedings/pull/90))
 - narrow exclusion aggregation and index ordinal membership with measured evidence ([#91](https://github.com/uw-share-lab/openproceedings/pull/91))
 - make pre-release quickstart branch explicit ([#96](https://github.com/uw-share-lab/openproceedings/pull/96))
+- perf: re-measure group counts at a quiet load; decision-039 keeps the budget (TASK-196) ([#106](https://github.com/uw-share-lab/openproceedings/pull/106))
 
 ### Fixed
 
@@ -113,10 +115,13 @@ names the index it was verified on and which saved records still reproduce.
 - nightly: differential@50k, benchmarks with the 80k report, properties matrix, loud failures (TASK-057) ([#84](https://github.com/uw-share-lab/openproceedings/pull/84))
 - task-057: AC #1 met by proof run 3, task complete ([#88](https://github.com/uw-share-lab/openproceedings/pull/88))
 - ci: cover every mutant with eight nightly shards ([#95](https://github.com/uw-share-lab/openproceedings/pull/95))
+- bump fastapi from 0.141.1 to 0.142.2 in the uv-minor-patch group across 1 directory ([#98](https://github.com/uw-share-lab/openproceedings/pull/98))
+- bump the npm-minor-patch group with 3 updates ([#100](https://github.com/uw-share-lab/openproceedings/pull/100))
+- bump astral-sh/uv from 0.11.18 to 0.12.22 in /deploy in the docker-minor-patch group across 1 directory ([#99](https://github.com/uw-share-lab/openproceedings/pull/99))
 
 ### Data
 
-- index_version `5cc8e14c2f9a`, snapshot `d552baa07aed6bd754720c7ef17bc7d9ef7a645531fb95d6bc4174c2eacf91b8`
+- index_version `fd13d8d27535`, snapshot `10b5a205a63f964496b9b572321785cf4c845c49fac4bf6cbdf5ab3dfe4cbe76`
 - TOKENIZER_VERSION 3 · SCHEMA_VERSION 3 · Tantivy 0.26.2 · QUERY_VERSION 2
 - First tagged release. Development records can reproduce on retained supported pins when QUERY_VERSION matches.
-- First release candidate, verified on a copied 95,877-paper snapshot; promotion does not deploy data.
+- Verified on the 133,629-paper snapshot of 2026-10-05 (the 2026 crawl); promotion does not deploy data.
