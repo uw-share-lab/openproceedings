@@ -15,11 +15,13 @@ Candidate: `dev` at `63da2318` (PR #106's merge). Base: `main` at `d8eec5fd`.
 - **Required checks at `63da2318`, in `dev`'s merge queue:** all green. These were test `37351340289`, lint
   `37351340188`, claude-tooling `37351340283` and pr-gates `37351340172`.
 - **Advisory checks:** `bench` passed on PR #106's head (`37349851173`), on a base that includes group counts.
-  The `e2e` and `web-image` push runs at `63da2318` are `37352990725` and `37352990475`; their results are in
-  the promotion PR. They were green at PR #105's merge, `bed0a6cb`.
+  The `web-image` push run at `63da2318` (`37352990475`) passed. The `e2e` push run there (`37352990725`) was
+  still running when this was written; its result is in the promotion PR. Both were green at PR #105's merge,
+  `bed0a6cb`.
 - **Nightly:** the scheduled nightly `37337202193` ran on `142f3e0e` (`dev` before PR #105) on 2026-10-05.
   Its result is in the promotion PR. The previous nightly, `37204685351` (2026-10-04, same sha), passed
-  all jobs.
+  all jobs. Neither tested PR #105 or #106, so a nightly was also dispatched on the candidate itself
+  (`37353576315`, `63da2318`). The promotion waits for it.
 - **Backlog:** `backlog task list --plain` shows no open Must finding. TASK-197, the one known budget miss,
   is a recorded exception (decision-039), not a Must.
 - **Coverage:** the M4 gate passes on this release's index (§3).
@@ -38,6 +40,10 @@ The `security-reviewer` reviewed `origin/main...origin/dev` at `bed0a6cb` on 202
   fixed it, and its own gate's security-reviewer approved the wording.
 - **Prior findings:** none from PR #105's gate were re-raised. SEC-183 stays deferred to TASK-183, since
   `/compare` is off on the deploy stack.
+
+TASK-067 (the pre-release security review) is still In Progress. Step 2 requires it to be Done only before
+the first release a public instance serves, and no instance is hosted (TASK-064), so it doesn't block this
+tag. It must be Done before any deployment of `v0.1.0`.
 
 `63da2318` adds only PR #106 to the reviewed range: docs, a bench report and a test. Its gate's
 security-reviewer approved it.
