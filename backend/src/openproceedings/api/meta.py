@@ -37,5 +37,8 @@ def get_meta(request: Request, engine: EngineDep) -> MetaResponse:
             max_query_depth=MAX_DEPTH,
             max_verified_clauses=config.max_verified_clauses,
             max_verification_candidates=config.max_verification_candidates,
+            max_counted_groups=config.max_counted_groups,
+            max_counted_terms=config.max_counted_terms,
+            max_counted_ids=config.max_counted_ids,
         ),
     )
