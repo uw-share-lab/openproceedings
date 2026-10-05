@@ -280,7 +280,7 @@ def read_calls(
             )
         if review and comparisons and cls == IN_BOTH:
             query, pair = review[n].query_name, _paired(review[n].row)
-            if pair not in added.get(query, ()):
+            if pair is None or pair not in added.get(query, ()):  # None was refused just above
                 raise ValueError(
                     f"{where}: `in_both` pairs the row with `{pair}`, which is not among query `{query}`'s records "
                     "only in openproceedings, so it can't be counted in both"
