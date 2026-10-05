@@ -19,8 +19,9 @@ from hypothesis import event, example, given
 from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode, verbatim
 from openproceedings.query import wordforms
-from openproceedings.query.ast import structure
+from openproceedings.query.ast import Phrase, Term, Wildcard, structure
 from openproceedings.query.exact import exact_leaves, exact_name
+from openproceedings.query.lexer import OPERATOR_WORDS
 from openproceedings.query.parser import MAX_QUERY_LENGTH, ParseResult, parse
 from openproceedings.query.wordforms import WordForm, apply, word_forms
 
@@ -163,6 +164,19 @@ def test_a_lowercase_operator_keeps_its_warning_and_its_reading() -> None:
     assert apply("a | trust and model", forms_of("a | trust and model")) == "a | trust$ and model$"
 
 
+def check_example(example: str, term: str) -> None:
+    """The notice's example reads, in both modes, as `term` made a `$` wildcard (a phrase's last word): the
+    very thing "Add `$`" writes for it, not merely something that parses."""
+    for mode in ("native", "scholar"):
+        alone = parse(example, mode)  # type: ignore[arg-type]
+        assert alone.errors == [] and alone.ast is not None, (example, mode, alone.errors)
+        items = alone.ast.items if isinstance(alone.ast, Phrase) else (alone.ast,)
+        last = items[-1]
+        assert isinstance(last, Wildcard) and last.op == "$", (example, mode)
+        assert all(isinstance(i, Term) for i in items[:-1])
+        assert " ".join([*(i.token for i in items[:-1] if isinstance(i, Term)), last.stem]) == term
+
+
 def _plain(n: Any) -> Any:
     """A tree's structure with every `$` wildcard put back as the term it was."""
     if isinstance(n, dict):
@@ -222,7 +236,9 @@ _WORDS = st.sampled_from(
      "model$", 'G\\"odel', "a\\$b", "＄y＄", "𝒜𝒜𝒜", "and", "or", "not", "And",
      "near/3", "2024", "naïve", "大语言模型", "x×y", "~"]
 )  # fmt: skip
-_PHRASES = st.lists(_WORDS, min_size=1, max_size=3).map(lambda ws: '"' + " ".join(ws) + '"')
+_PHRASES = st.lists(st.one_of(_WORDS, st.sampled_from(["and", "or", "not"])), min_size=1, max_size=3).map(
+    lambda ws: '"' + " ".join(ws) + '"'
+)
 _LEAVES = st.one_of(
     _WORDS,
     _WORDS,
@@ -272,12 +288,13 @@ def test_offered_edits_are_sound_on_generated_queries(q: str) -> None:
     [note] = [t for t in result.translations if t.code is DiagnosticCode.COMPAT_NO_STEMMING] or [None]
     example = None if note is None else re.search(r"\(e\.g\. `([^`]*)`\)\.$", note.message)
     quotable = [
-        f.term for f in allowed if verbatim(f.term) and len(f.term) + 1 + 2 * (" " in f.term) <= 40
+        f.term
+        for f in allowed
+        if verbatim(f.term) and len(f.term) + 1 + 2 * (" " in f.term or f.term in OPERATOR_WORDS) <= 40
     ]  # a message quotes at most 40 characters, and only text it need not escape
     if example is not None:
         event("the notice has an example")
-        assert example.group(1).strip('"').removesuffix("$") == quotable[0]
-        assert parse(example.group(1)).errors == []
+        check_example(example.group(1), quotable[0])
     elif note is not None:
         assert quotable == []
     if forms != allowed:

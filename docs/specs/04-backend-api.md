@@ -714,7 +714,7 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
 | `sources` (the manifest's source names) and `identification_citable` | whether `total` can be cited as a PRISMA identification number: `false` when every source is a bootstrap one (`vocab.bootstrap_only`, the test `op search`'s "bootstrap corpus" note uses), since the corpus is then an earlier search's output, not a database |
 | `searched_at` (UTC) | the search date, which is separate from the crawl date |
 | `total`, `excluded` (with `unknown` itemised) | the counts cited in PRISMA |
-| `expansions`, `translations`, `warnings` | how the query was interpreted (PRISMA-S) |
+| `expansions`, `translations`, `warnings` | how the query was interpreted (PRISMA-S); each message as worded when saved: a later release may word a notice differently for the same query (TASK-181 and its review changed `COMPAT_NO_STEMMING`'s example) with `canonical` and `ids_hash` unchanged, and replay compares membership, never message text |
 | `ids` (sorted) and `ids_hash = sha256(ids)` | membership, for replay and for the diff |
 | `dedup` (`merged`, and the manifest's not-merged conflicts by resolution: `ambiguous_not_merged`, `track_not_merged`, `venue_year_not_merged`) | the PRISMA-S item 16 deduplication-process statement (corpus-wide ingest merges, never a per-search removal count) |
 | `semantic_version` (if the near-miss panel was open) | the audit trail for query revisions it prompted |

@@ -133,6 +133,15 @@ describe("the sections", () => {
     expect(text).toContain("fewer forms than Google Scholar counts");
   });
 
+  it("gives the full-text figure the diagnostics row's ED-19 sentence points to, with its index and source", () => {
+    page();
+    const text = document.getElementById("scholar")?.textContent ?? "";
+    expect(text).toContain("comes from full text, which $ does not recover");
+    expect(text).toContain("index fd13d8d27535 (2026-10-05)");
+    expect(text).toContain("1,752 (96.6%) match the string nowhere in their title or abstract");
+    expect(text).toContain("docs/results/2026-10-05-scholar-comparison.md");
+  });
+
   it("takes every number and value list from the golden, none written into the page", () => {
     const changed = structuredClone(golden);
     changed.constants.min_wildcard_stem = 7;

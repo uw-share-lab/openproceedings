@@ -409,8 +409,10 @@ needs its row here. The UI's splice is checked against the server's own
 
 The notice's own example goes by the same rule (`query/exact.py::dollar_places`, the one implementation both
 use; TASK-181): "(e.g. `trust$`)" names the first term that can take a `$` as written, a phrase quoted whole
-since its earlier words count toward the stem (`"foundation model$"`, `"gpt 4$"`), so the example is always a
-query the parser accepts. A term too long to quote whole in a message (40 characters) is passed over, and when
+since its earlier words count toward the stem (`"foundation model$"`, `"gpt 4$"`), and a lowercase operator word
+quoted too (`"and" trust` gives `"and$"`, what Add `$` writes there; unquoted it would be the lowercase-operator
+row above), so the example is always a query both modes read as that term made a `$` wildcard. A term whose
+example would pass 40 characters (the most a message quotes) is passed over, and when
 no term qualifies (`AI C++ or`, which once suggested `ai$`) the sentence has no example. The notice's code and
 span are unchanged, and it does not depend on the read-back.
 

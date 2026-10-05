@@ -431,6 +431,15 @@ export function SyntaxHelp({
           <code className={CODE}>*</code> for any ending. After a search, the expansions show every word each
           wildcard matched.
         </p>
+        <p>
+          Most of a difference from Google Scholar&apos;s count usually comes from full text, which{" "}
+          <code className={CODE}>$</code> does not recover. Measured once, for one review&apos;s main string
+          on index <code className={CODE}>fd13d8d27535</code> (2026-10-05): of the 1,813 papers Google Scholar
+          found in these venues and years, 1,752 (96.6%) match the string nowhere in their title or abstract,
+          even with other inflections of its words, and 32 (1.8%) match only with one (source: the
+          project&apos;s <code className={CODE}>docs/results/2026-10-05-scholar-comparison.md</code>). It is
+          one string&apos;s figure, not a rule for every query.
+        </p>
         <Examples items={data.sections.scholar} />
       </Section>
 

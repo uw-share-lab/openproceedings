@@ -84,11 +84,18 @@ async function setup(c: Report, state: Partial<SearchState> = {}) {
   return { ...r, view, notice };
 }
 
+/** Said under the notice in both its states (copy ED-19): full text, not word forms, is most of the gap. */
+const FULL_TEXT =
+  "Google Scholar also reads the full text of a paper; openproceedings matches titles and abstracts only. " +
+  "Most of a difference in counts usually comes from that, and $ does not recover it.";
+
 describe("Add $ on the no-stemming notice", () => {
   it("writes $ after every term the server offered, as a draft: nothing is searched until Search", async () => {
     const c = caseOf("phrase: last word only");
     const { view, notice } = await setup(c);
-    expect(notice().textContent).toContain(c.notice);
+    // the server's message, its backticked runs drawn as code
+    expect(notice().textContent).toContain(c.notice?.replaceAll("`", ""));
+    expect(notice().textContent).toContain(FULL_TEXT);
     const all = within(notice()).getByRole("button", { name: "Add $ to all 3 terms" });
     const described = document.getElementById(all.getAttribute("aria-describedby") ?? "");
     expect(described?.textContent).toMatch(/Nothing is searched until you press Search\.$/);
@@ -150,9 +157,9 @@ describe("Add $ on the no-stemming notice", () => {
     // nothing ticked: the button stays focusable, says why, and does nothing
     const add = within(group).getByRole("button", { name: "Add $ to the ticked terms" });
     expect(add.getAttribute("aria-disabled")).toBe("true");
-    expect(document.getElementById(add.getAttribute("aria-describedby") ?? "")?.textContent).toBe(
-      "Tick at least one term first.",
-    );
+    const why = document.getElementById(add.getAttribute("aria-describedby") ?? "");
+    expect(why?.textContent).toBe("Tick at least one term first.");
+    expect(why?.className).not.toContain("sr-only"); // shown, not only read to a screen reader
     fireEvent.click(add);
     expect(view.state.doc.toString()).toBe(c.q);
 
@@ -210,6 +217,7 @@ describe("Add $ on the no-stemming notice", () => {
         "when the query would be over the length limit with $ added. Type a wildcard yourself where one is valid.",
     );
     expect(again.notice().textContent).not.toContain("benchmark$");
+    expect(again.notice().textContent).toContain(FULL_TEXT);
   });
 
   it("says nothing more when the editor holds other text than the notice's", async () => {
