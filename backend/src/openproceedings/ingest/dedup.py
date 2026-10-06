@@ -19,7 +19,13 @@ a review, a duplicate only shows in the hit count.
    accepted/unknown) are set aside as rivals and the rest merge if they may; the set-aside clusters stay
    separate records. A record that is no listing and has a status no listing has (rejected, withdrawn,
    desk-rejected) never merges with imported records alone, imported or crawled itself: `ris` ranks last for
-   status, so the merged record would keep that status (`_import_would_take_its_status`).
+   status, so the merged record would keep that status (`_import_would_take_its_status`). For this rule a
+   listing is one by crawled evidence (`_Cluster.crawled`, decision-040): a proceedings source's claim, or a
+   crawled note's own proceedings URL; a proceedings id only a RIS row names (TASK-174's shape) is none.
+   An imported record stays out of a title group when a crawler gave a record of its venue-year the import's
+   own-page abstract and none of its title partners keeps it (`_yields_to_its_abstract`, TASK-189,
+   decision-045): Scholar's title `-Guard` has a different paper's key, `Guard`. Step 3 then joins it to the
+   abstract's record if it may.
 
 3. An **imported record** that matched nothing (a cluster whose only source is `ris`, after steps 1 and 2) then
    merges on `(venue, year, abstract key)` (TASK-179): its title is Google Scholar's rendering, which drops math
@@ -29,8 +35,9 @@ a review, a duplicate only shows in the hit count.
    `MIN_ABSTRACT_TOKENS` tokens. Every refusal of step 2 holds here too (forum ids, proceedings ids, the track
    rule, the set-aside rivals), and three of its own (`_abstract_group`, decision-037): a group with no imported
    record is never joined by its abstracts, an abstract never joins two records that aren't imported, and an
-   import never merges with a record that is no listing and is rejected, withdrawn or desk-rejected (a note, or
-   another import: a forum id's RIS row).
+   import never merges with a record that is no listing by crawled evidence and is rejected, withdrawn or
+   desk-rejected (a note, also one whose forum id's RIS row names a proceedings paper, or another import: a
+   forum id's RIS row; decision-040).
 
 `ris` is a route, not a publisher: each RIS row names its paper by a forum id or a proceedings id. So two
 candidates that share only `ris` are judged by those ids (at most one of each in a merged record), not refused
@@ -408,6 +415,9 @@ class _Cluster:
     # input), so a merged record still carries the ids of the listings it absorbed
     proceedings_ids: frozenset[str]
     listed: bool  # a proceedings listing: proceedings id or proceedings source
+    # a listing by crawled evidence: a proceedings source, or a proceedings id a claim other than `ris` names
+    # (decision-040); decision-037's status exemption reads this, never `listed`
+    crawled: bool
     # its own forum id and every one a kept `urls.forum` claim names (a PMLR listing's link to OpenReview)
     forum_ids: frozenset[str]
 
@@ -490,6 +500,7 @@ def _cluster(members: Sequence[PaperRecord], rid: str | None = None) -> _Cluster
         id=rid, members=tuple(members), summary=summary, sources=sources,
         keys=frozenset(k for c in summary.provenance if c.field == "title" and (k := title_key(_text(c.value)))),
         proceedings_ids=frozenset(pids), listed=_listed(pids, sources),
+        crawled=_listed(proceedings_ids(c for c in claims if c.source not in IMPORTED), sources),
         forum_ids=forum_ids(summary),
     )  # fmt: skip
 
@@ -532,13 +543,16 @@ def _mergeable(group: Sequence[_Cluster], *, linked: bool = False) -> str | None
 
 
 def _import_would_take_its_status(group: Sequence[_Cluster]) -> bool:
-    """A record that is no listing, with a status no listing has (rejected, withdrawn, desk-rejected), whose only
-    companions are imported records (decision-037). A crawled listing outranks every status claim, so a lone
-    rejected note may merge with one (decision-005). `ris` ranks last: merged with only imports, the record would
-    keep that status (or, when it is an import itself, take whichever RIS row was fetched last), and an accepted
-    paper would leave every accepted-only result. So they stay apart, by title as by abstract."""
+    """A record that is no listing by crawled evidence (`crawled`), with a status no listing has (rejected,
+    withdrawn, desk-rejected), whose only companions are imported records (decision-037). A crawled listing
+    outranks every status claim, so a lone rejected note may merge with one (decision-005). `ris` ranks last:
+    merged with only imports, the record would keep that status (or, when it is an import itself, take whichever
+    RIS row was fetched last), and an accepted paper would leave every accepted-only result. So they stay apart,
+    by title as by abstract. A cluster that is a listing only because a RIS row names a proceedings paper (TASK-174's
+    shape: a rejected note and its forum id's RIS row) has no crawled listing's status to outrank its own, so it is
+    held to the rule too (decision-040); a note's own proceedings URL is crawled evidence."""
     return len(group) > 1 and any(
-        not c.listed and c.summary.status not in _LISTABLE_STATUSES
+        not c.crawled and c.summary.status not in _LISTABLE_STATUSES
         and all(x.sources == IMPORTED for j, x in enumerate(group) if j != i)
         for i, c in enumerate(group)
     )  # fmt: skip
@@ -628,7 +642,7 @@ def _dedup(records: Iterable[PaperRecord]) -> DedupResult:
     for ci, c in enumerate(clusters):
         for key in c.keys:  # a title of only punctuation or math has no key and never matches
             titled[(c.summary.venue, c.summary.year, key)].add(ci)
-    clusters, found = _join(clusters, titled, "title_venue_year")
+    clusters, found = _join(clusters, titled, "title_venue_year", _crawled_abstracts(clusters))
     merges += found
     # Step 3: an imported record that matched nothing, on (venue, year, abstract key).
     clusters, found = _join(clusters, _abstract_buckets(clusters), "abstract_venue_year")
@@ -667,13 +681,14 @@ def _own_abstract(claim: Claim, record: PaperRecord, pids: frozenset[str]) -> bo
     return False
 
 
-def _abstract_keys(c: _Cluster, *, imported: bool = False) -> frozenset[str]:
+def _abstract_keys(c: _Cluster, *, imported: bool = False, crawled: bool = False) -> frozenset[str]:
     """The key of every abstract claim the cluster keeps (as `keys` is of its titles) that is long enough and
-    its own page's text (`_own_abstract`). `imported`: only the import route's claims."""
+    its own page's text (`_own_abstract`). `imported`: only the import route's claims; `crawled`: only the
+    others (a crawler's text, which no merge with a RIS row replaces)."""
     return frozenset(
         k for claim in c.summary.provenance
         if claim.field == "abstract" and isinstance(claim.value, str)
-        and (claim.source in IMPORTED or not imported)
+        and (claim.source in IMPORTED or not imported) and (claim.source not in IMPORTED or not crawled)
         and _own_abstract(claim, c.summary, c.proceedings_ids) and (k := abstract_key(claim.value))
     )  # fmt: skip
 
@@ -708,15 +723,54 @@ def _abstract_buckets(
     return {k: cis for k, cis in buckets.items() if any(k[2] in anchors.get(ci, ()) for ci in cis)}
 
 
+def _crawled_abstracts(clusters: Sequence[_Cluster]) -> dict[tuple[str, int, str], set[int]]:
+    """Where `_yields_to_its_abstract` looks for an import's abstract: each crawled cluster under the key of every
+    abstract a crawler gave it (`_abstract_keys(crawled=True)`), in the venue-years that hold an imported record.
+    A crawler's claim, never a RIS row's: a merge with another RIS row can replace that one (one claim per
+    source), and a second run would then judge the title group differently."""
+    scope = {(c.summary.venue, c.summary.year) for c in clusters if _imported(c)}
+    held: dict[tuple[str, int, str], set[int]] = defaultdict(set)
+    for ci, c in enumerate(clusters):
+        if not _imported(c) and (c.summary.venue, c.summary.year) in scope:
+            for key in _abstract_keys(c, crawled=True):
+                held[(c.summary.venue, c.summary.year, key)].add(ci)
+    return held
+
+
+def _yields_to_its_abstract(
+    ci: int,
+    group: Iterable[int],
+    clusters: Sequence[_Cluster],
+    abstracts: dict[tuple[str, int, str], set[int]],
+) -> bool:
+    """Does the imported record at `ci` stay out of this title-key group (TASK-189, decision-045)? Its title is
+    Scholar's (`$R^2$-Guard` arrives as `-Guard`, the title key of a different paper, `Guard`), its own-page
+    abstract the publisher's. When a crawled cluster of the venue-year holds that abstract (`abstracts`:
+    `_crawled_abstracts`) and none of its title partners keeps it (`_abstract_keys`), the title names another
+    paper: the import yields, and step 3 joins it to the abstract's record if it may (else it stays apart). A
+    partner that keeps the abstract (a main note beside its workshop version sharing it) keeps the title merge,
+    and two RIS rows whose abstracts differ (an OpenReview and a camera-ready text) still merge: no crawled
+    record holds either."""
+    c = clusters[ci]
+    if not _imported(c):
+        return False
+    partners = [clusters[p] for p in group if p != ci]
+    return any(
+        (c.summary.venue, c.summary.year, key) in abstracts
+        and all(key not in _abstract_keys(p) for p in partners)
+        for key in _abstract_keys(c)
+    )
+
+
 def _abstract_aside(c: _Cluster, group: Sequence[_Cluster]) -> str | None:
     """Why a cluster in an abstract group can never be the imported record's paper, as its not-merged resolution,
-    or None. A listing is always a candidate. Any other record, imported or not: the title step's rule for a
-    rival of a listing (`_not_the_listed_paper`), and, listing in the group or not, a status no listing has:
-    `ris` ranks last for status, so an accepted import merged into a withdrawn or rejected record (a note, or an
-    import-only row of a forum id) would take that status, and an accepted paper would leave every
-    accepted-only result."""
+    or None. A listing is always a candidate, unless it is one by RIS evidence alone and has a status no listing
+    has (decision-040). Any other record, imported or not: the title step's rule for a rival of a listing
+    (`_not_the_listed_paper`), and, listing in the group or not, a status no listing has: `ris` ranks last for
+    status, so an accepted import merged into a withdrawn or rejected record (a note, or an import-only row of a
+    forum id) would take that status, and an accepted paper would leave every accepted-only result."""
     if c.listed:
-        return None
+        return None if c.crawled or c.summary.status in _LISTABLE_STATUSES else "ambiguous_not_merged"
     if any(x.listed for x in group):
         return _not_the_listed_paper(c, group)
     return None if c.summary.status in _LISTABLE_STATUSES else "ambiguous_not_merged"
@@ -724,16 +778,20 @@ def _abstract_aside(c: _Cluster, group: Sequence[_Cluster]) -> str | None:
 
 def _abstract_group(group: Sequence[_Cluster]) -> str | None:
     """Why these clusters must not share a record on an abstract key, or None: `_mergeable`'s reasons, and step
-    3's own. The group holds an imported record, and no record that isn't a listing has a status a listing can't
-    have. It also holds at most one cluster that isn't imported, so an abstract never joins two crawled records
-    (a listing and a note of another title are an owner decision, decision-037, TASK-187). That last check is a
-    belt-and-braces guard no input reaches today: two crawled clusters and an import can only pass `_mergeable`
-    (one forum id, one proceedings id) if the import carries the id of one of them, and then step 1 has already
-    merged it into that cluster, which is no longer imported."""
+    3's own. The group holds an imported record, and no record that isn't a listing by crawled evidence has a
+    status a listing can't have (decision-040). It also holds at most one cluster that isn't imported, so an
+    abstract never joins two crawled records (a listing and a note of another title are an owner decision,
+    decision-037, TASK-187).
+
+    Both of those checks are belt-and-braces guards no input reaches today. The status check repeats
+    `_abstract_aside`, which `_abstract_merging` runs first and which already sets aside every such cluster. And
+    two crawled clusters and an import can only pass `_mergeable` (one forum id, one proceedings id) if the
+    import carries the id of one of them, and then step 1 has already merged it into that cluster, which is no
+    longer imported."""
     crawled = [c for c in group if not _imported(c)]
     if len(crawled) > 1 or len(crawled) == len(group):
         return "ambiguous_not_merged"
-    if any(c.summary.status not in _LISTABLE_STATUSES for c in group if not c.listed):
+    if any(c.summary.status not in _LISTABLE_STATUSES for c in group if not c.crawled):
         return "ambiguous_not_merged"
     return _mergeable(group)
 
@@ -748,11 +806,16 @@ def _abstract_merging(group: Sequence[_Cluster]) -> list[int] | None:
 
 
 def _join(
-    clusters: Sequence[_Cluster], buckets: dict[tuple[str, int, str], set[int]], rule: str
+    clusters: Sequence[_Cluster],
+    buckets: dict[tuple[str, int, str], set[int]],
+    rule: str,
+    abstracts: dict[tuple[str, int, str], set[int]] | None = None,
 ) -> tuple[list[_Cluster], list[Merge]]:
     """Merge the clusters each bucket's key joins, where the step lets them, into new clusters (sorted by id),
     with one `rule` row per merged cluster, from its id to the survivor's. Title keys (step 2) are judged by
-    `_merging` and `_mergeable`, abstract keys (step 3) by `_abstract_merging` and `_abstract_group`."""
+    `_merging` and `_mergeable`, abstract keys (step 3) by `_abstract_merging` and `_abstract_group`. `abstracts`
+    (step 2: `_crawled_abstracts` of the same clusters) leaves out of a title group every import that yields to
+    its abstract (`_yields_to_its_abstract`)."""
     by_abstract = rule == "abstract_venue_year"
     merging_of = _abstract_merging if by_abstract else _merging
     refusal = _abstract_group if by_abstract else _mergeable
@@ -762,6 +825,10 @@ def _join(
         if len(cis) < 2:
             continue
         ordered = sorted(cis)
+        if abstracts is not None:
+            ordered = [ci for ci in ordered if not _yields_to_its_abstract(ci, ordered, clusters, abstracts)]
+            if len(ordered) < 2:
+                continue
         merging = merging_of([clusters[ci] for ci in ordered])
         if merging is None:
             continue  # reported by _refusals, against the output records
@@ -863,9 +930,17 @@ def _refusals(out: Sequence[PaperRecord]) -> set[Conflict]:
     for ci, c in enumerate(clusters):
         for key in c.keys:
             buckets[(c.summary.venue, c.summary.year, key)].add(ci)
+    abstracts = _crawled_abstracts(clusters)
     titled: set[Conflict] = set()
     for cis in buckets.values():
-        bucket = [clusters[ci] for ci in sorted(cis)]
+        ordered = sorted(cis)
+        # an import that yields to its abstract (decision-045), against the first title partner that doesn't:
+        # "first" in cluster order, so with several partners the row names one, and every run names the same one
+        yielded = {ci for ci in ordered if _yields_to_its_abstract(ci, ordered, clusters, abstracts)}
+        partner = next((ci for ci in ordered if ci not in yielded), None)
+        if partner is not None:
+            titled.update(_pair(clusters[partner], clusters[ci], "ambiguous_not_merged") for ci in yielded)
+        bucket = [clusters[ci] for ci in ordered if ci not in yielded]
         if len(bucket) < 2:
             continue
         # a cluster that can't be a listing's paper (TASK-126) is reported against the first listing, with

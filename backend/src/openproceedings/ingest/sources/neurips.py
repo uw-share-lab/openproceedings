@@ -40,6 +40,7 @@ from openproceedings.ingest.record import (
     PaperRecord,
     Source,
     Urls,
+    controls_evidence,
     is_url,
     title_evidence,
     title_text,
@@ -298,10 +299,13 @@ def _record(
 
     parsed = parse_abstract_page(page.text, page.url) if page.ok else None
     matches = parsed is not None and titles_match(title, parsed.title)
-    abstract = clean_abstract(parsed.abstract) if parsed is not None and matches else None
+    abstract, spaced = clean_abstract(parsed.abstract) if parsed is not None and matches else (None, 0)
     missing = missing_reason(page.ok, matches, abstract)
     if abstract is not None:
-        claim("abstract", abstract, "p.paper-abstract (citation_title matches the listing)", page.fetched_at)
+        evidence = controls_evidence(
+            "p.paper-abstract (citation_title matches the listing)", spaced
+        )  # decision-044
+        claim("abstract", abstract, evidence, page.fetched_at)
     if parsed is not None and matches and parsed.authors:
         claim("authors", parsed.authors, "citation_author", page.fetched_at)
     elif entry.authors:

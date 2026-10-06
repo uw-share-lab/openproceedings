@@ -334,3 +334,28 @@ def test_a_listed_title_with_a_control_character_keeps_its_paper() -> None:
                             index, Page(entry.url, 404, "", T0))  # fmt: skip
     assert clean.title == "Inductive Trust"
     assert [c.evidence for c in clean.claims("title")] == [f"volume index {volume.index_url}"]
+
+
+def test_a_page_abstract_with_a_control_character_is_imported_with_a_space() -> None:
+    """decision-044 (TASK-188): the title rule, for abstracts; the claim's evidence says so."""
+    from openproceedings.ingest.sources.http import Page
+
+    volume = VOLUMES[235]
+    entry = pmlr.Entry(
+        "https://proceedings.mlr.press/v235/abe24a.html", "Inductive Trust", ("A One",), None, None
+    )
+    html = (
+        '<meta name="citation_title" content="Inductive Trust">'
+        '<div id="abstract">The LiDAR modal\x02ity, 500x\x02 longer.</div>'
+    )
+    index = Page(volume.index_url, 200, "", T0)
+    record, missing = pmlr._record(volume, "pmlr-v235-abe24a", entry, index, Page(entry.url, 200, html, T0))
+    assert (record.abstract, missing) == ("The LiDAR modal ity, 500x longer.", None)
+    [abstract] = record.claims("abstract")
+    assert (
+        abstract.evidence
+        == "div#abstract (citation_title matches the listing) (2 control characters replaced by a space)"
+    )
+    only = html.replace("The LiDAR modal\x02ity, 500x\x02 longer.", "\x02\x00")
+    bare, missing = pmlr._record(volume, "pmlr-v235-abe24a", entry, index, Page(entry.url, 200, only, T0))
+    assert (bare.abstract, missing, bare.claims("abstract")) == (None, "no_abstract", ())

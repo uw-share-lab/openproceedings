@@ -3,10 +3,10 @@ id: TASK-197
 title: >-
   A cold first page of main-2-pop with group counts runs its first group three
   times and misses the 100 ms p95 budget
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-05 17:21'
-updated_date: '2026-10-05 17:31'
+updated_date: '2026-10-06 00:30'
 labels:
   - perf
   - search
@@ -32,8 +32,22 @@ Cause, measured on a scratch copy of the index: the first group (nine alternativ
 - [ ] #3 Spec 03's "Exception, as measured (decision-039, TASK-197)" bullet is removed and spec 04's Cost figures are regenerated from that run
 <!-- AC:END -->
 
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Compiled records each top-level conjunct's query (and a NOT's child's); search.run hands the request's compile to the counting worker, so TantivyEngine.counts compiles nothing again (the recompile, with exact()'s count and members collections per verified clause, was about a fifth of the counting time).
+2. When a conjunct holding a position-verified clause is in two or more counted bases, counts collects each distinct conjunct once as a bitmap of ords (order_by_field ord: no scoring), ANDs them per tree (a NOT conjunct subtracts its child's), and reads each base's (venue, year, track, status) combos from per-value bitmaps built once per engine; stored in faceted as before. Otherwise the per-tree aggregation as before.
+3. Tests: bitmap combos equal the aggregation's on generated bases; counts with the request's compile equal counts without it and ReferenceEngine; each shared conjunct collected once; check stops between collections; concurrency with the masks rebuilt under it; memo budgets unchanged.
+4. Measure by ratio (cold first page with vs without counts, before vs after, alternated) with the load recorded; the quiet re-measure and report stay with the main session.
+<!-- SECTION:PLAN:END -->
+
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Measure names (2026-10-05, gate round 1 PERF nit): 'about 35 ms a run' is the group's count alone (Tantivy's count collector on its query, best of 5); 'materialising 39 ms' is a search returning every hit's address plus reading their ord fast-field values and building the term set, best of 3. Both on the scratch copy of fd13d8d27535 at a 1-minute load near 4.
+
+Implemented on v011/perf (2026-10-05), awaiting the main session's quiet re-measure (AC #1) and the spec 03/04 figures (AC #3):
+- Compiled.conjuncts: each top-level conjunct's query (a NOT's child's too), recorded as the compile builds them; search.run passes the request's compile to the counting worker, so counts compiles nothing again (that recompile ran exact()'s count and members collections per verified clause).
+- TantivyEngine.counts: when a conjunct holding a verified clause is in two or more bases, and the call has no more distinct conjuncts than distinct bases, each distinct non-filter conjunct is collected once as a bitmap (order_by_field ord: no scoring), a base is the AND of its conjuncts' bitmaps (a NOT's child's subtracted), and its combos are read from per-value bitmaps (_masks, built once per engine, ~0.5 MB at 133k docs, uncharged like the ord table). Combos stored in faceted as before. Otherwise the per-tree aggregation as before.
+- Ratios on the scratch copy of fd13d8d27535 (cold first page = faceted cleared; plain / before / after alternated in one process, 'before' = the old path patched in): main-2-pop median after/plain 1.22-1.39 vs before/plain 3.03-3.23; p95 at a load of 30.5 → 25.0: plain 72.4, before 221.9, after 86.2 ms (40 rounds). The wildcard-phrase query: p95 81.1 → 51.7; 'trust model NOT (model NEAR/10 model*)': 46.1 → 38.4. The other nine Trust-Evals strings unchanged (no verified clause: old path). Not quiet-machine figures: the load was 25-130 throughout.
 <!-- SECTION:NOTES:END -->

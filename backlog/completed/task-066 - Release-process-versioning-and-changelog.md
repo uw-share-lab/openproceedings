@@ -1,10 +1,10 @@
 ---
 id: TASK-066
 title: 'Release process, versioning and changelog'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-03 17:23'
+updated_date: '2026-10-05 23:55'
 labels:
   - ops
 milestone: m-6
@@ -21,7 +21,7 @@ release-manager; dev → main promotion with second approval.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Tagged release from main
+- [x] #1 Tagged release from main
 - [x] #2 CHANGELOG from merged PRs
 <!-- AC:END -->
 
@@ -62,3 +62,9 @@ Pre-merge compatibility audit: fixed spec03 unsupported-version summary, spec08 
 
 2026-10-03: Owner requested solo-maintainer main promotion (zero mandatory approving reviews). GitHub protection before/after comparison proved only the review count changed; all CI and other guards remain. PR101 merged normally as 87b7dea321df3ad73045d6214158a284d7b797e2. Workflow/spec/agent guidance and decision023 receive dated clarification with the protected back-merge. No tag or deployment; those acceptance criteria remain open.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+v0.1.0 tagged on main e272aec5 on 2026-10-05 (gh release create, notes from changelog.py --notes; evidence in docs/results/2026-10-05-release-preparation.md, PRs #107, #108, #110).
+<!-- SECTION:FINAL_SUMMARY:END -->

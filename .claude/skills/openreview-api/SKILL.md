@@ -172,15 +172,16 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   a recorded note each (`notes-presentation-*.json`, trimmed from the crawl cache and scrubbed; a capture
   taken on another day than `scrub.RECORDED` carries its own `"date"`). The 2026 crawl (TASK-178) added
   `ICLR 2026 Oral` and ICML 2026's two `spotlight` strings. ICML 2026's two `regular` strings (5,805 main +
-  175 position) stay unmapped until the owner decides what they are, so that venue-year's attention WARNING is
-  expected with `presentation_unmapped` exactly 5,980. The DEBUG line has no string, so any other count means a
+  175 position) are `none` rows (decision-042, TASK-190): known, no presentation, never counted. So every
+  venue-year's `presentation_unmapped` is expected to be 0. The DEBUG line has no string, so any count means a
   new string: list the cache's distinct `content.venue` values before touching the table.
 - Titles (TASK-180, decision-036; spec 01 §Pipeline 2; the RIS and proceedings importers apply the same
   `record.title_text`): both crawlers read a title through `openreview_v2._title`, which
   replaces each control character (U+0002 from a pasted PDF line break, a trailing NUL) with a space
   (`record.title_text`) instead of losing the note as `invalid`. The claim's evidence becomes
   `content.title (<n> control characters replaced by a space)` and a DEBUG `openreview_title_control_characters`
-  line names the forum and the count. Abstracts and keywords keep theirs.
+  line names the forum and the count. Abstracts get the same rule through `openreview_v2._abstract` (evidence
+  `content.abstract (<n> control characters replaced by a space)`; TASK-188, decision-044); keywords keep theirs.
 - Logs (TASK-116; logging-standards skill §Crawl lines), the same for v1 and v2: `openreview_crawl_started`
   (`api`, `venue`, `year`, `offline`, `page_size`), `openreview_crawl_progress` at most every 30 s of the
   client's monotonic clock (`common.Heartbeat`; notes read, `forums` on v1, imported, skipped, `requests`,
