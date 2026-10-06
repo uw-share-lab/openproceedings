@@ -112,7 +112,8 @@ def abstract_text(raw: str) -> tuple[str, int]:
     (`title_text`; decision-044, TASK-188). Every importer already collapsed an abstract's whitespace, so only
     an abstract that held a control character changes. Its tokens do not (`modal\x02ity` was `modal`, `ity`
     before and is after); the record model does not refuse a control character in an abstract, so a snapshot
-    built before this still loads. Empty when nothing is left."""
+    built before this still loads. Empty when nothing is left. The same function as `title_text` under the
+    field's own name, so each importer names what it stores."""
     return _spaced(raw)
 
 
@@ -125,7 +126,8 @@ def controls_evidence(evidence: str, replaced: int) -> str:
 
 
 def title_evidence(evidence: str, replaced: int) -> str:
-    """A title claim's evidence (`controls_evidence`)."""
+    """A title claim's evidence: `controls_evidence` under the title's own name, kept for the importers that
+    call it beside `title_text`."""
     return controls_evidence(evidence, replaced)
 
 

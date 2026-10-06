@@ -654,8 +654,9 @@ WITHDRAWN_NOTE_IMPORTED_LISTING = [
 def test_a_status_no_listing_has_is_never_kept_by_merging_with_imports_alone(xs: list[PaperRecord]) -> None:
     """Steps 2 and 3 (decision-037): when a title or an abstract joins clusters, one that is no listing by crawled
     evidence (decision-040) and is rejected, withdrawn or desk-rejected (a note, or a forum id's RIS row) has a
-    companion that is no import, a crawled listing whose status outranks it. Merged with imports alone, `ris` ranking last, the record would keep
-    that status, and an accepted paper would leave every accepted-only result."""
+    companion that is no import, a crawled listing whose status outranks it. Merged with imports alone, `ris`
+    ranking last, the record would keep that status, and an accepted paper would leave every accepted-only
+    result."""
     result = dedup(xs)
     note(result)
     ends = final_ids(result)

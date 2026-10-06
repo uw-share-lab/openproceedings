@@ -941,16 +941,24 @@ class Collections:
 SHARED_VERIFIED = '"model* learning" AND (trust OR "data* set") AND calibrat* AND evaluat*'
 
 
-def test_each_shared_costly_conjunct_is_collected_once_and_nothing_is_compiled_again(tmp_path: Any) -> None:
-    """Four groups, each holding a verified clause or not: the request's compile is reused (no clause is
-    compiled, so no candidate is counted or read again), each of the four conjuncts is collected once, and no
-    tree is aggregated (its combos come from the bitmaps); the counts are the oracle's."""
+# three groups and a kept verified NOT: its child's query is the request's too (`Compiled.conjuncts`)
+KEPT_VERIFIED_NOT = '"model* learning" AND calibrat* AND evaluat* NOT "data* set"'
+
+
+@pytest.mark.parametrize(("q", "groups"), [(SHARED_VERIFIED, 4), (KEPT_VERIFIED_NOT, 3)])
+def test_each_shared_costly_conjunct_is_collected_once_and_nothing_is_compiled_again(
+    tmp_path: Any, q: str, groups: int
+) -> None:
+    """Groups each holding a verified clause or not (and a kept verified NOT): the request's compile is reused
+    (no clause is compiled, a NOT's child included, so no candidate is counted or read again), each of the four
+    non-filter conjuncts is collected once, and no tree is aggregated (its combos come from the bitmaps); the
+    counts are the oracle's."""
     engine = tantivy_of(RECORDS, tmp_path)
     reference = ReferenceEngine(RECORDS)
-    ast = parse(SHARED_VERIFIED).effective_ast
+    ast = parse(q).effective_ast
     assert ast is not None
     found = split(ast)
-    assert len(found.groups) == 4
+    assert len(found.groups) == groups
     trees = counted_trees(ast)
     scope = Scope()
     compiled = engine.compile(ast, scope)
@@ -1132,3 +1140,27 @@ def test_a_compile_of_another_tree_with_as_many_conjuncts_is_refused(engines: En
     assert tantivy.counts(counted_trees(ast), compiled=(ast, tantivy.compile(ast))) == tantivy.counts(
         counted_trees(ast)
     )
+
+
+def test_a_search_with_group_counts_hands_its_compile_to_the_counting_worker(tmp_path: Any) -> None:
+    """`search.run` passes the request's compile to the counting job (TASK-197): the worker compiles nothing,
+    neither a conjunct nor a kept NOT's child, on a fresh engine whose memos hold nothing to fall back on."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    reference = ReferenceEngine(RECORDS)
+    parsed = parse(KEPT_VERIFIED_NOT)
+    assert parsed.effective_ast is not None
+    in_counting: list[Node] = []
+    real = engine._fresh
+
+    def compiling(n: Node, s: Scope | None) -> Any:
+        if threading.current_thread().name.startswith("op-groups"):
+            in_counting.append(n)
+        return real(n, s)
+
+    engine._fresh = compiling  # type: ignore[method-assign, assignment]
+    got = search.run(engine, parsed, facets=True, groups=10)
+    search.shutdown()
+    assert got.groups is not None and got.groups.counts == expected_pairs(
+        reference, split(parsed.effective_ast)
+    )
+    assert in_counting == []

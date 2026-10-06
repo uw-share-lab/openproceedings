@@ -575,7 +575,7 @@ class TantivyEngine:
                 for v in values:
                     if check is not None:
                         check()
-                    field.append((v, self.bitmap(self._value_query(f, v))))
+                    field.append((v, self._bitmap(self._value_query(f, v))))
                 built.append(tuple(field))
             masks = self._masks = tuple(built)  # a race only builds the same masks twice
         return masks
@@ -587,7 +587,7 @@ class TantivyEngine:
             )
         return tantivy.Query.term_query(self.index.schema, field, value)
 
-    def bitmap(self, query: tantivy.Query) -> int:
+    def _bitmap(self, query: tantivy.Query) -> int:
         """The documents `query` matches as a bitmap: bit `ord` set for each (its position in `ids.txt`). One
         collection ordered by the `ord` fast column, so nothing is scored and no other column is read."""
         hits = self.searcher.search(
@@ -839,7 +839,7 @@ class _Parts:
                 query = child if child is not None else self.engine._fresh(c.child, self.scope).query
             else:
                 query = self.conjunct(c)
-            bits = self.matched[id(c)] = self.engine.bitmap(query)
+            bits = self.matched[id(c)] = self.engine._bitmap(query)
         return bits
 
 
