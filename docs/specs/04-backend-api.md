@@ -750,8 +750,11 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
 - **What a methods section may cite** (prisma-reporting). A comparison is a search-development aid, never a
   number in a PRISMA flow diagram: it changes no search and records nothing. A figure from it is cited with
   the reviewer's own file (its sha256 and the date it was exported) beside the CSV's `index_version` and
-  `canonical_hash`, since the server keeps neither the file nor the answer; the citable comparison is the
-  dated `op eval scholar` report (07 §B). A copyable summary and a place in the search record are TASK-195.
+  `canonical_hash`, since the server keeps neither the file nor the answer; the citable comparison with
+  Google Scholar is the dated `op eval scholar` report (07 §B). A search record never notes a comparison
+  (decision-043: the record stays the query and its index pin, so its replay is unchanged); instead the panel
+  gives the comparison as one sentence to cite (05 §Components 9), with the file's sha256 computed in the
+  browser from the bytes it sent, so nothing about the file is added to the answer (decision-035).
 
 ## Search records (reproducibility, PRISMA)
 

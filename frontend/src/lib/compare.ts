@@ -248,16 +248,46 @@ export function detailText(list: ListName, row: Pick<CompareRow, "detail">): str
 }
 
 /**
- * One sentence that says what the comparison found and on what, to paste into notes (copy CM-21; the server
- * keeps nothing of it: a place in the search record is TASK-195).
+ * The file's sha256 as 64 hex digits, computed here from the bytes `postCompare` sends (the File the reviewer
+ * chose), or `null` where this browser can't: Web Crypto exists only in a secure context (https, or
+ * localhost), and a file that can't be read has no digest. The server is never asked for it (decision-043:
+ * nothing of the file is echoed or kept beyond what decision-035 lists).
  */
-export function summaryText(c: Comparison, fileName: string, date: string): string {
+export async function fileSha256(file: Blob): Promise<string | null> {
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle === undefined) return null;
+  try {
+    const digest = await subtle.digest("SHA-256", new Uint8Array(await file.arrayBuffer()));
+    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The comparison as one citable sentence (copy CM-21; decision-043, prisma-reporting skill §Group counts and
+ * `/compare`): a search-development aid, never a flow-diagram number, cited with the reviewer's own file (its
+ * sha256), the UTC date it was run, the full `index_version` and the query's `canonical_hash`. The server
+ * keeps nothing of it, and a search record never notes it (decision-043): the sentence is the citable form.
+ */
+export function summaryText(
+  c: Comparison,
+  file: { readonly name: string; readonly sha256: string | null },
+  date: string,
+): string {
   const n = (x: number) => x.toLocaleString("en-US");
+  const count = (x: number, one: string) => `${n(x)} ${x === 1 ? one : `${one}s`}`;
+  const hash =
+    file.sha256 === null
+      ? "sha256 not computed by this browser: compute it from your copy"
+      : `sha256 \`${file.sha256}\``;
   return (
-    `On ${date}, the query ${c.query.canonical} (canonical_hash ${c.query.canonical_hash}) on openproceedings ` +
-    `index ${c.index_version}, compared with ${fileName} (${n(c.records_total)} records read, ` +
-    `${n(c.papers_total)} papers compared): ${n(c.kept_total)} kept, ${n(c.dropped_total)} dropped, ` +
-    `${n(c.not_in_index_total)} not in the index; it adds ${n(c.added_total)} papers the file doesn't hold.`
+    `As a search-development check (not a PRISMA flow-diagram count), on ${date} (UTC) we compared the RIS ` +
+    `file ${file.name} (${hash}; ${count(c.records_total, "record")} read, ` +
+    `${count(c.papers_total, "paper")} compared) with the query \`${c.query.canonical}\` ` +
+    `(canonical_hash \`${c.query.canonical_hash}\`) on openproceedings (index \`${c.index_version}\`): ` +
+    `${n(c.kept_total)} kept, ${n(c.dropped_total)} dropped, ${n(c.not_in_index_total)} not in the index, ` +
+    `and ${count(c.added_total, "paper")} added that the file doesn't hold.`
   );
 }
 
