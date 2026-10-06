@@ -180,7 +180,8 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   replaces each control character (U+0002 from a pasted PDF line break, a trailing NUL) with a space
   (`record.title_text`) instead of losing the note as `invalid`. The claim's evidence becomes
   `content.title (<n> control characters replaced by a space)` and a DEBUG `openreview_title_control_characters`
-  line names the forum and the count. Abstracts and keywords keep theirs.
+  line names the forum and the count. Abstracts get the same rule through `openreview_v2._abstract` (evidence
+  `content.abstract (<n> control characters replaced by a space)`; TASK-188, decision-044); keywords keep theirs.
 - Logs (TASK-116; logging-standards skill §Crawl lines), the same for v1 and v2: `openreview_crawl_started`
   (`api`, `venue`, `year`, `offline`, `page_size`), `openreview_crawl_progress` at most every 30 s of the
   client's monotonic clock (`common.Heartbeat`; notes read, `forums` on v1, imported, skipped, `requests`,

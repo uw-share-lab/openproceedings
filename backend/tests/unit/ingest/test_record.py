@@ -11,7 +11,16 @@ from typing import Any
 import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
-from openproceedings.ingest.record import DERIVED, Claim, PaperRecord, Urls, content_hash, title_text
+from openproceedings.ingest.record import (
+    DERIVED,
+    Claim,
+    PaperRecord,
+    Urls,
+    abstract_text,
+    content_hash,
+    controls_evidence,
+    title_text,
+)
 from openproceedings.ingest.snapshot import record_line
 from openproceedings.query.normalize import normalize
 from pydantic import ValidationError
@@ -494,3 +503,74 @@ def test_a_control_character_beside_a_math_delimiter_is_the_one_token_exception(
     stored, replaced = title_text(raw)
     assert (stored, replaced) == ("$\\tau $-bench", 1)
     assert (normalize(raw), normalize(stored)) == (["τ", "bench"], ["bench"])
+
+
+# --- control characters in an abstract (TASK-188, decision-044) -----------------------------------------------
+
+ABSTRACT_TEXT = [
+    # raw, stored, control characters replaced
+    (
+        "the LiDAR modal\x02ity is quanti\x02fying",
+        "the LiDAR modal ity is quanti fying",
+        2,
+    ),  # a line-break hyphen
+    ("500x\x02 longer and 6\x02x over", "500x longer and 6 x over", 2),  # U+0002 for a lost `×`
+    ("such as\x0f-greedy, \u2200\x0f > 0", "such as -greedy, \u2200 > 0", 2),  # U+000F for a lost `ε`
+    ("back\x08space\x00", "back space", 2),
+    ("a\x7fb\x85c\x9fd", "a b c d", 2),  # DEL and C1; U+0085 is whitespace, which always became a space
+    ("We study  trust.\nIn\tdepth.", "We study trust. In depth.", 0),  # whitespace collapsed, as importers do
+    ("caf\u00e9\u200b\u2014$x^2$ \u2026 done", "caf\u00e9\u200b\u2014$x^2$ \u2026 done", 0),
+    ("\x00\x02 ", "", 2),  # nothing left: the importer has no abstract
+]
+
+
+@pytest.mark.parametrize(("raw", "stored", "replaced"), ABSTRACT_TEXT)
+def test_a_control_character_in_an_abstract_becomes_a_space(raw: str, stored: str, replaced: int) -> None:
+    assert abstract_text(raw) == (stored, replaced)
+    assert abstract_text(stored) == (stored, 0)  # idempotent
+    if stored:
+        assert record(abstract=stored).abstract == stored  # the record model accepts it
+
+
+def test_an_abstract_with_a_line_break_control_keeps_its_tokens_and_still_misses_the_whole_word() -> None:
+    """decision-044: the tokenizer already split `quanti\x02fying`, so the stored abstract's tokens are the raw
+    one's and no search result changes; a search for `quantifying` still misses it (spec 01 states it)."""
+    raw = "Quanti\x02fying the LiDAR modal\x02ity of 500x\x02 longer runs"
+    stored, replaced = abstract_text(raw)
+    assert replaced == 3 and normalize(stored) == normalize(raw)
+    assert normalize(stored) == [
+        "quanti",
+        "fying",
+        "the",
+        "lidar",
+        "modal",
+        "ity",
+        "of",
+        "500x",
+        "longer",
+        "runs",
+    ]
+    assert "quantifying" not in normalize(stored)
+
+
+@given(st.text(alphabet=st.sampled_from([*"abAB12 -\\{}^_.,\u00e9\u0301\u200b", *_CONTROLS]), max_size=40))
+def test_the_stored_abstract_keeps_the_raw_abstracts_tokens(raw: str) -> None:
+    """The title property, for abstracts (decision-044): no token changes, no control character is left."""
+    stored, replaced = abstract_text(raw)
+    assert normalize(stored) == normalize(raw)
+    assert not any(unicodedata.category(c) == "Cc" for c in stored) and stored == " ".join(stored.split())
+    assert replaced == sum(unicodedata.category(c) == "Cc" and not c.isspace() for c in raw)
+
+
+@pytest.mark.parametrize(
+    ("evidence", "replaced", "said"),
+    [
+        ("content.abstract", 0, "content.abstract"),
+        ("content.abstract", 1, "content.abstract (1 control character replaced by a space)"),
+        ("p.paper-abstract", 3, "p.paper-abstract (3 control characters replaced by a space)"),
+    ],
+)
+def test_a_claims_evidence_says_how_many_control_characters_were_replaced(
+    evidence: str, replaced: int, said: str
+) -> None:
+    assert controls_evidence(evidence, replaced) == said

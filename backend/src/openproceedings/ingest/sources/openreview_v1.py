@@ -114,9 +114,9 @@ from openproceedings.ingest.sources.openreview_v2 import (
     FIRST_V2_YEAR,
     SKIP_REASONS,
     Progress,
+    _abstract,
     _pages,
     _strings,
-    _text,
     _title,
     marker_key,
 )
@@ -712,9 +712,7 @@ def note_record(
         return verdict
     venue, year = ad.venue, ad.year
     rid = f"op:{venue.lower()}:{year}:{nid}"
-    abstract = _text(content.get("abstract"))
-    if abstract is not None and (abstract.startswith("…") or abstract.endswith("…")):
-        abstract = None
+    abstract, abstract_evidence = _abstract(content.get("abstract"))
     raw_authors = content.get("authors")
     count = author_count(content)
     authors, authors_how = split_authors(raw_authors, count)
@@ -741,7 +739,7 @@ def note_record(
             claim("presentation", verdict.presentation, verdict.status_evidence, verdict.status_page)
         )
     if abstract is not None:
-        provenance.append(claim("abstract", abstract, "content.abstract"))
+        provenance.append(claim("abstract", abstract, abstract_evidence))
     if keywords:
         provenance.append(claim("keywords", keywords, "content.keywords"))
     if vid is not None:
