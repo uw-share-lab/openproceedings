@@ -282,7 +282,11 @@ def build_parser() -> argparse.ArgumentParser:
     rr.add_argument("--json", action="store_true", help="print GET /records/{id}'s replay block as JSON")
     rr.set_defaults(run=_record_replay)
 
-    serve = sub.add_parser("serve", help="run the HTTP API (spec 04) over <data-dir>/indexes/<index>")
+    serve = sub.add_parser(
+        "serve",
+        help="run the HTTP API (spec 04) over <data-dir>/indexes/<index>",
+        formatter_class=ConfigDefaults,
+    )
     serve.add_argument("--host", default="127.0.0.1", help="default 127.0.0.1")
     serve.add_argument("--port", type=int, default=8000, help="default 8000")
     serve.add_argument("--index", default="current", help="`current` (default) or an index_version")
@@ -365,54 +369,28 @@ def build_parser() -> argparse.ArgumentParser:
     compare_caps = serve.add_argument_group(
         "comparisons", "POST /compare's caps (stated in GET /meta limits.compare) and costs (decision-035)"
     )
-    compare_caps.add_argument(
-        "--compare-max-body-bytes", type=int, metavar="BYTES",
-        help="the largest RIS file (default 16777216, 16 MiB; at least 1024); the reverse proxy's body cap "
-        "for the path must be at least this",
-    )  # fmt: skip
-    compare_caps.add_argument(
-        "--compare-max-records", type=int, metavar="N",
-        help="records one file may hold (default 5000); about 10 s of CPU per 1,000",
-    )  # fmt: skip
-    compare_caps.add_argument(
-        "--compare-max-line-chars", type=int, metavar="N",
-        help="code points in one line of the file, tag included (default 32768; at least 64)",
-    )  # fmt: skip
-    compare_caps.add_argument(
-        "--compare-max-results", type=int, metavar="N",
-        help="papers of the query's result that the file lacks, the most one comparison reads (default 5000)",
-    )  # fmt: skip
-    compare_caps.add_argument(
-        "--compare-max-response-bytes", type=int, metavar="BYTES",
-        help="the largest answer (default 16777216; at least 1024)",
-    )  # fmt: skip
-    compare_caps.add_argument(
-        "--compare-max-seconds", type=float, metavar="S",
-        help="wall time one comparison's work gets before a 503 API_BUSY (default 60)",
-    )  # fmt: skip
-    compare_caps.add_argument(
-        "--compare-upload-seconds", type=float, metavar="S",
-        help="wall time a file gets to arrive once a slot is held before a 408 (default 30)",
-    )  # fmt: skip
-    compare_caps.add_argument(
-        "--comparison-slots", type=int, metavar="N",
-        help="comparisons run at once, each holding one file in memory (default 1; budget about 250 MB each)",
-    )  # fmt: skip
-    compare_caps.add_argument(
-        "--compare-cooldown-factor", type=float, metavar="X",
-        help="after a comparison its network starts no other for X times the slot time it used (default 3: "
-        "one network holds a slot at most 1/(1+X) of the time); 0 turns the pause off. Not applied on a "
-        "local instance or with --no-rate-limit",
-    )  # fmt: skip
-    compare_caps.add_argument(
-        "--compare-upload-weight", type=float, metavar="X",
-        help="how many times a file's upload time counts, in the token debit and the cooldown (default 4; at "
-        "least 1)",
-    )  # fmt: skip
-    compare_caps.add_argument(
-        "--compare-token-ms", type=float, metavar="MS",
-        help="one rate-limit token per this many ms a comparison held its slot (default 500)",
-    )  # fmt: skip
+    for flag, metavar, kind, meaning in (
+        ("--compare-max-body-bytes", "BYTES", int,
+         "the largest RIS file; the reverse proxy's body cap for the path must be at least this"),
+        ("--compare-max-records", "N", int, "records one file may hold; about 10 s of CPU per 1,000"),
+        ("--compare-max-line-chars", "N", int, "code points in one line of the file, tag included"),
+        ("--compare-max-results", "N", int,
+         "papers of the query's result that the file lacks, the most one comparison reads"),
+        ("--compare-max-response-bytes", "BYTES", int, "the largest answer"),
+        ("--compare-max-seconds", "S", float, "wall time one comparison's work gets before a 503 API_BUSY"),
+        ("--compare-upload-seconds", "S", float,
+         "wall time a file gets to arrive once a slot is held before a 408"),
+        ("--comparison-slots", "N", int,
+         "comparisons run at once, each holding one file in memory: budget about 250 MB each"),
+        ("--compare-cooldown-factor", "X", float,
+         "after a comparison its network starts no other for X times the slot time it used (one network holds "
+         "a slot at most 1/(1+X) of the time); 0 turns the pause off. Not applied on a local instance or with "
+         "--no-rate-limit"),
+        ("--compare-upload-weight", "X", float,
+         "how many times a file's upload time counts, in the token debit and the cooldown"),
+        ("--compare-token-ms", "MS", float, "one rate-limit token per this many ms a comparison held its slot"),
+    ):  # fmt: skip
+        compare_caps.add_argument(flag, type=kind, metavar=metavar, help=f"{meaning} (%(config_default)s)")
     serve.add_argument(
         "--log-query-text",
         action="store_true",
@@ -1852,6 +1830,34 @@ def _serve(ns: argparse.Namespace) -> int:
         raise _usage(f"invalid serve options: {serve_errors(e)}") from None
     serve(config, ns.host, ns.port, ns.log_level, ns.log_format)
     return 0
+
+
+class ConfigDefaults(argparse.HelpFormatter):
+    """Fills `%(config_default)s` in a serve flag's help with its `ApiConfig` (or `RateLimit`) field's default and
+    range, so the help can't drift from the config (TASK-184). The API is imported only when help is printed:
+    it costs every other `op` command 0.4 s."""
+
+    def _expand_help(self, action: argparse.Action) -> str:
+        if "%(config_default)" in (action.help or ""):
+            import annotated_types as at
+
+            from openproceedings.api.config import ApiConfig, RateLimit
+
+            field = {**RateLimit.model_fields, **ApiConfig.model_fields}[action.dest]
+
+            def num(v: object) -> str:  # 16777216, never 1.67772e+07
+                return f"{v:.15g}" if isinstance(v, float) else str(v)
+
+            said = [f"default {num(field.default)}"]
+            for m in field.metadata:
+                if isinstance(m, at.Ge):
+                    said.append(f"at least {num(m.ge)}")
+                elif isinstance(m, at.Gt):
+                    said.append(f"over {num(m.gt)}")
+                elif isinstance(m, at.Le):
+                    said.append(f"at most {num(m.le)}")
+            vars(action)["config_default"] = "; ".join(said)
+        return super()._expand_help(action)
 
 
 def given(**options: object) -> dict[str, object]:

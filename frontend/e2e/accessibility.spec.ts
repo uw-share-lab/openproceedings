@@ -345,7 +345,12 @@ test("a comparison with a RIS file is run and read by keyboard, and fits 320px",
     .first()
     .textContent();
   expect(kept + added).toBe(Number((shown ?? "").replace(/[^\d]/g, "")));
-  // from the heading, Tab reaches the summary's Copy, then each list's controls in order; Enter opens a list
+  // from the heading, Tab reaches the citable sentence's read-only box (selectable from the keyboard), its
+  // Copy, then each list's controls in order; Enter opens a list
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("textbox", { name: /^This comparison in one sentence, to cite/ }),
+  ).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Copy this comparison as one sentence" })).toBeFocused();
   await page.keyboard.press("Tab");

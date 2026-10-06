@@ -17,6 +17,7 @@ import csv
 import gzip
 import io
 import json
+import math
 import re
 import shutil
 import tempfile
@@ -34,9 +35,10 @@ from openproceedings import cli
 from openproceedings import export as exporter
 from openproceedings.api import ApiConfig, RateLimit, meta
 from openproceedings.api import compare as route
+from openproceedings.api import config as api_config
 from openproceedings.api import export as export_route
 from openproceedings.api import server as api_server
-from openproceedings.api.middleware import BodyLimit, drain
+from openproceedings.api.middleware import BodyLimit, drain, rate_limited
 from openproceedings.api.middleware import RateLimit as RateLimitMiddleware
 from openproceedings.api.models import CompareLimits, CompareReason, MatchedBy, NotComparedReason
 from openproceedings.api.state import IndexState, MatchTable
@@ -538,7 +540,46 @@ def test_op_serve_sets_every_comparison_value(monkeypatch: pytest.MonkeyPatch, t
             ["--compare-upload-weight", "0.5"],
             "compare_upload_weight: Input should be greater than or equal to 1",
         ),
-        (["--compare-token-ms", "0"], "compare_token_ms: Input should be greater than 0"),
+        (["--compare-token-ms", "0"], "compare_token_ms: Input should be greater than or equal to 1"),
+        # finite but extreme (security gate, batch B): each overflowed or removed the bound it is
+        (["--compare-token-ms", "5e-324"], "compare_token_ms: Input should be greater than or equal to 1"),
+        (
+            ["--compare-cooldown-factor", "1e308"],
+            "compare_cooldown_factor: Input should be less than or equal to 1000",
+        ),
+        (
+            ["--compare-upload-weight", "1e308"],
+            "compare_upload_weight: Input should be less than or equal to 100",
+        ),
+        (
+            ["--compare-max-seconds", "1e308"],
+            "compare_max_seconds: Input should be less than or equal to 3600",
+        ),
+        (
+            ["--compare-upload-seconds", "3601"],
+            "compare_upload_seconds: Input should be less than or equal to 3600",
+        ),
+        (["--comparison-slots", str(10**30)], "comparison_slots: Input should be less than or equal to 16"),
+        (
+            ["--compare-max-body-bytes", str(2**30 + 1)],
+            "compare_max_body_bytes: Input should be less than or equal to 1073741824",
+        ),
+        (
+            ["--compare-max-response-bytes", str(10**30)],
+            "compare_max_response_bytes: Input should be less than or equal to 1073741824",
+        ),
+        (
+            ["--compare-max-records", "1000001"],
+            "compare_max_records: Input should be less than or equal to 1000000",
+        ),
+        (
+            ["--compare-max-results", "1000001"],
+            "compare_max_results: Input should be less than or equal to 1000000",
+        ),
+        (
+            ["--compare-max-line-chars", str(2**24 + 1)],
+            "compare_max_line_chars: Input should be less than or equal to 16777216",
+        ),
     ],
 )
 def test_op_serve_refuses_a_bad_comparison_value_at_start(
@@ -552,6 +593,33 @@ def test_op_serve_refuses_a_bad_comparison_value_at_start(
     assert cli.main(["--data-dir", str(tmp_path), "serve", *flags]) == 1
     err = capsys.readouterr().err
     assert "invalid serve options" in err and says in err
+
+
+def test_the_widest_comparison_values_keep_the_pause_and_the_debit_finite() -> None:
+    """At every bound at once (the slowest upload counted the most, the longest work, the dearest pause, the
+    cheapest token) the pause, its whole seconds, its 429 and the debit are finite: 1e308 overflowed them."""
+    worst = api_config.MAX_UPLOAD_WEIGHT * api_config.MAX_COMPARE_SECONDS + api_config.MAX_COMPARE_SECONDS
+    cooldowns = route.Cooldowns(api_config.MAX_COOLDOWN_FACTOR, 10)
+    assert cooldowns.enter("n") == 0.0
+    pause = cooldowns.leave("n", worst)
+    assert math.isfinite(pause) and math.ceil(pause) == math.ceil(api_config.MAX_COOLDOWN_FACTOR * worst)
+    assert int(rate_limited(cooldowns.enter("n")).headers["Retry-After"]) > 0
+    assert math.isfinite(worst * 1000 / 1)  # tokens at the lowest price, 1 ms (refused below it, above)
+
+
+def test_op_serve_help_states_each_comparison_default_from_the_config(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The help reads each default and range from the config's own field, so it can't drift (TASK-184)."""
+    with pytest.raises(SystemExit):
+        cli.main(["--data-dir", str(tmp_path), "serve", "--help"])
+    text = " ".join(capsys.readouterr().out.split())  # argparse wraps it
+    for flag, _, where, field, _ in COMPARE_FLAGS:
+        info = (RateLimit if where == "rate_limit" else ApiConfig).model_fields[field]
+        default = info.default if isinstance(info.default, int) else f"{info.default:.15g}"
+        assert f"{flag} " in text and f"(default {default};" in text, flag
+    assert "(default 16777216; at least 1024; at most 1073741824)" in text  # never 1.67772e+07
+    assert "(default 3; at least 0; at most 1000)" in text
 
 
 def test_op_serve_refuses_a_comparison_value_that_is_not_a_number(
@@ -967,12 +1035,13 @@ def test_a_comparison_costs_an_exports_weight_and_its_slot_time(corpus_dir: Path
 
 
 def test_the_time_a_comparison_held_its_slot_is_debited(corpus_dir: Path) -> None:
-    """One token per `compare_token_ms`: at a tiny rate one comparison leaves the client in debt."""
+    """One token per `compare_token_ms`: at the lowest price (1 ms) the slot time a comparison used is debited
+    past the one token the route's own charge left, so the next search can't be paid."""
     limit = RateLimit(
-        capacity=100,
+        capacity=11,
         refill_per_second=0.001,
         export_weight=10,
-        compare_token_ms=0.001,
+        compare_token_ms=1,
         compare_cooldown_factor=0,
     )
     with app_of(corpus_dir, rate_limit=limit) as c:

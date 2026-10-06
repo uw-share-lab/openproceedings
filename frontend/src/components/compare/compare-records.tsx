@@ -14,8 +14,8 @@
  * text, saved as sent.
  *
  * The file goes to the server for this one request and is not kept there (spec 04). Its name never leaves the
- * browser, and its sha256, for the citable sentence, is computed here (TASK-195). Nor does the comparison: it lives in this component only, so a row's title opens its paper in a
- * new tab (Back would otherwise lose it).
+ * browser, and its sha256, for the citable sentence, is computed here (TASK-195). The comparison is kept
+ * nowhere but this component, so a row's title opens its paper in a new tab (Back would otherwise lose it).
  */
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -135,7 +135,13 @@ interface Done {
 type Run =
   | { readonly kind: "idle" }
   | { readonly kind: "running"; readonly fileName: string; readonly size: number; readonly since: number }
-  | { readonly kind: "failed"; readonly key: string; readonly failure: Failure };
+  | {
+      readonly kind: "failed";
+      readonly key: string;
+      readonly failure: Failure;
+      /** Which request failed (one per start): each failure draws its own notice and countdown. */
+      readonly attempt: number;
+    };
 
 export function CompareRecords({
   q,
@@ -155,6 +161,7 @@ export function CompareRecords({
   // when this network may start the next comparison (ms since the epoch) and the wait the last answer gave
   const [nextAt, setNextAt] = useState<{ readonly at: number; readonly seconds: number } | null>(null);
   const aborter = useRef<AbortController | null>(null);
+  const attempts = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const compareButton = useRef<HTMLButtonElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -204,6 +211,7 @@ export function CompareRecords({
       const controller = new AbortController();
       aborter.current = controller;
       const asked = key;
+      const attempt = (attempts.current += 1);
       keepFocus(byItself);
       setRun({ kind: "running", fileName: file.name, size: file.size, since: Date.now() });
       // a retry by itself was announced with its wait; "Comparing…" again would only repeat it (A11Y-R2-2)
@@ -232,7 +240,7 @@ export function CompareRecords({
             setRun({ kind: "idle" });
             setAnnouncement(doneText(outcome.data));
           } else {
-            setRun({ kind: "failed", key: asked, failure: outcome });
+            setRun({ kind: "failed", key: asked, failure: outcome, attempt });
             setAnnouncement(
               retriedByItself(outcome, tries)
                 ? `${autoRetryText(outcome.retryAfter ?? 0)}.`
@@ -242,7 +250,7 @@ export function CompareRecords({
         },
         () => {
           if (controller.signal.aborted) return;
-          setRun({ kind: "failed", key: asked, failure: { kind: "unreachable" } });
+          setRun({ kind: "failed", key: asked, failure: { kind: "unreachable" }, attempt });
           setAnnouncement("The comparison didn't run.");
         },
       );
@@ -394,6 +402,10 @@ export function CompareRecords({
               </p>
             )}
             <FailureNotice
+              // a new notice per failed request: two busy answers in a row can land without the "running"
+              // state between them ever being drawn, and the one countdown kept would not retry again (it
+              // had retried; a test failed 1 run in 6 on it)
+              key={run.attempt}
               failure={run.failure}
               onRetry={refusedFile ? null : (byItself) => start({ byItself, keepCount: busy })}
               autoRetry={retrying}
@@ -620,21 +632,38 @@ function ListToggle({
 }
 
 /**
- * The comparison as one sentence to cite (copy CM-21; TASK-195, decision-043): shown as text, so it can be
- * selected where the clipboard can't be written, with a Copy button that says "Copied". A search record never
- * notes a comparison; this sentence, with the file's own sha256, is what a methods section cites.
+ * The comparison as one sentence to cite (copy CM-21; TASK-195, decision-043): in a read-only text box sized to
+ * its text, which the keyboard reaches, so it can be selected where the clipboard can't be written (WCAG 2.1.1);
+ * the Copy button then focuses and selects it. A search record never notes a comparison; this sentence, with
+ * the file's own sha256, is what a methods section cites.
  */
 function Citable({ done }: { done: Done }) {
   const captionId = useId();
+  const box = useRef<HTMLTextAreaElement>(null);
   const text = summaryText(done.comparison, { name: done.fileName, sha256: done.sha256 }, done.date);
   return (
-    <figure aria-labelledby={captionId} className="space-y-1">
+    <figure className="space-y-1">
       <figcaption id={captionId} className="text-xs text-muted-foreground">
         This comparison in one sentence, to cite beside your file (nothing of it is kept here, and a saved
         search record doesn&apos;t note it):
       </figcaption>
-      <p className="rounded-md border bg-muted/40 p-2 text-sm break-words select-all">{text}</p>
-      <CopyButton text={text} label="Copy this comparison as one sentence" />
+      <textarea
+        ref={box}
+        readOnly
+        value={text}
+        aria-labelledby={captionId}
+        // `field-sizing: content` fits the box to the sentence where supported; rows is the fallback's height
+        rows={Math.ceil(text.length / 72)}
+        className="block field-sizing-content w-full resize-none rounded-md border bg-muted/40 p-2 text-sm break-words"
+      />
+      <CopyButton
+        text={text}
+        label="Copy this comparison as one sentence"
+        onFailed={() => {
+          box.current?.focus();
+          box.current?.select();
+        }}
+      />
     </figure>
   );
 }

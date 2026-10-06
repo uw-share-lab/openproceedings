@@ -105,6 +105,10 @@ describe("the words", () => {
     expect(reasonText("dropped", "a_new_class")).toBe("a_new_class");
     expect(matchedByText("a_new_rule")).toBe("a_new_rule");
     expect(matchedByText("doi")).toBe("matched by its DOI"); // TASK-186: Scopus and Web of Science exports
+    // a record with neither names its links and its DOI as unmatched alike (TASK-186)
+    expect(matchedByText("not_found")).toBe(
+      "no record with this title in that venue and year, and no link or DOI naming an indexed paper",
+    );
     expect(notComparedText("a_new_reason")).toBe("a_new_reason");
   });
 
@@ -148,6 +152,25 @@ describe("the words", () => {
       `${limited.query_limit} papers are outside a limit your query writes: to include such a paper, widen ` +
         "that limit in the query (its row names the clause).",
     ]);
+    // a paper the index doesn't hold whose year or venue in the file is outside the query's own limit: no
+    // widening finds it, so its step is the coverage gap's, never "widen that limit" (gate UX/USAB MUST)
+    const missing = fixture.limited.response.reason_totals.not_in_index;
+    expect(missing.query_limit).toBe(1);
+    expect(reasonLines("not_in_index", { query_limit: missing.query_limit ?? 0 }, "native")).toEqual([
+      "1 paper is not in the index, and its year or venue in your file is outside a limit your query writes. " +
+        "Keep such a paper from your own file; no query here can find it.",
+    ]);
+    expect(reasonLines("not_in_index", { query_limit: 2 }, "native")).toEqual([
+      "2 papers are not in the index, and their year or venue in your file is outside a limit your query " +
+        "writes. Keep such a paper from your own file; no query here can find it.",
+    ]);
+    const row = fixture.limited.response.not_in_index.find((r) => r.reason === "query_limit");
+    expect(reasonText("not_in_index", row?.reason ?? null)).toBe(
+      "not in the index; its year or venue in your file is outside a limit your query writes",
+    );
+    expect(reasonText("dropped", "query_limit")).toBe(
+      "outside a limit your query writes (its year, venue, track or status)",
+    );
     expect(reasonLines("dropped", { a_new_class: 2 }, "native")).toEqual(["2 papers: a_new_class."]); // open enum
     // every reason the API documents has its sentence, in both lists it can appear in, and a dropped or
     // missing paper's always says what to do next (USAB-S3)
@@ -200,21 +223,36 @@ describe("the words", () => {
     const n = (x: number) => x.toLocaleString("en-US");
     expect(text).toBe(
       "As a search-development check (not a PRISMA flow-diagram count), on 2026-10-05 (UTC) we compared the " +
-        `RIS file mine.ris (sha256 \`${sha}\`; ${n(c.records_total)} records read, ${n(c.papers_total)} papers ` +
-        `compared) with the query \`${c.query.canonical}\` (canonical_hash \`${c.query.canonical_hash}\`) on ` +
+        `RIS file mine.ris (sha256 \`${sha}\`; ${n(c.records_total)} records read: ${n(c.papers_total)} papers ` +
+        `compared, ${n(c.not_compared_total)} not compared for a venue or year out of scope, and ` +
+        `${n(c.duplicates_total)} ${c.duplicates_total === 1 ? "repeat" : "repeats"} of a paper already counted) ` +
+        `with the query \`${c.query.canonical}\` (canonical_hash \`${c.query.canonical_hash}\`) on ` +
         `openproceedings (index \`${c.index_version}\`): ${n(c.kept_total)} kept, ${n(c.dropped_total)} dropped, ` +
         `${n(c.not_in_index_total)} not in the index, and ${n(c.added_total)} papers added that the file ` +
         "doesn't hold.",
     );
     // one sentence: no full stop before its end but the ones inside the query
     expect(text.replace(c.query.canonical, "").slice(0, -1)).not.toMatch(/\.\s/);
+    // the file's records are all accounted for: compared, not compared, repeats (the fixture has each)
+    expect(c.not_compared_total).toBeGreaterThan(0);
+    expect(c.duplicates_total).toBeGreaterThan(0);
+    expect(c.papers_total + c.not_compared_total + c.duplicates_total).toBe(c.records_total);
   });
 
   it("says when this browser couldn't compute the file's sha256, and counts one of a kind", () => {
-    const one = { ...fixture.response, records_total: 1, papers_total: 1, added_total: 1 };
+    const one = {
+      ...fixture.response,
+      records_total: 1,
+      papers_total: 1,
+      not_compared_total: 0,
+      duplicates_total: 0,
+      added_total: 1,
+    };
     const text = summaryText(one, { name: "mine.ris", sha256: null }, "2026-10-05");
+    // no repeats: the clause is left out, never "0 repeats"
     expect(text).toContain(
-      "(sha256 not computed by this browser: compute it from your copy; 1 record read, 1 paper compared)",
+      "(sha256 not computed by this browser: compute it from your copy; 1 record read: 1 paper compared and 0 " +
+        "not compared for a venue or year out of scope)",
     );
     expect(text).toContain("and 1 paper added that the file doesn't hold.");
   });
@@ -272,8 +310,10 @@ describe("the file", () => {
       /^This file is 2\.9 KB; this instance compares files up to 2\.0 KB\./,
     );
     expect(limitsLine(LIMITS)).toBe(
-      "Up to 16.0 MB and 5,000 records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it).",
+      "Up to 16.0 MB and 5,000 records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it); the " +
+        "file must arrive within 30 s.",
     );
+    expect(limitsLine({ ...LIMITS, max_upload_seconds: 1.5 })).toContain("within 1.5 s.");
     expect(limitsLine({ ...LIMITS, ...fixture.limits.compare })).toContain("5,000 records");
   });
 
