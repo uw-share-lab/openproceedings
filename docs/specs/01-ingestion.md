@@ -301,7 +301,12 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
      a forum id's RIS row with no note crawled (both claims are `ris`, so the status would be whichever row was
      fetched last). Either way an accepted paper would leave every accepted-only result. (b) holds the same
      rule: such a record never merges on its title with imported records alone, imported or crawled itself; a
-     crawled listing, whose status outranks it, may still take a lone rejected note.
+     crawled listing, whose status outranks it, may still take a lone rejected note. For this rule a record is a
+     listing only by **crawled evidence** (TASK-198, decision-040): a proceedings source's claim, or a crawled
+     note's own `urls.proceedings`/`urls.pdf` naming a proceedings paper. A proceedings id that only a RIS row
+     names does not count: a rejected note whose forum id's RIS row names a proceedings paper (TASK-174's shape)
+     stays apart from the import of that paper, which stays accepted, until a crawl lists the paper. Everywhere
+     else (reconcile, the track rule) a listing keeps its wider meaning (`dedup.is_listing`).
    A refused group is a `conflicts.csv` row with field `abstract_key` (or `abstract_key_chain` when each pair
    could merge alone), and so is a rival set aside by a merge: rows are judged on the output records, anchored on
    every own-page abstract the record an import merged into keeps (a listing holding a `ris` claim: a newer RIS

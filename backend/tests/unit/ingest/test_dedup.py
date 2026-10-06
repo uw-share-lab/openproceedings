@@ -1467,6 +1467,80 @@ def test_a_crawled_note_that_is_not_accepted_never_merges_with_an_imported_listi
     assert (r.id, r.status) == (note.id, "accepted")
 
 
+# --- a listing by RIS evidence alone (TASK-198, decision-040) ----------------------------------------------------
+
+
+def ris_listed_note(title: str, status: str = "rejected") -> list[PaperRecord]:
+    """TASK-174's shape: a note that is not accepted and its forum id's RIS row naming a proceedings paper, which
+    makes the note's cluster a listing by RIS evidence alone."""
+    return [
+        paper("AbCd1234", title, abstract=LONG, status=status, **ICLR),
+        paper("AbCd1234", title, source="ris", abstract=LONG, urls_proceedings=self_url(f"iclr-{H[1]}", 2025),
+              **ICLR),
+    ]  # fmt: skip
+
+
+@pytest.mark.parametrize("status", ["withdrawn", "rejected", "desk_rejected"])
+@pytest.mark.parametrize(
+    ("titles", "field"), [(("One", "Two"), "abstract_key"), (("One", "One"), "title_key")]
+)
+def test_a_listing_by_ris_evidence_alone_never_takes_an_import_by_abstract_or_title(
+    status: str, titles: tuple[str, str], field: str
+) -> None:
+    """decision-040: the note's cluster names `iclr-<H1>` only through its RIS row, so it is no listing for
+    decision-037's exemption. The import of that paper stays apart and accepted, by abstract as by title, with one
+    not-merged row."""
+    xs = [*ris_listed_note(titles[0], status), imported(f"iclr-{H[1]}", titles[1], abstract=LONG, **ICLR)]
+    note, copy = xs[0], xs[2]
+    result = dedup(xs)
+    assert [(r.id, r.status) for r in result.records] == [(note.id, status), (copy.id, "accepted")]
+    assert rules(result) == [(note.id, note.id, "forum_id")]
+    pair = [(copy.id, "ris"), (note.id, "openreview_v2+ris")]
+    if field == "title_key":  # both are listings, so neither is set aside: the pair in id order
+        pair.reverse()
+    (a, sa), (b, sb) = pair
+    assert [c for c in result.conflicts if c.resolution.endswith("_not_merged")] == [
+        Conflict(a, field, a, sa, b, sb, "ambiguous_not_merged")
+    ]
+    again = dedup(result.records)
+    assert (again.records, again.conflicts) == (result.records, result.conflicts)
+
+
+def test_a_listing_by_ris_evidence_alone_is_still_a_listing_for_reconcile() -> None:
+    """decision-040 narrows only decision-037's exemption: `is_listing` keeps its meaning (reconcile, the track
+    rule), so the note's merged record is still one."""
+    from openproceedings.ingest.dedup import is_listing
+
+    [r] = dedup(ris_listed_note("One")).records
+    assert is_listing(r)
+
+
+def test_a_ris_listed_note_and_its_import_merge_once_the_proceedings_listing_is_crawled() -> None:
+    """With the crawled listing present, its status outranks the note's: the three merge, accepted."""
+    xs = [
+        *ris_listed_note("One"),
+        imported(f"iclr-{H[1]}", "One", abstract=LONG, **ICLR),
+        paper(f"iclr-{H[1]}", "One", source="iclr_archive", abstract=LONG, **ICLR),
+    ]
+    [r] = dedup(xs).records
+    assert (r.id, r.status) == ("op:iclr:2025:AbCd1234", "accepted")
+
+
+@pytest.mark.parametrize("title", ["One", "Two"])
+def test_a_note_that_names_its_proceedings_paper_itself_is_crawled_evidence(title: str) -> None:
+    """decision-040: a crawled note's own `urls.proceedings` claim is crawled evidence (no crawler emits one
+    today), so the exemption holds and the import merges into it, by title or abstract (the note's status
+    stays OpenReview's)."""
+    note = paper("AbCd1234", "One", abstract=LONG, status="rejected",
+                 urls_proceedings=self_url(f"iclr-{H[1]}", 2025), **ICLR)  # fmt: skip
+    copy = imported(f"iclr-{H[1]}", title, abstract=LONG, **ICLR)
+    result = dedup([note, copy])
+    assert [(r.id, r.status) for r in result.records] == [(note.id, "rejected")]
+    assert [m.rule for m in result.merges] == [
+        "title_venue_year" if title == "One" else "abstract_venue_year"
+    ]
+
+
 @pytest.mark.parametrize(
     "evidence",
     [
