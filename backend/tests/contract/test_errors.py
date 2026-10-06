@@ -6,7 +6,7 @@ from __future__ import annotations
 import unicodedata
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,6 +14,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from openproceedings.api import RateLimit
 from openproceedings.api.errors import MAX_NAMED_PARAMS, bad_param_message
+from openproceedings.api.middleware import RateLimit as RateLimitMiddleware
 from openproceedings.api.models import ParseRequest
 from openproceedings.diagnostics import DiagnosticCode, http_status
 from pydantic import ValidationError
@@ -174,9 +175,13 @@ def test_a_disallowed_cors_preflight_is_a_plain_400_and_is_logged(
 
 
 def test_429_rate_limited_with_retry_after(store: Store) -> None:
+    """The bucket's clock is frozen: on the wall clock a slow runner refilled 0.2 tokens between the two
+    requests (2 s at 0.1 a second) and the header said 8, not 10 (the v0.2.0 candidate's nightly)."""
     app = make_app(
         store.indexes.parent, rate_limit=RateLimit(capacity=1, refill_per_second=0.1, export_weight=1)
     )
+    (limiter,) = [m for m in app.user_middleware if cast(object, m.cls) is RateLimitMiddleware]
+    limiter.kwargs["clock"] = lambda: 0.0  # read when the middleware stack is built, at the first request
     with TestClient(app) as c:
         assert c.get("/api/v1/search", params={"q": "trust"}).status_code == 200
         r = c.get("/api/v1/search", params={"q": "trust"})
