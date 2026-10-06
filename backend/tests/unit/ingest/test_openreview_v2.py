@@ -153,7 +153,7 @@ def test_a_title_with_control_characters_is_imported_with_spaces_and_says_so(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """ICLR 2026 `xHMNX3l8rx` (two U+0002 in its title) was skipped as `invalid`: a real paper lost to invisible
-    characters. The title keeps everything else; the abstract, which the record never refused, is untouched."""
+    characters. The title keeps everything else; the abstract gets the same rule (decision-044, TASK-188)."""
     note = recorded_note("iclr-2026/notes-accepted.json")
     note["content"]["title"]["value"] = "A SPEC\x02TRUM FROM STATISTICAL TO CAUSAL\x02"
     note["content"]["abstract"]["value"] = "the LiDAR modal\x02ity"
@@ -161,11 +161,15 @@ def test_a_title_with_control_characters_is_imported_with_spaces_and_says_so(
         record = build(note, "ICLR", 2026)
     assert isinstance(record, PaperRecord)
     assert (
-        record.title == "A SPEC TRUM FROM STATISTICAL TO CAUSAL"
-        and record.abstract == "the LiDAR modal\x02ity"
+        record.title == "A SPEC TRUM FROM STATISTICAL TO CAUSAL" and record.abstract == "the LiDAR modal ity"
     )
     [title] = record.claims("title")
     assert title.evidence == "content.title (2 control characters replaced by a space)"
+    [abstract] = record.claims("abstract")
+    assert (abstract.value, abstract.evidence) == (
+        "the LiDAR modal ity",
+        "content.abstract (1 control character replaced by a space)",
+    )
     [line] = [r for r in caplog.records if r.getMessage() == "openreview_title_control_characters"]
     assert (line.levelno, line.__dict__["forum"], line.__dict__["replaced"]) == (logging.DEBUG, note["id"], 2)
     assert "title" not in line.__dict__  # a title is never logged
@@ -188,6 +192,34 @@ def test_the_title_claims_evidence_counts_only_what_was_replaced(title: str, evi
     record = build(note)
     assert isinstance(record, PaperRecord) and [c.evidence for c in record.claims("title")] == [evidence]
     assert record.title == " ".join(title.replace("\x00", " ").split())
+
+
+@pytest.mark.parametrize(
+    ("abstract", "stored", "evidence"),
+    [
+        (
+            "quanti\x02fying 500x\x02 longer",
+            "quanti fying 500x longer",
+            "content.abstract (2 control characters replaced by a space)",
+        ),
+        (
+            "We  study\x0b trust.",
+            "We study trust.",
+            "content.abstract",
+        ),  # whitespace controls: evidence unchanged
+        ("\x00\x02 ", None, None),  # nothing left: no abstract, the paper is kept
+        ("\x02\u2026 a snippet", None, None),  # a snippet once the control is a space
+    ],
+)
+def test_an_abstract_with_control_characters_is_imported_with_spaces_and_says_so(
+    abstract: str, stored: str | None, evidence: str | None
+) -> None:
+    """decision-044 (TASK-188): the title rule, for abstracts."""
+    note = recorded_note("iclr-2024/notes-accepted.json")
+    note["content"]["abstract"]["value"] = abstract
+    record = build(note)
+    assert isinstance(record, PaperRecord) and record.abstract == stored
+    assert [c.evidence for c in record.claims("abstract")] == ([] if evidence is None else [evidence])
 
 
 @pytest.mark.parametrize("title", ["\x00\x02", " \x02 ", "", None, 7])

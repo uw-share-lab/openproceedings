@@ -14,7 +14,7 @@ build.
 |---|---|---|
 | `id` | str | Stable ID `op:<venue>:<year>:<native>`, e.g. `op:iclr:2024:iilhN2MycO`. `native` is the OpenReview forum ID, or `pmlr-v202-<key>` (ICML) / `nips-<hash>` (NeurIPS; `nips-<hash>-round1`/`-round2` on the 2021 Datasets and Benchmarks host: the suffix is the link's round token, because that host numbers each round and the main track separately, so its hash alone can name three papers; a D&B link without a round, or dated other than 2021, gets no id (miner `no_round`, RIS `unresolved`), never a bare `nips-<hash>`; `urls.proceedings_native` is the one rule) / `iclr-<hash>` (ICLR) for proceedings-only papers. |
 | `title` | str | Raw, whitespace-collapsed. No control character: the record refuses one, and every importer replaces each with a space first (§Pipeline 2, TASK-180, decision-036). Normalization for search happens in 03, not here. The snapshot build caps it at 1,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
-| `abstract` | str \| null | Raw. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. The snapshot build caps it at 20,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
+| `abstract` | str \| null | Raw, whitespace-collapsed; every importer replaces each control character with a space (§Pipeline 2, TASK-188, decision-044), though the model does not refuse one. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. The snapshot build caps it at 20,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
 | `authors` | list[str] | Display order. |
 | `venue` | enum | `NeurIPS` \| `ICLR` \| `ICML`. Extensible. |
 | `year` | int | Conference year, not the arXiv year. A year before the venue was held under its name (NeurIPS 1987, ICLR 2013, ICML 1988; `vocab.CONFERENCES`) is refused. |
@@ -238,15 +238,28 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    with nothing left is `no_title`. Before this, a control character in a RIS title raised out of the import
    and failed the build, and one in a proceedings listing dropped the listing as `invalid`, after which
    reconcile would have turned that paper's OpenReview acceptance into `unknown`; neither has happened on a
-   real crawl. **Abstracts, authors and keywords are
-   not changed**: the record never refused a control character there, dozens of crawled abstracts hold U+0002,
-   and they are stored and tokenized as before (the tokenizer splits on it, so `modal␂ity` is two words in the
-   index: TASK-188). The OpenReview crawl reports count the records whose title lost one,
+   real crawl. **Authors and keywords are not changed**; abstracts follow the same rule (below). The OpenReview crawl reports count the records whose title lost one,
    `title_control_characters` in the crawl file, the manifest and `openreview_crawl_finished` (listed in the
    manifest only when above 0, so a crawl with none keeps its shape; never an attention WARNING: the paper is
    kept). No
    existing record's bytes change (a rebuild of the 2026-10-05 cache adds four records and changes no other),
    so no tokenizer, index-schema or record-schema version moves.
+   **Control characters in an abstract (TASK-188, decision-044).** Every importer that supplies an abstract
+   (OpenReview API v1 and v2, `openreview_v2._abstract`; the RIS importer; the NeurIPS and PMLR paper pages,
+   `common.clean_abstract`) applies the title rule (`record.abstract_text`): each control character becomes a
+   space and whitespace is collapsed, before the snippet check, so an abstract with nothing else left, or one
+   that is then snippet-shaped, is missing. The abstract claim's evidence gains the same
+   ` (<n> control characters replaced by a space)` note (`record.controls_evidence`; on a RIS claim it follows
+   the route and url, which `dedup.attribution` reads). Snapshot `2026-10-05-10b5a205a63f` had 59 such
+   abstracts holding 117 non-whitespace control characters (U+0002 ×106, U+000F ×6, U+0008 ×4, U+0000 ×1):
+   98 between two letters where a line-break hyphen was (`quanti␂fying`), the rest standing for a character
+   the PDF lost (U+0002 for `×`, U+000F for `ε`), which neither a space nor a deletion restores. The tokenizer
+   already split on them, so **no token changes**: `TOKENIZER_VERSION` is not bumped and no search result
+   moves. The stored text, content hash and abstract claim of those records do change, so the next snapshot's
+   diff lists them as changed. **Known limit:** the abstract reads `quanti fying`, and a search for the whole
+   word `quantifying` still misses that paper, as it did before; that is the source's text. The record model
+   does not refuse a control character in an abstract, so a snapshot built before TASK-188 still loads.
+   Authors keep theirs (one author name holds U+007F).
 3. **Classify.** Derive `track`, `status` and `presentation` using the rules above. Every classification
    records its evidence claim.
 4. **Deduplicate.** The same paper appears on OpenReview and in the proceedings (NeurIPS, ICML 2023+).

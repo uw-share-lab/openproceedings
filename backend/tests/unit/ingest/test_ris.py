@@ -153,6 +153,33 @@ def test_openreview_abstract_beats_the_proceedings_page(tmp_path: Path) -> None:
     assert by_id[ICLR].abstract is None  # Semantic Scholar never supplies one
 
 
+def test_an_abstract_with_a_control_character_is_imported_with_a_space(tmp_path: Path) -> None:
+    """decision-044 (TASK-188): the title rule, for abstracts. The note goes after the route and url, which
+    `dedup.attribution` reads from the start of the evidence. A claim that is only control characters is
+    empty, so the next source's abstract is taken."""
+    text = "A made-up abstract about human reliance on model outputs."
+
+    def controls(e: Entries) -> None:
+        for entry in e:
+            for c in entry["claims"]:
+                if c["field"] == "abstract" and c["value"] == text:
+                    c["value"] = "A made-up abstract about human re\x02liance on model outputs.\x00"
+                elif c["field"] == "abstract" and c["value"].startswith("A synthetic datasets-track"):
+                    entry["claims"].insert(
+                        0, claim("abstract", "\x02 \x00", "openreview_api", "openreview:x")
+                    )
+                    break
+
+    by_id, _ = run(tmp_path, controls)
+    assert by_id[WORKSHOP].abstract == "A made-up abstract about human re liance on model outputs."
+    [abstract] = by_id[WORKSHOP].claims("abstract")
+    assert abstract.evidence is not None and abstract.evidence.endswith(
+        " (2 control characters replaced by a space)"
+    )
+    assert abstract.evidence.startswith("scholarmend:openreview_api ")
+    assert by_id[DB].abstract == "A synthetic datasets-track abstract with extra spaces."
+
+
 def test_authors_drop_the_truncation_marker(imported: Imported) -> None:
     by_id, _ = imported
     assert by_id[NEURIPS].authors == ("Doe, J", "Roe, R")
