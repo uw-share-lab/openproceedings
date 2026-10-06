@@ -88,25 +88,47 @@ def _utf8(v: str) -> str:
     return v
 
 
-def title_text(raw: str) -> tuple[str, int]:
-    """A source's title as a record stores it, and how many control characters it lost (TASK-180): every
-    control character (Unicode category Cc: C0, DEL and C1) becomes a space, then whitespace is collapsed.
-    Nothing else changes, so the stored title is otherwise the source's. A space, never a deletion: the
-    tokenizer reads a control character as a separator (`SPEC\x02TRUM` is `spec`, `trum`), so the stored
-    title's tokens are the raw title's (`$`-math aside, where a space beside a delimiter reads differently),
-    and an invisible character never fuses two words. The count leaves out the controls that are whitespace
-    (tab, line breaks, U+001C-U+001F, U+0085), which collapsing always turned into a space."""
+def _spaced(raw: str) -> tuple[str, int]:
+    """`raw` with every control character (Unicode category Cc: C0, DEL and C1) a space and whitespace then
+    collapsed, and how many it replaced. The count leaves out the controls that are whitespace (tab, line breaks,
+    U+001C-U+001F, U+0085), which collapsing always turned into a space."""
     spaced = "".join(" " if unicodedata.category(c) == "Cc" else c for c in raw)
     replaced = sum(unicodedata.category(c) == "Cc" and not c.isspace() for c in raw)
     return " ".join(spaced.split()), replaced
 
 
-def title_evidence(evidence: str, replaced: int) -> str:
-    """A title claim's evidence, saying how many control characters `title_text` replaced (nothing is silent;
-    decision-036). Unchanged when none were."""
+def title_text(raw: str) -> tuple[str, int]:
+    """A source's title as a record stores it, and how many control characters it lost (TASK-180): every
+    control character becomes a space, then whitespace is collapsed (`_spaced`). Nothing else changes, so the
+    stored title is otherwise the source's. A space, never a deletion: the tokenizer reads a control character
+    as a separator (`SPEC\x02TRUM` is `spec`, `trum`), so the stored title's tokens are the raw title's
+    (`$`-math aside, where a space beside a delimiter reads differently), and an invisible character never
+    fuses two words."""
+    return _spaced(raw)
+
+
+def abstract_text(raw: str) -> tuple[str, int]:
+    """A source's abstract as a record stores it, and how many control characters it lost: the title rule
+    (`title_text`; decision-044, TASK-188). Every importer already collapsed an abstract's whitespace, so only
+    an abstract that held a control character changes. Its tokens do not (`modal\x02ity` was `modal`, `ity`
+    before and is after); the record model does not refuse a control character in an abstract, so a snapshot
+    built before this still loads. Empty when nothing is left. The same function as `title_text` under the
+    field's own name, so each importer names what it stores."""
+    return _spaced(raw)
+
+
+def controls_evidence(evidence: str, replaced: int) -> str:
+    """A title or abstract claim's evidence, saying how many control characters `title_text` or
+    `abstract_text` replaced (nothing is silent; decision-036, decision-044). Unchanged when none were."""
     if not replaced:
         return evidence
     return f"{evidence} ({replaced} control character{'' if replaced == 1 else 's'} replaced by a space)"
+
+
+def title_evidence(evidence: str, replaced: int) -> str:
+    """A title claim's evidence: `controls_evidence` under the title's own name, kept for the importers that
+    call it beside `title_text`."""
+    return controls_evidence(evidence, replaced)
 
 
 _REPLACED = re.compile(r" \(([1-9][0-9]*) control characters? replaced by a space\)\Z")

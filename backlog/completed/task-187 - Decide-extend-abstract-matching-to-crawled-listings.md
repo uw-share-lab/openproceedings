@@ -1,9 +1,10 @@
 ---
 id: TASK-187
 title: 'Decide: extend abstract matching to crawled listings'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-05 08:39'
+updated_date: '2026-10-05 23:55'
 labels:
   - ingest
   - dedup
@@ -21,5 +22,11 @@ decision-037 limits the abstract_venue_year merge to import-only clusters. On sn
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The owner's decision is recorded; if extended, the rule names what distinguishes a retitled listing from a twin, with the real pair and negative cases as tests
+- [x] #1 The owner's decision is recorded; if extended, the rule names what distinguishes a retitled listing from a twin, with the real pair and negative cases as tests
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Decided by decision-041 (2026-10-05): abstract matching stays import-only; the one retitled crawled pair stays a known duplicate.
+<!-- SECTION:FINAL_SUMMARY:END -->

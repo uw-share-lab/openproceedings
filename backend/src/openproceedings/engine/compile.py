@@ -71,12 +71,20 @@ class Compiled:
     explain: list[str] = field(default_factory=list)  # the readable tree, one line per clause
     verified: list[str] = field(default_factory=list)  # which clauses took the position-verified fallback
     # what the engine's compiled memo charges against its budget (TantivyEngine.MAX_COMPILED_UNITS): what
-    # this compiled query keeps alive (ids in its verified term sets, terms in its expansions, one per
-    # explain line). The verified memo is charged clause by clause, as each is stored (`Compiler.store`)
+    # this compiled query keeps alive (ids in its verified term sets, terms in its expansions, plus the copies
+    # `conjuncts` keeps, one per explain line). The verified memo is charged clause by clause, as each is stored (`Compiler.store`)
     held: int = 0
     # (field, clause) -> the ids each verified clause matched: a compiled-memo hit hands them to the request's
     # scope (`TantivyEngine.compile`), so its later compiles of other trees never verify them again
     ids: dict[tuple[str, str], list[str]] = field(default_factory=dict)
+    # each top-level conjunct's query (`conjuncts(tree)`, in order) and, for a NOT, its child's, which
+    # `TantivyEngine.counts` reuses rather than compiling the conjuncts again (TASK-197). Copies, not parts of
+    # `query`: tantivy-py's `boolean_query` deep-copies its subqueries, so each kept conjunct holds its terms and
+    # ids a second time (a kept NOT's child a third), and `held` charges every copy (`Compiler.compile`)
+    conjuncts: tuple[tuple[tantivy.Query, tantivy.Query | None], ...] = ()
+    # the tree compiled, as `TantivyEngine.compile` keys it (its memo key, the same string): what `counts` checks
+    # a compile it is handed against ("" for a compile outside the memo)
+    tree: str = ""
 
 
 def wildcards(n: Node) -> Iterator[Wildcard]:
@@ -141,27 +149,64 @@ class Compiler:
         self.id_query = id_query if id_query is not None else partial(id_set, schema)
         self.out = Compiled(tantivy.Query.empty_query())
         self._allowed: dict[tuple[str, str], frozenset[str]] = {}  # per item: `allowed`
+        # the top-level conjuncts being compiled, by identity, and the queries built for them (and NOTs' children),
+        # with the units each holds (`_units`: what `held` charges for the Tantivy queries alone, so not the
+        # Python lists of verified ids nor the explain lines)
+        self._tops: set[int] = set()
+        self._built: dict[int, tuple[tantivy.Query, int]] = {}
+        self._children: dict[int, tuple[tantivy.Query, int]] = {}
+        self._units = 0
 
     def compile(self, n: Node) -> Compiled:
+        tops = conjuncts(n)
+        self._tops = {id(c) for c in tops}
         self.out.query = self.node(n, 0)
+        kept = []
+        for c in tops:
+            query, units = self._built[id(c)]
+            child, child_units = self._children.get(id(c), (None, 0))
+            kept.append((query, child))
+            # every copy charged: the whole query holds each conjunct's queries once, and keeps them by value; a
+            # kept conjunct that isn't the whole query is a second copy, and a NOT's kept child one more
+            if c is not n:
+                self.out.held += units
+            self.out.held += child_units
+        self.out.conjuncts = tuple(kept)
         self.out.held += len(self.out.explain)
         return self.out
+
+    def charge(self, units: int) -> None:
+        """Charge `units` held inside a Tantivy query (terms, or ids in a term set) to `held`, and count them for
+        the copy `Compiled.conjuncts` keeps of the conjunct being built."""
+        self.out.held += units
+        self._units += units
 
     def line(self, depth: int, text: str) -> None:
         self.out.explain.append("  " * depth + text)
 
     # --- boolean structure and filters ---------------------------------------------------------------
     def node(self, n: Node, depth: int) -> tantivy.Query:
+        before = self._units
+        query = self.build(n, depth)
+        if id(n) in self._tops:
+            self._built[id(n)] = (query, self._units - before)
+        return query
+
+    def build(self, n: Node, depth: int) -> tantivy.Query:
         if isinstance(n, And | Or):
             self.line(depth, "AND" if isinstance(n, And) else "OR")
             occur = tantivy.Occur.Must if isinstance(n, And) else tantivy.Occur.Should
             return combine(occur, [self.node(c, depth + 1) for c in n.children])
         if isinstance(n, Not):
             self.line(depth, "NOT (all documents, minus:)")
+            before = self._units
+            child = self.node(n.child, depth + 1)
+            if id(n) in self._tops:
+                self._children[id(n)] = (child, self._units - before)
             return tantivy.Query.boolean_query(
                 [
                     (tantivy.Occur.Must, tantivy.Query.const_score_query(tantivy.Query.all_query(), 0.0)),
-                    (tantivy.Occur.MustNot, self.node(n.child, depth + 1)),
+                    (tantivy.Occur.MustNot, child),
                 ]
             )
         if isinstance(n, Filter):
@@ -223,7 +268,7 @@ class Compiler:
     def term_set(self, f: TextField, terms: tuple[str, ...]) -> tantivy.Query:
         if not terms:
             return tantivy.Query.empty_query()  # matches nothing: never a dropped (widening) clause
-        self.out.held += len(terms)
+        self.charge(len(terms))
         # SHOULD of term queries (not a TermSetQuery, which scores every match 1): each expansion scores as
         # its own term (field-weighted-bm25 skill)
         return combine(tantivy.Occur.Should, [tantivy.Query.term_query(self.schema, f, t) for t in terms])
@@ -275,13 +320,13 @@ class Compiler:
             and self.count(candidates) - len(ids) < len(ids)
         ):
             failed = sorted(self.members(candidates).difference(ids))
-            self.out.held += len(failed)
+            self.charge(len(failed))
             if not failed:
                 return candidates
             return tantivy.Query.boolean_query(
                 [(tantivy.Occur.Must, candidates), (tantivy.Occur.MustNot, self.id_query(failed))]
             )
-        self.out.held += len(ids)
+        self.charge(len(ids))
         exact = tantivy.Query.const_score_query(self.id_query(ids), 0.0)
         return tantivy.Query.boolean_query([(tantivy.Occur.Must, candidates), (tantivy.Occur.Must, exact)])
 
@@ -383,6 +428,11 @@ def _starts(parts: Parts, tokens: list[str], positions: dict[str, list[int]]) ->
         for at in first
         if at + width <= len(tokens) and all(tokens[at + k] in parts[k] for k in range(1, width))
     ]
+
+
+def conjuncts(n: Node) -> list[Node]:
+    """Top-level AND conjuncts, nested ANDs flattened (`Compiled.conjuncts` is in this order)."""
+    return [x for c in n.children for x in conjuncts(c)] if isinstance(n, And) else [n]
 
 
 def id_set(schema: tantivy.Schema, ids: list[str]) -> tantivy.Query:

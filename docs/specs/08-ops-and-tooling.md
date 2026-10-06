@@ -551,7 +551,7 @@ retention (step 8) matter (guarantee 4).
   same bytes, in any clone (the repository name is compared without case).
 - **Counted:** PRs merged into `dev`, and into `main` except this repo's `dev → main` promotions (they repeat
   what `dev` lists). Never this repo's `release/*` branches, which carry only release bookkeeping (the version
-  bump, the data table and this file before the promotion; the back-merge after the tag). Not PRs into any
+  bump, the data table and this file before the promotion). Not PRs into any
   other base.
 - **Sections:** a PR belongs to the oldest tag whose history holds its merge commit; with `--release X.Y.Z`,
   `HEAD` counts as that version's tag. A PR no tag holds is Unreleased.
@@ -612,15 +612,15 @@ retention (step 8) matter (guarantee 4).
 5. **Promotion.** `gh pr create --base main --head dev --title "chore: promote dev to main for X.Y.Z"
    --body-file <the readiness evidence>`, not `/open-pr` (it pushes and attests, and a promotion does
    neither; `require-review.sh` exempts exactly this command, and CI exempts a same-repo promotion from
-   `learnings` and `review-attested`). `main`'s branch protection requires green checks and `dev` up to date
-   with `main` (step 7).
+   `learnings` and `review-attested`). `main`'s branch protection requires green checks, not `dev` up to date
+   with `main` (decision-046, step 7).
    Its approving-review count is zero under the owner's solo-maintainer policy applied on 2026-10-03;
    reviews remain optional, and required checks are never bypassed.
    Merge with a merge commit.
 6. **Tag and notes.** First, the `v*` tag rulesets (§Branch protection; applied 2026-10-01) must be in place:
    `gh api repos/<owner>/<name>/rulesets --jq '.[] | select(.target == "tag") | .name'` lists them, one name
    per line and possibly more than one (today `Release tags: immutable` and `Release tags: maintainers only
-   create`); paste the output into the back-merge PR (step 7), since the promotion PR has merged. On
+   create`); add the output to the merged promotion PR as a comment (`gh pr comment <n>`). On
    `origin/main`, `CITATION.cff`'s `version` must be `X.Y.Z` and its `date-released` today's date (UTC); if
    either is not, don't tag: re-run step 4 with the corrected date (a new release branch and promotion), since
    a tag's `CITATION.cff` is never edited after. Then `git
@@ -632,16 +632,12 @@ retention (step 8) matter (guarantee 4).
    (`require-review.sh` blocks an agent's `git push` of a tag, since `main`'s merge commit has no per-sha
    record; `block-ai-attribution.sh` scans the notes). No assets. Then `git fetch origin --tags` and check that
    `git rev-parse vX.Y.Z^{commit}` is that sha.
-7. **Back-merge.** `main` now holds the promotion's merge commit, which `dev` lacks, and the next promotion
-   can't merge until `dev` has it. `git switch -c release/X.Y.Z-back-merge origin/dev && git merge --no-ff
-   origin/main`; if a PR merged into `dev` after the release branch was cut (#109 for 0.1.0), run `make
-   changelog` and commit its output (no other file changes); then `/review-gate`, `git push -u origin
-   release/X.Y.Z-back-merge` (the review record covers HEAD), then `gh pr create --base dev --title "chore: back-merge main after
-   X.Y.Z" --body-file <file> --label no-learning` and `record-review.py APPROVE <dispositions> --attest`.
-   Merge it with a merge commit, never `--squash` or `--rebase`, which would leave `main`'s commit out of
-   `dev`, which means adding it to the merge queue (`gh pr merge <n> --auto`; the queue's method is MERGE). Then check
-   `git fetch origin && git merge-base --is-ancestor origin/main origin/dev`. On `dev`,
-   `python3 .claude/scripts/changelog.py --check` then passes.
+7. **No back-merge** (decision-046). `main` holds the promotion's merge commit, which `dev` lacks, and that is
+   fine: `main` doesn't require `dev` up to date, the next promotion merges cleanly (that commit changes no
+   file `dev` lacks), and `changelog.py` places each PR by its tag's own history, never `dev`'s. After the tag,
+   `git fetch origin --tags`; on `dev`, `python3 .claude/scripts/changelog.py --check` passes, unless a PR
+   merged into `dev` after the release branch was cut, whose Unreleased entry any later PR's `make changelog`
+   adds (§`CHANGELOG.md`). Releases through 0.1.0 used a `release/X.Y.Z-back-merge` PR (#102, #104, #110).
 8. **Retention.** Keep every index and snapshot a search record pins (`op index retire` refuses a pinned
    index; §CLI). Supported older tokenizer/schema pins can still reproduce when `QUERY_VERSION` matches.
    Unsupported versions or incompatible Tantivy require the matching historical release; a changed
@@ -804,8 +800,8 @@ Never hand-roll a serial loop.
 
 `dev` and `main` require a PR, with these checks green: `lint`, `test`, `claude-tooling`, `attribution`,
 `learnings`, `review-attested`. No force-push, no deletion, admins included, and conversations must be
-resolved. `main` additionally requires the branch up to date with it (so each
-promotion is followed by §Release step 7's back-merge). The owner changed only `main`'s required
+resolved. `main` required the branch up to date with it until 2026-10-06, when the owner turned that off
+(decision-046), so a release needs no back-merge (§Release step 7). The owner changed only `main`'s required
 approving-review count from 1 to 0 on 2026-10-03 for the solo-maintainer workflow; optional reviews remain
 available. Required checks and all other protection settings were preserved. This protection was
 applied on 2026-09-25, after

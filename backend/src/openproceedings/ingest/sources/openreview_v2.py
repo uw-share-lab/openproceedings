@@ -59,6 +59,8 @@ from openproceedings.ingest.record import (
     PaperRecord,
     Source,
     Urls,
+    abstract_text,
+    controls_evidence,
     title_controls_replaced,
     title_evidence,
     title_text,
@@ -189,11 +191,17 @@ def _strings(value: Any) -> tuple[str, ...]:
     return tuple(v for v in value if isinstance(v, str) and v.strip()) if isinstance(value, list) else ()
 
 
-def _text(value: Any) -> str | None:
-    """Whitespace collapsed (as the RIS importer does, so claims from both sources compare); None if empty."""
+def _abstract(value: Any) -> tuple[str | None, str]:
+    """A note's abstract and its claim's evidence (both API versions): whitespace collapsed (as the RIS importer
+    does, so claims from both sources compare) and a control character a space (`record.abstract_text`,
+    decision-044), the evidence saying how many. None when empty or snippet-shaped (`…` at an end), which the
+    record refuses; the paper is kept on its title."""
     if not isinstance(value, str):
-        return None
-    return " ".join(value.split()) or None
+        return None, "content.abstract"
+    abstract, replaced = abstract_text(value)
+    if not abstract or abstract.startswith("…") or abstract.endswith("…"):
+        return None, "content.abstract"
+    return abstract, controls_evidence("content.abstract", replaced)
 
 
 def _title(value: Any, forum: str) -> tuple[str | None, str]:
@@ -249,9 +257,7 @@ def note_record(
             log.debug("openreview_presentation_unmapped", extra={"forum": nid})  # the string may be free text
             if unmapped is not None:
                 unmapped.add(nid)
-    abstract = _text(_value(content, "abstract"))
-    if abstract is not None and (abstract.startswith("…") or abstract.endswith("…")):
-        abstract = None  # the record refuses a snippet-shaped abstract; the paper is kept on its title
+    abstract, abstract_evidence = _abstract(_value(content, "abstract"))
     authors, keywords = _strings(_value(content, "authors")), _strings(_value(content, "keywords"))
     pdf_path = _value(content, "pdf")
     urls = Urls(
@@ -268,7 +274,7 @@ def note_record(
     provenance = [claim(f, v, evidence) for f, v in scope]
     provenance += [claim("title", title, title_evidence), claim("authors", authors, "content.authors")]
     if abstract is not None:
-        provenance.append(claim("abstract", abstract, "content.abstract"))
+        provenance.append(claim("abstract", abstract, abstract_evidence))
     if keywords:
         provenance.append(claim("keywords", keywords, "content.keywords"))
     if presentation is not None:

@@ -24,7 +24,7 @@ from typing import Any, ClassVar, Protocol
 
 from openproceedings import storage
 from openproceedings.ingest.dedup import resolve, title_key
-from openproceedings.ingest.record import Claim, PaperRecord
+from openproceedings.ingest.record import Claim, PaperRecord, abstract_text
 from openproceedings.ingest.sources.http import FetchError, SourceError
 
 _LEADING_MATH = re.compile(r"^\s*\$[^$]+\$[\s:,.-]*")
@@ -203,12 +203,14 @@ def titles_match(listed: str, page: str | None) -> bool:
     return bool(keys(listed) & keys(page))
 
 
-def clean_abstract(text: str | None) -> str | None:
-    """An abstract as a record may hold it, or None: empty, or starting or ending with `…` (a snippet, not
-    an abstract; spec 01), is missing. An ellipsis inside (`x₁, …, x_n`) is kept."""
+def clean_abstract(text: str | None) -> tuple[str | None, int]:
+    """An abstract as a record may hold it, or None, and how many control characters became a space
+    (`record.abstract_text`, decision-044; the claim's evidence says so). Empty, or starting or ending with `…`
+    (a snippet, not an abstract; spec 01), is missing. An ellipsis inside (`x₁, …, x_n`) is kept."""
+    text, replaced = abstract_text(text or "")
     if not text or text.startswith(SNIPPET) or text.endswith(SNIPPET):
-        return None
-    return text
+        return None, 0
+    return text, replaced
 
 
 def missing_reason(page_ok: bool, title_matches: bool, abstract: str | None) -> str | None:

@@ -19,10 +19,11 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from openproceedings import search
-from openproceedings.engine.protocol import EngineInputError
+from openproceedings.engine.compile import conjuncts
+from openproceedings.engine.protocol import EngineInputError, EngineInternalError
 from openproceedings.engine.reference import ReferenceEngine
-from openproceedings.engine.tantivy_engine import Scope, TantivyEngine
-from openproceedings.query.ast import And, Filter, Node, Not
+from openproceedings.engine.tantivy_engine import COMBO, Scope, TantivyEngine, _filter_field, _Parts
+from openproceedings.query.ast import And, Filter, Node, Not, Phrase, Term, Wildcard
 from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.groups import Groups, split
@@ -692,6 +693,7 @@ def test_a_counting_worker_that_would_verify_is_recounted_in_the_caller(
     def cold_in_the_worker(*a: Any, **kw: Any) -> Any:
         if threading.current_thread().name.startswith("op-groups"):
             engine.verified.clear(), engine.compiled.clear(), engine.faceted.clear()
+            kw.pop("compiled")  # and without the request's compile: it compiles each conjunct itself
         return counts(*a, **kw)
 
     monkeypatch.setattr(engine, "counts", cold_in_the_worker)
@@ -808,6 +810,7 @@ def test_concurrent_searches_with_groups_give_the_oracles_counts(engines: Engine
         "trust model NOT survey year:2019..2024",
         "(agents NEAR/3 reliance) AND (trust OR calibrat*)",
         '"language model" benchmark* evaluation',
+        SHARED_VERIFIED,  # counted from bitmaps (TASK-197), the per-value ones rebuilt under it
     ):
         parsed = parse(q)
         assert parsed.effective_ast is not None
@@ -819,6 +822,7 @@ def test_concurrent_searches_with_groups_give_the_oracles_counts(engines: Engine
         while not stop.is_set():
             tantivy.faceted.clear()
             tantivy.compiled.clear()
+            tantivy._masks = None
             time.sleep(0.001)
 
     def searching(worker: int) -> list[str]:
@@ -839,3 +843,324 @@ def test_concurrent_searches_with_groups_give_the_oracles_counts(engines: Engine
         stop.set()
         clearer.join()
     assert wrong == []
+
+
+# --- TASK-197: the request's compile, and each shared costly conjunct collected once ----------------------------
+@st.composite
+def verified_grouped_asts(draw: st.DrawFn) -> Node:
+    """`grouped_asts` with a position-verified conjunct (a phrase with a wildcard item), a group or negated (kept):
+    the shape whose counting collects each conjunct once, as a bitmap (`_Parts.bitwise`)."""
+    stem = draw(st.sampled_from(["model", "trust", "learn", "data", "language"]))
+    word = draw(vocab().term())
+    phrase = Phrase(span=SPAN, items=(Term(span=SPAN, token=word), Wildcard(span=SPAN, stem=stem, op="*")))
+    clause: Node = Not(span=SPAN, child=phrase) if draw(st.booleans()) else phrase
+    rest = draw(grouped_asts())
+    others = list(rest.children) if isinstance(rest, And) else [rest]
+    return And(span=SPAN, children=tuple(draw(st.permutations([clause, *others]))))
+
+
+def request_counts(engine: TantivyEngine, ast: Node, trees: list[Node]) -> list[int]:
+    """`counts` as `search.run`'s worker asks: with the request's compile of `ast` and a read-only scope."""
+    scope = Scope()
+    compiled = engine.compile(ast, scope)
+    return engine.counts(trees, scope=scope.reader(), compiled=(ast, compiled))
+
+
+def counted_trees(ast: Node) -> list[Node]:
+    found = split(ast)
+    return [*map(found.alone, found.groups), *map(found.without, found.groups)]
+
+
+# each example evaluates every counted tree with the oracle over the 5k corpus: no per-example deadline
+@settings(max_examples=150, deadline=None)
+@given(tree=st.one_of(grouped_asts(), verified_grouped_asts()))
+def test_counts_with_the_requests_compile_are_the_counts_without_it_and_the_oracles(
+    engines: Engines, tree: Node
+) -> None:
+    """The conjunct queries the request's compile built (`Compiled.conjuncts`), and the bitmaps the shared
+    costly ones are collected into, give the counts a fresh compile gives, and ReferenceEngine's."""
+    reference, tantivy, other = engines
+    ast = canonicalize(tree)
+    trees = counted_trees(ast) if len(split(ast).groups) >= 2 else [ast]
+    expected = outcome(lambda ts: [len(reference.match_ids(t)) for t in ts], trees)
+    tantivy.faceted.clear(), other.faceted.clear()
+    assert outcome(lambda ts: request_counts(tantivy, ast, ts), trees) == expected, render(ast)
+    assert outcome(lambda ts: other.counts(ts), trees) == expected, render(ast)
+
+
+def bases_of(tree: Node) -> list[list[Node]]:
+    """Every base a tree's counting collects: the whole tree's, and each of its non-filter conjuncts' alone."""
+    base = [c for c in conjuncts(tree) if _filter_field(c) is None]
+    return [base, *([c] for c in base)] if base else [base]
+
+
+@settings(max_examples=150, deadline=None)
+@given(tree=st.one_of(grouped_asts(), verified_grouped_asts()))
+def test_a_bases_combos_from_bitmaps_are_the_aggregations(engines: Engines, tree: Node) -> None:
+    """Each (venue, year, track, status) combination's count, read from the conjuncts' bitmaps and the engine's
+    per-value bitmaps, is what the nested terms aggregation of the base's query counts."""
+    _reference, tantivy, _other = engines
+    for base in bases_of(canonicalize(tree)):
+        try:
+            tantivy.faceted.clear()
+            aggregated = tantivy.combos(base)
+        except EngineInputError:
+            return  # over the expansion cap: refused either way (`counts` checks it first)
+        parts = _Parts(tantivy, None)
+        parts.bitwise = True
+        tantivy.faceted.clear()
+        assert tantivy.combos(base, parts=parts) == aggregated, render(canonicalize(tree))
+
+
+def test_every_documents_combo_from_bitmaps_is_the_aggregations(engines: Engines) -> None:
+    _reference, tantivy, _other = engines
+    tantivy.faceted.clear()
+    whole = tantivy.combos([])
+    assert tantivy._combos_of((1 << len(tantivy.ids)) - 1) == whole
+    assert sum(n for _combo, n in whole) == len(tantivy.ids)
+
+
+class Collections:
+    """A searcher that counts the collections it runs (`search` and `aggregate`), by thread."""
+
+    def __init__(self, searcher: Any) -> None:
+        self.searcher, self.searches, self.aggregates = searcher, 0, 0
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.searcher, name)
+
+    def search(self, *a: Any, **kw: Any) -> Any:
+        self.searches += 1
+        return self.searcher.search(*a, **kw)
+
+    def aggregate(self, *a: Any, **kw: Any) -> Any:
+        self.aggregates += 1
+        return self.searcher.aggregate(*a, **kw)
+
+
+SHARED_VERIFIED = '"model* learning" AND (trust OR "data* set") AND calibrat* AND evaluat*'
+
+
+# three groups and a kept verified NOT: its child's query is the request's too (`Compiled.conjuncts`)
+KEPT_VERIFIED_NOT = '"model* learning" AND calibrat* AND evaluat* NOT "data* set"'
+
+
+@pytest.mark.parametrize(("q", "groups"), [(SHARED_VERIFIED, 4), (KEPT_VERIFIED_NOT, 3)])
+def test_each_shared_costly_conjunct_is_collected_once_and_nothing_is_compiled_again(
+    tmp_path: Any, q: str, groups: int
+) -> None:
+    """Groups each holding a verified clause or not (and a kept verified NOT): the request's compile is reused
+    (no clause is compiled, a NOT's child included, so no candidate is counted or read again), each of the four
+    non-filter conjuncts is collected once, and no tree is aggregated (its combos come from the bitmaps); the
+    counts are the oracle's."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    reference = ReferenceEngine(RECORDS)
+    ast = parse(q).effective_ast
+    assert ast is not None
+    found = split(ast)
+    assert len(found.groups) == groups
+    trees = counted_trees(ast)
+    scope = Scope()
+    compiled = engine.compile(ast, scope)
+    engine._combos_of(0)  # the per-value bitmaps, built once per engine, are not this call's
+    fresh: list[Node] = []
+    real = engine._fresh
+
+    def compiling(n: Node, s: Scope | None) -> Any:
+        fresh.append(n)
+        return real(n, s)
+
+    engine._fresh = compiling  # type: ignore[method-assign, assignment]
+    searcher = engine.searcher = Collections(engine.searcher)  # type: ignore[assignment]
+    got = engine.counts(trees, scope=scope.reader(), compiled=(ast, compiled))
+    assert got == [len(reference.match_ids(t)) for t in trees]
+    assert fresh == []
+    assert (searcher.searches, searcher.aggregates) == (4, 0)
+
+
+def test_without_a_shared_costly_conjunct_each_tree_is_aggregated_as_before(tmp_path: Any) -> None:
+    """No verified clause: one aggregation per distinct base, nothing collected into a bitmap, and the
+    request's compile still reused."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    ast = parse("(trust OR reliance) AND calibrat* AND model*").effective_ast
+    assert ast is not None
+    trees = counted_trees(ast)
+    scope = Scope()
+    compiled = engine.compile(ast, scope)
+    searcher = engine.searcher = Collections(engine.searcher)  # type: ignore[assignment]
+    engine.counts(trees, scope=scope.reader(), compiled=(ast, compiled))
+    assert (searcher.searches, searcher.aggregates) == (0, 6)
+    assert engine._masks is None  # never built for a query that doesn't need them
+
+
+def test_a_stopped_bitwise_count_stops_before_its_next_collection(tmp_path: Any) -> None:
+    """`check` is asked before each conjunct's collection too, not only before each tree: a job its search
+    stopped waiting for makes no more collections, however many conjuncts its first tree has."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    ast = parse(SHARED_VERIFIED).effective_ast
+    assert ast is not None
+    scope = Scope()
+    compiled = engine.compile(ast, scope)
+    engine._combos_of(0)
+    searcher = engine.searcher = Collections(engine.searcher)  # type: ignore[assignment]
+    asked = 0
+
+    def check() -> None:
+        nonlocal asked
+        asked += 1
+        if asked > 2:  # before the first tree, then before its first conjunct: stop at the second
+            raise search._Abandoned
+
+    with pytest.raises(search._Abandoned):
+        engine.counts(counted_trees(ast), scope=scope.reader(), check=check, compiled=(ast, compiled))
+    assert searcher.searches == 1
+
+
+def test_a_compile_of_another_tree_is_refused(engines: Engines) -> None:
+    """`compiled` must be the compile of the tree whose conjuncts are counted: one whose conjuncts don't line up
+    with it is a caller's bug, an internal error, never a count of the wrong queries."""
+    _reference, tantivy, _other = engines
+    ast = parse("trust model calibration").effective_ast
+    wrong = parse("trust model").effective_ast
+    assert ast is not None and wrong is not None
+    with pytest.raises(EngineInternalError):
+        tantivy.counts(counted_trees(ast), compiled=(ast, tantivy.compile(wrong)))
+
+
+def test_bitwise_counting_costs_the_memos_nothing_more(tmp_path: Any) -> None:
+    """A search of SHARED_VERIFIED with its counts, against the same search without: no `compiled` entry or
+    unit more, no clause verified or id set built again, at most two `faceted` entries a group, and the
+    per-value bitmaps one per facet value (held for the engine's life, as the ord table is)."""
+    plain_engine, engine = two_engines(tmp_path)
+    parsed = parse(SHARED_VERIFIED)
+    plain, plain_builds, plain_keys, plain_units, plain_faceted = measured(plain_engine, parsed)
+    got, builds, keys, units, faceted = measured(engine, parsed, groups=10)
+    assert got.groups is not None and got.groups.not_counted is None and len(got.groups.counts) == 4
+    assert dataclasses.replace(got, groups=None) == plain
+    assert (keys, units, builds) == (plain_keys, plain_units, plain_builds)
+    assert sum(engine.charges["verified"]) == sum(plain_engine.charges["verified"])
+    assert faceted - plain_faceted <= 8
+    assert engine._masks is not None
+    whole = engine.combos([])
+    assert [len(values) for values in engine._masks] == [
+        len({c[i] for c, _n in whole}) for i in range(len(COMBO))
+    ]
+
+
+def test_bitwise_counting_never_makes_more_collections_than_its_distinct_bases(tmp_path: Any) -> None:
+    """Two groups and three kept text conjuncts, one of them verified: five conjuncts but two distinct bases (a
+    group alone is the query without the other), so each base is aggregated as before, two collections, not
+    five conjuncts collected."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    reference = ReferenceEngine(RECORDS)
+    ast = parse('trust model NOT "data* set" NOT survey NOT bias').effective_ast
+    assert ast is not None
+    trees = counted_trees(ast)
+    assert len(split(ast).groups) == 2 and len(trees) == 4
+    scope = Scope()
+    compiled = engine.compile(ast, scope)
+    searcher = engine.searcher = Collections(engine.searcher)  # type: ignore[assignment]
+    got = engine.counts(trees, scope=scope.reader(), compiled=(ast, compiled))
+    assert got == [len(reference.match_ids(t)) for t in trees]
+    assert (searcher.searches, searcher.aggregates) == (
+        0,
+        2,
+    )  # the two distinct bases; the rest from the memo
+
+
+# --- gate round 1 (TASK-197): what the kept conjuncts cost, the masks' stop, the compile's tree -----------------
+def query_units(engine: TantivyEngine, tree: Node) -> int:
+    """What `held` charges for the Tantivy queries a compile of `tree` keeps: less its explain lines and the
+    Python lists of verified ids (`Compiled.ids`), which no query copies."""
+    c = engine.compile(tree)
+    return c.held - len(c.explain) - sum(len(ids) for ids in c.ids.values())
+
+
+def test_held_charges_every_copy_of_a_conjunct_the_compile_keeps(engines: Engines) -> None:
+    """tantivy-py's `boolean_query` deep-copies its subqueries, so a conjunct kept in `Compiled.conjuncts` is a
+    second copy of its terms and ids beside the one inside the whole query, and a NOT's kept child a third (the
+    child, the NOT that copies it, the whole query that copies the NOT): `held` charges each copy, so the
+    compiled memo's budget stays honest (task-080). A tree that is its one conjunct keeps no second copy."""
+    _reference, tantivy, _other = engines
+    tantivy.compiled.clear()
+    calibrat = Wildcard(span=SPAN, stem="calibrat", op="*")
+    model = Wildcard(span=SPAN, stem="model", op="*")
+    phrase = Phrase(
+        span=SPAN, items=(Term(span=SPAN, token="language"), Wildcard(span=SPAN, stem="model", op="*"))
+    )
+    trust = Term(span=SPAN, token="trust")
+    a, b, v = (query_units(tantivy, n) for n in (calibrat, model, phrase))
+    assert a > 0 and b > 0 and v > 0
+    assert query_units(tantivy, Not(span=SPAN, child=model)) == 2 * b
+    assert (
+        query_units(tantivy, And(span=SPAN, children=(calibrat, Not(span=SPAN, child=model))))
+        == 2 * a + 3 * b
+    )
+    assert query_units(tantivy, And(span=SPAN, children=(phrase, trust))) == 2 * v
+    nested = And(span=SPAN, children=(And(span=SPAN, children=(calibrat, trust)), model))
+    assert query_units(tantivy, nested) == 2 * a + 2 * b
+
+
+def test_building_the_value_masks_stops_before_its_next_collection(tmp_path: Any) -> None:
+    """The per-value bitmaps are about 30 collections, built inside the first bitwise count: `check` is asked
+    before each, so a job its search stopped waiting for stops within one, and keeps no partial masks."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    ast = parse(SHARED_VERIFIED).effective_ast
+    assert ast is not None
+    scope = Scope()
+    compiled = engine.compile(ast, scope)
+    searcher = engine.searcher = Collections(engine.searcher)  # type: ignore[assignment]
+    asked = 0
+
+    def check() -> None:
+        nonlocal asked
+        asked += 1
+        if asked > 4:  # the tree, its conjunct, then two values' bitmaps: stop at the third value
+            raise search._Abandoned
+
+    with pytest.raises(search._Abandoned):
+        engine.counts(counted_trees(ast), scope=scope.reader(), check=check, compiled=(ast, compiled))
+    assert searcher.searches == 3  # the conjunct and two values
+    assert engine._masks is None
+    # and a later count builds them whole, with the oracle's counts
+    reference = ReferenceEngine(RECORDS)
+    got = engine.counts(counted_trees(ast), scope=scope.reader(), compiled=(ast, compiled))
+    assert got == [len(reference.match_ids(t)) for t in counted_trees(ast)]
+
+
+def test_a_compile_of_another_tree_with_as_many_conjuncts_is_refused(engines: Engines) -> None:
+    _reference, tantivy, _other = engines
+    ast = parse("trust model calibration").effective_ast
+    other = parse("trust model evaluation").effective_ast
+    assert ast is not None and other is not None
+    assert len(conjuncts(ast)) == len(conjuncts(other))
+    with pytest.raises(EngineInternalError):
+        tantivy.counts(counted_trees(ast), compiled=(ast, tantivy.compile(other)))
+    tantivy.faceted.clear()
+    assert tantivy.counts(counted_trees(ast), compiled=(ast, tantivy.compile(ast))) == tantivy.counts(
+        counted_trees(ast)
+    )
+
+
+def test_a_search_with_group_counts_hands_its_compile_to_the_counting_worker(tmp_path: Any) -> None:
+    """`search.run` passes the request's compile to the counting job (TASK-197): the worker compiles nothing,
+    neither a conjunct nor a kept NOT's child, on a fresh engine whose memos hold nothing to fall back on."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    reference = ReferenceEngine(RECORDS)
+    parsed = parse(KEPT_VERIFIED_NOT)
+    assert parsed.effective_ast is not None
+    in_counting: list[Node] = []
+    real = engine._fresh
+
+    def compiling(n: Node, s: Scope | None) -> Any:
+        if threading.current_thread().name.startswith("op-groups"):
+            in_counting.append(n)
+        return real(n, s)
+
+    engine._fresh = compiling  # type: ignore[method-assign, assignment]
+    got = search.run(engine, parsed, facets=True, groups=10)
+    search.shutdown()
+    assert got.groups is not None and got.groups.counts == expected_pairs(
+        reference, split(parsed.effective_ast)
+    )
+    assert in_counting == []

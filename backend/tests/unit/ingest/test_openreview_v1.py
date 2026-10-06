@@ -357,6 +357,17 @@ def test_a_v1_title_with_a_control_character_is_imported_with_a_space(tmp_path: 
     )
 
 
+def test_a_v1_abstract_with_a_control_character_is_imported_with_a_space(tmp_path: Path) -> None:
+    """decision-044 (TASK-188): the v1 crawler reads an abstract through the v2 crawler's rule."""
+    note = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    note["content"]["abstract"] = "the LiDAR modal\x02ity"
+    record = by_forum(iclr_2017(tmp_path, [note], []))[note["id"]]
+    assert record.abstract == "the LiDAR modal ity"
+    assert [c.evidence for c in record.claims("abstract")] == [
+        "content.abstract (1 control character replaced by a space)"
+    ]
+
+
 def test_a_title_match_links_a_copy_whose_bibtex_names_another_forum(tmp_path: Path) -> None:
     """ICLR 2017's 35 `Invite to Workshop` notes all carry a `_bibtex` naming one unrelated conference forum
     (B1akgy9xx), so a `_bibtex` counts only when it names a submission with the copy's title; otherwise the one

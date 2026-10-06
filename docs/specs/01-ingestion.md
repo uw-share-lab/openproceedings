@@ -14,7 +14,7 @@ build.
 |---|---|---|
 | `id` | str | Stable ID `op:<venue>:<year>:<native>`, e.g. `op:iclr:2024:iilhN2MycO`. `native` is the OpenReview forum ID, or `pmlr-v202-<key>` (ICML) / `nips-<hash>` (NeurIPS; `nips-<hash>-round1`/`-round2` on the 2021 Datasets and Benchmarks host: the suffix is the link's round token, because that host numbers each round and the main track separately, so its hash alone can name three papers; a D&B link without a round, or dated other than 2021, gets no id (miner `no_round`, RIS `unresolved`), never a bare `nips-<hash>`; `urls.proceedings_native` is the one rule) / `iclr-<hash>` (ICLR) for proceedings-only papers. |
 | `title` | str | Raw, whitespace-collapsed. No control character: the record refuses one, and every importer replaces each with a space first (§Pipeline 2, TASK-180, decision-036). Normalization for search happens in 03, not here. The snapshot build caps it at 1,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
-| `abstract` | str \| null | Raw. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. The snapshot build caps it at 20,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
+| `abstract` | str \| null | Raw, whitespace-collapsed; every importer replaces each control character with a space (§Pipeline 2, TASK-188, decision-044), though the model does not refuse one. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. The snapshot build caps it at 20,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
 | `authors` | list[str] | Display order. |
 | `venue` | enum | `NeurIPS` \| `ICLR` \| `ICML`. Extensible. |
 | `year` | int | Conference year, not the arXiv year. A year before the venue was held under its name (NeurIPS 1987, ICLR 2013, ICML 1988; `vocab.CONFERENCES`) is refused. |
@@ -107,7 +107,7 @@ note under `backend/tests/fixtures/http/openreview/v2/`:
 | ICML 2023 | `ICML 2023 OralPoster` 155 | | `ICML 2023 Poster` 1,673 | |
 | ICML 2024 | `ICML 2024 Oral` 144 | `ICML 2024 Spotlight` 191 | `ICML 2024 Poster` 2,275 | |
 | ICML 2025 | `ICML 2025 oral` 108; position `… Position Paper Track oral` 12 | `ICML 2025 spotlightposter` 211; position `… spotlightposter` 12 | `ICML 2025 poster` 2,938; position `… poster` 49 | |
-| ICML 2026 | | `ICML 2026 spotlight` 536; position `ICML 2026 Position Paper Track spotlight` 38 | | |
+| ICML 2026 | | `ICML 2026 spotlight` 536; position `ICML 2026 Position Paper Track spotlight` 38 | | `ICML 2026 regular` 5,805; position `ICML 2026 Position Paper Track regular` 175 (decision-042) |
 | NeurIPS 2023 | `NeurIPS 2023 oral` 67; D&B `NeurIPS 2023 Datasets and Benchmarks Oral` 10 | `… spotlight` 378; D&B `… Spotlight` 22 | `… poster` 2,773; D&B `… Poster` 290 | |
 | NeurIPS 2024 | `NeurIPS 2024 oral` 61; D&B `NeurIPS 2024 Track Datasets and Benchmarks Oral` 11 | `… spotlight` 326; D&B `… Spotlight` 56 | `… poster` 3,648; D&B `… Poster` 392 | `NeurIPS 2024 Competition Track` 16 |
 | NeurIPS 2025 | `NeurIPS 2025 oral` 77; D&B `NeurIPS 2025 Datasets and Benchmarks Track oral` 7; position `NeurIPS 2025 Position Paper Track Oral` 9 | `… spotlight` 687; D&B `… spotlight` 56 | `… poster` 4,522; D&B `… poster` 434 | `NeurIPS 2025 Position Paper Track` 31 |
@@ -116,17 +116,17 @@ ICML 2023's `OralPoster` and ICML 2025's `spotlightposter` are orals and spotlig
 slot; the higher tier is the presentation (ICML 2023: 155 + 1,673 = the 1,828 accepted notes). ICLR 2026 has
 no spotlight tier (224 + 5,127 = its 5,351 accepted notes).
 
-**Known unmapped strings.** No accepted, non-workshop string in the 2023–2025 cache is unmapped. ICML 2026 has
-two tiers, `spotlight` and `regular` (536 + 5,805 = its 6,341 accepted main-track notes; 38 + 175 = the 213
-position papers). `spotlight` is mapped. `ICML 2026 regular` and `ICML 2026 Position Paper Track regular` are
-left out of the table: `regular` is not a presentation word, and nothing recorded says a regular paper was a
-poster. Both strings have a recorded note and a test that keeps them unmapped
-(`icml-2026/notes-presentation-*.json`), and their records show no presentation. **They await an owner
-decision** (`poster`, a stated string with no presentation, or left as they are; TASK-190). Until then ICML 2026 reports
-`presentation_unmapped` 5,980 (5,805 + 175) and raises the `openreview_crawl_attention` WARNING on every crawl
-and replay. The DEBUG line carries only a forum id, so the count is the only signal: **any ICML 2026 count
-other than 5,980 means a string this table has not seen** (or a changed listing), and is chased by listing the
-cache's distinct `content.venue` values. NeurIPS 2026's strings get rows when its notes are public.
+**Known strings with no presentation.** No accepted, non-workshop string in the 2023–2025 cache or the ICLR and ICML 2026 cache is unmapped.
+ICML 2026 has two tiers, `spotlight` and `regular` (536 + 5,805 = its 6,341 accepted main-track notes; 38 +
+175 = the 213 position papers). `spotlight` is mapped. `ICML 2026 regular` and `ICML 2026 Position Paper Track
+regular` are stated strings with no presentation (decision-042, TASK-190): `regular` is not a presentation
+word, and nothing ICML has published says a regular paper was a poster. Their records show no presentation in
+records, filters and exports, and they are not counted. Both strings have a recorded note and a test
+(`icml-2026/notes-presentation-*.json`); a test also keeps an unseen ICML 2026 string (another case, another
+track, another word) unmapped. If ICML says what `regular` means, the row changes and decision-042 is
+revisited. So every venue-year's `presentation_unmapped` is expected to be 0. The DEBUG line carries only a
+forum id, so the count is the only signal: **any nonzero count means a string this table has not seen** (or
+a changed listing), and is chased by listing the cache's distinct `content.venue` values. NeurIPS 2026's strings get rows when its notes are public.
 
 ## Sources
 
@@ -238,15 +238,28 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    with nothing left is `no_title`. Before this, a control character in a RIS title raised out of the import
    and failed the build, and one in a proceedings listing dropped the listing as `invalid`, after which
    reconcile would have turned that paper's OpenReview acceptance into `unknown`; neither has happened on a
-   real crawl. **Abstracts, authors and keywords are
-   not changed**: the record never refused a control character there, dozens of crawled abstracts hold U+0002,
-   and they are stored and tokenized as before (the tokenizer splits on it, so `modal␂ity` is two words in the
-   index: TASK-188). The OpenReview crawl reports count the records whose title lost one,
+   real crawl. **Authors and keywords are not changed**; abstracts follow the same rule (below). The OpenReview crawl reports count the records whose title lost one,
    `title_control_characters` in the crawl file, the manifest and `openreview_crawl_finished` (listed in the
    manifest only when above 0, so a crawl with none keeps its shape; never an attention WARNING: the paper is
    kept). No
    existing record's bytes change (a rebuild of the 2026-10-05 cache adds four records and changes no other),
    so no tokenizer, index-schema or record-schema version moves.
+   **Control characters in an abstract (TASK-188, decision-044).** Every importer that supplies an abstract
+   (OpenReview API v1 and v2, `openreview_v2._abstract`; the RIS importer; the NeurIPS and PMLR paper pages,
+   `common.clean_abstract`) applies the title rule (`record.abstract_text`): each control character becomes a
+   space and whitespace is collapsed, before the snippet check, so an abstract with nothing else left, or one
+   that is then snippet-shaped, is missing. The abstract claim's evidence gains the same
+   ` (<n> control characters replaced by a space)` note (`record.controls_evidence`; on a RIS claim it follows
+   the route and url, which `dedup.attribution` reads). Snapshot `2026-10-05-10b5a205a63f` had 59 such
+   abstracts holding 117 non-whitespace control characters (U+0002 ×106, U+000F ×6, U+0008 ×4, U+0000 ×1):
+   98 between two letters where a line-break hyphen was (`quanti␂fying`), the rest standing for a character
+   the PDF lost (U+0002 for `×`, U+000F for `ε`), which neither a space nor a deletion restores. The tokenizer
+   already split on them, so **no token changes**: `TOKENIZER_VERSION` is not bumped and no search result
+   moves. The stored text, content hash and abstract claim of those records do change, so the next snapshot's
+   diff lists them as changed. **Known limit:** the abstract reads `quanti fying`, and a search for the whole
+   word `quantifying` still misses that paper, as it did before; that is the source's text. The record model
+   does not refuse a control character in an abstract, so a snapshot built before TASK-188 still loads.
+   Authors keep theirs (one author name holds U+007F).
 3. **Classify.** Derive `track`, `status` and `presentation` using the rules above. Every classification
    records its evidence claim.
 4. **Deduplicate.** The same paper appears on OpenReview and in the proceedings (NeurIPS, ICML 2023+).
@@ -301,7 +314,12 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
      a forum id's RIS row with no note crawled (both claims are `ris`, so the status would be whichever row was
      fetched last). Either way an accepted paper would leave every accepted-only result. (b) holds the same
      rule: such a record never merges on its title with imported records alone, imported or crawled itself; a
-     crawled listing, whose status outranks it, may still take a lone rejected note.
+     crawled listing, whose status outranks it, may still take a lone rejected note. For this rule a record is a
+     listing only by **crawled evidence** (TASK-198, decision-040): a proceedings source's claim, or a crawled
+     note's own `urls.proceedings`/`urls.pdf` naming a proceedings paper. A proceedings id that only a RIS row
+     names does not count: a rejected note whose forum id's RIS row names a proceedings paper (TASK-174's shape)
+     stays apart from the import of that paper, which stays accepted, until a crawl lists the paper. Everywhere
+     else (reconcile, the track rule) a listing keeps its wider meaning (`dedup.is_listing`).
    A refused group is a `conflicts.csv` row with field `abstract_key` (or `abstract_key_chain` when each pair
    could merge alone), and so is a rival set aside by a merge: rows are judged on the output records, anchored on
    every own-page abstract the record an import merged into keeps (a listing holding a `ris` claim: a newer RIS
@@ -310,9 +328,17 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    second, `abstract_key` row: it would say nothing more (the 14 such pairs on the 2026-10-05 crawl were each a
    listing and its same-title workshop version). The
    title key is never loosened: two papers whose titles differ only by a symbol and whose abstracts differ
-   stay two records. The title step, for its part, never consults the abstract: an import whose title lost a
-   symbol could equal another paper's title key and merge with it (no instance on the 2026-10-05 crawl;
-   TASK-189). The merged record's differing titles are a `precedence:` row, as for any merge. On the
+   stay two records. The title step consults the abstract in one case (TASK-189, decision-045): an import whose
+   title lost a symbol can equal another paper's title key (`-Guard` beside a note titled `Guard`), so (b)
+   leaves an imported record out of a title group when its own-page abstract is one a crawler gave a record of
+   the same venue and year (`$R^2$-Guard`'s note) and none of its title partners keeps it. (c) then joins it to
+   that record if it may; if (c) can't (the record is a workshop note, say), it stays its own record, with a
+   `title_key` `ambiguous_not_merged` row against the title partner. A crawler's abstract only: a RIS row's
+   text in a crawled cluster can be replaced by a merge in the same step, and a second run would judge the
+   group differently. A partner that keeps the abstract keeps the merge (a main note beside its workshop version
+   sharing it, the 14 pairs above), and two RIS rows with one title and different abstracts (an OpenReview and
+   a camera-ready text) still merge: no crawler holds either. A rebuild of the real cache under this rule (and
+   decision-040's) changed no merge on 2026-10-06 (decision-045, "Real-cache rebuild"). The merged record's differing titles are a `precedence:` row, as for any merge. On the
    2026-10-05 crawl (a) – (c) merge all 7 accepted records that existed only as the import's second copy of a
    crawled ICLR paper: one by its title once `ris` on both sides stopped blocking it, six by their abstract
    (five lost a math symbol; `CwoM9T55lG` is under its earlier title).

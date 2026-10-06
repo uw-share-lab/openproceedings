@@ -16,12 +16,14 @@ from hypothesis import strategies as st
 from openproceedings.ingest import urls
 from openproceedings.ingest.dedup import (
     IMPORTED,
+    PROCEEDINGS_SOURCES,
     PROCEEDINGS_TRACKS,
     DedupResult,
     abstract_key,
     dedup,
+    is_absence,
     is_creative_ai,
-    is_listing,
+    proceedings_ids,
     resolve,
     shown_key,
 )
@@ -375,6 +377,17 @@ NOTE_BRIDGE = [
 ]
 
 
+# decision-045's yield read a RIS row's abstract in a crawled cluster: a title merge in the same step replaced it
+# (one claim per source), so a second run merged the import it had kept apart (`_crawled_abstracts`)
+YIELD_TO_A_REPLACED_RIS_ABSTRACT = [
+    imported(f"nips-{H[1]}", "Trust in Machines", year=2023, abstract=LONG),
+    paper("AbCd1234", "Trust in Machines", year=2023, abstract=LONG),
+    imported("AbCd1234", "Trust in Machines", year=2023, abstract=OTHER),
+    imported("EfGh5678", "Trust in AI", year=2023, abstract=OTHER),
+    paper(f"nips-{H[2]}", "Trust in AI", source="neurips_proceedings", year=2023, abstract=LONG),
+]
+
+
 @given(pools)
 @example(TWO_PROCEEDINGS_IDS)
 @example(WORKSHOP_INTO_RIS_LISTING)
@@ -385,6 +398,7 @@ NOTE_BRIDGE = [
 @example(ICLR_2016)
 @example(RIS_BRIDGE)
 @example(NOTE_BRIDGE)
+@example(YIELD_TO_A_REPLACED_RIS_ABSTRACT)
 def test_idempotent(xs: list[PaperRecord]) -> None:
     once = dedup(xs)
     note(once)
@@ -545,7 +559,8 @@ LISTED_REJECTED_NOTE = [
     ),
     imported(f"nips-{H[1]}", "Trust in Machines", venue="NeurIPS", abstract=LONG),
 ]
-# TASK-174's shape: a rejected note, its forum id's RIS row naming a proceedings paper, and the import of that paper
+# TASK-174's shape: a rejected note, its forum id's RIS row naming a proceedings paper, and the import of that paper;
+# the note's cluster is a listing by RIS evidence alone, so the two stay apart (decision-040)
 REJECTED_NOTE_RIS_LISTING = [
     paper("AbCd1234", "Trust in AI", venue="NeurIPS", status="rejected", abstract=LONG),
     paper("AbCd1234", "Trust in AI", source="ris", venue="NeurIPS", abstract=LONG, urls_proceedings=nips(1)),
@@ -591,16 +606,35 @@ def test_an_abstract_merge_always_holds_an_imported_record_and_its_abstract(xs: 
             if any({c.source for c in x.provenance} != IMPORTED for x in ins)
         ]
         assert len(crawled) <= 1 < len(before)
-        # the cluster's resolved status is one a listing can have, unless it is a listing itself (decision-037
-        # refuses only a record that is no listing; whether a listing by RIS evidence alone should count is
-        # TASK-198), and its forum id survives
+        # the cluster's resolved status is one a listing can have, unless it is a listing by crawled evidence
+        # (decision-037; a proceedings id only a RIS row names is none, decision-040), and its forum id survives
         for cid in crawled:
             status = dedup(inputs[cid]).records
-            assert all(r.status in {"accepted", "unknown"} or is_listing(r) for r in status)
+            assert all(r.status in {"accepted", "unknown"} or crawled_listing(r) for r in status)
             if any(x.forum_id is not None and x.id == cid for x in inputs[cid]):
                 assert out.id == cid
         if any(x.forum_id is not None for x in members):  # a forum id in the group is always the survivor's
             assert out.forum_id is not None
+
+
+def crawled_listing(r: PaperRecord) -> bool:
+    """A listing by crawled evidence (decision-040): a proceedings source's claim (an absence claim is none), or a
+    proceedings id in a `urls.proceedings`/`urls.pdf` claim of a source other than `ris`."""
+    crawled = [c for c in r.provenance if c.source not in IMPORTED]
+    return any(c.source in PROCEEDINGS_SOURCES and not is_absence(c) for c in crawled) or bool(
+        proceedings_ids(crawled)
+    )
+
+
+def test_a_rejected_note_listed_by_its_ris_row_alone_takes_no_import() -> None:
+    """REJECTED_NOTE_RIS_LISTING pinned (TASK-198, decision-040): no abstract merge, the import stays accepted
+    and the note keeps its own status."""
+    result = dedup(REJECTED_NOTE_RIS_LISTING)
+    assert [(r.id, r.status) for r in result.records] == [
+        ("op:neurips:2024:AbCd1234", "rejected"),
+        (f"op:neurips:2024:nips-{H[1]}", "accepted"),
+    ]
+    assert [m.rule for m in result.merges] == ["forum_id"]
 
 
 IMPORT_ONLY_WITHDRAWN = [  # the forum id's RIS row says withdrawn and was fetched last; no note crawled
@@ -616,11 +650,13 @@ WITHDRAWN_NOTE_IMPORTED_LISTING = [
 @given(pools)
 @example(IMPORT_ONLY_WITHDRAWN)
 @example(WITHDRAWN_NOTE_IMPORTED_LISTING)
+@example(REJECTED_NOTE_RIS_LISTING)
 def test_a_status_no_listing_has_is_never_kept_by_merging_with_imports_alone(xs: list[PaperRecord]) -> None:
-    """Steps 2 and 3 (decision-037): when a title or an abstract joins clusters, one that is no listing and is
-    rejected, withdrawn or desk-rejected (a note, or a forum id's RIS row) has a companion that is no import, a
-    crawled listing whose status outranks it. Merged with imports alone, `ris` ranking last, the record would keep
-    that status, and an accepted paper would leave every accepted-only result."""
+    """Steps 2 and 3 (decision-037): when a title or an abstract joins clusters, one that is no listing by crawled
+    evidence (decision-040) and is rejected, withdrawn or desk-rejected (a note, or a forum id's RIS row) has a
+    companion that is no import, a crawled listing whose status outranks it. Merged with imports alone, `ris`
+    ranking last, the record would keep that status, and an accepted paper would leave every accepted-only
+    result."""
     result = dedup(xs)
     note(result)
     ends = final_ids(result)
@@ -633,11 +669,55 @@ def test_a_status_no_listing_has_is_never_kept_by_merging_with_imports_alone(xs:
             continue
         for cid, ins in inputs.items():
             alone, _ = resolve(cid, [c for x in ins for c in x.provenance])
-            if not is_listing(alone) and alone.status not in {"accepted", "unknown"}:
+            if not crawled_listing(alone) and alone.status not in {"accepted", "unknown"}:
                 assert any(
                     {c.source for c in x.provenance} != IMPORTED
                     for other, rest in inputs.items() if other != cid for x in rest
                 )  # fmt: skip
+
+
+# TASK-189's shape A: Scholar's title has a different note's title key, its own-page abstract a third note's
+TITLE_OF_ANOTHER = [
+    paper("AbCd1234", "Trust in AI", venue="ICLR", abstract=OTHER),
+    paper("EfGh5678", "Trust in Machines", venue="ICLR", abstract=LONG),
+    imported(f"iclr-{H[1]}", "Trust in AI", venue="ICLR", abstract=LONG),
+]
+
+
+@given(pools)
+@example(TITLE_OF_ANOTHER)
+def test_an_import_joined_by_its_title_keeps_no_abstract_only_another_crawled_record_holds(
+    xs: list[PaperRecord],
+) -> None:
+    """decision-045: an imported record (sources `ris` alone before step 2) that a title merge joined keeps no
+    own-page abstract that a crawler gave a record of its venue-year unless a record it joined holds it too: the
+    title would name another paper."""
+    from openproceedings.ingest.dedup import _abstract_keys, _cluster
+
+    result = dedup(xs)
+    note(result)
+    ends = final_ids(result)
+    clusters: dict[str, list[PaperRecord]] = {}
+    for x in xs:
+        clusters.setdefault(linked_before(result, x.id), []).append(x)
+    keys = {cid: _abstract_keys(_cluster(ins, cid)) for cid, ins in clusters.items()}
+    by_crawler = {cid: _abstract_keys(_cluster(ins, cid), crawled=True) for cid, ins in clusters.items()}
+    imported_ = {
+        cid for cid, ins in clusters.items() if all({c.source for c in x.provenance} == IMPORTED for x in ins)
+    }
+    by_title = {m.merged_id for m in result.merges if m.rule == "title_venue_year"}
+    by_title |= {m.survivor_id for m in result.merges if m.rule == "title_venue_year"}
+    for cid in imported_ & by_title:
+        out = ends[cid]
+        mine = clusters[cid][0]
+        joined = {k for other in clusters if other != cid and ends[other] == out for k in keys[other]}
+        crawled = {
+            k for other, ins in clusters.items() if other not in imported_
+            and (ins[0].venue, ins[0].year) == (mine.venue, mine.year) for k in by_crawler[other]
+        }  # fmt: skip
+        for k in keys[cid] & crawled:
+            event("import-title-merge:abstract-held-elsewhere")
+            assert k in joined
 
 
 def linked_before(result: DedupResult, rid: str) -> str:

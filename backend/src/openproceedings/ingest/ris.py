@@ -74,6 +74,8 @@ from openproceedings.ingest.record import (
     ClaimValue,
     PaperRecord,
     Urls,
+    abstract_text,
+    controls_evidence,
     is_url,
     title_evidence,
     title_text,
@@ -384,11 +386,15 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
     return "out_of_scope"
 
 
-def _abstract(entry: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+def _abstract(entry: dict[str, Any]) -> tuple[str, str] | None:
+    """The first non-empty abstract claim in `_ABSTRACT_SOURCES` order, as a record stores it (whitespace
+    collapsed, a control character a space: `record.abstract_text`, decision-044), and its evidence. The
+    route and url lead the evidence (`dedup.attribution` reads them); a replacement note follows."""
     for src in _ABSTRACT_SOURCES:
         for c in _claims(entry, "abstract", src):
-            if isinstance(c["value"], str) and (text := " ".join(c["value"].split())):
-                return text, c
+            if isinstance(c["value"], str) and (spaced := abstract_text(c["value"]))[0]:
+                text, replaced = spaced
+                return text, controls_evidence(f"scholarmend:{c['source']} {c['evidence']}", replaced)
     return None
 
 
@@ -414,9 +420,7 @@ def _record(
         claim("authors", authors, "mended.ris:AU"),
     ]
     if abstract is not None:
-        provenance.append(
-            claim("abstract", abstract[0], f"scholarmend:{abstract[1]['source']} {abstract[1]['evidence']}")
-        )
+        provenance.append(claim("abstract", *abstract))
     if ident.cls.venue_id_raw is not None:
         provenance.append(
             claim(
