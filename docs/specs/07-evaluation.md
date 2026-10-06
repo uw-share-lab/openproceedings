@@ -76,7 +76,9 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
 - **DOI** (TASK-186; a comparison rule only: dedup does not merge on a DOI). Scopus and Web of Science exports
   carry a DOI (`DO`) and no link these rules read: a Scopus `UR` is its own record page, and Web of Science
   writes the venue with its volume and edition (`ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS 35 (NEURIPS
-  2022)`), which is no venue. A DOI (`DO`, WoS's `DI`, or a `doi.org` link; read by `doi_key`: a doi.org link's prefix
+  2022)`), which is no venue. A DOI (`DO`, the tag Scopus and Web of Science RIS both write, or a `doi.org` link; `DI` is
+  Web of Science's plain-text export tag, which is no RIS, and is not read; read by `doi_key` in one pass, so a
+  hostile value can't outlast `/compare`'s time limit: a doi.org link's prefix
   with or without its scheme, `www.` or `dx.`, and its query and fragment, are dropped, and so are a `doi:` or
   `DOI ` label and the `.`, `,`, `;` or unbalanced `)` a sentence leaves after it; a suffix with whitespace or a
   control character is no DOI; compared case-blind) names the index record whose `urls.doi` it is, **only when the record's year
@@ -87,7 +89,9 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   doesn't block a forum or proceedings id; that is what lets a Web of Science record match. A DOI two records
   carry, or a DOI and another id naming different records, is ambiguous. **Where the index has DOIs:** only
   NeurIPS proceedings pages give one (`citation_doi`, prefix `10.52202`), so on index `fd13d8d27535` (snapshot
-  `2026-10-05-10b5a205a63f`) 16,690 of its 133,629 records carry a DOI: every accepted NeurIPS 2022–2025 main,
+  `2026-10-05-10b5a205a63f`) 16,690 of its 133,629 records carry a DOI (counted on 2026-10-05 by reading that
+  snapshot's `records.jsonl` and counting the records whose `urls.doi` is set, by venue, year, track and
+  status; a one-off read, not a committed report): every accepted NeurIPS 2022–2025 main,
   datasets-and-benchmarks and position paper, and nothing else. No ICLR or ICML record, no NeurIPS record before
   2022, and no NeurIPS workshop or rejected record has one, so a Scopus or Web of Science record of those is
   matched by title (Scopus) or not at all (Web of Science, no venue) and lands in `not_compared` or

@@ -637,8 +637,8 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   the answer (about 13 s, as the security review measured), which are charged like any comparison's.
 - **Matching** is 01's merge rules in their order (07 §B): the OpenReview forum id a URL names, then the
   proceedings paper a URL names (within its venue and year), then a DOI the index record carries (a Scopus or
-  Web of Science export's `DO`; never across the venue or year the file states; only NeurIPS 2022–2025 records
-  carry one), then the dedup title key **with the same venue and year**; never a title alone. The venue is one of Scholar mode's `source:` names exactly. A record whose
+  Web of Science export's `DO`; never across the venue or year the file states; only accepted NeurIPS 2022–2025
+  records carry one), then the dedup title key **with the same venue and year**; never a title alone. The venue is one of Scholar mode's `source:` names exactly. A record whose
   venue is none of the three indexed venues, and whose links name no indexed paper, is **not compared**
   (`not_compared`); two records of one paper are counted once (`copies`). Both sides cover every indexed
   venue and year: a limit on years or venues is part of `q` (guarantee 3), never a parameter.

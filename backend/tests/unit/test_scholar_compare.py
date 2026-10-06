@@ -4,6 +4,7 @@ hand-built corpus with a known answer. The engine here is the oracle itself: no 
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -965,6 +966,43 @@ def doi_corpus() -> list[PaperRecord]:
 )
 def test_doi_key(text: str, key: str | None) -> None:
     assert doi_key(text) == key
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    [
+        "10.1/x" + ")" * 1_000_000,
+        "10.1/x" + "." * 1_000_000,
+        "10.1/x" + ".,;)" * 250_000,
+        "10.1/x(" + ")" * 1_000_000,
+        "doi:" + " " * 1_000_000 + "10.1/x",
+        "10.1/x" + " " * 1_000_000 + ".",
+        "https://doi.org/10.1/x" + "?" * 1_000_000,
+        "10." + "1." * 500_000 + "/x!",
+    ],
+    ids=["parens", "dots", "mixed", "one-open", "label-spaces", "inner-spaces", "queries", "registrant"],
+)
+def test_doi_key_is_linear_on_a_hostile_value(hostile: str) -> None:
+    """The trim is one pass, not a character at a time (a hostile file must not defeat /compare's time cap)."""
+    started = time.perf_counter()
+    doi_key(hostile)
+    assert time.perf_counter() - started < 0.5
+
+
+def test_a_di_tag_is_not_read() -> None:
+    # `DI` is Web of Science's plain-text tag, not RIS (WoS RIS writes `DO`); a RIS reader never meets it
+    [r] = read_ris(entry("x").replace("ER  - ", "DI  - 10.52202/068431-0101\nER  - "), NAME)
+    assert r.dois == ()
+
+
+def test_a_doi_only_a_claim_carries_matches() -> None:
+    """A merged record keeps every `urls.doi` claim, the resolved one in `urls.doi` and any other in its
+    provenance: a DOI in either names it."""
+    record = paper("doi00001", "Trust", year=2022, urls_doi="10.52202/068431-0101")
+    claim_only = record.model_copy(update={"urls": record.urls.model_copy(update={"doi": None})})
+    index = MatchIndex.build([claim_only])
+    [r] = read_ris(entry("x", year=2022, doi="10.52202/068431-0101"), NAME)
+    assert (index.match(r).op_id, index.match(r).rule) == (nid("doi00001", 2022), "doi")
 
 
 def test_a_scopus_export_is_matched_by_doi_never_across_year() -> None:

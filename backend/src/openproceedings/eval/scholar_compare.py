@@ -118,14 +118,15 @@ VENUE_TAGS = ("JF", "JO", "T2", "J2", "JA", "BT")  # where a RIS writer puts the
 TITLE_TAGS = ("TI", "T1")
 _YEAR_TAGS = ("PY", "Y1", "DA")
 _URL_TAGS = ("UR", "L1", "L2")
-_DOI_TAGS = ("DO", "DI")  # Scopus and Web of Science write the DOI in `DO`; `DI` is WoS's own tag for it
+# Scopus and Web of Science RIS write the DOI in `DO` (`DI` is WoS's plain-text export tag, which is no RIS)
+_DOI_TAGS = ("DO",)
 # a DOI as `record.Urls.doi` accepts one; matched case-blind (DOIs are case-insensitive, ISO 26324)
 # (its suffix: no whitespace and no control character, C0, DEL or C1: a key is quoted in a row's evidence)
 _DOI = re.compile(r"10\.\d+(?:\.\d+)*/[^\s\x00-\x1f\x7f-\x9f]+")
 # a doi.org link, with or without its scheme, `www.` or `dx.`; and a `doi:` / `DOI ` label before a bare DOI
 _DOI_LINK = re.compile(r"(?:https?://)?(?:www\.|dx\.)?doi\.org/", re.IGNORECASE)
 _DOI_LABEL = re.compile(r"doi(?::\s*|\s+)", re.IGNORECASE)
-_TRAILING = ".,;"  # punctuation a sentence or a list puts after a DOI (an unbalanced `)` too)
+_TRAILING = ".,;)"  # punctuation a sentence or a list puts after a DOI (a `)` only when unbalanced)
 _YEAR = re.compile(r"\s*([0-9]{4})(?![0-9])")
 _QUERY_DATE = re.compile(r"Query date: (.+)")  # Publish or Perish: one per Scholar search
 _OPENREVIEW_PATHS = frozenset({"/forum", "/pdf"})
@@ -167,8 +168,12 @@ def doi_key(text: str) -> str | None:
         v = unquote(re.split(r"[?#]", v[link.end() :], maxsplit=1)[0])
     elif label := _DOI_LABEL.match(v):
         v = v[label.end() :]
-    while v and (v[-1] in _TRAILING or (v[-1] == ")" and v.count(")") > v.count("("))):
-        v = v[:-1]
+    # one pass each, never a character at a time (a hostile file must not defeat /compare's time cap): strip the
+    # trailing run, then give back the run's leading `)`s that close a `(` the DOI opened
+    kept = v.rstrip(_TRAILING)
+    tail = v[len(kept) :]
+    closes = min(len(tail) - len(tail.lstrip(")")), max(kept.count("(") - kept.count(")"), 0))
+    v = kept + ")" * closes
     return v.lower() if _DOI.fullmatch(v) else None
 
 
