@@ -334,20 +334,19 @@ Two readings follow from "the canonical form decides", and are worth knowing:
     the 2 s is only ever spent on a search's own running job, whose work the two bounds above cap; and a job
     nobody waits for does at most one more collection. No rate-limit token, no verification slot.
 
-  Measured (`docs/results/2026-10-05-bench-group-counts.md`, `backend/tests/bench/group_counts_report.py`:
+  Measured (`docs/results/2026-10-06-bench-group-counts.md`, `backend/tests/bench/group_counts_report.py`:
   `search.run` with facets and highlights as `/search` runs it, with and without its counts at the default
-  bounds, alternated, median and p95 of 200 rounds of wall time; Apple M1 Pro, a 1-minute load of 3.9 at the
-  start and 3.3 at the end, the report code of `b96c121c`, run before that commit and so recorded as
-  `bed0a6cb-dirty`; TASK-196). On the real corpus (index `fd13d8d27535`, 133,629 records), a
-  first page (the facet memo forgotten every round, so every collection is made again) of `(trust OR
-  reliance) AND calibrat* AND model*` took a median 16.4 ms and p95 17.6 ms without its three counts and
-  23.1 / 24.0 ms with them; `("large language model$" OR LLM*) AND (trust* OR calibrat*) AND (benchmark* OR
-  evaluat*)` (wildcard phrases) 31.8 / 36.2 ms and 75.2 / 84.4 ms; `trust model NOT (model NEAR/10 model*)`
-  26.9 / 35.2 and 44.5 / 70.1 ms; ten one-word groups of common words (20 collections) 2.3 / 2.7 and
-  29.2 / 35.8 ms. Of the ten Trust-Evals strings, nine take at most 44.2 ms p95 with their counts; `main-2-pop`
-  takes 59.5 / 62.1 ms and 178.9 / 190.1 ms, the one p95 over the 03 search budget, on this first-page
-  protocol only (03's exception "as measured", decision-039, TASK-197). A later page reads the counts from the
-  memo and costs what it costs without them (`main-2-pop` 59.0 / 64.1 and 59.2 / 62.3 ms). On the 5k fixture
+  bounds, alternated, median and p95 of 200 rounds of wall time; Apple M1 Pro, a 1-minute load of 3.4 at the
+  start and 4.6 at the end, commit `66613463`, after TASK-197). On the real corpus (index `fd13d8d27535`,
+  133,629 records), a first page (the facet memo forgotten every round, so every collection is made again) of
+  `(trust OR reliance) AND calibrat* AND model*` took a median 16.8 ms and p95 17.5 ms without its three counts
+  and 22.9 / 23.7 ms with them; `("large language model$" OR LLM*) AND (trust* OR calibrat*) AND (benchmark* OR
+  evaluat*)` (wildcard phrases) 33.0 / 45.8 ms and 50.7 / 53.7 ms; `trust model NOT (model NEAR/10 model*)`
+  27.7 / 30.3 and 33.7 / 40.5 ms; ten one-word groups of common words (20 collections) 2.4 / 3.0 and
+  30.0 / 33.9 ms. Of the ten Trust-Evals strings, nine take at most 46.1 ms p95 with their counts, and
+  `main-2-pop` 60.2 / 65.6 ms and 73.8 / 85.4 ms (190.1 ms p95 on 2026-10-05, before TASK-197; decision-039),
+  so every one is within the 03 search budget. A later page reads the counts from the memo and costs what it
+  costs without them (`main-2-pop` 59.2 / 64.5 and 59.3 / 61.7 ms). On the 5k fixture
   the same shapes add 4–25 ms to a first page's median, every round counted at the default grace; the
   158-wildcard shape is `too_costly` and costs what the search alone does. A query over the group limit is not refused either: it
   gets its result without counts and `not_counted: "too_many_groups"`.
