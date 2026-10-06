@@ -305,8 +305,10 @@ fixtures: `test_dedup_forum_link.py`.
   crawled), a status of its own; `@example`s pin the import-only and the crawled-note shapes.
 - No output record combines inputs with different `(venue, year)`.
 - An imported record a title merge joined keeps no own-page abstract a crawler gave another record of its
-  venue-year unless a record it joined keeps it too (decision-045; `TITLE_OF_ANOTHER`; `test_idempotent` pins
-  `YIELD_TO_A_REPLACED_RIS_ABSTRACT`, why the yield reads a crawler's abstract only).
+  venue-year unless a title partner keeps it too: any cluster of the venue-year sharing its title key, a rival
+  the merge set aside included (decision-045; `TITLE_OF_ANOTHER`; `SET_ASIDE_PARTNER`, a same-title workshop
+  note, from nightly run 37412309356; `test_idempotent` pins `YIELD_TO_A_REPLACED_RIS_ABSTRACT`, why the yield
+  reads a crawler's abstract only).
 - Idempotent: `dedup(dedup(xs)).records == dedup(xs).records`, and the same conflict rows apart from
   `newest:`/`tie:`.
 - Order-independent: `dedup(shuffle(xs)) == dedup(xs)`.

@@ -683,41 +683,55 @@ TITLE_OF_ANOTHER = [
     imported(f"iclr-{H[1]}", "Trust in AI", venue="ICLR", abstract=LONG),
 ]
 
+# nightly run 37412309356: the title partner that keeps the forum-id import's abstract is a same-title workshop note,
+# set aside by the track rule; the import merges with a proceedings-id import whose abstract is not its own page's
+# (no evidence), so nothing the import joined keeps its abstract. decision-045 counts the workshop note: no yield.
+SET_ASIDE_PARTNER = [
+    imported(f"nips-{H[1]}", "Trust in Machines", year=2023, abstract=LONG,
+             abstract_evidence="scholarmend:proceedings_page https://example.org/x"),
+    paper("AbCd1234", "Trust in Machines", year=2023, track="workshop", abstract=LONG),
+    imported("EfGh5678", "Trust in Machines", year=2023, abstract=LONG),
+]  # fmt: skip
+
 
 @given(pools)
 @example(TITLE_OF_ANOTHER)
+@example(SET_ASIDE_PARTNER)
 def test_an_import_joined_by_its_title_keeps_no_abstract_only_another_crawled_record_holds(
     xs: list[PaperRecord],
 ) -> None:
     """decision-045: an imported record (sources `ris` alone before step 2) that a title merge joined keeps no
-    own-page abstract that a crawler gave a record of its venue-year unless a record it joined holds it too: the
-    title would name another paper."""
+    own-page abstract that a crawler gave a record of its venue-year unless one of its title partners (every
+    cluster of the venue-year sharing its title key, a rival the merge set aside included) keeps it too: the title
+    would name another paper."""
     from openproceedings.ingest.dedup import _abstract_keys, _cluster
 
     result = dedup(xs)
     note(result)
-    ends = final_ids(result)
     clusters: dict[str, list[PaperRecord]] = {}
     for x in xs:
         clusters.setdefault(linked_before(result, x.id), []).append(x)
-    keys = {cid: _abstract_keys(_cluster(ins, cid)) for cid, ins in clusters.items()}
-    by_crawler = {cid: _abstract_keys(_cluster(ins, cid), crawled=True) for cid, ins in clusters.items()}
+    built = {cid: _cluster(ins, cid) for cid, ins in clusters.items()}
+    keys = {cid: _abstract_keys(c) for cid, c in built.items()}
+    by_crawler = {cid: _abstract_keys(c, crawled=True) for cid, c in built.items()}
     imported_ = {
         cid for cid, ins in clusters.items() if all({c.source for c in x.provenance} == IMPORTED for x in ins)
     }
     by_title = {m.merged_id for m in result.merges if m.rule == "title_venue_year"}
     by_title |= {m.survivor_id for m in result.merges if m.rule == "title_venue_year"}
     for cid in imported_ & by_title:
-        out = ends[cid]
         mine = clusters[cid][0]
-        joined = {k for other in clusters if other != cid and ends[other] == out for k in keys[other]}
+        partnered = {
+            k for other, c in built.items() if other != cid and c.keys & built[cid].keys
+            and (c.summary.venue, c.summary.year) == (mine.venue, mine.year) for k in keys[other]
+        }  # fmt: skip
         crawled = {
             k for other, ins in clusters.items() if other not in imported_
             and (ins[0].venue, ins[0].year) == (mine.venue, mine.year) for k in by_crawler[other]
         }  # fmt: skip
         for k in keys[cid] & crawled:
             event("import-title-merge:abstract-held-elsewhere")
-            assert k in joined
+            assert k in partnered
 
 
 def linked_before(result: DedupResult, rid: str) -> str:
