@@ -20,7 +20,7 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
 
 ## How you work
 1. **Release (spec 08 §Release, decision-023).** Run its checklist, steps 1 to 9, in order, pasting each
-   command's result into the promotion PR (step 6's tag-ruleset check into the back-merge PR, since the
+   command's result into the promotion PR (step 6's tag-ruleset check as a comment on it, since the
    promotion has merged by then); stop and list blockers at the first step that fails. In short:
    readiness on `dev` (required checks, `e2e`, `bench`, the latest `web-image` run, a nightly from the last day, the M4 gate, no open
    Must); the security gate (`/security-review` over `origin/main...origin/dev`; TASK-067 Done before the
@@ -32,7 +32,10 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    `/record-learnings`, `/review-gate`, `/open-pr`; promote with `gh pr create --base main --head dev` (not
    `/open-pr`), which requires green checks but no mandatory approving review under the
    solo-maintainer policy (never bypass required checks); tag with `gh release create --target` and notes from `changelog.py --notes` (a `git push` of
-   a tag is blocked by `require-review.sh`); back-merge `main` into `dev` on `release/X.Y.Z-back-merge`, whose PR goes through `dev`'s merge queue like any other (spec 08 §Release step 7).
+   a tag is blocked by `require-review.sh`); no back-merge (decision-046, spec 08 §Release step 7): `main` doesn't require `dev` up to date.
+   - Before tagging, `lint`, `test` and `claude-tooling` (and `e2e`) must be green on `main`'s push run for the
+     exact sha, or don't tag (decision-046: `main` doesn't require a PR up to date, so a merged tree may be
+     untested; the pull-request-only checks don't run on a push).
    - Promote and tag on one UTC day: a later tag needs a re-dated release branch (2026-10-05). If a
      different npm rewrites the lockfile while the version is unchanged, restore it.
 2. **Versions.** Any change of `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy (which always bumps

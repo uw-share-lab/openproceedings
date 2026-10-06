@@ -628,3 +628,26 @@ def test_a_listed_title_with_a_control_character_keeps_its_paper() -> None:
     clean, _ = neurips._record(2024, native, neurips.Entry(url, "Inductive Trust", ("A One",)), "main",
                                "track token Conference", listing, index, page)  # fmt: skip
     assert claim(clean, "title").evidence == f"year index {listing}"
+
+
+def test_a_page_abstract_with_a_control_character_is_imported_with_a_space() -> None:
+    """decision-044 (TASK-188): the title rule, for abstracts; the claim's evidence says so."""
+    from openproceedings.ingest.sources.http import Page
+
+    native = "nips-" + "a" * 32
+    url = f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{'a' * 32}-Abstract-Conference.html"
+    listing = "https://proceedings.neurips.cc/paper_files/paper/2024"
+    t0 = datetime(2026, 9, 29, tzinfo=UTC)
+    html = (
+        '<meta name="citation_title" content="Inductive Trust">'
+        '<p class="paper-abstract">Quanti\x02fying trust\x00</p>'
+    )
+    index, page = Page(listing, 200, "", t0), Page(url, 200, html, t0)
+    entry = neurips.Entry(url, "Inductive Trust", ("A One",))
+    record, missing = neurips._record(
+        2024, native, entry, "main", "track token Conference", listing, index, page
+    )
+    assert (record.abstract, missing) == ("Quanti fying trust", None)
+    assert claim(record, "abstract").evidence == (
+        "p.paper-abstract (citation_title matches the listing) (2 control characters replaced by a space)"
+    )

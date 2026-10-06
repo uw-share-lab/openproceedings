@@ -8,7 +8,7 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 ## Endpoints (`/api/v1`)
 | Method | Path | In → out |
 |---|---|---|
-| POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations) plus `filters`, each filter field's top-level clause for facet clicks (02 §Filter clauses, decision-011; `query/clauses.py`), and `word_forms`, each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names (02 §Word forms, TASK-175; `query/wordforms.py`). Debounced, called as the user types. Any well-formed body is a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body is a 422 `API_BAD_PARAM`. |
+| POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations) plus `filters`, each filter field's top-level clause for facet clicks (02 §Filter clauses, decision-011; `query/clauses.py`), and `word_forms`, each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names (02 §Word forms, TASK-175; `query/wordforms.py`), with `word_forms_skipped`, each other named term and why it gets none (TASK-192). Debounced, called as the user types. Any well-formed body is a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body is a 422 `API_BAD_PARAM`. |
 | GET | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | GET | `/papers/{id}` | full record with provenance and its derived `venue_name` (the export venue string, TASK-112); optional `q` (+ `mode`) → `matched` and `highlights`, equal to `/search`'s for that paper (null without `q`; `matched: false` + empty lists when the query doesn't match it; `q` admitted exactly as `/search` admits it; task-087) |
 | GET | `/export` | `format=ris\|csv\|bibtex\|jsonl` plus either `q` (with `mode` and optional `index_version`) or `record_id` (with at most `mode=native`, the declared default some clients always send; `scholar` is 422 "with record_id, mode may only be native") → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; `record_id` → exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if gone, 409 `API_RECORD_MISMATCH` on a `mismatch`) |
@@ -146,7 +146,9 @@ first `N1` as the provenance line.
 
 One recorded exception: `RecordResponse.replay` is nullable, null only for the opt-in `replay=false`
 (decision-014). `backend/tests/contract/test_openapi_additive.py` diffs the snapshot against the released one
-on `origin/dev` by these rules (`ALLOWED` lists that exception); run it before any contract change lands.
+on `origin/dev` by these rules (`ALLOWED` lists that exception); run it before any contract change lands. A
+nullable field (`anyOf: [schema, null]`) is judged option by option, so a new value in a nullable open enum
+(`CompareRow.reason`, `matched_by`) is additive and a removed one is breaking (TASK-185).
 Locally it skips when `origin/dev` is missing. CI's `test` job compares against the commit the change builds
 on (the PR's base commit, or the pushed branch's previous tip), fetched by SHA into `OPENAPI_BASELINE_REF`, with
 `OPENAPI_BASELINE_REQUIRED=1`: an unreadable baseline fails there. A baseline commit with no snapshot yet (`main`

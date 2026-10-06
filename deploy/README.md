@@ -318,6 +318,29 @@ the whole server, every path, not of this one: Caddy has no per-path setting for
 `GET /api/v1/meta` then shows `limits.compare`, and the web app offers the panel; no rebuild
 of the `web` image is needed. To turn them off again, remove `--compare` and restart `api`.
 
+### Tuning comparisons
+
+Each cap and cost below is an `op serve` flag (TASK-184), added to the `api` service's `command` beside
+`--compare`. A flag left out keeps its default; a value out of range, or a float that isn't finite, stops
+`op serve` at start with `invalid serve options: <field>: <reason>`; the bounds in brackets keep a finite but
+extreme value from overflowing the pause or the debit, or from lifting the bound the flag is (the field is the flag's name with
+underscores; the three costs are under `rate_limit.`). The caps are stated in `GET /api/v1/meta`
+`limits.compare` (the field in brackets), so the web app reads what you set; the costs are not.
+
+| Flag | Default (allowed) | What it bounds |
+|---|---|---|
+| `--compare-max-body-bytes` | 16777216, 16 MiB (1024 to 1073741824, 1 GiB) | the largest file (`max_body_bytes`; 413). The proxy's `request_body` and `request_buffers` for the path must be at least this, in the same unit (`16MiB`, not `16MB`) |
+| `--compare-max-records` | 5000 (1 to 1000000) | records in one file (`max_records`; 413): about 10 s of CPU per 1,000 |
+| `--compare-max-line-chars` | 32768 (64 to 16777216) | code points in one line of the file (`max_line_length`; 413) |
+| `--compare-max-results` | 5000 (1 to 1000000) | papers of the query's result that the file lacks (`max_results`; 422) |
+| `--compare-max-response-bytes` | 16777216 (1024 to 1073741824) | the largest answer (`max_response_bytes`; 422) |
+| `--compare-max-seconds` | 60 (over 0, up to 3600) | wall time of one comparison's work (`max_seconds`; 503 without `Retry-After`) |
+| `--compare-upload-seconds` | 30 (over 0, up to 3600) | wall time for the file to arrive once a slot is held (`max_upload_seconds`; 408). Behind this proxy the file arrives whole, so it bounds a direct client only |
+| `--comparison-slots` | 1 (1 to 16) | comparisons at once (`max_concurrent`; another is 503 before its file is read). Budget about 250 MB of `api` memory per slot (above) |
+| `--compare-cooldown-factor` | 3 (0 to 1000; 0: no pause) | after a comparison, its network (IPv4 /24, IPv6 /48) starts no other for this many times the slot time it used: one network holds a slot at most 1 / (1 + factor) of the time. Not applied with `--no-rate-limit` or on a local instance |
+| `--compare-upload-weight` | 4 (1 to 100) | how many times the file's upload time counts in the token debit and the pause (a stalled upload holds the slot and does no work) |
+| `--compare-token-ms` | 500 (at least 1) | one rate-limit token per this many ms a comparison held its slot; lower makes a comparison dearer in searches |
+
 ## Backups
 
 `$OP_DATA_HOST/records/records.sqlite` holds the only copy of every saved search. Losing it also unpins

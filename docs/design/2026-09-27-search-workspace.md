@@ -277,7 +277,9 @@ Component rules:
   one line per translation message, then `Searched as: <canonical>` in monospace with **Copy**. `COMPAT_NO_STEMMING`
   is one line naming the terms (the server already lists them), with **Add `$`** under it while the editor
   holds the text it was reported for (TASK-175; spec 05 §Components 1, copy ED-19): "Add $ to all N terms",
-  and **Choose terms** for a subset. Like Load with parentheses it edits the draft and never searches. Both
+  and **Choose terms** for a subset, then "Left as typed:" with each other named term and the server's reason
+  (TASK-192; near the length cap, "Add $ to the N terms that fit"). Like Load with parentheses it edits the
+  draft and never searches. Both
   states end with the full-text sentence (copy ED-19, gate review USAB-S4): most of a lower count than Google
   Scholar's can come from Scholar reading full text, which `$` does not recover. The `COMPAT_POP_DOLLAR` notices
   (one per `$`) are one line saying the widening is what `$` is for, the server's own behind a "Show all N
@@ -587,7 +589,7 @@ controls that change them. Export and Save (TASK-044) go after Sort.
 | Load with parentheses, Add $ | Enter/Space; the button is gone once the draft changes, so focus moves to the editor on the Text tab and to the Builder tab itself on the Builder tab (its controls are rebuilt after `/parse` answers; A11Y-M4) | the editor or tab announces itself; the draft label says "not searched" |
 | Expansion line | `+N more` is a button (`aria-expanded`); after expanding, focus stays on it (now "Show fewer") | "benchmark star expands to 12 words: benchmark, benchmarking, …" |
 | Tree disclosure | button `aria-expanded`, Enter/Space toggles; **Show how it was read** opens it and moves focus to its heading | tree is a nested list (`<ul>`), each default clause reads "track: main or datasets and benchmarks or position, default" |
-| Copy buttons | Enter/Space | announce "Copied" via the polite region |
+| Copy buttons | Enter/Space | announce "Copied" via the polite region, cleared and said again on every press so each is announced; where the clipboard can't be written, "Couldn't copy: select the text and copy it", or, where the owner selects its text for the keyboard (the compare panel's sentence), "Couldn't copy: the text is selected; copy it" (TASK-195) |
 | Sidebar checkbox | Space toggles; a toggle **pushes** the new URL and search | label "workshop, 205 papers" (the facet count, as shown); after the search lands, the results live region says "Track: workshop included. 617 papers." (the new `total`) |
 | Disabled control | still focusable (`aria-disabled="true"`, not `disabled`), so the reason can be reached | `aria-describedby` → the note; announces "dimmed" + the reason |
 | Include button | Enter/Space; focus afterwards moves to the results header count, because the banner line it was on disappears | name "Include 205 workshop papers" (the visible label's number); description "Adds workshop to the track filter, `track:(… OR workshop)`; the track filter then becomes a limit you wrote" |

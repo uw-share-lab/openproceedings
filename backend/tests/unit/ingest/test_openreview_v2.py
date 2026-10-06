@@ -153,7 +153,7 @@ def test_a_title_with_control_characters_is_imported_with_spaces_and_says_so(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """ICLR 2026 `xHMNX3l8rx` (two U+0002 in its title) was skipped as `invalid`: a real paper lost to invisible
-    characters. The title keeps everything else; the abstract, which the record never refused, is untouched."""
+    characters. The title keeps everything else; the abstract gets the same rule (decision-044, TASK-188)."""
     note = recorded_note("iclr-2026/notes-accepted.json")
     note["content"]["title"]["value"] = "A SPEC\x02TRUM FROM STATISTICAL TO CAUSAL\x02"
     note["content"]["abstract"]["value"] = "the LiDAR modal\x02ity"
@@ -161,11 +161,15 @@ def test_a_title_with_control_characters_is_imported_with_spaces_and_says_so(
         record = build(note, "ICLR", 2026)
     assert isinstance(record, PaperRecord)
     assert (
-        record.title == "A SPEC TRUM FROM STATISTICAL TO CAUSAL"
-        and record.abstract == "the LiDAR modal\x02ity"
+        record.title == "A SPEC TRUM FROM STATISTICAL TO CAUSAL" and record.abstract == "the LiDAR modal ity"
     )
     [title] = record.claims("title")
     assert title.evidence == "content.title (2 control characters replaced by a space)"
+    [abstract] = record.claims("abstract")
+    assert (abstract.value, abstract.evidence) == (
+        "the LiDAR modal ity",
+        "content.abstract (1 control character replaced by a space)",
+    )
     [line] = [r for r in caplog.records if r.getMessage() == "openreview_title_control_characters"]
     assert (line.levelno, line.__dict__["forum"], line.__dict__["replaced"]) == (logging.DEBUG, note["id"], 2)
     assert "title" not in line.__dict__  # a title is never logged
@@ -188,6 +192,34 @@ def test_the_title_claims_evidence_counts_only_what_was_replaced(title: str, evi
     record = build(note)
     assert isinstance(record, PaperRecord) and [c.evidence for c in record.claims("title")] == [evidence]
     assert record.title == " ".join(title.replace("\x00", " ").split())
+
+
+@pytest.mark.parametrize(
+    ("abstract", "stored", "evidence"),
+    [
+        (
+            "quanti\x02fying 500x\x02 longer",
+            "quanti fying 500x longer",
+            "content.abstract (2 control characters replaced by a space)",
+        ),
+        (
+            "We  study\x0b trust.",
+            "We study trust.",
+            "content.abstract",
+        ),  # whitespace controls: evidence unchanged
+        ("\x00\x02 ", None, None),  # nothing left: no abstract, the paper is kept
+        ("\x02\u2026 a snippet", None, None),  # a snippet once the control is a space
+    ],
+)
+def test_an_abstract_with_control_characters_is_imported_with_spaces_and_says_so(
+    abstract: str, stored: str | None, evidence: str | None
+) -> None:
+    """decision-044 (TASK-188): the title rule, for abstracts."""
+    note = recorded_note("iclr-2024/notes-accepted.json")
+    note["content"]["abstract"]["value"] = abstract
+    record = build(note)
+    assert isinstance(record, PaperRecord) and record.abstract == stored
+    assert [c.evidence for c in record.claims("abstract")] == ([] if evidence is None else [evidence])
 
 
 @pytest.mark.parametrize("title", ["\x00\x02", " \x02 ", "", None, 7])
@@ -305,8 +337,10 @@ PRESENTATIONS = [
      "spotlight"),
     ("icml-2025/notes-presentation-position-paper-track.json", "ICML 2025 Position Paper Track poster", "poster"),
     ("icml-2026/notes-presentation-conference.json", "ICML 2026 spotlight", "spotlight"),
+    ("icml-2026/notes-presentation-conference.json", "ICML 2026 regular", None),  # decision-042
     ("icml-2026/notes-presentation-position-paper-track.json", "ICML 2026 Position Paper Track spotlight",
      "spotlight"),
+    ("icml-2026/notes-presentation-position-paper-track.json", "ICML 2026 Position Paper Track regular", None),
     ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 oral", "oral"),
     ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 spotlight", "spotlight"),
     ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 poster", "poster"),
@@ -384,9 +418,8 @@ def unmapped_after(note: dict[str, Any], venue: str, year: int) -> tuple[PaperRe
 
 
 def test_an_unrecognised_string_is_null_counted_and_logged_at_debug(caplog: pytest.LogCaptureFixture) -> None:
-    note = recorded_note(
-        "icml-2026/notes-accepted.json"
-    )  # `ICML 2026 regular`, recorded live: not in the table
+    note = recorded_note("icml-2026/notes-accepted.json")
+    note["content"]["venue"]["value"] = "ICML 2026 keynote"  # a string nobody has seen
     with caplog.at_level(logging.DEBUG):
         record, unmapped = unmapped_after(note, "ICML", 2026)
     assert isinstance(record, PaperRecord) and (record.status, record.presentation) == ("accepted", None)
@@ -396,8 +429,8 @@ def test_an_unrecognised_string_is_null_counted_and_logged_at_debug(caplog: pyte
     assert "venue_string" not in line.__dict__  # the string can be free text: never logged
 
 
-# ICML 2026's other tier names no presentation, so it stays out of the table and is counted (TASK-178: 5,805
-# main and 175 position notes in the crawl cache)
+# decision-042: ICML 2026's other tier names no presentation. Its two strings are known (null, never counted;
+# TASK-178: 5,805 main and 175 position notes in the crawl cache), so the count names only unseen strings.
 @pytest.mark.parametrize(
     ("fixture", "venue_string", "track"),
     [
@@ -406,11 +439,32 @@ def test_an_unrecognised_string_is_null_counted_and_logged_at_debug(caplog: pyte
          "position"),
     ],
 )  # fmt: skip
-def test_icml_2026_regular_is_left_unmapped(fixture: str, venue_string: str, track: str) -> None:
-    record, unmapped = unmapped_after(note_with_venue(fixture, venue_string), "ICML", 2026)
+def test_icml_2026_regular_is_known_and_states_no_presentation(
+    fixture: str, venue_string: str, track: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.DEBUG):
+        record, unmapped = unmapped_after(note_with_venue(fixture, venue_string), "ICML", 2026)
     assert isinstance(record, PaperRecord) and (record.track, record.status) == (track, "accepted")
-    assert record.presentation is None and unmapped == {record.id.rsplit(":", 1)[1]}
+    assert record.presentation is None and not unmapped
     assert "presentation" not in {c.field for c in record.provenance}
+    assert not lines(caplog, "openreview_presentation_unmapped")
+
+
+@pytest.mark.parametrize(
+    "venue_string",
+    [
+        "ICML 2026 Regular",  # exact match only: another case is unseen
+        "ICML 2026 regular ",
+        "ICML 2026 Position Paper Track regular",  # known, but under the position track, not main
+        "ICML 2026 oral",
+    ],
+)
+def test_an_unseen_icml_2026_string_is_still_unmapped(venue_string: str) -> None:
+    note = note_with_venue("icml-2026/notes-presentation-conference.json", "ICML 2026 regular")
+    note["content"]["venue"]["value"] = venue_string
+    record, unmapped = unmapped_after(note, "ICML", 2026)
+    assert isinstance(record, PaperRecord) and record.track == "main"
+    assert record.presentation is None and unmapped == {note["id"]}
 
 
 @pytest.mark.parametrize(

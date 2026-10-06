@@ -50,10 +50,14 @@ authoritative):
 - **Exports with provenance**: RIS (checked against Covidence), CSV, BibTeX and JSONL of the entire matched
   set. Each record names the source of its abstract and links to it.
 - **Compare with your records** ([spec 04](docs/specs/04-backend-api.md) §Comparing with a RIS file): give the
-  search page a RIS file of papers you already hold (a Google Scholar export) and see which of them the query
-  keeps, which it drops and why (excluded by a default filter, no exact match in title or abstract, a match
-  only as another word form), which it adds, and which the index doesn't hold; every list downloads as CSV,
-  the added papers as RIS. The file is read in memory for that one request and never stored or logged. It is
+  search page a RIS file of papers you already hold (any RIS export: Google Scholar, Scopus, Web of Science;
+  records match by OpenReview or proceedings link, DOI, or title, venue and year) and see which of them the
+  query keeps, which it drops and why (outside a limit your query writes, excluded by a default filter, no
+  exact match in title or abstract, a match only as another word form), which it adds, and which the index
+  doesn't hold; every list downloads as CSV, the added papers as RIS. A Web of Science record has no link
+  and no venue these rules read, so it matches only by DOI, which only accepted NeurIPS 2022–2025 papers
+  carry in the index: a Web of Science record of any other paper ends up not compared
+  ([spec 07](docs/specs/07-evaluation.md) §B). The file is read in memory for that one request and never stored or logged. It is
   on for a local instance and off on a public one unless its operator turns it on (`op serve --compare`).
 - **Coverage page** (`/coverage`, `GET /api/v1/coverage`, `op eval coverage`): indexed counts per venue, year,
   track and status, compared with official accepted counts ([spec 07](docs/specs/07-evaluation.md) §C).
@@ -225,8 +229,8 @@ exit status).
 
 `uv run op eval scholar --ris <scholar-set.ris> --years 2020..2026 --index <index_version>` compares a Google
 Scholar RIS set with the review's search strings on that index ([spec 07](docs/specs/07-evaluation.md) §B). It
-writes `docs/results/<date>-scholar-comparison.md`, with every record only one side holds classified (filtered,
-read differently by Scholar, matched only through an inflected form, matched nowhere in title or abstract, not
+writes `docs/results/<date>-scholar-comparison.md`, with every record only one side holds classified (outside
+a limit the string writes, filtered, read differently by Scholar, matched only through an inflected form, matched nowhere in title or abstract, not
 in the corpus), and `<date>-scholar-comparison-review.csv`, the rows a person decides. It also says how many
 of the set's papers match a crawled record and how many only a record the set's own import put in the index. `--query-file` and
 `--query` run other strings. The first report is

@@ -1,6 +1,6 @@
 # A generated changelog is reproducible only if a release is bounded by HEAD and nothing reads the clock
 
-**Key lesson:** Place each merged PR in a release by commit ancestry (the oldest `v*` tag, or HEAD for a pending `--release`), leave dates and authors out, check release data against the code and the index manifest rather than trusting a hand-copied table, and plan the promotion around branch protection: `gh pr create --base main --head dev` (not `/open-pr`), the tag via `gh release create --target`, then a `main` → `dev` back-merge.
+**Key lesson:** Place each merged PR in a release by commit ancestry (the oldest `v*` tag, or HEAD for a pending `--release`), leave dates and authors out, check release data against the code and the index manifest rather than trusting a hand-copied table, and plan the promotion around branch protection: `gh pr create --base main --head dev` (not `/open-pr`), the tag via `gh release create --target`, then a `main` → `dev` back-merge (releases through 0.1.0; none since decision-046).
 
 - **Date:** 2026-09-30 · **Task:** TASK-066 · **Area:** ops
 - **Artifacts:** `.claude/scripts/changelog.py`, `.claude/scripts/tests/test-changelog.sh`,
@@ -130,3 +130,6 @@ a dated decision clarification rather than silently rewriting the earlier accept
 - **A promotion is not a release; the citation date decides when it can be tagged.** `0.1.0` was promoted to `main` on 2026-10-03 with `CITATION.cff` dated that day but not tagged, and spec 08 step 6 refuses a tag on another UTC day, so tagging on 2026-10-05 took a new `release/0.1.0` (re-dated citation, the untagged data table pointed at the new index, regenerated changelog), a second promotion and a back-merge. Evidence: `docs/results/2026-10-05-release-preparation.md`. Lesson: promote and tag on the same UTC day, or expect to redo the release branch; an untagged table may be updated, a tagged one never.
 - **`npm install --package-lock-only` under a different npm rewrites the lockfile with no version change** (npm 10.8.2 dropped optional packages' `libc` fields), as on 2026-10-03. When the version is already right, restore the tracked lockfile instead of committing the rewrite.
 - Propagated to: `.claude/agents/release-manager.md` (one UTC day; restore a rewritten lockfile).
+
+## Addendum — 2026-10-06 (0.2.0)
+- **Without the back-merge, tag only a `main` sha whose own push run is green.** Decision-046 turned off `main`'s "require up to date", so a PR into `main` can merge on checks run against an older `main`, and the tagged tree may never have been tested as such; the 0.2.0 release security review raised it. Spec 08 step 6 now checks the required checks on `main`'s push run for the exact sha before `gh release create`. Evidence: `docs/results/2026-10-06-release-preparation.md` §2.

@@ -1399,9 +1399,10 @@ def test_an_imported_listing_never_merges_with_a_workshop_note_on_its_abstract()
 
 def test_an_import_that_matched_by_title_is_not_matched_again_by_abstract() -> None:
     """Step 3 is for an imported record that matched nothing: one whose title found its paper is no longer an
-    imported record, so a second note sharing only its abstract is left alone."""
+    imported record, so a second note sharing its abstract is left alone. (Its title partner keeps the abstract
+    too: when only the second note did, the import would yield to it, decision-045, tested below.)"""
     xs = [
-        paper("AbCd1234", "One", abstract=OTHER, **ICLR),
+        paper("AbCd1234", "One", abstract=LONG, **ICLR),
         imported(f"iclr-{H[1]}", "One", abstract=LONG, **ICLR),
         paper("EfGh5678", "Two", abstract=LONG, track="workshop", **ICLR),
     ]
@@ -1465,6 +1466,80 @@ def test_a_crawled_note_that_is_not_accepted_never_merges_with_an_imported_listi
     crawled = paper(f"iclr-{H[1]}", "One", source="iclr_archive", **ICLR)
     [r] = dedup([note, copy, crawled]).records
     assert (r.id, r.status) == (note.id, "accepted")
+
+
+# --- a listing by RIS evidence alone (TASK-198, decision-040) ----------------------------------------------------
+
+
+def ris_listed_note(title: str, status: str = "rejected") -> list[PaperRecord]:
+    """TASK-174's shape: a note that is not accepted and its forum id's RIS row naming a proceedings paper, which
+    makes the note's cluster a listing by RIS evidence alone."""
+    return [
+        paper("AbCd1234", title, abstract=LONG, status=status, **ICLR),
+        paper("AbCd1234", title, source="ris", abstract=LONG, urls_proceedings=self_url(f"iclr-{H[1]}", 2025),
+              **ICLR),
+    ]  # fmt: skip
+
+
+@pytest.mark.parametrize("status", ["withdrawn", "rejected", "desk_rejected"])
+@pytest.mark.parametrize(
+    ("titles", "field"), [(("One", "Two"), "abstract_key"), (("One", "One"), "title_key")]
+)
+def test_a_listing_by_ris_evidence_alone_never_takes_an_import_by_abstract_or_title(
+    status: str, titles: tuple[str, str], field: str
+) -> None:
+    """decision-040: the note's cluster names `iclr-<H1>` only through its RIS row, so it is no listing for
+    decision-037's exemption. The import of that paper stays apart and accepted, by abstract as by title, with one
+    not-merged row."""
+    xs = [*ris_listed_note(titles[0], status), imported(f"iclr-{H[1]}", titles[1], abstract=LONG, **ICLR)]
+    note, copy = xs[0], xs[2]
+    result = dedup(xs)
+    assert [(r.id, r.status) for r in result.records] == [(note.id, status), (copy.id, "accepted")]
+    assert rules(result) == [(note.id, note.id, "forum_id")]
+    pair = [(copy.id, "ris"), (note.id, "openreview_v2+ris")]
+    if field == "title_key":  # both are listings, so neither is set aside: the pair in id order
+        pair.reverse()
+    (a, sa), (b, sb) = pair
+    assert [c for c in result.conflicts if c.resolution.endswith("_not_merged")] == [
+        Conflict(a, field, a, sa, b, sb, "ambiguous_not_merged")
+    ]
+    again = dedup(result.records)
+    assert (again.records, again.conflicts) == (result.records, result.conflicts)
+
+
+def test_a_listing_by_ris_evidence_alone_is_still_a_listing_for_reconcile() -> None:
+    """decision-040 narrows only decision-037's exemption: `is_listing` keeps its meaning (reconcile, the track
+    rule), so the note's merged record is still one."""
+    from openproceedings.ingest.dedup import is_listing
+
+    [r] = dedup(ris_listed_note("One")).records
+    assert is_listing(r)
+
+
+def test_a_ris_listed_note_and_its_import_merge_once_the_proceedings_listing_is_crawled() -> None:
+    """With the crawled listing present, its status outranks the note's: the three merge, accepted."""
+    xs = [
+        *ris_listed_note("One"),
+        imported(f"iclr-{H[1]}", "One", abstract=LONG, **ICLR),
+        paper(f"iclr-{H[1]}", "One", source="iclr_archive", abstract=LONG, **ICLR),
+    ]
+    [r] = dedup(xs).records
+    assert (r.id, r.status) == ("op:iclr:2025:AbCd1234", "accepted")
+
+
+@pytest.mark.parametrize("title", ["One", "Two"])
+def test_a_note_that_names_its_proceedings_paper_itself_is_crawled_evidence(title: str) -> None:
+    """decision-040: a crawled note's own `urls.proceedings` claim is crawled evidence (no crawler emits one
+    today), so the exemption holds and the import merges into it, by title or abstract (the note's status
+    stays OpenReview's)."""
+    note = paper("AbCd1234", "One", abstract=LONG, status="rejected",
+                 urls_proceedings=self_url(f"iclr-{H[1]}", 2025), **ICLR)  # fmt: skip
+    copy = imported(f"iclr-{H[1]}", title, abstract=LONG, **ICLR)
+    result = dedup([note, copy])
+    assert [(r.id, r.status) for r in result.records] == [(note.id, "rejected")]
+    assert [m.rule for m in result.merges] == [
+        "title_venue_year" if title == "One" else "abstract_venue_year"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -1567,3 +1642,99 @@ def test_matching_is_on_the_whole_digest_not_the_sixteen_digits_merges_csv_shows
     monkeypatch.setattr(module, "abstract_key", lambda text: fake.get(text, ""))
     xs = [paper("AbCd1234", "One", abstract=LONG, **ICLR), imported(f"iclr-{H[1]}", "Two", abstract=OTHER, **ICLR)]  # fmt: skip
     assert len(dedup(xs).records) == 2  # the two keys share their first 16 digits and are still two abstracts
+
+
+# --- an import's title merge yields to its own abstract's crawled match (TASK-189, decision-045) -----------------
+GUARD = "Guard: Robust Reasoning Enabled LLM Guardrail"
+
+
+def test_an_import_whose_title_lost_a_symbol_joins_its_abstracts_note_not_the_other_title() -> None:
+    """Shape A: Scholar's `-Guard` has the title key of a different note, `Guard`, but its own-page abstract is
+    `$R^2$-Guard`'s. The title partner keeps no such abstract and a crawled record does: the import joins that
+    record by its abstract, and the two notes stay apart with their title row."""
+    r2 = paper("AbCd1234", "$R^2$-" + GUARD, abstract=LONG, **ICLR)
+    guard = paper("EfGh5678", GUARD, abstract=OTHER, **ICLR)
+    copy = imported(f"iclr-{H[1]}", "-" + GUARD, abstract=LONG, **ICLR)
+    assert title_key(copy.title) == title_key(guard.title) != title_key(r2.title)
+    result = dedup([guard, copy, r2])
+    assert [r.id for r in result.records] == [r2.id, guard.id]
+    assert rules(result) == [(r2.id, copy.id, "abstract_venue_year")]
+    assert not_merged(result) == [("title_key", "ambiguous_not_merged")]  # two forum ids under one title key
+    again = dedup(result.records)
+    assert (again.records, again.conflicts) == (result.records, result.conflicts)
+
+
+def test_an_import_whose_abstract_no_crawled_record_holds_still_merges_on_its_title() -> None:
+    """Shape A without `$R^2$-Guard`'s note: nothing says the import is another paper, so the title decides."""
+    guard = paper("EfGh5678", GUARD, abstract=OTHER, **ICLR)
+    copy = imported(f"iclr-{H[1]}", "-" + GUARD, abstract=LONG, **ICLR)
+    result = dedup([guard, copy])
+    assert rules(result) == [(guard.id, copy.id, "title_venue_year")]
+
+
+def test_two_ris_rows_with_one_title_and_different_abstracts_still_merge() -> None:
+    """Shape B: OpenReview and camera-ready abstracts often differ; no crawled record holds either, so the title
+    decides (decision-045)."""
+    own = imported("AbCd1234", "One", abstract=LONG, **ICLR)
+    listing = imported(f"iclr-{H[1]}", "One", abstract=OTHER, **ICLR)
+    result = dedup([own, listing])
+    assert rules(result) == [(own.id, listing.id, "title_venue_year")]
+
+
+@pytest.mark.parametrize("workshop_title", ["One", "One (workshop version)"])
+def test_an_import_beside_a_main_note_and_its_workshop_version_sharing_the_abstract_merges_with_the_main(
+    workshop_title: str,
+) -> None:
+    """The 14 pairs of decision-037: a main note and its workshop version keep one abstract. The import's title
+    partner (the main note) keeps its abstract too, so the title merge stands; the workshop note is a rival set
+    aside, as before."""
+    main = paper("AbCd1234", "One", abstract=LONG, **ICLR)
+    workshop = paper("EfGh5678", workshop_title, abstract=LONG, track="workshop", **ICLR)
+    copy = imported(f"iclr-{H[1]}", "One", abstract=LONG, **ICLR)
+    result = dedup([main, workshop, copy])
+    assert [r.id for r in result.records] == [main.id, workshop.id]
+    assert rules(result) == [(main.id, copy.id, "title_venue_year")]
+
+
+def test_an_import_whose_abstracts_holder_cannot_take_it_stays_apart() -> None:
+    """decision-045 reads the crawled holder as evidence the title partner is another paper, whether or not step 3
+    can then merge the two: a workshop note keeps the import's abstract, so it stays its own record, with a row
+    against each."""
+    guard = paper("EfGh5678", GUARD, abstract=OTHER, **ICLR)
+    workshop = paper("AbCd1234", "$R^2$-" + GUARD, abstract=LONG, track="workshop", **ICLR)
+    copy = imported(f"iclr-{H[1]}", "-" + GUARD, abstract=LONG, **ICLR)
+    result = dedup([guard, workshop, copy])
+    assert len(result.records) == 3 and result.merges == ()
+    assert sorted(not_merged(result)) == [
+        ("abstract_key", "track_not_merged"),
+        ("title_key", "ambiguous_not_merged"),
+    ]
+    again = dedup(result.records)
+    assert (again.records, again.conflicts) == (result.records, result.conflicts)
+
+
+def test_an_abstract_only_a_crawled_records_ris_row_holds_is_no_reason_to_yield() -> None:
+    """decision-045 reads a crawler's abstract only: a RIS row's in a crawled cluster can be replaced by a merge in
+    the same step (one claim per source), so a second run would judge the title group differently."""
+    r2 = paper("AbCd1234", "$R^2$-" + GUARD, abstract=OTHER, **ICLR)
+    its_row = imported("AbCd1234", "$R^2$-" + GUARD, abstract=LONG, **ICLR)
+    guard = paper("EfGh5678", GUARD, abstract=OTHER, **ICLR)
+    copy = imported(f"iclr-{H[1]}", "-" + GUARD, abstract=LONG, **ICLR)
+    result = dedup([r2, its_row, guard, copy])
+    assert (guard.id, copy.id, "title_venue_year") in rules(result)
+
+
+def test_a_title_partner_set_aside_by_the_track_rule_still_keeps_the_title_merge() -> None:
+    """decision-045 asks whether a title partner keeps the import's abstract, set-aside rivals included: a
+    same-title workshop note holding it is the main paper's workshop version (the 14 pairs of decision-037), not a
+    sign the title names another paper. The forum-id import merges on its title with the proceedings-id import
+    (whose abstract is another page's, no evidence), and the workshop note stays apart with its title row
+    (nightly run 37412309356)."""
+    copy = imported(f"nips-{H[1]}", "Trust in Machines", year=2023, abstract=LONG,
+                    abstract_evidence="scholarmend:proceedings_page https://example.org/x")  # fmt: skip
+    workshop = paper("AbCd1234", "Trust in Machines", year=2023, track="workshop", abstract=LONG)
+    own = imported("EfGh5678", "Trust in Machines", year=2023, abstract=LONG)
+    result = dedup([copy, workshop, own])
+    assert [r.id for r in result.records] == [workshop.id, own.id]
+    assert rules(result) == [(own.id, copy.id, "title_venue_year")]
+    assert not_merged(result) == [("title_key", "track_not_merged")]

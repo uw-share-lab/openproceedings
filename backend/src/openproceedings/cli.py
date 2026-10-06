@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     from openproceedings.official_counts import OfficialTable
     from openproceedings.query.parser import ParseResult
     from openproceedings.records import RecordStore, SearchRecord
+    from openproceedings.search import GroupCounts
 
 log = logging.getLogger(__name__)
 
@@ -223,7 +224,12 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--sort", choices=SORTS, default="relevance")
     search.add_argument("--limit", type=int, default=20, help="ranked hits to print (default 20)")
     what = search.add_mutually_exclusive_group()
-    what.add_argument("--explain", action="store_true", help="print the parse and the compiled query")
+    what.add_argument(
+        "--explain",
+        action="store_true",
+        help="print the parse, the compiled query and each concept group's counts (alone, and the query "
+        "without it, under /search's bounds), or why they were not counted",
+    )
     what.add_argument("--ids", action="store_true", help="print every matching id, sorted")
     search.set_defaults(run=_search)
 
@@ -276,7 +282,11 @@ def build_parser() -> argparse.ArgumentParser:
     rr.add_argument("--json", action="store_true", help="print GET /records/{id}'s replay block as JSON")
     rr.set_defaults(run=_record_replay)
 
-    serve = sub.add_parser("serve", help="run the HTTP API (spec 04) over <data-dir>/indexes/<index>")
+    serve = sub.add_parser(
+        "serve",
+        help="run the HTTP API (spec 04) over <data-dir>/indexes/<index>",
+        formatter_class=ConfigDefaults,
+    )
     serve.add_argument("--host", default="127.0.0.1", help="default 127.0.0.1")
     serve.add_argument("--port", type=int, default=8000, help="default 8000")
     serve.add_argument("--index", default="current", help="`current` (default) or an index_version")
@@ -354,6 +364,33 @@ def build_parser() -> argparse.ArgumentParser:
         "for the one request, never stored or logged); default on for a loopback --host without --trusted-proxy "
         "only, with no pause between comparisons; --compare adds the per-network pause after each (decision-035)",
     )
+    # POST /compare's caps and costs (TASK-184): each flag sets the ApiConfig (or RateLimit) field of its name, so
+    # a refusal names the flag; one left out keeps the config's default, and a bad value is refused at start
+    compare_caps = serve.add_argument_group(
+        "comparisons", "POST /compare's caps (stated in GET /meta limits.compare) and costs (decision-035)"
+    )
+    for flag, metavar, kind, meaning in (
+        ("--compare-max-body-bytes", "BYTES", int,
+         "the largest RIS file; the reverse proxy's body cap for the path must be at least this"),
+        ("--compare-max-records", "N", int, "records one file may hold; about 10 s of CPU per 1,000"),
+        ("--compare-max-line-chars", "N", int, "code points in one line of the file, tag included"),
+        ("--compare-max-results", "N", int,
+         "papers of the query's result that the file lacks, the most one comparison reads"),
+        ("--compare-max-response-bytes", "BYTES", int, "the largest answer"),
+        ("--compare-max-seconds", "S", float, "wall time one comparison's work gets before a 503 API_BUSY"),
+        ("--compare-upload-seconds", "S", float,
+         "wall time a file gets to arrive once a slot is held before a 408"),
+        ("--comparison-slots", "N", int,
+         "comparisons run at once, each holding one file in memory: budget about 250 MB each"),
+        ("--compare-cooldown-factor", "X", float,
+         "after a comparison its network starts no other for X times the slot time it used (one network holds "
+         "a slot at most 1/(1+X) of the time); 0 turns the pause off. Not applied on a local instance or with "
+         "--no-rate-limit"),
+        ("--compare-upload-weight", "X", float,
+         "how many times a file's upload time counts, in the token debit and the cooldown"),
+        ("--compare-token-ms", "MS", float, "one rate-limit token per this many ms a comparison held its slot"),
+    ):  # fmt: skip
+        compare_caps.add_argument(flag, type=kind, metavar=metavar, help=f"{meaning} (%(config_default)s)")
     serve.add_argument(
         "--log-query-text",
         action="store_true",
@@ -1167,8 +1204,9 @@ def _eval_scholar(ns: argparse.Namespace) -> int:
 
 
 def _search(ns: argparse.Namespace) -> int:
+    from openproceedings import search as search_module
+    from openproceedings.api.config import ApiConfig
     from openproceedings.engine.tantivy_engine import TantivyEngine
-    from openproceedings.search import run
 
     started = time.perf_counter()
     _utf8_stdout()
@@ -1200,10 +1238,23 @@ def _search(ns: argparse.Namespace) -> int:
             f"canonical: {result.canonical}",
             f"index_version: {engine.index_version}",
         ]
-        print("\n".join([*lines, engine.explain(ast)]))
-        _search_run(ns, started, engine.index_version, result, engine.page(ast, limit=0)[0])
+        # each concept group's counts under the bounds /search counts them under (TASK-194)
+        limits = ApiConfig.model_fields
+        found = search_module.run(
+            engine,
+            result,
+            limit=0,
+            groups=limits["max_counted_groups"].default,
+            groups_terms=limits["max_counted_terms"].default,
+            groups_ids=limits["max_counted_ids"].default,
+            groups_wait=limits["group_count_wait_seconds"].default,
+            groups_grace=limits["group_count_grace_seconds"].default,
+        )
+        assert found.groups is not None  # asked for
+        print("\n".join([*lines, engine.explain(ast), *_group_lines(ns.query, found.total, found.groups)]))
+        _search_run(ns, started, engine.index_version, result, found.total)
         return 0
-    found = run(engine, result, sort=ns.sort, limit=ns.limit)  # what GET /api/v1/search runs (search.py)
+    found = search_module.run(engine, result, sort=ns.sort, limit=ns.limit)  # what GET /api/v1/search runs
     for line in _report(engine, result, found.total, found.excluded, _snapshot_of(ns, path)):
         print(line)
     for rank, hit in enumerate(found.hits, 1):
@@ -1213,6 +1264,33 @@ def _search(ns: argparse.Namespace) -> int:
         )
     _search_run(ns, started, engine.index_version, result, found.total)
     return 0
+
+
+# what each `groups.not_counted` constant means (spec 04 §SearchResponse), for `op search --explain`
+_NOT_COUNTED = {
+    "fewer_than_two_groups": "the query is not an AND of groups",
+    "too_many_groups": "more than {limit}",
+    "too_costly": "counting them would read more terms or verified ids than /search allows",
+    "busy": "the counting workers were taken",
+    "count_failed": "the counting failed",
+    "timed_out": "the counts were not ready in time",
+}
+
+
+def _group_lines(q: str, total: int, groups: GroupCounts) -> list[str]:
+    """`op search --explain`'s concept groups (TASK-176/194): each group as typed, with its count alone
+    (`total`) and the query's count without it (`total_without`), as /search's `groups` has them; or why
+    they were not counted."""
+    if groups.not_counted is not None:
+        why = _NOT_COUNTED[groups.not_counted].format(limit=groups.limit)
+        return [f"concept groups: {groups.found}, not counted: {groups.not_counted} ({why})"]
+    return [
+        f"concept groups: {groups.found}, counted (at most {groups.limit}); total {total}",
+        *(
+            f"  [{s}, {e}] {q[s:e]}: total {alone}, total_without {without}"
+            for (s, e), alone, without in groups.counts
+        ),
+    ]
 
 
 def _utf8_stdout() -> None:
@@ -1712,6 +1790,21 @@ def _serve(ns: argparse.Namespace) -> int:
                 capacity=ns.rate_capacity,
                 refill_per_second=ns.rate_refill,
                 export_weight=ns.export_weight,
+                **given(
+                    compare_cooldown_factor=ns.compare_cooldown_factor,
+                    compare_upload_weight=ns.compare_upload_weight,
+                    compare_token_ms=ns.compare_token_ms,
+                ),
+            ),
+            **given(
+                compare_max_body_bytes=ns.compare_max_body_bytes,
+                compare_max_records=ns.compare_max_records,
+                compare_max_line_chars=ns.compare_max_line_chars,
+                compare_max_results=ns.compare_max_results,
+                compare_max_response_bytes=ns.compare_max_response_bytes,
+                compare_max_seconds=ns.compare_max_seconds,
+                compare_upload_seconds=ns.compare_upload_seconds,
+                comparison_slots=ns.comparison_slots,
             ),
             cors_origins=tuple(ns.cors_origin),
             trusted_proxies=tuple(ns.trusted_proxy),
@@ -1737,6 +1830,39 @@ def _serve(ns: argparse.Namespace) -> int:
         raise _usage(f"invalid serve options: {serve_errors(e)}") from None
     serve(config, ns.host, ns.port, ns.log_level, ns.log_format)
     return 0
+
+
+class ConfigDefaults(argparse.HelpFormatter):
+    """Fills `%(config_default)s` in a serve flag's help with its `ApiConfig` (or `RateLimit`) field's default and
+    range, so the help can't drift from the config (TASK-184). The API is imported only when help is printed:
+    it costs every other `op` command 0.4 s."""
+
+    def _expand_help(self, action: argparse.Action) -> str:
+        if "%(config_default)" in (action.help or ""):
+            import annotated_types as at
+
+            from openproceedings.api.config import ApiConfig, RateLimit
+
+            field = {**RateLimit.model_fields, **ApiConfig.model_fields}[action.dest]
+
+            def num(v: object) -> str:  # 16777216, never 1.67772e+07
+                return f"{v:.15g}" if isinstance(v, float) else str(v)
+
+            said = [f"default {num(field.default)}"]
+            for m in field.metadata:
+                if isinstance(m, at.Ge):
+                    said.append(f"at least {num(m.ge)}")
+                elif isinstance(m, at.Gt):
+                    said.append(f"over {num(m.gt)}")
+                elif isinstance(m, at.Le):
+                    said.append(f"at most {num(m.le)}")
+            vars(action)["config_default"] = "; ".join(said)
+        return super()._expand_help(action)
+
+
+def given(**options: object) -> dict[str, object]:
+    """The options the operator passed (not None): one left out keeps the config's own default."""
+    return {name: value for name, value in options.items() if value is not None}
 
 
 def serve_errors(e: ValidationError) -> str:

@@ -84,6 +84,19 @@ def _compare(old: Any, new: Any, where: str, request: bool, out: list[tuple[str,
         if {k: v for k, v in old.items() if k not in rest} != {k: v for k, v in new.items() if k not in rest}:
             out.append((where, "changed"))
         return
+    options_old, options_new = old.get("anyOf"), new.get("anyOf")
+    if (
+        isinstance(options_old, list)
+        and isinstance(options_new, list)
+        and len(options_old) == len(options_new)
+    ):
+        # the same options (a nullable enum: `anyOf: [enum, null]`), each judged by these rules in its place
+        for o, n in zip(options_old, options_new, strict=True):
+            _compare(o, n, where, request, out)
+        rest_old = {k: v for k, v in _bare(old).items() if k != "anyOf"}
+        if rest_old != {k: v for k, v in _bare(new).items() if k != "anyOf"}:
+            out.append((where, "changed"))
+        return
     if _bare(old) != _bare(new):
         out.append((where, "nullable" if not request and _nullable_of(new, old) else "changed"))
 
@@ -220,6 +233,14 @@ def _record_get(d: dict[str, Any]) -> dict[str, Any]:
             lambda d: _schemas(d)["RecordRequest"]["required"].append("index_version"),
             ("RecordRequest.index_version", "made required"),
         ),
+        (
+            lambda d: _schemas(d)["CompareRow"]["properties"]["reason"]["anyOf"][0]["enum"].remove("our_bug"),
+            ("CompareRow.reason", "enum value removed"),  # a nullable enum is judged inside its `anyOf`
+        ),
+        (
+            lambda d: _schemas(d)["CompareRow"]["properties"]["reason"]["anyOf"][1].update(type="integer"),
+            ("CompareRow.reason", "changed"),
+        ),
         (lambda d: d["paths"].pop("/api/v1/coverage"), ("GET /api/v1/coverage", "removed")),
         (
             lambda d: _record_get(d)["parameters"].append(
@@ -238,6 +259,7 @@ def test_each_breaking_change_is_found(doc: dict[str, Any], edit: Any, expected:
     [
         lambda d: _schemas(d)["SearchResponse"]["properties"].update(new_total={"type": "integer"}),
         lambda d: _schemas(d)["Hit"]["properties"]["track"]["enum"].append("oral_only"),  # open
+        lambda d: _schemas(d)["CompareRow"]["properties"]["reason"]["anyOf"][0]["enum"].append("a_new_class"),
         lambda d: _record_get(d)["parameters"].append(
             {
                 "in": "query",
@@ -249,7 +271,14 @@ def test_each_breaking_change_is_found(doc: dict[str, Any], edit: Any, expected:
         lambda d: _schemas(d)["SearchResponse"]["properties"]["total"].update(description="reworded"),
         lambda d: _schemas(d).update(NewThing={"type": "object", "properties": {}}),
     ],
-    ids=["new response field", "open enum value", "optional parameter", "reworded", "new schema"],
+    ids=[
+        "new response field",
+        "open enum value",
+        "nullable open enum value",
+        "optional parameter",
+        "reworded",
+        "new schema",
+    ],
 )
 def test_additive_changes_pass(doc: dict[str, Any], edit: Any) -> None:
     assert _changed(doc, edit) == []

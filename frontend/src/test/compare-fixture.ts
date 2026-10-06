@@ -20,6 +20,8 @@ const typed = fixture as unknown as {
   readonly response: Comparison;
   /** A refusal's envelope (422 `API_RIS_INVALID`). */
   readonly invalid: Schemas["ErrorEnvelope"];
+  /** The file plus one unindexed paper of the limited year against `q` with a year limit of its own: `query_limit` rows in `dropped` and `not_in_index` (TASK-185). */
+  readonly limited: { readonly q: string; readonly file: string; readonly response: Comparison };
 };
 
 export const COMPARE = typed;

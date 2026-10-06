@@ -39,6 +39,7 @@ from openproceedings.eval.scholar_compare import (
     ONLY_OP,
     ONLY_SCHOLAR,
     OUR_BUG,
+    QUERY_LIMIT,
     SCHOLAR_CAP,
     SCHOLAR_CAP_RESULTS,
     SCHOLAR_MISSED,
@@ -62,9 +63,10 @@ UNRESOLVED, SPOT = "unresolved", "spot_check"
 BOM = chr(0xFEFF)
 _MEANING = {
     OUR_BUG: "the oracle and the served engine disagree (must be 0)",
+    QUERY_LIMIT: "a filter clause the query itself writes (`year:`, `venue:`, …) excludes it, whatever its text",
     FILTERED: "in the corpus; fails the default track or status filters and matches once they are removed",
     COMPAT_READING: "decided by how Scholar mode read the string (decision-002 phrases, `$`), not by the corpus",
-    COVERAGE_GAP: "no record in the snapshot by forum id, proceedings id or title+venue+year",
+    COVERAGE_GAP: "no record in the snapshot by forum id, proceedings id, DOI or title+venue+year",
     STEMMING: "matches title or abstract only with an inflected form added",
     FULL_TEXT: "in the corpus with an abstract; no reading matches its title or abstract, inflected forms included",
     UNSETTLED: "the automation can't tell (see the row's evidence)",
@@ -158,7 +160,7 @@ OUT_OF_SCOPE = (
 )
 # what `human_class` may hold: a class of the protocol, or one of the two verdicts above
 HUMAN_CLASSES = (
-    OUR_BUG, FILTERED, COMPAT_READING, COVERAGE_GAP, STEMMING, FULL_TEXT, SCHOLAR_CAP, SCHOLAR_MISSED, IN_BOTH,
+    OUR_BUG, QUERY_LIMIT, FILTERED, COMPAT_READING, COVERAGE_GAP, STEMMING, FULL_TEXT, SCHOLAR_CAP, SCHOLAR_MISSED, IN_BOTH,
     OUT_OF_SCOPE,
 )  # fmt: skip
 _SIDE_VERDICTS = (
@@ -638,8 +640,9 @@ def _matching(side: ScholarSide, index: MatchIndex, meta: Meta) -> list[str]:
         "## Matching the Scholar set to the index",
         "",
         "Each Scholar record is matched by spec 01's merge rules, in their order: the OpenReview forum id its URL "
-        "names, else the proceedings paper its URL names (the native id within that venue and year), else the "
-        "dedup title key within the same venue and year. A title alone never matches. A matched record is scoped "
+        "names, else the proceedings paper its URL names (the native id within that venue and year), else a DOI "
+        "the index record carries (never across the venue or year the record states), else the dedup title key "
+        "within the same venue and year. A title alone never matches. A matched record is scoped "
         "by its index record's venue and year, an unmatched one by its own; records outside the scope are dropped "
         "before comparing.",
         "",
@@ -854,8 +857,8 @@ def _query(
 
 _METHOD = """## Method
 
-- **Order of the tests** (scholar-comparison-protocol). Only in the Scholar set: `our_bug`, `filtered`,
-  `compat_reading`, `coverage_gap`, `stemming`, then `full_text`. Only in openproceedings: `our_bug`, `scholar_cap`,
+- **Order of the tests** (scholar-comparison-protocol). Only in the Scholar set: `our_bug`, `query_limit`,
+  `filtered`, `compat_reading`, `coverage_gap`, `stemming`, then `full_text`. Only in openproceedings: `our_bug`, `scholar_cap`,
   `compat_reading`, then `scholar_missed`. A record gets the first class whose test it passes, and a second cause
   is named in its evidence. The filters come before the text: a record that fails the default track or status
   filters and matches with them removed, as run, as Scholar reads the string or with an inflected form, is
@@ -878,6 +881,11 @@ _METHOD = """## Method
   Decision-038 keeps this stand-in and adopts no published stemmer, because that figure is at or near zero for
   the review's strings; the `stemming` and `full_text` counts are relative to the stand-in, and the decision is
   revisited for any string whose sensitivity is not near zero.
+- **`query_limit`.** A top-level filter clause the string itself writes (`year:2020..2024`, `source:`/`venue:`,
+  or a `track:`/`status:` clause other than the default) excludes the record: the string as written leaves it
+  out, whatever its text, so it is no full-text or stemming miss. The evidence names the clause, the value that
+  fails it, and whether the rest of the string matches. A record the index doesn't hold is judged on the
+  file's own venue and year and goes to `review.csv`. A clause under an OR or a NOT group is part of the search.
 - **`full_text`** is the residue: the record is in the corpus with an abstract, and the oracle confirms that no
   reading above matches its title or abstract. It may also fail the filters (counted under each finding). A
   record the corpus holds without an abstract is `unsettled`.

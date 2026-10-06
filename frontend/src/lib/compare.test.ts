@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApi } from "@/api/client";
 import { json, stubFetch } from "@/test/api-stub";
 import { COMPARE as fixture } from "@/test/compare-fixture";
@@ -15,6 +15,7 @@ import {
   reasonLines,
   detailText,
   summaryText,
+  fileSha256,
   undecidedText,
   reasonText,
   RIS_MEDIA,
@@ -29,6 +30,8 @@ const LIMITS: CompareLimits = {
   max_results: 5000,
   max_seconds: 60,
   max_response_bytes: 16 * 1024 * 1024,
+  max_upload_seconds: 30,
+  max_concurrent: 1,
 };
 
 describe("postCompare", () => {
@@ -80,7 +83,15 @@ describe("postCompare", () => {
 
 describe("the words", () => {
   it("names every reason the API documents, per list", () => {
-    for (const reason of ["filtered", "full_text", "stemming", "compat_reading", "unsettled", "our_bug"]) {
+    for (const reason of [
+      "query_limit",
+      "filtered",
+      "full_text",
+      "stemming",
+      "compat_reading",
+      "unsettled",
+      "our_bug",
+    ]) {
       expect(reasonText("dropped", reason)).not.toBe(reason);
     }
     for (const reason of ["scholar_missed", "compat_reading", "scholar_cap", "our_bug"]) {
@@ -93,6 +104,11 @@ describe("the words", () => {
   it("shows a value it doesn't know as sent (the enums are open)", () => {
     expect(reasonText("dropped", "a_new_class")).toBe("a_new_class");
     expect(matchedByText("a_new_rule")).toBe("a_new_rule");
+    expect(matchedByText("doi")).toBe("matched by its DOI"); // TASK-186: Scopus and Web of Science exports
+    // a record with neither names its links and its DOI as unmatched alike (TASK-186)
+    expect(matchedByText("not_found")).toBe(
+      "no record with this title in that venue and year, and no link or DOI naming an indexed paper",
+    );
     expect(notComparedText("a_new_reason")).toBe("a_new_reason");
   });
 
@@ -130,10 +146,36 @@ describe("the words", () => {
     expect(reasonLines("not_in_index", { coverage_gap: 3 }, "native")).toEqual([
       "3 papers are not in the index. Keep such a paper from your own file; no query here can find it.",
     ]);
+    // a paper the query's own limit leaves out (TASK-185), with the API's own count for it
+    const limited = fixture.limited.response.reason_totals.dropped;
+    expect(reasonLines("dropped", { query_limit: limited.query_limit ?? 0 }, "native")).toEqual([
+      `${limited.query_limit} papers are outside a limit your query writes: to include such a paper, widen ` +
+        "that limit in the query (its row names the clause).",
+    ]);
+    // a paper the index doesn't hold whose year or venue in the file is outside the query's own limit: no
+    // widening finds it, so its step is the coverage gap's, never "widen that limit" (gate UX/USAB MUST)
+    const missing = fixture.limited.response.reason_totals.not_in_index;
+    expect(missing.query_limit).toBe(1);
+    expect(reasonLines("not_in_index", { query_limit: missing.query_limit ?? 0 }, "native")).toEqual([
+      "1 paper is not in the index, and its year or venue in your file is outside a limit your query writes. " +
+        "Keep such a paper from your own file; no query here can find it.",
+    ]);
+    expect(reasonLines("not_in_index", { query_limit: 2 }, "native")).toEqual([
+      "2 papers are not in the index, and their year or venue in your file is outside a limit your query " +
+        "writes. Keep such a paper from your own file; no query here can find it.",
+    ]);
+    const row = fixture.limited.response.not_in_index.find((r) => r.reason === "query_limit");
+    expect(reasonText("not_in_index", row?.reason ?? null)).toBe(
+      "not in the index; its year or venue in your file is outside a limit your query writes",
+    );
+    expect(reasonText("dropped", "query_limit")).toBe(
+      "outside a limit your query writes (its year, venue, track or status)",
+    );
     expect(reasonLines("dropped", { a_new_class: 2 }, "native")).toEqual(["2 papers: a_new_class."]); // open enum
     // every reason the API documents has its sentence, in both lists it can appear in, and a dropped or
     // missing paper's always says what to do next (USAB-S3)
     for (const reason of [
+      "query_limit",
       "filtered",
       "full_text",
       "stemming",
@@ -166,7 +208,7 @@ describe("the words", () => {
   });
 
   it("leaves out of a missing paper's evidence what its match line already says", () => {
-    const unmatched = "no forum id, proceedings id or title+venue+year match in the snapshot";
+    const unmatched = "no forum id, proceedings id, DOI or title+venue+year match in the snapshot";
     expect(detailText("not_in_index", { detail: unmatched })).toBe("");
     expect(detailText("not_in_index", { detail: `${unmatched}; its links are on a.example` })).toBe(
       "its links are on a.example",
@@ -174,13 +216,45 @@ describe("the words", () => {
     expect(detailText("dropped", { detail: unmatched })).toBe(unmatched); // only where matched_by says it
   });
 
-  it("sums a comparison up in one sentence to keep", () => {
+  it("sums a comparison up in one citable sentence (decision-043, prisma-reporting)", () => {
     const c = fixture.response;
-    const text = summaryText(c, "mine.ris", "2026-10-05");
-    expect(text).toContain(`index ${c.index_version}`);
-    expect(text).toContain(c.query.canonical_hash);
-    expect(text).toContain(`${c.kept_total} kept, ${c.dropped_total} dropped`);
-    expect(text.startsWith("On 2026-10-05, the query ")).toBe(true);
+    const sha = "a".repeat(64);
+    const text = summaryText(c, { name: "mine.ris", sha256: sha }, "2026-10-05");
+    const n = (x: number) => x.toLocaleString("en-US");
+    expect(text).toBe(
+      "As a search-development check (not a PRISMA flow-diagram count), on 2026-10-05 (UTC) we compared the " +
+        `RIS file mine.ris (sha256 \`${sha}\`; ${n(c.records_total)} records read: ${n(c.papers_total)} papers ` +
+        `compared, ${n(c.not_compared_total)} not compared (venue not recognised, or outside the indexed venues and years), and ` +
+        `${n(c.duplicates_total)} ${c.duplicates_total === 1 ? "repeat" : "repeats"} of a paper already counted) ` +
+        `with the query \`${c.query.canonical}\` (canonical_hash \`${c.query.canonical_hash}\`) on ` +
+        `openproceedings (index \`${c.index_version}\`): ${n(c.kept_total)} kept, ${n(c.dropped_total)} dropped, ` +
+        `${n(c.not_in_index_total)} not in the index, and ${n(c.added_total)} papers added that the file ` +
+        "doesn't hold.",
+    );
+    // one sentence: no full stop before its end but the ones inside the query
+    expect(text.replace(c.query.canonical, "").slice(0, -1)).not.toMatch(/\.\s/);
+    // the file's records are all accounted for: compared, not compared, repeats (the fixture has each)
+    expect(c.not_compared_total).toBeGreaterThan(0);
+    expect(c.duplicates_total).toBeGreaterThan(0);
+    expect(c.papers_total + c.not_compared_total + c.duplicates_total).toBe(c.records_total);
+  });
+
+  it("says when this browser couldn't compute the file's sha256, and counts one of a kind", () => {
+    const one = {
+      ...fixture.response,
+      records_total: 1,
+      papers_total: 1,
+      not_compared_total: 0,
+      duplicates_total: 0,
+      added_total: 1,
+    };
+    const text = summaryText(one, { name: "mine.ris", sha256: null }, "2026-10-05");
+    // no repeats: the clause is left out, never "0 repeats"
+    expect(text).toContain(
+      "(sha256 not computed by this browser: compute it from your copy; 1 record read: 1 paper compared and 0 " +
+        "not compared (venue not recognised, or outside the indexed venues and years))",
+    );
+    expect(text).toContain("and 1 paper added that the file doesn't hold.");
   });
 
   it("counts a list with its noun", () => {
@@ -200,6 +274,23 @@ describe("the words", () => {
 });
 
 describe("the file", () => {
+  it("has its sha256 computed here from the bytes sent", async () => {
+    // sha256 of the three bytes "abc" (FIPS 180-2's first example)
+    expect(await fileSha256(new Blob(["abc"]))).toBe(
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    );
+    expect(await fileSha256(new Blob([fixture.file]))).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("has no sha256 where this browser has no Web Crypto (not a secure context)", async () => {
+    vi.stubGlobal("crypto", {});
+    try {
+      expect(await fileSha256(new Blob(["abc"]))).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("is checked against the instance's cap before it is sent", () => {
     expect(fileProblem({ size: 0 }, LIMITS)).toMatch(/empty/);
     expect(fileProblem({ size: LIMITS.max_body_bytes }, LIMITS)).toBeNull();
@@ -218,6 +309,8 @@ describe("the file", () => {
     expect(fileProblem({ size: 3_000 }, { ...LIMITS, max_body_bytes: 2_048 })).toMatch(
       /^This file is 2\.9 KB; this instance compares files up to 2\.0 KB\./,
     );
+    // no upload time: behind the shipped proxy a browser's upload meets the proxy's own timeout, not the API's
+    // `max_upload_seconds` (that bounds a direct client only; deploy/README.md), so the line names neither
     expect(limitsLine(LIMITS)).toBe(
       "Up to 16.0 MB and 5,000 records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it).",
     );

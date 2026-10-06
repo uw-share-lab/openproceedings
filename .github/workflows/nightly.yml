@@ -2,7 +2,7 @@ name: nightly
 # The whole backend suite at the ci profile (2,000 examples; PRs run it at 200, TASK-127), every property test
 # at 50,000 examples, the differential suite at 50,000 split across parallel jobs, the exhaustive tokenizer check,
 # the benchmarks with their budgets plus the ~80k report, and the full mutation run of every gate and tooling
-# check (make mutate's mutants, as 8 `--shard` jobs). Reviews run only `make mutate-changed`; this catches
+# check (make mutate's mutants, as 12 `--shard` jobs). Reviews run only `make mutate-changed`; this catches
 # anything that slipped (TASK-057).
 # Not a PR check: a failure shows as a red run on `dev`. Every Hypothesis failure prints its `@reproduce_failure`
 # blob. A long pytest step runs verbose (`-v` prints each test as it starts, and its result when it ends) and is
@@ -181,11 +181,14 @@ jobs:
           path: ${{ runner.temp }}/bench-80k.md
           if-no-files-found: warn  # the report step failed, and said why
           retention-days: 30
-  # make mutate as 8 jobs (TASK-171): `mutate.py --shard i/n` runs every n-th mutant from the i-th, so the shards
+  # make mutate as 12 jobs (TASK-171; 8 until 2026-10-06): `mutate.py --shard i/n` runs every n-th mutant from
+  # the i-th, so the shards
   # check every mutant every night. n is the matrix size (strategy.job-total), so adding a shard is one edit to the
   # matrix list. Estimate: 188 mutants took 140 min in 37017691575, so the 694 at TASK-171 need ~8.5 h of one
   # 4-CPU runner, ~65 min a shard of its 140 (shard 1's first step prints tonight's count); add shards before a
-  # shard nears 140 min. A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min (its
+  # shard nears 140 min. On 2026-10-06 (run 37412309356) 778 mutants in 8 shards took 77–123 min, and shard 5
+  # was cut off at 140 after ~92 of its ~97 (some mutants run the slow suites), so 12 shards (~65 each).
+  # A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min (its
   # unchecked mutants would go unchecked). Shard 1's first step checks every mutant's pattern still exists, in
   # seconds; a stale mutant also fails its own shard.
   mutate:
@@ -194,7 +197,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     name: mutate (${{ matrix.shard }}/${{ strategy.job-total }})
     env:
       SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}

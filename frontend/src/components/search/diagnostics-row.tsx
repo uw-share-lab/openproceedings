@@ -25,7 +25,7 @@ import {
   type Severity,
 } from "@/editor/diagnostics";
 import { clip } from "@/lib/clip";
-import { byTerm, withWordForms, type WordForm } from "@/lib/word-forms";
+import { byReason, byTerm, withWordForms, type SkippedTerm, type WordForm } from "@/lib/word-forms";
 
 const GLYPH: Readonly<Record<Severity, { glyph: string; prefix: string; className: string }>> = {
   error: { glyph: "✖", prefix: "Error:", className: "text-diag-error" },
@@ -46,6 +46,8 @@ export interface DiagnosticsRowProps {
   readonly textIsDraft: boolean;
   /** `/parse`'s `word_forms` for `text`: where a `$` can be added to the terms `COMPAT_NO_STEMMING` names. */
   readonly wordForms: readonly WordForm[];
+  /** `/parse`'s `word_forms_skipped` for `text`: each other term the notice names, with the server's reason. */
+  readonly skippedTerms: readonly SkippedTerm[];
   /** The draft is read as native syntax, so "Read as Google Scholar syntax" can be offered. */
   readonly nativeMode: boolean;
   /** The canonical string the translations produced ("Searched as:"), when the row is the searched query's. */
@@ -153,14 +155,56 @@ function DollarSummary({ n }: { n: number }) {
   );
 }
 
-/** Why a term the notice names has no `$` on offer (spec 02 §Word forms; copy ED-19). */
-const NOT_OFFERED = (
-  <>
-    A term is left as typed when it has too few letters or digits, has a symbol or another{" "}
-    <code className="font-mono">$</code> beside it, or is a lowercase <code className="font-mono">and</code>,{" "}
-    <code className="font-mono">or</code> or <code className="font-mono">not</code>.
-  </>
-);
+const $ = <code className="font-mono">$</code>;
+
+/**
+ * Why a term the notice names has no `$` on offer, by the server's `reason` (spec 02 §Word forms; TASK-192).
+ * The set is open: a reason this client doesn't know reads as `OTHER_REASON`.
+ */
+const REASONS: Readonly<Record<string, ReactNode>> = {
+  too_short: <>too few letters or digits for a {$}</>,
+  symbol: <>a symbol where the {$} would go</>,
+  dollar_nearby: <>another {$} or a backslash beside it</>,
+  operator_word: (
+    <>
+      a lowercase <code className="font-mono">and</code>, <code className="font-mono">or</code> or{" "}
+      <code className="font-mono">not</code>
+    </>
+  ),
+  too_long: <>no room for a {$} under the length limit</>,
+  unconfirmed: <>the server couldn&apos;t check a {$} there</>,
+};
+const OTHER_REASON = <>can&apos;t take a {$} as typed</>;
+const MAX_LISTED = 8; // terms named per reason, then "and N more", as the notice names its terms
+
+/**
+ * "Left as typed:", then one item per reason: the terms the notice names that the server offers no `$` for
+ * (`word_forms_skipped`), so the reader learns which and why. Static text, read in place after the buttons.
+ */
+function Skipped({ skipped }: { skipped: readonly SkippedTerm[] }) {
+  const id = useId();
+  const groups = byReason(skipped);
+  if (groups.length === 0) return null;
+  return (
+    <div className="text-muted-foreground">
+      <p id={id}>Left as typed:</p>
+      <ul aria-labelledby={id} className="list-disc space-y-0.5 pl-5">
+        {groups.map(({ reason, terms }) => (
+          <li key={reason}>
+            {terms.slice(0, MAX_LISTED).map((term, i) => (
+              <span key={term}>
+                {i > 0 && ", "}
+                <code className="font-mono">{clip(term)}</code>
+              </span>
+            ))}
+            {terms.length > MAX_LISTED && ` and ${(terms.length - MAX_LISTED).toLocaleString("en-US")} more`}:{" "}
+            {REASONS[reason] ?? OTHER_REASON}.
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 /**
  * "Add `$`" under the no-stemming notice (TASK-175): the notice's own suggestion, written into the draft at
@@ -174,18 +218,20 @@ function WordForms({ props }: { props: DiagnosticsRowProps }) {
   const terms = byTerm(props.wordForms);
   if (!props.textIsDraft || withWordForms(props.text, props.wordForms) === null) return null;
   if (terms.length === 0) {
-    // the notice names terms, and the server found no place for a `$` (or the query can't grow): say so
+    // the notice names terms, and the server found no place for a `$`: say so, and why for each term
     return (
       <div className="mt-1 space-y-1.5">
         <p className="text-muted-foreground">
-          <code className="font-mono">$</code> can&apos;t be added to these terms for you. {NOT_OFFERED} The
-          same happens when the query would be over the length limit with <code className="font-mono">$</code>{" "}
-          added. Type a wildcard yourself where one is valid.
+          <code className="font-mono">$</code> can&apos;t be added to these terms for you.
         </p>
+        <Skipped skipped={props.skippedTerms} />
+        <p className="text-muted-foreground">Type a wildcard yourself where one is valid.</p>
         {FULL_TEXT}
       </div>
     );
   }
+  // near the length cap the server offers only the terms whose `$` fit (TASK-192)
+  const fitting = props.skippedTerms.some((t) => t.reason === "too_long");
   const picked = terms.filter((t) => ticked.has(t.term));
   const add = (forms: readonly WordForm[]) => {
     const text = withWordForms(props.text, forms);
@@ -211,11 +257,18 @@ function WordForms({ props }: { props: DiagnosticsRowProps }) {
           aria-describedby={`${id}-all`}
           onClick={() => add(props.wordForms)}
         >
-          {terms.length === 1 ? "Add $ to 1 term" : `Add $ to all ${n} terms`}
+          {fitting
+            ? terms.length === 1
+              ? "Add $ to the 1 term that fits"
+              : `Add $ to the ${n} terms that fit`
+            : terms.length === 1
+              ? "Add $ to 1 term"
+              : `Add $ to all ${n} terms`}
         </button>
         <span id={`${id}-all`} className="sr-only">
-          Puts $ in the editor after each term this notice names that can take one. A phrase gets it on its
-          last word. Nothing is searched until you press Search.
+          Puts $ in the editor after each term this notice names that can take one
+          {fitting && " and that fits under the length limit"}. A phrase gets it on its last word. Nothing is
+          searched until you press Search.
         </span>
         {terms.length > 1 && (
           <button
@@ -275,12 +328,9 @@ function WordForms({ props }: { props: DiagnosticsRowProps }) {
                 : "Puts $ in the editor after each ticked term. Nothing is searched until you press Search."}
             </span>
           </p>
-          <p className="text-muted-foreground">
-            A term the notice names that is not listed here can&apos;t take{" "}
-            <code className="font-mono">$</code> as typed. {NOT_OFFERED}
-          </p>
         </fieldset>
       )}
+      <Skipped skipped={props.skippedTerms} />
     </div>
   );
 }

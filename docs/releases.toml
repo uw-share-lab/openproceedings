@@ -22,3 +22,12 @@ schema_version = "3"
 tantivy_version = "0.26.2"
 query_version = "2"
 notes = "Verified on the 133,629-paper snapshot of 2026-10-05 (the 2026 crawl); promotion does not deploy data."
+
+[releases."0.2.0"]
+index_version = "fd13d8d27535"
+snapshot_hash = "10b5a205a63f964496b9b572321785cf4c845c49fac4bf6cbdf5ab3dfe4cbe76"
+tokenizer_version = "3"
+schema_version = "3"
+tantivy_version = "0.26.2"
+query_version = "2"
+notes = "Verified on the same served index as 0.1.0; this release's ingest changes (decisions 040, 044, 045) take effect at the next snapshot build, which changes 59 abstracts and no merge (decisions 044, 045)."

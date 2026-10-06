@@ -130,7 +130,9 @@ describe("CompareRecords", () => {
     );
     const panel = screen.getByRole("region", { name: "Compare with your records" });
     expect(panel.textContent).toContain(`${R.records_total} records read, ${R.papers_total} papers compared`);
-    expect(panel.textContent).toContain(`${R.not_compared_total} record from other venues`);
+    expect(panel.textContent).toContain(
+      `${R.not_compared_total} record whose venue is not recognised or is outside the indexed venues and years`,
+    );
     expect(panel.textContent).toContain(`${R.duplicates_total} record that repeats a paper already counted`);
     expect(panel.textContent).toContain("What “dropped” means.");
     expect(panel.textContent).toContain("A dropped paper is not judged irrelevant");
@@ -215,8 +217,12 @@ describe("CompareRecords", () => {
     expect(item.textContent).toContain("to check: is it in the index under another title, venue or year?");
     expect(item.textContent).not.toContain("no forum id, proceedings id");
     const out = screen.getByRole("region", { name: `Not compared, ${R.not_compared_total} record` });
+    // never "not NeurIPS, ICLR or ICML": a Web of Science venue string with its volume is not recognised (CM-16)
+    expect(out.textContent).toContain("whose venue is not recognised as NeurIPS, ICLR or ICML");
     fireEvent.click(within(out).getByRole("button", { name: /^List the/ }));
-    expect(within(out).getByRole("listitem").textContent).toContain("its venue is not NeurIPS, ICLR or ICML");
+    expect(within(out).getByRole("listitem").textContent).toContain(
+      "its venue is not recognised as NeurIPS, ICLR or ICML, and no link or DOI names an indexed paper",
+    );
   });
 
   it("saves each list as the server's own text", async () => {
@@ -519,17 +525,73 @@ describe("CompareRecords", () => {
     expect(screen.getByRole("button", { name: "Compare" }).getAttribute("aria-disabled")).toBeNull();
   });
 
-  it("gives the comparison as one sentence to copy", async () => {
+  /** The citable sentence's figure (named by its figcaption) and its read-only text box. */
+  async function citable() {
+    const caption = await screen.findByText(/^This comparison in one sentence, to cite/);
+    const figure = caption.closest("figure");
+    if (figure === null) throw new Error("the sentence's caption is not in a figure");
+    expect(figure.hasAttribute("aria-labelledby")).toBe(false); // the figcaption names it
+    const box = within(figure).getByRole("textbox", { name: /This comparison in one sentence, to cite/ });
+    if (!(box instanceof HTMLTextAreaElement)) throw new Error("the sentence is not in a textarea");
+    // the answer's own focus move to its heading (an effect after the draw) comes first, as it does for a
+    // reader; a press before it would have its selection taken back to the heading (a 1-in-20 flake)
+    await waitFor(() => expect(document.activeElement?.tagName).toBe("H3"));
+    return { figure, box };
+  }
+
+  it("gives the comparison as one citable sentence, shown and copied, with the file's sha256", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    await draw();
+    const bytes = new TextEncoder().encode(fixture.file);
+    const sha = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (b) =>
+      b.toString(16).padStart(2, "0"),
+    ).join("");
+    const { calls } = await draw();
     await compareWith();
     await screen.findByRole("table", { name: /What this search does/ });
-    fireEvent.click(screen.getByRole("button", { name: "Copy this comparison as one sentence" }));
-    expect(writeText).toHaveBeenCalledOnce();
-    const text = (writeText.mock.calls[0] as unknown as [string])[0];
-    expect(text).toContain(`index ${R.index_version}, compared with my-records.ris`);
-    expect(text).toContain(R.query.canonical_hash);
+    const { figure, box } = await citable();
+    const shown = box.value;
+    expect(box.readOnly).toBe(true);
+    expect(box.tabIndex).toBe(0); // reachable from the keyboard, so the text can be selected there (WCAG 2.1.1)
+    // without field-sizing (Firefox) the box is as tall as the sentence at a 320px width (about 32 characters a
+    // row), up to 12 rows, then it scrolls: never half the sentence hidden with no sign of the rest
+    expect(box.rows).toBe(Math.min(Math.ceil(box.value.length / 32), 12));
+    expect(box.rows).toBe(12); // this fixture's sentence is longer than 12 such rows
+    expect(shown).toContain(`RIS file my-records.ris (sha256 \`${sha}\`;`);
+    expect(shown).toContain(`(index \`${R.index_version}\`)`);
+    expect(shown).toContain(`(canonical_hash \`${R.query.canonical_hash}\`)`);
+    expect(shown).toMatch(
+      /^As a search-development check \(not a PRISMA flow-diagram count\), on \d{4}-\d{2}-\d{2} \(UTC\)/,
+    );
+    // the digest is this browser's: the request is the file and the query, nothing about its hash
+    const sent = calls.find((c) => c.path === "/api/v1/compare");
+    expect(sent?.body).toBe(fixture.file);
+    expect([...(sent?.query.keys() ?? [])].sort()).toEqual(["mode", "q"]);
+    // a native button, reached and pressed from the keyboard like any other, and announced
+    const copy = within(figure).getByRole("button", { name: "Copy this comparison as one sentence" });
+    copy.focus();
+    expect(document.activeElement).toBe(copy);
+    fireEvent.click(copy);
+    expect(writeText).toHaveBeenCalledWith(shown);
+    await waitFor(() => expect(within(figure).getByRole("status").textContent).toBe("Copied"));
+  });
+
+  it.each([
+    ["there is no Clipboard API", undefined],
+    ["the clipboard refuses the write", { writeText: () => Promise.reject(new Error("denied")) }],
+  ])("selects the sentence for the keyboard where %s", async (_, value) => {
+    Object.defineProperty(navigator, "clipboard", { value, configurable: true });
+    await draw();
+    await compareWith();
+    const { figure, box } = await citable();
+    fireEvent.click(within(figure).getByRole("button", { name: "Copy this comparison as one sentence" }));
+    await waitFor(() => expect(document.activeElement).toBe(box));
+    expect([box.selectionStart, box.selectionEnd]).toEqual([0, box.value.length]);
+    await waitFor(() =>
+      expect(within(figure).getByRole("status").textContent).toBe(
+        "Couldn't copy: the text is selected; copy it",
+      ),
+    );
   });
 
   it("is off, with the reason, while the results shown aren't the searched query's", async () => {

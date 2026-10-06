@@ -43,3 +43,6 @@ page.
 `fastapi-conventions` (the `async` exception, `streamed` bodies, `drain`, per-index data on the bundle),
 `api-contract` (§A file as a request body), `testing-standards` (e2e ports), spec 04 §Comparing with a RIS
 file, spec 05 §Testing.
+
+## Addendum — 2026-10-06
+- **A fixture that freezes "today" must patch every module that imported the clock function by name.** `test_compare.py`'s `fixed_date` patched `export.utc_date` and `api.compare.utc_date`, but one test also reads `GET /export`, whose `api.export` module holds its own reference; it passed only while the real UTC date was the frozen `2026-10-05` and failed for every PR from 00:00 UTC on 2026-10-06. Evidence: the failing diff (`exported 2026-10-06` against `2026-10-05`). Lesson: when a test freezes a date with `monkeypatch.setattr(module, "fn", …)`, grep for every `from … import fn` the test exercises; a test pinned to a date that is today passes until midnight.

@@ -215,6 +215,62 @@ def test_cli_search_explain_and_ids(tmp_path: Path, capsys: pytest.CaptureFixtur
     assert "PARSE_" in capsys.readouterr().err
 
 
+def test_cli_search_explain_counts_each_group(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import openproceedings.search as search_module
+    from openproceedings import cli
+    from openproceedings.api.config import ApiConfig
+
+    data = tmp_path / "data"
+    index = build_index(snapshot_of(CORPUS, tmp_path / "snap"), data / "indexes", BUILT).path
+    (data / "indexes" / "current").symlink_to(index.name)
+    asked: dict[str, object] = {}
+    real = search_module.run
+
+    def spy(*args: object, **kwargs: object) -> object:
+        asked.update(kwargs)
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(search_module, "run", spy)
+    # (alpha OR gamma): Ab01-05, Ab08; delta: Ab01, Ab08; together: Ab01, Ab08 (TASK-194)
+    assert cli.main(["--data-dir", str(data), "search", "(alpha OR gamma) delta", "--explain"]) == 0
+    out = capsys.readouterr().out
+    assert "concept groups: 2, counted (at most 10); total 2" in out
+    assert "  [0, 16] (alpha OR gamma): total 6, total_without 2" in out
+    assert "  [17, 22] delta: total 2, total_without 6" in out
+    assert out.index("verified by position:") < out.index("concept groups:")  # after the compiled query
+    # the bounds /search counts under: ApiConfig's defaults, so the CLI counts what the API would
+    defaults = ApiConfig.model_fields
+    assert asked["groups"] == defaults["max_counted_groups"].default
+    assert asked["groups_terms"] == defaults["max_counted_terms"].default
+    assert asked["groups_ids"] == defaults["max_counted_ids"].default
+    assert asked["groups_wait"] == defaults["group_count_wait_seconds"].default
+    assert asked["groups_grace"] == defaults["group_count_grace_seconds"].default
+
+    assert cli.main(["--data-dir", str(data), "search", "alpha", "--explain"]) == 0
+    assert (
+        "concept groups: 1, not counted: fewer_than_two_groups (the query is not an AND of groups)"
+        in capsys.readouterr().out
+    )
+
+
+def test_cli_search_explain_says_why_the_groups_are_not_counted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings import cli
+    from openproceedings.api.config import ApiConfig
+
+    data = tmp_path / "data"
+    index = build_index(snapshot_of(CORPUS, tmp_path / "snap"), data / "indexes", BUILT).path
+    (data / "indexes" / "current").symlink_to(index.name)
+    monkeypatch.setattr(ApiConfig.model_fields["max_counted_groups"], "default", 2)
+    assert cli.main(["--data-dir", str(data), "search", "alpha beta delta", "--explain"]) == 0
+    out = capsys.readouterr().out
+    assert "concept groups: 3, not counted: too_many_groups (more than 2)" in out
+    assert "total_without" not in out
+
+
 def scores(engine: TantivyEngine, q: str) -> dict[str, float]:
     query = engine.compile(parse(q).ast).query  # type: ignore[arg-type]
     hits = engine.searcher.search(query, 50).hits

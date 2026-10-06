@@ -179,13 +179,18 @@ warnings, the save's index check), the design doc says so; its open questions li
    browser Back returns to the query as typed, and the expansions row lists what each `$` matched (guarantee
    6). The client only splices (`src/lib/word-forms.ts`, checked against the server's own strings in
    `word-forms-golden.json`): it never finds a term, and offers nothing while the editor holds other text
-   than the one reported on. When the notice is shown and `word_forms` is empty (no named term can take a
-   `$`, or the query would pass the length cap with them added; the client can't tell which, so it names
-   both) the line says so in place of the buttons: "`$` can't be added to these terms for you. A term is
-   left as typed when it has too few letters or digits, has a symbol or another `$` beside it, or is a
-   lowercase `and`, `or` or `not`. The same happens when the query would be over the length limit with `$`
-   added. Type a wildcard yourself where one is valid." The chooser ends with the same reasons for a named
-   term it doesn't list. A line under the notice says what `$` is: "`$` after a
+   than the one reported on. Each named term the server offers no `$` for comes in `word_forms_skipped`
+   with its reason (TASK-192), and the line names them under the buttons, in both states and whether the
+   chooser is open or not: "Left as typed:", then a list (labelled by that text) with one item per reason,
+   its terms (at most 8, then "and N more") and why: "too few letters or digits for a `$`", "a symbol where
+   the `$` would go", "another `$` or a backslash beside it", "a lowercase `and`, `or` or `not`", "no room
+   for a `$` under the length limit", "the server couldn't check a `$` there", and for a reason this client
+   doesn't know (the set is open) "can't take a `$` as typed". Near the 2,000-code-point cap the server
+   offers only the terms whose `$` fit, and the button says so: "Add $ to the N terms that fit" ("the 1 term
+   that fits"; its description adds "and that fits under the length limit"). When the notice is shown and
+   `word_forms` is empty the line says so in place of the buttons: "`$` can't be added to these terms for
+   you.", the list, then "Type a wildcard yourself where one is valid." A line under the notice says what
+   `$` is: "`$` after a
    term also matches it with one more letter or digit: `benchmark$` matches `benchmark` and `benchmarks`, not
    `benchmarking`. That is fewer forms than Google Scholar counts; type `*` for any ending." Both states then
    say what `$` can't do (gate review, USAB-S4): "Google Scholar also reads the full text of a paper;
@@ -393,18 +398,27 @@ warnings, the save's index check), the design doc says so; its open questions li
      and its name never leaves the browser.
    - **Counts first.** A four-row table: Kept, Dropped, Not in the index, Added, each with its one-line
      meaning and the server's `*_total`; then the file's accounting (records read, papers compared, records
-     from other venues, repeats). Every number is an API field, `reason_totals` included: nothing is counted
+     whose venue is not recognised or is outside the indexed venues and years, repeats). Every number is an API field, `reason_totals` included: nothing is counted
      in the browser.
    - **What "dropped" means** is said in place: the index holds the paper and this search doesn't return it
      (other word forms only where the query asks, with `$` or `*`); Google Scholar matches full text and other
-     word forms; a dropped paper is not judged irrelevant. One sentence to copy says what the comparison found,
-     on what index and query (the server keeps nothing of it; TASK-195). When some kept or dropped papers are in the index only because a RIS file was
+     word forms; a dropped paper is not judged irrelevant. **One sentence to cite** (TASK-195, decision-043;
+     prisma-reporting), in a read-only text box sized to it that the keyboard reaches, with a Copy button that
+     announces "Copied" (where the clipboard can't be written, it focuses and selects the box and says so): "As a search-development check (not a PRISMA flow-diagram count),
+     on `<date>` (UTC) we compared the RIS file `<name>` (sha256 `<64 hex>`; `<r>` records read: `<p>` papers compared, `<x>` not compared (venue not recognised, or
+     outside the indexed venues and years), and `<d>` repeats of a paper already counted) with the query `<canonical>` (canonical_hash `<hash>`) on openproceedings (index
+     `<index_version>`): `<k>` kept, `<d>` dropped, `<n>` not in the index, and `<a>` papers added that the
+     file doesn't hold." Every record of the file is accounted for (`records_total` = `papers_total` + `not_compared_total` +
+     `duplicates_total`); the repeats clause is left out when there are none. The sha256 is computed in the browser (Web Crypto) from the file sent; where it can't
+     be (not a secure context) the sentence says "sha256 not computed by this browser: compute it from your
+     copy". The date is the UTC day the answer came. The server keeps nothing of it, and a search record never
+     notes a comparison (decision-043). When some kept or dropped papers are in the index only because a RIS file was
      imported (`kept_ris_only_total`, `dropped_ris_only_total`; each such row is marked "import only"), a
      warning says a match to them shows the import holds the paper, not that the index covers it.
-   - **Lists on demand.** Each list is a section with its count, the reasons with their counts (`excluded by a
-     default filter`, `no exact match in its title or abstract`, `matches only as another word form`, …; an
-     unknown `reason` is shown as sent, the enum being open), each with what to do next (add `$`, write the
-     filter into the query, keep it from your own file, check it by hand, report it), one toggle button whose
+   - **Lists on demand.** Each list is a section with its count, the reasons with their counts (`outside a
+     limit your query writes`, `excluded by a default filter`, `no exact match in its title or abstract`, `matches only as another word form`, …; an
+     unknown `reason` is shown as sent, the enum being open), each with what to do next (add `$`, widen
+     the query's own limit, write the filter into the query, keep it from your own file, check it by hand, report it), one toggle button whose
      name doesn't change (its state in `aria-expanded`), and its
      downloads. A row is the title (the file's own; a link to `/paper/[id]` with the query when the index
      holds the paper, opened in a new tab and named so: the comparison is held by this page only), venue and year, its position in the file, how it was matched or why it wasn't, the

@@ -1,11 +1,11 @@
 ---
 id: TASK-065
 title: 'Deploy: compose, Caddy TLS, index promotion runbook'
-status: In Progress
+status: Done
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-02 19:46'
+updated_date: '2026-10-05 23:55'
 labels:
   - ops
 milestone: m-6
@@ -161,3 +161,9 @@ From the task-023 review (2026-09-26): a Tantivy index directory must be writabl
     rc=0
 - macOS, Docker Desktop 24.0.7: PASS. It warns that the engine predates the CVE-2024-29018 fix, and skips the ownership steps and checks, as designed. This run started while the last deploy/ edits were being committed, so the Linux run is the record for this tree.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All three criteria met (compose over TLS, index promotion runbook with retire, the takedown-list mount); closed after the v0.1.0 tag. The first real deployment waits on TASK-064 (hosting) and TASK-067's deployed checks.
+<!-- SECTION:FINAL_SUMMARY:END -->
