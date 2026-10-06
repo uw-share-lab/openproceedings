@@ -70,9 +70,10 @@ def _is_default(n: Node) -> bool:
     return isinstance(n, Filter) and n.field in DEFAULT_CLAUSES and n.values == DEFAULT_CLAUSES[n.field]
 
 
-def apply_defaults(ast: Node, at: int) -> Defaulted:
-    """The effective tree for `ast`; inserted clauses get the zero-width span `(at, at)`."""
-    conjuncts = _conjuncts(canonicalize(ast))
+def apply_defaults(ast: Node, at: int, *, dedupe: bool = True) -> Defaulted:
+    """The effective tree for `ast`; inserted clauses get the zero-width span `(at, at)`. `dedupe=False` is
+    `canonicalize`'s, for `wordforms.py` only."""
+    conjuncts = _conjuncts(canonicalize(ast, dedupe=dedupe))
     defaults: list[FilterField] = []
     added: list[Node] = []
     warnings: list[Diagnostic] = []
@@ -95,6 +96,8 @@ def apply_defaults(ast: Node, at: int) -> Defaulted:
                     span=nested.span,
                 )
             )
-    effective = canonicalize(_combine(conjuncts + added) or ast)  # never empty: `ast` has a conjunct
+    effective = canonicalize(
+        _combine(conjuncts + added) or ast, dedupe=dedupe
+    )  # never empty: `ast` has a conjunct
     kept = [c for c in _conjuncts(effective) if not (_is_default(c) and _clause_field(c) in defaults)]
     return Defaulted(effective, _combine(kept), tuple(defaults), tuple(warnings))
