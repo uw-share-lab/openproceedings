@@ -1058,3 +1058,77 @@ def test_bitwise_counting_never_makes_more_collections_than_its_distinct_bases(t
         0,
         2,
     )  # the two distinct bases; the rest from the memo
+
+
+# --- gate round 1 (TASK-197): what the kept conjuncts cost, the masks' stop, the compile's tree -----------------
+def query_units(engine: TantivyEngine, tree: Node) -> int:
+    """What `held` charges for the Tantivy queries a compile of `tree` keeps: less its explain lines and the
+    Python lists of verified ids (`Compiled.ids`), which no query copies."""
+    c = engine.compile(tree)
+    return c.held - len(c.explain) - sum(len(ids) for ids in c.ids.values())
+
+
+def test_held_charges_every_copy_of_a_conjunct_the_compile_keeps(engines: Engines) -> None:
+    """tantivy-py's `boolean_query` deep-copies its subqueries, so a conjunct kept in `Compiled.conjuncts` is a
+    second copy of its terms and ids beside the one inside the whole query, and a NOT's kept child a third (the
+    child, the NOT that copies it, the whole query that copies the NOT): `held` charges each copy, so the
+    compiled memo's budget stays honest (task-080). A tree that is its one conjunct keeps no second copy."""
+    _reference, tantivy, _other = engines
+    tantivy.compiled.clear()
+    calibrat = Wildcard(span=SPAN, stem="calibrat", op="*")
+    model = Wildcard(span=SPAN, stem="model", op="*")
+    phrase = Phrase(
+        span=SPAN, items=(Term(span=SPAN, token="language"), Wildcard(span=SPAN, stem="model", op="*"))
+    )
+    trust = Term(span=SPAN, token="trust")
+    a, b, v = (query_units(tantivy, n) for n in (calibrat, model, phrase))
+    assert a > 0 and b > 0 and v > 0
+    assert query_units(tantivy, Not(span=SPAN, child=model)) == 2 * b
+    assert (
+        query_units(tantivy, And(span=SPAN, children=(calibrat, Not(span=SPAN, child=model))))
+        == 2 * a + 3 * b
+    )
+    assert query_units(tantivy, And(span=SPAN, children=(phrase, trust))) == 2 * v
+    nested = And(span=SPAN, children=(And(span=SPAN, children=(calibrat, trust)), model))
+    assert query_units(tantivy, nested) == 2 * a + 2 * b
+
+
+def test_building_the_value_masks_stops_before_its_next_collection(tmp_path: Any) -> None:
+    """The per-value bitmaps are about 30 collections, built inside the first bitwise count: `check` is asked
+    before each, so a job its search stopped waiting for stops within one, and keeps no partial masks."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    ast = parse(SHARED_VERIFIED).effective_ast
+    assert ast is not None
+    scope = Scope()
+    compiled = engine.compile(ast, scope)
+    searcher = engine.searcher = Collections(engine.searcher)  # type: ignore[assignment]
+    asked = 0
+
+    def check() -> None:
+        nonlocal asked
+        asked += 1
+        if asked > 4:  # the tree, its conjunct, then two values' bitmaps: stop at the third value
+            raise search._Abandoned
+
+    with pytest.raises(search._Abandoned):
+        engine.counts(counted_trees(ast), scope=scope.reader(), check=check, compiled=(ast, compiled))
+    assert searcher.searches == 3  # the conjunct and two values
+    assert engine._masks is None
+    # and a later count builds them whole, with the oracle's counts
+    reference = ReferenceEngine(RECORDS)
+    got = engine.counts(counted_trees(ast), scope=scope.reader(), compiled=(ast, compiled))
+    assert got == [len(reference.match_ids(t)) for t in counted_trees(ast)]
+
+
+def test_a_compile_of_another_tree_with_as_many_conjuncts_is_refused(engines: Engines) -> None:
+    _reference, tantivy, _other = engines
+    ast = parse("trust model calibration").effective_ast
+    other = parse("trust model evaluation").effective_ast
+    assert ast is not None and other is not None
+    assert len(conjuncts(ast)) == len(conjuncts(other))
+    with pytest.raises(EngineInternalError):
+        tantivy.counts(counted_trees(ast), compiled=(ast, tantivy.compile(other)))
+    tantivy.faceted.clear()
+    assert tantivy.counts(counted_trees(ast), compiled=(ast, tantivy.compile(ast))) == tantivy.counts(
+        counted_trees(ast)
+    )
