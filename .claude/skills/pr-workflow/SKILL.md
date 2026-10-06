@@ -12,11 +12,11 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
 - `dev` and `main` take **no direct commits, pushes or merges** (`enforce-pr-workflow.sh`). All work is on
   a branch cut from an up-to-date `origin/dev`: `git fetch origin && git switch -c <type>/<slug> origin/dev`,
   where type is `feat`, `fix`, `chore`, `docs` or `test` (e.g. `feat/wildcard-expansion`); a release's own
-  bookkeeping uses `release/X.Y.Z` and `release/X.Y.Z-back-merge` (spec 08 §Release).
+  bookkeeping uses `release/X.Y.Z` (spec 08 §Release).
 - Feature PRs target `dev`. `main` is only updated by a `dev → main` promotion PR (`release-manager`,
   spec 08 §Release), which requires green checks but **no mandatory approving review** under the
-  solo-maintainer policy applied on 2026-10-03, and `dev` up to date with `main`: after each promotion,
-  `main` is merged back into `dev`.
+  solo-maintainer policy applied on 2026-10-03; `main` doesn't require `dev` up to date, so there is no
+  back-merge (decision-046).
 - Branch protection: both `dev` and `main` accept only PRs whose required checks are green. `dev` merges
   through a **merge queue** (TASK-161, decision-027; §Merge method).
 

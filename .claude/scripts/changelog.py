@@ -13,7 +13,7 @@ tag whose history holds its merge commit; with `--release`, HEAD counts as that 
 on the release branch, or on `main` after the promotion). A PR no tag holds is Unreleased.
 Counted: PRs merged into `dev`, and into `main` except this repo's `dev → main` promotions (they repeat what
 dev already lists); never this repo's `release/*` branches (release bookkeeping: the version bump, the data
-table and this file before the promotion, the main → dev back-merge after the tag).
+table and this file before the promotion; releases through 0.1.0 also had a main → dev back-merge).
 Grouped by the Conventional Commits type in the title, else the head branch's `<type>/` prefix.
 
 A release's Data section comes from its `[releases."X.Y.Z"]` table in `docs/releases.toml`. With
