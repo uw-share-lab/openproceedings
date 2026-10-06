@@ -359,11 +359,14 @@ def test_a_v1_title_with_a_control_character_is_imported_with_a_space(tmp_path: 
     assert "abstract_control_characters" not in crawl.report.to_manifest()
 
 
-def test_a_v1_abstract_with_a_control_character_is_imported_with_a_space(tmp_path: Path) -> None:
+def test_a_v1_abstract_with_a_control_character_is_imported_with_a_space(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """decision-044 (TASK-188): the v1 crawler reads an abstract through the v2 crawler's rule."""
     note = v1_note("iclr-2017/note-rejected-bare-venueid.json")
     note["content"]["abstract"] = "the LiDAR modal\x02ity"
-    crawl = iclr_2017(tmp_path, [note], [])
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+        crawl = iclr_2017(tmp_path, [note], [])
     record = by_forum(crawl)[note["id"]]
     assert record.abstract == "the LiDAR modal ity"
     # TASK-199: counted beside the titles, from the importer's own count
@@ -376,6 +379,8 @@ def test_a_v1_abstract_with_a_control_character_is_imported_with_a_space(tmp_pat
     assert [c.evidence for c in record.claims("abstract")] == [
         "content.abstract (1 control character replaced by a space)"
     ]
+    [finished] = [r for r in caplog.records if r.getMessage() == "openreview_crawl_finished"]
+    assert finished.__dict__["abstract_control_characters"] == 1
 
 
 def test_a_title_match_links_a_copy_whose_bibtex_names_another_forum(tmp_path: Path) -> None:
@@ -1082,6 +1087,22 @@ def neurips_2021_twins(**second: Any) -> tuple[dict[str, Any], dict[str, Any]]:
         note, "BW2Z6B7S9KZ", note["number"] + 604, _bibtex="@inproceedings{BW2Z6B7S9KZ}", **second
     )
     return note, twin
+
+
+def test_two_notes_of_one_paper_whose_abstracts_lost_a_control_character_count_once(tmp_path: Path) -> None:
+    """TASK-199: the abstract counter counts records, not notes, so rule 5's collapse of two identical notes
+    (both abstracts spaced) leaves a count of 1."""
+    note, twin = neurips_2021_twins()
+    for n in (note, twin):
+        n["content"]["abstract"] = "the LiDAR modal\x02ity"
+    crawl = run(FakeOpenReviewV1({NEURIPS_2021_MAIN: [note, twin]}), tmp_path, "NeurIPS", 2021)
+    [record] = crawl.records
+    assert record.abstract == "the LiDAR modal ity" and crawl.report.skipped["duplicate_submission"] == 1
+    assert (
+        crawl.report.abstract_control_characters
+        == 1
+        == crawl.report.to_manifest()["abstract_control_characters"]
+    )
 
 
 @pytest.mark.parametrize("listed_first", ["lower", "higher"])

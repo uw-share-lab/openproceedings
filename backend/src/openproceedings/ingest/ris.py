@@ -541,6 +541,8 @@ def import_ris(
         abstract_control_characters=spaced,
     )
     counts = {k: v for k, v in report.to_manifest().items() if k not in ("track_status",)}
+    # always on the line, as on the crawl lines; the manifest lists it only when above 0
+    counts["abstract_control_characters"] = report.abstract_control_characters
     log.info("ris_import", extra=counts)
     attention = {
         k: skipped[k] for k in ("unresolved", "ambiguous", "conflict", "no_query_date") if skipped[k]
