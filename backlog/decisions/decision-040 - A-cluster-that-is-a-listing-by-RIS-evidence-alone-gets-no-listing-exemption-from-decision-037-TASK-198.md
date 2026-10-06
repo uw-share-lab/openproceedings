@@ -30,7 +30,9 @@ keeps its meaning elsewhere (reconcile, the track rule); the exemption uses the 
 
 ## Consequences
 
-- No import ever takes a `rejected`, `withdrawn` or `desk-rejected` status through a merge.
+- No import takes a `rejected`, `withdrawn` or `desk-rejected` status through a merge on RIS evidence. A crawled
+  note that names its own proceedings URL is crawled evidence, so it keeps the exemption and its status
+  (`LISTED_REJECTED_NOTE`); no crawler emits such a note today.
 - In TASK-174's shape the import stays a separate record until a crawl lists the paper.
 - `test_dedup_props.py`'s abstract-merge property asserts the narrower rule, with `REJECTED_NOTE_RIS_LISTING`
   pinned as no merge; TASK-198 implements it.
