@@ -215,8 +215,12 @@ describe("CompareRecords", () => {
     expect(item.textContent).toContain("to check: is it in the index under another title, venue or year?");
     expect(item.textContent).not.toContain("no forum id, proceedings id");
     const out = screen.getByRole("region", { name: `Not compared, ${R.not_compared_total} record` });
+    // never "not NeurIPS, ICLR or ICML": a Web of Science venue string with its volume is not recognised (CM-16)
+    expect(out.textContent).toContain("whose venue is not recognised as NeurIPS, ICLR or ICML");
     fireEvent.click(within(out).getByRole("button", { name: /^List the/ }));
-    expect(within(out).getByRole("listitem").textContent).toContain("its venue is not NeurIPS, ICLR or ICML");
+    expect(within(out).getByRole("listitem").textContent).toContain(
+      "its venue is not recognised as NeurIPS, ICLR or ICML, and no link or DOI names an indexed paper",
+    );
   });
 
   it("saves each list as the server's own text", async () => {
@@ -547,6 +551,10 @@ describe("CompareRecords", () => {
     const shown = box.value;
     expect(box.readOnly).toBe(true);
     expect(box.tabIndex).toBe(0); // reachable from the keyboard, so the text can be selected there (WCAG 2.1.1)
+    // without field-sizing (Firefox) the box is as tall as the sentence at a 320px width (about 32 characters a
+    // row), up to 12 rows, then it scrolls: never half the sentence hidden with no sign of the rest
+    expect(box.rows).toBe(Math.min(Math.ceil(box.value.length / 32), 12));
+    expect(box.rows).toBe(12); // this fixture's sentence is longer than 12 such rows
     expect(shown).toContain(`RIS file my-records.ris (sha256 \`${sha}\`;`);
     expect(shown).toContain(`(index \`${R.index_version}\`)`);
     expect(shown).toContain(`(canonical_hash \`${R.query.canonical_hash}\`)`);
@@ -579,7 +587,7 @@ describe("CompareRecords", () => {
     expect([box.selectionStart, box.selectionEnd]).toEqual([0, box.value.length]);
     await waitFor(() =>
       expect(within(figure).getByRole("status").textContent).toBe(
-        "Couldn't copy: the text is selected; copy it with Ctrl+C (⌘C on a Mac)",
+        "Couldn't copy: the text is selected; copy it",
       ),
     );
   });

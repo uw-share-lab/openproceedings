@@ -33,7 +33,7 @@ export function CopyButton({
           const failed = () => {
             if (onFailed === undefined) return say("Couldn't copy: select the text and copy it");
             onFailed();
-            say("Couldn't copy: the text is selected; copy it with Ctrl+C (⌘C on a Mac)");
+            say("Couldn't copy: the text is selected; copy it");
           };
           if (navigator.clipboard === undefined) return failed();
           setSaid("");

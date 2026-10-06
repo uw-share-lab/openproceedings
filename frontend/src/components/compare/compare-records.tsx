@@ -652,8 +652,9 @@ function Citable({ done }: { done: Done }) {
         readOnly
         value={text}
         aria-labelledby={captionId}
-        // `field-sizing: content` fits the box to the sentence where supported; rows is the fallback's height
-        rows={Math.ceil(text.length / 72)}
+        // `field-sizing: content` fits the box to the sentence where supported; elsewhere (Firefox) rows are
+        // counted at a 320px width's 32 characters, up to 12, past which the box scrolls
+        rows={Math.min(Math.ceil(text.length / 32), 12)}
         className="block field-sizing-content w-full resize-none rounded-md border bg-muted/40 p-2 text-sm break-words"
       />
       <CopyButton
@@ -797,8 +798,9 @@ function NotCompared({ c }: { c: Comparison }) {
     <section aria-label={`Not compared, ${plural(total, "record")}`} className="space-y-1 border-t pt-2">
       <CountHeading label={LIST_LABELS.not_compared} count={total} />
       <p className="break-words">
-        Records of your file that are not NeurIPS, ICLR or ICML papers as far as their venue and links say.
-        They are in none of the lists above.
+        Records of your file whose venue is not recognised as NeurIPS, ICLR or ICML (and no link or DOI names
+        an indexed paper), or which are outside the indexed venues and years. They are in none of the lists
+        above.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <ListToggle
