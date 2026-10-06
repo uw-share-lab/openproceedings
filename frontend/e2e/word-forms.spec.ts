@@ -93,8 +93,9 @@ test("Choose terms adds $ to the ticked terms only", async ({ page }) => {
 test("a lowercase and is named by the notice and never offered a $", async ({ page }) => {
   await page.goto("/");
   const editor = await typeQuery(page, "trust and benchmark", "scholar");
-  // the message's backticked runs are drawn as code, not as backticks
-  await expect(notice(page).first().locator("code").filter({ hasText: /^and$/ })).toHaveCount(1);
+  // the message's backticked runs are drawn as code, not as backticks: the sentence's own code, a direct child
+  // of the notice's item (the "Left as typed:" list under it has `and` in code too)
+  await expect(notice(page).first().locator(":scope > code").filter({ hasText: /^and$/ })).toHaveCount(1);
   await expect(notice(page)).toContainText("trust, and, benchmark");
   await expect(notice(page)).not.toContainText("`");
   await expect(page.getByRole("list", { name: "Warnings" })).toContainText("and is searched as a word");
