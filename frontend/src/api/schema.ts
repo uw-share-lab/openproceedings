@@ -357,6 +357,11 @@ export interface components {
              */
             max_body_bytes: number;
             /**
+             * Max Concurrent
+             * @description comparisons this instance runs at once; another is 503 `API_BUSY` with `Retry-After`, before its file is read
+             */
+            max_concurrent: number;
+            /**
              * Max Line Length
              * @description the longest line of the file, in Unicode code points, tag included; a longer one is 413 `API_RIS_TOO_LARGE`
              */
@@ -386,6 +391,11 @@ export interface components {
              * @description the longest title or venue line's value, in Unicode code points (the corpus's own title cap); a longer one is 413 `API_RIS_TOO_LARGE`
              */
             max_title_length: number;
+            /**
+             * Max Upload Seconds
+             * @description the wall time the file gets to arrive once a comparison slot is held; past it, 408 `API_UPLOAD_TIMEOUT`
+             */
+            max_upload_seconds: number;
         };
         /** CompareQuery */
         CompareQuery: {

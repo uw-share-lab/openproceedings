@@ -63,4 +63,6 @@ def compare_limits(config: ApiConfig) -> CompareLimits | None:
         max_results=config.compare_max_results,
         max_seconds=config.compare_max_seconds,
         max_response_bytes=config.compare_max_response_bytes,
+        max_upload_seconds=config.compare_upload_seconds,
+        max_concurrent=config.comparison_slots,
     )

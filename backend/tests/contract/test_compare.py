@@ -32,12 +32,12 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from openproceedings import cli
 from openproceedings import export as exporter
-from openproceedings.api import ApiConfig, RateLimit
+from openproceedings.api import ApiConfig, RateLimit, meta
 from openproceedings.api import compare as route
 from openproceedings.api import server as api_server
 from openproceedings.api.middleware import BodyLimit, drain
 from openproceedings.api.middleware import RateLimit as RateLimitMiddleware
-from openproceedings.api.models import CompareReason, MatchedBy, NotComparedReason
+from openproceedings.api.models import CompareLimits, CompareReason, MatchedBy, NotComparedReason
 from openproceedings.api.state import IndexState, MatchTable
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.eval import scholar_compare
@@ -452,7 +452,111 @@ def test_meta_states_the_caps(corpus_dir: Path) -> None:
             "max_results": 5_000,
             "max_seconds": 60.0,
             "max_response_bytes": 16 * 1024 * 1024,
+            "max_upload_seconds": 30.0,
+            "max_concurrent": 1,
         }
+
+
+# every comparison flag (TASK-184) and the config field it sets: (flag, value given, where, field, value set)
+COMPARE_FLAGS = [
+    ("--compare-max-body-bytes", "4096", "config", "compare_max_body_bytes", 4096),
+    ("--compare-max-records", "7", "config", "compare_max_records", 7),
+    ("--compare-max-line-chars", "100", "config", "compare_max_line_chars", 100),
+    ("--compare-max-results", "9", "config", "compare_max_results", 9),
+    ("--compare-max-response-bytes", "2048", "config", "compare_max_response_bytes", 2048),
+    ("--compare-max-seconds", "12.5", "config", "compare_max_seconds", 12.5),
+    ("--compare-upload-seconds", "4", "config", "compare_upload_seconds", 4.0),
+    ("--comparison-slots", "2", "config", "comparison_slots", 2),
+    ("--compare-cooldown-factor", "0", "rate_limit", "compare_cooldown_factor", 0.0),
+    ("--compare-upload-weight", "2", "rate_limit", "compare_upload_weight", 2.0),
+    ("--compare-token-ms", "250", "rate_limit", "compare_token_ms", 250.0),
+]
+
+
+def served_with(flags: list[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> ApiConfig:
+    served: list[ApiConfig] = []
+    monkeypatch.setattr(api_server, "serve", lambda config, *a: served.append(config))
+    assert cli.main(["--data-dir", str(tmp_path), "serve", *flags]) == 0
+    return served[0]
+
+
+def test_op_serve_sets_every_comparison_value(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    defaults = served_with([], monkeypatch, tmp_path)
+    assert defaults == ApiConfig(  # a flag left out keeps the config's own default
+        data_dir=tmp_path, serve_docs=True, compare_enabled=True, compare_local=True
+    )
+    flags = [part for flag, value, *_ in COMPARE_FLAGS for part in (flag, value)]
+    config = served_with(flags, monkeypatch, tmp_path)
+    for _, _, where, field, value in COMPARE_FLAGS:
+        assert getattr(config if where == "config" else config.rate_limit, field) == value, field
+    # and `/meta` states the caps an operator set, as the routes enforce them
+    assert meta.compare_limits(config) == CompareLimits(
+        max_body_bytes=4096,
+        max_records=7,
+        max_line_length=100,
+        max_title_length=MAX_TITLE,
+        max_results=9,
+        max_seconds=12.5,
+        max_response_bytes=2048,
+        max_upload_seconds=4.0,
+        max_concurrent=2,
+    )
+
+
+@pytest.mark.parametrize(
+    ("flags", "says"),
+    [
+        (
+            ["--compare-max-body-bytes", "100"],
+            "compare_max_body_bytes: Input should be greater than or equal to 1024",
+        ),
+        (["--compare-max-records", "0"], "compare_max_records: Input should be greater than or equal to 1"),
+        (
+            ["--compare-max-line-chars", "10"],
+            "compare_max_line_chars: Input should be greater than or equal to 64",
+        ),
+        (["--compare-max-results", "-1"], "compare_max_results: Input should be greater than or equal to 1"),
+        (
+            ["--compare-max-response-bytes", "0"],
+            "compare_max_response_bytes: Input should be greater than or equal",
+        ),
+        (["--compare-max-seconds", "0"], "compare_max_seconds: Input should be greater than 0"),
+        (["--compare-max-seconds", "inf"], "compare_max_seconds: Input should be a finite number"),
+        (["--compare-upload-seconds", "nan"], "compare_upload_seconds: Input should be a finite number"),
+        (["--comparison-slots", "0"], "comparison_slots: Input should be greater than or equal to 1"),
+        (
+            ["--compare-cooldown-factor", "-1"],
+            "compare_cooldown_factor: Input should be greater than or equal to 0",
+        ),
+        (["--compare-cooldown-factor", "inf"], "compare_cooldown_factor: Input should be a finite number"),
+        (
+            ["--compare-upload-weight", "0.5"],
+            "compare_upload_weight: Input should be greater than or equal to 1",
+        ),
+        (["--compare-token-ms", "0"], "compare_token_ms: Input should be greater than 0"),
+    ],
+)
+def test_op_serve_refuses_a_bad_comparison_value_at_start(
+    flags: list[str],
+    says: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(api_server, "serve", lambda *a: pytest.fail("served"))
+    assert cli.main(["--data-dir", str(tmp_path), "serve", *flags]) == 1
+    err = capsys.readouterr().err
+    assert "invalid serve options" in err and says in err
+
+
+def test_op_serve_refuses_a_comparison_value_that_is_not_a_number(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(api_server, "serve", lambda *a: pytest.fail("served"))
+    with pytest.raises(SystemExit) as exit_:
+        cli.main(["--data-dir", str(tmp_path), "serve", "--compare-max-records", "many"])
+    assert exit_.value.code == 2
+    assert "--compare-max-records: invalid int value: 'many'" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

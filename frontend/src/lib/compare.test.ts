@@ -29,6 +29,8 @@ const LIMITS: CompareLimits = {
   max_results: 5000,
   max_seconds: 60,
   max_response_bytes: 16 * 1024 * 1024,
+  max_upload_seconds: 30,
+  max_concurrent: 1,
 };
 
 describe("postCompare", () => {

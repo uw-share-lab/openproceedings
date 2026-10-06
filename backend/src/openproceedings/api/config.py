@@ -49,18 +49,18 @@ class RateLimit(BaseModel):
     # client's share of the comparison slot is at most refill × this (50% at the defaults), a network's 4 × that.
     # 500 ms, not 100: a comparison is seconds of work by design (about 10 s per 1,000 records), and at 100 one
     # run would lock a reviewer out of search for minutes
-    compare_token_ms: float = Field(default=500.0, gt=0)
+    compare_token_ms: float = Field(default=500.0, gt=0, allow_inf_nan=False)
     # the wall time a comparison's file took to arrive counts this many times over, in that debit and in the
     # cooldown below: it is the part of a slot's time the client alone decides (a stalled upload holds the
     # slot and does no work), so it is the dearest
-    compare_upload_weight: float = Field(default=4.0, ge=1)
+    compare_upload_weight: float = Field(default=4.0, ge=1, allow_inf_nan=False)
     # what bounds a network's share of the comparison slots (the token debit can't: a network's bucket refills
     # 4 tokens/s, so several addresses of one network could hold a slot all the time). After a comparison, its
     # client's network (IPv4 /24, IPv6 /48) starts no other for this many times the slot time it used (the
     # upload weighted as above), and runs one at a time: a network's sustained share of a slot is at most
     # 1 / (1 + factor) however many addresses it holds, 25% at 3 (7.7% for uploads that stall), and a reviewer
     # waits under a minute after an 18 s comparison. 0 turns it off
-    compare_cooldown_factor: float = Field(default=3.0, ge=0)
+    compare_cooldown_factor: float = Field(default=3.0, ge=0, allow_inf_nan=False)
     max_clients: int = Field(default=100_000, ge=1)  # buckets held in memory; the least recent is dropped
 
     @property
@@ -193,7 +193,8 @@ class ApiConfig(BaseModel):
     # none), and a request that came through a proxy (`X-Forwarded-For`, `Forwarded` or `Via`) is refused 403
     # `API_COMPARE_DISABLED`: a same-host proxy in front of a loopback bind makes it public (decision-035)
     compare_local: bool = False
-    # the file's caps, each refused with a typed error, never cut (`/meta` `limits.compare` states them).
+    # the file's caps, each refused with a typed error, never cut (`/meta` `limits.compare` states them). Each
+    # comparison value here and in `RateLimit` has an `op serve` flag (TASK-184); a float one must be finite.
     # 16 MiB: the Trust-Evals export is 3.7 MB for 1,834 records with abstracts (2 KB a record), so the record
     # cap's worth of such records is ~10 MB. A body over it is 413 `API_BODY_TOO_LARGE` before it is read
     compare_max_body_bytes: int = Field(default=16 * 1024 * 1024, ge=1024)
@@ -216,10 +217,10 @@ class ApiConfig(BaseModel):
     # most this many files are in memory)
     comparison_slots: int = Field(default=1, ge=1)
     # the wall time one comparison's work gets from the moment its file is read; past it, 503 `API_BUSY`
-    compare_max_seconds: float = Field(default=60.0, gt=0)
+    compare_max_seconds: float = Field(default=60.0, gt=0, allow_inf_nan=False)
     # the wall time a file gets to arrive once the slot is held; past it, 408 `API_UPLOAD_TIMEOUT`. Behind the
     # reverse proxy the body arrives whole (spec 08 §Deploy), so this bounds a direct client only
-    compare_upload_seconds: float = Field(default=30.0, gt=0)
+    compare_upload_seconds: float = Field(default=30.0, gt=0, allow_inf_nan=False)
 
     @property
     def verified_cost(self) -> float:

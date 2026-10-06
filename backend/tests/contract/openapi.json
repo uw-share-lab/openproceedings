@@ -313,6 +313,11 @@
             "title": "Max Body Bytes",
             "type": "integer"
           },
+          "max_concurrent": {
+            "description": "comparisons this instance runs at once; another is 503 `API_BUSY` with `Retry-After`, before its file is read",
+            "title": "Max Concurrent",
+            "type": "integer"
+          },
           "max_line_length": {
             "description": "the longest line of the file, in Unicode code points, tag included; a longer one is 413 `API_RIS_TOO_LARGE`",
             "title": "Max Line Length",
@@ -342,6 +347,11 @@
             "description": "the longest title or venue line's value, in Unicode code points (the corpus's own title cap); a longer one is 413 `API_RIS_TOO_LARGE`",
             "title": "Max Title Length",
             "type": "integer"
+          },
+          "max_upload_seconds": {
+            "description": "the wall time the file gets to arrive once a comparison slot is held; past it, 408 `API_UPLOAD_TIMEOUT`",
+            "title": "Max Upload Seconds",
+            "type": "number"
           }
         },
         "required": [
@@ -351,7 +361,9 @@
           "max_title_length",
           "max_results",
           "max_seconds",
-          "max_response_bytes"
+          "max_response_bytes",
+          "max_upload_seconds",
+          "max_concurrent"
         ],
         "title": "CompareLimits",
         "type": "object"
