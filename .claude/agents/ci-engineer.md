@@ -39,7 +39,7 @@ tempted to bypass it.
    tokenizer check), split by the measured time per test, and the year-edit property as 4 seeded `year-edits` jobs
    (`OP_YEAR_EDIT_SHARDS`); `differential`, 8 matrix jobs of 6,250 examples with their own `--hypothesis-seed`
    (`OP_DIFFERENTIAL_SHARDS`); `benchmarks` (5k budgets asserted, then the ~80k report into the run summary and a
-   `bench-80k` artifact); and `mutate`, 8 matrix jobs of `mutate.py --shard i/8` so every mutant runs each night, 140 min each (a surviving or stale mutant fails its shard, and so does a shard cut off at 140 min: raise the shard count). Long pytest steps set `OP_EARLY_FAILURES=1` (a failure's report and blob are printed when it fails) and run `-v` inside `timeout --signal=INT` a few
+   `bench-80k` artifact); and `mutate`, 12 matrix jobs of `mutate.py --shard i/12` so every mutant runs each night, 140 min each (a surviving or stale mutant fails its shard, and so does a shard cut off at 140 min: raise the shard count). Long pytest steps set `OP_EARLY_FAILURES=1` (a failure's report and blob are printed when it fails) and run `-v` inside `timeout --signal=INT` a few
    minutes short of the job limit, so an overrun is an `::error::` with the unfinished test in the log.
 3. **Frontend jobs:** `actions/setup-node` with npm cache on `package-lock.json`; `npm ci --ignore-scripts`; eslint, `tsc
    --noEmit`, prettier, vitest; `make openapi` and `git diff --exit-code` the snapshot and `frontend/src/api/schema.ts`.
