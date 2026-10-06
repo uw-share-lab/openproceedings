@@ -49,7 +49,7 @@ from functools import partial
 from typing import Any, Literal
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
-from openproceedings.engine.compile import FIELDS, verified_clauses, wildcards
+from openproceedings.engine.compile import FIELDS, Compiled, verified_clauses, wildcards
 from openproceedings.engine.exclusions import ORDER, Excluded, excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInputError, EngineInternalError, Expansions
@@ -177,14 +177,16 @@ def run(
     if facets or countable:
         engine.check_page(sort, offset, limit)  # a bad argument is refused before any work, as before
         # compiled first, here: a cold verified clause takes its slot in this thread, and the worker's facet
-        # tree (the same clauses, less top-level filters) then finds each one in `scope` (it never verifies)
-        engine.compile(ast, scope)
+        # tree (the same clauses, less top-level filters) then finds each one in `scope` (it never verifies);
+        # the counting worker reuses its conjuncts' queries (TASK-197)
+        compiled = engine.compile(ast, scope)
     if facets:
         faceting = _submit(engine, ast, scope)
     if found is not None and countable and _ids_read(found, scope) > groups_ids:
         why, countable = "too_costly", False  # known only now: the ids are the compile's
     if found is not None and countable:
-        counting = _start(partial(_alone, engine, found, scope.reader(), abandoned, taken), counts=True)
+        job = partial(_alone, engine, found, scope.reader(), abandoned, taken, (ast, compiled))
+        counting = _start(job, counts=True)
     # from here to `_grouped`, whatever fails takes the workers' jobs with it: the facets' is cancelled, and
     # the counting job, which nobody will wait for, is cancelled or stops before its next collection
     try:
@@ -267,9 +269,11 @@ def _alone(
     scope: Scope,
     abandoned: threading.Event,
     started: threading.Event | None = None,
+    compiled: tuple[Node, Compiled] | None = None,
 ) -> tuple[Pair, ...]:
     """Each group's two counts, in query order: alone, and the query without it (`TantivyEngine.counts`: at
-    most two collections a group, memoised; every conjunct compiled at most once for all of them). Sets
+    most two collections a group, memoised; every conjunct compiled at most once for all of them, or taken
+    from `compiled`, the request's compile of the query, when given; TASK-197). Sets
     `started` when it begins (a worker took the job), and stops before its next collection once `abandoned`
     is set (`_Abandoned`): nobody is waiting for the rest."""
     if started is not None:
@@ -281,7 +285,7 @@ def _alone(
 
     n = len(found.groups)
     trees = [*map(found.alone, found.groups), *map(found.without, found.groups)]
-    totals = engine.counts(trees, scope=scope, check=wanted)
+    totals = engine.counts(trees, scope=scope, check=wanted, compiled=compiled)
     return tuple(zip(totals[:n], totals[n:], strict=True))
 
 

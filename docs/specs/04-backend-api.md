@@ -272,12 +272,13 @@ Two readings follow from "the canonical form decides", and are worth knowing:
   without it) is collected once, and every one of them reads the kept text clauses again. A query of 10
   groups and one kept `NOT (… 158 wildcards …)` (1,336 characters, 4,522 expanded terms, no verified clause,
   one rate-limit token) made 20 collections of 4,500 terms each. So the cost is bounded three ways:
-  - **Nothing a count compiles is stored.** `TantivyEngine.counts` compiles each distinct non-filter conjunct
-    of the query once per request (the kept clauses once, each group once) and builds every tree's query by
+  - **Nothing a count compiles is stored.** `TantivyEngine.counts` takes each distinct non-filter conjunct's
+    query from the request's own compile of the query (`Compiled.conjuncts`, TASK-197; without one it compiles
+    each once per request: the kept clauses once, each group once) and builds every tree's query by
     ANDing those: a group alone is its query and the kept ones, the query without it all the others. No tree
     and no combination is stored in the `compiled` memo, whose 500,000-unit budget every client shares (a
-    counted tree is never searched). A kept verified clause's id set is built once per field for all the
-    counts, never once a group. On the shape above (5k fixture): a plain search stores 2 `compiled` entries of
+    counted tree is never searched). A kept verified clause's id set is not built again for the counts: the
+    request's compile holds it. On the shape above (5k fixture): a plain search stores 2 `compiled` entries of
     19,106 units; with its groups counted the first implementation stored 12 entries of 114,356 units, and
     this one stores the plain search's 2 entries and 19,106 units, exactly
     (`test_a_long_kept_clause_costs_the_memos_nothing_and_is_too_costly_by_default`, which fails on one
@@ -311,7 +312,15 @@ Two readings follow from "the canonical form decides", and are worth knowing:
     combination, the filters applied to the combos) and memoised per base in `faceted` (at most 2 × `limit`
     entries of a few hundred combos against its 100,000 budget; another page, a facet click and a later query
     with the same groups and kept clauses collect nothing; a changed kept clause collects again, within the
-    same bounds). The job runs on **the counts' own two workers** (`search.GROUP_WORKERS`), never on the facet
+    same bounds). When a conjunct holding a position-verified clause is in two or more of the trees, each tree
+    would resolve its id sets again, so instead each distinct non-filter conjunct is collected once, as a
+    bitmap of the documents it matches (a `NOT`'s child's, subtracted), and each tree's combinations are read
+    from the AND of its conjuncts' bitmaps and a bitmap per facet value (TASK-197): the same documents, so the
+    same counts (`tests/unit/test_group_counts.py` holds the combinations to the aggregation's). It is taken
+    only when the conjuncts are no more than the distinct trees, so it never makes more collections; a call's
+    bitmaps are one bit per document per conjunct, dropped with the job; the per-value bitmaps (one bit per
+    document per facet value, about 0.5 MB on the real index) are collected once per engine, on the first
+    count that needs them, and kept, as the `ord` table is. The job runs on **the counts' own two workers** (`search.GROUP_WORKERS`), never on the facet
     pool: a search waits for its facets without a timeout, so no counting job, however slow or however many,
     may hold a thread the facets need. After the page, the facets and the exclusion accounting are done, a
     search waits for its counts **at most 50 ms if no worker has taken its job** (then `busy`, the job
