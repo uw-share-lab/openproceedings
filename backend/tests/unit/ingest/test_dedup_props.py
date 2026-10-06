@@ -693,10 +693,19 @@ SET_ASIDE_PARTNER = [
     imported("EfGh5678", "Trust in Machines", year=2023, abstract=LONG),
 ]  # fmt: skip
 
+# the same nightly's 50,000-example job: the partner keeping the proceedings-id import's abstract is a rejected note of
+# another forum, set aside as a rival for the listing; the import merges with a forum-id import whose abstract differs
+REJECTED_PARTNER = [
+    imported(f"nips-{H[1]}", "Trust in Machines", year=2023, abstract=LONG),
+    imported("AbCd1234", "Trust in Machines", year=2023, abstract=OTHER),
+    paper("EfGh5678", "Trust in Machines", year=2023, status="rejected", abstract=LONG),
+]
+
 
 @given(pools)
 @example(TITLE_OF_ANOTHER)
 @example(SET_ASIDE_PARTNER)
+@example(REJECTED_PARTNER)
 def test_an_import_joined_by_its_title_keeps_no_abstract_only_another_crawled_record_holds(
     xs: list[PaperRecord],
 ) -> None:
