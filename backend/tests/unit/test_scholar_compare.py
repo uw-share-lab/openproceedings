@@ -5,8 +5,9 @@ hand-built corpus with a known answer. The engine here is the oracle itself: no 
 from __future__ import annotations
 
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 from openproceedings.diagnostics import DiagnosticCode
@@ -43,7 +44,7 @@ from openproceedings.eval.scholar_compare import (
     with_variants,
 )
 from openproceedings.ingest.record import PaperRecord
-from openproceedings.query.ast import Node
+from openproceedings.query.ast import Node, _Node
 from openproceedings.query.canonical import render
 from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.normalize import TOKENIZER_VERSION
@@ -1107,3 +1108,67 @@ def test_a_doi_in_another_year_is_named_in_the_gap_row() -> None:
         (nid("doi00001", 2022), "doi")
     ]  # matched by its DOI
     assert [r.op_id for r in c.dropped] == [nid("pmlr0001", venue="icml")]
+
+
+# --- cost: the tree is serialised once per comparison, not once per row (TASK-200) --------------------------------
+
+
+def _serialisations(
+    monkeypatch: pytest.MonkeyPatch, q: str, make: Callable[[int], PaperRecord], n: int
+) -> int:
+    """How many times a comparison of `n` such records serialises a query tree (the memo's key)."""
+    records = [make(k) for k in range(n)]
+    text = "".join(entry(r.title, year=r.year) for r in records if "extra" not in r.title) or entry(
+        "Unrelated"
+    )
+    calls = 0
+    real = _Node.model_dump_json
+
+    def counted(self: _Node, *args: Any, **kwargs: Any) -> str:
+        nonlocal calls
+        calls += 1
+        return real(self, *args, **kwargs)
+
+    with monkeypatch.context() as m:
+        m.setattr(_Node, "model_dump_json", counted)
+        c = compare(q, text, records)
+    assert sum(bool(r.op_id) for r in c.disagreements) == n  # every record is a row on the path under test
+    return calls
+
+
+@pytest.mark.parametrize(
+    ("q", "make", "cls"),
+    [
+        (  # `query_limit`: whether the rest of the query matches (`ids(unlimited)`)
+            f"{QUERY} AND year:2025..2026",
+            lambda k: paper(f"lim{k:05d}", f"LLM trust benchmark {k}", abstract="An abstract."),
+            QUERY_LIMIT,
+        ),
+        (  # `stemming`: which inflected forms decide it
+            QUERY,
+            lambda k: paper(f"stm{k:05d}", f"Trusted LLMs {k}", abstract="We are benchmarking them."),
+            STEMMING,
+        ),
+        (  # `filtered`, also `compat_reading`: which rewrite decides it
+            POP,
+            lambda k: paper(
+                f"pop{k:05d}",
+                f"A model of a foundation for trust {k}",
+                track="workshop",
+                abstract="An abstract.",
+            ),
+            FILTERED,
+        ),
+        (  # `scholar_missed`: where each leaf matches
+            QUERY,
+            lambda k: paper(f"add{k:05d}", f"LLM trust benchmark extra {k}", abstract="An abstract."),
+            SCHOLAR_MISSED,
+        ),
+    ],
+    ids=["query_limit", "stemming", "compat_reading", "scholar_missed"],
+)
+def test_a_rows_evidence_serialises_no_tree_per_row(
+    monkeypatch: pytest.MonkeyPatch, q: str, make: Callable[[int], PaperRecord], cls: str
+) -> None:
+    few, many = _serialisations(monkeypatch, q, make, 2), _serialisations(monkeypatch, q, make, 12)
+    assert few == many, f"{cls}: {few} serialisations for 2 rows, {many} for 12"
