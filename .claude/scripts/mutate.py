@@ -5,7 +5,7 @@
     python3 .claude/scripts/mutate.py --changed    # only mutants in files changed vs origin/dev (reviews)
     python3 .claude/scripts/mutate.py --jobs 8     # parallelism (default: CPU count, max 8)
     python3 .claude/scripts/mutate.py --match glob # only mutants whose label contains "glob"
-    python3 .claude/scripts/mutate.py --shard 2/8  # every 8th selected mutant from the 2nd (nightly CI runs 1/8..8/8)
+    python3 .claude/scripts/mutate.py --shard 2/8  # every 8th selected mutant from the 2nd (nightly CI runs 1/12..12/12)
     python3 .claude/scripts/mutate.py --list       # print the selected mutants' labels; run nothing
 
 Mutants live in .claude/scripts/mutants/*.json as {label, file, old, new[, equivalent]}: `old` is replaced
