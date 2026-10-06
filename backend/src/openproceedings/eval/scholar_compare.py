@@ -121,9 +121,10 @@ _URL_TAGS = ("UR", "L1", "L2")
 # Scopus and Web of Science RIS write the DOI in `DO` (`DI` is WoS's plain-text export tag, which is no RIS)
 _DOI_TAGS = ("DO",)
 # a DOI as `record.Urls.doi` accepts one; matched case-blind (DOIs are case-insensitive, ISO 26324)
-# (its suffix: no whitespace and no control character, C0, DEL or C1: a key is quoted in a row's evidence)
-_DOI = re.compile(r"10\.\d+(?:\.\d+)*/[^\s\x00-\x1f\x7f-\x9f]+")
-# a doi.org link, with or without its scheme, `www.` or `dx.`; and a `doi:` / `DOI ` label before a bare DOI
+# (its suffix: no whitespace, no control character (C0, DEL, C1) and no bidi format character (the marks,
+# embeddings, overrides and isolates), which could make a key quoted in a row's evidence read as another)
+_DOI = re.compile(r"10\.\d+(?:\.\d+)*/[^\s\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]+")
+# a doi.org link, with or without its scheme, `www.` or `dx.`; and a `doi:` / `DOI ` label before a DOI or a link
 _DOI_LINK = re.compile(r"(?:https?://)?(?:www\.|dx\.)?doi\.org/", re.IGNORECASE)
 _DOI_LABEL = re.compile(r"doi(?::\s*|\s+)", re.IGNORECASE)
 _TRAILING = ".,;)"  # punctuation a sentence or a list puts after a DOI (a `)` only when unbalanced)
@@ -159,15 +160,15 @@ class RisRecord:
 
 
 def doi_key(text: str) -> str | None:
-    """A DOI as matching compares it, lower-cased (DOIs are case-insensitive): without a doi.org link's prefix
-    (`https://`, `www.`/`dx.` optional) and its query and fragment, or a `doi:`/`DOI ` label, and without the
+    """A DOI as matching compares it, lower-cased (DOIs are case-insensitive): without a `doi:`/`DOI ` label, then
+    without a doi.org link's prefix (`https://`, `www.`/`dx.` optional) and its query and fragment, and without the
     `.`, `,`, `;` or unbalanced `)` a sentence leaves after it. None for anything that is no DOI
-    (`10.<registrant>/<suffix>`, no whitespace or control character in the suffix, once unquoted)."""
+    (`10.<registrant>/<suffix>`, no whitespace, control or bidi format character in the suffix, once unquoted)."""
     v = text.strip()
+    if label := _DOI_LABEL.match(v):  # `DOI https://doi.org/…` too: the label, then the link
+        v = v[label.end() :]
     if link := _DOI_LINK.match(v):
         v = unquote(re.split(r"[?#]", v[link.end() :], maxsplit=1)[0])
-    elif label := _DOI_LABEL.match(v):
-        v = v[label.end() :]
     # one pass each, never a character at a time (a hostile file must not defeat /compare's time cap): strip the
     # trailing run, then give back the run's leading `)`s that close a `(` the DOI opened
     kept = v.rstrip(_TRAILING)

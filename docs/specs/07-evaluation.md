@@ -78,10 +78,11 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   writes the venue with its volume and edition (`ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS 35 (NEURIPS
   2022)`), which is no venue. A DOI (`DO`, the tag Scopus and Web of Science RIS both write, or a `doi.org` link; `DI` is
   Web of Science's plain-text export tag, which is no RIS, and is not read; read by `doi_key` in one pass, so a
-  hostile value can't outlast `/compare`'s time limit: a doi.org link's prefix
-  with or without its scheme, `www.` or `dx.`, and its query and fragment, are dropped, and so are a `doi:` or
-  `DOI ` label and the `.`, `,`, `;` or unbalanced `)` a sentence leaves after it; a suffix with whitespace or a
-  control character is no DOI; compared case-blind) names the index record whose `urls.doi` it is, **only when the record's year
+  hostile value can't outlast `/compare`'s time limit: a `doi:` or `DOI `
+  label is dropped, then a doi.org link's prefix with or without its scheme, `www.` or `dx.`, and its query and
+  fragment (so `DOI https://doi.org/…` reads), then the `.`, `,`, `;` or unbalanced `)` a sentence leaves after
+  it; a suffix with whitespace, a control character or a bidi format character (marks, embeddings, overrides,
+  isolates) is no DOI; compared case-blind) names the index record whose `urls.doi` it is, **only when the record's year
   is the year the file states and its venue the venue the file states**, each where the file states one (a year;
   one of the three venues by Scholar mode's source names). A DOI that names a record in another venue or year is
   never a match: the record falls to the title rule, and its row names that record (`doi_elsewhere`, "its DOI
