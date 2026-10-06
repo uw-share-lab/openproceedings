@@ -519,6 +519,17 @@ describe("CompareRecords", () => {
     expect(screen.getByRole("button", { name: "Compare" }).getAttribute("aria-disabled")).toBeNull();
   });
 
+  /** The citable sentence's figure (named by its figcaption) and its read-only text box. */
+  async function citable() {
+    const caption = await screen.findByText(/^This comparison in one sentence, to cite/);
+    const figure = caption.closest("figure");
+    if (figure === null) throw new Error("the sentence's caption is not in a figure");
+    expect(figure.hasAttribute("aria-labelledby")).toBe(false); // the figcaption names it
+    const box = within(figure).getByRole("textbox", { name: /This comparison in one sentence, to cite/ });
+    if (!(box instanceof HTMLTextAreaElement)) throw new Error("the sentence is not in a textarea");
+    return { figure, box };
+  }
+
   it("gives the comparison as one citable sentence, shown and copied, with the file's sha256", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
@@ -529,8 +540,10 @@ describe("CompareRecords", () => {
     const { calls } = await draw();
     await compareWith();
     await screen.findByRole("table", { name: /What this search does/ });
-    const figure = screen.getByRole("figure", { name: /This comparison in one sentence, to cite/ });
-    const shown = figure.querySelector("p")?.textContent ?? "";
+    const { figure, box } = await citable();
+    const shown = box.value;
+    expect(box.readOnly).toBe(true);
+    expect(box.tabIndex).toBe(0); // reachable from the keyboard, so the text can be selected there (WCAG 2.1.1)
     expect(shown).toContain(`RIS file my-records.ris (sha256 \`${sha}\`;`);
     expect(shown).toContain(`(index \`${R.index_version}\`)`);
     expect(shown).toContain(`(canonical_hash \`${R.query.canonical_hash}\`)`);
@@ -547,16 +560,22 @@ describe("CompareRecords", () => {
     expect(document.activeElement).toBe(copy);
     fireEvent.click(copy);
     expect(writeText).toHaveBeenCalledWith(shown);
-    expect(await within(figure).findByRole("status")).toHaveProperty("textContent", "Copied");
+    await waitFor(() => expect(within(figure).getByRole("status").textContent).toBe("Copied"));
   });
 
-  it("says to select the sentence where the clipboard can't be written", async () => {
+  it("selects the sentence for the keyboard where the clipboard can't be written", async () => {
     Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
     await draw();
     await compareWith();
-    const figure = await screen.findByRole("figure", { name: /This comparison in one sentence/ });
+    const { figure, box } = await citable();
     fireEvent.click(within(figure).getByRole("button", { name: "Copy this comparison as one sentence" }));
-    expect(within(figure).getByRole("status").textContent).toBe("Couldn't copy: select the text and copy it");
+    expect(document.activeElement).toBe(box);
+    expect([box.selectionStart, box.selectionEnd]).toEqual([0, box.value.length]);
+    await waitFor(() =>
+      expect(within(figure).getByRole("status").textContent).toBe(
+        "Couldn't copy: the text is selected; copy it with Ctrl+C (⌘C on a Mac)",
+      ),
+    );
   });
 
   it("is off, with the reason, while the results shown aren't the searched query's", async () => {

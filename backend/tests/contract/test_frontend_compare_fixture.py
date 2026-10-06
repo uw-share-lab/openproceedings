@@ -34,3 +34,4 @@ def test_the_fixture_exercises_the_panel() -> None:
     assert body["limits"]["compare"]["max_records"] > 0
     assert body["invalid"]["error"]["code"] == "API_RIS_INVALID"
     assert body["limited"]["response"]["reason_totals"]["dropped"]["query_limit"] > 0
+    assert body["limited"]["response"]["reason_totals"]["not_in_index"]["query_limit"] > 0

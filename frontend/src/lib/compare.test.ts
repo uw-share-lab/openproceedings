@@ -148,6 +148,25 @@ describe("the words", () => {
       `${limited.query_limit} papers are outside a limit your query writes: to include such a paper, widen ` +
         "that limit in the query (its row names the clause).",
     ]);
+    // a paper the index doesn't hold whose year or venue in the file is outside the query's own limit: no
+    // widening finds it, so its step is the coverage gap's, never "widen that limit" (gate UX/USAB MUST)
+    const missing = fixture.limited.response.reason_totals.not_in_index;
+    expect(missing.query_limit).toBe(1);
+    expect(reasonLines("not_in_index", { query_limit: missing.query_limit ?? 0 }, "native")).toEqual([
+      "1 paper is not in the index, and its year or venue in your file is outside a limit your query writes. " +
+        "Keep such a paper from your own file; no query here can find it.",
+    ]);
+    expect(reasonLines("not_in_index", { query_limit: 2 }, "native")).toEqual([
+      "2 papers are not in the index, and their year or venue in your file is outside a limit your query " +
+        "writes. Keep such a paper from your own file; no query here can find it.",
+    ]);
+    const row = fixture.limited.response.not_in_index.find((r) => r.reason === "query_limit");
+    expect(reasonText("not_in_index", row?.reason ?? null)).toBe(
+      "not in the index; its year or venue in your file is outside a limit your query writes",
+    );
+    expect(reasonText("dropped", "query_limit")).toBe(
+      "outside a limit your query writes (its year, venue, track or status)",
+    );
     expect(reasonLines("dropped", { a_new_class: 2 }, "native")).toEqual(["2 papers: a_new_class."]); // open enum
     // every reason the API documents has its sentence, in both lists it can appear in, and a dropped or
     // missing paper's always says what to do next (USAB-S3)
@@ -272,8 +291,10 @@ describe("the file", () => {
       /^This file is 2\.9 KB; this instance compares files up to 2\.0 KB\./,
     );
     expect(limitsLine(LIMITS)).toBe(
-      "Up to 16.0 MB and 5,000 records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it).",
+      "Up to 16.0 MB and 5,000 records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it); the " +
+        "file must arrive within 30 s.",
     );
+    expect(limitsLine({ ...LIMITS, max_upload_seconds: 1.5 })).toContain("within 1.5 s.");
     expect(limitsLine({ ...LIMITS, ...fixture.limits.compare })).toContain("5,000 records");
   });
 

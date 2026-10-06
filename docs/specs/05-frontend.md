@@ -403,8 +403,8 @@ warnings, the save's index check), the design doc says so; its open questions li
    - **What "dropped" means** is said in place: the index holds the paper and this search doesn't return it
      (other word forms only where the query asks, with `$` or `*`); Google Scholar matches full text and other
      word forms; a dropped paper is not judged irrelevant. **One sentence to cite** (TASK-195, decision-043;
-     prisma-reporting), shown as text and with a Copy button that announces "Copied" (or, where the clipboard
-     can't be written, to select the text): "As a search-development check (not a PRISMA flow-diagram count),
+     prisma-reporting), in a read-only text box sized to it that the keyboard reaches, with a Copy button that
+     announces "Copied" (where the clipboard can't be written, it focuses and selects the box and says so): "As a search-development check (not a PRISMA flow-diagram count),
      on `<date>` (UTC) we compared the RIS file `<name>` (sha256 `<64 hex>`; `<r>` records read, `<p>` papers
      compared) with the query `<canonical>` (canonical_hash `<hash>`) on openproceedings (index
      `<index_version>`): `<k>` kept, `<d>` dropped, `<n>` not in the index, and `<a>` papers added that the

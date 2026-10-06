@@ -620,21 +620,38 @@ function ListToggle({
 }
 
 /**
- * The comparison as one sentence to cite (copy CM-21; TASK-195, decision-043): shown as text, so it can be
- * selected where the clipboard can't be written, with a Copy button that says "Copied". A search record never
- * notes a comparison; this sentence, with the file's own sha256, is what a methods section cites.
+ * The comparison as one sentence to cite (copy CM-21; TASK-195, decision-043): in a read-only text box sized to
+ * its text, which the keyboard reaches, so it can be selected where the clipboard can't be written (WCAG 2.1.1);
+ * the Copy button then focuses and selects it. A search record never notes a comparison; this sentence, with
+ * the file's own sha256, is what a methods section cites.
  */
 function Citable({ done }: { done: Done }) {
   const captionId = useId();
+  const box = useRef<HTMLTextAreaElement>(null);
   const text = summaryText(done.comparison, { name: done.fileName, sha256: done.sha256 }, done.date);
   return (
-    <figure aria-labelledby={captionId} className="space-y-1">
+    <figure className="space-y-1">
       <figcaption id={captionId} className="text-xs text-muted-foreground">
         This comparison in one sentence, to cite beside your file (nothing of it is kept here, and a saved
         search record doesn&apos;t note it):
       </figcaption>
-      <p className="rounded-md border bg-muted/40 p-2 text-sm break-words select-all">{text}</p>
-      <CopyButton text={text} label="Copy this comparison as one sentence" />
+      <textarea
+        ref={box}
+        readOnly
+        value={text}
+        aria-labelledby={captionId}
+        // `field-sizing: content` fits the box to the sentence where supported; rows is the fallback's height
+        rows={Math.ceil(text.length / 72)}
+        className="block field-sizing-content w-full resize-none rounded-md border bg-muted/40 p-2 text-sm break-words"
+      />
+      <CopyButton
+        text={text}
+        label="Copy this comparison as one sentence"
+        onFailed={() => {
+          box.current?.focus();
+          box.current?.select();
+        }}
+      />
     </figure>
   );
 }
