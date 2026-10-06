@@ -16,8 +16,9 @@ then `dev` has added:
 The release adds features, so it is a MINOR release (spec 08 §Versioning). It changes none of
 `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy or `QUERY_VERSION`.
 
-Candidate: `dev` at `a18fd0ca` (PR #114's merge). Base: `main` at `e272aec5` (`v0.1.0`). Since decision-046,
-`dev` does not contain `main`'s promotion merge commit.
+Candidate: `dev` at `a18fd0ca` (PR #114's merge). Base: `main` at `e272aec5` (`v0.1.0`), which `dev` holds
+through PR #110, 0.1.0's back-merge (left out of the changelog by design). From this release on there is no
+back-merge (decision-046), so `dev` won't hold 0.2.0's promotion commit.
 
 ## 1. Readiness on `dev`
 
@@ -89,6 +90,9 @@ This release's ingest changes take effect at the next snapshot build. A real-cac
 - **`make changelog RELEASE=0.2.0`:** the 0.2.0 section lists PRs #109, #111, #112, #113 and #114, with no
   Breaking line and no changed-input callout.
 - **Process:** spec 08 step 6, the release-manager agent and the `pr-gates.yml` comment, from §2.
+- **Golden:** `test_combined_snapshot.py`'s `FILES_HASH` changes with the version, as at 0.1.0: the manifest
+  records `openproceedings_version`, and set back to `0.1.0` in memory the files hash to the old value again;
+  `SNAPSHOT_HASH` is unchanged.
 
 ## 5. Local tests
 

@@ -31,7 +31,7 @@ names the index it was verified on and which saved records still reproduce.
 - index_version `fd13d8d27535`, snapshot `10b5a205a63f964496b9b572321785cf4c845c49fac4bf6cbdf5ab3dfe4cbe76`
 - TOKENIZER_VERSION 3 · SCHEMA_VERSION 3 · Tantivy 0.26.2 · QUERY_VERSION 2
 - Search records saved under 0.1.0 replay as `reproduced` on the index_version they pin, while it is kept and supported and QUERY_VERSION matches.
-- Verified on the same served index as 0.1.0; this release's ingest changes (decisions 040, 044, 045) take effect at the next snapshot build, which changes 59 abstracts and no merge (decision-045).
+- Verified on the same served index as 0.1.0; this release's ingest changes (decisions 040, 044, 045) take effect at the next snapshot build, which changes 59 abstracts and no merge (decisions 044, 045).
 
 ## 0.1.0
 

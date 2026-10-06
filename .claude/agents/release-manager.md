@@ -33,8 +33,9 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    `/open-pr`), which requires green checks but no mandatory approving review under the
    solo-maintainer policy (never bypass required checks); tag with `gh release create --target` and notes from `changelog.py --notes` (a `git push` of
    a tag is blocked by `require-review.sh`); no back-merge (decision-046, spec 08 §Release step 7): `main` doesn't require `dev` up to date.
-   - Before tagging, the required checks must be green on `main`'s push run for the exact sha (decision-046:
-     `main` doesn't require a PR up to date, so a merged tree may be untested).
+   - Before tagging, `lint`, `test` and `claude-tooling` (and `e2e`) must be green on `main`'s push run for the
+     exact sha, or don't tag (decision-046: `main` doesn't require a PR up to date, so a merged tree may be
+     untested; the pull-request-only checks don't run on a push).
    - Promote and tag on one UTC day: a later tag needs a re-dated release branch (2026-10-05). If a
      different npm rewrites the lockfile while the version is unchanged, restore it.
 2. **Versions.** Any change of `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy (which always bumps
