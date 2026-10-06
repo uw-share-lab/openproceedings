@@ -10,11 +10,28 @@ papers a query matches: a search record pins its `index_version`, `tokenizer_ver
 it with the same QUERY_VERSION; otherwise as `drifted`, naming what changed. Each release's Data section
 names the index it was verified on and which saved records still reproduce.
 
-## Unreleased
+## 0.2.0
+
+### Added
+
+- v0.1.1 batch — dedup rules (TASK-188/189/198), ICML 2026 presentation, shared group-count collections (TASK-197), no back-merge ([#112](https://github.com/uw-share-lab/openproceedings/pull/112))
+- comparison batch — query_limit, DOI matching, word forms near the cap, explain counts, serve flags, citable sentence (TASK-184/185/186/192/194/195) ([#113](https://github.com/uw-share-lab/openproceedings/pull/113))
+
+### Changed
+
+- perf: TASK-197 re-measured quietly; every Trust-Evals first page under 100 ms, spec 03's exception closed ([#114](https://github.com/uw-share-lab/openproceedings/pull/114))
 
 ### Internal
 
 - ingest: fix two properties the candidate nightly failed (0.1.0) ([#109](https://github.com/uw-share-lab/openproceedings/pull/109))
+- compare: freeze GET /export's date too, so a contract test stops failing after 2026-10-05 ([#111](https://github.com/uw-share-lab/openproceedings/pull/111))
+
+### Data
+
+- index_version `fd13d8d27535`, snapshot `10b5a205a63f964496b9b572321785cf4c845c49fac4bf6cbdf5ab3dfe4cbe76`
+- TOKENIZER_VERSION 3 · SCHEMA_VERSION 3 · Tantivy 0.26.2 · QUERY_VERSION 2
+- Search records saved under 0.1.0 replay as `reproduced` on the index_version they pin, while it is kept and supported and QUERY_VERSION matches.
+- Verified on the same served index as 0.1.0; this release's ingest changes (decisions 040, 044, 045) take effect at the next snapshot build, which changes 59 abstracts and no merge (decision-045).
 
 ## 0.1.0
 

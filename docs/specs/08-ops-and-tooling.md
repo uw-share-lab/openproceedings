@@ -624,7 +624,9 @@ retention (step 8) matter (guarantee 4).
    `origin/main`, `CITATION.cff`'s `version` must be `X.Y.Z` and its `date-released` today's date (UTC); if
    either is not, don't tag: re-run step 4 with the corrected date (a new release branch and promotion), since
    a tag's `CITATION.cff` is never edited after. Then `git
-   fetch origin` and check out `origin/main`; `python3 .claude/scripts/changelog.py
+   fetch origin` and check out `origin/main`; the required checks are green on the push run for that exact sha
+   (`gh run list --branch main --commit "$(git rev-parse origin/main)"`; paste it into the promotion PR's
+   comment), since `main` doesn't require a PR up to date (decision-046) and its merged tree may be untested; `python3 .claude/scripts/changelog.py
    --check --release X.Y.Z` passes (the promotion holds exactly the PRs the file lists; with `OP_DATA_DIR` or
    `--data-dir` naming step 3's data dir when this checkout doesn't hold `data/`); `python3 .claude/scripts/changelog.py --release X.Y.Z
    --notes X.Y.Z > notes.md` (the same `--data-dir`); `gh release create vX.Y.Z --target
