@@ -71,8 +71,8 @@ class Compiled:
     explain: list[str] = field(default_factory=list)  # the readable tree, one line per clause
     verified: list[str] = field(default_factory=list)  # which clauses took the position-verified fallback
     # what the engine's compiled memo charges against its budget (TantivyEngine.MAX_COMPILED_UNITS): what
-    # this compiled query keeps alive (ids in its verified term sets, terms in its expansions, one per
-    # explain line). The verified memo is charged clause by clause, as each is stored (`Compiler.store`)
+    # this compiled query keeps alive (ids in its verified term sets, terms in its expansions, plus the copies
+    # `conjuncts` keeps, one per explain line). The verified memo is charged clause by clause, as each is stored (`Compiler.store`)
     held: int = 0
     # (field, clause) -> the ids each verified clause matched: a compiled-memo hit hands them to the request's
     # scope (`TantivyEngine.compile`), so its later compiles of other trees never verify them again
@@ -80,7 +80,7 @@ class Compiled:
     # each top-level conjunct's query (`conjuncts(tree)`, in order) and, for a NOT, its child's, which
     # `TantivyEngine.counts` reuses rather than compiling the conjuncts again (TASK-197). Copies, not parts of
     # `query`: tantivy-py's `boolean_query` deep-copies its subqueries, so each kept conjunct holds its terms and
-    # ids a second time (a NOT's child a third), and `held` charges every copy (`Compiler.compile`)
+    # ids a second time (a kept NOT's child a third), and `held` charges every copy (`Compiler.compile`)
     conjuncts: tuple[tuple[tantivy.Query, tantivy.Query | None], ...] = ()
     # the tree compiled, as `TantivyEngine.compile` keys it (its memo key, the same string): what `counts` checks
     # a compile it is handed against ("" for a compile outside the memo)

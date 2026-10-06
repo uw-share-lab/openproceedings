@@ -185,7 +185,7 @@ class TantivyEngine:
     # index, ~5 MB on 80k): it is cleared once the weights charged to it since its last clear pass its budget.
     # Weights, in ids/terms (~60 bytes each as Python strings): a verified clause, its ids + 1; an expansion,
     # its terms + 1 (an over-cap count, 1); a compiled query, `Compiled.held` + 1 (the ids and terms inside its
-    # Tantivy query: each verified clause's ids once for the list `Compiled.ids` keeps, plus whichever id list its query holds, the ids or the candidates that failed, none when none failed (TASK-076); plus its explain lines); a base's facet combos, their number + 1. So ≲ 30 + 30 + 6 + a few MB per
+    # Tantivy query: each verified clause's ids once for the list `Compiled.ids` keeps, plus whichever id list its query holds, the ids or the candidates that failed, none when none failed (TASK-076); plus the copies `Compiled.conjuncts` keeps, TASK-197; plus its explain lines); a base's facet combos, their number + 1. So ≲ 30 + 30 + 6 + a few MB per
     # engine, and the API holds the served engine plus `pinned_indexes` more. Every memo is checked before each
     # entry is stored and charged right after (`verified` clause by clause, inside a compile: `_store_verified`),
     # so it exceeds its budget by at most one entry per thread storing concurrently (each thread's check may
@@ -645,7 +645,7 @@ class TantivyEngine:
             return self._copy(hit)
         self._trim("compiled", self.compiled, self.MAX_COMPILED_UNITS)
         compiled = self._fresh(ast, scope)
-        compiled.tree = key  # the memo's own key string: nothing more held
+        compiled.tree = key  # the memo's own key string, uncharged as every memo key is (harmless: no copy)
         self.compiled[key] = compiled
         self.charges["compiled"].append(compiled.held + 1)
         return self._copy(compiled)

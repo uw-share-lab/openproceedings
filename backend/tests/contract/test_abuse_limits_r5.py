@@ -139,12 +139,23 @@ def test_a_bucket_in_debt_is_not_evicted_so_its_debt_is_not_forgiven() -> None:
     assert everyone.take("y", 1) > 1000 and everyone.take("x", 1) == 0
 
 
-def test_a_compiled_entry_charges_its_verified_ids_twice(store: Store) -> None:
-    """The Tantivy query's copy and `Compiled.ids` both hold them: the compiled memo's budget counts both."""
+def test_a_compiled_entry_charges_each_copy_of_its_verified_ids(store: Store) -> None:
+    """`Compiled.ids` holds them, and so does every Tantivy query that keeps the clause's id set: the whole query,
+    and, since TASK-197, the top-level conjunct `Compiled.conjuncts` keeps beside it. tantivy-py's
+    `boolean_query` and `const_score_query` deep-copy their subqueries (a 3M-ord term set: 349 MB; wrapped in a
+    const score, +46 MB; in a boolean query, +237 MB; again, +112 MB; gate round 1 of TASK-197), so the kept
+    conjunct is a second copy of the term set. The compiled memo's budget counts all three: the list once and
+    the term set twice, never the list again with the copy."""
     from openproceedings.query.parser import parse
 
     engine = engine_of(store)
     ast = parse("trust NEAR/3 trust").effective_ast
     compiled = engine.compile(ast)
     ids = sum(len(v) for v in compiled.ids.values())
-    assert ids > 0 and compiled.held == 2 * ids + len(compiled.explain)
+    # the NEAR is one of the effective tree's conjuncts (beside the default track and status filters), so it is
+    # kept: the list, the whole query's term set, the kept conjunct's term set
+    assert len(compiled.conjuncts) > 1
+    assert ids > 0 and compiled.held == 3 * ids + len(compiled.explain)
+    # a tree that is the clause alone keeps no second copy: the list and the one term set
+    alone = engine.compile(ast.children[0])  # type: ignore[union-attr]
+    assert sum(len(v) for v in alone.ids.values()) == ids and alone.held == 2 * ids + len(alone.explain)
