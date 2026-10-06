@@ -99,7 +99,7 @@ reviews without the UI.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side), plus `filters`: each filter field's top-level clause (span, values, `toggleable`, `reason`, and for a clause blocked by other clauses their `blocking_spans`) for facet clicks (02 §Filter clauses; decision-011), and `word_forms`: each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names (`term`, code-point `at`, `insert`; 02 §Word forms; TASK-175). Called as you type, debounced. |
+| `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side), plus `filters`: each filter field's top-level clause (span, values, `toggleable`, `reason`, and for a clause blocked by other clauses their `blocking_spans`) for facet clicks (02 §Filter clauses; decision-011), and `word_forms`: each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names (`term`, code-point `at`, `insert`; 02 §Word forms; TASK-175), with `word_forms_skipped`: each other named term and the `reason` it gets no `$` (TASK-192). Called as you type, debounced. |
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | `GET` | `/papers/{id}` | The full record, provenance included; with an optional `q` (and `mode`), whether that query matches it and its `highlights`, exactly as `/search` gives them for that paper (task-087) |
 | `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` (with `mode` at most `native`) → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; with `record_id`, exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if that index is gone, 409 `API_RECORD_MISMATCH` if its replay is a `mismatch`) |
@@ -351,8 +351,9 @@ Two readings follow from "the canonical form decides", and are worth knowing:
   the same shapes add 4–25 ms to a first page's median, every round counted at the default grace; the
   158-wildcard shape is `too_costly` and costs what the search alone does. A query over the group limit is not refused either: it
   gets its result without counts and `not_counted: "too_many_groups"`.
-- Only `/search` sends it. `op search`, a record's save and replay, and an export run the same search without
-  it (`search.run`'s `groups` is unset), and a search record stores no group counts.
+- Only `/search` sends it. `op search --explain` prints the same counts under the same bounds (`ApiConfig`'s
+  defaults; spec 08 §CLI, TASK-194). `op search` otherwise, a record's save and replay, and an export run the
+  same search without it (`search.run`'s `groups` is unset), and a search record stores no group counts.
 
 ## Exports (built to be imported into Covidence)
 
@@ -632,7 +633,8 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   hold, the host names of at most three of its links (a host name as DNS writes one, at most 253 characters;
   anything else in a link's host position is dropped, and no path, query or credential is ever echoed). A
   link no URL parser takes (`http://[x`, a volume of 5,000 digits) names no paper and never refuses the file.
-- **Caps**, stated in `GET /meta` `limits.compare`; a file over one is refused whole, never cut:
+- **Caps**, stated in `GET /meta` `limits.compare` (each set by an `op serve` flag, defaults below; TASK-184,
+  §Implementation notes); a file over one is refused whole, never cut:
   `max_body_bytes` (16 MiB; 413 `API_BODY_TOO_LARGE`, by `Content-Length` before a byte is read, else counted
   as the bytes arrive), then, before anything is parsed into fields, 413 `API_RIS_TOO_LARGE` for more than 64
   lines per allowed record (320,000 lines at the default: a file of millions of one-tag lines never becomes
@@ -647,8 +649,9 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   twice): 5,000 records of 2 KB titles reach the cap, and are refused after the seconds of work that built
   the answer (about 13 s, as the security review measured), which are charged like any comparison's.
 - **Matching** is 01's merge rules in their order (07 §B): the OpenReview forum id a URL names, then the
-  proceedings paper a URL names (within its venue and year), then the dedup title key **with the same venue
-  and year**; never a title alone. The venue is one of Scholar mode's `source:` names exactly. A record whose
+  proceedings paper a URL names (within its venue and year), then a DOI the index record carries (a Scopus or
+  Web of Science export's `DO`; never across the venue or year the file states; only accepted NeurIPS 2022–2025
+  records carry one), then the dedup title key **with the same venue and year**; never a title alone. The venue is one of Scholar mode's `source:` names exactly. A record whose
   venue is none of the three indexed venues, and whose links name no indexed paper, is **not compared**
   (`not_compared`); two records of one paper are counted once (`copies`). Both sides cover every indexed
   venue and year: a limit on years or venues is part of `q` (guarantee 3), never a parameter.
@@ -660,10 +663,12 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   (whole seconds until this client's network may start another comparison: the cooldown below; 0 when it may
   start one now, always on a local instance and with the rate limit off), and five lists. Each row of `kept`, `dropped`, `not_in_index` and `added` has `ris_record` (the
   record's position in the file, from 1), `copies`, `id`, `title` (the file's own for a paper of the file),
-  `venue`, `year`, `matched_by` (`forum_id`, `proceedings_id`, `title_venue_year`; or why it has no index
+  `venue`, `year`, `matched_by` (`forum_id`, `proceedings_id`, `doi`, `title_venue_year`; or why it has no index
   record: `not_found`, `ambiguous`, `no_year`, `no_venue`, `truncated_title`), `reason` and `detail` (07 §B's
-  class and its evidence: for a dropped paper `filtered` by track or status, `full_text` (no title or abstract
-  match), `stemming`, `compat_reading`; `unsettled` when a person must decide, with `settled: false`),
+  class and its evidence: for a dropped paper `query_limit` (a filter clause `q` itself writes, such as
+  `year:` or `venue:`, excludes it; `detail` names the clause), `filtered` by track or status, `full_text` (no
+  title or abstract match), `stemming`, `compat_reading`; for a paper not in the index `coverage_gap`, or
+  `query_limit` by the file's own venue and year; `unsettled` when a person must decide, with `settled: false`),
   `independent` (false when the index holds the record only because a RIS set was imported: a match to it
   says nothing about coverage), `fails_filters` and `abstract_withheld`. The lists hold **no abstract**.
   A record whose abstract is withheld (decision-022) keeps its class and has an empty `detail` (the evidence
@@ -711,14 +716,14 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   that run was 0.34 s). What runs between two checks is one record's or one row's work, one oracle
   evaluation over the compared records, or one pass in C over the whole file (the decode, the cap scan,
   scholarmend's split into records, the JSON encoding), each bounded by the caps, not by the clock: before
-  the per-link check, one record holding every link line of a 16 MiB file ran about 2 s between checks (the security review's measurement). `comparison_slots` (1)
+  the per-link check, one record holding every link line of a 16 MiB file ran about 2 s between checks (the security review's measurement). `comparison_slots` (1; `limits.compare.max_concurrent`)
   comparisons run at once; another is 503 `API_BUSY` before its file is read, so at most that many files are
   in memory. Every refusal sent before the file was read whole (that 503, a 429, a query refusal, and those
   made before the handler runs: an undeclared parameter, a missing `q`, no index loaded yet) first reads and
   discards what arrives of the file for up to 2 s and closes the connection (`middleware.DrainRefusals`, one
   layer for the path; nothing is held), so the client sending it gets the refusal rather than a reset
   connection. The query's one search runs before the file is decoded, so a refusal of its own (a taken
-  verification slot) comes before the seconds of reading and matching the file. The file must arrive within `compare_upload_seconds` (30 s; 408 `API_UPLOAD_TIMEOUT`); behind the
+  verification slot) comes before the seconds of reading and matching the file. The file must arrive within `compare_upload_seconds` (30 s, `limits.compare.max_upload_seconds`; 408 `API_UPLOAD_TIMEOUT`); behind the
   reverse proxy it arrives whole (08 §Deploy). Measured on index `05a0541717f6` (95,877 records) with the
   Trust-Evals export (1,834 records, 3.7 MB) and the review's `$` string in Scholar mode, on a loaded
   laptop: 20 to 24 s for the request (17.8 s debited: 36 tokens, beside the 10 of the route, the query's
@@ -762,8 +767,11 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
 - **What a methods section may cite** (prisma-reporting). A comparison is a search-development aid, never a
   number in a PRISMA flow diagram: it changes no search and records nothing. A figure from it is cited with
   the reviewer's own file (its sha256 and the date it was exported) beside the CSV's `index_version` and
-  `canonical_hash`, since the server keeps neither the file nor the answer; the citable comparison is the
-  dated `op eval scholar` report (07 §B). A copyable summary and a place in the search record are TASK-195.
+  `canonical_hash`, since the server keeps neither the file nor the answer; the citable comparison with
+  Google Scholar is the dated `op eval scholar` report (07 §B). A search record never notes a comparison
+  (decision-043: the record stays the query and its index pin, so its replay is unchanged); instead the panel
+  gives the comparison as one sentence to cite (05 §Components 9), with the file's sha256 computed in the
+  browser from the bytes it sent, so nothing about the file is added to the answer (decision-035).
 
 ## Search records (reproducibility, PRISMA)
 
@@ -1156,8 +1164,18 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   - `op serve [--host] [--port] [--index] [--cors-origin …] [--trusted-proxy …] [--rate-capacity]
     [--rate-refill] [--export-weight] [--no-rate-limit] [--max-verified-clauses]
     [--max-verification-candidates] [--max-verification-seconds] [--max-counted-groups] [--max-counted-terms]
-    [--max-counted-ids] [--pinned-indexes] [--docs|--no-docs] [--compare|--no-compare] [--log-query-text]` refuses an invalid combination as usage, naming each
-    option and the validator's reason (never the value pydantic would quote), and runs one uvicorn process with
+    [--max-counted-ids] [--pinned-indexes] [--docs|--no-docs] [--compare|--no-compare] [--compare-max-body-bytes]
+    [--compare-max-records] [--compare-max-line-chars] [--compare-max-results] [--compare-max-response-bytes]
+    [--compare-max-seconds] [--compare-upload-seconds] [--comparison-slots] [--compare-cooldown-factor]
+    [--compare-upload-weight] [--compare-token-ms] [--log-query-text]` refuses an invalid combination as usage, naming each
+    option and the validator's reason (never the value pydantic would quote). Each comparison flag (TASK-184)
+    sets the `ApiConfig` or `RateLimit` field of its name (`--compare-cooldown-factor` →
+    `rate_limit.compare_cooldown_factor`), so the refusal names it; one left out keeps the default this section
+    gives, and a value out of the field's range (each but `--compare-token-ms`, which has only a floor of 1, has an
+    upper bound too: spec 08 §CLI), or a float that
+    isn't finite (`inf`, `nan`), is refused. The
+    caps are stated in `GET /meta` `limits.compare`; the cooldown factor, the upload weight and the token price
+    are costs, not limits, and like `--export-weight` are not in `/meta`. It runs one uvicorn process with
     its own access log off, `proxy_headers` off, and a 64 KiB request-head limit (uvicorn's 16 KiB would
     refuse a valid 2,000-code-point query in the URL). **Deploy note:** `GET /search?q=…` carries the query
     in the URL, so the reverse proxy in front (Caddy, task-065) must not log query strings. Log the path
@@ -1224,11 +1242,18 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     `/export`, `POST /records`). **Correction to TASK-035 AC #2** (the task is completed, so the CLI can't
     edit it): the AC says "Parse errors are 422", but that holds only for endpoints that run the query.
     `/parse` reports them in a 200 (task-035 review, Should 5).
-  - `POST /parse`'s `word_forms` (TASK-175, additive) is `query.wordforms.word_forms(q, result)`: a list of
+  - `POST /parse`'s `word_forms` (TASK-175, additive) is `query.wordforms.report(q, result).forms`: a list of
     `{term, at, insert}`, every key always sent, in order of `at`; empty in native mode and when no named term
     can take a `$`; null exactly when `errors` is non-empty. It costs one lex and one parse of the edited
-    string in Scholar mode, none in native mode (02 §Word forms has the rules). `/search` does not carry it:
-    the UI's action edits the draft, which `/parse` has always just read.
+    string in Scholar mode, none in native mode (02 §Word forms has the rules), and near the length cap a
+    budget (no more parses; linear in the places, at most two renderings of the canonical form) to offer
+    the terms whose `$` fit, in every subset the reader can tick. `/search` does not carry it: the
+    UI's action edits the draft, which `/parse` has always just read.
+  - `POST /parse`'s `word_forms_skipped` (TASK-192, additive) comes from the same call,
+    `query.wordforms.report(q, result)`: a list of `{term, reason}`, every key always sent, one per term the
+    notice names that `word_forms` offers in no place, in the notice's order; empty in native mode and when
+    every named term is offered; null exactly when `errors` is non-empty. `reason` is an open enum
+    (`too_short`, `symbol`, `dollar_nearby`, `operator_word`, `too_long`, `unconfirmed`; decision-009).
   - `POST /parse`'s `filters` (TASK-078, decision-011) is `query.clauses.filter_clauses(q, result)`, the one
     call the route adds: `{venue, year, track, status}`, each `{field, negated, span, toggleable, reason}`
     plus `values` (venue, track, status) or `ranges` (year), every key always sent (a null included); null

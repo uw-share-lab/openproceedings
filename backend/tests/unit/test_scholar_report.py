@@ -211,6 +211,25 @@ def test_the_tables_hold_the_runs_counts_and_percentages() -> None:
     ) in lines
 
 
+def test_the_report_counts_and_explains_query_limit_rows() -> None:
+    """TASK-185: records the string's own `year:` clause leaves out are counted as `query_limit`, never as
+    `full_text`, and the Finding's `full_text` figure leaves them out."""
+    c = compare(f"{QUERY} AND year:2025..2026", SET, corpus(), scope=META.scope)
+    lines = report(c).splitlines()
+    [row] = [ln for ln in lines if ln.startswith("| `query_limit` |")]
+    assert (
+        row.split("|")[2].strip() == "8"
+    )  # every paper of the set is NeurIPS 2024 (the unindexed one by its file)
+    assert (
+        "a filter clause the query itself writes (`year:`, `venue:`, …) excludes it, whatever its text" in row
+    )
+    assert not any(ln.startswith("| `full_text` |") for ln in lines)
+    assert any(
+        ln.startswith("- **`query_limit`.** A top-level filter clause the string itself writes")
+        for ln in lines
+    )
+
+
 def test_the_report_holds_ids_and_titles_but_no_abstract_and_no_path() -> None:
     text = report(compare(QUERY, SET, corpus(), scope=META.scope))
     assert f"| `{nid('miss0001')}` | A benchmark of trust | NeurIPS | 2024 | `scholar_missed` |" in text
@@ -673,7 +692,10 @@ def test_a_persons_our_bug_fails_the_check_and_is_named(ran: tuple[list[str], Pa
 @pytest.mark.parametrize(
     ("call", "message"),
     [
-        (("probably fine", "second reviewer", ""), "human_class must be one of our_bug, filtered"),
+        (
+            ("probably fine", "second reviewer", ""),
+            "human_class must be one of our_bug, query_limit, filtered",
+        ),
         (("", "second reviewer", ""), "the row has a role or a note but no class"),
         (("", "", "looked at it"), "the row has a role or a note but no class"),
         (("full_text", "", ""), "a human_class needs a reviewer_role"),

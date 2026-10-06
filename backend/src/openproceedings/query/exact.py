@@ -17,7 +17,7 @@ import bisect
 import re
 import unicodedata
 from collections.abc import Sequence
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from openproceedings.query.ast import And, Near, Node, Not, Or, Phrase, Term, Wildcard
 from openproceedings.query.lexer import (
@@ -61,18 +61,18 @@ def exact_name(leaf: Term | Phrase) -> str:
     return " ".join(i.token for i in leaf.items if isinstance(i, Term))
 
 
-def takes_dollar(word: Lexeme, before: int, tokenizer: str) -> bool:
-    """Whether `word` + `$` is a valid wildcard: the lexer's stem conditions (`_Lexer.check_stem`). `before`
-    is the letters and digits of the phrase words before it."""
+def stem_refusal(word: Lexeme, before: int, tokenizer: str) -> Literal["too_short", "symbol"] | None:
+    """Why `word` + `$` is not a valid wildcard, or None when it is, by the lexer's stem conditions
+    (`_Lexer.check_stem`): a `$` that would not directly follow a letter or digit (`C++`), else a stem under
+    `MIN_STEM` letters or digits (`AI`). `before` is the letters and digits of the phrase words before it."""
     if word.kind is not Kind.WORD or word.wildcard is not None:
-        return False
+        return "symbol"  # not reached for an exact leaf: its words hold no wildcard
     toks, tail = tokenize_with_tail(word.text, tokenizer)
-    return (
-        bool(toks)
-        and before + sum(len(t.text) for t in toks) >= MIN_STEM
-        and not toks[-1].op
-        and not tail.pieces
-    )
+    if not toks or toks[-1].op or tail.pieces:
+        return "symbol"
+    if before + sum(len(t.text) for t in toks) < MIN_STEM:
+        return "too_short"
+    return None
 
 
 def reads_as_operator(word: Lexeme) -> bool:
@@ -113,15 +113,33 @@ class Place(NamedTuple):
     leaf_end: int  # the end of the leaf's span, which identifies the leaf
 
 
-def dollar_places(q: str, ast: Node, lexemes: Sequence[Lexeme], tokenizer: str) -> list[Place]:
-    """Each exact term of `ast` that can take a `$` as written, in order of `at`. `lexemes` are `q`'s as the
-    parser read them (in Scholar mode after `compat.group_phrases`), lexed with `tokenizer`."""
+# Why a term the notice names gets no `$` (spec 02 §Word forms). `dollar_verdicts` gives the first four, from
+# the rules, and `unconfirmed` for a leaf whose shape it doesn't know (no word or phrase lexeme in it, two in
+# it, or a phrase with no parts); `wordforms.py` adds `too_long` (no room in the length budget) and
+# `unconfirmed` for edits the read-back refused. The tests hold that neither `unconfirmed` happens.
+SkipReason = Literal["too_short", "symbol", "dollar_nearby", "operator_word", "too_long", "unconfirmed"]
+
+
+class Refusal(NamedTuple):
+    """One exact term that can't take a `$` as written, and why."""
+
+    term: str  # as the notice names it (`exact_name`)
+    reason: SkipReason
+    leaf_end: int  # the end of the leaf's span, which identifies the leaf
+
+
+def dollar_verdicts(
+    q: str, ast: Node, lexemes: Sequence[Lexeme], tokenizer: str
+) -> tuple[list[Place], list[Refusal]]:
+    """Each exact term of `ast` that can take a `$` as written, in order of `at`, and each that can't, with
+    the rule that refuses it, in the order the leaves are written. `lexemes` are `q`'s as the parser read them
+    (in Scholar mode after `compat.group_phrases`), lexed with `tokenizer`."""
     # An exact leaf's span holds its one word or phrase lexeme, and may be wider: a field prefix, the
     # parentheses of a group of one (`(model)`). Leaves never overlap, so a lexeme has at most one.
     leaves = sorted(exact_leaves(ast), key=lambda leaf: leaf.span)
     starts = [leaf.span[0] for leaf in leaves]
     run_of = runs(q)
-    found: dict[int, Place | None] = {}  # by the leaf's end
+    found: dict[int, Place | SkipReason] = {}  # by the leaf's end
     for x in lexemes:
         if x.kind not in (Kind.WORD, Kind.PHRASE):
             continue
@@ -131,17 +149,29 @@ def dollar_places(q: str, ast: Node, lexemes: Sequence[Lexeme], tokenizer: str) 
         leaf = leaves[i]
         end = leaf.span[1]
         if end in found:  # a second lexeme in one leaf: not a shape this knows, so not offered
-            found[end] = None
+            found[end] = "unconfirmed"
             continue
-        found[end] = None
+        found[end] = "unconfirmed"
         if x.kind is Kind.PHRASE:
             if not x.parts:
                 continue
             word, before = x.parts[-1], sum(letters(p.stem or "", tokenizer) for p in x.parts[:-1])
         elif reads_as_operator(x):
+            found[end] = "operator_word"
             continue
         else:
             word, before = x, 0
-        if run_of[word.end] >= 0 and takes_dollar(word, before, tokenizer):
-            found[end] = Place(term=exact_name(leaf), at=word.end, run=run_of[word.end], leaf_end=end)
-    return sorted((place for place in found.values() if place is not None), key=lambda place: place.at)
+        refused = "dollar_nearby" if run_of[word.end] < 0 else stem_refusal(word, before, tokenizer)
+        found[end] = refused or Place(term=exact_name(leaf), at=word.end, run=run_of[word.end], leaf_end=end)
+    places = sorted((v for v in found.values() if isinstance(v, Place)), key=lambda place: place.at)
+    refusals = [
+        Refusal(term=exact_name(leaf), reason=verdict, leaf_end=leaf.span[1])
+        for leaf in leaves
+        if not isinstance(verdict := found.get(leaf.span[1], "unconfirmed"), Place)
+    ]
+    return places, refusals
+
+
+def dollar_places(q: str, ast: Node, lexemes: Sequence[Lexeme], tokenizer: str) -> list[Place]:
+    """Each exact term of `ast` that can take a `$` as written, in order of `at` (`dollar_verdicts`)."""
+    return dollar_verdicts(q, ast, lexemes, tokenizer)[0]

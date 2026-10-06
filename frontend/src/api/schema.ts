@@ -357,6 +357,11 @@ export interface components {
              */
             max_body_bytes: number;
             /**
+             * Max Concurrent
+             * @description comparisons this instance runs at once; another is 503 `API_BUSY` with `Retry-After`, before its file is read
+             */
+            max_concurrent: number;
+            /**
              * Max Line Length
              * @description the longest line of the file, in Unicode code points, tag included; a longer one is 413 `API_RIS_TOO_LARGE`
              */
@@ -386,6 +391,11 @@ export interface components {
              * @description the longest title or venue line's value, in Unicode code points (the corpus's own title cap); a longer one is 413 `API_RIS_TOO_LARGE`
              */
             max_title_length: number;
+            /**
+             * Max Upload Seconds
+             * @description the wall time the file gets to arrive once a comparison slot is held; past it, 408 `API_UPLOAD_TIMEOUT`
+             */
+            max_upload_seconds: number;
         };
         /** CompareQuery */
         CompareQuery: {
@@ -531,14 +541,14 @@ export interface components {
             independent: boolean | null;
             /**
              * Matched By
-             * @description How the file's record was matched to the index, by spec 01's merge rules in their order (`forum_id`, `proceedings_id`, `title_venue_year`), or why it has no index record (`not_found`, `ambiguous`: its id or title names several records, `no_year`, `no_venue`, `truncated_title`). Null on an `added` row.
+             * @description How the file's record was matched to the index, by spec 01's merge rules in their order (`forum_id`, `proceedings_id`, `doi`: a DOI the index record carries, in the venue and year the file states, `title_venue_year`), or why it has no index record (`not_found`, `ambiguous`: its id or title names several records, `no_year`, `no_venue`, `truncated_title`). Null on an `added` row.
              */
-            matched_by: ("forum_id" | "proceedings_id" | "title_venue_year" | "not_found" | "ambiguous" | "no_year" | "no_venue" | "truncated_title") | null;
+            matched_by: ("forum_id" | "proceedings_id" | "doi" | "title_venue_year" | "not_found" | "ambiguous" | "no_year" | "no_venue" | "truncated_title") | null;
             /**
              * Reason
-             * @description Why the paper is on one side only (spec 07 §B's classes): for `dropped`, `filtered` (a default filter removes it: its track or status), `full_text` (no title or abstract match), `stemming` (it matches only with another inflected form), `compat_reading` (it matches as Google Scholar reads the string); for `not_in_index`, `coverage_gap` or `unsettled`; for `added`, `scholar_missed`, `compat_reading` or `scholar_cap`. `unsettled`: a person must decide. `our_bug`: the reference matcher and the served index disagree (report it). Null on a `kept` row that has none.
+             * @description Why the paper is on one side only (spec 07 §B's classes): for `dropped`, `query_limit` (a filter clause the query itself writes, such as `year:` or `venue:`, excludes it, whatever its text; `detail` names the clause), `filtered` (a default filter removes it: its track or status), `full_text` (no title or abstract match), `stemming` (it matches only with another inflected form), `compat_reading` (it matches as Google Scholar reads the string); for `not_in_index`, `coverage_gap`, `query_limit` (by the file's own venue and year) or `unsettled`; for `added`, `scholar_missed`, `compat_reading` or `scholar_cap`. `unsettled`: a person must decide. `our_bug`: the reference matcher and the served index disagree (report it). Null on a `kept` row that has none.
              */
-            reason: ("our_bug" | "filtered" | "compat_reading" | "coverage_gap" | "stemming" | "full_text" | "scholar_cap" | "scholar_missed" | "unsettled") | null;
+            reason: ("our_bug" | "query_limit" | "filtered" | "compat_reading" | "coverage_gap" | "stemming" | "full_text" | "scholar_cap" | "scholar_missed" | "unsettled") | null;
             /**
              * Ris Record
              * @description The record's position in the file, from 1 (the paper's first record when the file repeats it). Null on an `added` row.
@@ -1106,8 +1116,9 @@ export interface components {
         /**
          * ParseResponse
          * @description 02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus
-         *     `filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` (`query.wordforms.word_forms`,
-         *     TASK-175). A query with errors is still a 200 here: `errors` holds them, and every Optional is null.
+         *     `filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` and `word_forms_skipped`
+         *     (`query.wordforms.report`, TASK-175, TASK-192). A query with errors is still a 200 here: `errors` holds
+         *     them, and every Optional is null.
          */
         ParseResponse: {
             /** Ast */
@@ -1143,9 +1154,14 @@ export interface components {
             warnings: components["schemas"]["Diagnostic"][];
             /**
              * Word Forms
-             * @description Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order (spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the query text the reader triggers and sees. The server has parsed `q` with every one inserted. Empty outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty.
+             * @description Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order (spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the query text the reader triggers and sees. The server has parsed `q` with every one inserted. Near the 2,000-code-point cap, only the terms whose `$` fit (in the order they are first written; TASK-192). Empty outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty.
              */
             word_forms: components["schemas"]["WordForm"][] | null;
+            /**
+             * Word Forms Skipped
+             * @description Each term the `COMPAT_NO_STEMMING` notice names that `word_forms` offers in no place, once, in the notice's order, with the `reason` it gets no `$` (spec 02 §Word forms; TASK-192). Empty outside Scholar mode and when every named term is offered. Null exactly when `errors` is non-empty.
+             */
+            word_forms_skipped: components["schemas"]["SkippedTerm"][] | null;
         };
         /**
          * ParsedClause
@@ -1567,6 +1583,20 @@ export interface components {
              * @description Of `excluded.total`, the records removed as unclassified rather than ineligible: `excluded.track.unknown` + `excluded.status.unknown`. The number `op search` prints as `unclassified`.
              */
             unclassified_total: number;
+        };
+        /** SkippedTerm */
+        SkippedTerm: {
+            /**
+             * Reason
+             * @description Why it gets no `$` (spec 02 §Word forms): `too_short`, a stem under 3 letters or digits (`AI`); `symbol`, the `$` would not directly follow a letter or digit (`C++`); `dollar_nearby`, its unspaced run already holds a `$` or a backslash, so a second `$` would close LaTeX math (`US$5`); `operator_word`, a lowercase `and`, `or`, `not` or `near/n`, read by its text; `too_long`, no room for its `$` under the 2,000-code-point cap beside the offered ones, by a budget that keeps every subset of them under it; `unconfirmed`, the server could not check the edit (a term of a shape the rules don't know, or edits the read-back refused). Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @enum {string}
+             */
+            reason: "too_short" | "symbol" | "dollar_nearby" | "operator_word" | "too_long" | "unconfirmed";
+            /**
+             * Term
+             * @description The term as the `COMPAT_NO_STEMMING` notice names it, as in `WordForm.term`.
+             */
+            term: string;
         };
         /**
          * SnapshotInfo

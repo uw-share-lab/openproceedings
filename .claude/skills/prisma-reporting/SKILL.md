@@ -71,7 +71,9 @@ string while it is being written; a methods section that mentions one cites it w
 `canonical_hash`) and the `index_version` it was counted on. A **`/compare` figure** (a reviewer's own RIS file
 against one query, TASK-177) is about that file: cite it only with the file's own sha256 and the date it was
 run beside the CSV's `index_version` and `canonical_hash`, since the tool keeps neither the file nor a record of
-the run. The citable comparison with Google Scholar is the `op eval scholar` report
+the run. The compare panel's sentence to cite (TASK-195) carries all four and says it is not a flow-diagram
+count; a search record never notes a comparison (decision-043), so never add one to the record or its methods
+text. The citable comparison with Google Scholar is the `op eval scholar` report
 (`scholar-comparison-protocol` skill), which names every input by hash and says whose calls it rests on.
 
 ## Search record fields (04 §Search records) — all required

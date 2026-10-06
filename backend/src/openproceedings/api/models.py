@@ -20,7 +20,7 @@ from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import MIN_YEAR, FilterField, Node, TextField
 from openproceedings.query.clauses import ParsedFilters
 from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode
-from openproceedings.query.wordforms import WordForm
+from openproceedings.query.wordforms import SkippedTerm, WordForm
 from openproceedings.records import Excluded as Excluded  # one schema for the exclusion accounting
 from openproceedings.records import SearchRecord
 from openproceedings.search import NotCounted
@@ -86,8 +86,9 @@ class ParseRequest(Model):
 
 class ParseResponse(Versioned):
     """02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus
-    `filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` (`query.wordforms.word_forms`,
-    TASK-175). A query with errors is still a 200 here: `errors` holds them, and every Optional is null."""
+    `filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` and `word_forms_skipped`
+    (`query.wordforms.report`, TASK-175, TASK-192). A query with errors is still a 200 here: `errors` holds
+    them, and every Optional is null."""
 
     mode: Mode
     ast: Node | None  # as typed, spans into q
@@ -108,8 +109,14 @@ class ParseResponse(Versioned):
     word_forms: list[WordForm] | None = Field(
         description="Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order "
         "(spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the "
-        "query text the reader triggers and sees. The server has parsed `q` with every one inserted. Empty "
-        "outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty."
+        "query text the reader triggers and sees. The server has parsed `q` with every one inserted. Near the "
+        "2,000-code-point cap, only the terms whose `$` fit (in the order they are first written; TASK-192). "
+        "Empty outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty."
+    )
+    word_forms_skipped: list[SkippedTerm] | None = Field(
+        description="Each term the `COMPAT_NO_STEMMING` notice names that `word_forms` offers in no place, once, "
+        "in the notice's order, with the `reason` it gets no `$` (spec 02 §Word forms; TASK-192). Empty outside "
+        "Scholar mode and when every named term is offered. Null exactly when `errors` is non-empty."
     )
 
 
@@ -269,6 +276,7 @@ class SearchResponse(Versioned):
 MatchedBy = Literal[
     "forum_id",
     "proceedings_id",
+    "doi",
     "title_venue_year",
     "not_found",
     "ambiguous",
@@ -279,6 +287,7 @@ MatchedBy = Literal[
 # why a paper is on one side only (`scholar_compare`'s classes: `ONLY_SCHOLAR` and `ONLY_OP`; pinned by a test)
 CompareReason = Literal[
     "our_bug",
+    "query_limit",
     "filtered",
     "compat_reading",
     "coverage_gap",
@@ -319,15 +328,17 @@ class CompareRow(Model):
     year: int | None
     matched_by: MatchedBy | None = Field(
         description="How the file's record was matched to the index, by spec 01's merge rules in their order "
-        "(`forum_id`, `proceedings_id`, `title_venue_year`), or why it has no index record (`not_found`, "
+        "(`forum_id`, `proceedings_id`, `doi`: a DOI the index record carries, in the venue and year the file "
+        "states, `title_venue_year`), or why it has no index record (`not_found`, "
         "`ambiguous`: its id or title names several records, `no_year`, `no_venue`, `truncated_title`). Null "
         "on an `added` row."
     )
     reason: CompareReason | None = Field(
-        description="Why the paper is on one side only (spec 07 §B's classes): for `dropped`, `filtered` (a "
-        "default filter removes it: its track or status), `full_text` (no title or abstract match), "
+        description="Why the paper is on one side only (spec 07 §B's classes): for `dropped`, `query_limit` (a "
+        "filter clause the query itself writes, such as `year:` or `venue:`, excludes it, whatever its text; "
+        "`detail` names the clause), `filtered` (a default filter removes it: its track or status), `full_text` (no title or abstract match), "
         "`stemming` (it matches only with another inflected form), `compat_reading` (it matches as Google "
-        "Scholar reads the string); for `not_in_index`, `coverage_gap` or `unsettled`; for `added`, "
+        "Scholar reads the string); for `not_in_index`, `coverage_gap`, `query_limit` (by the file's own venue and year) or `unsettled`; for `added`, "
         "`scholar_missed`, `compat_reading` or `scholar_cap`. `unsettled`: a person must decide. `our_bug`: "
         "the reference matcher and the served index disagree (report it). Null on a `kept` row that has none."
     )
@@ -622,6 +633,14 @@ class CompareLimits(Model):
     max_response_bytes: int = Field(
         description="the largest answer, in bytes; a comparison whose answer would be larger is 422 "
         "`API_COMPARE_TOO_COSTLY`"
+    )
+    max_upload_seconds: float = Field(
+        description="the wall time the file gets to arrive once a comparison slot is held; past it, 408 "
+        "`API_UPLOAD_TIMEOUT`"
+    )
+    max_concurrent: int = Field(
+        description="comparisons this instance runs at once; another is 503 `API_BUSY` with `Retry-After`, "
+        "before its file is read"
     )
 
 

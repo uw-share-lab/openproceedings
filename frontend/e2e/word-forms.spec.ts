@@ -20,7 +20,8 @@ import {
 const TYPED = 'trust benchmark "language model"';
 const WITH_ALL = 'trust$ benchmark$ "language model$"';
 
-const notice = (page: Page) => page.getByRole("list", { name: "Translations" }).getByRole("listitem");
+// the notice's own item, not the items of the "Left as typed:" list inside it
+const notice = (page: Page) => page.getByRole("list", { name: "Translations" }).locator(":scope > li");
 const q = (page: Page) => new URL(page.url()).searchParams.get("q");
 
 test("Add $ to all terms edits the query, Search carries it in the URL, and Back is the typed query", async ({
@@ -92,8 +93,9 @@ test("Choose terms adds $ to the ticked terms only", async ({ page }) => {
 test("a lowercase and is named by the notice and never offered a $", async ({ page }) => {
   await page.goto("/");
   const editor = await typeQuery(page, "trust and benchmark", "scholar");
-  // the message's backticked runs are drawn as code, not as backticks
-  await expect(notice(page).first().locator("code").filter({ hasText: /^and$/ })).toHaveCount(1);
+  // the message's backticked runs are drawn as code, not as backticks: the sentence's own code, a direct child
+  // of the notice's item (the "Left as typed:" list under it has `and` in code too)
+  await expect(notice(page).first().locator(":scope > code").filter({ hasText: /^and$/ })).toHaveCount(1);
   await expect(notice(page)).toContainText("trust, and, benchmark");
   await expect(notice(page)).not.toContainText("`");
   await expect(page.getByRole("list", { name: "Warnings" })).toContainText("and is searched as a word");
@@ -101,7 +103,10 @@ test("a lowercase and is named by the notice and never offered a $", async ({ pa
   const terms = page.getByRole("group", { name: "Add $ to" });
   await expect(terms.getByRole("checkbox")).toHaveCount(2);
   await expect(terms.getByRole("checkbox", { name: /^and/ })).toHaveCount(0);
-  await expect(terms).toContainText("is a lowercase and, or or not");
+  // why it is left out is said with the chooser open or closed (TASK-192)
+  await expect(page.getByRole("list", { name: "Left as typed:" })).toHaveText(
+    "and: a lowercase and, or or not.",
+  );
   await page.getByRole("button", { name: "Add $ to all 2 terms" }).click();
   await expect(editor).toHaveText("trust$ and benchmark$");
 });

@@ -313,6 +313,11 @@
             "title": "Max Body Bytes",
             "type": "integer"
           },
+          "max_concurrent": {
+            "description": "comparisons this instance runs at once; another is 503 `API_BUSY` with `Retry-After`, before its file is read",
+            "title": "Max Concurrent",
+            "type": "integer"
+          },
           "max_line_length": {
             "description": "the longest line of the file, in Unicode code points, tag included; a longer one is 413 `API_RIS_TOO_LARGE`",
             "title": "Max Line Length",
@@ -342,6 +347,11 @@
             "description": "the longest title or venue line's value, in Unicode code points (the corpus's own title cap); a longer one is 413 `API_RIS_TOO_LARGE`",
             "title": "Max Title Length",
             "type": "integer"
+          },
+          "max_upload_seconds": {
+            "description": "the wall time the file gets to arrive once a comparison slot is held; past it, 408 `API_UPLOAD_TIMEOUT`",
+            "title": "Max Upload Seconds",
+            "type": "number"
           }
         },
         "required": [
@@ -351,7 +361,9 @@
           "max_title_length",
           "max_results",
           "max_seconds",
-          "max_response_bytes"
+          "max_response_bytes",
+          "max_upload_seconds",
+          "max_concurrent"
         ],
         "title": "CompareLimits",
         "type": "object"
@@ -597,6 +609,7 @@
                 "enum": [
                   "forum_id",
                   "proceedings_id",
+                  "doi",
                   "title_venue_year",
                   "not_found",
                   "ambiguous",
@@ -610,7 +623,7 @@
                 "type": "null"
               }
             ],
-            "description": "How the file's record was matched to the index, by spec 01's merge rules in their order (`forum_id`, `proceedings_id`, `title_venue_year`), or why it has no index record (`not_found`, `ambiguous`: its id or title names several records, `no_year`, `no_venue`, `truncated_title`). Null on an `added` row.",
+            "description": "How the file's record was matched to the index, by spec 01's merge rules in their order (`forum_id`, `proceedings_id`, `doi`: a DOI the index record carries, in the venue and year the file states, `title_venue_year`), or why it has no index record (`not_found`, `ambiguous`: its id or title names several records, `no_year`, `no_venue`, `truncated_title`). Null on an `added` row.",
             "title": "Matched By"
           },
           "reason": {
@@ -619,6 +632,7 @@
                 "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
                 "enum": [
                   "our_bug",
+                  "query_limit",
                   "filtered",
                   "compat_reading",
                   "coverage_gap",
@@ -634,7 +648,7 @@
                 "type": "null"
               }
             ],
-            "description": "Why the paper is on one side only (spec 07 §B's classes): for `dropped`, `filtered` (a default filter removes it: its track or status), `full_text` (no title or abstract match), `stemming` (it matches only with another inflected form), `compat_reading` (it matches as Google Scholar reads the string); for `not_in_index`, `coverage_gap` or `unsettled`; for `added`, `scholar_missed`, `compat_reading` or `scholar_cap`. `unsettled`: a person must decide. `our_bug`: the reference matcher and the served index disagree (report it). Null on a `kept` row that has none.",
+            "description": "Why the paper is on one side only (spec 07 §B's classes): for `dropped`, `query_limit` (a filter clause the query itself writes, such as `year:` or `venue:`, excludes it, whatever its text; `detail` names the clause), `filtered` (a default filter removes it: its track or status), `full_text` (no title or abstract match), `stemming` (it matches only with another inflected form), `compat_reading` (it matches as Google Scholar reads the string); for `not_in_index`, `coverage_gap`, `query_limit` (by the file's own venue and year) or `unsettled`; for `added`, `scholar_missed`, `compat_reading` or `scholar_cap`. `unsettled`: a person must decide. `our_bug`: the reference matcher and the served index disagree (report it). Null on a `kept` row that has none.",
             "title": "Reason"
           },
           "ris_record": {
@@ -2162,7 +2176,7 @@
         "type": "object"
       },
       "ParseResponse": {
-        "description": "02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus\n`filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` (`query.wordforms.word_forms`,\nTASK-175). A query with errors is still a 200 here: `errors` holds them, and every Optional is null.",
+        "description": "02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus\n`filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` and `word_forms_skipped`\n(`query.wordforms.report`, TASK-175, TASK-192). A query with errors is still a 200 here: `errors` holds\nthem, and every Optional is null.",
         "properties": {
           "ast": {
             "anyOf": [
@@ -2373,8 +2387,23 @@
                 "type": "null"
               }
             ],
-            "description": "Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order (spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the query text the reader triggers and sees. The server has parsed `q` with every one inserted. Empty outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty.",
+            "description": "Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order (spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the query text the reader triggers and sees. The server has parsed `q` with every one inserted. Near the 2,000-code-point cap, only the terms whose `$` fit (in the order they are first written; TASK-192). Empty outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty.",
             "title": "Word Forms"
+          },
+          "word_forms_skipped": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SkippedTerm"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Each term the `COMPAT_NO_STEMMING` notice names that `word_forms` offers in no place, once, in the notice's order, with the `reason` it gets no `$` (spec 02 §Word forms; TASK-192). Empty outside Scholar mode and when every named term is offered. Null exactly when `errors` is non-empty.",
+            "title": "Word Forms Skipped"
           }
         },
         "required": [
@@ -2392,7 +2421,8 @@
           "errors",
           "translations",
           "filters",
-          "word_forms"
+          "word_forms",
+          "word_forms_skipped"
         ],
         "title": "ParseResponse",
         "type": "object"
@@ -3525,6 +3555,34 @@
           "hits"
         ],
         "title": "SearchResponse",
+        "type": "object"
+      },
+      "SkippedTerm": {
+        "properties": {
+          "reason": {
+            "description": "Why it gets no `$` (spec 02 §Word forms): `too_short`, a stem under 3 letters or digits (`AI`); `symbol`, the `$` would not directly follow a letter or digit (`C++`); `dollar_nearby`, its unspaced run already holds a `$` or a backslash, so a second `$` would close LaTeX math (`US$5`); `operator_word`, a lowercase `and`, `or`, `not` or `near/n`, read by its text; `too_long`, no room for its `$` under the 2,000-code-point cap beside the offered ones, by a budget that keeps every subset of them under it; `unconfirmed`, the server could not check the edit (a term of a shape the rules don't know, or edits the read-back refused). Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "too_short",
+              "symbol",
+              "dollar_nearby",
+              "operator_word",
+              "too_long",
+              "unconfirmed"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "term": {
+            "description": "The term as the `COMPAT_NO_STEMMING` notice names it, as in `WordForm.term`.",
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term",
+          "reason"
+        ],
+        "title": "SkippedTerm",
         "type": "object"
       },
       "SnapshotInfo": {

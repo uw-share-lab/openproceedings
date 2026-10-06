@@ -57,7 +57,7 @@ from openproceedings.ingest.record import Urls
 from openproceedings.ingest.snapshot import RecordFile
 from openproceedings.query.clauses import filter_clauses
 from openproceedings.query.parser import Mode
-from openproceedings.query.wordforms import word_forms
+from openproceedings.query.wordforms import report
 from openproceedings.search import Hit as Found
 from openproceedings.search import expansions_json, run
 
@@ -70,6 +70,7 @@ def parse_query(request: Request, engine: EngineDep, body: ParseRequest) -> Pars
     a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body
     is refused (422 `API_BAD_PARAM`)."""
     result = parsed(request, body.q, body.mode, engine.tokenizer_version)
+    forms = report(body.q, result)
     return ParseResponse(
         **versions(engine.index_version, engine.tokenizer_version),
         mode=result.mode,
@@ -83,7 +84,8 @@ def parse_query(request: Request, engine: EngineDep, body: ParseRequest) -> Pars
         errors=result.errors,
         translations=result.translations,
         filters=filter_clauses(body.q, result),
-        word_forms=word_forms(body.q, result),
+        word_forms=None if forms is None else forms.forms,
+        word_forms_skipped=None if forms is None else forms.skipped,
     )
 
 

@@ -17,6 +17,7 @@ import csv
 import gzip
 import io
 import json
+import math
 import re
 import shutil
 import tempfile
@@ -32,13 +33,14 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from openproceedings import cli
 from openproceedings import export as exporter
-from openproceedings.api import ApiConfig, RateLimit
+from openproceedings.api import ApiConfig, RateLimit, meta
 from openproceedings.api import compare as route
+from openproceedings.api import config as api_config
 from openproceedings.api import export as export_route
 from openproceedings.api import server as api_server
-from openproceedings.api.middleware import BodyLimit, drain
+from openproceedings.api.middleware import BodyLimit, drain, rate_limited
 from openproceedings.api.middleware import RateLimit as RateLimitMiddleware
-from openproceedings.api.models import CompareReason, MatchedBy, NotComparedReason
+from openproceedings.api.models import CompareLimits, CompareReason, MatchedBy, NotComparedReason
 from openproceedings.api.state import IndexState, MatchTable
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.eval import scholar_compare
@@ -46,7 +48,7 @@ from openproceedings.eval.scholar_compare import ONLY_OP, ONLY_SCHOLAR, MatchInd
 from openproceedings.export import csv_cell
 from openproceedings.ingest import dedup
 from openproceedings.ingest.caps import MAX_TITLE
-from openproceedings.ingest.record import PaperRecord
+from openproceedings.ingest.record import Claim, PaperRecord
 from openproceedings.query.normalize import TOKENIZER_VERSION, normalize
 from openproceedings.query.parser import parse
 from scholarmend.parse import parse_ris
@@ -54,6 +56,7 @@ from scholarmend.parse import parse_ris
 from tests.contract.conftest import SECRET, Store, attributed, build, make_app, point_current
 from tests.contract.test_abuse_limits import error
 from tests.fixtures.corpus.synthetic_5k import records
+from tests.unit.engine.test_exclusions import BUILT
 
 COMPARE = "/api/v1/compare"
 RIS = {"Content-Type": "application/x-research-info-systems"}
@@ -456,7 +459,283 @@ def test_meta_states_the_caps(corpus_dir: Path) -> None:
             "max_results": 5_000,
             "max_seconds": 60.0,
             "max_response_bytes": 16 * 1024 * 1024,
+            "max_upload_seconds": 30.0,
+            "max_concurrent": 1,
         }
+
+
+# every comparison flag (TASK-184) and the config field it sets: (flag, value given, where, field, value set)
+COMPARE_FLAGS = [
+    ("--compare-max-body-bytes", "4096", "config", "compare_max_body_bytes", 4096),
+    ("--compare-max-records", "7", "config", "compare_max_records", 7),
+    ("--compare-max-line-chars", "100", "config", "compare_max_line_chars", 100),
+    ("--compare-max-results", "9", "config", "compare_max_results", 9),
+    ("--compare-max-response-bytes", "2048", "config", "compare_max_response_bytes", 2048),
+    ("--compare-max-seconds", "12.5", "config", "compare_max_seconds", 12.5),
+    ("--compare-upload-seconds", "4", "config", "compare_upload_seconds", 4.0),
+    ("--comparison-slots", "2", "config", "comparison_slots", 2),
+    ("--compare-cooldown-factor", "0", "rate_limit", "compare_cooldown_factor", 0.0),
+    ("--compare-upload-weight", "2", "rate_limit", "compare_upload_weight", 2.0),
+    ("--compare-token-ms", "250", "rate_limit", "compare_token_ms", 250.0),
+]
+
+
+def served_with(flags: list[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> ApiConfig:
+    served: list[ApiConfig] = []
+    monkeypatch.setattr(api_server, "serve", lambda config, *a: served.append(config))
+    assert cli.main(["--data-dir", str(tmp_path), "serve", *flags]) == 0
+    return served[0]
+
+
+def test_op_serve_sets_every_comparison_value(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    defaults = served_with([], monkeypatch, tmp_path)
+    assert defaults == ApiConfig(  # a flag left out keeps the config's own default
+        data_dir=tmp_path, serve_docs=True, compare_enabled=True, compare_local=True
+    )
+    flags = [part for flag, value, *_ in COMPARE_FLAGS for part in (flag, value)]
+    config = served_with(flags, monkeypatch, tmp_path)
+    for _, _, where, field, value in COMPARE_FLAGS:
+        assert getattr(config if where == "config" else config.rate_limit, field) == value, field
+    # and `/meta` states the caps an operator set, as the routes enforce them
+    assert meta.compare_limits(config) == CompareLimits(
+        max_body_bytes=4096,
+        max_records=7,
+        max_line_length=100,
+        max_title_length=MAX_TITLE,
+        max_results=9,
+        max_seconds=12.5,
+        max_response_bytes=2048,
+        max_upload_seconds=4.0,
+        max_concurrent=2,
+    )
+
+
+# every bound of every comparison value, exactly: accepted at it, refused just past it (`le` is not `lt`)
+EXACT_BOUNDS = [
+    ("--compare-max-body-bytes", "1024", "config", "compare_max_body_bytes", 1024),
+    ("--compare-max-body-bytes", str(2**30), "config", "compare_max_body_bytes", 2**30),
+    ("--compare-max-records", "1", "config", "compare_max_records", 1),
+    ("--compare-max-records", "1000000", "config", "compare_max_records", 1_000_000),
+    ("--compare-max-line-chars", "64", "config", "compare_max_line_chars", 64),
+    ("--compare-max-line-chars", str(2**24), "config", "compare_max_line_chars", 2**24),
+    ("--compare-max-results", "1", "config", "compare_max_results", 1),
+    ("--compare-max-results", "1000000", "config", "compare_max_results", 1_000_000),
+    ("--compare-max-response-bytes", "1024", "config", "compare_max_response_bytes", 1024),
+    ("--compare-max-response-bytes", str(2**30), "config", "compare_max_response_bytes", 2**30),
+    ("--comparison-slots", "1", "config", "comparison_slots", 1),
+    ("--comparison-slots", "16", "config", "comparison_slots", 16),
+    ("--compare-max-seconds", "0.001", "config", "compare_max_seconds", 0.001),
+    ("--compare-max-seconds", "3600", "config", "compare_max_seconds", 3600.0),
+    ("--compare-upload-seconds", "0.001", "config", "compare_upload_seconds", 0.001),
+    ("--compare-upload-seconds", "3600", "config", "compare_upload_seconds", 3600.0),
+    ("--compare-cooldown-factor", "0", "rate_limit", "compare_cooldown_factor", 0.0),
+    ("--compare-cooldown-factor", "1000", "rate_limit", "compare_cooldown_factor", 1000.0),
+    ("--compare-upload-weight", "1", "rate_limit", "compare_upload_weight", 1.0),
+    ("--compare-upload-weight", "100", "rate_limit", "compare_upload_weight", 100.0),
+    ("--compare-token-ms", "1", "rate_limit", "compare_token_ms", 1.0),
+]
+
+
+@pytest.mark.parametrize(("flag", "value", "where", "field", "expected"), EXACT_BOUNDS)
+def test_op_serve_accepts_each_comparison_bound_exactly(
+    flag: str,
+    value: str,
+    where: str,
+    field: str,
+    expected: float,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = served_with([flag, value], monkeypatch, tmp_path)
+    assert getattr(config if where == "config" else config.rate_limit, field) == expected
+
+
+@pytest.mark.parametrize(
+    ("flags", "says"),
+    [
+        # just past each bound (the far-out values below would let `le` become `lt`)
+        (
+            ["--compare-max-body-bytes", "1023"],
+            "compare_max_body_bytes: Input should be greater than or equal to 1024",
+        ),
+        (
+            ["--compare-max-records", "1000001"],
+            "compare_max_records: Input should be less than or equal to 1000000",
+        ),
+        (
+            ["--compare-max-line-chars", "63"],
+            "compare_max_line_chars: Input should be greater than or equal to 64",
+        ),
+        (["--compare-max-results", "0"], "compare_max_results: Input should be greater than or equal to 1"),
+        (
+            ["--compare-max-response-bytes", "1023"],
+            "compare_max_response_bytes: Input should be greater than or equal to 1024",
+        ),
+        (
+            ["--compare-max-response-bytes", str(2**30 + 1)],
+            "compare_max_response_bytes: Input should be less than or equal to 1073741824",
+        ),
+        (["--comparison-slots", "17"], "comparison_slots: Input should be less than or equal to 16"),
+        (
+            ["--compare-max-seconds", "3600.001"],
+            "compare_max_seconds: Input should be less than or equal to 3600",
+        ),
+        (["--compare-upload-seconds", "0"], "compare_upload_seconds: Input should be greater than 0"),
+        (
+            ["--compare-upload-seconds", "3600.001"],
+            "compare_upload_seconds: Input should be less than or equal to 3600",
+        ),
+        (
+            ["--compare-cooldown-factor", "1000.001"],
+            "compare_cooldown_factor: Input should be less than or equal to 1000",
+        ),
+        (
+            ["--compare-cooldown-factor", "-0.001"],
+            "compare_cooldown_factor: Input should be greater than or equal to 0",
+        ),
+        (
+            ["--compare-upload-weight", "100.001"],
+            "compare_upload_weight: Input should be less than or equal to 100",
+        ),
+        (
+            ["--compare-upload-weight", "0.999"],
+            "compare_upload_weight: Input should be greater than or equal to 1",
+        ),
+        (["--compare-token-ms", "0.999"], "compare_token_ms: Input should be greater than or equal to 1"),
+        (
+            ["--compare-max-body-bytes", "100"],
+            "compare_max_body_bytes: Input should be greater than or equal to 1024",
+        ),
+        (["--compare-max-records", "0"], "compare_max_records: Input should be greater than or equal to 1"),
+        (
+            ["--compare-max-line-chars", "10"],
+            "compare_max_line_chars: Input should be greater than or equal to 64",
+        ),
+        (["--compare-max-results", "-1"], "compare_max_results: Input should be greater than or equal to 1"),
+        (
+            ["--compare-max-response-bytes", "0"],
+            "compare_max_response_bytes: Input should be greater than or equal",
+        ),
+        (["--compare-max-seconds", "0"], "compare_max_seconds: Input should be greater than 0"),
+        (["--compare-max-seconds", "inf"], "compare_max_seconds: Input should be a finite number"),
+        (["--compare-upload-seconds", "nan"], "compare_upload_seconds: Input should be a finite number"),
+        (["--comparison-slots", "0"], "comparison_slots: Input should be greater than or equal to 1"),
+        (
+            ["--compare-cooldown-factor", "-1"],
+            "compare_cooldown_factor: Input should be greater than or equal to 0",
+        ),
+        (["--compare-cooldown-factor", "inf"], "compare_cooldown_factor: Input should be a finite number"),
+        (
+            ["--compare-upload-weight", "0.5"],
+            "compare_upload_weight: Input should be greater than or equal to 1",
+        ),
+        (["--compare-token-ms", "0"], "compare_token_ms: Input should be greater than or equal to 1"),
+        # finite but extreme (security gate, batch B): each overflowed or removed the bound it is
+        (["--compare-token-ms", "5e-324"], "compare_token_ms: Input should be greater than or equal to 1"),
+        (
+            ["--compare-cooldown-factor", "1e308"],
+            "compare_cooldown_factor: Input should be less than or equal to 1000",
+        ),
+        (
+            ["--compare-upload-weight", "1e308"],
+            "compare_upload_weight: Input should be less than or equal to 100",
+        ),
+        (
+            ["--compare-max-seconds", "1e308"],
+            "compare_max_seconds: Input should be less than or equal to 3600",
+        ),
+        (
+            ["--compare-upload-seconds", "3601"],
+            "compare_upload_seconds: Input should be less than or equal to 3600",
+        ),
+        (["--comparison-slots", str(10**30)], "comparison_slots: Input should be less than or equal to 16"),
+        (
+            ["--compare-max-body-bytes", str(2**30 + 1)],
+            "compare_max_body_bytes: Input should be less than or equal to 1073741824",
+        ),
+        (
+            ["--compare-max-response-bytes", str(10**30)],
+            "compare_max_response_bytes: Input should be less than or equal to 1073741824",
+        ),
+        (
+            ["--compare-max-records", "1000001"],
+            "compare_max_records: Input should be less than or equal to 1000000",
+        ),
+        (
+            ["--compare-max-results", "1000001"],
+            "compare_max_results: Input should be less than or equal to 1000000",
+        ),
+        (
+            ["--compare-max-line-chars", str(2**24 + 1)],
+            "compare_max_line_chars: Input should be less than or equal to 16777216",
+        ),
+    ],
+)
+def test_op_serve_refuses_a_bad_comparison_value_at_start(
+    flags: list[str],
+    says: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(api_server, "serve", lambda *a: pytest.fail("served"))
+    assert cli.main(["--data-dir", str(tmp_path), "serve", *flags]) == 1
+    err = capsys.readouterr().err
+    assert "invalid serve options" in err and says in err
+
+
+def test_the_widest_comparison_values_keep_the_pause_and_the_debit_finite() -> None:
+    """At every bound at once (the slowest upload counted the most, the longest work, the dearest pause, the
+    cheapest token) the pause, its whole seconds, its 429 and the debit are finite: 1e308 overflowed them."""
+    worst = api_config.MAX_UPLOAD_WEIGHT * api_config.MAX_COMPARE_SECONDS + api_config.MAX_COMPARE_SECONDS
+    cooldowns = route.Cooldowns(api_config.MAX_COOLDOWN_FACTOR, 10)
+    assert cooldowns.enter("n") == 0.0
+    pause = cooldowns.leave("n", worst)
+    assert math.isfinite(pause) and math.ceil(pause) == math.ceil(api_config.MAX_COOLDOWN_FACTOR * worst)
+    assert int(rate_limited(cooldowns.enter("n")).headers["Retry-After"]) > 0
+    # the debit at the lowest price, 1 ms a token (refused below it, above), through the middleware's own call
+    limit = RateLimit(
+        compare_token_ms=1,
+        compare_upload_weight=api_config.MAX_UPLOAD_WEIGHT,
+        compare_cooldown_factor=api_config.MAX_COOLDOWN_FACTOR,
+    )
+
+    async def app(scope: Any, receive: Any, send: Any) -> None:  # never called
+        raise AssertionError
+
+    limiter = RateLimitMiddleware(app, limit, ())
+    fields: dict[str, object] = {"compare_cost_ms": worst * 1000}
+    limiter.debit_comparison([(limiter.buckets, "c"), (limiter.networks, "n")], fields)
+    assert fields["compare_tokens"] == round(worst * 1000, 2) and math.isfinite(worst * 1000)
+    for bucket, key in ((limiter.buckets, "c"), (limiter.networks, "n")):
+        wait = bucket.wait(key, 1)  # the debt, repaid by the refill
+        assert math.isfinite(wait) and wait > 0
+        assert int(rate_limited(wait).headers["Retry-After"]) == math.ceil(wait)
+
+
+def test_op_serve_help_states_each_comparison_default_from_the_config(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The help reads each default and range from the config's own field, so it can't drift (TASK-184)."""
+    with pytest.raises(SystemExit):
+        cli.main(["--data-dir", str(tmp_path), "serve", "--help"])
+    text = " ".join(capsys.readouterr().out.split())  # argparse wraps it
+    for flag, _, where, field, _ in COMPARE_FLAGS:
+        info = (RateLimit if where == "rate_limit" else ApiConfig).model_fields[field]
+        default = info.default if isinstance(info.default, int) else f"{info.default:.15g}"
+        assert f"{flag} " in text and f"(default {default};" in text, flag
+    assert "(default 16777216; at least 1024; at most 1073741824)" in text  # never 1.67772e+07
+    assert "(default 3; at least 0; at most 1000)" in text
+
+
+def test_op_serve_refuses_a_comparison_value_that_is_not_a_number(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(api_server, "serve", lambda *a: pytest.fail("served"))
+    with pytest.raises(SystemExit) as exit_:
+        cli.main(["--data-dir", str(tmp_path), "serve", "--compare-max-records", "many"])
+    assert exit_.value.code == 2
+    assert "--compare-max-records: invalid int value: 'many'" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
@@ -862,12 +1141,13 @@ def test_a_comparison_costs_an_exports_weight_and_its_slot_time(corpus_dir: Path
 
 
 def test_the_time_a_comparison_held_its_slot_is_debited(corpus_dir: Path) -> None:
-    """One token per `compare_token_ms`: at a tiny rate one comparison leaves the client in debt."""
+    """One token per `compare_token_ms`: at the lowest price (1 ms) the slot time a comparison used is debited
+    past the one token the route's own charge left, so the next search can't be paid."""
     limit = RateLimit(
-        capacity=100,
+        capacity=11,
         refill_per_second=0.001,
         export_weight=10,
-        compare_token_ms=0.001,
+        compare_token_ms=1,
         compare_cooldown_factor=0,
     )
     with app_of(corpus_dir, rate_limit=limit) as c:
@@ -1590,3 +1870,54 @@ def test_a_second_comparison_from_a_network_running_one_is_logged_as_such(
         error(post(c, the_file()), 429, "API_RATE_LIMITED")
     busy = [x.get("busy") for x in logs() if x["event"] == "request" and x["route"] == COMPARE]
     assert busy == ["compare_running", None, "compare_cooldown"]
+
+
+def test_a_paper_the_querys_own_limit_excludes_is_query_limit(shared: TestClient) -> None:
+    """TASK-185: the query's own `year:` clause, not the text, leaves the paper out, and the row says which."""
+    p = BY_ID[KEPT[0]]
+    body = compared(shared, by_forum(p), f"{Q} AND NOT year:{p.year}")
+    [row] = body["dropped"]
+    assert (row["id"], row["reason"], row["settled"]) == (p.id, "query_limit", True)
+    assert row["detail"] == (
+        f"outside the query's own limit: `NOT year:{p.year}` (year {p.year}); the rest of the query matches it "
+        "(as run)"
+    )
+    assert body["reason_totals"]["dropped"] == {"query_limit": 1}
+
+
+def test_a_web_of_science_record_is_matched_by_its_doi(tmp_path: Path) -> None:
+    """TASK-186: a WoS record (no venue Scholar mode knows, no link to the paper) matches by DOI, case-blind."""
+    p = BY_ID[next(i for i in KEPT + sorted(RESULT) if BY_ID[i].venue == "NeurIPS" and plain(BY_ID[i]))]
+    doi = "10.52202/000000-0001-AB"
+
+    def with_doi(r: Any) -> PaperRecord:
+        paper = attributed(r)
+        if paper.id != p.id:
+            return paper
+        claim = Claim(field="urls.doi", value=doi, source="neurips_proceedings", fetched_at=BUILT)
+        return paper.model_copy(
+            update={
+                "urls": paper.urls.model_copy(update={"doi": doi}),
+                "provenance": (*paper.provenance, claim),
+            }
+        )
+
+    corpus = [*list(records())[:800], list(records())[TWIN]]
+    version = build(corpus, tmp_path / "snapshots", "doi", tmp_path / "indexes", paper=with_doi)
+    (tmp_path / "indexes" / "current").symlink_to(version)
+    file = "\n".join(
+        [
+            "TY  - CPAPER",
+            "TI  - A TITLE THE INDEX DOES NOT HOLD",
+            f"T2  - ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS (NEURIPS {p.year})",
+            f"PY  - {p.year}",
+            f"DO  - {doi.lower()}",
+            "AN  - WOS:000000000000001",
+            "ER  - ",
+            "",
+        ]
+    )
+    with app_of(tmp_path) as client:
+        body = compared(client, file)
+    assert [(r["id"], r["matched_by"]) for r in body["kept"]] == [(p.id, "doi")]
+    assert body["not_compared_total"] == 0

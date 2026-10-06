@@ -27,6 +27,7 @@ from openproceedings.ingest.dedup import Origin
 from openproceedings.ingest.record import ClaimField, Presentation, Source
 from openproceedings.query.ast import FilterField, TextField
 from openproceedings.query.clauses import CLAUSE_REASONS
+from openproceedings.query.exact import SkipReason
 from openproceedings.search import NotCounted
 from openproceedings.vocab import Status, Track, Venue
 
@@ -179,6 +180,8 @@ OPEN_ENUMS: dict[str, frozenset[str]] = {
     "match rule": frozenset(get_args(MatchedBy)),
     "compare reason": frozenset(get_args(CompareReason)),
     "not compared reason": frozenset(get_args(NotComparedReason)),
+    # why /parse offers no `$` for a term the no-stemming notice names (TASK-192): a new lexer rule adds one
+    "word form skip reason": frozenset(get_args(SkipReason)),
 }
 CLOSED_ENUMS: dict[str, frozenset[str]] = {
     "mode": frozenset({"native", "scholar"}),

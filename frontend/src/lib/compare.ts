@@ -106,8 +106,9 @@ export function limitsLine(limits: CompareLimits): string {
 const MATCHED_BY: Record<string, string> = {
   forum_id: "matched by its OpenReview link",
   proceedings_id: "matched by its proceedings link",
+  doi: "matched by its DOI",
   title_venue_year: "matched by title, venue and year",
-  not_found: "no record with this title in that venue and year, and no link to an indexed paper",
+  not_found: "no record with this title in that venue and year, and no link or DOI naming an indexed paper",
   ambiguous: "its link or title names several index records, so none was chosen",
   no_year: "it has no year, so only a link could match it",
   no_venue: "its venue is cut short or missing, so its title was not matched",
@@ -121,6 +122,7 @@ export function matchedByText(matchedBy: string | null): string {
 }
 
 const REASONS: Record<string, string> = {
+  query_limit: "outside a limit your query writes (its year, venue, track or status)",
   filtered: "excluded by a default filter",
   full_text: "no exact match in its title or abstract",
   stemming: "matches only as another word form",
@@ -136,14 +138,30 @@ const ADDED_REASONS: Record<string, string> = {
   our_bug: "openproceedings judges it both ways (a bug: please report it)",
 };
 
+/**
+ * A `not_in_index` row's `query_limit` (TASK-185) is judged on the file's own venue and year: the index holds no
+ * record of the paper, so widening the limit can never find it, and its words and step are a coverage gap's.
+ */
+const NOT_IN_INDEX_LIMIT = {
+  row: "not in the index; its year or venue in your file is outside a limit your query writes",
+  counted: [
+    "is not in the index, and its year or venue in your file is outside a limit your query writes",
+    "are not in the index, and their year or venue in your file is outside a limit your query writes",
+  ],
+} as const;
+
 /** A `reason` in words for one list (an unknown value is shown as sent: the enum is open). */
 export function reasonText(list: ListName, reason: string | null): string {
   if (reason === null) return "";
+  if (list === "not_in_index" && reason === "query_limit") return NOT_IN_INDEX_LIMIT.row;
   return (list === "added" ? ADDED_REASONS[reason] : REASONS[reason]) ?? reason;
 }
 
 const NOT_COMPARED: Record<string, string> = {
-  venue_unrecognised: "its venue is not NeurIPS, ICLR or ICML",
+  // a venue string matching none of the three (Web of Science writes it with its volume), and no link or DOI
+  // naming an indexed paper: it may well be an indexed venue's paper, so never "its venue is not …"
+  venue_unrecognised:
+    "its venue is not recognised as NeurIPS, ICLR or ICML, and no link or DOI names an indexed paper",
   venue: "it matched a record outside the compared venues",
   year: "it matched a record outside the compared years",
 };
@@ -154,6 +172,7 @@ export function notComparedText(reason: string): string {
 
 /** A reason as a count's sentence, [one paper, several]: "1 paper has …", "1,713 papers have …" (copy CM-7). */
 const COUNTED: Record<string, readonly [string, string]> = {
+  query_limit: ["is outside a limit your query writes", "are outside a limit your query writes"],
   filtered: ["is excluded by a default filter", "are excluded by a default filter"],
   full_text: [
     "has no exact match in its title or abstract",
@@ -191,6 +210,7 @@ const COUNTED_ADDED: Record<string, readonly [string, string]> = {
  * action under the query, Scholar mode's alone (USAB-R2-1, R3-2).
  */
 const NEXT_STEP: Record<string, string> = {
+  query_limit: "to include such a paper, widen that limit in the query (its row names the clause)",
   filtered: "to include such a paper, write its track or status into the query (its row says which)",
   full_text:
     "no form of this query finds such a paper by its title or abstract; keep it from your own file if it belongs in the review",
@@ -211,7 +231,8 @@ const SCHOLAR_STEMMING_STEP =
  */
 export function reasonLines(list: ListName, totals: Readonly<Record<string, number>>, mode: Mode): string[] {
   return Object.entries(totals).map(([reason, n]) => {
-    const words = (list === "added" ? COUNTED_ADDED : COUNTED)[reason];
+    const missing = list === "not_in_index" && reason === "query_limit";
+    const words = missing ? NOT_IN_INDEX_LIMIT.counted : (list === "added" ? COUNTED_ADDED : COUNTED)[reason];
     const papers = `${n.toLocaleString("en-US")} ${n === 1 ? "paper" : "papers"}`;
     if (words === undefined) return `${papers}: ${reason}.`;
     const next =
@@ -219,7 +240,7 @@ export function reasonLines(list: ListName, totals: Readonly<Record<string, numb
         ? undefined
         : reason === "stemming" && mode === "scholar"
           ? SCHOLAR_STEMMING_STEP
-          : NEXT_STEP[reason];
+          : NEXT_STEP[missing ? "coverage_gap" : reason];
     // a step that is a sentence of its own (a capital) follows a full stop, never a second colon (USAB-R2-N)
     const joint = next === undefined ? "" : /^[A-Z]/.test(next) ? `. ${next}` : `: ${next}`;
     return `${papers} ${n === 1 ? words[0] : words[1]}${joint}.`;
@@ -239,7 +260,7 @@ export function undecidedText(list: ListName, row: Pick<CompareRow, "reason" | "
 }
 
 /** The start of a `not_in_index` row's `detail` that `matched_by` already says (copy USAB-N3). */
-const UNMATCHED = "no forum id, proceedings id or title+venue+year match in the snapshot";
+const UNMATCHED = "no forum id, proceedings id, DOI or title+venue+year match in the snapshot";
 
 /** A row's evidence as shown: what `matched_by` already says is left out, the rest (links, near titles) kept. */
 export function detailText(list: ListName, row: Pick<CompareRow, "detail">): string {
@@ -248,16 +269,56 @@ export function detailText(list: ListName, row: Pick<CompareRow, "detail">): str
 }
 
 /**
- * One sentence that says what the comparison found and on what, to paste into notes (copy CM-21; the server
- * keeps nothing of it: a place in the search record is TASK-195).
+ * The file's sha256 as 64 hex digits, computed here from the bytes `postCompare` sends (the File the reviewer
+ * chose), or `null` where this browser can't: Web Crypto exists only in a secure context (https, or
+ * localhost), and a file that can't be read has no digest. The server is never asked for it (decision-043:
+ * nothing of the file is echoed or kept beyond what decision-035 lists).
  */
-export function summaryText(c: Comparison, fileName: string, date: string): string {
+export async function fileSha256(file: Blob): Promise<string | null> {
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle === undefined) return null;
+  try {
+    const digest = await subtle.digest("SHA-256", new Uint8Array(await file.arrayBuffer()));
+    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The comparison as one citable sentence (copy CM-21; decision-043, prisma-reporting skill §Group counts and
+ * `/compare`): a search-development aid, never a flow-diagram number, cited with the reviewer's own file (its
+ * sha256), the UTC date it was run, the full `index_version` and the query's `canonical_hash`. The server
+ * keeps nothing of it, and a search record never notes it (decision-043): the sentence is the citable form.
+ */
+export function summaryText(
+  c: Comparison,
+  file: { readonly name: string; readonly sha256: string | null },
+  date: string,
+): string {
   const n = (x: number) => x.toLocaleString("en-US");
+  const count = (x: number, one: string) => `${n(x)} ${x === 1 ? one : `${one}s`}`;
+  const hash =
+    file.sha256 === null
+      ? "sha256 not computed by this browser: compute it from your copy"
+      : `sha256 \`${file.sha256}\``;
+  // every record of the file accounted for (records_total = papers + not compared + repeats), so a reader can
+  // see where a file's records went (a Web of Science file's unmatched records are mostly not compared);
+  // repeats only when there are some
+  const parts = [
+    `${count(c.papers_total, "paper")} compared`,
+    `${n(c.not_compared_total)} not compared (venue not recognised, or outside the indexed venues and years)`,
+    ...(c.duplicates_total > 0 ? [`${count(c.duplicates_total, "repeat")} of a paper already counted`] : []),
+  ];
+  const accounted =
+    parts.length === 2 ? parts.join(" and ") : `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1) ?? ""}`;
   return (
-    `On ${date}, the query ${c.query.canonical} (canonical_hash ${c.query.canonical_hash}) on openproceedings ` +
-    `index ${c.index_version}, compared with ${fileName} (${n(c.records_total)} records read, ` +
-    `${n(c.papers_total)} papers compared): ${n(c.kept_total)} kept, ${n(c.dropped_total)} dropped, ` +
-    `${n(c.not_in_index_total)} not in the index; it adds ${n(c.added_total)} papers the file doesn't hold.`
+    `As a search-development check (not a PRISMA flow-diagram count), on ${date} (UTC) we compared the RIS ` +
+    `file ${file.name} (${hash}; ${count(c.records_total, "record")} read: ${accounted}) ` +
+    `with the query \`${c.query.canonical}\` ` +
+    `(canonical_hash \`${c.query.canonical_hash}\`) on openproceedings (index \`${c.index_version}\`): ` +
+    `${n(c.kept_total)} kept, ${n(c.dropped_total)} dropped, ${n(c.not_in_index_total)} not in the index, ` +
+    `and ${count(c.added_total, "paper")} added that the file doesn't hold.`
   );
 }
 

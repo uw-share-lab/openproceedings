@@ -14,8 +14,8 @@
  * text, saved as sent.
  *
  * The file goes to the server for this one request and is not kept there (spec 04). Its name never leaves the
- * browser. Nor does the comparison: it lives in this component only, so a row's title opens its paper in a
- * new tab (Back would otherwise lose it).
+ * browser, and its sha256, for the citable sentence, is computed here (TASK-195). The comparison is kept
+ * nowhere but this component, so a row's title opens its paper in a new tab (Back would otherwise lose it).
  */
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -28,6 +28,7 @@ import {
   doneText,
   downloadName,
   fileProblem,
+  fileSha256,
   limitsLine,
   listCount,
   LIST_LABELS,
@@ -124,6 +125,8 @@ function useNow(active: boolean): number {
 interface Done {
   readonly key: string;
   readonly fileName: string;
+  /** The file's sha256, computed in this browser from the bytes sent (`fileSha256`; null where it can't be). */
+  readonly sha256: string | null;
   readonly comparison: Comparison;
   /** The UTC day the answer came, for the summary sentence. */
   readonly date: string;
@@ -132,7 +135,13 @@ interface Done {
 type Run =
   | { readonly kind: "idle" }
   | { readonly kind: "running"; readonly fileName: string; readonly size: number; readonly since: number }
-  | { readonly kind: "failed"; readonly key: string; readonly failure: Failure };
+  | {
+      readonly kind: "failed";
+      readonly key: string;
+      readonly failure: Failure;
+      /** Which request failed (one per start): each failure draws its own notice and countdown. */
+      readonly attempt: number;
+    };
 
 export function CompareRecords({
   q,
@@ -149,9 +158,10 @@ export function CompareRecords({
   const [run, setRun] = useState<Run>({ kind: "idle" });
   const [done, setDone] = useState<Done | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  // when this network may start the next comparison (ms since the epoch), from the last answer
-  const [nextAt, setNextAt] = useState<number | null>(null);
+  // when this network may start the next comparison (ms since the epoch) and the wait the last answer gave
+  const [nextAt, setNextAt] = useState<{ readonly at: number; readonly seconds: number } | null>(null);
   const aborter = useRef<AbortController | null>(null);
+  const attempts = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const compareButton = useRef<HTMLButtonElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -166,7 +176,9 @@ export function CompareRecords({
   const key = `${q}\u0000${mode}\u0000${indexVersion}`;
   const now = useNow(run.kind === "running" || nextAt !== null);
   const elapsed = run.kind === "running" ? Math.max(0, Math.floor((now - run.since) / 1000)) : 0;
-  const pause = nextAt === null ? 0 : Math.max(0, Math.ceil((nextAt - now) / 1000));
+  // never more than the server said: `now` can be up to a tick older than the answer
+  const pause =
+    nextAt === null ? 0 : Math.min(nextAt.seconds, Math.max(0, Math.ceil((nextAt.at - now) / 1000)));
 
   useEffect(() => () => aborter.current?.abort(), []);
   useEffect(() => {
@@ -199,12 +211,14 @@ export function CompareRecords({
       const controller = new AbortController();
       aborter.current = controller;
       const asked = key;
+      const attempt = (attempts.current += 1);
       keepFocus(byItself);
       setRun({ kind: "running", fileName: file.name, size: file.size, since: Date.now() });
       // a retry by itself was announced with its wait; "Comparing…" again would only repeat it (A11Y-R2-2)
       if (!byItself) setAnnouncement(`Comparing ${file.name} with this search.`);
-      void postCompare(api, { q, mode }, file, controller.signal).then(
-        (outcome) => {
+      // the digest is of the File sent, read here alongside the upload (the server is never asked for it)
+      void Promise.all([postCompare(api, { q, mode }, file, controller.signal), fileSha256(file)]).then(
+        ([outcome, sha256]) => {
           if (controller.signal.aborted) return;
           if (outcome.kind === "ok") {
             // an answer that came by itself takes focus only from Compare or from nowhere, never from
@@ -214,18 +228,19 @@ export function CompareRecords({
               !byItself || active === null || active === document.body || active === compareButton.current;
             setAutoTries(0);
             const wait = outcome.data.next_comparison_seconds;
-            setNextAt(wait > 0 ? Date.now() + wait * 1000 : null);
+            setNextAt(wait > 0 ? { at: Date.now() + wait * 1000, seconds: wait } : null);
             if (wait > 0) setTimeout(() => setNextAt(null), wait * 1000);
             setDone({
               key: asked,
               fileName: file.name,
+              sha256,
               comparison: outcome.data,
               date: new Date().toISOString().slice(0, 10),
             });
             setRun({ kind: "idle" });
             setAnnouncement(doneText(outcome.data));
           } else {
-            setRun({ kind: "failed", key: asked, failure: outcome });
+            setRun({ kind: "failed", key: asked, failure: outcome, attempt });
             setAnnouncement(
               retriedByItself(outcome, tries)
                 ? `${autoRetryText(outcome.retryAfter ?? 0)}.`
@@ -235,7 +250,7 @@ export function CompareRecords({
         },
         () => {
           if (controller.signal.aborted) return;
-          setRun({ kind: "failed", key: asked, failure: { kind: "unreachable" } });
+          setRun({ kind: "failed", key: asked, failure: { kind: "unreachable" }, attempt });
           setAnnouncement("The comparison didn't run.");
         },
       );
@@ -387,6 +402,10 @@ export function CompareRecords({
               </p>
             )}
             <FailureNotice
+              // a new notice per failed request: two busy answers in a row can land without the "running"
+              // state between them ever being drawn, and the one countdown kept would not retry again (it
+              // had retried; a test failed 1 run in 6 on it)
+              key={run.attempt}
               failure={run.failure}
               onRetry={refusedFile ? null : (byItself) => start({ byItself, keepCount: busy })}
               autoRetry={retrying}
@@ -521,20 +540,13 @@ function Result({
       </table>
       <p className="break-words">
         Kept and added papers together are the {plural(c.total, "paper")} of this search. Left out of the
-        comparison: {plural(c.not_compared_total, "record")} from other venues
+        comparison: {plural(c.not_compared_total, "record")} whose venue is not recognised or is outside the
+        indexed venues and years
         {c.duplicates_total > 0 &&
           `, and ${plural(c.duplicates_total, "record")} that ${c.duplicates_total === 1 ? "repeats" : "repeat"} a paper already counted`}
         .
       </p>
-      <div className="flex flex-wrap items-center gap-2 break-words">
-        <span className="text-xs text-muted-foreground">
-          This comparison in one sentence, for your notes (nothing of it is kept here):
-        </span>
-        <CopyButton
-          text={summaryText(c, done.fileName, done.date)}
-          label="Copy this comparison as one sentence"
-        />
-      </div>
+      <Citable done={done} />
       <p className={`${box} break-words`}>
         <span className="font-semibold">What &ldquo;dropped&rdquo; means.</span> The index holds the paper,
         and this search doesn&apos;t return it: the query&apos;s words are not in its title or abstract as
@@ -617,6 +629,44 @@ function ListToggle({
     <button type="button" aria-expanded={open} aria-controls={controls} onClick={onToggle} className={button}>
       List the {name} <span aria-hidden="true">{open ? "▾" : "▸"}</span>
     </button>
+  );
+}
+
+/**
+ * The comparison as one sentence to cite (copy CM-21; TASK-195, decision-043): in a read-only text box sized to
+ * its text, which the keyboard reaches, so it can be selected where the clipboard can't be written (WCAG 2.1.1);
+ * the Copy button then focuses and selects it. A search record never notes a comparison; this sentence, with
+ * the file's own sha256, is what a methods section cites.
+ */
+function Citable({ done }: { done: Done }) {
+  const captionId = useId();
+  const box = useRef<HTMLTextAreaElement>(null);
+  const text = summaryText(done.comparison, { name: done.fileName, sha256: done.sha256 }, done.date);
+  return (
+    <figure className="space-y-1">
+      <figcaption id={captionId} className="text-xs text-muted-foreground">
+        This comparison in one sentence, to cite beside your file (nothing of it is kept here, and a saved
+        search record doesn&apos;t note it):
+      </figcaption>
+      <textarea
+        ref={box}
+        readOnly
+        value={text}
+        aria-labelledby={captionId}
+        // `field-sizing: content` fits the box to the sentence where supported; elsewhere (Firefox) rows are
+        // counted at a 320px width's 32 characters, up to 12, past which the box scrolls
+        rows={Math.min(Math.ceil(text.length / 32), 12)}
+        className="block field-sizing-content w-full resize-none rounded-md border bg-muted/40 p-2 text-sm break-words"
+      />
+      <CopyButton
+        text={text}
+        label="Copy this comparison as one sentence"
+        onFailed={() => {
+          box.current?.focus();
+          box.current?.select();
+        }}
+      />
+    </figure>
   );
 }
 
@@ -749,8 +799,9 @@ function NotCompared({ c }: { c: Comparison }) {
     <section aria-label={`Not compared, ${plural(total, "record")}`} className="space-y-1 border-t pt-2">
       <CountHeading label={LIST_LABELS.not_compared} count={total} />
       <p className="break-words">
-        Records of your file that are not NeurIPS, ICLR or ICML papers as far as their venue and links say.
-        They are in none of the lists above.
+        Records of your file whose venue is not recognised as NeurIPS, ICLR or ICML (and no link or DOI names
+        an indexed paper), or which are outside the indexed venues and years. They are in none of the lists
+        above.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <ListToggle
