@@ -224,7 +224,7 @@ describe("the words", () => {
     expect(text).toBe(
       "As a search-development check (not a PRISMA flow-diagram count), on 2026-10-05 (UTC) we compared the " +
         `RIS file mine.ris (sha256 \`${sha}\`; ${n(c.records_total)} records read: ${n(c.papers_total)} papers ` +
-        `compared, ${n(c.not_compared_total)} not compared for a venue or year out of scope, and ` +
+        `compared, ${n(c.not_compared_total)} not compared (venue not recognised, or outside the indexed venues and years), and ` +
         `${n(c.duplicates_total)} ${c.duplicates_total === 1 ? "repeat" : "repeats"} of a paper already counted) ` +
         `with the query \`${c.query.canonical}\` (canonical_hash \`${c.query.canonical_hash}\`) on ` +
         `openproceedings (index \`${c.index_version}\`): ${n(c.kept_total)} kept, ${n(c.dropped_total)} dropped, ` +
@@ -252,7 +252,7 @@ describe("the words", () => {
     // no repeats: the clause is left out, never "0 repeats"
     expect(text).toContain(
       "(sha256 not computed by this browser: compute it from your copy; 1 record read: 1 paper compared and 0 " +
-        "not compared for a venue or year out of scope)",
+        "not compared (venue not recognised, or outside the indexed venues and years))",
     );
     expect(text).toContain("and 1 paper added that the file doesn't hold.");
   });
@@ -309,11 +309,11 @@ describe("the file", () => {
     expect(fileProblem({ size: 3_000 }, { ...LIMITS, max_body_bytes: 2_048 })).toMatch(
       /^This file is 2\.9 KB; this instance compares files up to 2\.0 KB\./,
     );
+    // no upload time: behind the shipped proxy a browser's upload meets the proxy's own timeout, not the API's
+    // `max_upload_seconds` (that bounds a direct client only; deploy/README.md), so the line names neither
     expect(limitsLine(LIMITS)).toBe(
-      "Up to 16.0 MB and 5,000 records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it); the " +
-        "file must arrive within 30 s.",
+      "Up to 16.0 MB and 5,000 records, UTF-8 RIS (Publish or Perish, Zotero and EndNote export it).",
     );
-    expect(limitsLine({ ...LIMITS, max_upload_seconds: 1.5 })).toContain("within 1.5 s.");
     expect(limitsLine({ ...LIMITS, ...fixture.limits.compare })).toContain("5,000 records");
   });
 

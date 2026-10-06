@@ -1158,7 +1158,8 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     option and the validator's reason (never the value pydantic would quote). Each comparison flag (TASK-184)
     sets the `ApiConfig` or `RateLimit` field of its name (`--compare-cooldown-factor` →
     `rate_limit.compare_cooldown_factor`), so the refusal names it; one left out keeps the default this section
-    gives, and a value out of the field's range (each has an upper bound too, spec 08 §CLI), or a float that
+    gives, and a value out of the field's range (each but `--compare-token-ms`, which has only a floor of 1, has an
+    upper bound too: spec 08 §CLI), or a float that
     isn't finite (`inf`, `nan`), is refused. The
     caps are stated in `GET /meta` `limits.compare`; the cooldown factor, the upload weight and the token price
     are costs, not limits, and like `--export-weight` are not in `/meta`. It runs one uvicorn process with

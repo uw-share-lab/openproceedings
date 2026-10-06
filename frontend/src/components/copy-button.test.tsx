@@ -36,9 +36,7 @@ describe("CopyButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy it" }));
     await waitFor(() => expect(onFailed).toHaveBeenCalledOnce());
     await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toBe(
-        "Couldn't copy: the text is selected; copy it with Ctrl+C (⌘C on a Mac)",
-      ),
+      expect(screen.getByRole("status").textContent).toBe("Couldn't copy: the text is selected; copy it"),
     );
   });
 });

@@ -398,15 +398,15 @@ warnings, the save's index check), the design doc says so; its open questions li
      and its name never leaves the browser.
    - **Counts first.** A four-row table: Kept, Dropped, Not in the index, Added, each with its one-line
      meaning and the server's `*_total`; then the file's accounting (records read, papers compared, records
-     from other venues, repeats). Every number is an API field, `reason_totals` included: nothing is counted
+     whose venue is not recognised or is outside the indexed venues and years, repeats). Every number is an API field, `reason_totals` included: nothing is counted
      in the browser.
    - **What "dropped" means** is said in place: the index holds the paper and this search doesn't return it
      (other word forms only where the query asks, with `$` or `*`); Google Scholar matches full text and other
      word forms; a dropped paper is not judged irrelevant. **One sentence to cite** (TASK-195, decision-043;
      prisma-reporting), in a read-only text box sized to it that the keyboard reaches, with a Copy button that
      announces "Copied" (where the clipboard can't be written, it focuses and selects the box and says so): "As a search-development check (not a PRISMA flow-diagram count),
-     on `<date>` (UTC) we compared the RIS file `<name>` (sha256 `<64 hex>`; `<r>` records read: `<p>` papers compared, `<x>` not compared for a venue or year
-     out of scope, and `<d>` repeats of a paper already counted) with the query `<canonical>` (canonical_hash `<hash>`) on openproceedings (index
+     on `<date>` (UTC) we compared the RIS file `<name>` (sha256 `<64 hex>`; `<r>` records read: `<p>` papers compared, `<x>` not compared (venue not recognised, or
+     outside the indexed venues and years), and `<d>` repeats of a paper already counted) with the query `<canonical>` (canonical_hash `<hash>`) on openproceedings (index
      `<index_version>`): `<k>` kept, `<d>` dropped, `<n>` not in the index, and `<a>` papers added that the
      file doesn't hold." Every record of the file is accounted for (`records_total` = `papers_total` + `not_compared_total` +
      `duplicates_total`); the repeats clause is left out when there are none. The sha256 is computed in the browser (Web Crypto) from the file sent; where it can't

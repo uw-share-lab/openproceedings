@@ -99,8 +99,7 @@ export function fileProblem(file: { readonly size: number }, limits: CompareLimi
 export function limitsLine(limits: CompareLimits): string {
   return (
     `Up to ${megabytes(limits.max_body_bytes)} and ${limits.max_records.toLocaleString("en-US")} records, ` +
-    "UTF-8 RIS (Publish or Perish, Zotero and EndNote export it); the file must arrive within " +
-    `${limits.max_upload_seconds.toLocaleString("en-US")} s.`
+    "UTF-8 RIS (Publish or Perish, Zotero and EndNote export it)."
   );
 }
 
@@ -159,7 +158,10 @@ export function reasonText(list: ListName, reason: string | null): string {
 }
 
 const NOT_COMPARED: Record<string, string> = {
-  venue_unrecognised: "its venue is not NeurIPS, ICLR or ICML",
+  // a venue string matching none of the three (Web of Science writes it with its volume), and no link or DOI
+  // naming an indexed paper: it may well be an indexed venue's paper, so never "its venue is not …"
+  venue_unrecognised:
+    "its venue is not recognised as NeurIPS, ICLR or ICML, and no link or DOI names an indexed paper",
   venue: "it matched a record outside the compared venues",
   year: "it matched a record outside the compared years",
 };
@@ -305,7 +307,7 @@ export function summaryText(
   // repeats only when there are some
   const parts = [
     `${count(c.papers_total, "paper")} compared`,
-    `${n(c.not_compared_total)} not compared for a venue or year out of scope`,
+    `${n(c.not_compared_total)} not compared (venue not recognised, or outside the indexed venues and years)`,
     ...(c.duplicates_total > 0 ? [`${count(c.duplicates_total, "repeat")} of a paper already counted`] : []),
   ];
   const accounted =

@@ -16,6 +16,9 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
+/** The day the comparison surface's clock and file are pinned to (any fixed day: never today). */
+const FIXED_DAY = "2026-10-05";
+
 /**
  * The three surfaces TASK-175, TASK-176 and TASK-177 added, each as its own element (TASK-182): the page
  * around them is the baseline above. The fixture is fixed, so every number in them is.
@@ -48,8 +51,14 @@ const surfaces: { name: string; open: (page: Page) => Promise<Locator> }[] = [
   {
     name: "comparison",
     open: async (page) => {
+      // the citable sentence (TASK-195) states the day the answer came and the file's sha256, so both are
+      // pinned: the page's clock to one fixed UTC instant (Date only; timers run), and the export's own
+      // "exported <date>" provenance, which the server writes from its clock, to that same day. Unpinned, the
+      // baseline changed at every UTC midnight
+      await page.clock.setFixedTime(new Date(`${FIXED_DAY}T12:00:00Z`));
       const params = new URLSearchParams({ q: "trust venue:ICLR", format: "ris" });
       const held = await page.request.get(`${apiUrl()}/api/v1/export?${params}`);
+      const file = (await held.text()).replace(/exported \d{4}-\d{2}-\d{2}/g, `exported ${FIXED_DAY}`);
       const extra = "TY  - JOUR\nTI  - a paper no index holds\nJF  - NeurIPS\nPY  - 2024\nER  - \n";
       await page.goto("/search?q=benchmark");
       await expect(page.getByText(/\d+ papers?/).first()).toBeVisible();
@@ -58,11 +67,19 @@ const surfaces: { name: string; open: (page: Page) => Promise<Locator> }[] = [
       await panel.getByLabel("RIS file").setInputFiles({
         name: "my-records.ris",
         mimeType: "application/x-research-info-systems",
-        buffer: Buffer.concat([await held.body(), Buffer.from(extra)]),
+        buffer: Buffer.from(file + extra),
       });
       await panel.getByRole("button", { name: "Compare", exact: true }).click();
       await expect(panel.getByRole("table")).toBeVisible({ timeout: 60_000 });
       await panel.getByRole("button", { name: /^List the \d+ papers? not in the index$/ }).click();
+      // the sentence is drawn with the pinned day, whatever today is
+      await expect(
+        panel.getByRole("textbox", { name: /^This comparison in one sentence, to cite/ }),
+      ).toHaveValue(
+        new RegExp(
+          `, on ${FIXED_DAY} \\(UTC\\) we compared the RIS file my-records\\.ris \\(sha256 \`[0-9a-f]{64}\``,
+        ),
+      );
       return panel;
     },
   },
