@@ -43,3 +43,4 @@ Finish M2: ranking, exclusion accounting, highlights, the differential suite, to
 
 ## Addendum — 2026-10-06
 - **A ratio under load predicts the quiet figure; only the quiet run is cited.** TASK-197's fix was judged during implementation by ratios in one loaded process (`main-2-pop` cold first page with counts: 222 → 86 ms p95 at a 1-minute load near 25–30); the official report at a load of 3.4 → 4.6 then gave 190.1 → 85.4 ms, and that is the figure spec 03, spec 04 and decision-039 cite (`docs/results/2026-10-06-bench-group-counts.md`). Lesson: use alternated ratios to choose a fix while the machine is busy, and wait for a quiet run before changing a budget statement.
+- Propagated to: `.claude/agents/performance-profiler.md` already says to cite a budget figure only at a 1-minute load under 5 at both ends (2026-10-05); this addendum adds the ratio-under-load practice it relies on.
