@@ -2162,7 +2162,7 @@
         "type": "object"
       },
       "ParseResponse": {
-        "description": "02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus\n`filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` (`query.wordforms.word_forms`,\nTASK-175). A query with errors is still a 200 here: `errors` holds them, and every Optional is null.",
+        "description": "02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus\n`filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` and `word_forms_skipped`\n(`query.wordforms.report`, TASK-175, TASK-192). A query with errors is still a 200 here: `errors` holds\nthem, and every Optional is null.",
         "properties": {
           "ast": {
             "anyOf": [
@@ -2373,8 +2373,23 @@
                 "type": "null"
               }
             ],
-            "description": "Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order (spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the query text the reader triggers and sees. The server has parsed `q` with every one inserted. Empty outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty.",
+            "description": "Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order (spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the query text the reader triggers and sees. The server has parsed `q` with every one inserted. Near the 2,000-code-point cap, only the terms whose `$` fit (in the order they are first written; TASK-192). Empty outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty.",
             "title": "Word Forms"
+          },
+          "word_forms_skipped": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SkippedTerm"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Each term the `COMPAT_NO_STEMMING` notice names that `word_forms` offers in no place, once, in the notice's order, with the `reason` it gets no `$` (spec 02 §Word forms; TASK-192). Empty outside Scholar mode and when every named term is offered. Null exactly when `errors` is non-empty.",
+            "title": "Word Forms Skipped"
           }
         },
         "required": [
@@ -2392,7 +2407,8 @@
           "errors",
           "translations",
           "filters",
-          "word_forms"
+          "word_forms",
+          "word_forms_skipped"
         ],
         "title": "ParseResponse",
         "type": "object"
@@ -3525,6 +3541,34 @@
           "hits"
         ],
         "title": "SearchResponse",
+        "type": "object"
+      },
+      "SkippedTerm": {
+        "properties": {
+          "reason": {
+            "description": "Why it gets no `$` (spec 02 §Word forms): `too_short`, a stem under 3 letters or digits (`AI`); `symbol`, the `$` would not directly follow a letter or digit (`C++`); `dollar_nearby`, its unspaced run already holds a `$` or a backslash, so a second `$` would close LaTeX math (`US$5`); `operator_word`, a lowercase `and`, `or`, `not` or `near/n`, read by its text; `too_long`, its `$` would put the query, or its canonical form, over the 2,000-code-point cap with the offered ones; `unconfirmed`, the server could not read the edit back. Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "too_short",
+              "symbol",
+              "dollar_nearby",
+              "operator_word",
+              "too_long",
+              "unconfirmed"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "term": {
+            "description": "The term as the `COMPAT_NO_STEMMING` notice names it, as in `WordForm.term`.",
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term",
+          "reason"
+        ],
+        "title": "SkippedTerm",
         "type": "object"
       },
       "SnapshotInfo": {

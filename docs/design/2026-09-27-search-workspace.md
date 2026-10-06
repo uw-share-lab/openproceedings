@@ -277,7 +277,9 @@ Component rules:
   one line per translation message, then `Searched as: <canonical>` in monospace with **Copy**. `COMPAT_NO_STEMMING`
   is one line naming the terms (the server already lists them), with **Add `$`** under it while the editor
   holds the text it was reported for (TASK-175; spec 05 §Components 1, copy ED-19): "Add $ to all N terms",
-  and **Choose terms** for a subset. Like Load with parentheses it edits the draft and never searches. Both
+  and **Choose terms** for a subset, then "Left as typed:" with each other named term and the server's reason
+  (TASK-192; near the length cap, "Add $ to the N terms that fit"). Like Load with parentheses it edits the
+  draft and never searches. Both
   states end with the full-text sentence (copy ED-19, gate review USAB-S4): most of a lower count than Google
   Scholar's can come from Scholar reading full text, which `$` does not recover. The `COMPAT_POP_DOLLAR` notices
   (one per `$`) are one line saying the widening is what `$` is for, the server's own behind a "Show all N

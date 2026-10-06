@@ -18,6 +18,7 @@
      "insert": "$"
     }
    ],
+   "word_forms_skipped": [],
    "all": "LLM$ benchmark$",
    "each": [
     "LLM$ benchmark",
@@ -46,6 +47,7 @@
      "insert": "$"
     }
    ],
+   "word_forms_skipped": [],
    "all": "(\"large language model$\" OR LLM$) trust$",
    "each": [
     "(\"large language model$\" OR LLM) trust",
@@ -70,6 +72,7 @@
      "insert": "$"
     }
    ],
+   "word_forms_skipped": [],
    "all": "(large language model$ | LLM$)",
    "each": [
     "(large language model$ | LLM)",
@@ -88,6 +91,7 @@
      "insert": "$"
     }
    ],
+   "word_forms_skipped": [],
    "all": "model$ bench* trust$ year:2020..2024 source:PMLR",
    "each": [
     "model$ bench* trust$ year:2020..2024 source:PMLR"
@@ -103,6 +107,20 @@
      "term": "generative ai",
      "at": 26,
      "insert": "$"
+    }
+   ],
+   "word_forms_skipped": [
+    {
+     "term": "ai",
+     "reason": "too_short"
+    },
+    {
+     "term": "c",
+     "reason": "symbol"
+    },
+    {
+     "term": "us 5",
+     "reason": "dollar_nearby"
     }
    ],
    "all": "AI C++ US$5 \"generative AI$\"",
@@ -132,6 +150,7 @@
      "insert": "$"
     }
    ],
+   "word_forms_skipped": [],
    "all": "(model$ |LLM$) trust$",
    "each": [
     "(model$ |LLM) trust",
@@ -161,6 +180,7 @@
      "insert": "$"
     }
    ],
+   "word_forms_skipped": [],
    "all": "trust$ OR (trust$ AND model$)",
    "each": [
     "trust$ OR (trust AND model)",
@@ -195,6 +215,7 @@
      "insert": "$"
     }
    ],
+   "word_forms_skipped": [],
    "all": "title:trust$ -bias$ model$ NEAR/3 \"language model$\"",
    "each": [
     "title:trust$ -bias model NEAR/3 \"language model\"",
@@ -230,6 +251,7 @@
      "insert": "$"
     }
    ],
+   "word_forms_skipped": [],
    "all": "𝒜𝒜𝒜$ (model$ |LLM$) 😀😀trust$",
    "each": [
     "𝒜𝒜𝒜$ (model|LLM) 😀😀trust",
@@ -260,6 +282,16 @@
      "insert": "$"
     }
    ],
+   "word_forms_skipped": [
+    {
+     "term": "and",
+     "reason": "operator_word"
+    },
+    {
+     "term": "not",
+     "reason": "operator_word"
+    }
+   ],
    "all": "trust$ | LLM$ and model$ not",
    "each": [
     "trust$ | LLM and model not",
@@ -273,6 +305,20 @@
    "mode": "scholar",
    "notice": "Google Scholar stems words; openproceedings matches them exactly, so `ai`, `c`, `or` match only those forms (not plurals or other endings). Add `$` or `*` where they should count.",
    "word_forms": [],
+   "word_forms_skipped": [
+    {
+     "term": "ai",
+     "reason": "too_short"
+    },
+    {
+     "term": "c",
+     "reason": "symbol"
+    },
+    {
+     "term": "or",
+     "reason": "operator_word"
+    }
+   ],
    "all": "AI C++ or",
    "each": []
   },
@@ -282,6 +328,7 @@
    "mode": "scholar",
    "notice": null,
    "word_forms": [],
+   "word_forms_skipped": [],
    "all": "bench* model$",
    "each": []
   },
@@ -291,6 +338,7 @@
    "mode": "native",
    "notice": null,
    "word_forms": [],
+   "word_forms_skipped": [],
    "all": "LLM benchmark",
    "each": []
   },
@@ -300,6 +348,7 @@
    "mode": "scholar",
    "notice": null,
    "word_forms": null,
+   "word_forms_skipped": null,
    "all": null,
    "each": null
   },
@@ -365,6 +414,7 @@
      "insert": "$"
     }
    ],
+   "word_forms_skipped": [],
    "all": "(\"foundation model$\" OR \"large language model$\" OR LLM$ OR \"generative AI$\") AND (trustworthiness$ OR trustworthy$ OR \"trust$\" OR \"trustworthy AI$\") AND (benchmark$ OR leaderboard$ OR \"evaluation framework$\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
    "each": [
     "(\"foundation model$\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark OR leaderboard OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
@@ -378,6 +428,43 @@
     "(\"foundation model\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark$ OR leaderboard OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
     "(\"foundation model\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark OR leaderboard$ OR \"evaluation framework\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")",
     "(\"foundation model\" OR \"large language model\" OR LLM OR \"generative AI\") AND (trustworthiness OR trustworthy OR \"trust\" OR \"trustworthy AI\") AND (benchmark OR leaderboard OR \"evaluation framework$\") AND (source:\"ICLR\" OR source:\"international conference on learning representations\" OR source:ICML OR source:\"international conference on machine learning\" OR source:PMLR OR source:\"proceedings of machine learning research\" OR source:NeurIPS OR source:\"neural information processing systems\" OR source:\"advances in neural information processing systems\")"
+   ]
+  },
+  {
+   "name": "near the length cap",
+   "q": "trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust        OR model OR agent OR judge OR AI",
+   "mode": "scholar",
+   "notice": "Google Scholar stems words; openproceedings matches them exactly, so `trust`, `model`, `agent`, `judge`, `ai` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `trust$`).",
+   "word_forms": [
+    {
+     "term": "model",
+     "at": 1974,
+     "insert": "$"
+    },
+    {
+     "term": "agent",
+     "at": 1983,
+     "insert": "$"
+    }
+   ],
+   "word_forms_skipped": [
+    {
+     "term": "trust",
+     "reason": "too_long"
+    },
+    {
+     "term": "judge",
+     "reason": "too_long"
+    },
+    {
+     "term": "ai",
+     "reason": "too_short"
+    }
+   ],
+   "all": "trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust        OR model$ OR agent$ OR judge OR AI",
+   "each": [
+    "trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust        OR model$ OR agent OR judge OR AI",
+    "trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust OR trust        OR model OR agent$ OR judge OR AI"
    ]
   }
  ]

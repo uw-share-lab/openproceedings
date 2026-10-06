@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { byTerm, withWordForms, type WordForm } from "./word-forms";
+import { byReason, byTerm, withWordForms, type WordForm } from "./word-forms";
 import golden from "./word-forms-golden.json";
 
 describe("withWordForms writes the query the server read back (word-forms-golden.json)", () => {
@@ -53,5 +53,21 @@ describe("byTerm", () => {
       { term: "model", forms: [forms[1]] },
     ]);
     expect(byTerm([])).toEqual([]);
+  });
+});
+
+describe("byReason", () => {
+  it("groups the skipped terms by the server's reason, in the order reasons first appear", () => {
+    expect(
+      byReason([
+        { term: "trust", reason: "too_long" },
+        { term: "ai", reason: "too_short" },
+        { term: "judge", reason: "too_long" },
+      ]),
+    ).toEqual([
+      { reason: "too_long", terms: ["trust", "judge"] },
+      { reason: "too_short", terms: ["ai"] },
+    ]);
+    expect(byReason([])).toEqual([]);
   });
 });

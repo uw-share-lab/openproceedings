@@ -129,15 +129,88 @@ def test_none_with_errors_and_empty_outside_scholar_mode() -> None:
     assert forms_of("bench* model$ year:2024") == []  # nothing the notice names
 
 
-def test_nothing_is_offered_when_the_edited_query_would_be_too_long() -> None:
-    """The check is all the edits at once, so near the cap none is offered rather than some that fit."""
-    q = " ".join(["abc"] * (MAX_QUERY_LENGTH // 4))
-    assert len(q) <= MAX_QUERY_LENGTH < len(q) + q.count("abc")
+# (name, query, each named term not offered, with its reason, in the notice's order)
+SKIPPED: list[tuple[str, str, list[tuple[str, str]]]] = [
+    ("stem under 3 letters or digits", 'AI "a b" trust', [("ai", "too_short"), ("a b", "too_short")]),
+    ("a symbol where the $ would go", 'C++ trust? "what is trust?"', [("c", "symbol"), ("trust", "symbol"),
+     ("what is trust", "symbol")]),
+    ("another $ or a backslash in the run", 'US$5 $f(x)$-DP (model$|LLM) G\\"odel',
+     [("us 5", "dollar_nearby"), ("f x dp", "dollar_nearby"), ("llm", "dollar_nearby"),
+      ("godel", "dollar_nearby")]),
+    ("a lowercase operator word", "trust and model not", [("and", "operator_word"), ("not", "operator_word")]),
+    ("every term offered", "trust model", []),
+    ("a term offered in one place is not skipped", "AI trust (US$5 OR trust)", [("ai", "too_short"),
+     ("us 5", "dollar_nearby")]),
+]  # fmt: skip
+
+
+@pytest.mark.parametrize(("q", "skipped"), [c[1:] for c in SKIPPED], ids=[c[0] for c in SKIPPED])
+def test_each_named_term_left_as_typed_says_why(q: str, skipped: list[tuple[str, str]]) -> None:
+    report = wordforms.report(q, scholar(q))
+    assert report is not None
+    assert [(s.term, s.reason) for s in report.skipped] == skipped
+    assert report.forms == forms_of(q)
+
+
+def test_no_report_with_errors_and_an_empty_one_outside_scholar_mode() -> None:
+    assert wordforms.report("(trust", parse("(trust", "scholar")) is None
+    assert wordforms.report("AI trust", parse("AI trust")) == wordforms.Report(forms=[], skipped=[])
+
+
+def check_fits(q: str) -> wordforms.Report:
+    """Near the cap: the offered terms' edits, all at once, are read back under the cap, and each term named
+    as too long would put the query, or its canonical form, over it if added to them."""
     result = scholar(q)
-    assert result.ast is not None and len(wordforms._candidates(q, result.ast, result)) == q.count("abc")
-    assert forms_of(q) == []
-    room = " ".join(["abc"] * 300)
-    assert len(forms_of(room)) == 300
+    report = wordforms.report(q, result)
+    assert report is not None and report.forms
+    edited = scholar(apply(q, report.forms))
+    assert len(apply(q, report.forms)) <= MAX_QUERY_LENGTH and len(edited.canonical or "") <= MAX_QUERY_LENGTH
+    assert result.ast is not None
+    allowed = [form for form, _ in wordforms._candidates(q, result.ast, result)]
+    for skipped in (s for s in report.skipped if s.reason == "too_long"):
+        more = [*report.forms, *(f for f in allowed if f.term == skipped.term)]
+        assert [e.code for e in parse(apply(q, more), "scholar").errors] == [DiagnosticCode.PARSE_TOO_LONG]
+    return report
+
+
+def test_near_the_cap_the_terms_that_fit_are_offered_and_the_rest_named() -> None:
+    """The query is under the cap, but its canonical form has room for 30 more characters: the first 30 terms
+    in the order they are written get their `$`, and every later one is named as too long."""
+    words = [f"term{i:03d}" for i in range(300)]
+    q = " OR ".join(words)
+    while parse(q, "scholar").errors or len(scholar(q).canonical or "") > MAX_QUERY_LENGTH - 30:
+        words.pop()
+        q = " OR ".join(words)
+    room = MAX_QUERY_LENGTH - len(scholar(q).canonical or "")
+    report = check_fits(q)
+    assert [f.term for f in report.forms] == words[:room]
+    assert [(s.term, s.reason) for s in report.skipped] == [(w, "too_long") for w in words[room:]]
+
+
+def padded(tail: str, spare: int) -> str:
+    """`abc OR abc OR … tail`, padded with spaces to `spare` code points under the cap. `abc` is written in
+    hundreds of places, so it never fits: the canonical form, which dedupes it, stays short, and the raw cap
+    is the one that binds."""
+    head = " OR ".join(["abc"] * ((MAX_QUERY_LENGTH - spare - len(tail)) // 7))
+    q = head + " " * (MAX_QUERY_LENGTH - spare - len(tail) - len(head)) + tail
+    assert len(q) == MAX_QUERY_LENGTH - spare and len(scholar(q).canonical or "") < MAX_QUERY_LENGTH // 2
+    return q
+
+
+def test_near_the_cap_a_term_written_in_many_places_is_skipped_whole_and_a_later_one_offered() -> None:
+    """`abc` has no room for its `$` in every place, so it is named as too long; the terms after it still fit,
+    one character each, and are offered until the room runs out."""
+    report = check_fits(padded(" OR model OR agent OR judge", 2))
+    assert [f.term for f in report.forms] == ["model", "agent"]
+    assert [(s.term, s.reason) for s in report.skipped] == [("abc", "too_long"), ("judge", "too_long")]
+
+
+def test_near_the_cap_the_spaced_insert_of_a_skipped_neighbour_is_not_counted() -> None:
+    """`(model|LLM)` takes `$ ` and `$` when both are offered; with room for two characters, `model$` (a bare
+    `$`, since `LLM` is not offered) and `trust$` fit, and `LLM` does not."""
+    report = check_fits(padded(" OR (model|LLM) OR trust", 2))
+    assert [(f.term, f.insert) for f in report.forms] == [("model", "$"), ("trust", "$")]
+    assert [(s.term, s.reason) for s in report.skipped] == [("abc", "too_long"), ("llm", "too_long")]
 
 
 def test_every_term_offered_is_one_the_notice_names() -> None:
@@ -297,9 +370,21 @@ def test_offered_edits_are_sound_on_generated_queries(q: str) -> None:
         check_example(example.group(1), quotable[0])
     elif note is not None:
         assert quotable == []
+    report = wordforms.report(q, result)
+    assert report is not None and report.forms == forms
     if forms != allowed:
         event("over the length cap once edited")
         assert [e.code for e in parse(apply(q, allowed), "scholar").errors] == [DiagnosticCode.PARSE_TOO_LONG]
+        assert {f.term for f in allowed} - {f.term for f in forms} <= {
+            s.term for s in report.skipped if s.reason == "too_long"
+        }
+    # every term the notice names is offered or named as left as typed, once, with a reason
+    named_terms = list(dict.fromkeys(exact_name(leaf) for leaf in exact_leaves(result.ast)))
+    offered = list(dict.fromkeys(f.term for f in forms))
+    skipped = [s.term for s in report.skipped]
+    assert sorted(offered + skipped) == sorted(named_terms)
+    assert skipped == [t for t in named_terms if t in set(skipped)]  # in the notice's order
+    assert "unconfirmed" not in {s.reason for s in report.skipped}  # the rules name every refusal
     named = len(exact_leaves(result.ast))  # type: ignore[arg-type]
     event(
         "every named term offered" if len(forms) == named else "none offered" if not forms else "some offered"

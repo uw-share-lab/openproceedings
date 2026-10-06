@@ -344,7 +344,8 @@
             "values": ["accepted"]
           }
         },
-        "word_forms": []
+        "word_forms": [],
+        "word_forms_skipped": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -461,7 +462,8 @@
             "values": ["accepted"]
           }
         },
-        "word_forms": []
+        "word_forms": [],
+        "word_forms_skipped": []
       }
     },
     "defaults_only": {
@@ -768,7 +770,8 @@
             "values": ["accepted"]
           }
         },
-        "word_forms": []
+        "word_forms": [],
+        "word_forms_skipped": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -792,7 +795,8 @@
         ],
         "translations": [],
         "filters": null,
-        "word_forms": null
+        "word_forms": null,
+        "word_forms_skipped": null
       }
     },
     "all_negative": {
@@ -1119,7 +1123,8 @@
             "values": ["accepted"]
           }
         },
-        "word_forms": []
+        "word_forms": [],
+        "word_forms_skipped": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -1143,7 +1148,8 @@
         ],
         "translations": [],
         "filters": null,
-        "word_forms": null
+        "word_forms": null,
+        "word_forms_skipped": null
       }
     },
     "one_default": {
@@ -1447,7 +1453,8 @@
             "values": ["accepted"]
           }
         },
-        "word_forms": []
+        "word_forms": [],
+        "word_forms_skipped": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -1546,7 +1553,8 @@
             "values": ["accepted"]
           }
         },
-        "word_forms": []
+        "word_forms": [],
+        "word_forms_skipped": []
       }
     },
     "scholar": {
@@ -1979,7 +1987,8 @@
             "values": ["accepted"]
           }
         },
-        "word_forms": []
+        "word_forms": [],
+        "word_forms_skipped": []
       },
       "parse_identification": {
         "index_version": "fb3fc0aab48e",
@@ -2140,7 +2149,8 @@
             "values": ["accepted"]
           }
         },
-        "word_forms": []
+        "word_forms": [],
+        "word_forms_skipped": []
       }
     }
   },
@@ -2342,7 +2352,8 @@
             "values": ["accepted"]
           }
         },
-        "word_forms": []
+        "word_forms": [],
+        "word_forms_skipped": []
       }
     },
     "statuses": {
@@ -2551,7 +2562,8 @@
             "values": ["accepted", "rejected", "withdrawn"]
           }
         },
-        "word_forms": []
+        "word_forms": [],
+        "word_forms_skipped": []
       }
     },
     "negated_status": {
@@ -2772,7 +2784,8 @@
             "values": ["rejected"]
           }
         },
-        "word_forms": []
+        "word_forms": [],
+        "word_forms_skipped": []
       }
     },
     "workshop": {
@@ -2978,7 +2991,8 @@
             "values": ["accepted"]
           }
         },
-        "word_forms": []
+        "word_forms": [],
+        "word_forms_skipped": []
       }
     }
   }

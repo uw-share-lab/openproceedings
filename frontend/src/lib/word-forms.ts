@@ -11,6 +11,8 @@ import type { Schemas } from "@/api/client";
 import { codePointSpanToUtf16 } from "@/api/spans";
 
 export type WordForm = Schemas["WordForm"];
+/** A term the notice names that `/parse` offers no `$` for, and why (`word_forms_skipped`, TASK-192). */
+export type SkippedTerm = Schemas["SkippedTerm"];
 
 /**
  * `text` with each of `forms` inserted (any subset of one `/parse` answer's, in any order), or `null` when an
@@ -45,4 +47,21 @@ export function byTerm(forms: readonly WordForm[]): TermForms[] {
     else group.push(form);
   }
   return [...terms].map(([term, group]) => ({ term, forms: group }));
+}
+
+/** The skipped terms of one reason. */
+export interface ReasonTerms {
+  readonly reason: string;
+  readonly terms: readonly string[];
+}
+
+/** `skipped` grouped by the server's reason, each reason where it first appears (an open set: kept as sent). */
+export function byReason(skipped: readonly SkippedTerm[]): ReasonTerms[] {
+  const reasons = new Map<string, string[]>();
+  for (const { term, reason } of skipped) {
+    const group = reasons.get(reason);
+    if (group === undefined) reasons.set(reason, [term]);
+    else group.push(term);
+  }
+  return [...reasons].map(([reason, terms]) => ({ reason, terms }));
 }
