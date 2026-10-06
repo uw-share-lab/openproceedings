@@ -39,7 +39,6 @@ that record. Two RIS rows with one title and different abstracts still merge.
   rule), the import yields anyway and stays a separate record, with `title_key` `ambiguous_not_merged` rows.
   A duplicate costs a reviewer one extra screen; a wrong merge would lose a paper. Accepted on that basis.
 
-
 ## Real-cache rebuild (2026-10-06)
 
 `op snapshot build --from data/cache` with the v0.1.1 batch's code (TASK-188, 189, 190, 197, 198; branch
