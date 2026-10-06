@@ -634,6 +634,14 @@ class CompareLimits(Model):
         description="the largest answer, in bytes; a comparison whose answer would be larger is 422 "
         "`API_COMPARE_TOO_COSTLY`"
     )
+    max_upload_seconds: float = Field(
+        description="the wall time the file gets to arrive once a comparison slot is held; past it, 408 "
+        "`API_UPLOAD_TIMEOUT`"
+    )
+    max_concurrent: int = Field(
+        description="comparisons this instance runs at once; another is 503 `API_BUSY` with `Retry-After`, "
+        "before its file is read"
+    )
 
 
 class MetaResponse(Versioned):

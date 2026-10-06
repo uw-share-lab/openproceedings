@@ -186,7 +186,7 @@ read "; " instead.
 | CM-18 | A list's reasons, each count a sentence of its own (singular for 1), followed by CM-19's step: dropped "`<n>` papers are excluded by a default filter", "… have no exact match in their title or abstract", "… match only as another word form", "… match only as Google Scholar reads the query", "… can't be decided automatically", "… are judged both ways by openproceedings (a bug: please report it)"; not in the index "… are not in the index"; added "… match exactly and are not in your file", "… match as this search reads the query, not as Google Scholar reads it", "… are from a venue and year that hit Google Scholar's 1,000-result cap in your file" |
 | CM-19 | What to do, after a dropped or missing count (USAB-S3): filtered "to include such a paper, write its track or status into the query (its row says which)"; full text "no form of this query finds such a paper by its title or abstract; keep it from your own file if it belongs in the review"; word form "type * after its stem (e.g. evaluat*) to match its other forms; $ adds only one letter or digit" (a word form can be any number of letters longer, as `evaluated` or `evaluating`, and `$` reaches only one more; R3-2), and in Scholar mode, where the Add $ action is, the same followed by "(the Add $ action under the query)" (USAB-R2-1); Scholar's reading "write the query as Google Scholar reads it (its translation notice shows how) to match such a paper"; not in the index, a sentence of its own after the count ("3 papers are not in the index. Keep such a paper from your own file; no query here can find it."; USAB-R2-N); undecided "check such a paper by hand (its row says what is undecided)"; a bug "please report it with this query" |
 | CM-20 | What is undecided, on a row (UX-S4): "to check: is it in the index under another title, venue or year?" (not in the index); "to check: does the paper itself match the query? (its row says what is undecided)" (dropped); "to check: is it the paper your file holds under another record?" (added); "to report: openproceedings judged it both ways" |
-| CM-21 | Summary (USAB-S7): "This comparison in one sentence, for your notes (nothing of it is kept here):" `[Copy]` → "On `<date>`, the query `<canonical>` (canonical_hash `<hash>`) on openproceedings index `<v>`, compared with `<file>` (`<r>` records read, `<p>` papers compared): `<k>` kept, `<d>` dropped, `<n>` not in the index; it adds `<a>` papers the file doesn't hold." |
+| CM-21 | Summary (USAB-S7; TASK-195, decision-043): "This comparison in one sentence, to cite beside your file (nothing of it is kept here, and a saved search record doesn't note it):", the sentence shown, `[Copy]` → "As a search-development check (not a PRISMA flow-diagram count), on `<date>` (UTC) we compared the RIS file `<file>` (sha256 `<sha256>`; `<r>` records read, `<p>` papers compared) with the query `<canonical>` (canonical_hash `<hash>`) on openproceedings (index `<v>`): `<k>` kept, `<d>` dropped, `<n>` not in the index, and `<a>` papers added that the file doesn't hold." Without Web Crypto the hash reads "sha256 not computed by this browser: compute it from your copy". |
 | CM-22 | Why Compare is off, beside it (A11Y-S5, USAB-S2): "Choose a RIS file first."; "Choose a smaller file."; "Next comparison in `<n>` s: this instance pauses between one network's comparisons."; or the search page's own reason (a dirty draft, stale results) |
 
 Units: sizes in the panel are MB or KB to one decimal (binary, as the caps are); the server's own messages give
@@ -219,7 +219,7 @@ search heuristics, `heuristic-evaluation`), on the built panel. Dispositions:
 | A11Y-M1–M3 Cancel, Retry and the last Show more dropped focus to the page | Must | fixed: Compare, Compare, the first row drawn |
 | USAB-S2 a 54 s pause read as a bug on a local instance | Should | fixed (owner's decision): no pause on a local instance; the pause said beside Compare |
 | USAB-S3 a dropped reason said a cause, no next step | Should | fixed: CM-19 |
-| USAB-S7 the counts can't be kept | Should | fixed in part: CM-21's sentence to copy; citable record is TASK-195 |
+| USAB-S7 the counts can't be kept | Should | fixed: CM-21's citable sentence with the file's sha256 (TASK-195); a search record never notes a comparison (decision-043) |
 | USAB-S8 a static "running" line; a fixed 5 s retry while the table builds | Should | fixed: a counter; the build's expected time; retried by itself |
 | UX-S1 "you can keep searching" on every 429 | Should | fixed: CM-17 retired |
 | UX-S4 "needs a person to decide" never said what | Should | fixed: CM-20 |
@@ -246,8 +246,9 @@ search heuristics, `heuristic-evaluation`), on the built panel. Dispositions:
 ## Open questions
 
 - Should a comparison be saved with a search record (the file's hash and the counts, never the file), so a
-  methods section can cite "kept 51 of 1,815"? Not built: the owner ruled that nothing of the file is stored.
-  The copyable sentence (CM-21) is the stopgap; the citable form and its place in the record are TASK-195.
+  methods section can cite "kept 51 of 1,815"? Decided (decision-043, 2026-10-05): no. A search record never
+  notes a comparison; CM-21's sentence, with the file's sha256 computed in the browser, is the citable form
+  (TASK-195).
 - A file from another database (Scopus, Web of Science) has DOIs, which the merge rules don't match on
   (TASK-186), and the reasons are worded for Scholar.
 - For the user research and usability rounds (TASK-032, TASK-047; each needs ORE clearance first): do reviewers

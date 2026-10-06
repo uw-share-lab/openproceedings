@@ -620,7 +620,8 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   hold, the host names of at most three of its links (a host name as DNS writes one, at most 253 characters;
   anything else in a link's host position is dropped, and no path, query or credential is ever echoed). A
   link no URL parser takes (`http://[x`, a volume of 5,000 digits) names no paper and never refuses the file.
-- **Caps**, stated in `GET /meta` `limits.compare`; a file over one is refused whole, never cut:
+- **Caps**, stated in `GET /meta` `limits.compare` (each set by an `op serve` flag, defaults below; TASK-184,
+  §Implementation notes); a file over one is refused whole, never cut:
   `max_body_bytes` (16 MiB; 413 `API_BODY_TOO_LARGE`, by `Content-Length` before a byte is read, else counted
   as the bytes arrive), then, before anything is parsed into fields, 413 `API_RIS_TOO_LARGE` for more than 64
   lines per allowed record (320,000 lines at the default: a file of millions of one-tag lines never becomes
@@ -702,14 +703,14 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   that run was 0.34 s). What runs between two checks is one record's or one row's work, one oracle
   evaluation over the compared records, or one pass in C over the whole file (the decode, the cap scan,
   scholarmend's split into records, the JSON encoding), each bounded by the caps, not by the clock: before
-  the per-link check, one record holding every link line of a 16 MiB file ran about 2 s between checks (the security review's measurement). `comparison_slots` (1)
+  the per-link check, one record holding every link line of a 16 MiB file ran about 2 s between checks (the security review's measurement). `comparison_slots` (1; `limits.compare.max_concurrent`)
   comparisons run at once; another is 503 `API_BUSY` before its file is read, so at most that many files are
   in memory. Every refusal sent before the file was read whole (that 503, a 429, a query refusal, and those
   made before the handler runs: an undeclared parameter, a missing `q`, no index loaded yet) first reads and
   discards what arrives of the file for up to 2 s and closes the connection (`middleware.DrainRefusals`, one
   layer for the path; nothing is held), so the client sending it gets the refusal rather than a reset
   connection. The query's one search runs before the file is decoded, so a refusal of its own (a taken
-  verification slot) comes before the seconds of reading and matching the file. The file must arrive within `compare_upload_seconds` (30 s; 408 `API_UPLOAD_TIMEOUT`); behind the
+  verification slot) comes before the seconds of reading and matching the file. The file must arrive within `compare_upload_seconds` (30 s, `limits.compare.max_upload_seconds`; 408 `API_UPLOAD_TIMEOUT`); behind the
   reverse proxy it arrives whole (08 §Deploy). Measured on index `05a0541717f6` (95,877 records) with the
   Trust-Evals export (1,834 records, 3.7 MB) and the review's `$` string in Scholar mode, on a loaded
   laptop: 20 to 24 s for the request (17.8 s debited: 36 tokens, beside the 10 of the route, the query's
@@ -753,8 +754,11 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
 - **What a methods section may cite** (prisma-reporting). A comparison is a search-development aid, never a
   number in a PRISMA flow diagram: it changes no search and records nothing. A figure from it is cited with
   the reviewer's own file (its sha256 and the date it was exported) beside the CSV's `index_version` and
-  `canonical_hash`, since the server keeps neither the file nor the answer; the citable comparison is the
-  dated `op eval scholar` report (07 §B). A copyable summary and a place in the search record are TASK-195.
+  `canonical_hash`, since the server keeps neither the file nor the answer; the citable comparison with
+  Google Scholar is the dated `op eval scholar` report (07 §B). A search record never notes a comparison
+  (decision-043: the record stays the query and its index pin, so its replay is unchanged); instead the panel
+  gives the comparison as one sentence to cite (05 §Components 9), with the file's sha256 computed in the
+  browser from the bytes it sent, so nothing about the file is added to the answer (decision-035).
 
 ## Search records (reproducibility, PRISMA)
 
@@ -1147,8 +1151,16 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   - `op serve [--host] [--port] [--index] [--cors-origin …] [--trusted-proxy …] [--rate-capacity]
     [--rate-refill] [--export-weight] [--no-rate-limit] [--max-verified-clauses]
     [--max-verification-candidates] [--max-verification-seconds] [--max-counted-groups] [--max-counted-terms]
-    [--max-counted-ids] [--pinned-indexes] [--docs|--no-docs] [--compare|--no-compare] [--log-query-text]` refuses an invalid combination as usage, naming each
-    option and the validator's reason (never the value pydantic would quote), and runs one uvicorn process with
+    [--max-counted-ids] [--pinned-indexes] [--docs|--no-docs] [--compare|--no-compare] [--compare-max-body-bytes]
+    [--compare-max-records] [--compare-max-line-chars] [--compare-max-results] [--compare-max-response-bytes]
+    [--compare-max-seconds] [--compare-upload-seconds] [--comparison-slots] [--compare-cooldown-factor]
+    [--compare-upload-weight] [--compare-token-ms] [--log-query-text]` refuses an invalid combination as usage, naming each
+    option and the validator's reason (never the value pydantic would quote). Each comparison flag (TASK-184)
+    sets the `ApiConfig` or `RateLimit` field of its name (`--compare-cooldown-factor` →
+    `rate_limit.compare_cooldown_factor`), so the refusal names it; one left out keeps the default this section
+    gives, and a value out of the field's range, or a float that isn't finite (`inf`, `nan`), is refused. The
+    caps are stated in `GET /meta` `limits.compare`; the cooldown factor, the upload weight and the token price
+    are costs, not limits, and like `--export-weight` are not in `/meta`. It runs one uvicorn process with
     its own access log off, `proxy_headers` off, and a 64 KiB request-head limit (uvicorn's 16 KiB would
     refuse a valid 2,000-code-point query in the URL). **Deploy note:** `GET /search?q=…` carries the query
     in the URL, so the reverse proxy in front (Caddy, task-065) must not log query strings. Log the path

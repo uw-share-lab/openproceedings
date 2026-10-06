@@ -402,8 +402,16 @@ warnings, the save's index check), the design doc says so; its open questions li
      in the browser.
    - **What "dropped" means** is said in place: the index holds the paper and this search doesn't return it
      (other word forms only where the query asks, with `$` or `*`); Google Scholar matches full text and other
-     word forms; a dropped paper is not judged irrelevant. One sentence to copy says what the comparison found,
-     on what index and query (the server keeps nothing of it; TASK-195). When some kept or dropped papers are in the index only because a RIS file was
+     word forms; a dropped paper is not judged irrelevant. **One sentence to cite** (TASK-195, decision-043;
+     prisma-reporting), shown as text and with a Copy button that announces "Copied" (or, where the clipboard
+     can't be written, to select the text): "As a search-development check (not a PRISMA flow-diagram count),
+     on `<date>` (UTC) we compared the RIS file `<name>` (sha256 `<64 hex>`; `<r>` records read, `<p>` papers
+     compared) with the query `<canonical>` (canonical_hash `<hash>`) on openproceedings (index
+     `<index_version>`): `<k>` kept, `<d>` dropped, `<n>` not in the index, and `<a>` papers added that the
+     file doesn't hold." The sha256 is computed in the browser (Web Crypto) from the file sent; where it can't
+     be (not a secure context) the sentence says "sha256 not computed by this browser: compute it from your
+     copy". The date is the UTC day the answer came. The server keeps nothing of it, and a search record never
+     notes a comparison (decision-043). When some kept or dropped papers are in the index only because a RIS file was
      imported (`kept_ris_only_total`, `dropped_ris_only_total`; each such row is marked "import only"), a
      warning says a match to them shows the import holds the paper, not that the index covers it.
    - **Lists on demand.** Each list is a section with its count, the reasons with their counts (`outside a

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApi } from "@/api/client";
 import { json, stubFetch } from "@/test/api-stub";
 import { COMPARE as fixture } from "@/test/compare-fixture";
@@ -15,6 +15,7 @@ import {
   reasonLines,
   detailText,
   summaryText,
+  fileSha256,
   undecidedText,
   reasonText,
   RIS_MEDIA,
@@ -29,6 +30,8 @@ const LIMITS: CompareLimits = {
   max_results: 5000,
   max_seconds: 60,
   max_response_bytes: 16 * 1024 * 1024,
+  max_upload_seconds: 30,
+  max_concurrent: 1,
 };
 
 describe("postCompare", () => {
@@ -190,13 +193,30 @@ describe("the words", () => {
     expect(detailText("dropped", { detail: unmatched })).toBe(unmatched); // only where matched_by says it
   });
 
-  it("sums a comparison up in one sentence to keep", () => {
+  it("sums a comparison up in one citable sentence (decision-043, prisma-reporting)", () => {
     const c = fixture.response;
-    const text = summaryText(c, "mine.ris", "2026-10-05");
-    expect(text).toContain(`index ${c.index_version}`);
-    expect(text).toContain(c.query.canonical_hash);
-    expect(text).toContain(`${c.kept_total} kept, ${c.dropped_total} dropped`);
-    expect(text.startsWith("On 2026-10-05, the query ")).toBe(true);
+    const sha = "a".repeat(64);
+    const text = summaryText(c, { name: "mine.ris", sha256: sha }, "2026-10-05");
+    const n = (x: number) => x.toLocaleString("en-US");
+    expect(text).toBe(
+      "As a search-development check (not a PRISMA flow-diagram count), on 2026-10-05 (UTC) we compared the " +
+        `RIS file mine.ris (sha256 \`${sha}\`; ${n(c.records_total)} records read, ${n(c.papers_total)} papers ` +
+        `compared) with the query \`${c.query.canonical}\` (canonical_hash \`${c.query.canonical_hash}\`) on ` +
+        `openproceedings (index \`${c.index_version}\`): ${n(c.kept_total)} kept, ${n(c.dropped_total)} dropped, ` +
+        `${n(c.not_in_index_total)} not in the index, and ${n(c.added_total)} papers added that the file ` +
+        "doesn't hold.",
+    );
+    // one sentence: no full stop before its end but the ones inside the query
+    expect(text.replace(c.query.canonical, "").slice(0, -1)).not.toMatch(/\.\s/);
+  });
+
+  it("says when this browser couldn't compute the file's sha256, and counts one of a kind", () => {
+    const one = { ...fixture.response, records_total: 1, papers_total: 1, added_total: 1 };
+    const text = summaryText(one, { name: "mine.ris", sha256: null }, "2026-10-05");
+    expect(text).toContain(
+      "(sha256 not computed by this browser: compute it from your copy; 1 record read, 1 paper compared)",
+    );
+    expect(text).toContain("and 1 paper added that the file doesn't hold.");
   });
 
   it("counts a list with its noun", () => {
@@ -216,6 +236,23 @@ describe("the words", () => {
 });
 
 describe("the file", () => {
+  it("has its sha256 computed here from the bytes sent", async () => {
+    // sha256 of the three bytes "abc" (FIPS 180-2's first example)
+    expect(await fileSha256(new Blob(["abc"]))).toBe(
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    );
+    expect(await fileSha256(new Blob([fixture.file]))).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("has no sha256 where this browser has no Web Crypto (not a secure context)", async () => {
+    vi.stubGlobal("crypto", {});
+    try {
+      expect(await fileSha256(new Blob(["abc"]))).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("is checked against the instance's cap before it is sent", () => {
     expect(fileProblem({ size: 0 }, LIMITS)).toMatch(/empty/);
     expect(fileProblem({ size: LIMITS.max_body_bytes }, LIMITS)).toBeNull();

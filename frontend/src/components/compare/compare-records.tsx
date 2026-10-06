@@ -14,7 +14,7 @@
  * text, saved as sent.
  *
  * The file goes to the server for this one request and is not kept there (spec 04). Its name never leaves the
- * browser. Nor does the comparison: it lives in this component only, so a row's title opens its paper in a
+ * browser, and its sha256, for the citable sentence, is computed here (TASK-195). Nor does the comparison: it lives in this component only, so a row's title opens its paper in a
  * new tab (Back would otherwise lose it).
  */
 import Link from "next/link";
@@ -28,6 +28,7 @@ import {
   doneText,
   downloadName,
   fileProblem,
+  fileSha256,
   limitsLine,
   listCount,
   LIST_LABELS,
@@ -124,6 +125,8 @@ function useNow(active: boolean): number {
 interface Done {
   readonly key: string;
   readonly fileName: string;
+  /** The file's sha256, computed in this browser from the bytes sent (`fileSha256`; null where it can't be). */
+  readonly sha256: string | null;
   readonly comparison: Comparison;
   /** The UTC day the answer came, for the summary sentence. */
   readonly date: string;
@@ -149,8 +152,8 @@ export function CompareRecords({
   const [run, setRun] = useState<Run>({ kind: "idle" });
   const [done, setDone] = useState<Done | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  // when this network may start the next comparison (ms since the epoch), from the last answer
-  const [nextAt, setNextAt] = useState<number | null>(null);
+  // when this network may start the next comparison (ms since the epoch) and the wait the last answer gave
+  const [nextAt, setNextAt] = useState<{ readonly at: number; readonly seconds: number } | null>(null);
   const aborter = useRef<AbortController | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const compareButton = useRef<HTMLButtonElement>(null);
@@ -166,7 +169,9 @@ export function CompareRecords({
   const key = `${q}\u0000${mode}\u0000${indexVersion}`;
   const now = useNow(run.kind === "running" || nextAt !== null);
   const elapsed = run.kind === "running" ? Math.max(0, Math.floor((now - run.since) / 1000)) : 0;
-  const pause = nextAt === null ? 0 : Math.max(0, Math.ceil((nextAt - now) / 1000));
+  // never more than the server said: `now` can be up to a tick older than the answer
+  const pause =
+    nextAt === null ? 0 : Math.min(nextAt.seconds, Math.max(0, Math.ceil((nextAt.at - now) / 1000)));
 
   useEffect(() => () => aborter.current?.abort(), []);
   useEffect(() => {
@@ -203,8 +208,9 @@ export function CompareRecords({
       setRun({ kind: "running", fileName: file.name, size: file.size, since: Date.now() });
       // a retry by itself was announced with its wait; "Comparing…" again would only repeat it (A11Y-R2-2)
       if (!byItself) setAnnouncement(`Comparing ${file.name} with this search.`);
-      void postCompare(api, { q, mode }, file, controller.signal).then(
-        (outcome) => {
+      // the digest is of the File sent, read here alongside the upload (the server is never asked for it)
+      void Promise.all([postCompare(api, { q, mode }, file, controller.signal), fileSha256(file)]).then(
+        ([outcome, sha256]) => {
           if (controller.signal.aborted) return;
           if (outcome.kind === "ok") {
             // an answer that came by itself takes focus only from Compare or from nowhere, never from
@@ -214,11 +220,12 @@ export function CompareRecords({
               !byItself || active === null || active === document.body || active === compareButton.current;
             setAutoTries(0);
             const wait = outcome.data.next_comparison_seconds;
-            setNextAt(wait > 0 ? Date.now() + wait * 1000 : null);
+            setNextAt(wait > 0 ? { at: Date.now() + wait * 1000, seconds: wait } : null);
             if (wait > 0) setTimeout(() => setNextAt(null), wait * 1000);
             setDone({
               key: asked,
               fileName: file.name,
+              sha256,
               comparison: outcome.data,
               date: new Date().toISOString().slice(0, 10),
             });
@@ -526,15 +533,7 @@ function Result({
           `, and ${plural(c.duplicates_total, "record")} that ${c.duplicates_total === 1 ? "repeats" : "repeat"} a paper already counted`}
         .
       </p>
-      <div className="flex flex-wrap items-center gap-2 break-words">
-        <span className="text-xs text-muted-foreground">
-          This comparison in one sentence, for your notes (nothing of it is kept here):
-        </span>
-        <CopyButton
-          text={summaryText(c, done.fileName, done.date)}
-          label="Copy this comparison as one sentence"
-        />
-      </div>
+      <Citable done={done} />
       <p className={`${box} break-words`}>
         <span className="font-semibold">What &ldquo;dropped&rdquo; means.</span> The index holds the paper,
         and this search doesn&apos;t return it: the query&apos;s words are not in its title or abstract as
@@ -617,6 +616,26 @@ function ListToggle({
     <button type="button" aria-expanded={open} aria-controls={controls} onClick={onToggle} className={button}>
       List the {name} <span aria-hidden="true">{open ? "▾" : "▸"}</span>
     </button>
+  );
+}
+
+/**
+ * The comparison as one sentence to cite (copy CM-21; TASK-195, decision-043): shown as text, so it can be
+ * selected where the clipboard can't be written, with a Copy button that says "Copied". A search record never
+ * notes a comparison; this sentence, with the file's own sha256, is what a methods section cites.
+ */
+function Citable({ done }: { done: Done }) {
+  const captionId = useId();
+  const text = summaryText(done.comparison, { name: done.fileName, sha256: done.sha256 }, done.date);
+  return (
+    <figure aria-labelledby={captionId} className="space-y-1">
+      <figcaption id={captionId} className="text-xs text-muted-foreground">
+        This comparison in one sentence, to cite beside your file (nothing of it is kept here, and a saved
+        search record doesn&apos;t note it):
+      </figcaption>
+      <p className="rounded-md border bg-muted/40 p-2 text-sm break-words select-all">{text}</p>
+      <CopyButton text={text} label="Copy this comparison as one sentence" />
+    </figure>
   );
 }
 

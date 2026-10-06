@@ -519,17 +519,44 @@ describe("CompareRecords", () => {
     expect(screen.getByRole("button", { name: "Compare" }).getAttribute("aria-disabled")).toBeNull();
   });
 
-  it("gives the comparison as one sentence to copy", async () => {
+  it("gives the comparison as one citable sentence, shown and copied, with the file's sha256", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    await draw();
+    const bytes = new TextEncoder().encode(fixture.file);
+    const sha = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (b) =>
+      b.toString(16).padStart(2, "0"),
+    ).join("");
+    const { calls } = await draw();
     await compareWith();
     await screen.findByRole("table", { name: /What this search does/ });
-    fireEvent.click(screen.getByRole("button", { name: "Copy this comparison as one sentence" }));
-    expect(writeText).toHaveBeenCalledOnce();
-    const text = (writeText.mock.calls[0] as unknown as [string])[0];
-    expect(text).toContain(`index ${R.index_version}, compared with my-records.ris`);
-    expect(text).toContain(R.query.canonical_hash);
+    const figure = screen.getByRole("figure", { name: /This comparison in one sentence, to cite/ });
+    const shown = figure.querySelector("p")?.textContent ?? "";
+    expect(shown).toContain(`RIS file my-records.ris (sha256 \`${sha}\`;`);
+    expect(shown).toContain(`(index \`${R.index_version}\`)`);
+    expect(shown).toContain(`(canonical_hash \`${R.query.canonical_hash}\`)`);
+    expect(shown).toMatch(
+      /^As a search-development check \(not a PRISMA flow-diagram count\), on \d{4}-\d{2}-\d{2} \(UTC\)/,
+    );
+    // the digest is this browser's: the request is the file and the query, nothing about its hash
+    const sent = calls.find((c) => c.path === "/api/v1/compare");
+    expect(sent?.body).toBe(fixture.file);
+    expect([...(sent?.query.keys() ?? [])].sort()).toEqual(["mode", "q"]);
+    // a native button, reached and pressed from the keyboard like any other, and announced
+    const copy = within(figure).getByRole("button", { name: "Copy this comparison as one sentence" });
+    copy.focus();
+    expect(document.activeElement).toBe(copy);
+    fireEvent.click(copy);
+    expect(writeText).toHaveBeenCalledWith(shown);
+    expect(await within(figure).findByRole("status")).toHaveProperty("textContent", "Copied");
+  });
+
+  it("says to select the sentence where the clipboard can't be written", async () => {
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    await draw();
+    await compareWith();
+    const figure = await screen.findByRole("figure", { name: /This comparison in one sentence/ });
+    fireEvent.click(within(figure).getByRole("button", { name: "Copy this comparison as one sentence" }));
+    expect(within(figure).getByRole("status").textContent).toBe("Couldn't copy: select the text and copy it");
   });
 
   it("is off, with the reason, while the results shown aren't the searched query's", async () => {

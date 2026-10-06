@@ -360,6 +360,59 @@ def build_parser() -> argparse.ArgumentParser:
         "for the one request, never stored or logged); default on for a loopback --host without --trusted-proxy "
         "only, with no pause between comparisons; --compare adds the per-network pause after each (decision-035)",
     )
+    # POST /compare's caps and costs (TASK-184): each flag sets the ApiConfig (or RateLimit) field of its name, so
+    # a refusal names the flag; one left out keeps the config's default, and a bad value is refused at start
+    compare_caps = serve.add_argument_group(
+        "comparisons", "POST /compare's caps (stated in GET /meta limits.compare) and costs (decision-035)"
+    )
+    compare_caps.add_argument(
+        "--compare-max-body-bytes", type=int, metavar="BYTES",
+        help="the largest RIS file (default 16777216, 16 MiB; at least 1024); the reverse proxy's body cap "
+        "for the path must be at least this",
+    )  # fmt: skip
+    compare_caps.add_argument(
+        "--compare-max-records", type=int, metavar="N",
+        help="records one file may hold (default 5000); about 10 s of CPU per 1,000",
+    )  # fmt: skip
+    compare_caps.add_argument(
+        "--compare-max-line-chars", type=int, metavar="N",
+        help="code points in one line of the file, tag included (default 32768; at least 64)",
+    )  # fmt: skip
+    compare_caps.add_argument(
+        "--compare-max-results", type=int, metavar="N",
+        help="papers of the query's result that the file lacks, the most one comparison reads (default 5000)",
+    )  # fmt: skip
+    compare_caps.add_argument(
+        "--compare-max-response-bytes", type=int, metavar="BYTES",
+        help="the largest answer (default 16777216; at least 1024)",
+    )  # fmt: skip
+    compare_caps.add_argument(
+        "--compare-max-seconds", type=float, metavar="S",
+        help="wall time one comparison's work gets before a 503 API_BUSY (default 60)",
+    )  # fmt: skip
+    compare_caps.add_argument(
+        "--compare-upload-seconds", type=float, metavar="S",
+        help="wall time a file gets to arrive once a slot is held before a 408 (default 30)",
+    )  # fmt: skip
+    compare_caps.add_argument(
+        "--comparison-slots", type=int, metavar="N",
+        help="comparisons run at once, each holding one file in memory (default 1; budget about 250 MB each)",
+    )  # fmt: skip
+    compare_caps.add_argument(
+        "--compare-cooldown-factor", type=float, metavar="X",
+        help="after a comparison its network starts no other for X times the slot time it used (default 3: "
+        "one network holds a slot at most 1/(1+X) of the time); 0 turns the pause off. Not applied on a "
+        "local instance or with --no-rate-limit",
+    )  # fmt: skip
+    compare_caps.add_argument(
+        "--compare-upload-weight", type=float, metavar="X",
+        help="how many times a file's upload time counts, in the token debit and the cooldown (default 4; at "
+        "least 1)",
+    )  # fmt: skip
+    compare_caps.add_argument(
+        "--compare-token-ms", type=float, metavar="MS",
+        help="one rate-limit token per this many ms a comparison held its slot (default 500)",
+    )  # fmt: skip
     serve.add_argument(
         "--log-query-text",
         action="store_true",
@@ -1759,6 +1812,21 @@ def _serve(ns: argparse.Namespace) -> int:
                 capacity=ns.rate_capacity,
                 refill_per_second=ns.rate_refill,
                 export_weight=ns.export_weight,
+                **given(
+                    compare_cooldown_factor=ns.compare_cooldown_factor,
+                    compare_upload_weight=ns.compare_upload_weight,
+                    compare_token_ms=ns.compare_token_ms,
+                ),
+            ),
+            **given(
+                compare_max_body_bytes=ns.compare_max_body_bytes,
+                compare_max_records=ns.compare_max_records,
+                compare_max_line_chars=ns.compare_max_line_chars,
+                compare_max_results=ns.compare_max_results,
+                compare_max_response_bytes=ns.compare_max_response_bytes,
+                compare_max_seconds=ns.compare_max_seconds,
+                compare_upload_seconds=ns.compare_upload_seconds,
+                comparison_slots=ns.comparison_slots,
             ),
             cors_origins=tuple(ns.cors_origin),
             trusted_proxies=tuple(ns.trusted_proxy),
@@ -1784,6 +1852,11 @@ def _serve(ns: argparse.Namespace) -> int:
         raise _usage(f"invalid serve options: {serve_errors(e)}") from None
     serve(config, ns.host, ns.port, ns.log_level, ns.log_format)
     return 0
+
+
+def given(**options: object) -> dict[str, object]:
+    """The options the operator passed (not None): one left out keeps the config's own default."""
+    return {name: value for name, value in options.items() if value is not None}
 
 
 def serve_errors(e: ValidationError) -> str:
