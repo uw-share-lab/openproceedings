@@ -251,14 +251,19 @@ class ListingReport(Report):
     abstract_title_mismatch: int = 0  # of abstract_missing: the page's citation_title isn't the listed title
     page_missing: int = 0  # of abstract_missing: the paper page answered 404/410
     unknown_track: int = 0
+    abstract_control_characters: int = (
+        0  # records whose abstract had a control character replaced (decision-044)
+    )
     to_fetch: int | None = None  # a dry run: paper pages not yet in the cache (never in a manifest)
     see_also: list[str] = field(default_factory=list)  # other volumes the page points to, not crawled
 
     manifest_key: ClassVar[str] = "listings"
 
-    def count(self, record: PaperRecord, missing: str | None) -> None:
-        """Count one record made from this listing (after it validated)."""
+    def count(self, record: PaperRecord, missing: str | None, spaced: int = 0) -> None:
+        """Count one record made from this listing (after it validated); `spaced` is how many control characters
+        its abstract lost (`clean_abstract`'s own count, never read back from the evidence; TASK-199)."""
         self.records += 1
+        self.abstract_control_characters += spaced > 0
         self.tracks[record.track] += 1
         self.unknown_track += record.track == "unknown"
         if missing is not None:
@@ -280,6 +285,8 @@ class ListingReport(Report):
             "abstract_title_mismatch": self.abstract_title_mismatch, "page_missing": self.page_missing,
             "unknown_track": self.unknown_track,
         }  # fmt: skip
+        if self.abstract_control_characters:  # listed only when there are any, so a listing's shape is kept
+            out["abstract_control_characters"] = self.abstract_control_characters
         if self.volume is not None:
             out["volume"] = self.volume
         if self.see_also:

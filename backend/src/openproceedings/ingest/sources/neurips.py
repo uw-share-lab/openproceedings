@@ -257,7 +257,7 @@ def _mine_listing(
         page = fetcher.get(entry.url, keep_absent=True)
         report.fetched.append(page.fetched_at)
         try:
-            record, missing = _record(year, native, entry, cls.track, rule, listing, index, page)
+            record, missing, spaced = _record(year, native, entry, cls.track, rule, listing, index, page)
         except (ValidationError, ValueError) as e:
             report.skipped["invalid"] += 1
             log.debug(  # counted in the listing's one `listing_attention` WARNING
@@ -266,7 +266,7 @@ def _mine_listing(
             )
             continue
         records.append(record)
-        report.count(record, missing)
+        report.count(record, missing, spaced)
         if time.monotonic() - last >= PROGRESS_SECONDS:
             last = time.monotonic()
             log.info("neurips_listing_progress", extra={"year": year, "done": n, "of": len(entries)})
@@ -276,8 +276,9 @@ def _mine_listing(
 
 def _record(
     year: int, native: str, entry: Entry, track: str, rule: str, listing: str, index: Page, page: Page
-) -> tuple[PaperRecord, str | None]:  # fmt: skip
-    """The record and, when it has no abstract, why (`common.MISSING`)."""
+) -> tuple[PaperRecord, str | None, int]:  # fmt: skip
+    """The record, why it has no abstract when it has none (`common.MISSING`), and how many control characters
+    its abstract lost (`common.clean_abstract`; the listing counts them, TASK-199)."""
     title, replaced = title_text(entry.title)  # a control character becomes a space (decision-036)
     claims: list[Claim] = []
 
@@ -315,13 +316,14 @@ def _record(
             claim("urls.pdf", parsed.pdf, "citation_pdf_url", page.fetched_at)
         if doi := _doi(parsed.doi):
             claim("urls.doi", doi, "citation_doi", page.fetched_at)
-    return record_from_claims(f"op:neurips:{year}:{native}", claims), missing
+    return record_from_claims(f"op:neurips:{year}:{native}", claims), missing, spaced
 
 
 def _log_done(report: ListingReport, started: float) -> None:
     fields: dict[str, Any] = {
         "year": report.year, "listing": report.listing, "listed": report.listed, "stated": report.stated,
         "records": report.records, "abstract_missing": report.abstract_missing,
+        "abstract_control_characters": report.abstract_control_characters,
         "unknown_track": report.unknown_track, "ms": elapsed_ms(started, time.monotonic),
     }  # fmt: skip
     log.info("neurips_listing_mined", extra=fields)

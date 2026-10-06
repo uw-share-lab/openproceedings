@@ -355,14 +355,24 @@ def test_a_v1_title_with_a_control_character_is_imported_with_a_space(tmp_path: 
     assert (
         crawl.report.title_control_characters == 1 == crawl.report.to_manifest()["title_control_characters"]
     )
+    assert crawl.report.abstract_control_characters == 0
+    assert "abstract_control_characters" not in crawl.report.to_manifest()
 
 
 def test_a_v1_abstract_with_a_control_character_is_imported_with_a_space(tmp_path: Path) -> None:
     """decision-044 (TASK-188): the v1 crawler reads an abstract through the v2 crawler's rule."""
     note = v1_note("iclr-2017/note-rejected-bare-venueid.json")
     note["content"]["abstract"] = "the LiDAR modal\x02ity"
-    record = by_forum(iclr_2017(tmp_path, [note], []))[note["id"]]
+    crawl = iclr_2017(tmp_path, [note], [])
+    record = by_forum(crawl)[note["id"]]
     assert record.abstract == "the LiDAR modal ity"
+    # TASK-199: counted beside the titles, from the importer's own count
+    assert (
+        crawl.report.abstract_control_characters
+        == 1
+        == crawl.report.to_manifest()["abstract_control_characters"]
+    )
+    assert crawl.report.title_control_characters == 0
     assert [c.evidence for c in record.claims("abstract")] == [
         "content.abstract (1 control character replaced by a space)"
     ]

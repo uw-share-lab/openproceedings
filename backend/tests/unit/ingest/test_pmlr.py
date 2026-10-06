@@ -326,11 +326,11 @@ def test_a_listed_title_with_a_control_character_keeps_its_paper() -> None:
         "https://proceedings.mlr.press/v235/abe24a.html", "Induc\x02tive Trust\x00", ("A One",), None, None
     )
     index = Page(volume.index_url, 200, "", T0)
-    record, missing = pmlr._record(volume, "pmlr-v235-abe24a", entry, index, Page(entry.url, 404, "", T0))
+    record, missing, _ = pmlr._record(volume, "pmlr-v235-abe24a", entry, index, Page(entry.url, 404, "", T0))
     assert (record.title, missing) == ("Induc tive Trust", "page_missing")
     [title] = record.claims("title")
     assert title.evidence == f"volume index {volume.index_url} (2 control characters replaced by a space)"
-    clean, _ = pmlr._record(volume, "pmlr-v235-abe24a", pmlr.Entry(entry.url, "Inductive  Trust", ("A One",), None, None),
+    clean, _, _ = pmlr._record(volume, "pmlr-v235-abe24a", pmlr.Entry(entry.url, "Inductive  Trust", ("A One",), None, None),
                             index, Page(entry.url, 404, "", T0))  # fmt: skip
     assert clean.title == "Inductive Trust"
     assert [c.evidence for c in clean.claims("title")] == [f"volume index {volume.index_url}"]
@@ -349,13 +349,42 @@ def test_a_page_abstract_with_a_control_character_is_imported_with_a_space() -> 
         '<div id="abstract">The LiDAR modal\x02ity, 500x\x02 longer.</div>'
     )
     index = Page(volume.index_url, 200, "", T0)
-    record, missing = pmlr._record(volume, "pmlr-v235-abe24a", entry, index, Page(entry.url, 200, html, T0))
-    assert (record.abstract, missing) == ("The LiDAR modal ity, 500x longer.", None)
+    record, missing, spaced = pmlr._record(
+        volume, "pmlr-v235-abe24a", entry, index, Page(entry.url, 200, html, T0)
+    )
+    assert (record.abstract, missing, spaced) == ("The LiDAR modal ity, 500x longer.", None, 2)
     [abstract] = record.claims("abstract")
     assert (
         abstract.evidence
         == "div#abstract (citation_title matches the listing) (2 control characters replaced by a space)"
     )
     only = html.replace("The LiDAR modal\x02ity, 500x\x02 longer.", "\x02\x00")
-    bare, missing = pmlr._record(volume, "pmlr-v235-abe24a", entry, index, Page(entry.url, 200, only, T0))
+    bare, missing, _ = pmlr._record(volume, "pmlr-v235-abe24a", entry, index, Page(entry.url, 200, only, T0))
     assert (bare.abstract, missing, bare.claims("abstract")) == (None, "no_abstract", ())
+
+
+def test_a_volume_counts_the_abstracts_that_lost_a_control_character(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """TASK-199 (decision-044): from the miner's own count, in the report, its manifest when above 0 and the
+    volume's done line; never a WARNING for it. A volume with none keeps its manifest shape."""
+    seed_fixture(tmp_path, "pmlr", V235)
+    seed_fixture(
+        tmp_path, "pmlr", "pmlr/v235/paper.json",
+        edit=lambda t: t.replace("Synthetic title 9", "Synthetic title 2").replace("Synthetic abstract 4", "Synthetic\x02abstract 4"),
+    )  # fmt: skip
+    for key in ("abad-rocamora24a", "abhyankar24a"):
+        seed(tmp_path, "pmlr", f"https://proceedings.mlr.press/v235/{key}.html", "", status=404)
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+        result = mine(tmp_path, 235)
+    assert {x.id: x for x in result.records}[
+        "op:icml:2024:pmlr-v235-abe24a"
+    ].abstract == "Synthetic abstract 4"
+    report = result.report
+    assert report.abstract_control_characters == 1 == report.to_manifest()["abstract_control_characters"]
+    [done] = [r for r in caplog.records if r.getMessage() == "pmlr_volume_mined"]
+    assert done.__dict__["abstract_control_characters"] == 1
+    plain = tmp_path / "plain"
+    seed_v235(plain)
+    clean = mine(plain, 235).report
+    assert clean.abstract_control_characters == 0 and "abstract_control_characters" not in clean.to_manifest()
