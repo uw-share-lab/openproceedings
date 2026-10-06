@@ -107,7 +107,7 @@ note under `backend/tests/fixtures/http/openreview/v2/`:
 | ICML 2023 | `ICML 2023 OralPoster` 155 | | `ICML 2023 Poster` 1,673 | |
 | ICML 2024 | `ICML 2024 Oral` 144 | `ICML 2024 Spotlight` 191 | `ICML 2024 Poster` 2,275 | |
 | ICML 2025 | `ICML 2025 oral` 108; position `… Position Paper Track oral` 12 | `ICML 2025 spotlightposter` 211; position `… spotlightposter` 12 | `ICML 2025 poster` 2,938; position `… poster` 49 | |
-| ICML 2026 | | `ICML 2026 spotlight` 536; position `ICML 2026 Position Paper Track spotlight` 38 | | |
+| ICML 2026 | | `ICML 2026 spotlight` 536; position `ICML 2026 Position Paper Track spotlight` 38 | | `ICML 2026 regular` 5,805; position `ICML 2026 Position Paper Track regular` 175 (decision-042) |
 | NeurIPS 2023 | `NeurIPS 2023 oral` 67; D&B `NeurIPS 2023 Datasets and Benchmarks Oral` 10 | `… spotlight` 378; D&B `… Spotlight` 22 | `… poster` 2,773; D&B `… Poster` 290 | |
 | NeurIPS 2024 | `NeurIPS 2024 oral` 61; D&B `NeurIPS 2024 Track Datasets and Benchmarks Oral` 11 | `… spotlight` 326; D&B `… Spotlight` 56 | `… poster` 3,648; D&B `… Poster` 392 | `NeurIPS 2024 Competition Track` 16 |
 | NeurIPS 2025 | `NeurIPS 2025 oral` 77; D&B `NeurIPS 2025 Datasets and Benchmarks Track oral` 7; position `NeurIPS 2025 Position Paper Track Oral` 9 | `… spotlight` 687; D&B `… spotlight` 56 | `… poster` 4,522; D&B `… poster` 434 | `NeurIPS 2025 Position Paper Track` 31 |
@@ -116,17 +116,17 @@ ICML 2023's `OralPoster` and ICML 2025's `spotlightposter` are orals and spotlig
 slot; the higher tier is the presentation (ICML 2023: 155 + 1,673 = the 1,828 accepted notes). ICLR 2026 has
 no spotlight tier (224 + 5,127 = its 5,351 accepted notes).
 
-**Known unmapped strings.** No accepted, non-workshop string in the 2023–2025 cache is unmapped. ICML 2026 has
-two tiers, `spotlight` and `regular` (536 + 5,805 = its 6,341 accepted main-track notes; 38 + 175 = the 213
-position papers). `spotlight` is mapped. `ICML 2026 regular` and `ICML 2026 Position Paper Track regular` are
-left out of the table: `regular` is not a presentation word, and nothing recorded says a regular paper was a
-poster. Both strings have a recorded note and a test that keeps them unmapped
-(`icml-2026/notes-presentation-*.json`), and their records show no presentation. **They await an owner
-decision** (`poster`, a stated string with no presentation, or left as they are; TASK-190). Until then ICML 2026 reports
-`presentation_unmapped` 5,980 (5,805 + 175) and raises the `openreview_crawl_attention` WARNING on every crawl
-and replay. The DEBUG line carries only a forum id, so the count is the only signal: **any ICML 2026 count
-other than 5,980 means a string this table has not seen** (or a changed listing), and is chased by listing the
-cache's distinct `content.venue` values. NeurIPS 2026's strings get rows when its notes are public.
+**Known strings with no presentation.** No accepted, non-workshop string in the 2023–2025 cache or the ICLR and ICML 2026 cache is unmapped.
+ICML 2026 has two tiers, `spotlight` and `regular` (536 + 5,805 = its 6,341 accepted main-track notes; 38 +
+175 = the 213 position papers). `spotlight` is mapped. `ICML 2026 regular` and `ICML 2026 Position Paper Track
+regular` are stated strings with no presentation (decision-042, TASK-190): `regular` is not a presentation
+word, and nothing ICML has published says a regular paper was a poster. Their records show no presentation in
+records, filters and exports, and they are not counted. Both strings have a recorded note and a test
+(`icml-2026/notes-presentation-*.json`); a test also keeps an unseen ICML 2026 string (another case, another
+track, another word) unmapped. If ICML says what `regular` means, the row changes and decision-042 is
+revisited. So every venue-year's `presentation_unmapped` is expected to be 0. The DEBUG line carries only a
+forum id, so the count is the only signal: **any nonzero count means a string this table has not seen** (or
+a changed listing), and is chased by listing the cache's distinct `content.venue` values. NeurIPS 2026's strings get rows when its notes are public.
 
 ## Sources
 
