@@ -30,3 +30,12 @@ that record. Two RIS rows with one title and different abstracts still merge.
 - Papers whose title partners share the abstract, and RIS rows whose abstracts differ, merge as before.
 - The effect on real data is measured by a rebuild on the real cache, recorded in TASK-189.
 
+## As built (2026-10-06)
+
+- "A crawled record" holds the abstract through a crawler's abstract claim only, not a RIS row's abstract
+  inside a crawled cluster: a title merge in the same step can replace that RIS claim, and a second dedup run
+  then merged an import the first had kept apart (`YIELD_TO_A_REPLACED_RIS_ABSTRACT`, `test_idempotent`).
+- When the record holding the import's abstract is one step 3 can't merge with (a workshop note, by the track
+  rule), the import yields anyway and stays a separate record, with `title_key` `ambiguous_not_merged` rows.
+  A duplicate costs a reviewer one extra screen; a wrong merge would lose a paper. Accepted on that basis.
+
