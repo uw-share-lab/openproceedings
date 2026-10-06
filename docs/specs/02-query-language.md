@@ -413,13 +413,18 @@ accepts; the one thing they cannot see is the edited query, or its canonical for
 2,000-code-point cap. Then the terms whose `$` fit are offered and the rest are `too_long` (TASK-192): terms
 are taken in the order they are first written, each in every place it is written or in none (the UI adds a
 term's `$` everywhere), and a term that doesn't fit doesn't stop a later, smaller one. The raw length of a
-choice is counted exactly (a `$ ` whose neighbour in the run is not chosen is a bare `$`); the canonical
-form is counted as one more code point per place, the most a `$` adds to it (a term it quoted, `"and"`, or
-deduped with a sibling adds less), from the length the last read-back measured, and up to three rounds of
-read-backs try the terms left over against the measured length. So a term named `too_long` would put the
-query or its canonical form over the cap with the ones offered, except that one whose own places dedupe in
-the canonical form may be passed over by a few code points. The offered set is read back as a whole, and any
-subset of it is shorter. `test_wordforms.py` pins each row above and checks, for generated
+choice is counted exactly (a `$ ` whose neighbour in the run is not chosen is a bare `$`), and any subset of
+the chosen inserts is shorter. The canonical form is a **budget**, because the reader may tick any subset of
+the offered terms and some `$` shorten it (a quoted `"and"` becomes `and$`; `trust OR trust$` dedupes to
+`trust$`), so a set can fit while a subset without such a term does not (review of TASK-192): each term costs
+one code point per place, counted from the canonical form of the query as typed, never less, so one term's
+savings never pay for another. That is the most a `$` adds for a term that takes it in every place it is
+written, since such a term is edited alike everywhere and the canonical form's deduped subtrees stay equal.
+A term the rules refuse in another place (`trust? OR trust`, deduped to `trust`) can make them differ, so its
+own change is rendered and added on top. The offered set is read back as a whole. Because the budget is an
+upper bound, a term named `too_long` may in fact have fit by a few code points (its own or another offered
+term's `$` would have shortened the canonical form); it is never offered when some subset with it would not
+fit. `test_wordforms.py` pins each row above and checks, for generated
 queries and every Trust-Evals string, that every subset of the edits (each alone, all together, and every
 combination of the first six, since the reader may tick any) changes only the terms it names, and that the
 read-back refuses nothing the rules allow short of the cap. That last check is a test, not a proof: it is how

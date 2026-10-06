@@ -33,13 +33,16 @@ Whitespace there changes nothing else, and with it any subset of the edits is so
 The answer is then checked by making every edit at once and parsing the result with the parser itself, in the
 query's mode: it must parse, and its tree must be the original with exactly those leaves made `$` wildcards.
 If it is not, nothing is offered, so an offered edit is always one the server has read back. The rules above
-are meant to allow only what the read-back accepts, with one exception they can't see: the edited query, or
-its canonical form, being over the length cap; then the terms that fit are offered, and read back. `test_wordforms.py` holds them to that (a generated query whose
-candidates are refused for any other reason fails it; that is how the operator-word rule was found) and checks
-every subset of the edits a reader can tick, not only all of them.
+are meant to allow only what the read-back accepts, with one exception they can't see: the length cap.
+`test_wordforms.py` holds them to that (a generated query whose candidates are refused for any other reason
+fails it; that is how the operator-word rule was found) and checks every subset of the edits a reader can
+tick, not only all of them.
 
-Near the cap, the terms whose `$` fit are offered and the rest are named with the reason `too_long` (TASK-192;
-`_fit` says how they are counted). Every other term the notice names but no place is offered for is named
+Near the cap, the terms whose `$` fit are offered and the rest are named with the reason `too_long` (TASK-192).
+"Fit" is a budget, not a read-back of all the edits (`_costs`, `_fit`): a reader may tick any subset of the
+offered terms, and one term's `$` can shorten the canonical form (`"and"` → `and$`, `trust OR trust$` →
+`trust$`), so a set can fit while a subset of it does not. Each term is budgeted from the query as typed,
+and its savings never pay for another term. Every other term the notice names but no place is offered for is named
 with the rule that refuses it (`exact.dollar_verdicts`), so the UI can say which terms were left as typed
 and why without reading a message.
 
@@ -53,9 +56,10 @@ from typing import NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.query.ast import And, Leaf, Near, Node, Not, Or, Phrase, Term, Wildcard, structure
+from openproceedings.query.canonical import render
 from openproceedings.query.compat import group_phrases
+from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.exact import Place, SkipReason, dollar_verdicts, exact_leaves, exact_name
 from openproceedings.query.lexer import lex
 from openproceedings.query.parser import MAX_QUERY_LENGTH, ParseResult, parse
@@ -156,46 +160,51 @@ def _verdicts(q: str, ast: Node, result: ParseResult) -> tuple[list[Place], list
     return places, [(r.term, r.reason) for r in refusals]
 
 
-def _read_back(q: str, result: ParseResult, places: list[Place]) -> tuple[ParseResult, bool]:
-    """`q` with `places`' edits made, parsed, and whether its tree is the original with exactly those leaves
-    made `$` wildcards."""
+def _read_back(q: str, result: ParseResult, places: list[Place]) -> bool:
+    """Whether `q` with `places`' edits made parses to the original tree with exactly those leaves made `$`
+    wildcards."""
     assert result.ast is not None
     edited = parse(apply(q, _forms(places)), result.mode, result.tokenizer_version)
     expected = _with_dollar(result.ast, frozenset(place.leaf_end for place in places))
-    return edited, edited.ast is not None and structure(edited.ast) == structure(expected)
+    return edited.ast is not None and structure(edited.ast) == structure(expected)
 
 
-MAX_FIT_ROUNDS = 3  # read-backs while fitting terms under the cap; each after the first only adds terms
+def _costs(q: str, result: ParseResult, by_term: dict[str, list[Place]], refused: set[str]) -> dict[str, int]:
+    """For each offered term, the most its `$` can add to the canonical form, whichever other terms are ticked:
+    a budget, so that every subset of the offered terms a reader can tick fits under the cap, not only all
+    of them (review of TASK-192). One term's savings never pay for another's.
+
+    A term whose every exact leaf takes the `$` is edited alike wherever it is written, so two subtrees the
+    canonical form dedupes stay equal and are still deduped: a `$` adds at most one code point per place (a
+    quoted `"and"` or a deduped `trust OR trust$` adds less, and is still counted one). A term the rules
+    refuse in another place (`trust? OR trust`) can make two deduped subtrees differ, so its own change is
+    rendered and added, never less than nothing, on top of one per place."""
+    assert result.ast is not None and result.canonical is not None
+    costs = {}
+    for term, places in by_term.items():
+        costs[term] = len(places)
+        if term in refused:
+            ends = frozenset(place.leaf_end for place in places)
+            effective = apply_defaults(_with_dollar(result.ast, ends), len(q)).effective
+            costs[term] += max(0, len(render(effective)) - len(result.canonical))
+    return costs
 
 
-def _fit(q: str, result: ParseResult, by_term: dict[str, list[Place]]) -> list[Place] | None:
-    """Near the cap: the places of the terms whose `$` fit, each term in every place it is written or in none,
-    taken in the order the terms are first written; None if a read-back refuses them for another reason.
+def _fit(q: str, result: ParseResult, by_term: dict[str, list[Place]], costs: dict[str, int]) -> list[Place]:
+    """The places of the terms whose `$` fit the budget, each term in every place it is written or in none,
+    taken in the order the terms are first written; a term that doesn't fit doesn't stop a later one.
 
-    The raw length of an edit is exact (`len(q)` plus its inserts, which are recounted for each choice: a word's
-    `$ ` is a bare `$` while its neighbour is not chosen). The canonical form is not re-rendered for each term,
-    which would cost as much as a parse: a `$` adds at most one code point to it per place (a term that was
-    quoted there, `"and"`, or that dedupes with a sibling, adds less), so each round counts one per place
-    from the canonical length the last read-back measured, and the next round tries the terms left over
-    against that measured length."""
+    The raw length is exact (`len(q)` plus the inserts, recounted for each choice: a word's `$ ` is a bare `$`
+    while its neighbour is not chosen), and any subset of the chosen inserts is shorter. The canonical form is
+    `len(result.canonical)` plus each chosen term's cost (`_costs`), so it is never re-rendered per term."""
     assert result.canonical is not None
     chosen: list[Place] = []
     canonical = len(result.canonical)
-    left = dict(by_term)
-    for _ in range(MAX_FIT_ROUNDS):
-        added = 0
-        for term, places in list(left.items()):
-            trial = sorted([*chosen, *places], key=lambda place: place.at)
-            raw = len(q) + len(trial) + sum(_spaced(trial))
-            if raw <= MAX_QUERY_LENGTH and canonical + added + len(places) <= MAX_QUERY_LENGTH:
-                chosen, added = trial, added + len(places)
-                del left[term]
-        if not added:
-            break
-        edited, ok = _read_back(q, result, chosen)
-        if not ok or edited.canonical is None:
-            return None
-        canonical = len(edited.canonical)
+    for term, places in by_term.items():
+        trial = sorted([*chosen, *places], key=lambda place: place.at)
+        raw = len(q) + len(trial) + sum(_spaced(trial))
+        if raw <= MAX_QUERY_LENGTH and canonical + costs[term] <= MAX_QUERY_LENGTH:
+            chosen, canonical = trial, canonical + costs[term]
     return chosen
 
 
@@ -210,9 +219,10 @@ def report(q: str, result: ParseResult) -> Report | None:
     """Where a `$` can be added to the terms the no-stemming notice names, and why each other named term gets
     none. None exactly when `result` has errors; empty outside Scholar mode (no notice).
 
-    Every edit at once is read back first. When that passes the cap, the terms that fit are offered (`_fit`)
-    and the rest are `too_long`; when the read-back refuses the edits for another reason, which the rules are
-    meant to make impossible, none is offered and each is `unconfirmed`."""
+    The terms whose `$` fit under the cap are offered (`_fit`, by the budget `_costs`: every subset the
+    reader can tick fits, not only all of them), the rest are `too_long`, and the offered edits are read
+    back at once; when the read-back refuses them, which the rules are meant to make impossible, none is
+    offered and each is `unconfirmed`."""
     ast = result.ast
     if ast is None:
         return None
@@ -222,18 +232,18 @@ def report(q: str, result: ParseResult) -> Report | None:
     by_term: dict[str, list[Place]] = {}
     for place in places:
         by_term.setdefault(place.term, []).append(place)
-    why: dict[str, SkipReason] = {}
-    chosen: list[Place] | None = places
-    edited, ok = _read_back(q, result, places) if places else (result, True)
-    if not ok:
-        over = [e.code for e in edited.errors] == [DiagnosticCode.PARSE_TOO_LONG]
-        chosen = _fit(q, result, by_term) if over else None
-        reason: SkipReason = "unconfirmed" if chosen is None else "too_long"
-        offered = {place.term for place in chosen or []}
-        why = {term: reason for term in by_term if term not in offered}
-    for term, reason in refusals:
+    # within the budget, all of them; else the ones that fit, the rest `too_long`
+    chosen: list[Place] | None = _fit(
+        q, result, by_term, _costs(q, result, by_term, {t for t, _ in refusals})
+    )
+    if chosen and not _read_back(q, result, chosen):
+        chosen = None
+    offered = {place.term for place in chosen or []}
+    reason: SkipReason = "unconfirmed" if chosen is None else "too_long"
+    why: dict[str, SkipReason] = {term: reason for term in by_term if term not in offered}
+    for term, refusal in refusals:
         if term not in by_term:  # a term offered in one place is not named as skipped for another
-            why.setdefault(term, reason)
+            why.setdefault(term, refusal)
     named = dict.fromkeys(exact_name(leaf) for leaf in exact_leaves(ast))
     return Report(
         forms=_forms(chosen or []),
