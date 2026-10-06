@@ -43,8 +43,8 @@ BUILT = datetime(2026, 9, 28, tzinfo=UTC)
 # the hash before (checked when it changed). Dedup's title keys here are the same under both tokenizers.
 # Release 0.1.0 changed only the manifest's openproceedings_version from "0.0.0" to "0.1.0";
 # reverting that one value in memory restores the prior files hash. The corpus hash is unchanged.
-# Release 0.2.0 likewise changed only openproceedings_version, "0.1.0" to "0.2.0": set back to "0.1.0" in memory
-# the files hash to ce0f3eba… again (checked 2026-10-06), and SNAPSHOT_HASH is unchanged.
+# Release 0.2.0 likewise changed only openproceedings_version, "0.1.0" to "0.2.0": setting it back to "0.1.0" in
+# memory returns the files hash to ce0f3eba… (checked 2026-10-06), and SNAPSHOT_HASH is unchanged.
 SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bdd"
 FILES_HASH = "e0caaefc10aa977accd790098a9179eb2896f4272bbc3c2b9b10a1c0f238e2f6"
 

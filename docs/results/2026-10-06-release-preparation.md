@@ -91,7 +91,7 @@ This release's ingest changes take effect at the next snapshot build. A real-cac
   Breaking line and no changed-input callout.
 - **Process:** spec 08 step 6, the release-manager agent and the `pr-gates.yml` comment, from §2.
 - **Golden:** `test_combined_snapshot.py`'s `FILES_HASH` changes with the version, as at 0.1.0: the manifest
-  records `openproceedings_version`, and set back to `0.1.0` in memory the files hash to the old value again;
+  records `openproceedings_version`, and setting it back to `0.1.0` in memory returns the files hash to the old value;
   `SNAPSHOT_HASH` is unchanged.
 
 ## 5. Local tests
