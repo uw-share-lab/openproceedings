@@ -315,9 +315,17 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    second, `abstract_key` row: it would say nothing more (the 14 such pairs on the 2026-10-05 crawl were each a
    listing and its same-title workshop version). The
    title key is never loosened: two papers whose titles differ only by a symbol and whose abstracts differ
-   stay two records. The title step, for its part, never consults the abstract: an import whose title lost a
-   symbol could equal another paper's title key and merge with it (no instance on the 2026-10-05 crawl;
-   TASK-189). The merged record's differing titles are a `precedence:` row, as for any merge. On the
+   stay two records. The title step consults the abstract in one case (TASK-189, decision-045): an import whose
+   title lost a symbol can equal another paper's title key (`-Guard` beside a note titled `Guard`), so (b)
+   leaves an imported record out of a title group when its own-page abstract is one a crawler gave a record of
+   the same venue and year (`$R^2$-Guard`'s note) and none of its title partners keeps it. (c) then joins it to
+   that record if it may; if (c) can't (the record is a workshop note, say), it stays its own record, with a
+   `title_key` `ambiguous_not_merged` row against the title partner. A crawler's abstract only: a RIS row's
+   text in a crawled cluster can be replaced by a merge in the same step, and a second run would judge the
+   group differently. A partner that keeps the abstract keeps the merge (a main note beside its workshop version
+   sharing it, the 14 pairs above), and two RIS rows with one title and different abstracts (an OpenReview and
+   a camera-ready text) still merge: no crawler holds either. The real cache's rebuild under this rule is still
+   to be measured (TASK-189). The merged record's differing titles are a `precedence:` row, as for any merge. On the
    2026-10-05 crawl (a) – (c) merge all 7 accepted records that existed only as the import's second copy of a
    crawled ICLR paper: one by its title once `ris` on both sides stopped blocking it, six by their abstract
    (five lost a math symbol; `CwoM9T55lG` is under its earlier title).

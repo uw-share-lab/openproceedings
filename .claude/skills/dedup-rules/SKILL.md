@@ -71,8 +71,13 @@ over-merge silently deletes a paper from someone's systematic review.
      such pairs on the 2026-10-05 crawl were each a listing and its same-title workshop version). Abstracts are
      normalised only in venue-years that still hold an
    imported record. Never loosen the title key instead: `A$^2$Search` and `ASearch` with different abstracts are
-   two papers. The title step never consults the abstract, so a symbol-stripped import title equal to another
-   paper's title key would merge with it (no instance on the 2026-10-05 crawl; TASK-189).
+   two papers. The title step consults the abstract once (TASK-189, decision-045,
+   `_yields_to_its_abstract`): an imported record leaves a title group when a crawler gave a record of the
+   venue-year its own-page abstract (`_crawled_abstracts`, never a RIS row's text, which a same-step merge can
+   replace) and no title partner keeps it (`_abstract_keys`). `-Guard` then joins `$R^2$-Guard` by its abstract
+   in step 3, not `Guard` by its title; when step 3 can't take it, it stays apart with a `title_key` row. A
+   partner keeping the abstract (main note + workshop version) keeps the merge; two RIS rows with one title and
+   different abstracts still merge.
 
 Step 2 only runs **across sources**: the clusters' provenance source sets must be disjoint
 (OpenReview ↔ proceedings), **`ris` aside** (TASK-179): RIS is a route, each RIS row names its paper by a forum
@@ -299,6 +304,9 @@ fixtures: `test_dedup_forum_link.py`.
   or desk-rejected has a companion that is no import. The `imports` strategy gives the import, and each forum's RIS row (sometimes with no note
   crawled), a status of its own; `@example`s pin the import-only and the crawled-note shapes.
 - No output record combines inputs with different `(venue, year)`.
+- An imported record a title merge joined keeps no own-page abstract a crawler gave another record of its
+  venue-year unless a record it joined keeps it too (decision-045; `TITLE_OF_ANOTHER`; `test_idempotent` pins
+  `YIELD_TO_A_REPLACED_RIS_ABSTRACT`, why the yield reads a crawler's abstract only).
 - Idempotent: `dedup(dedup(xs)).records == dedup(xs).records`, and the same conflict rows apart from
   `newest:`/`tie:`.
 - Order-independent: `dedup(shuffle(xs)) == dedup(xs)`.

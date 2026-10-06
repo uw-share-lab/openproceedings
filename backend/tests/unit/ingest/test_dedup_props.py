@@ -377,6 +377,17 @@ NOTE_BRIDGE = [
 ]
 
 
+# decision-045's yield read a RIS row's abstract in a crawled cluster: a title merge in the same step replaced it
+# (one claim per source), so a second run merged the import it had kept apart (`_crawled_abstracts`)
+YIELD_TO_A_REPLACED_RIS_ABSTRACT = [
+    imported(f"nips-{H[1]}", "Trust in Machines", year=2023, abstract=LONG),
+    paper("AbCd1234", "Trust in Machines", year=2023, abstract=LONG),
+    imported("AbCd1234", "Trust in Machines", year=2023, abstract=OTHER),
+    imported("EfGh5678", "Trust in AI", year=2023, abstract=OTHER),
+    paper(f"nips-{H[2]}", "Trust in AI", source="neurips_proceedings", year=2023, abstract=LONG),
+]
+
+
 @given(pools)
 @example(TWO_PROCEEDINGS_IDS)
 @example(WORKSHOP_INTO_RIS_LISTING)
@@ -387,6 +398,7 @@ NOTE_BRIDGE = [
 @example(ICLR_2016)
 @example(RIS_BRIDGE)
 @example(NOTE_BRIDGE)
+@example(YIELD_TO_A_REPLACED_RIS_ABSTRACT)
 def test_idempotent(xs: list[PaperRecord]) -> None:
     once = dedup(xs)
     note(once)
@@ -661,6 +673,50 @@ def test_a_status_no_listing_has_is_never_kept_by_merging_with_imports_alone(xs:
                     {c.source for c in x.provenance} != IMPORTED
                     for other, rest in inputs.items() if other != cid for x in rest
                 )  # fmt: skip
+
+
+# TASK-189's shape A: Scholar's title has a different note's title key, its own-page abstract a third note's
+TITLE_OF_ANOTHER = [
+    paper("AbCd1234", "Trust in AI", venue="ICLR", abstract=OTHER),
+    paper("EfGh5678", "Trust in Machines", venue="ICLR", abstract=LONG),
+    imported(f"iclr-{H[1]}", "Trust in AI", venue="ICLR", abstract=LONG),
+]
+
+
+@given(pools)
+@example(TITLE_OF_ANOTHER)
+def test_an_import_joined_by_its_title_keeps_no_abstract_only_another_crawled_record_holds(
+    xs: list[PaperRecord],
+) -> None:
+    """decision-045: an imported record (sources `ris` alone before step 2) that a title merge joined keeps no
+    own-page abstract that a crawler gave a record of its venue-year unless a record it joined holds it too: the
+    title would name another paper."""
+    from openproceedings.ingest.dedup import _abstract_keys, _cluster
+
+    result = dedup(xs)
+    note(result)
+    ends = final_ids(result)
+    clusters: dict[str, list[PaperRecord]] = {}
+    for x in xs:
+        clusters.setdefault(linked_before(result, x.id), []).append(x)
+    keys = {cid: _abstract_keys(_cluster(ins, cid)) for cid, ins in clusters.items()}
+    by_crawler = {cid: _abstract_keys(_cluster(ins, cid), crawled=True) for cid, ins in clusters.items()}
+    imported_ = {
+        cid for cid, ins in clusters.items() if all({c.source for c in x.provenance} == IMPORTED for x in ins)
+    }
+    by_title = {m.merged_id for m in result.merges if m.rule == "title_venue_year"}
+    by_title |= {m.survivor_id for m in result.merges if m.rule == "title_venue_year"}
+    for cid in imported_ & by_title:
+        out = ends[cid]
+        mine = clusters[cid][0]
+        joined = {k for other in clusters if other != cid and ends[other] == out for k in keys[other]}
+        crawled = {
+            k for other, ins in clusters.items() if other not in imported_
+            and (ins[0].venue, ins[0].year) == (mine.venue, mine.year) for k in by_crawler[other]
+        }  # fmt: skip
+        for k in keys[cid] & crawled:
+            event("import-title-merge:abstract-held-elsewhere")
+            assert k in joined
 
 
 def linked_before(result: DedupResult, rid: str) -> str:
