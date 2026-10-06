@@ -789,7 +789,7 @@ deliberate evasion.
 have teeth. Each mutant in `.claude/scripts/mutants/*.json` breaks one piece of gate or tooling logic, and at
 least one table must fail. Survivors are either fixed with a new row or documented as `equivalent`, with
 the reason. Mutants run in parallel, each against a copy of every case table: the full set (694 at TASK-171) takes hours (188 in 140 min on a 4-CPU runner, nightly run 37017691575), and `--changed` only the mutants of the files a diff touches. `--shard i/n` runs every n-th selected mutant from the i-th (1 <= i <= n), so n shards partition the set the same way every run; `--list` prints the selected labels and runs nothing. Reviews run
-`make mutate-changed`; the nightly workflow runs every mutant as 8 shards in parallel jobs (§CI).
+`make mutate-changed`; the nightly workflow runs every mutant as 12 shards in parallel jobs (§CI; 8 until 2026-10-06, when a shard ran past its 140 minutes).
 Hook probes stay data (TASK-169): `.claude/scripts/lint_probes.py` (in `make tooling`)
 fails on a case-table row whose probe, label or command holds a `$(…)` or backquote bash would run while the
 table runs, and `.claude/scripts/probe_hook.py` feeds one probe, from a file or one argument, to a hook or to
