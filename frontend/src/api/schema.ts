@@ -1106,8 +1106,9 @@ export interface components {
         /**
          * ParseResponse
          * @description 02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus
-         *     `filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` (`query.wordforms.word_forms`,
-         *     TASK-175). A query with errors is still a 200 here: `errors` holds them, and every Optional is null.
+         *     `filters` (`query.clauses.filter_clauses`, TASK-078) and `word_forms` and `word_forms_skipped`
+         *     (`query.wordforms.report`, TASK-175, TASK-192). A query with errors is still a 200 here: `errors` holds
+         *     them, and every Optional is null.
          */
         ParseResponse: {
             /** Ast */
@@ -1143,9 +1144,14 @@ export interface components {
             warnings: components["schemas"]["Diagnostic"][];
             /**
              * Word Forms
-             * @description Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order (spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the query text the reader triggers and sees. The server has parsed `q` with every one inserted. Empty outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty.
+             * @description Each place a `$` can be added to a term the `COMPAT_NO_STEMMING` notice names, in order (spec 02 §Word forms; TASK-175): the UI inserts `insert` at code point `at` of `q`, an edit of the query text the reader triggers and sees. The server has parsed `q` with every one inserted. Near the 2,000-code-point cap, only the terms whose `$` fit (in the order they are first written; TASK-192). Empty outside Scholar mode and when no term can take a `$`. Null exactly when `errors` is non-empty.
              */
             word_forms: components["schemas"]["WordForm"][] | null;
+            /**
+             * Word Forms Skipped
+             * @description Each term the `COMPAT_NO_STEMMING` notice names that `word_forms` offers in no place, once, in the notice's order, with the `reason` it gets no `$` (spec 02 §Word forms; TASK-192). Empty outside Scholar mode and when every named term is offered. Null exactly when `errors` is non-empty.
+             */
+            word_forms_skipped: components["schemas"]["SkippedTerm"][] | null;
         };
         /**
          * ParsedClause
@@ -1567,6 +1573,20 @@ export interface components {
              * @description Of `excluded.total`, the records removed as unclassified rather than ineligible: `excluded.track.unknown` + `excluded.status.unknown`. The number `op search` prints as `unclassified`.
              */
             unclassified_total: number;
+        };
+        /** SkippedTerm */
+        SkippedTerm: {
+            /**
+             * Reason
+             * @description Why it gets no `$` (spec 02 §Word forms): `too_short`, a stem under 3 letters or digits (`AI`); `symbol`, the `$` would not directly follow a letter or digit (`C++`); `dollar_nearby`, its unspaced run already holds a `$` or a backslash, so a second `$` would close LaTeX math (`US$5`); `operator_word`, a lowercase `and`, `or`, `not` or `near/n`, read by its text; `too_long`, its `$` would put the query, or its canonical form, over the 2,000-code-point cap with the offered ones; `unconfirmed`, the server could not read the edit back. Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @enum {string}
+             */
+            reason: "too_short" | "symbol" | "dollar_nearby" | "operator_word" | "too_long" | "unconfirmed";
+            /**
+             * Term
+             * @description The term as the `COMPAT_NO_STEMMING` notice names it, as in `WordForm.term`.
+             */
+            term: string;
         };
         /**
          * SnapshotInfo

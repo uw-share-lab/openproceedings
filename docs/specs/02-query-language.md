@@ -374,7 +374,18 @@ WordForm = {term: str,            # as the notice names it: normalised tokens, a
                                   #   zero-width space after `trust` gives 6, not 5)
             insert: str}          # the text to insert at `at`, as it is: "$" or "$ "
 word_forms -> [WordForm] | None   # in order of `at`; None exactly when errors is non-empty; [] in native mode
+SkippedTerm = {term: str,         # as the notice names it, like WordForm.term
+               reason: str}       # too_short | symbol | dollar_nearby | operator_word | too_long | unconfirmed
+word_forms_skipped -> [SkippedTerm] | None  # each named term offered in no place, once, in the notice's order
 ```
+
+Both are `query/wordforms.py::report(q, result)` (TASK-192), served beside each other by `POST /parse`. Every
+term the notice names is in exactly one of them: offered (in at least one place), or skipped with the first
+reason that refuses it. The reasons are the table's rows below (`too_short`, `symbol`, `dollar_nearby`,
+`operator_word`, from `exact.py::dollar_verdicts`), plus `too_long` (the length cap, below) and `unconfirmed`
+(the read-back refused the edits for a reason the rules did not foresee; nothing is offered then, and the
+tests hold that it never happens). `reason` is an open enum (spec 04 §Conventions): a new lexer rule may add
+one.
 
 A term is offered when the notice names it (a word or phrase with no wildcard; `NEAR` operands and terms
 under `NOT` included; one entry per place it is written) and `$` is a valid wildcard on it **as written**:
@@ -397,9 +408,18 @@ nothing else, and with it any subset of the edits is sound.
 
 The report is then **read back**: the server makes every edit at once, parses the result in the query's mode,
 and requires the tree to be the original with exactly those leaves made `$` wildcards. If it is not, nothing
-is offered (`[]`). The rules above are meant to allow only what the read-back accepts; the one thing they
-cannot see is the edited query, or its canonical form, passing the 2,000-code-point cap, and then nothing is
-offered although single edits would fit. `test_wordforms.py` pins each row above and checks, for generated
+is offered (`[]`, each term `unconfirmed`). The rules above are meant to allow only what the read-back
+accepts; the one thing they cannot see is the edited query, or its canonical form, passing the
+2,000-code-point cap. Then the terms whose `$` fit are offered and the rest are `too_long` (TASK-192): terms
+are taken in the order they are first written, each in every place it is written or in none (the UI adds a
+term's `$` everywhere), and a term that doesn't fit doesn't stop a later, smaller one. The raw length of a
+choice is counted exactly (a `$ ` whose neighbour in the run is not chosen is a bare `$`); the canonical
+form is counted as one more code point per place, the most a `$` adds to it (a term it quoted, `"and"`, or
+deduped with a sibling adds less), from the length the last read-back measured, and up to three rounds of
+read-backs try the terms left over against the measured length. So a term named `too_long` would put the
+query or its canonical form over the cap with the ones offered, except that one whose own places dedupe in
+the canonical form may be passed over by a few code points. The offered set is read back as a whole, and any
+subset of it is shorter. `test_wordforms.py` pins each row above and checks, for generated
 queries and every Trust-Evals string, that every subset of the edits (each alone, all together, and every
 combination of the first six, since the reader may tick any) changes only the terms it names, and that the
 read-back refuses nothing the rules allow short of the cap. That last check is a test, not a proof: it is how

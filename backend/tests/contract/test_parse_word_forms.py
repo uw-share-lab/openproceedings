@@ -25,7 +25,8 @@ def test_parse_serves_the_golden_word_forms(client: TestClient, case: dict[str, 
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["word_forms"] == case["word_forms"]
-    assert (body["word_forms"] is None) == bool(body["errors"])
+    assert body["word_forms_skipped"] == case["word_forms_skipped"]  # TASK-192
+    assert (body["word_forms"] is None) == (body["word_forms_skipped"] is None) == bool(body["errors"])
 
 
 def _search(client: TestClient, q: str, mode: str) -> dict[str, Any]:
