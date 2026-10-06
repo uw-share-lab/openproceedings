@@ -382,9 +382,11 @@ word_forms_skipped -> [SkippedTerm] | None  # each named term offered in no plac
 Both are `query/wordforms.py::report(q, result)` (TASK-192), served beside each other by `POST /parse`. Every
 term the notice names is in exactly one of them: offered (in at least one place), or skipped with the first
 reason that refuses it. The reasons are the table's rows below (`too_short`, `symbol`, `dollar_nearby`,
-`operator_word`, from `exact.py::dollar_verdicts`), plus `too_long` (the length cap, below) and `unconfirmed`
-(the read-back refused the edits for a reason the rules did not foresee; nothing is offered then, and the
-tests hold that it never happens). `reason` is an open enum (spec 04 §Conventions): a new lexer rule may add
+`operator_word`, from `exact.py::dollar_verdicts`), plus `too_long` (the length budget, below) and
+`unconfirmed`, which has two sources: `dollar_verdicts` gives it to a leaf whose shape it doesn't know (no
+word or phrase lexeme in the leaf's span, two of them, or a phrase with no parts), and `wordforms.report` to
+every term when the read-back refuses the edits for a reason the rules did not foresee (nothing is offered
+then). The tests hold that neither happens. `reason` is an open enum (spec 04 §Conventions): a new lexer rule may add
 one.
 
 A term is offered when the notice names it (a word or phrase with no wildcard; `NEAR` operands and terms

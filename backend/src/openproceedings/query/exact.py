@@ -114,8 +114,9 @@ class Place(NamedTuple):
 
 
 # Why a term the notice names gets no `$` (spec 02 §Word forms). `dollar_verdicts` gives the first four, from
-# the rules; `wordforms.py` adds `too_long` (no room under the length cap) and `unconfirmed` (the read-back
-# refused it, which the rules are meant to make impossible).
+# the rules, and `unconfirmed` for a leaf whose shape it doesn't know (no word or phrase lexeme in it, two in
+# it, or a phrase with no parts); `wordforms.py` adds `too_long` (no room in the length budget) and
+# `unconfirmed` for edits the read-back refused. The tests hold that neither `unconfirmed` happens.
 SkipReason = Literal["too_short", "symbol", "dollar_nearby", "operator_word", "too_long", "unconfirmed"]
 
 

@@ -92,9 +92,10 @@ class SkippedTerm(BaseModel):
         description="Why it gets no `$` (spec 02 §Word forms): `too_short`, a stem under 3 letters or digits "
         "(`AI`); `symbol`, the `$` would not directly follow a letter or digit (`C++`); `dollar_nearby`, its "
         "unspaced run already holds a `$` or a backslash, so a second `$` would close LaTeX math (`US$5`); "
-        "`operator_word`, a lowercase `and`, `or`, `not` or `near/n`, read by its text; `too_long`, its `$` "
-        "would put the query, or its canonical form, over the 2,000-code-point cap with the offered ones; "
-        "`unconfirmed`, the server could not read the edit back."
+        "`operator_word`, a lowercase `and`, `or`, `not` or `near/n`, read by its text; `too_long`, no room "
+        "for its `$` under the 2,000-code-point cap beside the offered ones, by a budget that keeps every "
+        "subset of them under it; `unconfirmed`, the server could not check the edit (a term of a shape the "
+        "rules don't know, or edits the read-back refused)."
     )
 
 
