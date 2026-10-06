@@ -70,7 +70,9 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 - **Start, heartbeats, end** at INFO. OpenReview (API v1 and v2 alike): `openreview_crawl_started`,
   `openreview_crawl_progress`, `openreview_crawl_finished`, each with `api`, `venue`, `year`, the counts
   processed so far, `requests` and `cached` (the finished line also counts `title_control_characters`, the
-  records whose title lost a control character: decision-036, never an attention count); a heartbeat is due at most every 30 s (`common.Heartbeat` on the
+  records whose title lost a control character: decision-036, and `abstract_control_characters`, those whose
+  abstract did: decision-044, TASK-199; neither is an attention count; the proceedings `_mined` lines and
+  `ris_import` carry `abstract_control_characters` too); a heartbeat is due at most every 30 s (`common.Heartbeat` on the
   HTTP client's monotonic clock, so a test's fake clock drives it). The proceedings miners:
   `neurips_listing_started` / `_progress` / `_mined` and `pmlr_volume_started` / `_progress` / `_mined`, with the
   year or volume and `done` / `of`; their heartbeat is due at most every `PROGRESS_SECONDS` (30 s) of

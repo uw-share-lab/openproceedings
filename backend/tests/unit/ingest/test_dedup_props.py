@@ -268,6 +268,48 @@ def creative(draw: st.DrawFn) -> tuple[list[PaperRecord], list[str], bool, int]:
     return xs + noise, aside, blocked, year
 
 
+@st.composite
+def yields(draw: st.DrawFn) -> list[PaperRecord]:
+    """decision-045's shapes (TASK-201): an imported record with its own-page abstract, title partners under its
+    title (a crawled note of any track and status, a forum id's RIS row, a crawled listing) that keep its abstract,
+    another or none, and records of other titles (a note, a listing, a workshop or rejected one, or a note whose
+    RIS row alone keeps it) that hold its abstract, all in one venue-year, plus noise."""
+    venue, prefix, archive_source = draw(
+        st.sampled_from([("NeurIPS", "nips", "neurips_proceedings"), ("ICLR", "iclr", "iclr_archive")])
+    )
+    year = draw(st.sampled_from([2023, 2024]))
+    where = dict(venue=venue, year=year)
+    title, other_title = draw(st.permutations(TITLES[1:3]))  # two keys, never punctuation alone
+    abstracts = st.sampled_from([LONG, LONG, OTHER, None])
+    tracks = st.sampled_from(["main", "main", "workshop", "unknown"])
+    statuses = st.sampled_from(["accepted", "accepted", "rejected", "unknown"])
+    native = draw(st.sampled_from([f"{prefix}-{H[1]}", f"{prefix}-{H[1]}", FORUMS[2]]))
+    xs = [imported(native, title, abstract=LONG, **where)]
+    partners = st.sampled_from(["note", "note", "ris", "listing"])
+    for fid, kind in zip(FORUMS[:2], draw(st.lists(partners, min_size=1, max_size=2)), strict=False):
+        if kind == "note":
+            xs.append(paper(fid, title, source=draw(st.sampled_from(["openreview_v2", "openreview_v1"])),
+                            track=draw(tracks), status=draw(statuses), abstract=draw(abstracts), **where))  # fmt: skip
+        elif kind == "ris":
+            xs.append(imported(fid, title, abstract=draw(abstracts), **where))
+        else:
+            xs.append(
+                paper(f"{prefix}-{H[2]}", title, source=archive_source, abstract=draw(abstracts), **where)
+            )
+    for n, kind in enumerate(draw(st.lists(st.sampled_from(["note", "listing", "ris_only"]), max_size=2))):
+        fid = ["MnOp3456", "QrSt7890"][n]
+        if kind == "listing":
+            xs.append(
+                paper(f"{prefix}-{H[3 + n]}", other_title, source=archive_source, abstract=LONG, **where)
+            )
+        else:  # a note holding it, or a note whose RIS row alone keeps it (never a crawler's text)
+            xs.append(paper(fid, other_title, track=draw(tracks), status=draw(statuses),
+                            abstract=OTHER if kind == "ris_only" else LONG, **where))  # fmt: skip
+            if kind == "ris_only":
+                xs.append(imported(fid, other_title, abstract=LONG, **where))
+    return xs + draw(st.lists(records(), max_size=2))
+
+
 pools = st.one_of(
     st.lists(records(), max_size=10),
     chains(),
@@ -702,7 +744,7 @@ REJECTED_PARTNER = [
 ]
 
 
-@given(pools)
+@given(st.one_of(pools, yields()))  # yields(): the shapes a pool rarely reaches (TASK-201)
 @example(TITLE_OF_ANOTHER)
 @example(SET_ASIDE_PARTNER)
 @example(REJECTED_PARTNER)

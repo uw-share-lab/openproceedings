@@ -307,8 +307,13 @@ fixtures: `test_dedup_forum_link.py`.
 - An imported record a title merge joined keeps no own-page abstract a crawler gave another record of its
   venue-year unless a title partner keeps it too: any cluster of the venue-year sharing its title key, a rival
   the merge set aside included (decision-045; `TITLE_OF_ANOTHER`; `SET_ASIDE_PARTNER`, a same-title workshop
-  note, from nightly run 37412309356; `test_idempotent` pins `YIELD_TO_A_REPLACED_RIS_ABSTRACT`, why the yield
-  reads a crawler's abstract only).
+  note, and `REJECTED_PARTNER`, from nightly run 37412309356; `test_idempotent` pins
+  `YIELD_TO_A_REPLACED_RIS_ABSTRACT`, why the yield reads a crawler's abstract only). It draws from
+  `one_of(pools, yields())`: `yields()` builds an import beside same-title partners and other-title crawled
+  holders of its abstract (workshop, rejected, a RIS row only), so "never yield" and "a partner with any abstract
+  keeps the merge" fail at the ci profile without the `@example`s (TASK-201). The other direction, a yield
+  although a title partner keeps the abstract, gives the same record by the wrong rule, so unit tests pin it
+  (`test_one_title_partner_keeping_the_abstract_…`, `test_a_lone_title_partner_…`).
 - Idempotent: `dedup(dedup(xs)).records == dedup(xs).records`, and the same conflict rows apart from
   `newest:`/`tie:`.
 - Order-independent: `dedup(shuffle(xs)) == dedup(xs)`.

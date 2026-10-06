@@ -148,6 +148,9 @@ class ImportReport:
     track_status: Mapping[str, Mapping[str, int]]  # track → status → count (read-only)
     # the offset its query dates were converted with (`ris_offsets.toml`); None: local, offset unknown
     utc_offset: str | None = None
+    # records whose abstract had a control character replaced (decision-044, TASK-199), from the importer's own
+    # count; in the manifest only when above 0, so a file with none keeps its shape
+    abstract_control_characters: int = 0
 
     def __post_init__(self) -> None:
         if set(self.skipped) != set(SKIP_REASONS):
@@ -166,6 +169,8 @@ class ImportReport:
         out = {k: getattr(self, k) for k in self.__dataclass_fields__}
         out["skipped"] = dict(sorted(self.skipped.items()))
         out["track_status"] = {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())}
+        if not self.abstract_control_characters:
+            del out["abstract_control_characters"]
         return dict(sorted(out.items()))
 
 
@@ -386,21 +391,28 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
     return "out_of_scope"
 
 
-def _abstract(entry: dict[str, Any]) -> tuple[str, str] | None:
+def _abstract(entry: dict[str, Any]) -> tuple[str, str, int] | None:
     """The first non-empty abstract claim in `_ABSTRACT_SOURCES` order, as a record stores it (whitespace
-    collapsed, a control character a space: `record.abstract_text`, decision-044), and its evidence. The
-    route and url lead the evidence (`dedup.attribution` reads them); a replacement note follows."""
+    collapsed, a control character a space: `record.abstract_text`, decision-044), its evidence, and how many
+    control characters it lost. The route and url lead the evidence (`dedup.attribution` reads them); a
+    replacement note follows. The report counts from that number, never from the evidence, whose text comes
+    from the file and could say anything (TASK-199)."""
     for src in _ABSTRACT_SOURCES:
         for c in _claims(entry, "abstract", src):
             if isinstance(c["value"], str) and (spaced := abstract_text(c["value"]))[0]:
                 text, replaced = spaced
-                return text, controls_evidence(f"scholarmend:{c['source']} {c['evidence']}", replaced)
+                return (
+                    text,
+                    controls_evidence(f"scholarmend:{c['source']} {c['evidence']}", replaced),
+                    replaced,
+                )
     return None
 
 
 def _record(
     entry: dict[str, Any], ris: dict[str, list[str]], ident: _Identity, fetched: datetime
-) -> PaperRecord:
+) -> tuple[PaperRecord, int]:
+    """The record, and how many control characters its abstract lost (`_abstract`)."""
     title, replaced = title_text(entry["title"])  # a control character becomes a space (decision-036)
     authors = tuple(a for a in ris.get("AU", []) if a != _TRUNCATED)
     abstract = _abstract(entry)
@@ -420,7 +432,7 @@ def _record(
         claim("authors", authors, "mended.ris:AU"),
     ]
     if abstract is not None:
-        provenance.append(claim("abstract", *abstract))
+        provenance.append(claim("abstract", abstract[0], abstract[1]))
     if ident.cls.venue_id_raw is not None:
         provenance.append(
             claim(
@@ -438,13 +450,14 @@ def _record(
     urls = {f: u for f, u, _ in ident.urls}
     for f, u, src in ident.urls:
         provenance.append(claim(f, u, f"scholarmend:{src} {u}", url=u))
-    return PaperRecord.build(
+    record = PaperRecord.build(
         id=f"op:{ident.venue.lower()}:{ident.year}:{ident.native}", title=title,
         abstract=None if abstract is None else abstract[0], authors=authors, venue=ident.venue, year=ident.year,
         track=ident.cls.track, status=ident.cls.status, venue_id_raw=ident.cls.venue_id_raw,
         urls=Urls(forum=urls.get("urls.forum"), proceedings=urls.get("urls.proceedings"), pdf=urls.get("urls.pdf")),
         provenance=tuple(provenance),
     )  # fmt: skip
+    return record, 0 if abstract is None else abstract[2]
 
 
 def _check_shape(name: str, entries: object) -> list[dict[str, Any]]:
@@ -491,7 +504,7 @@ def import_ris(
         raise ValueError(f"{name}: {len(ris)} RIS records but {len(entries)} resolved entries")
     skipped: Counter[str] = Counter(dict.fromkeys(SKIP_REASONS, 0))
     track_status: dict[str, Counter[str]] = {}
-    overrides = 0
+    overrides = spaced = 0
     records: list[PaperRecord] = []
     for i, (rec, entry) in enumerate(zip(ris, entries, strict=True)):
         if rec.fields.get("TI", [None])[0] != entry["title"]:
@@ -507,8 +520,9 @@ def import_ris(
             log.debug("ris_skip", extra={"file": name, "index": i, "reason": "no_query_date"})
             continue
         queried = datetime.strptime(dates[0], "%Y-%m-%d %H:%M:%S").replace(tzinfo=zone).astimezone(UTC)
-        r = _record(entry, rec.fields, ident, queried)
+        r, replaced = _record(entry, rec.fields, ident, queried)
         records.append(r)
+        spaced += replaced > 0
         overrides += ident.status_override
         track_status.setdefault(r.track, Counter())[r.status] += 1
     report = ImportReport(
@@ -524,8 +538,11 @@ def import_ris(
         status_overrides=overrides,
         track_status={t: dict(c) for t, c in track_status.items()},
         utc_offset=utc_offset,
+        abstract_control_characters=spaced,
     )
     counts = {k: v for k, v in report.to_manifest().items() if k not in ("track_status",)}
+    # always on the line, as on the crawl lines; the manifest lists it only when above 0
+    counts["abstract_control_characters"] = report.abstract_control_characters
     log.info("ris_import", extra=counts)
     attention = {
         k: skipped[k] for k in ("unresolved", "ambiguous", "conflict", "no_query_date") if skipped[k]

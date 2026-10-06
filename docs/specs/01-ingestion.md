@@ -259,7 +259,15 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    diff lists them as changed. **Known limit:** the abstract reads `quanti fying`, and a search for the whole
    word `quantifying` still misses that paper, as it did before; that is the source's text. The record model
    does not refuse a control character in an abstract, so a snapshot built before TASK-188 still loads.
-   Authors keep theirs (one author name holds U+007F).
+   Authors keep theirs (one author name holds U+007F). **Counted (TASK-199):** every report beside it counts the
+   records whose abstract lost one, `abstract_control_characters`: the OpenReview crawl reports (crawl file,
+   manifest, `openreview_crawl_finished`, beside `title_control_characters`), each proceedings listing's
+   report (`neurips_listing_mined`, `pmlr_volume_mined`) and each RIS import report (`ris_import`). Always on
+   those log lines; listed in a manifest only when above 0, so a source with none keeps its shape; never an attention WARNING, since the
+   abstract is kept. The count is the importer's own (`abstract_text`'s number, carried out of
+   `openreview_v2._abstract`, `common.clean_abstract` and `ris._abstract`), never read back from the claim's
+   evidence: a RIS claim's evidence is the reviewer's file's text and could carry the note without a
+   replacement. The OpenReview crawls count only notes that became records.
 3. **Classify.** Derive `track`, `status` and `presentation` using the rules above. Every classification
    records its evidence claim.
 4. **Deduplicate.** The same paper appears on OpenReview and in the proceedings (NeurIPS, ICML 2023+).
