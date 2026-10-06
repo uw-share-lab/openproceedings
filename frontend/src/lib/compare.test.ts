@@ -105,6 +105,10 @@ describe("the words", () => {
     expect(reasonText("dropped", "a_new_class")).toBe("a_new_class");
     expect(matchedByText("a_new_rule")).toBe("a_new_rule");
     expect(matchedByText("doi")).toBe("matched by its DOI"); // TASK-186: Scopus and Web of Science exports
+    // a record with neither names its links and its DOI as unmatched alike (TASK-186)
+    expect(matchedByText("not_found")).toBe(
+      "no record with this title in that venue and year, and no link or DOI naming an indexed paper",
+    );
     expect(notComparedText("a_new_reason")).toBe("a_new_reason");
   });
 
@@ -219,21 +223,36 @@ describe("the words", () => {
     const n = (x: number) => x.toLocaleString("en-US");
     expect(text).toBe(
       "As a search-development check (not a PRISMA flow-diagram count), on 2026-10-05 (UTC) we compared the " +
-        `RIS file mine.ris (sha256 \`${sha}\`; ${n(c.records_total)} records read, ${n(c.papers_total)} papers ` +
-        `compared) with the query \`${c.query.canonical}\` (canonical_hash \`${c.query.canonical_hash}\`) on ` +
+        `RIS file mine.ris (sha256 \`${sha}\`; ${n(c.records_total)} records read: ${n(c.papers_total)} papers ` +
+        `compared, ${n(c.not_compared_total)} not compared for a venue or year out of scope, and ` +
+        `${n(c.duplicates_total)} ${c.duplicates_total === 1 ? "repeat" : "repeats"} of a paper already counted) ` +
+        `with the query \`${c.query.canonical}\` (canonical_hash \`${c.query.canonical_hash}\`) on ` +
         `openproceedings (index \`${c.index_version}\`): ${n(c.kept_total)} kept, ${n(c.dropped_total)} dropped, ` +
         `${n(c.not_in_index_total)} not in the index, and ${n(c.added_total)} papers added that the file ` +
         "doesn't hold.",
     );
     // one sentence: no full stop before its end but the ones inside the query
     expect(text.replace(c.query.canonical, "").slice(0, -1)).not.toMatch(/\.\s/);
+    // the file's records are all accounted for: compared, not compared, repeats (the fixture has each)
+    expect(c.not_compared_total).toBeGreaterThan(0);
+    expect(c.duplicates_total).toBeGreaterThan(0);
+    expect(c.papers_total + c.not_compared_total + c.duplicates_total).toBe(c.records_total);
   });
 
   it("says when this browser couldn't compute the file's sha256, and counts one of a kind", () => {
-    const one = { ...fixture.response, records_total: 1, papers_total: 1, added_total: 1 };
+    const one = {
+      ...fixture.response,
+      records_total: 1,
+      papers_total: 1,
+      not_compared_total: 0,
+      duplicates_total: 0,
+      added_total: 1,
+    };
     const text = summaryText(one, { name: "mine.ris", sha256: null }, "2026-10-05");
+    // no repeats: the clause is left out, never "0 repeats"
     expect(text).toContain(
-      "(sha256 not computed by this browser: compute it from your copy; 1 record read, 1 paper compared)",
+      "(sha256 not computed by this browser: compute it from your copy; 1 record read: 1 paper compared and 0 " +
+        "not compared for a venue or year out of scope)",
     );
     expect(text).toContain("and 1 paper added that the file doesn't hold.");
   });

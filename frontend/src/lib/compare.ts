@@ -109,7 +109,7 @@ const MATCHED_BY: Record<string, string> = {
   proceedings_id: "matched by its proceedings link",
   doi: "matched by its DOI",
   title_venue_year: "matched by title, venue and year",
-  not_found: "no record with this title in that venue and year, and no link to an indexed paper",
+  not_found: "no record with this title in that venue and year, and no link or DOI naming an indexed paper",
   ambiguous: "its link or title names several index records, so none was chosen",
   no_year: "it has no year, so only a link could match it",
   no_venue: "its venue is cut short or missing, so its title was not matched",
@@ -300,10 +300,20 @@ export function summaryText(
     file.sha256 === null
       ? "sha256 not computed by this browser: compute it from your copy"
       : `sha256 \`${file.sha256}\``;
+  // every record of the file accounted for (records_total = papers + not compared + repeats), so a reader can
+  // see where a file's records went (a Web of Science file's unmatched records are mostly not compared);
+  // repeats only when there are some
+  const parts = [
+    `${count(c.papers_total, "paper")} compared`,
+    `${n(c.not_compared_total)} not compared for a venue or year out of scope`,
+    ...(c.duplicates_total > 0 ? [`${count(c.duplicates_total, "repeat")} of a paper already counted`] : []),
+  ];
+  const accounted =
+    parts.length === 2 ? parts.join(" and ") : `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1) ?? ""}`;
   return (
     `As a search-development check (not a PRISMA flow-diagram count), on ${date} (UTC) we compared the RIS ` +
-    `file ${file.name} (${hash}; ${count(c.records_total, "record")} read, ` +
-    `${count(c.papers_total, "paper")} compared) with the query \`${c.query.canonical}\` ` +
+    `file ${file.name} (${hash}; ${count(c.records_total, "record")} read: ${accounted}) ` +
+    `with the query \`${c.query.canonical}\` ` +
     `(canonical_hash \`${c.query.canonical_hash}\`) on openproceedings (index \`${c.index_version}\`): ` +
     `${n(c.kept_total)} kept, ${n(c.dropped_total)} dropped, ${n(c.not_in_index_total)} not in the index, ` +
     `and ${count(c.added_total, "paper")} added that the file doesn't hold.`

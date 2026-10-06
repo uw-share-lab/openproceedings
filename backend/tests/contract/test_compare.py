@@ -607,6 +607,21 @@ def test_the_widest_comparison_values_keep_the_pause_and_the_debit_finite() -> N
     assert math.isfinite(worst * 1000 / 1)  # tokens at the lowest price, 1 ms (refused below it, above)
 
 
+def test_op_serve_help_states_each_comparison_default_from_the_config(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The help reads each default and range from the config's own field, so it can't drift (TASK-184)."""
+    with pytest.raises(SystemExit):
+        cli.main(["--data-dir", str(tmp_path), "serve", "--help"])
+    text = " ".join(capsys.readouterr().out.split())  # argparse wraps it
+    for flag, _, where, field, _ in COMPARE_FLAGS:
+        info = (RateLimit if where == "rate_limit" else ApiConfig).model_fields[field]
+        default = info.default if isinstance(info.default, int) else f"{info.default:.15g}"
+        assert f"{flag} " in text and f"(default {default};" in text, flag
+    assert "(default 16777216; at least 1024; at most 1073741824)" in text  # never 1.67772e+07
+    assert "(default 3; at least 0; at most 1000)" in text
+
+
 def test_op_serve_refuses_a_comparison_value_that_is_not_a_number(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

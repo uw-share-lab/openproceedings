@@ -563,13 +563,16 @@ describe("CompareRecords", () => {
     await waitFor(() => expect(within(figure).getByRole("status").textContent).toBe("Copied"));
   });
 
-  it("selects the sentence for the keyboard where the clipboard can't be written", async () => {
-    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+  it.each([
+    ["there is no Clipboard API", undefined],
+    ["the clipboard refuses the write", { writeText: () => Promise.reject(new Error("denied")) }],
+  ])("selects the sentence for the keyboard where %s", async (_, value) => {
+    Object.defineProperty(navigator, "clipboard", { value, configurable: true });
     await draw();
     await compareWith();
     const { figure, box } = await citable();
     fireEvent.click(within(figure).getByRole("button", { name: "Copy this comparison as one sentence" }));
-    expect(document.activeElement).toBe(box);
+    await waitFor(() => expect(document.activeElement).toBe(box));
     expect([box.selectionStart, box.selectionEnd]).toEqual([0, box.value.length]);
     await waitFor(() =>
       expect(within(figure).getByRole("status").textContent).toBe(

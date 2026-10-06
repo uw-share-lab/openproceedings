@@ -14,8 +14,8 @@
  * text, saved as sent.
  *
  * The file goes to the server for this one request and is not kept there (spec 04). Its name never leaves the
- * browser, and its sha256, for the citable sentence, is computed here (TASK-195). Nor does the comparison: it lives in this component only, so a row's title opens its paper in a
- * new tab (Back would otherwise lose it).
+ * browser, and its sha256, for the citable sentence, is computed here (TASK-195). The comparison is kept
+ * nowhere but this component, so a row's title opens its paper in a new tab (Back would otherwise lose it).
  */
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
