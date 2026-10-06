@@ -39,7 +39,7 @@ fails it; that is how the operator-word rule was found) and checks every subset 
 tick, not only all of them.
 
 Near the cap, the terms whose `$` fit are offered and the rest are named with the reason `too_long` (TASK-192).
-"Fit" is a budget, not a read-back of all the edits (`_costs`, `_fit`): a reader may tick any subset of the
+"Fit" is a budget, not a read-back of all the edits (`_fit`): a reader may tick any subset of the
 offered terms, and one term's `$` can shorten the canonical form (`"and"` → `and$`, `trust OR trust$` →
 `trust$`), so a set can fit while a subset of it does not. Each term is budgeted from the query as typed,
 and its savings never pay for another term. Every other term the notice names but no place is offered for is named
@@ -52,6 +52,7 @@ not need. `POST /parse` serves `report` as `word_forms` and `word_forms_skipped`
 
 from __future__ import annotations
 
+import bisect
 from typing import NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -170,43 +171,74 @@ def _read_back(q: str, result: ParseResult, places: list[Place]) -> bool:
     return edited.ast is not None and structure(edited.ast) == structure(expected)
 
 
-def _costs(q: str, result: ParseResult, by_term: dict[str, list[Place]], refused: set[str]) -> dict[str, int]:
-    """For each offered term, the most its `$` can add to the canonical form, whichever other terms are ticked:
-    a budget, so that every subset of the offered terms a reader can tick fits under the cap, not only all
-    of them (review of TASK-192). One term's savings never pay for another's.
+MAX_RENDERS = 2  # canonical renderings per query for single terms refused elsewhere, past the shared bound
 
-    A term whose every exact leaf takes the `$` is edited alike wherever it is written, so two subtrees the
-    canonical form dedupes stay equal and are still deduped: a `$` adds at most one code point per place (a
-    quoted `"and"` or a deduped `trust OR trust$` adds less, and is still counted one). A term the rules
-    refuse in another place (`trust? OR trust`) can make two deduped subtrees differ, so its own change is
-    rendered and added, never less than nothing, on top of one per place."""
+
+def _fit(q: str, result: ParseResult, by_term: dict[str, list[Place]], refused: set[str]) -> list[Place]:
+    """The places of the terms whose `$` fit, each term in every place it is written or in none, taken in the
+    order the terms are first written; a term that doesn't fit doesn't stop a later one.
+
+    The raw length is exact (`len(q)` plus the inserts: a word's `$ ` is a bare `$` while its neighbour in the
+    run is not chosen), and any subset of the chosen inserts is shorter. The canonical form is a budget, so
+    that every subset of the offered terms a reader can tick fits under the cap, not only all of them (review
+    of TASK-192): one term's savings never pay for another's. A term whose every exact leaf takes the `$` is
+    edited alike wherever it is written, so two subtrees the canonical form dedupes stay equal and are still
+    deduped: a `$` adds at most one code point per place (a quoted `"and"` or a deduped `trust OR trust$`
+    adds less, and is still counted one).
+
+    A term the rules refuse in another place (`trust? OR trust`) can make two deduped subtrees differ. With
+    deduping off, though, the canonical form of any edit is at most that of the query as typed plus one per
+    place, so what deduping saved (`saved`) bounds what all such terms together can bring back: the first one
+    chosen pays it, once. When that doesn't fit, a term's own change is rendered and paid instead, for at
+    most `MAX_RENDERS` terms; a later one is counted as not fitting (`too_long`).
+
+    `POST /parse` is public and runs as you type, so this is linear in the places but for a bisect each, and
+    renders the canonical form at most `1 + MAX_RENDERS` times."""
     assert result.ast is not None and result.canonical is not None
-    costs = {}
+    ats: list[int] = []  # the chosen places' offsets, sorted
+    run_at: dict[int, int] = {}
+    spaced = 0  # chosen neighbours in one run: each takes `$ `, one more code point
+    canonical, renders = len(result.canonical), 0
+    # deduping's saving in the query as typed, once a term refused elsewhere needs it
+    saved: int | None = None
+    paid = False  # whether a chosen term has paid `saved`, which covers every term refused elsewhere
     for term, places in by_term.items():
-        costs[term] = len(places)
-        if term in refused:
-            ends = frozenset(place.leaf_end for place in places)
-            effective = apply_defaults(_with_dollar(result.ast, ends), len(q)).effective
-            costs[term] += max(0, len(render(effective)) - len(result.canonical))
-    return costs
-
-
-def _fit(q: str, result: ParseResult, by_term: dict[str, list[Place]], costs: dict[str, int]) -> list[Place]:
-    """The places of the terms whose `$` fit the budget, each term in every place it is written or in none,
-    taken in the order the terms are first written; a term that doesn't fit doesn't stop a later one.
-
-    The raw length is exact (`len(q)` plus the inserts, recounted for each choice: a word's `$ ` is a bare `$`
-    while its neighbour is not chosen), and any subset of the chosen inserts is shorter. The canonical form is
-    `len(result.canonical)` plus each chosen term's cost (`_costs`), so it is never re-rendered per term."""
-    assert result.canonical is not None
-    chosen: list[Place] = []
-    canonical = len(result.canonical)
-    for term, places in by_term.items():
-        trial = sorted([*chosen, *places], key=lambda place: place.at)
-        raw = len(q) + len(trial) + sum(_spaced(trial))
-        if raw <= MAX_QUERY_LENGTH and canonical + costs[term] <= MAX_QUERY_LENGTH:
-            chosen, canonical = trial, canonical + costs[term]
-    return chosen
+        cost = len(places)
+        if canonical + cost > MAX_QUERY_LENGTH:
+            continue
+        pays = False
+        if term in refused and not paid:
+            if saved is None:
+                undeduped = apply_defaults(result.ast, len(q), dedupe=False).effective
+                saved = len(render(undeduped)) - len(result.canonical)
+            if canonical + cost + saved <= MAX_QUERY_LENGTH:
+                cost, pays = cost + saved, True
+            elif renders < MAX_RENDERS:
+                renders += 1
+                ends = frozenset(place.leaf_end for place in places)
+                effective = apply_defaults(_with_dollar(result.ast, ends), len(q)).effective
+                cost += max(0, len(render(effective)) - len(result.canonical))
+                if canonical + cost > MAX_QUERY_LENGTH:
+                    continue
+            else:
+                continue
+        before = spaced
+        for place in places:  # into the sorted offsets, counting the neighbours that share a run
+            i = bisect.bisect_left(ats, place.at)
+            left = run_at[ats[i - 1]] if i > 0 else None
+            right = run_at[ats[i]] if i < len(ats) else None
+            spaced += (left == place.run) + (place.run == right) - (left is not None and left == right)
+            ats.insert(i, place.at)
+            run_at[place.at] = place.run
+        if len(q) + len(ats) + spaced <= MAX_QUERY_LENGTH:
+            canonical, paid = canonical + cost, paid or pays
+            continue
+        for place in places:  # it doesn't fit: take it back out
+            ats.remove(place.at)
+            del run_at[place.at]
+        spaced = before
+    chosen = set(ats)
+    return [place for places in by_term.values() for place in places if place.at in chosen]
 
 
 class Report(NamedTuple):
@@ -220,7 +252,7 @@ def report(q: str, result: ParseResult) -> Report | None:
     """Where a `$` can be added to the terms the no-stemming notice names, and why each other named term gets
     none. None exactly when `result` has errors; empty outside Scholar mode (no notice).
 
-    The terms whose `$` fit under the cap are offered (`_fit`, by the budget `_costs`: every subset the
+    The terms whose `$` fit under the cap are offered (`_fit`, by a budget: every subset the
     reader can tick fits, not only all of them), the rest are `too_long`, and the offered edits are read
     back at once; when the read-back refuses them, which the rules are meant to make impossible, none is
     offered and each is `unconfirmed`."""
@@ -234,8 +266,8 @@ def report(q: str, result: ParseResult) -> Report | None:
     for place in places:
         by_term.setdefault(place.term, []).append(place)
     # within the budget, all of them; else the ones that fit, the rest `too_long`
-    chosen: list[Place] | None = _fit(
-        q, result, by_term, _costs(q, result, by_term, {t for t, _ in refusals})
+    chosen: list[Place] | None = sorted(
+        _fit(q, result, by_term, {t for t, _ in refusals}), key=lambda place: place.at
     )
     if chosen and not _read_back(q, result, chosen):
         chosen = None

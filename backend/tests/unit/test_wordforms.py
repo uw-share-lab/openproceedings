@@ -9,8 +9,9 @@ together, parses to the same query with exactly those terms made `$` wildcards.
 from __future__ import annotations
 
 import re
+import time
 from collections import Counter
-from itertools import combinations
+from itertools import combinations, product
 from pathlib import Path
 from typing import Any
 
@@ -456,3 +457,77 @@ def test_a_term_refused_in_another_place_is_budgeted_by_its_own_change() -> None
     assert (
         len(scholar(apply(small, forms_of(small))).canonical or "") > len(scholar(small).canonical or "") + 1
     )
+
+
+def hostile_near_cap() -> dict[str, str]:
+    """Near-cap queries that make the most budget work: many distinct terms, one term in many places, and
+    many terms the rules refuse in another place (each would need its own canonical rendering)."""
+    words = ["".join(p) for p in product("abcdefghijklmnopqrstuvwxyz", repeat=3)]
+
+    def fill(units: list[str], sep: str) -> str:
+        out: list[str] = []
+        for unit in units:
+            if len(sep.join([*out, unit])) > MAX_QUERY_LENGTH:
+                break
+            out.append(unit)
+        q = sep.join(out)
+        while parse(q, "scholar").errors:  # its canonical form over the cap: drop units until it is not
+            out.pop()
+            q = sep.join(out)
+        return q
+
+    return {
+        "distinct terms": fill(words, " OR "),
+        "tight runs": fill(["(" + "|".join(words[i : i + 20]) + ")" for i in range(0, 4000, 20)], " "),
+        "one term in many places": fill(["abc?", "abc"] * 500, " OR "),
+        "refused elsewhere, grouped": fill([f"({w}? OR {w})" for w in words], " "),
+        "refused elsewhere, in runs": fill([f"{w}?|{w}" for w in words], "|"),
+    }
+
+
+@pytest.mark.parametrize("name", list(hostile_near_cap()))
+def test_word_forms_near_the_cap_stay_cheap(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`POST /parse` is public and runs this as you type: the budget renders the canonical form at most
+    `1 + MAX_RENDERS` times however many terms the rules refuse elsewhere, and a hostile near-cap query costs
+    well under 100 ms (review of TASK-192: one rendering per such term took 0.9 s)."""
+    q = hostile_near_cap()[name]
+    result = scholar(q)
+    renders = 0
+    real = wordforms.render
+
+    def counted(n: Any) -> str:
+        nonlocal renders
+        renders += 1
+        return real(n)
+
+    monkeypatch.setattr(wordforms, "render", counted)
+    assert wordforms.report(q, result) is not None
+    assert renders <= 1 + wordforms.MAX_RENDERS
+    monkeypatch.undo()
+    best = min(_timed(lambda: wordforms.report(q, result)) for _ in range(3))
+    assert best < 0.1, f"{name}: {best * 1000:.0f} ms"
+    check_fits(q, exact=False)
+
+
+def _timed(f: Any) -> float:
+    start = time.perf_counter()
+    f()
+    return time.perf_counter() - start
+
+
+def test_terms_refused_elsewhere_share_one_bound_away_from_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Away from the cap, what deduping saved bounds every term refused elsewhere at once: all three are offered
+    with one rendering (the query undeduped), not one per term; near the cap the per-term renderings decide."""
+    q = "(trust? OR trust) (model? OR model) (agent? OR agent)"
+    renders = 0
+    real = wordforms.render
+
+    def counted(n: Any) -> str:
+        nonlocal renders
+        renders += 1
+        return real(n)
+
+    monkeypatch.setattr(wordforms, "render", counted)
+    report = check_fits(q, exact=False)
+    assert [f.term for f in report.forms] == ["trust", "model", "agent"]
+    assert renders == 1

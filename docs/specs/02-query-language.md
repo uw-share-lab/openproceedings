@@ -422,11 +422,16 @@ the offered terms and some `$` shorten it (a quoted `"and"` becomes `and$`; `tru
 one code point per place, counted from the canonical form of the query as typed, never less, so one term's
 savings never pay for another. That is the most a `$` adds for a term that takes it in every place it is
 written, since such a term is edited alike everywhere and the canonical form's deduped subtrees stay equal.
-A term the rules refuse in another place (`trust? OR trust`, deduped to `trust`) can make them differ, so its
-own change is rendered and added on top. The offered set is read back as a whole. Because the budget is an
-upper bound, a term named `too_long` may in fact have fit by a few code points (its own or another offered
-term's `$` would have shortened the canonical form); it is never offered when some subset with it would not
-fit. `test_wordforms.py` pins each row above and checks, for generated
+A term the rules refuse in another place (`trust? OR trust`, deduped to `trust`) can make them differ. With
+deduping off, any edit's canonical form is at most the typed query's plus one per place, so what deduping
+saved in the typed query bounds what all such terms together bring back: the first one offered pays it,
+once. When that doesn't fit, a term's own change is rendered and paid instead, for at most two such terms
+per query; a later one is `too_long`. `POST /parse` is public and runs this as the reader types, so the
+budget is linear in the places (a bisect each) and renders the canonical form at most three times (a
+hostile near-cap query takes under 30 ms; one rendering per such term once took 0.9 s). The offered set is
+read back as a whole. Because the budget is an upper bound, a term named `too_long` may in fact have fit
+(its own or another offered term's `$` would have shortened the canonical form, or it was past the
+rendering limit); it is never offered when some subset with it would not fit. `test_wordforms.py` pins each row above and checks, for generated
 queries and every Trust-Evals string, that every subset of the edits (each alone, all together, and every
 combination of the first six, since the reader may tick any) changes only the terms it names, and that the
 read-back refuses nothing the rules allow short of the cap. That last check is a test, not a proof: it is how

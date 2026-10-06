@@ -104,10 +104,11 @@ def _dedupe(children: list[Node]) -> list[Node]:
     return out
 
 
-def canonicalize(n: Node) -> Node:
-    """The normal form of `n` (see the module docstring). Spans are kept from the input nodes."""
+def canonicalize(n: Node, *, dedupe: bool = True) -> Node:
+    """The normal form of `n` (see the module docstring). Spans are kept from the input nodes. `dedupe=False`
+    keeps a repeated AND/OR branch, for `wordforms.py`'s bound on what a `$` can add; never a canonical form."""
     if isinstance(n, Not):
-        child = canonicalize(n.child)
+        child = canonicalize(n.child, dedupe=dedupe)
         return child.child if isinstance(child, Not) else n.model_copy(update={"child": child})
     if isinstance(n, Filter):
         return n.model_copy(update={"values": _sorted_values(n.values)})
@@ -117,7 +118,7 @@ def canonicalize(n: Node) -> Node:
     if not isinstance(n, And | Or):
         return n
     children: list[Node] = []
-    for c in (canonicalize(c) for c in n.children):
+    for c in (canonicalize(c, dedupe=dedupe) for c in n.children):
         children.extend(c.children if isinstance(c, And | Or) and type(c) is type(n) else (c,))
     if isinstance(n, Or):
         children = _merge_filters(children)
@@ -127,7 +128,8 @@ def canonicalize(n: Node) -> Node:
             (c for c in children if _filter_key(c) is not None), key=lambda c: _filter_key(c) or ()
         )
         children = text + filters
-    children = _dedupe(children)
+    if dedupe:
+        children = _dedupe(children)
     if len(children) == 1:
         return children[0]
     return n.model_copy(update={"children": tuple(children)})
