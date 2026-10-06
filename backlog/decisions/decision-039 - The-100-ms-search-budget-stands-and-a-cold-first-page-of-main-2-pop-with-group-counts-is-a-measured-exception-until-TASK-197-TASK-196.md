@@ -44,3 +44,11 @@ back is always exact.
 - A budget measurement is only cited when the 1-minute load was under 5 at the start and the end.
 - TASK-196 is closed by this decision; TASK-197 removes the exception when it lands.
 
+## Outcome (2026-10-06)
+
+TASK-197 (PR #112) gave the counting worker the request's own compile and collects a conjunct that several
+counted trees share once, as an `ord` bitmap. Re-measured with `group_counts_report.py` at a 1-minute load of
+3.4 at the start and 4.6 at the end (commit `66613463`; `docs/results/2026-10-06-bench-group-counts.md`), the
+cold first page of `main-2-pop` with its counts takes p95 85.4 ms (73.8 ms median), from 190.1 ms, and every
+Trust-Evals string is within the 100 ms budget. Spec 03's exception is removed; the budget stands as decided.
+

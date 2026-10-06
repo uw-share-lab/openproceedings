@@ -237,21 +237,15 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
 - Index build: under 2 minutes. Index size: under 500 MB.
 - p95 latency: under 100 ms for a search returning the first 50 hits, as `/search` runs it (with its facets,
   exclusion accounting and each concept group's counts at the instance's default bounds, 04 §SearchResponse
-  `groups`; `docs/results/2026-10-05-bench-group-counts.md`), and under 300 ms for `match_ids` with
+  `groups`; `docs/results/2026-10-06-bench-group-counts.md`), and under 300 ms for `match_ids` with
   exclusion accounting.
 - A wildcard expansion of up to 200 terms: under 50 ms.
-- **Exception, as measured (decision-039, TASK-197):** with its group counts, the cold first page (the facet
-  memo forgotten) of the Trust-Evals string `main-2-pop` (`tests/golden/test_trust_evals.py`) took p95
-  190.1 ms (median 178.9 ms) on index `fd13d8d27535`, over the 100 ms search budget; without the counts 62.1 ms, and a later page with them
-  62.3 ms (`docs/results/2026-10-05-bench-group-counts.md`, a 1-minute load of 3.9 at the start and 3.3 at the
-  end). Its first group (nine alternatives, seven of them `$` phrases; about 35 ms a run) is in three of the six
-  trees counted, and each count runs it again. Every other measured query, first page or later, is within the
-  budget with its counts, the wildcard-phrase query `("large language model$" OR LLM*) AND (trust* OR
-  calibrat*) AND (benchmark* OR evaluat*)` included (p95 84.4 ms; TASK-196's 110.8 ms was measured at a load
-  of 4.5 to 9.8). The budget is unchanged; TASK-197 brings this case under it. This is apart from task-024's
-  exception below, which covers `main-2-pop`'s `$` phrases (position-verified) when every cache is cold: here
-  only the facet memo is forgotten, the verified clauses are memoised, the page without its counts is within
-  the budget, and the extra time is the counts collecting the first group again.
+- **Group counts, as measured (TASK-197, closing decision-039's exception):** every Trust-Evals string's cold
+  first page (the facet memo forgotten) with its group counts is within the 100 ms search budget on index
+  `fd13d8d27535`, the highest `main-2-pop` at p95 85.4 ms (73.8 ms median; 65.6 ms without its counts), from
+  190.1 ms before TASK-197 shared the request's compile with the counting worker and collected each shared
+  conjunct once (`docs/results/2026-10-06-bench-group-counts.md`, a 1-minute load of 3.4 at the start and 4.6 at
+  the end; commit `66613463`).
 - **Exception, as built (task-024):** a clause that takes the position-verified fallback (a phrase with a
   wildcard item; NEAR with a phrase or wildcard operand, or a term with itself) costs time linear in its
   candidates' text and can exceed the search and `match_ids` budgets when cold: on a synthetic 80k corpus,

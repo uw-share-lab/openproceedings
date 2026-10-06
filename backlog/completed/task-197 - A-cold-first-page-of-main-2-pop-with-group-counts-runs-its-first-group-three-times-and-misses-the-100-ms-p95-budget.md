@@ -3,10 +3,10 @@ id: TASK-197
 title: >-
   A cold first page of main-2-pop with group counts runs its first group three
   times and misses the 100 ms p95 budget
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-05 17:21'
-updated_date: '2026-10-06 00:30'
+updated_date: '2026-10-06 03:25'
 labels:
   - perf
   - search
@@ -27,9 +27,9 @@ Cause, measured on a scratch copy of the index: the first group (nine alternativ
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A cold first page of every Trust-Evals string with its group counts at the default bounds is under the 100 ms p95 budget on the current index, measured with group_counts_report.py at a 1-minute load under 5 at the start and the end
-- [ ] #2 Every group count is unchanged: test_group_counts.py passes, and its counts still equal match_ids and ReferenceEngine on the shapes it covers
-- [ ] #3 Spec 03's "Exception, as measured (decision-039, TASK-197)" bullet is removed and spec 04's Cost figures are regenerated from that run
+- [x] #1 A cold first page of every Trust-Evals string with its group counts at the default bounds is under the 100 ms p95 budget on the current index, measured with group_counts_report.py at a 1-minute load under 5 at the start and the end
+- [x] #2 Every group count is unchanged: test_group_counts.py passes, and its counts still equal match_ids and ReferenceEngine on the shapes it covers
+- [x] #3 Spec 03's "Exception, as measured (decision-039, TASK-197)" bullet is removed and spec 04's Cost figures are regenerated from that run
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -50,4 +50,12 @@ Implemented on v011/perf (2026-10-05), awaiting the main session's quiet re-meas
 - Compiled.conjuncts: each top-level conjunct's query (a NOT's child's too), recorded as the compile builds them; search.run passes the request's compile to the counting worker, so counts compiles nothing again (that recompile ran exact()'s count and members collections per verified clause).
 - TantivyEngine.counts: when a conjunct holding a verified clause is in two or more bases, and the call has no more distinct conjuncts than distinct bases, each distinct non-filter conjunct is collected once as a bitmap (order_by_field ord: no scoring), a base is the AND of its conjuncts' bitmaps (a NOT's child's subtracted), and its combos are read from per-value bitmaps (_masks, built once per engine, ~0.5 MB at 133k docs, uncharged like the ord table). Combos stored in faceted as before. Otherwise the per-tree aggregation as before.
 - Ratios on the scratch copy of fd13d8d27535 (cold first page = faceted cleared; plain / before / after alternated in one process, 'before' = the old path patched in): main-2-pop median after/plain 1.22-1.39 vs before/plain 3.03-3.23; p95 at a load of 30.5 → 25.0: plain 72.4, before 221.9, after 86.2 ms (40 rounds). The wildcard-phrase query: p95 81.1 → 51.7; 'trust model NOT (model NEAR/10 model*)': 46.1 → 38.4. The other nine Trust-Evals strings unchanged (no verified clause: old path). Not quiet-machine figures: the load was 25-130 throughout.
+
+2026-10-06 quiet re-measure (group_counts_report.py, load 3.4 → 4.6, commit 66613463 = dev after #112): main-2-pop cold first page with counts p95 85.4 ms (median 73.8; 65.6 ms without counts), from 190.1 ms; every Trust-Evals string within 100 ms (next highest main-1 46.1 ms). Counts unchanged (test_group_counts.py holds them to match_ids and ReferenceEngine). Spec 03's exception removed and spec 04's Cost figures regenerated from docs/results/2026-10-06-bench-group-counts.md.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Counting reuses the request's compile and collects a conjunct shared by several counted trees once into an ord bitmap (PR #112), with the copies it keeps charged to the compiled memo. A cold first page of main-2-pop with its counts went from p95 190.1 ms to 85.4 ms at a quiet load; every Trust-Evals string is within the 100 ms budget, so decision-039's exception is closed.
+<!-- SECTION:FINAL_SUMMARY:END -->
