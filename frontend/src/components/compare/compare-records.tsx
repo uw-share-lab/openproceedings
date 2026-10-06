@@ -540,7 +540,8 @@ function Result({
       </table>
       <p className="break-words">
         Kept and added papers together are the {plural(c.total, "paper")} of this search. Left out of the
-        comparison: {plural(c.not_compared_total, "record")} from other venues
+        comparison: {plural(c.not_compared_total, "record")} whose venue is not recognised or is outside the
+        indexed venues and years
         {c.duplicates_total > 0 &&
           `, and ${plural(c.duplicates_total, "record")} that ${c.duplicates_total === 1 ? "repeats" : "repeat"} a paper already counted`}
         .

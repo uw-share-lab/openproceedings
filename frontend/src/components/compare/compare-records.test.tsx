@@ -130,7 +130,9 @@ describe("CompareRecords", () => {
     );
     const panel = screen.getByRole("region", { name: "Compare with your records" });
     expect(panel.textContent).toContain(`${R.records_total} records read, ${R.papers_total} papers compared`);
-    expect(panel.textContent).toContain(`${R.not_compared_total} record from other venues`);
+    expect(panel.textContent).toContain(
+      `${R.not_compared_total} record whose venue is not recognised or is outside the indexed venues and years`,
+    );
     expect(panel.textContent).toContain(`${R.duplicates_total} record that repeats a paper already counted`);
     expect(panel.textContent).toContain("What “dropped” means.");
     expect(panel.textContent).toContain("A dropped paper is not judged irrelevant");

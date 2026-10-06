@@ -109,7 +109,8 @@ C3, answered (numbers from the 2026-10-05 run on index `05a0541717f6`; each is a
 │ Not in the index  in your file; the index has no record of …        8    │
 │ Added             in this search's results, not in your file       16    │
 │ Kept and added papers together are the 67 papers of this search. Left    │
-│ out of the comparison: 19 records from other venues.                     │
+│ out of the comparison: 19 records whose venue is not recognised or is    │
+│ outside the indexed venues and years.                                    │
 │ ┌ What "dropped" means. The index holds the paper, and this search ┐     │
 │ └ doesn't return it: … A dropped paper is not judged irrelevant …  ┘     │
 │ ⚠ 21 of the 51 kept and 509 of the 1,756 dropped papers are in this      │

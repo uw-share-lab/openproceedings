@@ -398,7 +398,7 @@ warnings, the save's index check), the design doc says so; its open questions li
      and its name never leaves the browser.
    - **Counts first.** A four-row table: Kept, Dropped, Not in the index, Added, each with its one-line
      meaning and the server's `*_total`; then the file's accounting (records read, papers compared, records
-     from other venues, repeats). Every number is an API field, `reason_totals` included: nothing is counted
+     whose venue is not recognised or is outside the indexed venues and years, repeats). Every number is an API field, `reason_totals` included: nothing is counted
      in the browser.
    - **What "dropped" means** is said in place: the index holds the paper and this search doesn't return it
      (other word forms only where the query asks, with `$` or `*`); Google Scholar matches full text and other

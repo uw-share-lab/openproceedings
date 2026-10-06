@@ -89,7 +89,7 @@ test("a file's papers land in the four lists, each opens, and each downloads as 
   expect(answer.not_in_index_total).toBe(1);
   expect(answer.not_compared_total).toBeGreaterThan(1);
   await expect(panel(page)).toContainText(
-    `${answer.not_compared_total.toLocaleString("en-US")} records from other venues, and 1 record that repeats a paper already counted`,
+    `${answer.not_compared_total.toLocaleString("en-US")} records whose venue is not recognised or is outside the indexed venues and years, and 1 record that repeats a paper already counted`,
   );
   const hash = answer.query.canonical_hash.slice(0, 12);
   const stem = `openproceedings-${answer.index_version}-${hash}`;
