@@ -181,12 +181,14 @@ jobs:
           path: ${{ runner.temp }}/bench-80k.md
           if-no-files-found: warn  # the report step failed, and said why
           retention-days: 30
-  # make mutate as 12 jobs (TASK-171; 8 until 2026-10-06): `mutate.py --shard i/n` runs every n-th mutant from the i-th, so the shards
+  # make mutate as 12 jobs (TASK-171; 8 until 2026-10-06): `mutate.py --shard i/n` runs every n-th mutant from
+  # the i-th, so the shards
   # check every mutant every night. n is the matrix size (strategy.job-total), so adding a shard is one edit to the
   # matrix list. Estimate: 188 mutants took 140 min in 37017691575, so the 694 at TASK-171 need ~8.5 h of one
   # 4-CPU runner, ~65 min a shard of its 140 (shard 1's first step prints tonight's count); add shards before a
   # shard nears 140 min. On 2026-10-06 (run 37412309356) 778 mutants in 8 shards took 77–123 min, and shard 5
-  # was cut off at 140 after ~92 of its ~97 (some mutants run the slow suites), so 12 shards (~65 each). A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min (its
+  # was cut off at 140 after ~92 of its ~97 (some mutants run the slow suites), so 12 shards (~65 each).
+  # A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min (its
   # unchecked mutants would go unchecked). Shard 1's first step checks every mutant's pattern still exists, in
   # seconds; a stale mutant also fails its own shard.
   mutate:

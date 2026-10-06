@@ -181,6 +181,7 @@ def test_429_rate_limited_with_retry_after(store: Store) -> None:
         store.indexes.parent, rate_limit=RateLimit(capacity=1, refill_per_second=0.1, export_weight=1)
     )
     (limiter,) = [m for m in app.user_middleware if cast(object, m.cls) is RateLimitMiddleware]
+    assert app.middleware_stack is None  # not built yet, so the frozen clock below is the one it reads
     limiter.kwargs["clock"] = lambda: 0.0  # read when the middleware stack is built, at the first request
     with TestClient(app) as c:
         assert c.get("/api/v1/search", params={"q": "trust"}).status_code == 200
