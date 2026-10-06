@@ -1043,9 +1043,8 @@ def compare_query(
     variants = {t: tuple(_other_forms(t, forms)) for t in queried if _other_forms(t, forms)}
     # the trees a row's evidence asks about, built once so `ids` meets each again by identity
     form_terms = {v: Term(span=(0, 0), token=v) for vs in variants.values() for v in vs}
-    in_field: dict[
-        tuple[int, str], Node
-    ] = {}  # (a leaf's id, a text field) → the leaf searched in that field
+    # (a leaf's id, a text field) → the leaf and its copy searched in that field (held, as `seen` holds its trees)
+    in_field: dict[tuple[int, str], tuple[Node, Node]] = {}
 
     def fields(i: str, leaf: Term | Wildcard | Phrase | Near) -> str:
         """Where `leaf` matches record `i`: `title`, `abstract`, `title+abstract`, or "" for no match."""
@@ -1055,9 +1054,10 @@ def compare_query(
         for f in TEXT_FIELDS:
             if leaf.field not in (None, f):
                 continue
-            if (id(leaf), f) not in in_field:
-                in_field[(id(leaf), f)] = leaf.model_copy(update={"field": f})
-            if i in ids(in_field[(id(leaf), f)]):
+            hit = in_field.get((id(leaf), f))
+            if hit is None or hit[0] is not leaf:
+                hit = in_field[(id(leaf), f)] = (leaf, leaf.model_copy(update={"field": f}))
+            if i in ids(hit[1]):
                 found.append(f)
         return "+".join(found)
 
