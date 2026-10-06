@@ -99,8 +99,9 @@ ReferenceEngine, and (locally) the ten Trust-Evals protocol strings on the real 
 ## `op search --explain`
 `op search <q> --explain` prints, in order: the input, the warnings and translations, the canonical string
 (the effective query, default filters included), the index_version, the compiled query as a readable tree
-(field, clause kind, slop, and whether it is a filter), the wildcard expansions, and which clauses took the
-verification fallback. `op search <q> --ids` prints the sorted id set. Both take `--index` (a directory or
+(field, clause kind, slop, and whether it is a filter), the wildcard expansions, which clauses took the
+verification fallback, and each concept group's `total` (alone) and `total_without` under `/search`'s bounds, or
+the `not_counted` reason (TASK-194). `op search <q> --ids` prints the sorted id set. Both take `--index` (a directory or
 an index_version; default `indexes/current`) and `--mode native|scholar`; as built (task-030), ranked output
 by default, and `--ids --engine reference` runs the oracle over the index's snapshot. Every differential counterexample is reported with this output.
 

@@ -338,8 +338,9 @@ Two readings follow from "the canonical form decides", and are worth knowing:
   the same shapes add 4–25 ms to a first page's median, every round counted at the default grace; the
   158-wildcard shape is `too_costly` and costs what the search alone does. A query over the group limit is not refused either: it
   gets its result without counts and `not_counted: "too_many_groups"`.
-- Only `/search` sends it. `op search`, a record's save and replay, and an export run the same search without
-  it (`search.run`'s `groups` is unset), and a search record stores no group counts.
+- Only `/search` sends it. `op search --explain` prints the same counts under the same bounds (`ApiConfig`'s
+  defaults; spec 08 §CLI, TASK-194). `op search` otherwise, a record's save and replay, and an export run the
+  same search without it (`search.run`'s `groups` is unset), and a search record stores no group counts.
 
 ## Exports (built to be imported into Covidence)
 

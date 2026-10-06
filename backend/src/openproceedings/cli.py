@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     from openproceedings.official_counts import OfficialTable
     from openproceedings.query.parser import ParseResult
     from openproceedings.records import RecordStore, SearchRecord
+    from openproceedings.search import GroupCounts
 
 log = logging.getLogger(__name__)
 
@@ -223,7 +224,12 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--sort", choices=SORTS, default="relevance")
     search.add_argument("--limit", type=int, default=20, help="ranked hits to print (default 20)")
     what = search.add_mutually_exclusive_group()
-    what.add_argument("--explain", action="store_true", help="print the parse and the compiled query")
+    what.add_argument(
+        "--explain",
+        action="store_true",
+        help="print the parse, the compiled query and each concept group's counts (alone, and the query "
+        "without it, under /search's bounds), or why they were not counted",
+    )
     what.add_argument("--ids", action="store_true", help="print every matching id, sorted")
     search.set_defaults(run=_search)
 
@@ -1167,8 +1173,9 @@ def _eval_scholar(ns: argparse.Namespace) -> int:
 
 
 def _search(ns: argparse.Namespace) -> int:
+    from openproceedings import search as search_module
+    from openproceedings.api.config import ApiConfig
     from openproceedings.engine.tantivy_engine import TantivyEngine
-    from openproceedings.search import run
 
     started = time.perf_counter()
     _utf8_stdout()
@@ -1200,10 +1207,23 @@ def _search(ns: argparse.Namespace) -> int:
             f"canonical: {result.canonical}",
             f"index_version: {engine.index_version}",
         ]
-        print("\n".join([*lines, engine.explain(ast)]))
-        _search_run(ns, started, engine.index_version, result, engine.page(ast, limit=0)[0])
+        # each concept group's counts under the bounds /search counts them under (TASK-194)
+        limits = ApiConfig.model_fields
+        found = search_module.run(
+            engine,
+            result,
+            limit=0,
+            groups=limits["max_counted_groups"].default,
+            groups_terms=limits["max_counted_terms"].default,
+            groups_ids=limits["max_counted_ids"].default,
+            groups_wait=limits["group_count_wait_seconds"].default,
+            groups_grace=limits["group_count_grace_seconds"].default,
+        )
+        assert found.groups is not None  # asked for
+        print("\n".join([*lines, engine.explain(ast), *_group_lines(ns.query, found.total, found.groups)]))
+        _search_run(ns, started, engine.index_version, result, found.total)
         return 0
-    found = run(engine, result, sort=ns.sort, limit=ns.limit)  # what GET /api/v1/search runs (search.py)
+    found = search_module.run(engine, result, sort=ns.sort, limit=ns.limit)  # what GET /api/v1/search runs
     for line in _report(engine, result, found.total, found.excluded, _snapshot_of(ns, path)):
         print(line)
     for rank, hit in enumerate(found.hits, 1):
@@ -1213,6 +1233,33 @@ def _search(ns: argparse.Namespace) -> int:
         )
     _search_run(ns, started, engine.index_version, result, found.total)
     return 0
+
+
+# what each `groups.not_counted` constant means (spec 04 §SearchResponse), for `op search --explain`
+_NOT_COUNTED = {
+    "fewer_than_two_groups": "the query is not an AND of groups",
+    "too_many_groups": "more than {limit}",
+    "too_costly": "counting them would read more terms or verified ids than /search allows",
+    "busy": "the counting workers were taken",
+    "count_failed": "the counting failed",
+    "timed_out": "the counts were not ready in time",
+}
+
+
+def _group_lines(q: str, total: int, groups: GroupCounts) -> list[str]:
+    """`op search --explain`'s concept groups (TASK-176/194): each group as typed, with its count alone
+    (`total`) and the query's count without it (`total_without`), as /search's `groups` has them; or why
+    they were not counted."""
+    if groups.not_counted is not None:
+        why = _NOT_COUNTED[groups.not_counted].format(limit=groups.limit)
+        return [f"concept groups: {groups.found}, not counted: {groups.not_counted} ({why})"]
+    return [
+        f"concept groups: {groups.found}, counted (at most {groups.limit}); total {total}",
+        *(
+            f"  [{s}, {e}] {q[s:e]}: total {alone}, total_without {without}"
+            for (s, e), alone, without in groups.counts
+        ),
+    ]
 
 
 def _utf8_stdout() -> None:
