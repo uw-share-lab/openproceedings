@@ -1114,7 +1114,7 @@ def test_a_doi_in_another_year_is_named_in_the_gap_row() -> None:
 
 
 def _serialisations(
-    monkeypatch: pytest.MonkeyPatch, q: str, make: Callable[[int], PaperRecord], n: int
+    monkeypatch: pytest.MonkeyPatch, q: str, make: Callable[[int], PaperRecord], n: int, cls: str
 ) -> int:
     """How many times a comparison of `n` such records serialises a query tree (the memo's key)."""
     records = [make(k) for k in range(n)]
@@ -1132,7 +1132,8 @@ def _serialisations(
     with monkeypatch.context() as m:
         m.setattr(_Node, "model_dump_json", counted)
         c = compare(q, text, records)
-    assert sum(bool(r.op_id) for r in c.disagreements) == n  # every record is a row on the path under test
+    rows = [r for r in c.disagreements if r.op_id]
+    assert len(rows) == n and all(r.auto_class == cls for r in rows)  # every record is a row of the path
     return calls
 
 
@@ -1170,5 +1171,5 @@ def _serialisations(
 def test_a_rows_evidence_serialises_no_tree_per_row(
     monkeypatch: pytest.MonkeyPatch, q: str, make: Callable[[int], PaperRecord], cls: str
 ) -> None:
-    few, many = _serialisations(monkeypatch, q, make, 2), _serialisations(monkeypatch, q, make, 12)
+    few, many = _serialisations(monkeypatch, q, make, 2, cls), _serialisations(monkeypatch, q, make, 12, cls)
     assert few == many, f"{cls}: {few} serialisations for 2 rows, {many} for 12"
