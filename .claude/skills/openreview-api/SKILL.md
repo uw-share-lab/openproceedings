@@ -172,8 +172,8 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   a recorded note each (`notes-presentation-*.json`, trimmed from the crawl cache and scrubbed; a capture
   taken on another day than `scrub.RECORDED` carries its own `"date"`). The 2026 crawl (TASK-178) added
   `ICLR 2026 Oral` and ICML 2026's two `spotlight` strings. ICML 2026's two `regular` strings (5,805 main +
-  175 position) stay unmapped until the owner decides what they are, so that venue-year's attention WARNING is
-  expected with `presentation_unmapped` exactly 5,980. The DEBUG line has no string, so any other count means a
+  175 position) are `none` rows (decision-042, TASK-190): known, no presentation, never counted. So every
+  venue-year's `presentation_unmapped` is expected to be 0. The DEBUG line has no string, so any count means a
   new string: list the cache's distinct `content.venue` values before touching the table.
 - Titles (TASK-180, decision-036; spec 01 §Pipeline 2; the RIS and proceedings importers apply the same
   `record.title_text`): both crawlers read a title through `openreview_v2._title`, which

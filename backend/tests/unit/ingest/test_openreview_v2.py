@@ -305,8 +305,10 @@ PRESENTATIONS = [
      "spotlight"),
     ("icml-2025/notes-presentation-position-paper-track.json", "ICML 2025 Position Paper Track poster", "poster"),
     ("icml-2026/notes-presentation-conference.json", "ICML 2026 spotlight", "spotlight"),
+    ("icml-2026/notes-presentation-conference.json", "ICML 2026 regular", None),  # decision-042
     ("icml-2026/notes-presentation-position-paper-track.json", "ICML 2026 Position Paper Track spotlight",
      "spotlight"),
+    ("icml-2026/notes-presentation-position-paper-track.json", "ICML 2026 Position Paper Track regular", None),
     ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 oral", "oral"),
     ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 spotlight", "spotlight"),
     ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 poster", "poster"),
@@ -384,9 +386,8 @@ def unmapped_after(note: dict[str, Any], venue: str, year: int) -> tuple[PaperRe
 
 
 def test_an_unrecognised_string_is_null_counted_and_logged_at_debug(caplog: pytest.LogCaptureFixture) -> None:
-    note = recorded_note(
-        "icml-2026/notes-accepted.json"
-    )  # `ICML 2026 regular`, recorded live: not in the table
+    note = recorded_note("icml-2026/notes-accepted.json")
+    note["content"]["venue"]["value"] = "ICML 2026 keynote"  # a string nobody has seen
     with caplog.at_level(logging.DEBUG):
         record, unmapped = unmapped_after(note, "ICML", 2026)
     assert isinstance(record, PaperRecord) and (record.status, record.presentation) == ("accepted", None)
@@ -396,8 +397,8 @@ def test_an_unrecognised_string_is_null_counted_and_logged_at_debug(caplog: pyte
     assert "venue_string" not in line.__dict__  # the string can be free text: never logged
 
 
-# ICML 2026's other tier names no presentation, so it stays out of the table and is counted (TASK-178: 5,805
-# main and 175 position notes in the crawl cache)
+# decision-042: ICML 2026's other tier names no presentation. Its two strings are known (null, never counted;
+# TASK-178: 5,805 main and 175 position notes in the crawl cache), so the count names only unseen strings.
 @pytest.mark.parametrize(
     ("fixture", "venue_string", "track"),
     [
@@ -406,11 +407,32 @@ def test_an_unrecognised_string_is_null_counted_and_logged_at_debug(caplog: pyte
          "position"),
     ],
 )  # fmt: skip
-def test_icml_2026_regular_is_left_unmapped(fixture: str, venue_string: str, track: str) -> None:
-    record, unmapped = unmapped_after(note_with_venue(fixture, venue_string), "ICML", 2026)
+def test_icml_2026_regular_is_known_and_states_no_presentation(
+    fixture: str, venue_string: str, track: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.DEBUG):
+        record, unmapped = unmapped_after(note_with_venue(fixture, venue_string), "ICML", 2026)
     assert isinstance(record, PaperRecord) and (record.track, record.status) == (track, "accepted")
-    assert record.presentation is None and unmapped == {record.id.rsplit(":", 1)[1]}
+    assert record.presentation is None and not unmapped
     assert "presentation" not in {c.field for c in record.provenance}
+    assert not lines(caplog, "openreview_presentation_unmapped")
+
+
+@pytest.mark.parametrize(
+    "venue_string",
+    [
+        "ICML 2026 Regular",  # exact match only: another case is unseen
+        "ICML 2026 regular ",
+        "ICML 2026 Position Paper Track regular",  # known, but under the position track, not main
+        "ICML 2026 oral",
+    ],
+)
+def test_an_unseen_icml_2026_string_is_still_unmapped(venue_string: str) -> None:
+    note = note_with_venue("icml-2026/notes-presentation-conference.json", "ICML 2026 regular")
+    note["content"]["venue"]["value"] = venue_string
+    record, unmapped = unmapped_after(note, "ICML", 2026)
+    assert isinstance(record, PaperRecord) and record.track == "main"
+    assert record.presentation is None and unmapped == {note["id"]}
 
 
 @pytest.mark.parametrize(

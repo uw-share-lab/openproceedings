@@ -271,8 +271,8 @@ def _v2p(track: str, **by_presentation: str) -> dict[str, tuple[str, str | None]
 # 2023's `OralPoster` and ICML 2025's `spotlightposter` are orals and spotlights that also had a poster slot:
 # the higher tier is the presentation. A `none` string is known and states no presentation (Tiny Papers'
 # Archive/Present/Notable tiers are not presentations). Anything unlisted is unmapped: `null`, counted. ICML
-# 2026's other tier, `ICML 2026 regular` (and `ICML 2026 Position Paper Track regular`), is left out on purpose:
-# it names no presentation, and nothing recorded says a regular paper was a poster.
+# 2026's other tier, `ICML 2026 regular` (and `ICML 2026 Position Paper Track regular`), is a `none` string
+# (decision-042): it names no presentation, and nothing recorded says a regular paper was a poster.
 V2_PRESENTATION: dict[tuple[str, int], dict[str, tuple[str, str | None]]] = {
     ("ICLR", 2024): {
         **_v2p("main", oral="ICLR 2024 oral", spotlight="ICLR 2024 spotlight", poster="ICLR 2024 poster"),
@@ -294,8 +294,9 @@ V2_PRESENTATION: dict[tuple[str, int], dict[str, tuple[str, str | None]]] = {
                poster="ICML 2025 Position Paper Track poster"),
     },
     ("ICML", 2026): {
-        **_v2p("main", spotlight="ICML 2026 spotlight"),
-        **_v2p("position", spotlight="ICML 2026 Position Paper Track spotlight"),
+        **_v2p("main", spotlight="ICML 2026 spotlight", none="ICML 2026 regular"),
+        **_v2p("position", spotlight="ICML 2026 Position Paper Track spotlight",
+               none="ICML 2026 Position Paper Track regular"),
     },
     ("NeurIPS", 2023): {
         **_v2p("main", oral="NeurIPS 2023 oral", spotlight="NeurIPS 2023 spotlight", poster="NeurIPS 2023 poster"),
