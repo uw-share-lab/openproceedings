@@ -962,6 +962,15 @@ def doi_corpus() -> list[PaperRecord]:
         ("https://doi.org/10.1000/a%00b", None),
         ("10.1000/a\x7fb", None),
         ("10.1000/a\x85b", None),
+        # nor a bidi format character, which could make a quoted key read as another
+        *(
+            (f"10.1000/a{c}b", None)
+            for c in "\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069"
+        ),
+        ("https://doi.org/10.1000/a%E2%80%AEb", None),
+        # a label in front of a link
+        ("DOI https://doi.org/10.1000/xyz", "10.1000/xyz"),
+        ("doi: doi.org/10.1000/XYZ?x=1", "10.1000/xyz"),
     ],
 )
 def test_doi_key(text: str, key: str | None) -> None:
@@ -979,8 +988,19 @@ def test_doi_key(text: str, key: str | None) -> None:
         "10.1/x" + " " * 1_000_000 + ".",
         "https://doi.org/10.1/x" + "?" * 1_000_000,
         "10." + "1." * 500_000 + "/x!",
+        "doi:" + " " * 1_000_000 + "https://doi.org/10.1/x",
     ],
-    ids=["parens", "dots", "mixed", "one-open", "label-spaces", "inner-spaces", "queries", "registrant"],
+    ids=[
+        "parens",
+        "dots",
+        "mixed",
+        "one-open",
+        "label-spaces",
+        "inner-spaces",
+        "queries",
+        "registrant",
+        "label-link",
+    ],
 )
 def test_doi_key_is_linear_on_a_hostile_value(hostile: str) -> None:
     """The trim is one pass, not a character at a time (a hostile file must not defeat /compare's time cap)."""

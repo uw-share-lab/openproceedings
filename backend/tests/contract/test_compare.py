@@ -510,9 +510,98 @@ def test_op_serve_sets_every_comparison_value(monkeypatch: pytest.MonkeyPatch, t
     )
 
 
+# every bound of every comparison value, exactly: accepted at it, refused just past it (`le` is not `lt`)
+EXACT_BOUNDS = [
+    ("--compare-max-body-bytes", "1024", "config", "compare_max_body_bytes", 1024),
+    ("--compare-max-body-bytes", str(2**30), "config", "compare_max_body_bytes", 2**30),
+    ("--compare-max-records", "1", "config", "compare_max_records", 1),
+    ("--compare-max-records", "1000000", "config", "compare_max_records", 1_000_000),
+    ("--compare-max-line-chars", "64", "config", "compare_max_line_chars", 64),
+    ("--compare-max-line-chars", str(2**24), "config", "compare_max_line_chars", 2**24),
+    ("--compare-max-results", "1", "config", "compare_max_results", 1),
+    ("--compare-max-results", "1000000", "config", "compare_max_results", 1_000_000),
+    ("--compare-max-response-bytes", "1024", "config", "compare_max_response_bytes", 1024),
+    ("--compare-max-response-bytes", str(2**30), "config", "compare_max_response_bytes", 2**30),
+    ("--comparison-slots", "1", "config", "comparison_slots", 1),
+    ("--comparison-slots", "16", "config", "comparison_slots", 16),
+    ("--compare-max-seconds", "0.001", "config", "compare_max_seconds", 0.001),
+    ("--compare-max-seconds", "3600", "config", "compare_max_seconds", 3600.0),
+    ("--compare-upload-seconds", "0.001", "config", "compare_upload_seconds", 0.001),
+    ("--compare-upload-seconds", "3600", "config", "compare_upload_seconds", 3600.0),
+    ("--compare-cooldown-factor", "0", "rate_limit", "compare_cooldown_factor", 0.0),
+    ("--compare-cooldown-factor", "1000", "rate_limit", "compare_cooldown_factor", 1000.0),
+    ("--compare-upload-weight", "1", "rate_limit", "compare_upload_weight", 1.0),
+    ("--compare-upload-weight", "100", "rate_limit", "compare_upload_weight", 100.0),
+    ("--compare-token-ms", "1", "rate_limit", "compare_token_ms", 1.0),
+]
+
+
+@pytest.mark.parametrize(("flag", "value", "where", "field", "expected"), EXACT_BOUNDS)
+def test_op_serve_accepts_each_comparison_bound_exactly(
+    flag: str,
+    value: str,
+    where: str,
+    field: str,
+    expected: float,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = served_with([flag, value], monkeypatch, tmp_path)
+    assert getattr(config if where == "config" else config.rate_limit, field) == expected
+
+
 @pytest.mark.parametrize(
     ("flags", "says"),
     [
+        # just past each bound (the far-out values below would let `le` become `lt`)
+        (
+            ["--compare-max-body-bytes", "1023"],
+            "compare_max_body_bytes: Input should be greater than or equal to 1024",
+        ),
+        (
+            ["--compare-max-records", "1000001"],
+            "compare_max_records: Input should be less than or equal to 1000000",
+        ),
+        (
+            ["--compare-max-line-chars", "63"],
+            "compare_max_line_chars: Input should be greater than or equal to 64",
+        ),
+        (["--compare-max-results", "0"], "compare_max_results: Input should be greater than or equal to 1"),
+        (
+            ["--compare-max-response-bytes", "1023"],
+            "compare_max_response_bytes: Input should be greater than or equal to 1024",
+        ),
+        (
+            ["--compare-max-response-bytes", str(2**30 + 1)],
+            "compare_max_response_bytes: Input should be less than or equal to 1073741824",
+        ),
+        (["--comparison-slots", "17"], "comparison_slots: Input should be less than or equal to 16"),
+        (
+            ["--compare-max-seconds", "3600.001"],
+            "compare_max_seconds: Input should be less than or equal to 3600",
+        ),
+        (["--compare-upload-seconds", "0"], "compare_upload_seconds: Input should be greater than 0"),
+        (
+            ["--compare-upload-seconds", "3600.001"],
+            "compare_upload_seconds: Input should be less than or equal to 3600",
+        ),
+        (
+            ["--compare-cooldown-factor", "1000.001"],
+            "compare_cooldown_factor: Input should be less than or equal to 1000",
+        ),
+        (
+            ["--compare-cooldown-factor", "-0.001"],
+            "compare_cooldown_factor: Input should be greater than or equal to 0",
+        ),
+        (
+            ["--compare-upload-weight", "100.001"],
+            "compare_upload_weight: Input should be less than or equal to 100",
+        ),
+        (
+            ["--compare-upload-weight", "0.999"],
+            "compare_upload_weight: Input should be greater than or equal to 1",
+        ),
+        (["--compare-token-ms", "0.999"], "compare_token_ms: Input should be greater than or equal to 1"),
         (
             ["--compare-max-body-bytes", "100"],
             "compare_max_body_bytes: Input should be greater than or equal to 1024",
@@ -604,7 +693,24 @@ def test_the_widest_comparison_values_keep_the_pause_and_the_debit_finite() -> N
     pause = cooldowns.leave("n", worst)
     assert math.isfinite(pause) and math.ceil(pause) == math.ceil(api_config.MAX_COOLDOWN_FACTOR * worst)
     assert int(rate_limited(cooldowns.enter("n")).headers["Retry-After"]) > 0
-    assert math.isfinite(worst * 1000 / 1)  # tokens at the lowest price, 1 ms (refused below it, above)
+    # the debit at the lowest price, 1 ms a token (refused below it, above), through the middleware's own call
+    limit = RateLimit(
+        compare_token_ms=1,
+        compare_upload_weight=api_config.MAX_UPLOAD_WEIGHT,
+        compare_cooldown_factor=api_config.MAX_COOLDOWN_FACTOR,
+    )
+
+    async def app(scope: Any, receive: Any, send: Any) -> None:  # never called
+        raise AssertionError
+
+    limiter = RateLimitMiddleware(app, limit, ())
+    fields: dict[str, object] = {"compare_cost_ms": worst * 1000}
+    limiter.debit_comparison([(limiter.buckets, "c"), (limiter.networks, "n")], fields)
+    assert fields["compare_tokens"] == round(worst * 1000, 2) and math.isfinite(worst * 1000)
+    for bucket, key in ((limiter.buckets, "c"), (limiter.networks, "n")):
+        wait = bucket.wait(key, 1)  # the debt, repaid by the refill
+        assert math.isfinite(wait) and wait > 0
+        assert int(rate_limited(wait).headers["Retry-After"]) == math.ceil(wait)
 
 
 def test_op_serve_help_states_each_comparison_default_from_the_config(
