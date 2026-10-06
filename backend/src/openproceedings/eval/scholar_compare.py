@@ -997,16 +997,22 @@ def compare_query(
     forms = forms_of(oracle.vocabulary)
 
     memo: dict[str, frozenset[str]] = {}
+    # by identity too: a tree asked about again (once per row) is never serialised again (TASK-200). The tree is
+    # held beside its matches, so its id can't be reused by another object while the comparison runs
+    seen: dict[int, tuple[Node, frozenset[str]]] = {}
 
     def ids(n: Node | None) -> frozenset[str]:
         """The oracle's matches of a tree among the compared records (None: every record), computed once."""
         if n is None:
             return oracle.universe
+        if (hit := seen.get(id(n))) is not None and hit[0] is n:
+            return hit[1]
         key = n.model_dump_json()
         if key not in memo:
             if tick is not None:
                 tick()
             memo[key] = oracle.match_ids(n)
+        seen[id(n)] = (n, memo[key])
         return memo[key]
 
     # the readings: as run; as Scholar reads the string (each rewrite alone, and both); each with inflected forms
@@ -1035,16 +1041,25 @@ def compare_query(
     group_ids = [(ids(g), ids(with_variants(g, forms))) for g in groups]
     queried = sorted({t for tree in readings for t in _tokens(tree)})
     variants = {t: tuple(_other_forms(t, forms)) for t in queried if _other_forms(t, forms)}
+    # the trees a row's evidence asks about, built once so `ids` meets each again by identity
+    form_terms = {v: Term(span=(0, 0), token=v) for vs in variants.values() for v in vs}
+    in_field: dict[
+        tuple[int, str], Node
+    ] = {}  # (a leaf's id, a text field) → the leaf searched in that field
 
     def fields(i: str, leaf: Term | Wildcard | Phrase | Near) -> str:
         """Where `leaf` matches record `i`: `title`, `abstract`, `title+abstract`, or "" for no match."""
         if isinstance(leaf, Near):
             return "title or abstract" if i in ids(leaf) else ""
-        return "+".join(
-            f
-            for f in TEXT_FIELDS
-            if leaf.field in (None, f) and i in ids(leaf.model_copy(update={"field": f}))
-        )
+        found = []
+        for f in TEXT_FIELDS:
+            if leaf.field not in (None, f):
+                continue
+            if (id(leaf), f) not in in_field:
+                in_field[(id(leaf), f)] = leaf.model_copy(update={"field": f})
+            if i in ids(in_field[(id(leaf), f)]):
+                found.append(f)
+        return "+".join(found)
 
     def filters_failed(d: Searchable) -> str:
         failed = [f"{f}={getattr(d, f)}" for f in run.defaults if getattr(d, f) not in DEFAULT_CLAUSES[f]]
@@ -1069,7 +1084,7 @@ def compare_query(
         """The inflected forms that make record `i` match: for each group it fails as run and holds with forms,
         the forms of that group's words the record has. (Every form it has, when no single group explains it:
         the match then comes through Scholar's reading.)"""
-        held = {v for vs in variants.values() for v in vs if i in ids(Term(span=(0, 0), token=v))}
+        held = {v for v, term in form_terms.items() if i in ids(term)}
         named = {
             v
             for g, (exact, loose) in zip(groups, group_ids, strict=True)
