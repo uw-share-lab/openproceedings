@@ -12,6 +12,7 @@ from __future__ import annotations
 import dataclasses
 import heapq
 import json
+from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
@@ -28,8 +29,10 @@ from openproceedings.engine.compile import (
     Compiler,
     Expansions,
     combine,
+    conjuncts,
     id_set,
     verified_clauses,
+    verifies,
     wildcards,
 )
 from openproceedings.engine.index import IDS, SERVED_SCHEMAS, SchemaForm, open_index, record_of, verify_index
@@ -187,7 +190,9 @@ class TantivyEngine:
     # entry is stored and charged right after (`verified` clause by clause, inside a compile: `_store_verified`),
     # so it exceeds its budget by at most one entry per thread storing concurrently (each thread's check may
     # predate the others' charges), never more; a single compile, however many verified clauses it has,
-    # overshoots `verified` by at most one clause's ids. See `_trim`.
+    # overshoots `verified` by at most one clause's ids. See `_trim`. Not memos, so charged to none: the `ord`
+    # table and the per-value bitmaps (`_masks`), each built once and fixed in size by the index, and a `counts`
+    # call's own bitmaps (`_Parts`), one bit per document per conjunct, dropped with the call.
     MAX_COMPILED_UNITS = 500_000
     MAX_VERIFIED_IDS = 500_000
     MAX_EXPANDED_TERMS = 100_000
@@ -221,6 +226,10 @@ class TantivyEngine:
         # id → ord (its position in `ids.txt`), built on the first verified clause a schema-3 compile names
         # (`id_set`), then kept: one dict entry per record (a few MB at 80k), never changed after
         self._ords: dict[str, int] | None = None
+        # each facet field's values (COMBO order), each with the bitmap of the documents (by ord) that have it, built
+        # on the first count that collects its conjuncts as bitmaps (`counts`), then kept: one bit per document per
+        # value (~0.5 MB at 133k documents and 30 values), never changed after
+        self._masks: tuple[tuple[tuple[str | int, int], ...], ...] | None = None
         self.compiled: dict[str, Compiled] = {}  # per tree (bounded), see compile()
         self.verified: Verified = {}  # position-verified clauses, per engine
         # each wildcard's terms, or just the count of an over-cap one
@@ -393,9 +402,9 @@ class TantivyEngine:
                 DiagnosticCode.API_INTERNAL, f"facet fields {fields} must be among the aggregated {over}"
             )
         self.expansions(ast)  # the cap applies even when no facet field is asked for
-        conjuncts = _conjuncts(ast)
-        filters = [c for c in conjuncts if _filter_field(c) in over]
-        base = [c for c in conjuncts if _filter_field(c) not in over]
+        tops = conjuncts(ast)
+        filters = [c for c in tops if _filter_field(c) in over]
+        base = [c for c in tops if _filter_field(c) not in over]
         combos = self.combos(base, scope, over)
         # per field, whether each value that occurs passes every set-aside filter on that field
         ok = [
@@ -422,11 +431,16 @@ class TantivyEngine:
         return self.counts([ast], scope=scope)[0]
 
     def counts(
-        self, trees: Sequence[Node], *, scope: Scope | None = None, check: Callable[[], None] | None = None
+        self,
+        trees: Sequence[Node],
+        *,
+        scope: Scope | None = None,
+        check: Callable[[], None] | None = None,
+        compiled: tuple[Node, Compiled] | None = None,
     ) -> list[int]:
         """How many documents match each of `trees`, without reading an id (TASK-176: a query's concept groups,
         each alone and the query without each; `search.run`). Counted as a facet is: a tree's top-level
-        filters (`Filter`, or `NOT` of one) are set aside, the rest is collected once per combination of
+        filters (`Filter`, or `NOT` of one) are set aside, the rest (its *base*) is counted per combination of
         (venue, year, track, status) (`combos`, memoised per base: another page, and the same group under
         other filters, never collect again), and the combos passing every filter are summed. A filter
         depends only on its field's value, so the sum is exact (`test_group_counts.py` holds it to
@@ -434,21 +448,40 @@ class TantivyEngine:
 
         The trees of one call share their conjuncts (a query's groups and what is kept for each), so each
         distinct conjunct is compiled at most once per call, whatever the number of trees, and only when some
-        base misses the memo; a base's query is those conjuncts' queries ANDed, as `Compiler.node` builds an
-        AND. None of it is stored in `compiled`: a tree counted here is never searched, and storing one entry
-        a tree would hold every kept verified clause's ids once per group against the memo's shared budget.
+        base misses the memo; `compiled` (a tree and its `compile`: the request's query, whose conjuncts these
+        trees are made of) gives their queries already built, so none is compiled again (TASK-197). None of
+        it is stored in `compiled`: a tree counted here is never searched, and storing one entry a tree would
+        hold every kept verified clause's ids once per group against the memo's shared budget.
 
-        `check` is called before each tree: a caller that no longer wants the counts raises from it, so the
-        work stops within one collection (what is already collected stays memoised)."""
-        parts = _Parts(self, scope)
+        A base's combos are collected in one of two ways (`_Parts`). Usually its query (its conjuncts' queries
+        ANDed, as `Compiler.node` builds an AND) is aggregated once. But when a conjunct holding a
+        position-verified clause is in two or more bases, every collection of it resolves the clause's id
+        sets again (TASK-197: `main-2-pop`'s first group, about 35 ms, in three of six trees), so instead (when
+        the call has no more distinct conjuncts than distinct bases, so never more collections) each
+        distinct conjunct is collected once, as a bitmap of the documents it matches, each base is the AND of
+        its conjuncts' bitmaps (a NOT's child's subtracted), and its combos are read from the per-value
+        bitmaps (`_combos_of`). The same documents either way, so the same combos
+        (`test_group_counts.py` holds them to the aggregation's).
+
+        `check` is called before each tree and before each conjunct's collection: a caller that no longer
+        wants the counts raises from it, so the work stops within one collection (what is already collected
+        stays memoised)."""
+        parts = _Parts(self, scope, check, compiled)
+        split = [conjuncts(ast) for ast in trees]
+        bases = [[c for c in tops if _filter_field(c) is None] for tops in split]
+        shared = Counter(id(c) for base in bases for c in {id(c): c for c in base}.values())
+        # never more collections than one a distinct base (spec 04's bound), however many kept conjuncts
+        distinct = {frozenset(map(id, base)) for base in bases}
+        parts.bitwise = len(shared) <= len(distinct) and any(
+            shared[id(c)] > 1 and verifies(c) for base in bases for c in base
+        )
         out: list[int] = []
-        for ast in trees:
+        for ast, tops, base in zip(trees, split, bases, strict=True):
             if check is not None:
                 check()
             self.expansions(ast)  # the cap applies, as for every tree an engine is given
-            conjuncts = _conjuncts(ast)
-            filters = [(COMBO.index(f), c) for c in conjuncts if (f := _filter_field(c)) is not None]
-            combos = self.combos([c for c in conjuncts if _filter_field(c) is None], scope, parts=parts)
+            filters = [(COMBO.index(f), c) for c in tops if (f := _filter_field(c)) is not None]
+            combos = self.combos(base, scope, parts=parts)
             out.append(sum(n for combo, n in combos if all(_passes(c, combo[at]) for at, c in filters)))
         return out
 
@@ -462,13 +495,27 @@ class TantivyEngine:
     ) -> tuple[tuple[Combo, int], ...]:
         """How many matches of `base`'s conjunction (every document when empty) have each combination of the
         `over` fields' values (a subsequence of COMBO: (venue, year, track, status) unless narrowed), from one
-        collection; memoised per base and fields under task-080's rules."""
+        collection (or, for `counts`, from its conjuncts' bitmaps: `_Parts.bitwise`); memoised per base and
+        fields under task-080's rules."""
         over = _aggregated(over)
         spanless = _spanless if parts is None else parts.spanless
         key = "\x00".join((",".join(over), *sorted(spanless(c) for c in base)))
         hit = self.faceted.get(key)  # one read (task-080)
         if hit is not None:
             return hit
+        if parts is not None and parts.bitwise and over == COMBO:
+            combos = self._combos_of(parts.bits(base))
+        else:
+            combos = self._aggregate(base, scope, over, parts)
+        self._trim("faceted", self.faceted, self.MAX_FACET_COMBOS)
+        self.faceted[key] = combos  # stored complete (an immutable tuple), never changed after
+        self.charges["faceted"].append(len(combos) + 1)
+        return combos
+
+    def _aggregate(
+        self, base: list[Node], scope: Scope | None, over: tuple[str, ...], parts: _Parts | None
+    ) -> tuple[tuple[Combo, int], ...]:
+        """`combos` collected: one nested terms aggregation of `base`'s query over the `over` fields."""
         node = base[0] if len(base) == 1 else And(span=(0, 0), children=tuple(base)) if base else None
         if node is None:
             query = tantivy.Query.all_query()
@@ -481,11 +528,61 @@ class TantivyEngine:
             aggs = {f: {"terms": {"field": f, "size": 100_000}, **({"aggs": aggs} if aggs else {})}}
         found: list[tuple[Combo, int]] = []
         _walk(self.searcher.aggregate(query, aggs), over, (), found)
-        combos = tuple(sorted(found))
-        self._trim("faceted", self.faceted, self.MAX_FACET_COMBOS)
-        self.faceted[key] = combos  # stored complete (an immutable tuple), never changed after
-        self.charges["faceted"].append(len(combos) + 1)
-        return combos
+        return tuple(sorted(found))
+
+    def _combos_of(self, documents: int) -> tuple[tuple[Combo, int], ...]:
+        """`combos` of a bitmap of documents (bit `ord` set for each), over every COMBO field: each combination's
+        documents are the AND of its values' bitmaps, walked field by field and pruned where none is left."""
+        masks = self._value_masks()
+        found: list[tuple[Combo, int]] = []
+
+        def walk(at: int, within: int, prefix: Combo) -> None:
+            for value, mask in masks[at]:
+                both = within & mask
+                if not both:
+                    continue
+                if at == len(masks) - 1:
+                    found.append(((*prefix, value), both.bit_count()))
+                else:
+                    walk(at + 1, both, (*prefix, value))
+
+        walk(0, documents, ())
+        return tuple(sorted(found))
+
+    def _value_masks(self) -> tuple[tuple[tuple[str | int, int], ...], ...]:
+        """Each COMBO field's values, each with the bitmap of the documents that have it (`_masks`): the values
+        a terms aggregation over every document finds, and each one's documents collected by its own term (a
+        year by its one-year range), so a document is in a value's bitmap exactly when the aggregation counts it
+        under that value."""
+        masks = self._masks  # one read (task-080); built whole, then stored with one assignment
+        if masks is None:
+            built = []
+            for f in COMBO:
+                found = self.searcher.aggregate(
+                    tantivy.Query.all_query(), {f: {"terms": {"field": f, "size": 100_000}}}
+                )
+                values = [int(b["key"]) if f == "year" else str(b["key"]) for b in found[f]["buckets"]]
+                built.append(tuple((v, self.bitmap(self._value_query(f, v))) for v in values))
+            masks = self._masks = tuple(built)  # a race only builds the same masks twice
+        return masks
+
+    def _value_query(self, field: str, value: str | int) -> tantivy.Query:
+        if field == "year":
+            return tantivy.Query.range_query(
+                self.index.schema, "year", tantivy.FieldType.Unsigned, value, value
+            )
+        return tantivy.Query.term_query(self.index.schema, field, value)
+
+    def bitmap(self, query: tantivy.Query) -> int:
+        """The documents `query` matches as a bitmap: bit `ord` set for each (its position in `ids.txt`). One
+        collection ordered by the `ord` fast column, so nothing is scored and no other column is read."""
+        hits = self.searcher.search(
+            query, max(1, self.searcher.num_docs), count=False, order_by_field="ord"
+        ).hits
+        bits = bytearray(len(self.ids) // 8 + 1)
+        for o, _address in hits:  # an int (the column is u64; `_ord` per hit would double the loop's cost)
+            bits[o >> 3] |= 1 << (o & 7)
+        return int.from_bytes(bits, "little")
 
     # --- compilation and explain ---------------------------------------------------------------------
     def candidates(self, ast: Node) -> list[tuple[Phrase | Near, TextField, int]]:
@@ -655,15 +752,36 @@ class TantivyEngine:
 
 
 class _Parts:
-    """One `TantivyEngine.counts` call's conjunct queries: each distinct conjunct compiled once (`_fresh`: never
-    stored in `compiled`), on first need, and a base's query built from them. Used by one thread."""
+    """One `TantivyEngine.counts` call's conjuncts: each distinct conjunct's query taken from the request's compile
+    (`compiled`) or compiled once (`_fresh`: never stored in `compiled`), on first need, and a base's query built
+    from them; with `bitwise`, each one's bitmap, collected once, and a base's bitmap built from them (see
+    `counts`). A call's bitmaps are dropped with it: one bit per document per conjunct, charged to no memo.
+    Used by one thread."""
 
-    __slots__ = ("built", "engine", "keys", "scope")
+    __slots__ = ("bitwise", "built", "check", "engine", "keys", "known", "matched", "scope")
 
-    def __init__(self, engine: TantivyEngine, scope: Scope | None) -> None:
-        self.engine, self.scope = engine, scope
+    def __init__(
+        self,
+        engine: TantivyEngine,
+        scope: Scope | None,
+        check: Callable[[], None] | None = None,
+        compiled: tuple[Node, Compiled] | None = None,
+    ) -> None:
+        self.engine, self.scope, self.check = engine, scope, check
+        self.bitwise = False  # set by `counts`
         self.built: dict[int, tantivy.Query] = {}  # by the conjunct's identity: the call's trees share nodes
         self.keys: dict[int, str] = {}  # each conjunct's memo-key part, serialised once for all the trees
+        self.matched: dict[int, int] = {}  # each conjunct's bitmap (a NOT's: its child's), by identity
+        # each conjunct's query and, for a NOT, its child's, as the request's compile built them
+        self.known: dict[int, tuple[tantivy.Query, tantivy.Query | None]] = {}
+        if compiled is not None:
+            tree, done = compiled
+            tops = conjuncts(tree)
+            if len(tops) != len(done.conjuncts):
+                raise EngineInternalError(
+                    DiagnosticCode.API_INTERNAL, "counts was given the compile of another tree"
+                )
+            self.known = {id(c): q for c, q in zip(tops, done.conjuncts, strict=True)}
 
     def spanless(self, conjunct: Node) -> str:
         """`_spanless(conjunct)`, once per call: every tree counted names the kept conjuncts again."""
@@ -672,15 +790,43 @@ class _Parts:
             key = self.keys[id(conjunct)] = _spanless(conjunct)
         return key
 
+    def conjunct(self, c: Node) -> tantivy.Query:
+        """`c`'s query: the request's, or compiled now (once per call)."""
+        q = self.built.get(id(c))
+        if q is None:
+            known = self.known.get(id(c))
+            q = self.built[id(c)] = known[0] if known is not None else self.engine._fresh(c, self.scope).query
+        return q
+
     def query(self, base: list[Node]) -> tantivy.Query:
         """`base`'s conjunction, as `Compiler.node` builds an AND: its conjuncts' queries, all required."""
-        queries = []
+        return combine(tantivy.Occur.Must, [self.conjunct(c) for c in base])
+
+    def bits(self, base: list[Node]) -> int:
+        """`base`'s conjunction as a bitmap (every document when empty): its positive conjuncts' bitmaps ANDed,
+        less each NOT's child's (`NOT x` matches every document `x` doesn't, as `Compiler.node` builds it)."""
+        out = (1 << len(self.engine.ids)) - 1
         for c in base:
-            q = self.built.get(id(c))
-            if q is None:
-                q = self.built[id(c)] = self.engine._fresh(c, self.scope).query
-            queries.append(q)
-        return combine(tantivy.Occur.Must, queries)
+            if isinstance(c, Not):
+                out &= ~self.matches(c)
+            else:
+                out &= self.matches(c)
+        return out
+
+    def matches(self, c: Node) -> int:
+        """The bitmap of what `c` matches (a NOT: what its child matches), collected once per call."""
+        bits = self.matched.get(id(c))
+        if bits is None:
+            if self.check is not None:
+                self.check()
+            if isinstance(c, Not):
+                known = self.known.get(id(c))
+                child = known[1] if known is not None else None
+                query = child if child is not None else self.engine._fresh(c.child, self.scope).query
+            else:
+                query = self.conjunct(c)
+            bits = self.matched[id(c)] = self.engine.bitmap(query)
+        return bits
 
 
 def _aggregated(over: tuple[str, ...]) -> tuple[str, ...]:
@@ -708,11 +854,6 @@ def _ord(value: object) -> int:
             DiagnosticCode.API_INTERNAL, "a document has no ord: the index predates it; build it again"
         )
     return value
-
-
-def _conjuncts(n: Node) -> list[Node]:
-    """Top-level AND conjuncts, nested ANDs flattened."""
-    return [x for c in n.children for x in _conjuncts(c)] if isinstance(n, And) else [n]
 
 
 def _walk(result: dict[str, Any], over: tuple[str, ...], prefix: Combo, out: list[tuple[Combo, int]]) -> None:

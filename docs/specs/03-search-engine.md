@@ -275,7 +275,9 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
   filters for every facet and both exclusion buckets (task-086: counts per (venue, year, track, status) from
   one nested terms aggregation, the rest in Python; memoised per base in `TantivyEngine.faceted`; a concept
   group's two counts, 04 §SearchResponse `groups`, are two more such collections a group, on the counts' own workers,
-  from conjunct queries compiled once and never stored in `compiled`: `TantivyEngine.counts`, TASK-176). Two
+  from the request's own compile of its conjuncts, never stored in `compiled`; a conjunct holding a verified
+  clause that several trees share is collected once, as a bitmap, rather than once a tree: `TantivyEngine.counts`,
+  TASK-176, TASK-197). Two
   collections are the floor of an exact design (the page needs the effective query's own scores), so the
   second runs on a worker thread, overlapping the first (M3a review gate round 2): `search.run` compiles the
   effective tree in the request's thread (a cold verified clause takes its one verification slot there, and

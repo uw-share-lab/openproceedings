@@ -77,6 +77,9 @@ class Compiled:
     # (field, clause) -> the ids each verified clause matched: a compiled-memo hit hands them to the request's
     # scope (`TantivyEngine.compile`), so its later compiles of other trees never verify them again
     ids: dict[tuple[str, str], list[str]] = field(default_factory=dict)
+    # each top-level conjunct's query (`conjuncts(tree)`, in order) and, for a NOT, its child's: parts of `query`
+    # (nothing more held), which `TantivyEngine.counts` reuses rather than compiling the conjuncts again (TASK-197)
+    conjuncts: tuple[tuple[tantivy.Query, tantivy.Query | None], ...] = ()
 
 
 def wildcards(n: Node) -> Iterator[Wildcard]:
@@ -141,9 +144,16 @@ class Compiler:
         self.id_query = id_query if id_query is not None else partial(id_set, schema)
         self.out = Compiled(tantivy.Query.empty_query())
         self._allowed: dict[tuple[str, str], frozenset[str]] = {}  # per item: `allowed`
+        # the top-level conjuncts being compiled, by identity, and the queries built for them (and NOTs' children)
+        self._tops: set[int] = set()
+        self._built: dict[int, tantivy.Query] = {}
+        self._children: dict[int, tantivy.Query] = {}
 
     def compile(self, n: Node) -> Compiled:
+        tops = conjuncts(n)
+        self._tops = {id(c) for c in tops}
         self.out.query = self.node(n, 0)
+        self.out.conjuncts = tuple((self._built[id(c)], self._children.get(id(c))) for c in tops)
         self.out.held += len(self.out.explain)
         return self.out
 
@@ -152,16 +162,25 @@ class Compiler:
 
     # --- boolean structure and filters ---------------------------------------------------------------
     def node(self, n: Node, depth: int) -> tantivy.Query:
+        query = self.build(n, depth)
+        if id(n) in self._tops:
+            self._built[id(n)] = query
+        return query
+
+    def build(self, n: Node, depth: int) -> tantivy.Query:
         if isinstance(n, And | Or):
             self.line(depth, "AND" if isinstance(n, And) else "OR")
             occur = tantivy.Occur.Must if isinstance(n, And) else tantivy.Occur.Should
             return combine(occur, [self.node(c, depth + 1) for c in n.children])
         if isinstance(n, Not):
             self.line(depth, "NOT (all documents, minus:)")
+            child = self.node(n.child, depth + 1)
+            if id(n) in self._tops:
+                self._children[id(n)] = child
             return tantivy.Query.boolean_query(
                 [
                     (tantivy.Occur.Must, tantivy.Query.const_score_query(tantivy.Query.all_query(), 0.0)),
-                    (tantivy.Occur.MustNot, self.node(n.child, depth + 1)),
+                    (tantivy.Occur.MustNot, child),
                 ]
             )
         if isinstance(n, Filter):
@@ -383,6 +402,11 @@ def _starts(parts: Parts, tokens: list[str], positions: dict[str, list[int]]) ->
         for at in first
         if at + width <= len(tokens) and all(tokens[at + k] in parts[k] for k in range(1, width))
     ]
+
+
+def conjuncts(n: Node) -> list[Node]:
+    """Top-level AND conjuncts, nested ANDs flattened (`Compiled.conjuncts` is in this order)."""
+    return [x for c in n.children for x in conjuncts(c)] if isinstance(n, And) else [n]
 
 
 def id_set(schema: tantivy.Schema, ids: list[str]) -> tantivy.Query:
