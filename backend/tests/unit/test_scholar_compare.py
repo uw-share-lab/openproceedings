@@ -977,5 +977,7 @@ def test_a_doi_in_another_year_is_named_in_the_gap_row() -> None:
     assert gap.auto_evidence.endswith(
         "; its DOI names op:neurips:2022:doi00002 (NeurIPS 2022), another venue or year: never a match"
     )
-    assert [(r.op_id, r.auto_evidence) for r in c.kept] == [(nid("doi00001", 2022), "doi")]  # matched by its DOI
+    assert [(r.op_id, r.auto_evidence) for r in c.kept] == [
+        (nid("doi00001", 2022), "doi")
+    ]  # matched by its DOI
     assert [r.op_id for r in c.dropped] == [nid("pmlr0001", venue="icml")]

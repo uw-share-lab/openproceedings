@@ -217,7 +217,9 @@ def test_the_report_counts_and_explains_query_limit_rows() -> None:
     c = compare(f"{QUERY} AND year:2025..2026", SET, corpus(), scope=META.scope)
     lines = report(c).splitlines()
     [row] = [ln for ln in lines if ln.startswith("| `query_limit` |")]
-    assert row.split("|")[2].strip() == "8"  # every paper of the set is NeurIPS 2024 (the unindexed one by its file)
+    assert (
+        row.split("|")[2].strip() == "8"
+    )  # every paper of the set is NeurIPS 2024 (the unindexed one by its file)
     assert (
         "a filter clause the query itself writes (`year:`, `venue:`, …) excludes it, whatever its text" in row
     )
