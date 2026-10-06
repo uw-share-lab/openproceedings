@@ -191,8 +191,9 @@ class TantivyEngine:
     # so it exceeds its budget by at most one entry per thread storing concurrently (each thread's check may
     # predate the others' charges), never more; a single compile, however many verified clauses it has,
     # overshoots `verified` by at most one clause's ids. See `_trim`. Not memos, so charged to none: the `ord`
-    # table and the per-value bitmaps (`_masks`), each built once and fixed in size by the index, and a `counts`
-    # call's own bitmaps (`_Parts`), one bit per document per conjunct, dropped with the call.
+    # table and the per-value bitmaps (`_masks`, values × documents / 8 bytes), each built once and fixed in size
+    # by the index, and a `counts` call's own bitmaps (`_Parts`), one bit per document per conjunct, dropped with
+    # the call.
     MAX_COMPILED_UNITS = 500_000
     MAX_VERIFIED_IDS = 500_000
     MAX_EXPANDED_TERMS = 100_000
@@ -227,8 +228,9 @@ class TantivyEngine:
         # (`id_set`), then kept: one dict entry per record (a few MB at 80k), never changed after
         self._ords: dict[str, int] | None = None
         # each facet field's values (COMBO order), each with the bitmap of the documents (by ord) that have it, built
-        # on the first count that collects its conjuncts as bitmaps (`counts`), then kept: one bit per document per
-        # value (~0.5 MB at 133k documents and 30 values), never changed after
+        # on the first count that collects its conjuncts as bitmaps (`counts`), then kept, never changed after:
+        # values × documents / 8 bytes (~0.5 MB at 133k documents and 30 values; it grows with the index's facet
+        # values, e.g. more track values, TASK-130)
         self._masks: tuple[tuple[tuple[str | int, int], ...], ...] | None = None
         self.compiled: dict[str, Compiled] = {}  # per tree (bounded), see compile()
         self.verified: Verified = {}  # position-verified clauses, per engine
@@ -504,7 +506,7 @@ class TantivyEngine:
         if hit is not None:
             return hit
         if parts is not None and parts.bitwise and over == COMBO:
-            combos = self._combos_of(parts.bits(base))
+            combos = self._combos_of(parts.bits(base), parts.check)
         else:
             combos = self._aggregate(base, scope, over, parts)
         self._trim("faceted", self.faceted, self.MAX_FACET_COMBOS)
@@ -530,10 +532,13 @@ class TantivyEngine:
         _walk(self.searcher.aggregate(query, aggs), over, (), found)
         return tuple(sorted(found))
 
-    def _combos_of(self, documents: int) -> tuple[tuple[Combo, int], ...]:
+    def _combos_of(
+        self, documents: int, check: Callable[[], None] | None = None
+    ) -> tuple[tuple[Combo, int], ...]:
         """`combos` of a bitmap of documents (bit `ord` set for each), over every COMBO field: each combination's
-        documents are the AND of its values' bitmaps, walked field by field and pruned where none is left."""
-        masks = self._value_masks()
+        documents are the AND of its values' bitmaps, walked field by field and pruned where none is left.
+        `check`, as `counts`': asked before each collection, should the per-value bitmaps be built now."""
+        masks = self._value_masks(check)
         found: list[tuple[Combo, int]] = []
 
         def walk(at: int, within: int, prefix: Combo) -> None:
@@ -549,11 +554,15 @@ class TantivyEngine:
         walk(0, documents, ())
         return tuple(sorted(found))
 
-    def _value_masks(self) -> tuple[tuple[tuple[str | int, int], ...], ...]:
+    def _value_masks(
+        self, check: Callable[[], None] | None = None
+    ) -> tuple[tuple[tuple[str | int, int], ...], ...]:
         """Each COMBO field's values, each with the bitmap of the documents that have it (`_masks`): the values
         a terms aggregation over every document finds, and each one's documents collected by its own term (a
         year by its one-year range), so a document is in a value's bitmap exactly when the aggregation counts it
-        under that value."""
+        under that value. Built lazily, by the first count that needs them (about 30 collections on the real
+        index; at engine open they would slow every start, pinned indexes' too, for a path few queries take),
+        with `check` asked before each value's collection: a stopped job keeps no partial masks."""
         masks = self._masks  # one read (task-080); built whole, then stored with one assignment
         if masks is None:
             built = []
@@ -562,7 +571,12 @@ class TantivyEngine:
                     tantivy.Query.all_query(), {f: {"terms": {"field": f, "size": 100_000}}}
                 )
                 values = [int(b["key"]) if f == "year" else str(b["key"]) for b in found[f]["buckets"]]
-                built.append(tuple((v, self.bitmap(self._value_query(f, v))) for v in values))
+                field: list[tuple[str | int, int]] = []
+                for v in values:
+                    if check is not None:
+                        check()
+                    field.append((v, self.bitmap(self._value_query(f, v))))
+                built.append(tuple(field))
             masks = self._masks = tuple(built)  # a race only builds the same masks twice
         return masks
 
@@ -631,6 +645,7 @@ class TantivyEngine:
             return self._copy(hit)
         self._trim("compiled", self.compiled, self.MAX_COMPILED_UNITS)
         compiled = self._fresh(ast, scope)
+        compiled.tree = key  # the memo's own key string: nothing more held
         self.compiled[key] = compiled
         self.charges["compiled"].append(compiled.held + 1)
         return self._copy(compiled)
@@ -776,12 +791,11 @@ class _Parts:
         self.known: dict[int, tuple[tantivy.Query, tantivy.Query | None]] = {}
         if compiled is not None:
             tree, done = compiled
-            tops = conjuncts(tree)
-            if len(tops) != len(done.conjuncts):
+            if done.tree != tree.model_dump_json():  # as `compile` keys it: the very tree, spans included
                 raise EngineInternalError(
                     DiagnosticCode.API_INTERNAL, "counts was given the compile of another tree"
                 )
-            self.known = {id(c): q for c, q in zip(tops, done.conjuncts, strict=True)}
+            self.known = {id(c): q for c, q in zip(conjuncts(tree), done.conjuncts, strict=True)}
 
     def spanless(self, conjunct: Node) -> str:
         """`_spanless(conjunct)`, once per call: every tree counted names the kept conjuncts again."""
