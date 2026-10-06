@@ -34,6 +34,7 @@ from openproceedings import cli
 from openproceedings import export as exporter
 from openproceedings.api import ApiConfig, RateLimit
 from openproceedings.api import compare as route
+from openproceedings.api import export as export_route
 from openproceedings.api import server as api_server
 from openproceedings.api.middleware import BodyLimit, drain
 from openproceedings.api.middleware import RateLimit as RateLimitMiddleware
@@ -162,6 +163,9 @@ def the_file() -> str:
 def fixed_date(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(exporter, "utc_date", lambda: DATE)
     monkeypatch.setattr(route, "utc_date", lambda: DATE)
+    # GET /export too: a test compares /compare's added RIS with /export's byte for byte, and each route reads
+    # its own `utc_date` (it passed only while the real UTC date was DATE, 2026-10-05)
+    monkeypatch.setattr(export_route, "utc_date", lambda: DATE)
 
 
 @pytest.fixture(scope="module")
