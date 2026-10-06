@@ -1738,3 +1738,25 @@ def test_a_title_partner_set_aside_by_the_track_rule_still_keeps_the_title_merge
     assert [r.id for r in result.records] == [workshop.id, own.id]
     assert rules(result) == [(own.id, copy.id, "title_venue_year")]
     assert not_merged(result) == [("title_key", "track_not_merged")]
+
+
+# --- over-yielding (TASK-201): decision-045 asks that NO title partner keep the abstract --------------------------
+
+
+def test_one_title_partner_keeping_the_abstract_keeps_the_title_merge_whatever_the_others_keep() -> None:
+    """The main note keeps the import's abstract, a same-title workshop note of another forum keeps another: the
+    import is the main paper's, merged on its title (the workshop note set aside). Yielding because some partner
+    lacks the abstract would move the merge to step 3: the same record, by the wrong rule."""
+    main = paper("AbCd1234", "One", abstract=LONG, **ICLR)
+    workshop = paper("EfGh5678", "One", abstract=OTHER, track="workshop", **ICLR)
+    copy = imported(f"iclr-{H[1]}", "One", abstract=LONG, **ICLR)
+    result = dedup([main, workshop, copy])
+    assert [r.id for r in result.records] == [main.id, workshop.id]
+    assert rules(result) == [(main.id, copy.id, "title_venue_year")]
+
+
+def test_a_lone_title_partner_keeping_the_abstract_keeps_the_title_merge() -> None:
+    """The partner is itself the crawled holder of the import's abstract: nothing names another paper."""
+    note = paper("AbCd1234", "One", abstract=LONG, **ICLR)
+    copy = imported(f"iclr-{H[1]}", "One", abstract=LONG, **ICLR)
+    assert rules(dedup([note, copy])) == [(note.id, copy.id, "title_venue_year")]
