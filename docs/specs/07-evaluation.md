@@ -42,8 +42,9 @@ delta. Match papers by the merge rules in 01. Classify every disagreement:
 
 | Only in Scholar, because… | Only in openproceedings, because… |
 |---|---|
-| matched only in full text | Scholar missed it (known recall gap) |
-| matched only through stemming (e.g. `benchmarks`) | Scholar dropped it because of its 1,000-result cap or truncation |
+| outside a limit the string itself writes (`year:`, `source:`/`venue:`, …) | Scholar missed it (known recall gap) |
+| matched only in full text | Scholar dropped it because of its 1,000-result cap or truncation |
+| matched only through stemming (e.g. `benchmarks`) | |
 | workshop / competition / rejected (filtered here, counted in `excluded`) | |
 | not in the corpus (a coverage gap: fix 01) | |
 | **our bug** (investigate; must be 0) | |
@@ -85,7 +86,7 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   index record's venue and year, an unmatched one by its own.
 - **Classes**, in the protocol's order, each decided by `ReferenceEngine` over the compared records (every matched
   Scholar paper and every in-scope match): `our_bug` (the oracle and the served index disagree on a compared
-  record, on either side or in both), `filtered`, `compat_reading` (below), `coverage_gap`, `stemming`,
+  record, on either side or in both), `query_limit` (below), `filtered`, `compat_reading` (below), `coverage_gap`, `stemming`,
   `full_text`; and `scholar_cap`, `compat_reading`, `scholar_missed` for records only in the result. The filters
   are judged before the text: a record that fails the default filters and matches without them under any
   reading (as run, Scholar's, or with inflected forms) is `filtered`, with the reading in its evidence; one that
@@ -93,6 +94,17 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   `full_text` rows that fail them. A record the
   corpus holds without an abstract can't be `full_text`: it is `unsettled`, for a person. Every `coverage_gap` and
   `scholar_missed` row goes to a person too, with a tenth of the settled rows as a spot check.
+- **`query_limit`** (TASK-185): a top-level filter clause the string itself writes excludes the record: a
+  `year:` or `source:`/`venue:` clause, its `NOT`, or a `track:`/`status:` clause that is not the default
+  (`query_limits`). The string as written leaves the record out whatever its text, so it is no `full_text` or
+  `stemming` miss, and the test comes before the filters and the text. The evidence names each failing clause
+  as written canonically and the value that fails it (`` `year:2020..2026` (year 2019) ``), says whether the rest
+  of the string matches the record as run, and adds `also fails the filters (…)` when a default filter would
+  remove it too. A record the index doesn't hold is judged on the file's own venue and year (a `not_found`
+  record only; an `unsettled` one stays `unsettled`) and goes to a person, since the file's year may be wrong.
+  A clause under an OR or a NOT group is part of the search, not a limit. In `op eval scholar` the limit is the
+  string's own, beside `--years`/`--venues`; in `POST /compare`, where both sides cover every indexed venue and
+  year, it is the only limit there is.
 - **`compat_reading`** (decision-002 and `$`): the string is rewritten as Google Scholar reads it and run again.
   `$` is no wildcard there, and an unquoted multi-word `|` item is separate words with `|` binding tighter than
   juxtaposition, so `(large language model | LLM)` is `large AND language AND (model OR llm)`. A record that

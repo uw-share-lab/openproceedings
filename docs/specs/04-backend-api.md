@@ -649,8 +649,10 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   record's position in the file, from 1), `copies`, `id`, `title` (the file's own for a paper of the file),
   `venue`, `year`, `matched_by` (`forum_id`, `proceedings_id`, `title_venue_year`; or why it has no index
   record: `not_found`, `ambiguous`, `no_year`, `no_venue`, `truncated_title`), `reason` and `detail` (07 §B's
-  class and its evidence: for a dropped paper `filtered` by track or status, `full_text` (no title or abstract
-  match), `stemming`, `compat_reading`; `unsettled` when a person must decide, with `settled: false`),
+  class and its evidence: for a dropped paper `query_limit` (a filter clause `q` itself writes, such as
+  `year:` or `venue:`, excludes it; `detail` names the clause), `filtered` by track or status, `full_text` (no
+  title or abstract match), `stemming`, `compat_reading`; for a paper not in the index `coverage_gap`, or
+  `query_limit` by the file's own venue and year; `unsettled` when a person must decide, with `settled: false`),
   `independent` (false when the index holds the record only because a RIS set was imported: a match to it
   says nothing about coverage), `fails_filters` and `abstract_withheld`. The lists hold **no abstract**.
   A record whose abstract is withheld (decision-022) keeps its class and has an empty `detail` (the evidence

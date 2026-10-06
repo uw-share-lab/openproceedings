@@ -146,7 +146,9 @@ first `N1` as the provenance line.
 
 One recorded exception: `RecordResponse.replay` is nullable, null only for the opt-in `replay=false`
 (decision-014). `backend/tests/contract/test_openapi_additive.py` diffs the snapshot against the released one
-on `origin/dev` by these rules (`ALLOWED` lists that exception); run it before any contract change lands.
+on `origin/dev` by these rules (`ALLOWED` lists that exception); run it before any contract change lands. A
+nullable field (`anyOf: [schema, null]`) is judged option by option, so a new value in a nullable open enum
+(`CompareRow.reason`, `matched_by`) is additive and a removed one is breaking (TASK-185).
 Locally it skips when `origin/dev` is missing. CI's `test` job compares against the commit the change builds
 on (the PR's base commit, or the pushed branch's previous tip), fetched by SHA into `OPENAPI_BASELINE_REF`, with
 `OPENAPI_BASELINE_REQUIRED=1`: an unreadable baseline fails there. A baseline commit with no snapshot yet (`main`

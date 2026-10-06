@@ -80,7 +80,15 @@ describe("postCompare", () => {
 
 describe("the words", () => {
   it("names every reason the API documents, per list", () => {
-    for (const reason of ["filtered", "full_text", "stemming", "compat_reading", "unsettled", "our_bug"]) {
+    for (const reason of [
+      "query_limit",
+      "filtered",
+      "full_text",
+      "stemming",
+      "compat_reading",
+      "unsettled",
+      "our_bug",
+    ]) {
       expect(reasonText("dropped", reason)).not.toBe(reason);
     }
     for (const reason of ["scholar_missed", "compat_reading", "scholar_cap", "our_bug"]) {
@@ -130,10 +138,17 @@ describe("the words", () => {
     expect(reasonLines("not_in_index", { coverage_gap: 3 }, "native")).toEqual([
       "3 papers are not in the index. Keep such a paper from your own file; no query here can find it.",
     ]);
+    // a paper the query's own limit leaves out (TASK-185), with the API's own count for it
+    const limited = fixture.limited.response.reason_totals.dropped;
+    expect(reasonLines("dropped", { query_limit: limited.query_limit ?? 0 }, "native")).toEqual([
+      `${limited.query_limit} papers are outside a limit your query writes: to include such a paper, widen ` +
+        "that limit in the query (its row names the clause).",
+    ]);
     expect(reasonLines("dropped", { a_new_class: 2 }, "native")).toEqual(["2 papers: a_new_class."]); // open enum
     // every reason the API documents has its sentence, in both lists it can appear in, and a dropped or
     // missing paper's always says what to do next (USAB-S3)
     for (const reason of [
+      "query_limit",
       "filtered",
       "full_text",
       "stemming",

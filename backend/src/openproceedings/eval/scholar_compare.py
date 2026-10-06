@@ -17,7 +17,8 @@ Three steps, each a pure function of its arguments (no clock, no environment, no
    the result), each disagreement with its class and evidence.
 
 The classes and their order are the protocol's. Only in the RIS set: `our_bug` (the oracle and the served engine
-disagree) → `filtered` (it fails a default filter and matches with them removed, under any reading below, which
+disagree) → `query_limit` (a filter clause the query itself writes, `year:` or `venue:` say, excludes it:
+`query_limits`) → `filtered` (it fails a default filter and matches with them removed, under any reading below, which
 its evidence names) → `compat_reading` (it matches the string as Google Scholar reads it: `scholar_reading`) →
 `coverage_gap` (no record in the snapshot) → `stemming` (it matches with inflected forms added: `with_variants`)
 → `full_text` (`ReferenceEngine` confirms none of those readings matches its title or abstract; whether it also
@@ -59,6 +60,7 @@ from openproceedings.ingest import dedup, urls
 from openproceedings.ingest.record import FORUM_ID, PaperRecord
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 from openproceedings.query.ast import (
+    FILTER_FIELDS,
     And,
     Filter,
     Near,
@@ -70,6 +72,7 @@ from openproceedings.query.ast import (
     Term,
     TextField,
     Wildcard,
+    YearRange,
     structure,
 )
 from openproceedings.query.canonical import render
@@ -88,6 +91,9 @@ type Leaf = Term | Wildcard | Phrase
 
 # the classes (scholar-comparison-protocol §Classification)
 OUR_BUG = "our_bug"
+QUERY_LIMIT = (
+    "query_limit"  # a filter clause the query itself writes (`year:`, `venue:`, …) excludes the record
+)
 FILTERED = "filtered"
 COMPAT_READING = "compat_reading"
 COVERAGE_GAP = "coverage_gap"
@@ -96,7 +102,7 @@ FULL_TEXT = "full_text"
 SCHOLAR_CAP = "scholar_cap"
 SCHOLAR_MISSED = "scholar_missed"
 UNSETTLED = "unsettled"  # no class: the automation can't tell, and says why in the evidence
-ONLY_SCHOLAR = (OUR_BUG, FILTERED, COMPAT_READING, COVERAGE_GAP, STEMMING, FULL_TEXT, UNSETTLED)
+ONLY_SCHOLAR = (OUR_BUG, QUERY_LIMIT, FILTERED, COMPAT_READING, COVERAGE_GAP, STEMMING, FULL_TEXT, UNSETTLED)
 ONLY_OP = (OUR_BUG, SCHOLAR_CAP, COMPAT_READING, SCHOLAR_MISSED)
 # `Match.rule`, `Match.problem` and `Dropped.reason`, every value they take (the API's enums are pinned to them)
 MATCH_RULES = ("forum_id", "proceedings_id", "title_venue_year")
@@ -804,6 +810,46 @@ def _text_conjuncts(n: Node | None) -> list[Node]:
     return [c for c in conjuncts if not isinstance(c.child if isinstance(c, Not) else c, Filter)]
 
 
+def query_limits(d: Defaulted) -> list[Node]:
+    """The query's own limits: its top-level filter clauses (`year:2020..2022`, `NOT venue:ICML`, `track:main`)
+    that are not a default (spec 02 §Default filters). A record one of them excludes is `query_limit`, whatever
+    its text: the query as written leaves it out. A clause under an OR or a NOT group is part of the search."""
+    conjuncts = list(d.effective.children) if isinstance(d.effective, And) else [d.effective]
+
+    def own(c: Node) -> bool:
+        inner = c.child if isinstance(c, Not) else c
+        return isinstance(inner, Filter) and not (
+            inner.field in d.defaults and inner.values == DEFAULT_CLAUSES.get(inner.field)
+        )
+
+    return [c for c in conjuncts if own(c)]
+
+
+def _holds(clause: Node, values: Mapping[str, str | int | None]) -> bool | None:
+    """Whether a record with these field values passes a limit (`query_limits`); None when the value it reads
+    is unknown (a record the index doesn't hold has only the file's venue and year)."""
+    negated = isinstance(clause, Not)
+    f = clause.child if isinstance(clause, Not) else clause
+    assert isinstance(f, Filter)
+    value = values.get(f.field)
+    if value is None:
+        return None
+    if f.field == "year":
+        inside = any(isinstance(v, YearRange) and v.lo <= int(value) <= v.hi for v in f.values)
+    else:
+        inside = value in f.values
+    return inside != negated
+
+
+def _outside(limits: Sequence[Node], values: Mapping[str, str | int | None]) -> str:
+    """The limits a record fails, each with the value that fails it (`year:2020..2022` (year 2019)); "" for none."""
+    return "; ".join(
+        f"`{render(c)}` ({f.field} {values[f.field]})"
+        for c in limits
+        if _holds(c, values) is False and isinstance(f := c.child if isinstance(c, Not) else c, Filter)
+    )
+
+
 def _cells_of(ids: Iterable[str], index: MatchIndex) -> str:
     return "; ".join(f"{i} ({index.cells[i][0]} {index.cells[i][1]})" for i in ids)
 
@@ -827,7 +873,7 @@ def only_in_result(in_scope: AbstractSet[str], side: ScholarSide) -> list[str]:
     return sorted(in_scope - frozenset(side.by_id))
 
 
-def _not_in_index(e: Entry, index: MatchIndex, scope: Scope) -> Row:
+def _not_in_index(e: Entry, index: MatchIndex, scope: Scope, limits: Sequence[Node] = ()) -> Row:
     m, r = e.match, e.record
     cells = _cells_of(m.near, index)
     same = f"; same title: {cells}" if cells else ""
@@ -850,7 +896,11 @@ def _not_in_index(e: Entry, index: MatchIndex, scope: Scope) -> Row:
     else:  # a gap, or a record Scholar filed under the wrong venue or year: a person checks which
         where = f"; its links are on {', '.join(r.hosts)}" if r.hosts else ""
         cls = COVERAGE_GAP
-        if m.near:  # the same title in another venue or year is never a match
+        # judged on the file's own venue and year (the only ones it has), so still for a person
+        if outside := _outside(limits, {"venue": e.venue, "year": e.year}):
+            cls = QUERY_LIMIT
+            evidence = f"outside the query's own limit, by the file's venue and year: {outside}; not in the snapshot{same}{where}"
+        elif m.near:  # the same title in another venue or year is never a match
             evidence = f"no id or title match in {e.venue} {e.year}; same title elsewhere: {cells}{where}"
         else:
             evidence = f"no forum id, proceedings id or title+venue+year match in the snapshot{where}"
@@ -904,6 +954,10 @@ def compare_query(
 
     # the readings: as run; as Scholar reads the string (each rewrite alone, and both); each with inflected forms
     run = apply_defaults(parsed.ast, len(q))
+    limits = query_limits(run)
+    # the query as run without its limits or the defaults: its text conjuncts (None: every record)
+    rest = _text_conjuncts(run.identification)
+    unlimited = _combine(And, rest, run.effective.span) if rest else None
     pop = frozenset(
         d.span
         for d in parsed.translations
@@ -980,6 +1034,13 @@ def compare_query(
         settled = True
         if i in bugs:
             cls, evidence, settled = OUR_BUG, "the oracle matches it and the served engine doesn't", False
+        elif outside := _outside(limits, {f: getattr(d, f) for f in FILTER_FIELDS}):
+            also = (
+                "the rest of the query matches it"
+                if i in ids(unlimited)
+                else "the rest of the query doesn't match it either"
+            )
+            cls, evidence = QUERY_LIMIT, f"outside the query's own limit: {outside}; {also} (as run)"
         elif i in o_ident:
             cls, evidence = FILTERED, failed or "fails a filter of the query"
         elif differs and i in o_sch_ident:
@@ -996,7 +1057,7 @@ def compare_query(
                 if failing
                 else "no title or abstract match, inflected forms included"
             )
-        if cls in (FULL_TEXT, UNSETTLED) and failed:
+        if cls in (QUERY_LIMIT, FULL_TEXT, UNSETTLED) and failed:
             evidence += f"; also fails the filters ({failed})"
         if (
             e.match.shared and cls != OUR_BUG
@@ -1042,7 +1103,7 @@ def compare_query(
     for e in side.entries:
         step()
         if e.match.op_id is None:
-            gaps.append(_not_in_index(e, index, scope))
+            gaps.append(_not_in_index(e, index, scope, limits))
         elif e.match.op_id not in in_scope:
             only.append(dropped(e))
         else:  # in both; served without the oracle's agreement is still a bug, and is never hidden as kept

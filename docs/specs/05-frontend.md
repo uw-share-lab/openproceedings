@@ -401,10 +401,10 @@ warnings, the save's index check), the design doc says so; its open questions li
      on what index and query (the server keeps nothing of it; TASK-195). When some kept or dropped papers are in the index only because a RIS file was
      imported (`kept_ris_only_total`, `dropped_ris_only_total`; each such row is marked "import only"), a
      warning says a match to them shows the import holds the paper, not that the index covers it.
-   - **Lists on demand.** Each list is a section with its count, the reasons with their counts (`excluded by a
-     default filter`, `no exact match in its title or abstract`, `matches only as another word form`, …; an
-     unknown `reason` is shown as sent, the enum being open), each with what to do next (add `$`, write the
-     filter into the query, keep it from your own file, check it by hand, report it), one toggle button whose
+   - **Lists on demand.** Each list is a section with its count, the reasons with their counts (`outside a
+     limit your query writes`, `excluded by a default filter`, `no exact match in its title or abstract`, `matches only as another word form`, …; an
+     unknown `reason` is shown as sent, the enum being open), each with what to do next (add `$`, widen
+     the query's own limit, write the filter into the query, keep it from your own file, check it by hand, report it), one toggle button whose
      name doesn't change (its state in `aria-expanded`), and its
      downloads. A row is the title (the file's own; a link to `/paper/[id]` with the query when the index
      holds the paper, opened in a new tab and named so: the comparison is held by this page only), venue and year, its position in the file, how it was matched or why it wasn't, the

@@ -15,6 +15,7 @@ from openproceedings.eval.scholar_compare import (
     FILTERED,
     FULL_TEXT,
     OUR_BUG,
+    QUERY_LIMIT,
     SCHOLAR_CAP,
     SCHOLAR_MISSED,
     STEMMING,
@@ -622,6 +623,67 @@ def test_full_text_says_when_the_record_also_fails_the_filters() -> None:
     assert {r.op_id for r in c.dropped if r.fails_filters} == {
         nid("work0001"), nid("rjct0001"), nid("stwk0001"), nid("fwrk0001"),
     }  # fmt: skip
+
+
+def test_a_record_the_querys_own_year_or_venue_limit_excludes_is_query_limit_not_full_text() -> None:
+    """TASK-185: the query's own `year:` or `venue:` clause leaving a record out is no text miss."""
+    records = [
+        *corpus(),
+        paper("old00001", "An LLM trust benchmark of 2019", year=2019, abstract="An abstract."),
+        paper("old00002", "Graph theory of 2019", year=2019, abstract="No query word."),
+        paper("iclr0001", "An LLM trust benchmark at ICLR", venue="ICLR", abstract="An abstract."),
+        paper("oldw0001", "A workshop LLM trust benchmark of 2019", year=2019, track="workshop",
+              abstract="An abstract."),
+    ]  # fmt: skip
+    text = (
+        entry("An LLM trust benchmark of 2019", year=2019)
+        + entry("Graph theory of 2019", year=2019)
+        + entry("An LLM trust benchmark at ICLR", venue="ICLR")
+        + entry("A workshop LLM trust benchmark of 2019", year=2019)
+        + entry("Graph networks")
+        + entry("A gap of 2018", year=2018)
+        + entry("A gap of 2024")
+    )
+    c = compare(f"{QUERY} AND year:2020..2026 AND NOT source:ICLR", text, records)
+    rows = {r.op_id or r.scholar_key: r for r in c.only_scholar}
+    assert {k: (r.auto_class, r.settled) for k, r in rows.items()} == {
+        nid("old00001", 2019): (QUERY_LIMIT, True),
+        nid("old00002", 2019): (QUERY_LIMIT, True),  # outside the limit whatever its text
+        nid("iclr0001", venue="iclr"): (QUERY_LIMIT, True),
+        nid("oldw0001", 2019): (QUERY_LIMIT, True),  # the query's own limit before the default filters
+        nid("full0001"): (FULL_TEXT, True),  # inside the limits: the text decides, as before
+        "set.ris#6": (QUERY_LIMIT, False),  # no index record: judged on the file's year, for a person
+        "set.ris#7": (COVERAGE_GAP, False),
+    }
+    assert rows[nid("old00001", 2019)].auto_evidence == (
+        "outside the query's own limit: `year:2020..2026` (year 2019); the rest of the query matches it (as run)"
+    )
+    assert rows[nid("old00002", 2019)].auto_evidence == (
+        "outside the query's own limit: `year:2020..2026` (year 2019); the rest of the query doesn't match it "
+        "either (as run)"
+    )
+    assert rows[nid("iclr0001", venue="iclr")].auto_evidence.startswith(
+        "outside the query's own limit: `NOT venue:ICLR` (venue ICLR);"
+    )
+    assert rows[nid("oldw0001", 2019)].auto_evidence.endswith("; also fails the filters (track=workshop)")
+    assert rows["set.ris#6"].auto_evidence == (
+        "outside the query's own limit, by the file's venue and year: `year:2020..2026` (year 2018); not in the "
+        "snapshot"
+    )
+    assert c.counts("scholar")[QUERY_LIMIT] == 5
+
+
+def test_a_default_or_nested_filter_is_no_limit_of_the_query() -> None:
+    # the default filters are `filtered`'s; a clause under an OR is part of the search, not a limit
+    records = [*corpus(), paper("old00001", "Graph theory of 2019", year=2019, abstract="No query word.")]
+    c = compare(
+        f"{QUERY} AND track:(main OR datasets_benchmarks OR position) AND (year:2020..2026 OR graph)",
+        SET + entry("Graph theory of 2019", year=2019),
+        records,
+        mode="native",
+    )
+    assert QUERY_LIMIT not in c.counts("scholar")
+    assert classes(c)[nid("work0001")] == FILTERED
 
 
 def test_a_filtered_record_scholar_reads_differently_is_filtered_and_says_so() -> None:

@@ -536,9 +536,9 @@ export interface components {
             matched_by: ("forum_id" | "proceedings_id" | "title_venue_year" | "not_found" | "ambiguous" | "no_year" | "no_venue" | "truncated_title") | null;
             /**
              * Reason
-             * @description Why the paper is on one side only (spec 07 §B's classes): for `dropped`, `filtered` (a default filter removes it: its track or status), `full_text` (no title or abstract match), `stemming` (it matches only with another inflected form), `compat_reading` (it matches as Google Scholar reads the string); for `not_in_index`, `coverage_gap` or `unsettled`; for `added`, `scholar_missed`, `compat_reading` or `scholar_cap`. `unsettled`: a person must decide. `our_bug`: the reference matcher and the served index disagree (report it). Null on a `kept` row that has none.
+             * @description Why the paper is on one side only (spec 07 §B's classes): for `dropped`, `query_limit` (a filter clause the query itself writes, such as `year:` or `venue:`, excludes it, whatever its text; `detail` names the clause), `filtered` (a default filter removes it: its track or status), `full_text` (no title or abstract match), `stemming` (it matches only with another inflected form), `compat_reading` (it matches as Google Scholar reads the string); for `not_in_index`, `coverage_gap`, `query_limit` (by the file's own venue and year) or `unsettled`; for `added`, `scholar_missed`, `compat_reading` or `scholar_cap`. `unsettled`: a person must decide. `our_bug`: the reference matcher and the served index disagree (report it). Null on a `kept` row that has none.
              */
-            reason: ("our_bug" | "filtered" | "compat_reading" | "coverage_gap" | "stemming" | "full_text" | "scholar_cap" | "scholar_missed" | "unsettled") | null;
+            reason: ("our_bug" | "query_limit" | "filtered" | "compat_reading" | "coverage_gap" | "stemming" | "full_text" | "scholar_cap" | "scholar_missed" | "unsettled") | null;
             /**
              * Ris Record
              * @description The record's position in the file, from 1 (the paper's first record when the file repeats it). Null on an `added` row.

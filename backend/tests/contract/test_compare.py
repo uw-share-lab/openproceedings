@@ -1586,3 +1586,16 @@ def test_a_second_comparison_from_a_network_running_one_is_logged_as_such(
         error(post(c, the_file()), 429, "API_RATE_LIMITED")
     busy = [x.get("busy") for x in logs() if x["event"] == "request" and x["route"] == COMPARE]
     assert busy == ["compare_running", None, "compare_cooldown"]
+
+
+def test_a_paper_the_querys_own_limit_excludes_is_query_limit(shared: TestClient) -> None:
+    """TASK-185: the query's own `year:` clause, not the text, leaves the paper out, and the row says which."""
+    p = BY_ID[KEPT[0]]
+    body = compared(shared, by_forum(p), f"{Q} AND NOT year:{p.year}")
+    [row] = body["dropped"]
+    assert (row["id"], row["reason"], row["settled"]) == (p.id, "query_limit", True)
+    assert row["detail"] == (
+        f"outside the query's own limit: `NOT year:{p.year}` (year {p.year}); the rest of the query matches it "
+        "(as run)"
+    )
+    assert body["reason_totals"]["dropped"] == {"query_limit": 1}
