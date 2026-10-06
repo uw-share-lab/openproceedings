@@ -185,7 +185,7 @@ describe("the words", () => {
   });
 
   it("leaves out of a missing paper's evidence what its match line already says", () => {
-    const unmatched = "no forum id, proceedings id or title+venue+year match in the snapshot";
+    const unmatched = "no forum id, proceedings id, DOI or title+venue+year match in the snapshot";
     expect(detailText("not_in_index", { detail: unmatched })).toBe("");
     expect(detailText("not_in_index", { detail: `${unmatched}; its links are on a.example` })).toBe(
       "its links are on a.example",
