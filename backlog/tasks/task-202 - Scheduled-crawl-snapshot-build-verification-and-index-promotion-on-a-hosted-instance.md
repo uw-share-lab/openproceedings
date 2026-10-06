@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 18:53'
+updated_date: '2026-10-06 19:18'
 labels:
   - ops
   - deploy
@@ -28,3 +29,9 @@ Spec 08's deploy runbook refreshes the index by hand: crawl, op snapshot build (
 - [ ] #2 Whether promotion is automatic is decided and recorded; if automatic, its thresholds are tested on a shrunk-diff fixture and a failing one holds the index
 - [ ] #3 Promotion and retention follow spec 08's runbook, and every promotion is recorded where the next release's Data section can cite it
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Gate note (2026-10-06): an auto-promotion threshold of 'no drop in records per venue-year' must exempt drops the takedown list explains (op snapshot diff's abstract_withheld / removed ids on the list), or a legitimate takedown would hold promotion.
+<!-- SECTION:NOTES:END -->
