@@ -38,6 +38,11 @@ that record. Two RIS rows with one title and different abstracts still merge.
 - When the record holding the import's abstract is one step 3 can't merge with (a workshop note, by the track
   rule), the import yields anyway and stays a separate record, with `title_key` `ambiguous_not_merged` rows.
   A duplicate costs a reviewer one extra screen; a wrong merge would lose a paper. Accepted on that basis.
+- A "title partner" is every record sharing the import's title key in its venue and year, including one the
+  track rule then sets aside as a rival: a same-title workshop note holding the import's abstract keeps the
+  merge, since the title names this paper's own versions (decision-037's main/workshop pairs). The v0.2.0
+  candidate nightly (run 37412309356) found a property that counted only the records merged in the end; the
+  property now counts every title partner, as the code does (`SET_ASIDE_PARTNER`).
 
 ## Real-cache rebuild (2026-10-06)
 
