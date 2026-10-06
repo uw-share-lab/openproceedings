@@ -5,6 +5,7 @@ hand-built corpus with a known answer. The engine here is the oracle itself: no 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 
 import pytest
 from openproceedings.diagnostics import DiagnosticCode
@@ -28,8 +29,10 @@ from openproceedings.eval.scholar_compare import (
     TooManyForms,
     abstract_source,
     compare_query,
+    doi_key,
     forms_of,
     inflection_stem,
+    load_ris,
     openreview_id,
     proceedings_key,
     read_ris,
@@ -57,10 +60,12 @@ def entry(
     year: int | None = 2024,
     url: str | None = None,
     search: str | None = None,
+    doi: str | None = None,
 ) -> str:
     lines = ["TY  - JOUR", f"TI  - {title}"]
     lines += [f"JF  - {venue}"] if venue else []
     lines += [f"UR  - {url}"] if url else []
+    lines += [f"DO  - {doi}"] if doi else []
     lines += [f"PY  - {year}///"] if year else []
     lines += [f"M1  - Query date: {search}"] if search else []
     return "\n".join([*lines, "ER  - ", "", ""])
@@ -855,3 +860,122 @@ def test_the_prefix_is_built_on_the_inflection_stem_not_the_word_as_typed() -> N
     records = [paper("stem0002", "A benchmarkable design", abstract="An abstract.")]
     c = compare("benchmarks", entry("A benchmarkable design"), records, mode="native")
     assert [r.auto_class for r in c.dropped] == [FULL_TEXT] and c.full_text_by_prefix == 1
+
+
+# --- matching by DOI (TASK-186): Scopus and Web of Science exports ----------------------------------------------
+
+EXPORTS = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "ris" / "exports"
+)  # synthetic, in each vendor's layout
+
+
+def doi_corpus() -> list[PaperRecord]:
+    return [
+        # the DOI decides: the index's title is not the export's
+        paper("doi00001", "Trust calibration benchmark for LLM agents", year=2022, urls_doi="10.52202/068431-0101"),
+        # held in 2022; the Scopus record says 2023
+        paper("doi00002", "Reliance on explanations under distribution shift", year=2022,
+              urls_doi="10.52202/068431-0202"),
+        paper("doi00003", "Counterfactual advice and overreliance", urls_doi="10.52202/079017-0303-AB"),
+        paper("pmlr0001", "Auditing human-AI teams", venue="ICML"),
+    ]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("text", "key"),
+    [
+        ("10.52202/068431-0101", "10.52202/068431-0101"),
+        (" 10.52202/079017-0303-AB ", "10.52202/079017-0303-ab"),  # case-blind
+        ("https://doi.org/10.52202/079017-0303-AB", "10.52202/079017-0303-ab"),
+        ("http://dx.doi.org/10.1000/a%2Fb", "10.1000/a/b"),
+        ("doi:10.1000/xyz", "10.1000/xyz"),
+        ("10.1000", None),
+        ("11.1000/xyz", None),
+        ("10.1000/two words", None),
+        ("https://example.org/10.1000/xyz", None),
+    ],
+)
+def test_doi_key(text: str, key: str | None) -> None:
+    assert doi_key(text) == key
+
+
+def test_a_scopus_export_is_matched_by_doi_never_across_year() -> None:
+    index = MatchIndex.build(doi_corpus())
+    one, other_year, no_doi = load_ris(EXPORTS / "scopus.ris")
+    assert (one.venue, one.year, one.dois) == ("NeurIPS", 2022, ("10.52202/068431-0101",))
+    assert (one.forum_ids, one.proceedings_ids) == ((), ())  # a Scopus link names no paper
+    m = index.match(one)
+    assert (m.op_id, m.rule) == (nid("doi00001", 2022), "doi")
+    # the DOI names a 2022 paper and the file says 2023: never a match, and the row says why
+    m = index.match(other_year)
+    assert (m.op_id, m.problem, m.doi_elsewhere) == (None, "not_found", (nid("doi00002", 2022),))
+    assert (index.match(no_doi).op_id, index.match(no_doi).rule) == (
+        nid("pmlr0001", venue="icml"),
+        "title_venue_year",
+    )
+
+
+def test_a_web_of_science_export_is_matched_by_doi_and_scoped_by_the_index() -> None:
+    index = MatchIndex.build(doi_corpus())
+    records = load_ris(EXPORTS / "wos.ris")
+    same, upper, unknown = records
+    # WoS writes the venue with its volume and edition: no venue, so only an id can match it
+    assert (same.venue, same.venue_raw) == (
+        None,
+        "ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS 35 (NEURIPS 2022)",
+    )
+    assert (index.match(same).op_id, index.match(same).rule) == (nid("doi00001", 2022), "doi")
+    assert (index.match(upper).op_id, index.match(upper).rule) == (nid("doi00003"), "doi")  # case-blind
+    assert (index.match(unknown).op_id, index.match(unknown).problem) == (None, "no_venue")
+    side = scope_and_match(records, index, Scope(years=(2020, 2026)))
+    assert [(e.record.key, e.match.op_id, e.venue, e.year) for e in side.entries] == [
+        ("wos.ris#1", nid("doi00001", 2022), "NeurIPS", 2022),
+        ("wos.ris#2", nid("doi00003"), "NeurIPS", 2024),
+    ]
+    assert [(d.record.key, d.reason) for d in side.out_of_scope] == [("wos.ris#3", "venue_unrecognised")]
+    # the same paper exported by both vendors is one paper
+    both = scope_and_match([*load_ris(EXPORTS / "scopus.ris"), *records], index, Scope())
+    assert both.duplicates == 1
+
+
+def test_a_doi_is_checked_against_the_files_venue_too_and_its_ids() -> None:
+    corpus = [*doi_corpus(), paper("frm00001", "Another paper"), paper("twin0001", "x", urls_doi="10.1000/twin"),
+              paper("twin0002", "y", urls_doi="10.1000/TWIN")]  # fmt: skip
+    index = MatchIndex.build(corpus)
+
+    def match(text: str) -> tuple[str | None, str, str, tuple[str, ...]]:
+        [r] = read_ris(text, NAME)
+        m = index.match(r)
+        return m.op_id, m.rule, m.problem, m.candidates or m.doi_elsewhere
+
+    # a venue the file names that is not the record's: never a match
+    assert match(entry("x", venue="ICLR", year=2022, doi="10.52202/068431-0101")) == (
+        None, "", "not_found", (nid("doi00001", 2022),),
+    )  # fmt: skip
+    # no year in the file: the DOI alone decides, as an id does
+    assert match(entry("x", year=None, doi="10.52202/068431-0101"))[:2] == (nid("doi00001", 2022), "doi")
+    # a doi.org link is a DOI too
+    assert match(entry("x", year=2022, url="https://doi.org/10.52202/068431-0101"))[:2] == (
+        nid("doi00001", 2022), "doi",
+    )  # fmt: skip
+    # a DOI two records carry is ambiguous, and so is a DOI naming another record than the forum id
+    assert match(entry("x", doi="10.1000/twin"))[2:] == ("ambiguous", (nid("twin0001"), nid("twin0002")))
+    assert match(entry("x", year=2022, url=forum("frm00001"), doi="10.52202/068431-0101"))[2:] == (
+        "ambiguous", (nid("doi00001", 2022), nid("frm00001")),
+    )  # fmt: skip
+    # the same record by both: the forum id's rule, first in the order
+    assert match(entry("x", year=2022, url=forum("doi00001"), doi="10.52202/068431-0101"))[:2] == (
+        nid("doi00001", 2022), "forum_id",
+    )  # fmt: skip
+
+
+def test_a_doi_in_another_year_is_named_in_the_gap_row() -> None:
+    corpus = [*doi_corpus(), paper("both0001", "LLM trust benchmark", abstract="An abstract.")]
+    c = compare(QUERY, (EXPORTS / "scopus.ris").read_text(encoding="utf-8"), corpus)
+    [gap] = c.not_in_index
+    assert (gap.scholar_key, gap.auto_class, gap.settled) == ("set.ris#2", COVERAGE_GAP, False)
+    assert gap.auto_evidence.endswith(
+        "; its DOI names op:neurips:2022:doi00002 (NeurIPS 2022), another venue or year: never a match"
+    )
+    assert [(r.op_id, r.auto_evidence) for r in c.kept] == [(nid("doi00001", 2022), "doi")]  # matched by its DOI
+    assert [r.op_id for r in c.dropped] == [nid("pmlr0001", venue="icml")]

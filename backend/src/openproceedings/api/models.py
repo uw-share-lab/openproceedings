@@ -269,6 +269,7 @@ class SearchResponse(Versioned):
 MatchedBy = Literal[
     "forum_id",
     "proceedings_id",
+    "doi",
     "title_venue_year",
     "not_found",
     "ambiguous",
@@ -320,7 +321,8 @@ class CompareRow(Model):
     year: int | None
     matched_by: MatchedBy | None = Field(
         description="How the file's record was matched to the index, by spec 01's merge rules in their order "
-        "(`forum_id`, `proceedings_id`, `title_venue_year`), or why it has no index record (`not_found`, "
+        "(`forum_id`, `proceedings_id`, `doi`: a DOI the index record carries, in the venue and year the file "
+        "states, `title_venue_year`), or why it has no index record (`not_found`, "
         "`ambiguous`: its id or title names several records, `no_year`, `no_venue`, `truncated_title`). Null "
         "on an `added` row."
     )

@@ -63,7 +63,8 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   export as scholarmend mended it (`mended.ris`: the same 1,834 records as `clean.ris`, which holds the delta,
   with the years Scholar left out or guessed corrected), and says so under its hash.
 - **Matching** follows 01's merge rules in order: the OpenReview forum id a URL names (`/forum?id=` or
-  `/pdf?id=`), then the proceedings paper a URL names, then the dedup title key within the same venue and year. A
+  `/pdf?id=`), then the proceedings paper a URL names, then a DOI (below), then the dedup title key within the
+  same venue and year. A
   proceedings id is matched **within its venue and year**, as dedup merges on it: a NeurIPS hash is md5 of the
   paper's number and repeats every year. An id or key that names two records is ambiguous, never a pick, and
   so are a forum id and a proceedings id that name different records; a title alone never matches; the venue is
@@ -72,6 +73,23 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   empty or cut by Scholar (`…`) and an in-scope index record of the same year has its title, the record is in
   scope and `unsettled`, for a person, with that record named. A record that names another venue in full stays
   out, whatever its title.
+- **DOI** (TASK-186; a comparison rule only: dedup does not merge on a DOI). Scopus and Web of Science exports
+  carry a DOI (`DO`) and no link these rules read: a Scopus `UR` is its own record page, and Web of Science
+  writes the venue with its volume and edition (`ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS 35 (NEURIPS
+  2022)`), which is no venue. A DOI (`DO`, WoS's `DI`, or a `doi.org` link; `doi:` and doi.org prefixes dropped,
+  compared case-blind, `doi_key`) names the index record whose `urls.doi` it is, **only when the record's year
+  is the year the file states and its venue the venue the file states**, each where the file states one (a year;
+  one of the three venues by Scholar mode's source names). A DOI that names a record in another venue or year is
+  never a match: the record falls to the title rule, and its row names that record (`doi_elsewhere`, "its DOI
+  names …, another venue or year: never a match"). A venue string that is no venue does not block a DOI, as it
+  doesn't block a forum or proceedings id; that is what lets a Web of Science record match. A DOI two records
+  carry, or a DOI and another id naming different records, is ambiguous. **Where the index has DOIs:** only
+  NeurIPS proceedings pages give one (`citation_doi`, prefix `10.52202`), so on index `fd13d8d27535` (snapshot
+  `2026-10-05-10b5a205a63f`) 16,690 of its 133,629 records carry a DOI: every accepted NeurIPS 2022–2025 main,
+  datasets-and-benchmarks and position paper, and nothing else. No ICLR or ICML record, no NeurIPS record before
+  2022, and no NeurIPS workshop or rejected record has one, so a Scopus or Web of Science record of those is
+  matched by title (Scopus) or not at all (Web of Science, no venue) and lands in `not_compared` or
+  `coverage_gap`, as before.
 - **Provenance.** An index that an RIS set was imported into holds that set's records, and comparing the set
   with it matches them to themselves. So every match records whether its index record has an independent
   source (a crawl) or only the import (`ris`), and its abstract's source; the report states both counts, a

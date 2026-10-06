@@ -20,7 +20,12 @@ description: The spec 07 §B protocol for comparing openproceedings with Google 
 1. Identical OpenReview forum ID (from Scholar's URL when present: `/forum?id=` or `/pdf?id=`), then the
    proceedings paper a URL names. A proceedings id counts **within its venue and year** only: a NeurIPS hash
    repeats every year (matching on the bare `nips-<hash>` made 316 of 1,834 records ambiguous).
-2. Else normalized title (`token-contract` normalization, `dedup.title_key`) **with the same venue and year**.
+2. Else a DOI (TASK-186: Scopus and Web of Science exports, `DO`; a doi.org link too; case-blind) that an index
+   record's `urls.doi` holds, **only in the venue and year the file states** (where it states them; a WoS venue
+   string with its volume is no venue and doesn't block). A DOI in another venue or year is never a match and is
+   named in the row. Only NeurIPS 2022–2025 proceedings records carry a DOI (16,690 on `fd13d8d27535`); ICLR and
+   ICML have none. A comparison rule only: dedup doesn't merge on DOIs.
+3. Else normalized title (`token-contract` normalization, `dedup.title_key`) **with the same venue and year**.
 Never match on title alone across venue or year; a Scholar record with no year is matched only by forum
 ID, or goes to `review.csv`. The venue is one of Scholar mode's source names exactly; a string Scholar cut
 (`… Information Processing …`) is no venue. Code: `eval/scholar_compare.py` (`MatchIndex.match`), the one

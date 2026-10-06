@@ -640,8 +640,9 @@ def _matching(side: ScholarSide, index: MatchIndex, meta: Meta) -> list[str]:
         "## Matching the Scholar set to the index",
         "",
         "Each Scholar record is matched by spec 01's merge rules, in their order: the OpenReview forum id its URL "
-        "names, else the proceedings paper its URL names (the native id within that venue and year), else the "
-        "dedup title key within the same venue and year. A title alone never matches. A matched record is scoped "
+        "names, else the proceedings paper its URL names (the native id within that venue and year), else a DOI "
+        "the index record carries (never across the venue or year the record states), else the dedup title key "
+        "within the same venue and year. A title alone never matches. A matched record is scoped "
         "by its index record's venue and year, an unmatched one by its own; records outside the scope are dropped "
         "before comparing.",
         "",

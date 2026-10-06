@@ -9,7 +9,8 @@ Three steps, each a pure function of its arguments (no clock, no environment, no
    (`parse_ris`, as `ingest/ris.py` reads the corpus); the venue goes through Scholar mode's `source:` alias table
    (`compat.SOURCE_ALIASES`), exactly, never as a substring.
 2. `scope_and_match` → a `ScholarSide`: each record matched to an index record by spec 01's merge rules
-   (`MatchIndex.match`: the same OpenReview forum id or proceedings id, else the same dedup title key
+   (`MatchIndex.match`: the same OpenReview forum id or proceedings id, else the same DOI in the venue and year
+   the file states (TASK-186: Scopus and Web of Science exports), else the same dedup title key
    (`dedup.title_key`) **with the same venue and year**; never a title alone), scoped to the same venues and
    years as the query side, and counted once per paper.
 3. `compare_query` → a `QueryComparison`: the query run in its mode on the served engine, and every record of
@@ -49,7 +50,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import Literal, Protocol
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from scholarmend.parse import parse_ris
 
@@ -105,7 +106,7 @@ UNSETTLED = "unsettled"  # no class: the automation can't tell, and says why in 
 ONLY_SCHOLAR = (OUR_BUG, QUERY_LIMIT, FILTERED, COMPAT_READING, COVERAGE_GAP, STEMMING, FULL_TEXT, UNSETTLED)
 ONLY_OP = (OUR_BUG, SCHOLAR_CAP, COMPAT_READING, SCHOLAR_MISSED)
 # `Match.rule`, `Match.problem` and `Dropped.reason`, every value they take (the API's enums are pinned to them)
-MATCH_RULES = ("forum_id", "proceedings_id", "title_venue_year")
+MATCH_RULES = ("forum_id", "proceedings_id", "doi", "title_venue_year")
 MATCH_PROBLEMS = ("not_found", "ambiguous", "no_year", "no_venue", "truncated_title")
 NOT_COMPARED_REASONS = ("venue_unrecognised", "venue", "year")
 
@@ -117,6 +118,10 @@ VENUE_TAGS = ("JF", "JO", "T2", "J2", "JA", "BT")  # where a RIS writer puts the
 TITLE_TAGS = ("TI", "T1")
 _YEAR_TAGS = ("PY", "Y1", "DA")
 _URL_TAGS = ("UR", "L1", "L2")
+_DOI_TAGS = ("DO", "DI")  # Scopus and Web of Science write the DOI in `DO`; `DI` is WoS's own tag for it
+# a DOI as `record.Urls.doi` accepts one; matched case-blind (DOIs are case-insensitive, ISO 26324)
+_DOI = re.compile(r"10\.\d+(?:\.\d+)*/\S+")
+_DOI_PREFIXES = ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "http://dx.doi.org/", "doi:")
 _YEAR = re.compile(r"\s*([0-9]{4})(?![0-9])")
 _QUERY_DATE = re.compile(r"Query date: (.+)")  # Publish or Perish: one per Scholar search
 _OPENREVIEW_PATHS = frozenset({"/forum", "/pdf"})
@@ -145,6 +150,18 @@ class RisRecord:
     search: str | None  # the Scholar search it came from (PoP's query date), for the result cap
     # where its links point (valid host names only, the first `MAX_HOSTS`), for a person judging an unmatched record
     hosts: tuple[str, ...] = ()
+    dois: tuple[str, ...] = ()  # the DOIs it carries (`DO`, or a doi.org link), as `doi_key` writes them
+
+
+def doi_key(text: str) -> str | None:
+    """A DOI as matching compares it: without a `doi:` or doi.org prefix, lower-cased (DOIs are case-insensitive);
+    None for anything that is no DOI (`10.<registrant>/<suffix>`, no whitespace)."""
+    v = text.strip()
+    for prefix in _DOI_PREFIXES:
+        if v.lower().startswith(prefix):
+            v = unquote(v[len(prefix) :])
+            break
+    return v.lower() if _DOI.fullmatch(v) else None
 
 
 def openreview_id(url: str) -> str | None:
@@ -215,6 +232,9 @@ def read_ris(text: str, name: str, tick: Callable[[], None] | None = None) -> li
                 listings[p] = None
             if len(hosts) < MAX_HOSTS and (h := _named(link_host, u)) is not None:
                 hosts[h] = None
+        dois = dict.fromkeys(
+            k for t in _DOI_TAGS for v in rec.fields.get(t, ()) if (k := doi_key(v)) is not None
+        ) | dict.fromkeys(k for u in links if u.lower().startswith(_DOI_PREFIXES[:4]) and (k := doi_key(u)))
         venue_raw = _first(rec.fields, VENUE_TAGS)
         year = _YEAR.match(_first(rec.fields, _YEAR_TAGS))
         dates = [m.group(1) for v in rec.fields.get("M1", ()) if (m := _QUERY_DATE.fullmatch(v.strip()))]
@@ -229,6 +249,7 @@ def read_ris(text: str, name: str, tick: Callable[[], None] | None = None) -> li
                 proceedings_ids=tuple(listings),
                 search=dates[0] if dates else None,
                 hosts=tuple(hosts),
+                dois=tuple(dois),
             )
         )
     return out
@@ -257,6 +278,8 @@ class Match:
     # a matched record no crawl holds (its only source is an imported RIS set) whose title key another index
     # record has too: the id may have led to an import's copy of a paper the index also holds under another id
     shared: tuple[str, ...] = ()
+    # index records its DOI names in another venue or year than the file states: never a match, named for a person
+    doi_elsewhere: tuple[str, ...] = ()
 
 
 def abstract_source(r: PaperRecord) -> str:
@@ -292,6 +315,7 @@ class MatchIndex:
     abstracts: Mapping[str, str] = MappingProxyType({})
     crawled: Mapping[Cell, int] = MappingProxyType({})
     keys: Mapping[str, str] = MappingProxyType({})  # record id → its title key
+    dois: Mapping[str, tuple[str, ...]] = MappingProxyType({})  # `doi_key` → record ids (`urls.doi`)
 
     @classmethod
     def build(cls, records: Iterable[PaperRecord]) -> MatchIndex:
@@ -304,6 +328,7 @@ class MatchIndex:
         abstracts: dict[str, str] = {}
         crawled: Counter[Cell] = Counter()
         keys: dict[str, str] = {}
+        dois: dict[str, list[str]] = {}
         for r in records:
             cells[r.id] = (r.venue, r.year)
             abstracts[r.id] = abstract_source(r)
@@ -314,6 +339,9 @@ class MatchIndex:
                 forums.setdefault(f, []).append(r.id)
             for p in dedup.proceedings_ids(r.provenance):
                 proceedings.setdefault((r.venue, r.year, p), []).append(r.id)
+            claimed = {c.value for c in r.provenance if c.field == "urls.doi" and isinstance(c.value, str)}
+            for d in {k for v in {r.urls.doi, *claimed} if v and (k := doi_key(v))}:
+                dois.setdefault(d, []).append(r.id)
             if key := dedup.title_key(r.title):
                 keys[r.id] = key
                 titles.setdefault((r.venue, r.year, key), []).append(r.id)
@@ -328,6 +356,7 @@ class MatchIndex:
             abstracts,
             dict(crawled),
             keys,
+            _several(dois),
         )
 
     def _matched(self, op_id: str, rule: str) -> Match:
@@ -338,13 +367,22 @@ class MatchIndex:
 
     def match(self, r: RisRecord) -> Match:
         """`r`'s index record by the merge rules, in their order: an id first (a forum id, then a proceedings
-        id), then the title key within `r`'s venue and year. An id or a key that names two records is ambiguous,
-        never a pick, and so are a forum id and a proceedings id that name different records; a record with no year, or whose venue is not one of the three, is matched by id only."""
+        id, then a DOI), then the title key within `r`'s venue and year. An id or a key that names two records
+        is ambiguous, never a pick, and so are two ids that name different records; a record with no year, or
+        whose venue is not one of the three, is matched by id only. A DOI never matches across venue or year:
+        it names its record only when the file's year, if it gives one, and its venue, if it is one of the
+        three, are the record's (`doi_elsewhere` otherwise)."""
         by_forum = {rid for f in r.forum_ids for rid in self.forums.get(f, ())}
         by_listing = {rid for p in r.proceedings_ids for rid in self.proceedings.get(p, ())}
-        if by_forum and by_listing and by_forum != by_listing:  # its two ids name different records
-            return Match(None, problem="ambiguous", candidates=tuple(sorted(by_forum | by_listing)))
-        for rule, ids in (("forum_id", by_forum), ("proceedings_id", by_listing)):
+        named = {rid for d in r.dois for rid in self.dois.get(d, ())}
+        by_doi = {
+            i for i in named if r.venue in (None, self.cells[i][0]) and r.year in (None, self.cells[i][1])
+        }
+        elsewhere = tuple(sorted(named - by_doi))
+        found_by = [ids for ids in (by_forum, by_listing, by_doi) if ids]
+        if any(ids != found_by[0] for ids in found_by):  # its ids name different records
+            return Match(None, problem="ambiguous", candidates=tuple(sorted(set().union(*found_by))))
+        for rule, ids in (("forum_id", by_forum), ("proceedings_id", by_listing), ("doi", by_doi)):
             if len(ids) == 1:
                 return self._matched(min(ids), rule)
             if ids:
@@ -352,17 +390,17 @@ class MatchIndex:
         key = dedup.title_key(r.title)
         near = self.any_cell.get(key, ()) if key else ()
         if r.venue is None:
-            return Match(None, problem="no_venue", near=near)
+            return Match(None, problem="no_venue", near=near, doi_elsewhere=elsewhere)
         if r.year is None:
-            return Match(None, problem="no_year", near=near)
+            return Match(None, problem="no_year", near=near, doi_elsewhere=elsewhere)
         found = list(self.titles.get((r.venue, r.year, key), ())) if key else []
         if len(found) == 1:
             return self._matched(found[0], "title_venue_year")
         if found:
             return Match(None, problem="ambiguous", candidates=tuple(found))
         if r.title.rstrip().endswith(_ELLIPSES):
-            return Match(None, problem="truncated_title", near=near)
-        return Match(None, problem="not_found", near=near)
+            return Match(None, problem="truncated_title", near=near, doi_elsewhere=elsewhere)
+        return Match(None, problem="not_found", near=near, doi_elsewhere=elsewhere)
 
 
 # --- scope and the RIS side -----------------------------------------------------------------------------------
@@ -904,6 +942,10 @@ def _not_in_index(e: Entry, index: MatchIndex, scope: Scope, limits: Sequence[No
             evidence = f"no id or title match in {e.venue} {e.year}; same title elsewhere: {cells}{where}"
         else:
             evidence = f"no forum id, proceedings id or title+venue+year match in the snapshot{where}"
+    if m.doi_elsewhere:
+        evidence += (
+            f"; its DOI names {_cells_of(m.doi_elsewhere, index)}, another venue or year: never a match"
+        )
     return Row("scholar", r.key, "", r.title, e.venue or r.venue_raw, e.year, cls, evidence, False, near=near)
 
 

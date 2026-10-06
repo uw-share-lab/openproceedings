@@ -101,6 +101,7 @@ describe("the words", () => {
   it("shows a value it doesn't know as sent (the enums are open)", () => {
     expect(reasonText("dropped", "a_new_class")).toBe("a_new_class");
     expect(matchedByText("a_new_rule")).toBe("a_new_rule");
+    expect(matchedByText("doi")).toBe("matched by its DOI"); // TASK-186: Scopus and Web of Science exports
     expect(notComparedText("a_new_reason")).toBe("a_new_reason");
   });
 

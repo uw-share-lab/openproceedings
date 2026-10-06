@@ -634,8 +634,9 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   twice): 5,000 records of 2 KB titles reach the cap, and are refused after the seconds of work that built
   the answer (about 13 s, as the security review measured), which are charged like any comparison's.
 - **Matching** is 01's merge rules in their order (07 §B): the OpenReview forum id a URL names, then the
-  proceedings paper a URL names (within its venue and year), then the dedup title key **with the same venue
-  and year**; never a title alone. The venue is one of Scholar mode's `source:` names exactly. A record whose
+  proceedings paper a URL names (within its venue and year), then a DOI the index record carries (a Scopus or
+  Web of Science export's `DO`; never across the venue or year the file states; only NeurIPS 2022–2025 records
+  carry one), then the dedup title key **with the same venue and year**; never a title alone. The venue is one of Scholar mode's `source:` names exactly. A record whose
   venue is none of the three indexed venues, and whose links name no indexed paper, is **not compared**
   (`not_compared`); two records of one paper are counted once (`copies`). Both sides cover every indexed
   venue and year: a limit on years or venues is part of `q` (guarantee 3), never a parameter.
@@ -647,7 +648,7 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
   (whole seconds until this client's network may start another comparison: the cooldown below; 0 when it may
   start one now, always on a local instance and with the rate limit off), and five lists. Each row of `kept`, `dropped`, `not_in_index` and `added` has `ris_record` (the
   record's position in the file, from 1), `copies`, `id`, `title` (the file's own for a paper of the file),
-  `venue`, `year`, `matched_by` (`forum_id`, `proceedings_id`, `title_venue_year`; or why it has no index
+  `venue`, `year`, `matched_by` (`forum_id`, `proceedings_id`, `doi`, `title_venue_year`; or why it has no index
   record: `not_found`, `ambiguous`, `no_year`, `no_venue`, `truncated_title`), `reason` and `detail` (07 §B's
   class and its evidence: for a dropped paper `query_limit` (a filter clause `q` itself writes, such as
   `year:` or `venue:`, excludes it; `detail` names the clause), `filtered` by track or status, `full_text` (no

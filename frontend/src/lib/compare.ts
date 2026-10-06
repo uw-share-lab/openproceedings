@@ -106,6 +106,7 @@ export function limitsLine(limits: CompareLimits): string {
 const MATCHED_BY: Record<string, string> = {
   forum_id: "matched by its OpenReview link",
   proceedings_id: "matched by its proceedings link",
+  doi: "matched by its DOI",
   title_venue_year: "matched by title, venue and year",
   not_found: "no record with this title in that venue and year, and no link to an indexed paper",
   ambiguous: "its link or title names several index records, so none was chosen",
