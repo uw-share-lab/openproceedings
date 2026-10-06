@@ -153,7 +153,9 @@ def test_openreview_abstract_beats_the_proceedings_page(tmp_path: Path) -> None:
     assert by_id[ICLR].abstract is None  # Semantic Scholar never supplies one
 
 
-def test_an_abstract_with_a_control_character_is_imported_with_a_space(tmp_path: Path) -> None:
+def test_an_abstract_with_a_control_character_is_imported_with_a_space(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """decision-044 (TASK-188): the title rule, for abstracts. The note goes after the route and url, which
     `dedup.attribution` reads from the start of the evidence. A claim that is only control characters is
     empty, so the next source's abstract is taken."""
@@ -170,7 +172,10 @@ def test_an_abstract_with_a_control_character_is_imported_with_a_space(tmp_path:
                     )
                     break
 
-    by_id, report = run(tmp_path, controls)
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.ris"):
+        by_id, report = run(tmp_path, controls)
+    [line] = [r for r in caplog.records if r.getMessage() == "ris_import"]
+    assert line.__dict__["abstract_control_characters"] == 1
     assert by_id[WORKSHOP].abstract == "A made-up abstract about human re liance on model outputs."
     # TASK-199: one record's abstract lost a control character (the all-control claim was passed over)
     assert report.abstract_control_characters == 1 == report.to_manifest()["abstract_control_characters"]
@@ -182,7 +187,9 @@ def test_an_abstract_with_a_control_character_is_imported_with_a_space(tmp_path:
     assert by_id[DB].abstract == "A synthetic datasets-track abstract with extra spaces."
 
 
-def test_the_abstract_counter_cannot_be_faked_by_evidence_text(tmp_path: Path, imported: Imported) -> None:
+def test_the_abstract_counter_cannot_be_faked_by_evidence_text(
+    tmp_path: Path, imported: Imported, caplog: pytest.LogCaptureFixture
+) -> None:
     """TASK-199 security note: a RIS abstract claim's evidence is the reviewer's file's text, so it can say
     `(5 control characters replaced by a space)` without any. The count is the importer's own, so it stays 0,
     and a file with none keeps its manifest shape."""
@@ -194,7 +201,10 @@ def test_the_abstract_counter_cannot_be_faked_by_evidence_text(tmp_path: Path, i
                 if c["field"] == "abstract" and c["value"] == text:
                     c["evidence"] += " (5 control characters replaced by a space)"
 
-    by_id, report = run(tmp_path, spoof)
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.ris"):
+        by_id, report = run(tmp_path, spoof)
+    [line] = [r for r in caplog.records if r.getMessage() == "ris_import"]
+    assert line.__dict__["abstract_control_characters"] == 0  # on the line even at 0
     [abstract] = by_id[WORKSHOP].claims("abstract")
     assert abstract.evidence is not None and abstract.evidence.endswith(
         "(5 control characters replaced by a space)"

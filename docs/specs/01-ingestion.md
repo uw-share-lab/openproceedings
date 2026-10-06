@@ -262,8 +262,8 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    Authors keep theirs (one author name holds U+007F). **Counted (TASK-199):** every report beside it counts the
    records whose abstract lost one, `abstract_control_characters`: the OpenReview crawl reports (crawl file,
    manifest, `openreview_crawl_finished`, beside `title_control_characters`), each proceedings listing's
-   report (`neurips_listing_mined`, `pmlr_volume_mined`) and each RIS import report (`ris_import`). Listed in a
-   manifest only when above 0, so a source with none keeps its shape; never an attention WARNING, since the
+   report (`neurips_listing_mined`, `pmlr_volume_mined`) and each RIS import report (`ris_import`). Always on
+   those log lines; listed in a manifest only when above 0, so a source with none keeps its shape; never an attention WARNING, since the
    abstract is kept. The count is the importer's own (`abstract_text`'s number, carried out of
    `openreview_v2._abstract`, `common.clean_abstract` and `ris._abstract`), never read back from the claim's
    evidence: a RIS claim's evidence is the reviewer's file's text and could carry the note without a
