@@ -22,6 +22,10 @@ a review, a duplicate only shows in the hit count.
    status, so the merged record would keep that status (`_import_would_take_its_status`). For this rule a
    listing is one by crawled evidence (`_Cluster.crawled`, decision-040): a proceedings source's claim, or a
    crawled note's own proceedings URL; a proceedings id only a RIS row names (TASK-174's shape) is none.
+   An imported record stays out of a title group when a crawler gave a record of its venue-year the import's
+   own-page abstract and none of its title partners keeps it (`_yields_to_its_abstract`, TASK-189,
+   decision-045): Scholar's title `-Guard` has a different paper's key, `Guard`. Step 3 then joins it to the
+   abstract's record if it may.
 
 3. An **imported record** that matched nothing (a cluster whose only source is `ris`, after steps 1 and 2) then
    merges on `(venue, year, abstract key)` (TASK-179): its title is Google Scholar's rendering, which drops math
@@ -638,7 +642,7 @@ def _dedup(records: Iterable[PaperRecord]) -> DedupResult:
     for ci, c in enumerate(clusters):
         for key in c.keys:  # a title of only punctuation or math has no key and never matches
             titled[(c.summary.venue, c.summary.year, key)].add(ci)
-    clusters, found = _join(clusters, titled, "title_venue_year")
+    clusters, found = _join(clusters, titled, "title_venue_year", _crawled_abstracts(clusters))
     merges += found
     # Step 3: an imported record that matched nothing, on (venue, year, abstract key).
     clusters, found = _join(clusters, _abstract_buckets(clusters), "abstract_venue_year")
@@ -677,13 +681,14 @@ def _own_abstract(claim: Claim, record: PaperRecord, pids: frozenset[str]) -> bo
     return False
 
 
-def _abstract_keys(c: _Cluster, *, imported: bool = False) -> frozenset[str]:
+def _abstract_keys(c: _Cluster, *, imported: bool = False, crawled: bool = False) -> frozenset[str]:
     """The key of every abstract claim the cluster keeps (as `keys` is of its titles) that is long enough and
-    its own page's text (`_own_abstract`). `imported`: only the import route's claims."""
+    its own page's text (`_own_abstract`). `imported`: only the import route's claims; `crawled`: only the
+    others (a crawler's text, which no merge with a RIS row replaces)."""
     return frozenset(
         k for claim in c.summary.provenance
         if claim.field == "abstract" and isinstance(claim.value, str)
-        and (claim.source in IMPORTED or not imported)
+        and (claim.source in IMPORTED or not imported) and (claim.source not in IMPORTED or not crawled)
         and _own_abstract(claim, c.summary, c.proceedings_ids) and (k := abstract_key(claim.value))
     )  # fmt: skip
 
@@ -716,6 +721,45 @@ def _abstract_buckets(
             for key in _abstract_keys(c):
                 buckets[(c.summary.venue, c.summary.year, key)].add(ci)
     return {k: cis for k, cis in buckets.items() if any(k[2] in anchors.get(ci, ()) for ci in cis)}
+
+
+def _crawled_abstracts(clusters: Sequence[_Cluster]) -> dict[tuple[str, int, str], set[int]]:
+    """Where `_yields_to_its_abstract` looks for an import's abstract: each crawled cluster under the key of every
+    abstract a crawler gave it (`_abstract_keys(crawled=True)`), in the venue-years that hold an imported record.
+    A crawler's claim, never a RIS row's: a merge with another RIS row can replace that one (one claim per
+    source), and a second run would then judge the title group differently."""
+    scope = {(c.summary.venue, c.summary.year) for c in clusters if _imported(c)}
+    held: dict[tuple[str, int, str], set[int]] = defaultdict(set)
+    for ci, c in enumerate(clusters):
+        if not _imported(c) and (c.summary.venue, c.summary.year) in scope:
+            for key in _abstract_keys(c, crawled=True):
+                held[(c.summary.venue, c.summary.year, key)].add(ci)
+    return held
+
+
+def _yields_to_its_abstract(
+    ci: int,
+    group: Iterable[int],
+    clusters: Sequence[_Cluster],
+    abstracts: dict[tuple[str, int, str], set[int]],
+) -> bool:
+    """Does the imported record at `ci` stay out of this title-key group (TASK-189, decision-045)? Its title is
+    Scholar's (`$R^2$-Guard` arrives as `-Guard`, the title key of a different paper, `Guard`), its own-page
+    abstract the publisher's. When a crawled cluster of the venue-year holds that abstract (`abstracts`:
+    `_crawled_abstracts`) and none of its title partners keeps it (`_abstract_keys`), the title names another
+    paper: the import yields, and step 3 joins it to the abstract's record if it may (else it stays apart). A
+    partner that keeps the abstract (a main note beside its workshop version sharing it) keeps the title merge,
+    and two RIS rows whose abstracts differ (an OpenReview and a camera-ready text) still merge: no crawled
+    record holds either."""
+    c = clusters[ci]
+    if not _imported(c):
+        return False
+    partners = [clusters[p] for p in group if p != ci]
+    return any(
+        (c.summary.venue, c.summary.year, key) in abstracts
+        and all(key not in _abstract_keys(p) for p in partners)
+        for key in _abstract_keys(c)
+    )
 
 
 def _abstract_aside(c: _Cluster, group: Sequence[_Cluster]) -> str | None:
@@ -758,11 +802,16 @@ def _abstract_merging(group: Sequence[_Cluster]) -> list[int] | None:
 
 
 def _join(
-    clusters: Sequence[_Cluster], buckets: dict[tuple[str, int, str], set[int]], rule: str
+    clusters: Sequence[_Cluster],
+    buckets: dict[tuple[str, int, str], set[int]],
+    rule: str,
+    abstracts: dict[tuple[str, int, str], set[int]] | None = None,
 ) -> tuple[list[_Cluster], list[Merge]]:
     """Merge the clusters each bucket's key joins, where the step lets them, into new clusters (sorted by id),
     with one `rule` row per merged cluster, from its id to the survivor's. Title keys (step 2) are judged by
-    `_merging` and `_mergeable`, abstract keys (step 3) by `_abstract_merging` and `_abstract_group`."""
+    `_merging` and `_mergeable`, abstract keys (step 3) by `_abstract_merging` and `_abstract_group`. `abstracts`
+    (step 2: `_crawled_abstracts` of the same clusters) leaves out of a title group every import that yields to
+    its abstract (`_yields_to_its_abstract`)."""
     by_abstract = rule == "abstract_venue_year"
     merging_of = _abstract_merging if by_abstract else _merging
     refusal = _abstract_group if by_abstract else _mergeable
@@ -772,6 +821,10 @@ def _join(
         if len(cis) < 2:
             continue
         ordered = sorted(cis)
+        if abstracts is not None:
+            ordered = [ci for ci in ordered if not _yields_to_its_abstract(ci, ordered, clusters, abstracts)]
+            if len(ordered) < 2:
+                continue
         merging = merging_of([clusters[ci] for ci in ordered])
         if merging is None:
             continue  # reported by _refusals, against the output records
@@ -873,9 +926,16 @@ def _refusals(out: Sequence[PaperRecord]) -> set[Conflict]:
     for ci, c in enumerate(clusters):
         for key in c.keys:
             buckets[(c.summary.venue, c.summary.year, key)].add(ci)
+    abstracts = _crawled_abstracts(clusters)
     titled: set[Conflict] = set()
     for cis in buckets.values():
-        bucket = [clusters[ci] for ci in sorted(cis)]
+        ordered = sorted(cis)
+        # an import that yields to its abstract (decision-045), against the first title partner that doesn't
+        yielded = {ci for ci in ordered if _yields_to_its_abstract(ci, ordered, clusters, abstracts)}
+        partner = next((ci for ci in ordered if ci not in yielded), None)
+        if partner is not None:
+            titled.update(_pair(clusters[partner], clusters[ci], "ambiguous_not_merged") for ci in yielded)
+        bucket = [clusters[ci] for ci in ordered if ci not in yielded]
         if len(bucket) < 2:
             continue
         # a cluster that can't be a listing's paper (TASK-126) is reported against the first listing, with
