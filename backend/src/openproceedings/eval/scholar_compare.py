@@ -120,7 +120,8 @@ _YEAR_TAGS = ("PY", "Y1", "DA")
 _URL_TAGS = ("UR", "L1", "L2")
 # Scopus and Web of Science RIS write the DOI in `DO` (`DI` is WoS's plain-text export tag, which is no RIS)
 _DOI_TAGS = ("DO",)
-# a DOI as `record.Urls.doi` accepts one; matched case-blind (DOIs are case-insensitive, ISO 26324)
+# a DOI, matched case-blind (DOIs are case-insensitive, ISO 26324); stricter than `record.Urls.doi`, which
+# accepts the bidi characters this refuses in a reviewer's file
 # (its suffix: no whitespace, no control character (C0, DEL, C1) and no bidi format character (the marks,
 # embeddings, overrides and isolates), which could make a key quoted in a row's evidence read as another)
 _DOI = re.compile(r"10\.\d+(?:\.\d+)*/[^\s\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]+")

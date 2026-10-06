@@ -54,11 +54,10 @@ authoritative):
   records match by OpenReview or proceedings link, DOI, or title, venue and year) and see which of them the
   query keeps, which it drops and why (outside a limit your query writes, excluded by a default filter, no
   exact match in title or abstract, a match only as another word form), which it adds, and which the index
-  doesn't hold (a Web of Science record has no link and no venue these rules read, so it matches only by
-  DOI, which only accepted NeurIPS 2022–2025 papers carry in the index; a Web of Science record of any other
-  paper ends up not compared;
-  [spec 07](docs/specs/07-evaluation.md) §B); every list downloads as CSV,
-  the added papers as RIS. The file is read in memory for that one request and never stored or logged. It is
+  doesn't hold; every list downloads as CSV, the added papers as RIS. A Web of Science record has no link
+  and no venue these rules read, so it matches only by DOI, which only accepted NeurIPS 2022–2025 papers
+  carry in the index: a Web of Science record of any other paper ends up not compared
+  ([spec 07](docs/specs/07-evaluation.md) §B). The file is read in memory for that one request and never stored or logged. It is
   on for a local instance and off on a public one unless its operator turns it on (`op serve --compare`).
 - **Coverage page** (`/coverage`, `GET /api/v1/coverage`, `op eval coverage`): indexed counts per venue, year,
   track and status, compared with official accepted counts ([spec 07](docs/specs/07-evaluation.md) §C).
