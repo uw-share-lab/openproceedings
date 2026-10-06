@@ -930,7 +930,8 @@ def _refusals(out: Sequence[PaperRecord]) -> set[Conflict]:
     titled: set[Conflict] = set()
     for cis in buckets.values():
         ordered = sorted(cis)
-        # an import that yields to its abstract (decision-045), against the first title partner that doesn't
+        # an import that yields to its abstract (decision-045), against the first title partner that doesn't:
+        # "first" in cluster order, so with several partners the row names one, and every run names the same one
         yielded = {ci for ci in ordered if _yields_to_its_abstract(ci, ordered, clusters, abstracts)}
         partner = next((ci for ci in ordered if ci not in yielded), None)
         if partner is not None:
