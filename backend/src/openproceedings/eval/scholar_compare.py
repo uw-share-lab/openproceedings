@@ -120,8 +120,12 @@ _YEAR_TAGS = ("PY", "Y1", "DA")
 _URL_TAGS = ("UR", "L1", "L2")
 _DOI_TAGS = ("DO", "DI")  # Scopus and Web of Science write the DOI in `DO`; `DI` is WoS's own tag for it
 # a DOI as `record.Urls.doi` accepts one; matched case-blind (DOIs are case-insensitive, ISO 26324)
-_DOI = re.compile(r"10\.\d+(?:\.\d+)*/\S+")
-_DOI_PREFIXES = ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "http://dx.doi.org/", "doi:")
+# (its suffix: no whitespace and no control character, C0, DEL or C1: a key is quoted in a row's evidence)
+_DOI = re.compile(r"10\.\d+(?:\.\d+)*/[^\s\x00-\x1f\x7f-\x9f]+")
+# a doi.org link, with or without its scheme, `www.` or `dx.`; and a `doi:` / `DOI ` label before a bare DOI
+_DOI_LINK = re.compile(r"(?:https?://)?(?:www\.|dx\.)?doi\.org/", re.IGNORECASE)
+_DOI_LABEL = re.compile(r"doi(?::\s*|\s+)", re.IGNORECASE)
+_TRAILING = ".,;"  # punctuation a sentence or a list puts after a DOI (an unbalanced `)` too)
 _YEAR = re.compile(r"\s*([0-9]{4})(?![0-9])")
 _QUERY_DATE = re.compile(r"Query date: (.+)")  # Publish or Perish: one per Scholar search
 _OPENREVIEW_PATHS = frozenset({"/forum", "/pdf"})
@@ -154,13 +158,17 @@ class RisRecord:
 
 
 def doi_key(text: str) -> str | None:
-    """A DOI as matching compares it: without a `doi:` or doi.org prefix, lower-cased (DOIs are case-insensitive);
-    None for anything that is no DOI (`10.<registrant>/<suffix>`, no whitespace)."""
+    """A DOI as matching compares it, lower-cased (DOIs are case-insensitive): without a doi.org link's prefix
+    (`https://`, `www.`/`dx.` optional) and its query and fragment, or a `doi:`/`DOI ` label, and without the
+    `.`, `,`, `;` or unbalanced `)` a sentence leaves after it. None for anything that is no DOI
+    (`10.<registrant>/<suffix>`, no whitespace or control character in the suffix, once unquoted)."""
     v = text.strip()
-    for prefix in _DOI_PREFIXES:
-        if v.lower().startswith(prefix):
-            v = unquote(v[len(prefix) :])
-            break
+    if link := _DOI_LINK.match(v):
+        v = unquote(re.split(r"[?#]", v[link.end() :], maxsplit=1)[0])
+    elif label := _DOI_LABEL.match(v):
+        v = v[label.end() :]
+    while v and (v[-1] in _TRAILING or (v[-1] == ")" and v.count(")") > v.count("("))):
+        v = v[:-1]
     return v.lower() if _DOI.fullmatch(v) else None
 
 
@@ -234,7 +242,7 @@ def read_ris(text: str, name: str, tick: Callable[[], None] | None = None) -> li
                 hosts[h] = None
         dois = dict.fromkeys(
             k for t in _DOI_TAGS for v in rec.fields.get(t, ()) if (k := doi_key(v)) is not None
-        ) | dict.fromkeys(k for u in links if u.lower().startswith(_DOI_PREFIXES[:4]) and (k := doi_key(u)))
+        ) | dict.fromkeys(k for u in links if _DOI_LINK.match(u.strip()) and (k := doi_key(u)))
         venue_raw = _first(rec.fields, VENUE_TAGS)
         year = _YEAR.match(_first(rec.fields, _YEAR_TAGS))
         dates = [m.group(1) for v in rec.fields.get("M1", ()) if (m := _QUERY_DATE.fullmatch(v.strip()))]
@@ -941,7 +949,7 @@ def _not_in_index(e: Entry, index: MatchIndex, scope: Scope, limits: Sequence[No
         elif m.near:  # the same title in another venue or year is never a match
             evidence = f"no id or title match in {e.venue} {e.year}; same title elsewhere: {cells}{where}"
         else:
-            evidence = f"no forum id, proceedings id or title+venue+year match in the snapshot{where}"
+            evidence = f"no forum id, proceedings id, DOI or title+venue+year match in the snapshot{where}"
     if m.doi_elsewhere:
         evidence += (
             f"; its DOI names {_cells_of(m.doi_elsewhere, index)}, another venue or year: never a match"

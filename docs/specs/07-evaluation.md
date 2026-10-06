@@ -76,8 +76,10 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
 - **DOI** (TASK-186; a comparison rule only: dedup does not merge on a DOI). Scopus and Web of Science exports
   carry a DOI (`DO`) and no link these rules read: a Scopus `UR` is its own record page, and Web of Science
   writes the venue with its volume and edition (`ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS 35 (NEURIPS
-  2022)`), which is no venue. A DOI (`DO`, WoS's `DI`, or a `doi.org` link; `doi:` and doi.org prefixes dropped,
-  compared case-blind, `doi_key`) names the index record whose `urls.doi` it is, **only when the record's year
+  2022)`), which is no venue. A DOI (`DO`, WoS's `DI`, or a `doi.org` link; read by `doi_key`: a doi.org link's prefix
+  with or without its scheme, `www.` or `dx.`, and its query and fragment, are dropped, and so are a `doi:` or
+  `DOI ` label and the `.`, `,`, `;` or unbalanced `)` a sentence leaves after it; a suffix with whitespace or a
+  control character is no DOI; compared case-blind) names the index record whose `urls.doi` it is, **only when the record's year
   is the year the file states and its venue the venue the file states**, each where the file states one (a year;
   one of the three venues by Scholar mode's source names). A DOI that names a record in another venue or year is
   never a match: the record falls to the title rule, and its row names that record (`doi_elsewhere`, "its DOI

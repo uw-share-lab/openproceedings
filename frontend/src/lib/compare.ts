@@ -243,7 +243,7 @@ export function undecidedText(list: ListName, row: Pick<CompareRow, "reason" | "
 }
 
 /** The start of a `not_in_index` row's `detail` that `matched_by` already says (copy USAB-N3). */
-const UNMATCHED = "no forum id, proceedings id or title+venue+year match in the snapshot";
+const UNMATCHED = "no forum id, proceedings id, DOI or title+venue+year match in the snapshot";
 
 /** A row's evidence as shown: what `matched_by` already says is left out, the rest (links, near titles) kept. */
 export function detailText(list: ListName, row: Pick<CompareRow, "detail">): string {

@@ -66,7 +66,7 @@ _MEANING = {
     QUERY_LIMIT: "a filter clause the query itself writes (`year:`, `venue:`, …) excludes it, whatever its text",
     FILTERED: "in the corpus; fails the default track or status filters and matches once they are removed",
     COMPAT_READING: "decided by how Scholar mode read the string (decision-002 phrases, `$`), not by the corpus",
-    COVERAGE_GAP: "no record in the snapshot by forum id, proceedings id or title+venue+year",
+    COVERAGE_GAP: "no record in the snapshot by forum id, proceedings id, DOI or title+venue+year",
     STEMMING: "matches title or abstract only with an inflected form added",
     FULL_TEXT: "in the corpus with an abstract; no reading matches its title or abstract, inflected forms included",
     UNSETTLED: "the automation can't tell (see the row's evidence)",

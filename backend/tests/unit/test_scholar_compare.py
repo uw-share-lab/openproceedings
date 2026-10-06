@@ -334,7 +334,9 @@ def test_every_disagreement_gets_its_class_in_protocol_order() -> None:
         "exact match on group 1: llm (abstract); group 2: trust (title); group 3: benchmark (title)"
     )
     # what a person must decide: the record with no abstract, and every scholar_missed row
-    assert evidence["set.ris#8"] == "no forum id, proceedings id or title+venue+year match in the snapshot"
+    assert (
+        evidence["set.ris#8"] == "no forum id, proceedings id, DOI or title+venue+year match in the snapshot"
+    )
     assert {r.op_id or r.scholar_key for r in c.disagreements if not r.settled} == {
         nid("noab0001"),
         nid("miss0001"),
@@ -678,6 +680,44 @@ def test_a_record_the_querys_own_year_or_venue_limit_excludes_is_query_limit_not
     assert c.counts("scholar")[QUERY_LIMIT] == 5
 
 
+def test_a_track_or_status_clause_the_user_writes_is_a_limit_too() -> None:
+    """A `track:` or `status:` clause other than the default is the query's own limit (TASK-185 gate round 1)."""
+    records = [
+        paper("posn0001", "Trust in position papers", track="position", abstract="An abstract."),
+        paper("posn0002", "Graph theory", track="position", abstract="No query word."),
+        paper("main0001", "Trust in main papers", abstract="An abstract."),
+    ]
+    text = entry("Trust in position papers") + entry("Graph theory") + entry("Trust in main papers")
+    c = compare("trust track:main", text, records, mode="native")
+    rows = {r.op_id: r for r in c.dropped}
+    assert [r.op_id for r in c.kept] == [nid("main0001")]
+    assert {i: r.auto_class for i, r in rows.items()} == {
+        nid("posn0001"): QUERY_LIMIT,
+        nid("posn0002"): QUERY_LIMIT,
+    }
+    assert rows[nid("posn0001")].auto_evidence == (
+        "outside the query's own limit: `track:main` (track position); the rest of the query matches it (as run)"
+    )
+    assert rows[nid("posn0002")].auto_evidence == (
+        "outside the query's own limit: `track:main` (track position); the rest of the query doesn't match it "
+        "either (as run)"
+    )
+    # `NOT status:accepted` replaces the status default, so it is the query's own limit
+    records = [
+        paper("acpt0001", "Trust accepted", abstract="An abstract."),
+        paper("rjct0001", "Trust rejected", status="rejected", abstract="An abstract."),
+    ]
+    c = compare(
+        "trust NOT status:accepted", entry("Trust accepted") + entry("Trust rejected"), records, mode="native"
+    )
+    [row] = c.dropped
+    assert (row.op_id, row.auto_class) == (nid("acpt0001"), QUERY_LIMIT)
+    assert row.auto_evidence.startswith(
+        "outside the query's own limit: `NOT status:accepted` (status accepted);"
+    )
+    assert [r.op_id for r in c.kept] == [nid("rjct0001")]
+
+
 def test_a_default_or_nested_filter_is_no_limit_of_the_query() -> None:
     # the default filters are `filtered`'s; a clause under an OR is part of the search, not a limit
     records = [*corpus(), paper("old00001", "Graph theory of 2019", year=2019, abstract="No query word.")]
@@ -893,6 +933,34 @@ def doi_corpus() -> list[PaperRecord]:
         ("11.1000/xyz", None),
         ("10.1000/two words", None),
         ("https://example.org/10.1000/xyz", None),
+        # the forms exports and people write (TASK-186 gate round 1)
+        ("doi: 10.1000/xyz", "10.1000/xyz"),
+        ("DOI 10.1000/xyz", "10.1000/xyz"),
+        ("DOI:10.1000/XYZ", "10.1000/xyz"),
+        ("https://www.doi.org/10.1000/xyz", "10.1000/xyz"),
+        ("doi.org/10.1000/xyz", "10.1000/xyz"),
+        ("www.doi.org/10.1000/xyz", "10.1000/xyz"),
+        ("dx.doi.org/10.1000/xyz", "10.1000/xyz"),
+        ("https://doi.org/10.1000/xyz?utm_source=x", "10.1000/xyz"),
+        ("https://doi.org/10.1000/xyz#section-2", "10.1000/xyz"),
+        ("10.1000/xyz.", "10.1000/xyz"),
+        ("10.1000/xyz,", "10.1000/xyz"),
+        ("10.1000/xyz;", "10.1000/xyz"),
+        ("(doi:10.1000/xyz)", None),  # a leading parenthesis is no form of a DOI
+        ("10.1000/xyz)", "10.1000/xyz"),
+        (
+            "10.1002/(SICI)1097-0258(19980815)",
+            "10.1002/(sici)1097-0258(19980815)",
+        ),  # its own parentheses kept
+        ("10.1000/xyz).", "10.1000/xyz"),
+        ("doi", None),
+        ("doi:", None),
+        ("doinot10.1000/xyz", None),
+        # no control character survives into a key (a key is quoted in a row's evidence)
+        ("10.1000/a\x00b", None),
+        ("https://doi.org/10.1000/a%00b", None),
+        ("10.1000/a\x7fb", None),
+        ("10.1000/a\x85b", None),
     ],
 )
 def test_doi_key(text: str, key: str | None) -> None:
