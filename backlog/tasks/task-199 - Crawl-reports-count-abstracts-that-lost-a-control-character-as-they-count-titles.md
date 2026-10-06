@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 01:27'
+updated_date: '2026-10-06 01:36'
 labels:
   - ingest
   - observability
@@ -24,3 +25,9 @@ TASK-188 (decision-044) replaces each control character in an abstract by one sp
 <!-- AC:BEGIN -->
 - [ ] #1 Every importer that supplies an abstract reports how many abstracts had a control character replaced, beside the title counter, with tests and spec 01 as built
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Security review of the v0.1.1 batch (2026-10-06): RIS abstract claims carry evidence taken from the file (scholarmend:<source> <evidence>) before the replacement note, so a counter must count only crawled-source claims, or anchor its pattern to the known evidence prefixes; a crafted RIS evidence string could otherwise fake the count.
+<!-- SECTION:NOTES:END -->
