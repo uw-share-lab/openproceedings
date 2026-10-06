@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import time
 from collections import Counter
-from itertools import combinations, product
+from itertools import combinations, pairwise, product
 from pathlib import Path
 from typing import Any
 
@@ -482,13 +482,17 @@ def hostile_near_cap() -> dict[str, str]:
         "one term in many places": fill(["abc?", "abc"] * 500, " OR "),
         "refused elsewhere, grouped": fill([f"({w}? OR {w})" for w in words], " "),
         "refused elsewhere, in runs": fill([f"{w}?|{w}" for w in words], "|"),
+        "refused in different copies": fill(
+            [f"(({a} AND {b}) OR ({a}$ AND {b}?) OR ({a}? AND {b}))" for a, b in pairwise(words)],
+            " ",
+        ),
     }
 
 
 @pytest.mark.parametrize("name", list(hostile_near_cap()))
 def test_word_forms_near_the_cap_stay_cheap(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """`POST /parse` is public and runs this as you type: the budget renders the canonical form at most
-    `1 + MAX_RENDERS` times however many terms the rules refuse elsewhere (review of TASK-192: one rendering
+    twice however many terms the rules refuse elsewhere (review of TASK-192: one rendering
     per such term took 0.9 s), and every subset a reader can tick still fits."""
     q = hostile_near_cap()[name]
     result = scholar(q)
@@ -502,7 +506,7 @@ def test_word_forms_near_the_cap_stay_cheap(name: str, monkeypatch: pytest.Monke
 
     monkeypatch.setattr(wordforms, "render", counted)
     assert wordforms.report(q, result) is not None
-    assert renders <= 1 + wordforms.MAX_RENDERS
+    assert renders <= 2  # the query undeduped, and one term's own change: never a second term's
     monkeypatch.undo()
     # the rendering count above is the guarantee; this ceiling is only a backstop against a far worse cost than
     # the old one rendering per term (0.9 s on a laptop, now about 30 ms), never against a slow CI runner
@@ -533,3 +537,38 @@ def test_terms_refused_elsewhere_share_one_bound_away_from_the_cap(monkeypatch: 
     report = check_fits(q, exact=False)
     assert [f.term for f in report.forms] == ["trust", "model", "agent"]
     assert renders == 1
+
+
+# two terms each refused in a different copy of a deduped subtree: alone, each leaves two copies equal; ticked
+# together they split it into three, more than both their own changes (review round 2 of TASK-192)
+SPLIT = "((trust AND model) OR (trust$ AND model?) OR (trust? AND model))"
+SAVERS = "(zebrazebrazebra OR zebrazebrazebra$) (otterotterotter OR otterotterotter$)"
+
+
+def test_two_terms_refused_in_different_copies_are_not_both_budgeted_by_their_own_change() -> None:
+    """Rendered alone, `trust$` and `model$` each cost little; ticked together they cost far more. Only one
+    term is budgeted by its own rendering, so near the cap the second is named as too long, unless what
+    deduping saved fits and covers both, rather than offered with a pair that would not fit."""
+    alone = {t: len(scholar(apply(SPLIT, [f for f in forms_of_all(SPLIT) if f.term == t])).canonical or "")
+             for t in ("trust", "model")}  # fmt: skip
+    both = len(scholar(apply(SPLIT, forms_of_all(SPLIT))).canonical or "")
+    base = len(scholar(SPLIT).canonical or "")
+    assert both - base > sum(n - base for n in alone.values()) + 2  # not additive
+    checked = 0
+    for spare in range(4, 40):  # where both would have been offered (17 of these, before the fix)
+        try:
+            q = canonical_at(f"{SPLIT} {SAVERS}", "", MAX_QUERY_LENGTH - spare)
+        except AssertionError:  # a length the padding can't reach
+            continue
+        check_fits(q, exact=False)  # every tickable subset, `trust` and `model` alone among them, fits
+        checked += 1
+    assert checked >= 10
+
+
+def test_a_rendered_terms_saving_pays_for_no_other_term() -> None:
+    """`trust` is refused in one place (`trust?`) and dedupes away in another (`trust OR trust$`): its own
+    change is negative, and is counted as nothing, so the terms after it get no room it would free. (`xy OR
+    xy` deduping saves more than the room left, so `trust` is budgeted by its own rendering.)"""
+    head = "(trust OR trust$) (trust? AND judge) (xy OR xy)"
+    report = check_fits(canonical_at(head, "zebra wolf lynx moose otter", MAX_QUERY_LENGTH - 3), exact=False)
+    assert [f.term for f in report.forms] == ["trust", "judge", "zebra"]

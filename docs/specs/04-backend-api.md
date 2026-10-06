@@ -1232,7 +1232,7 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     `{term, at, insert}`, every key always sent, in order of `at`; empty in native mode and when no named term
     can take a `$`; null exactly when `errors` is non-empty. It costs one lex and one parse of the edited
     string in Scholar mode, none in native mode (02 §Word forms has the rules), and near the length cap a
-    budget (no more parses; linear in the places, at most three renderings of the canonical form) to offer
+    budget (no more parses; linear in the places, at most two renderings of the canonical form) to offer
     the terms whose `$` fit, in every subset the reader can tick. `/search` does not carry it: the
     UI's action edits the draft, which `/parse` has always just read.
   - `POST /parse`'s `word_forms_skipped` (TASK-192, additive) comes from the same call,

@@ -171,7 +171,7 @@ def _read_back(q: str, result: ParseResult, places: list[Place]) -> bool:
     return edited.ast is not None and structure(edited.ast) == structure(expected)
 
 
-MAX_RENDERS = 2  # canonical renderings per query for single terms refused elsewhere, past the shared bound
+MAX_RENDERS = 1  # terms budgeted by their own rendering: never two, whose costs don't add (`_fit`)
 
 
 def _fit(q: str, result: ParseResult, by_term: dict[str, list[Place]], refused: set[str]) -> list[Place]:
@@ -189,11 +189,17 @@ def _fit(q: str, result: ParseResult, by_term: dict[str, list[Place]], refused: 
     A term the rules refuse in another place (`trust? OR trust`) can make two deduped subtrees differ. With
     deduping off, though, the canonical form of any edit is at most that of the query as typed plus one per
     place, so what deduping saved (`saved`) bounds what all such terms together can bring back: the first one
-    chosen pays it, once. When that doesn't fit, a term's own change is rendered and paid instead, for at
-    most `MAX_RENDERS` terms; a later one is counted as not fitting (`too_long`).
+    chosen pays it, once. When that doesn't fit, a term's own change is rendered and paid instead (never less
+    than nothing), for one term only; a later one is counted as not fitting (`too_long`). One is sound: on top
+    of that term's edit the others take a `$` in every place, so they keep its deduped subtrees equal and add
+    at most one per place, and any subset is at most the rendering plus one per place of the rest. Two are
+    not: costs rendered one term at a time don't add (two terms refused in different copies of a deduped
+    subtree each leave two copies equal alone, and split it into three together: `(trust AND model) OR
+    (trust$ AND model?) OR (trust? AND model)`), and rendering them jointly would bound only the sets
+    rendered, not every subset a reader can tick (review round 2 of TASK-192).
 
     `POST /parse` is public and runs as you type, so this is linear in the places but for a bisect each, and
-    renders the canonical form at most `1 + MAX_RENDERS` times."""
+    renders the canonical form at most twice (`1 + MAX_RENDERS`)."""
     assert result.ast is not None and result.canonical is not None
     ats: list[int] = []  # the chosen places' offsets, sorted
     run_at: dict[int, int] = {}

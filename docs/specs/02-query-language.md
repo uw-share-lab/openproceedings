@@ -425,10 +425,16 @@ written, since such a term is edited alike everywhere and the canonical form's d
 A term the rules refuse in another place (`trust? OR trust`, deduped to `trust`) can make them differ. With
 deduping off, any edit's canonical form is at most the typed query's plus one per place, so what deduping
 saved in the typed query bounds what all such terms together bring back: the first one offered pays it,
-once. When that doesn't fit, a term's own change is rendered and paid instead, for at most two such terms
-per query; a later one is `too_long`. `POST /parse` is public and runs this as the reader types, so the
-budget is linear in the places (a bisect each) and renders the canonical form at most three times (a
-hostile near-cap query takes under 30 ms; one rendering per such term once took 0.9 s). The offered set is
+once. When that doesn't fit, a term's own change is rendered and paid instead (never less than nothing), for
+one such term per query; a later one is `too_long`. One is sound: on top of that term's edit every other
+offered term takes its `$` in every place it is written, so it keeps the deduped subtrees equal and adds at
+most one per place, and any subset is at most the rendering plus one per place of the rest. Two are not:
+costs rendered one term at a time don't add. In `(trust AND model) OR (trust$ AND model?) OR (trust? AND
+model)` each of `trust$` and `model$` alone leaves two of the three copies equal, and together they split
+them into three (review round 2 of TASK-192); rendering terms jointly would bound only the sets rendered,
+not every subset the reader can tick. `POST /parse` is public and runs this as the reader types, so the
+budget is linear in the places (a bisect each) and renders the canonical form at most twice (a hostile
+near-cap query takes under 30 ms; one rendering per such term once took 0.9 s). The offered set is
 read back as a whole. Because the budget is an upper bound, a term named `too_long` may in fact have fit
 (its own or another offered term's `$` would have shortened the canonical form, or it was past the
 rendering limit); it is never offered when some subset with it would not fit. `test_wordforms.py` pins each row above and checks, for generated
