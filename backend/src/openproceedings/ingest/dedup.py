@@ -779,11 +779,15 @@ def _abstract_aside(c: _Cluster, group: Sequence[_Cluster]) -> str | None:
 def _abstract_group(group: Sequence[_Cluster]) -> str | None:
     """Why these clusters must not share a record on an abstract key, or None: `_mergeable`'s reasons, and step
     3's own. The group holds an imported record, and no record that isn't a listing by crawled evidence has a
-    status a listing can't have (decision-040). It also holds at most one cluster that isn't imported, so an abstract never joins two crawled records
-    (a listing and a note of another title are an owner decision, decision-037, TASK-187). That last check is a
-    belt-and-braces guard no input reaches today: two crawled clusters and an import can only pass `_mergeable`
-    (one forum id, one proceedings id) if the import carries the id of one of them, and then step 1 has already
-    merged it into that cluster, which is no longer imported."""
+    status a listing can't have (decision-040). It also holds at most one cluster that isn't imported, so an
+    abstract never joins two crawled records (a listing and a note of another title are an owner decision,
+    decision-037, TASK-187).
+
+    Both of those checks are belt-and-braces guards no input reaches today. The status check repeats
+    `_abstract_aside`, which `_abstract_merging` runs first and which already sets aside every such cluster. And
+    two crawled clusters and an import can only pass `_mergeable` (one forum id, one proceedings id) if the
+    import carries the id of one of them, and then step 1 has already merged it into that cluster, which is no
+    longer imported."""
     crawled = [c for c in group if not _imported(c)]
     if len(crawled) > 1 or len(crawled) == len(group):
         return "ambiguous_not_merged"
