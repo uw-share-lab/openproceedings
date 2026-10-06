@@ -620,12 +620,14 @@ def test_a_listed_title_with_a_control_character_keeps_its_paper() -> None:
     t0 = datetime(2026, 9, 29, tzinfo=UTC)
     index, page = Page(listing, 200, "", t0), Page(url, 404, "", t0)
     entry = neurips.Entry(url, "Induc\x02tive Trust", ("A One",))
-    record, _ = neurips._record(2024, native, entry, "main", "track token Conference", listing, index, page)
+    record, _, _ = neurips._record(
+        2024, native, entry, "main", "track token Conference", listing, index, page
+    )
     assert record.title == "Induc tive Trust"
     assert (
         claim(record, "title").evidence == f"year index {listing} (1 control character replaced by a space)"
     )
-    clean, _ = neurips._record(2024, native, neurips.Entry(url, "Inductive Trust", ("A One",)), "main",
+    clean, _, _ = neurips._record(2024, native, neurips.Entry(url, "Inductive Trust", ("A One",)), "main",
                                "track token Conference", listing, index, page)  # fmt: skip
     assert claim(clean, "title").evidence == f"year index {listing}"
 
@@ -644,10 +646,42 @@ def test_a_page_abstract_with_a_control_character_is_imported_with_a_space() -> 
     )
     index, page = Page(listing, 200, "", t0), Page(url, 200, html, t0)
     entry = neurips.Entry(url, "Inductive Trust", ("A One",))
-    record, missing = neurips._record(
+    record, missing, spaced = neurips._record(
         2024, native, entry, "main", "track token Conference", listing, index, page
     )
-    assert (record.abstract, missing) == ("Quanti fying trust", None)
+    assert (record.abstract, missing, spaced) == ("Quanti fying trust", None, 2)
     assert claim(record, "abstract").evidence == (
         "p.paper-abstract (citation_title matches the listing) (2 control characters replaced by a space)"
     )
+
+
+def test_a_listing_counts_the_abstracts_that_lost_a_control_character(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """TASK-199 (decision-044): from the miner's own count, in the report, its manifest when above 0 and the
+    listing's done line; never a WARNING (the abstract is kept). A listing with none keeps its manifest shape."""
+    cache = cache_of(tmp_path)
+    seed_fixture(cache, "neurips", Y13)
+    edit = matching("Synthetic title 1")
+    seed_fixture(
+        cache,
+        "neurips",
+        ABS13,
+        edit=lambda t: edit(t).replace("Synthetic abstract 1", "Synthetic\x02abstract\x001"),
+        at=T1,
+    )
+    seed(cache, "neurips", neurips_abs(2013, B13), "", status=404, at=T1)
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+        result = mine(cache, 2013)
+    assert by_id(result.records)[f"op:neurips:2013:nips-{A13}"].abstract == "Synthetic abstract 1"
+    [report] = result.reports
+    assert report.abstract_control_characters == 1 == report.to_manifest()["abstract_control_characters"]
+    [done] = [r for r in caplog.records if r.getMessage() == "neurips_listing_mined"]
+    assert done.__dict__["abstract_control_characters"] == 1
+    # the fixture's own count mismatch warns; the counter is never part of a WARNING
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert not [r for r in warnings if "abstract_control_characters" in r.__dict__]
+    plain = cache_of(tmp_path / "plain")
+    seed_2013(plain)
+    [clean] = mine(plain, 2013).reports
+    assert clean.abstract_control_characters == 0 and "abstract_control_characters" not in clean.to_manifest()

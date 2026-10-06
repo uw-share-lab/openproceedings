@@ -654,6 +654,27 @@ def test_titles_that_lost_a_control_character_are_counted_in_the_report_and_the_
     assert plain.title_control_characters == 0 and "title_control_characters" not in plain.to_manifest()
 
 
+def test_abstracts_that_lost_a_control_character_are_counted_beside_the_titles(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """TASK-199 (decision-044): the crawl counts the records whose abstract had a control character replaced, from
+    the importer's own count (never by reading claim evidence back), in the report, the manifest when above 0 and
+    the finished line; never an attention WARNING. Whitespace controls aren't counted."""
+    server = world(accepted=4)
+    server.notes[CONF][0]["content"]["abstract"]["value"] = "the LiDAR modal\x02ity"
+    server.notes[CONF][1]["content"]["abstract"]["value"] = "500x\x02 longer\x00"
+    server.notes[CONF][2]["content"]["abstract"]["value"] = "We  study\x0b trust."
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        report = orv.crawl(client(tmp_path, server), "ICLR", 2024).report
+    assert report.abstract_control_characters == 2 == report.to_manifest()["abstract_control_characters"]
+    assert report.title_control_characters == 0
+    [finished] = lines(caplog, "openreview_crawl_finished")
+    assert finished.__dict__["abstract_control_characters"] == 2
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    plain = orv.crawl(client(tmp_path / "plain", world()), "ICLR", 2024).report
+    assert plain.abstract_control_characters == 0 and "abstract_control_characters" not in plain.to_manifest()
+
+
 def test_a_crawl_whose_strings_are_all_mapped_has_no_attention_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

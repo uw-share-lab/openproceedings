@@ -170,14 +170,39 @@ def test_an_abstract_with_a_control_character_is_imported_with_a_space(tmp_path:
                     )
                     break
 
-    by_id, _ = run(tmp_path, controls)
+    by_id, report = run(tmp_path, controls)
     assert by_id[WORKSHOP].abstract == "A made-up abstract about human re liance on model outputs."
+    # TASK-199: one record's abstract lost a control character (the all-control claim was passed over)
+    assert report.abstract_control_characters == 1 == report.to_manifest()["abstract_control_characters"]
     [abstract] = by_id[WORKSHOP].claims("abstract")
     assert abstract.evidence is not None and abstract.evidence.endswith(
         " (2 control characters replaced by a space)"
     )
     assert abstract.evidence.startswith("scholarmend:openreview_api ")
     assert by_id[DB].abstract == "A synthetic datasets-track abstract with extra spaces."
+
+
+def test_the_abstract_counter_cannot_be_faked_by_evidence_text(tmp_path: Path, imported: Imported) -> None:
+    """TASK-199 security note: a RIS abstract claim's evidence is the reviewer's file's text, so it can say
+    `(5 control characters replaced by a space)` without any. The count is the importer's own, so it stays 0,
+    and a file with none keeps its manifest shape."""
+    text = "A made-up abstract about human reliance on model outputs."
+
+    def spoof(e: Entries) -> None:
+        for entry in e:
+            for c in entry["claims"]:
+                if c["field"] == "abstract" and c["value"] == text:
+                    c["evidence"] += " (5 control characters replaced by a space)"
+
+    by_id, report = run(tmp_path, spoof)
+    [abstract] = by_id[WORKSHOP].claims("abstract")
+    assert abstract.evidence is not None and abstract.evidence.endswith(
+        "(5 control characters replaced by a space)"
+    )
+    assert (
+        report.abstract_control_characters == 0 and "abstract_control_characters" not in report.to_manifest()
+    )
+    assert "abstract_control_characters" not in imported[1].to_manifest()
 
 
 def test_authors_drop_the_truncation_marker(imported: Imported) -> None:
