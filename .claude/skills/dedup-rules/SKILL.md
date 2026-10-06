@@ -58,7 +58,11 @@ over-merge silently deletes a paper from someone's systematic review.
      record would keep the note's status, or whichever RIS row was fetched last. `_abstract_aside` sets it
      aside, with an `abstract_key` row. Step 2 has the same rule (`_import_would_take_its_status` in
      `_mergeable`): such a record never merges on its title with imported records alone; a crawled listing,
-     which outranks its status, may still take a lone rejected note.
+     which outranks its status, may still take a lone rejected note. "Listing" here means **by crawled
+     evidence** (`_Cluster.crawled`, decision-040): a proceedings source's claim, or a non-`ris` claim's
+     proceedings URL (a note's own). A proceedings id only a RIS row names (a rejected note and its forum id's
+     RIS row, TASK-174's shape) is no exemption; `is_listing` and `_Cluster.listed` keep the wider meaning for
+     reconcile and the track rule.
    - **Rows on the output records**: a refused group, and a rival a merge set aside. The merged record is a
      listing holding a `ris` claim, and `_abstract_buckets(merged_too=True)` anchors on **every own-page
      abstract** it keeps, not only its `ris` one: a newer RIS row of the note's forum id may have replaced the
@@ -287,11 +291,12 @@ over-merges a review found and the link cases. Table tests from the recorded v23
 fixtures: `test_dedup_forum_link.py`.
 - An `abstract_venue_year` row (TASK-179; the `imports` strategy, and two long abstracts in every pool) joins
   clusters of one venue-year that both keep the row's abstract, in a group that held an imported record and at
-  most one cluster that wasn't one, whose status is `accepted` or `unknown` and whose forum id, if it has one,
-  is the survivor's; a pool with no imported record has none.
+  most one cluster that wasn't one, whose status is `accepted` or `unknown` unless it is a listing by crawled
+  evidence (decision-040; `REJECTED_NOTE_RIS_LISTING` pins a RIS-only listing as no merge) and whose forum id, if
+  it has one, is the survivor's; a pool with no imported record has none.
 - A status no listing has is never kept by merging with imports alone (decision-037): wherever a title or an
-  abstract joins clusters, one that is no listing and is rejected, withdrawn or desk-rejected has a companion
-  that is no import. The `imports` strategy gives the import, and each forum's RIS row (sometimes with no note
+  abstract joins clusters, one that is no listing by crawled evidence (decision-040) and is rejected, withdrawn
+  or desk-rejected has a companion that is no import. The `imports` strategy gives the import, and each forum's RIS row (sometimes with no note
   crawled), a status of its own; `@example`s pin the import-only and the crawled-note shapes.
 - No output record combines inputs with different `(venue, year)`.
 - Idempotent: `dedup(dedup(xs)).records == dedup(xs).records`, and the same conflict rows apart from
