@@ -337,8 +337,8 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    text in a crawled cluster can be replaced by a merge in the same step, and a second run would judge the
    group differently. A partner that keeps the abstract keeps the merge (a main note beside its workshop version
    sharing it, the 14 pairs above), and two RIS rows with one title and different abstracts (an OpenReview and
-   a camera-ready text) still merge: no crawler holds either. The real cache's rebuild under this rule is still
-   to be measured (TASK-189). The merged record's differing titles are a `precedence:` row, as for any merge. On the
+   a camera-ready text) still merge: no crawler holds either. A rebuild of the real cache under this rule (and
+   decision-040's) changed no merge on 2026-10-06 (decision-045, "Real-cache rebuild"). The merged record's differing titles are a `precedence:` row, as for any merge. On the
    2026-10-05 crawl (a) – (c) merge all 7 accepted records that existed only as the import's second copy of a
    crawled ICLR paper: one by its title once `ris` on both sides stopped blocking it, six by their abstract
    (five lost a math symbol; `CwoM9T55lG` is under its earlier title).

@@ -39,8 +39,8 @@ change under `deploy/` is checked with `deploy/smoke-test.sh` wherever Docker is
 1. Pick or create a task: `backlog task list --plain`, `backlog task create "…" --ac "…"`, on a freshly
    pulled `dev`. Never hand-edit files under `backlog/`. Follow-up tasks and decisions found during the work
    are created last, after rebasing onto `dev` (`.claude/skills/task-hygiene/SKILL.md` §Ids).
-2. Branch off `dev`: `git switch dev && git pull && git switch -c <type>/<slug>` (e.g. `feat/wildcard-expansion`; types: feat, fix, chore, docs, test; `release/X.Y.Z` and `release/X.Y.Z-back-merge`
-   are only for a release's own bookkeeping, spec 08 §Release).
+2. Branch off `dev`: `git switch dev && git pull && git switch -c <type>/<slug>` (e.g. `feat/wildcard-expansion`; types: feat, fix, chore, docs, test; `release/X.Y.Z`
+   is only for a release's own bookkeeping, spec 08 §Release).
 3. Work test-first. Keep changes inside one spec's scope. If the spec is wrong, change the spec in the same PR.
 4. Close out, in this order (approvals are per-commit, so the order matters):
    - the local tests the change calls for green (the `.claude/skills/pr-workflow/SKILL.md` §Local test runs

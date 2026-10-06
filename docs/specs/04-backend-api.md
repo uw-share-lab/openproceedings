@@ -320,7 +320,7 @@ Two readings follow from "the canonical form decides", and are worth knowing:
     bitmap of the documents it matches (a `NOT`'s child's, subtracted), and each tree's combinations are read
     from the AND of its conjuncts' bitmaps and a bitmap per facet value (TASK-197): the same documents, so the
     same counts (`tests/unit/test_group_counts.py` holds the combinations to the aggregation's). It is taken
-    only when the conjuncts are no more than the distinct trees, so it never makes more collections; a call's
+    only when the conjuncts are no more than the distinct bases, so it never makes more collections; a call's
     bitmaps are one bit per document per conjunct, dropped with the job; the per-value bitmaps (values ×
     documents / 8 bytes, about 0.5 MB on the real index's 30 facet values, growing with them) are collected once
     per engine, by the first count that needs them (about 30 collections, each after `check`, so a stopped job
