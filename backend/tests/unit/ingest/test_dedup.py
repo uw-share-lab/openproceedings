@@ -1722,3 +1722,19 @@ def test_an_abstract_only_a_crawled_records_ris_row_holds_is_no_reason_to_yield(
     copy = imported(f"iclr-{H[1]}", "-" + GUARD, abstract=LONG, **ICLR)
     result = dedup([r2, its_row, guard, copy])
     assert (guard.id, copy.id, "title_venue_year") in rules(result)
+
+
+def test_a_title_partner_set_aside_by_the_track_rule_still_keeps_the_title_merge() -> None:
+    """decision-045 asks whether a title partner keeps the import's abstract, set-aside rivals included: a
+    same-title workshop note holding it is the main paper's workshop version (the 14 pairs of decision-037), not a
+    sign the title names another paper. The forum-id import merges on its title with the proceedings-id import
+    (whose abstract is another page's, no evidence), and the workshop note stays apart with its title row
+    (nightly run 37412309356)."""
+    copy = imported(f"nips-{H[1]}", "Trust in Machines", year=2023, abstract=LONG,
+                    abstract_evidence="scholarmend:proceedings_page https://example.org/x")  # fmt: skip
+    workshop = paper("AbCd1234", "Trust in Machines", year=2023, track="workshop", abstract=LONG)
+    own = imported("EfGh5678", "Trust in Machines", year=2023, abstract=LONG)
+    result = dedup([copy, workshop, own])
+    assert [r.id for r in result.records] == [workshop.id, own.id]
+    assert rules(result) == [(own.id, copy.id, "title_venue_year")]
+    assert not_merged(result) == [("title_key", "track_not_merged")]
