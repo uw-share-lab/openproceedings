@@ -527,6 +527,9 @@ describe("CompareRecords", () => {
     expect(figure.hasAttribute("aria-labelledby")).toBe(false); // the figcaption names it
     const box = within(figure).getByRole("textbox", { name: /This comparison in one sentence, to cite/ });
     if (!(box instanceof HTMLTextAreaElement)) throw new Error("the sentence is not in a textarea");
+    // the answer's own focus move to its heading (an effect after the draw) comes first, as it does for a
+    // reader; a press before it would have its selection taken back to the heading (a 1-in-20 flake)
+    await waitFor(() => expect(document.activeElement?.tagName).toBe("H3"));
     return { figure, box };
   }
 
