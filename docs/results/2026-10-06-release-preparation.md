@@ -12,11 +12,14 @@ then `dev` has added:
   - decision-046: no back-merge after a release.
 - **PR #113, the comparison batch:** TASK-184, 185, 186, 192, 194 and 195 (decision-043).
 - **PR #114:** TASK-197's quiet re-measure, which closed decision-039's budget exception.
+- **PRs #116 and #117:** the first candidate nightly's four failures, all in tests or CI capacity, none in
+  product code (§1).
 
 The release adds features, so it is a MINOR release (spec 08 §Versioning). It changes none of
 `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy or `QUERY_VERSION`.
 
-Candidate: `dev` at `a18fd0ca` (PR #114's merge). Base: `main` at `e272aec5` (`v0.1.0`), which `dev` holds
+Candidate: `dev` at `5bd772d7` (PR #117's merge); §2 and §3 ran on `a18fd0ca`, and #116 and #117 change
+no product code. Base: `main` at `e272aec5` (`v0.1.0`), which `dev` holds
 through PR #110, 0.1.0's back-merge (left out of the changelog by design). From this release on there is no
 back-merge (decision-046), so `dev` won't hold 0.2.0's promotion commit.
 
@@ -28,10 +31,14 @@ back-merge (decision-046), so `dev` won't hold 0.2.0's promotion commit.
   baselines were then committed from that run's artifact (`e0cb3559`); the final browser run is the promotion
   PR's. Locally, `make e2e` passed 64 of 64 on darwin.
 - **`bench`:** passed on PRs #112, #113 and #114.
-- **Nightly:** one was dispatched on the candidate itself, `37412309356` at `a18fd0ca`, on 2026-10-06; its result
-  is in the promotion PR, and the promotion waits for it. The v0.1.0 candidate nightly (`37353576315`) failed
-  one job, which PR #109 fixed and confirmed at the nightly profile.
-- **Backlog:** no open Must finding. Follow-ups TASK-199 and TASK-200 are filed.
+- **Nightly:** the scheduled nightly `37476773059` on the final candidate `5bd772d7` (2026-10-06) passed all 31
+  jobs, including the 12 mutation shards. A dispatched nightly on the first candidate, `37412309356` at
+  `a18fd0ca`, failed 4 jobs, none in product code:
+  - decision-045's property, twice (2,000 and 50,000 examples), modelled the rule's scope wrongly; fixed in
+    #116, with both shapes pinned in #117;
+  - `test_429_rate_limited_with_retry_after` was a wall-clock flake; its clock is frozen in #117;
+  - mutation shard 5/8 ran past 140 min; the nightly now runs 12 shards (#117).
+- **Backlog:** no open Must finding. Follow-ups TASK-199, TASK-200 and TASK-201 are filed.
 - **Coverage:** the M4 gate passes (§3).
 
 ## 2. Security gate

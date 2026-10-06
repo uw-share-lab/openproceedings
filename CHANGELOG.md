@@ -21,10 +21,15 @@ names the index it was verified on and which saved records still reproduce.
 
 - perf: TASK-197 re-measured quietly; every Trust-Evals first page under 100 ms, spec 03's exception closed ([#114](https://github.com/uw-share-lab/openproceedings/pull/114))
 
+### Fixed
+
+- ci/test: 12 mutation shards, a frozen-clock 429 test, and the nightly's second dedup shape (v0.2.0 candidate nightly) ([#117](https://github.com/uw-share-lab/openproceedings/pull/117))
+
 ### Internal
 
 - ingest: fix two properties the candidate nightly failed (0.1.0) ([#109](https://github.com/uw-share-lab/openproceedings/pull/109))
 - compare: freeze GET /export's date too, so a contract test stops failing after 2026-10-05 ([#111](https://github.com/uw-share-lab/openproceedings/pull/111))
+- dedup: decision-045's property counts every title partner (v0.2.0 candidate nightly) ([#116](https://github.com/uw-share-lab/openproceedings/pull/116))
 
 ### Data
 
