@@ -275,7 +275,7 @@ Two readings follow from "the canonical form decides", and are worth knowing:
   - **Nothing a count compiles is stored.** `TantivyEngine.counts` takes each distinct non-filter conjunct's
     query from the request's own compile of the query (`Compiled.conjuncts`, TASK-197: copies, since
     tantivy-py's `boolean_query` copies its subqueries, so the `compiled` memo charges each conjunct's terms and
-    ids once more, a `NOT`'s child's twice more; without one it compiles each once per request: the kept clauses
+    ids once more (a kept `NOT`'s child twice more); without one it compiles each once per request: the kept clauses
     once, each group once) and builds every tree's query by
     ANDing those: a group alone is its query and the kept ones, the query without it all the others. No tree
     and no combination is stored in the `compiled` memo, whose 500,000-unit budget every client shares (a
