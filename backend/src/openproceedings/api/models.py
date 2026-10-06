@@ -276,6 +276,7 @@ class SearchResponse(Versioned):
 MatchedBy = Literal[
     "forum_id",
     "proceedings_id",
+    "doi",
     "title_venue_year",
     "not_found",
     "ambiguous",
@@ -286,6 +287,7 @@ MatchedBy = Literal[
 # why a paper is on one side only (`scholar_compare`'s classes: `ONLY_SCHOLAR` and `ONLY_OP`; pinned by a test)
 CompareReason = Literal[
     "our_bug",
+    "query_limit",
     "filtered",
     "compat_reading",
     "coverage_gap",
@@ -326,15 +328,17 @@ class CompareRow(Model):
     year: int | None
     matched_by: MatchedBy | None = Field(
         description="How the file's record was matched to the index, by spec 01's merge rules in their order "
-        "(`forum_id`, `proceedings_id`, `title_venue_year`), or why it has no index record (`not_found`, "
+        "(`forum_id`, `proceedings_id`, `doi`: a DOI the index record carries, in the venue and year the file "
+        "states, `title_venue_year`), or why it has no index record (`not_found`, "
         "`ambiguous`: its id or title names several records, `no_year`, `no_venue`, `truncated_title`). Null "
         "on an `added` row."
     )
     reason: CompareReason | None = Field(
-        description="Why the paper is on one side only (spec 07 §B's classes): for `dropped`, `filtered` (a "
-        "default filter removes it: its track or status), `full_text` (no title or abstract match), "
+        description="Why the paper is on one side only (spec 07 §B's classes): for `dropped`, `query_limit` (a "
+        "filter clause the query itself writes, such as `year:` or `venue:`, excludes it, whatever its text; "
+        "`detail` names the clause), `filtered` (a default filter removes it: its track or status), `full_text` (no title or abstract match), "
         "`stemming` (it matches only with another inflected form), `compat_reading` (it matches as Google "
-        "Scholar reads the string); for `not_in_index`, `coverage_gap` or `unsettled`; for `added`, "
+        "Scholar reads the string); for `not_in_index`, `coverage_gap`, `query_limit` (by the file's own venue and year) or `unsettled`; for `added`, "
         "`scholar_missed`, `compat_reading` or `scholar_cap`. `unsettled`: a person must decide. `our_bug`: "
         "the reference matcher and the served index disagree (report it). Null on a `kept` row that has none."
     )

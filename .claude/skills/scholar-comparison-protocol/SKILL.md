@@ -20,7 +20,12 @@ description: The spec 07 §B protocol for comparing openproceedings with Google 
 1. Identical OpenReview forum ID (from Scholar's URL when present: `/forum?id=` or `/pdf?id=`), then the
    proceedings paper a URL names. A proceedings id counts **within its venue and year** only: a NeurIPS hash
    repeats every year (matching on the bare `nips-<hash>` made 316 of 1,834 records ambiguous).
-2. Else normalized title (`token-contract` normalization, `dedup.title_key`) **with the same venue and year**.
+2. Else a DOI (TASK-186: Scopus and Web of Science exports, `DO`; a doi.org link too; case-blind) that an index
+   record's `urls.doi` holds, **only in the venue and year the file states** (where it states them; a WoS venue
+   string with its volume is no venue and doesn't block). A DOI in another venue or year is never a match and is
+   named in the row. Only NeurIPS 2022–2025 proceedings records carry a DOI (16,690 on `fd13d8d27535`); ICLR and
+   ICML have none. A comparison rule only: dedup doesn't merge on DOIs.
+3. Else normalized title (`token-contract` normalization, `dedup.title_key`) **with the same venue and year**.
 Never match on title alone across venue or year; a Scholar record with no year is matched only by forum
 ID, or goes to `review.csv`. The venue is one of Scholar mode's source names exactly; a string Scholar cut
 (`… Information Processing …`) is no venue. Code: `eval/scholar_compare.py` (`MatchIndex.match`), the one
@@ -40,6 +45,7 @@ A change to the classes, the rules or their order changes both the report and th
 ## Classification
 | Only in Scholar, because… | Automated test |
 |---|---|
+| `query_limit` — the string's own limit excludes it | A top-level filter clause the string writes (`year:`, `source:`/`venue:`, their `NOT`, or a non-default `track:`/`status:`) fails the record (`query_limits`). Whatever its text: never `full_text` or `stemming`. Evidence names the clause, the failing value, and whether the rest of the string matches. A record the index doesn't hold (`not_found`) is judged on the file's venue and year and goes to a person. A clause under an OR or NOT group is part of the search. |
 | `filtered` — workshop / competition / rejected / withdrawn | Paper is in the corpus; `track`/`status` fails the default filters; re-running with defaults removed matches it, as run, as Scholar reads the string, or with inflected forms (the evidence says which: `also compat_reading`, `also stemming`). Counted in `excluded`. |
 | `compat_reading` | The difference comes from how Scholar mode read the string, not from the corpus: decision-002's phrase reading of unquoted multi-word `\|` items (Scholar ORs only neighbouring words), or `$` read as the WoS zero-or-one wildcard (Scholar has no documented `$`). Re-run with the Scholar reading written natively; it now matches. |
 | `stemming` | Passes the filters; re-run the query with the inflected variants added (e.g. `benchmarks`, `trusted`; inflection only, so not `trustworthy` for `trust`); it now matches. Record the variants that decide it. |
@@ -53,7 +59,7 @@ A change to the classes, the rules or their order changes both the report and th
 | `compat_reading` | Scholar mode read the string differently from Scholar (decision-002 phrases, `$` as a WoS wildcard) and that reading matches the record; re-running with Scholar's reading written natively doesn't. |
 | `scholar_missed` | Otherwise. Goes to `review.csv` to confirm the exact token really is in title/abstract. |
 
-**Order matters:** test `our_bug` (oracle vs engine) first, then `filtered`, `compat_reading`, `coverage_gap`, `stemming`,
+**Order matters:** test `our_bug` (oracle vs engine) first, then `query_limit`, `filtered`, `compat_reading`, `coverage_gap`, `stemming`,
 and only then `full_text`. Assigning `full_text` without the oracle check hides bugs. The filters are judged
 before the text: a record that fails them and matches under any reading is `filtered`; one that fails them and
 matches under none is `full_text` (Scholar found it in the full text, and the filters would also have removed it).
@@ -90,7 +96,7 @@ file is UTF-8 with a BOM and CRLF line ends, like `/compare`'s CSV, so a spreads
 are written through `export.csv_cell` (a value starting `=`, `+`, `-` or `@` gets a leading `'`).
 
 **Filling it in, and reading it back.** Whoever makes a call fills three columns and nothing else:
-`human_class`, one of `our_bug`, `filtered`, `compat_reading`, `coverage_gap`, `stemming`, `full_text`,
+`human_class`, one of `our_bug`, `query_limit`, `filtered`, `compat_reading`, `coverage_gap`, `stemming`, `full_text`,
 `scholar_cap`, `scholar_missed`, `in_both` (the record is the same paper as one in the result) or
 `out_of_scope` (it is no paper of the scope's venues and years: Scholar's venue or year is wrong); both verdicts
 go on Scholar-side rows only. `reviewer_role`, a role, never a name, required with a class; and `note`, free

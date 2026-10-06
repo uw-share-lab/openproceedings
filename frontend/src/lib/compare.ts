@@ -106,6 +106,7 @@ export function limitsLine(limits: CompareLimits): string {
 const MATCHED_BY: Record<string, string> = {
   forum_id: "matched by its OpenReview link",
   proceedings_id: "matched by its proceedings link",
+  doi: "matched by its DOI",
   title_venue_year: "matched by title, venue and year",
   not_found: "no record with this title in that venue and year, and no link to an indexed paper",
   ambiguous: "its link or title names several index records, so none was chosen",
@@ -121,6 +122,7 @@ export function matchedByText(matchedBy: string | null): string {
 }
 
 const REASONS: Record<string, string> = {
+  query_limit: "outside a limit your query writes (its year, venue, track or status)",
   filtered: "excluded by a default filter",
   full_text: "no exact match in its title or abstract",
   stemming: "matches only as another word form",
@@ -154,6 +156,7 @@ export function notComparedText(reason: string): string {
 
 /** A reason as a count's sentence, [one paper, several]: "1 paper has …", "1,713 papers have …" (copy CM-7). */
 const COUNTED: Record<string, readonly [string, string]> = {
+  query_limit: ["is outside a limit your query writes", "are outside a limit your query writes"],
   filtered: ["is excluded by a default filter", "are excluded by a default filter"],
   full_text: [
     "has no exact match in its title or abstract",
@@ -191,6 +194,7 @@ const COUNTED_ADDED: Record<string, readonly [string, string]> = {
  * action under the query, Scholar mode's alone (USAB-R2-1, R3-2).
  */
 const NEXT_STEP: Record<string, string> = {
+  query_limit: "to include such a paper, widen that limit in the query (its row names the clause)",
   filtered: "to include such a paper, write its track or status into the query (its row says which)",
   full_text:
     "no form of this query finds such a paper by its title or abstract; keep it from your own file if it belongs in the review",

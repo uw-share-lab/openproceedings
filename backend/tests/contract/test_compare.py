@@ -45,7 +45,7 @@ from openproceedings.eval.scholar_compare import ONLY_OP, ONLY_SCHOLAR, MatchInd
 from openproceedings.export import csv_cell
 from openproceedings.ingest import dedup
 from openproceedings.ingest.caps import MAX_TITLE
-from openproceedings.ingest.record import PaperRecord
+from openproceedings.ingest.record import Claim, PaperRecord
 from openproceedings.query.normalize import TOKENIZER_VERSION, normalize
 from openproceedings.query.parser import parse
 from scholarmend.parse import parse_ris
@@ -53,6 +53,7 @@ from scholarmend.parse import parse_ris
 from tests.contract.conftest import SECRET, Store, attributed, build, make_app, point_current
 from tests.contract.test_abuse_limits import error
 from tests.fixtures.corpus.synthetic_5k import records
+from tests.unit.engine.test_exclusions import BUILT
 
 COMPARE = "/api/v1/compare"
 RIS = {"Content-Type": "application/x-research-info-systems"}
@@ -1586,3 +1587,54 @@ def test_a_second_comparison_from_a_network_running_one_is_logged_as_such(
         error(post(c, the_file()), 429, "API_RATE_LIMITED")
     busy = [x.get("busy") for x in logs() if x["event"] == "request" and x["route"] == COMPARE]
     assert busy == ["compare_running", None, "compare_cooldown"]
+
+
+def test_a_paper_the_querys_own_limit_excludes_is_query_limit(shared: TestClient) -> None:
+    """TASK-185: the query's own `year:` clause, not the text, leaves the paper out, and the row says which."""
+    p = BY_ID[KEPT[0]]
+    body = compared(shared, by_forum(p), f"{Q} AND NOT year:{p.year}")
+    [row] = body["dropped"]
+    assert (row["id"], row["reason"], row["settled"]) == (p.id, "query_limit", True)
+    assert row["detail"] == (
+        f"outside the query's own limit: `NOT year:{p.year}` (year {p.year}); the rest of the query matches it "
+        "(as run)"
+    )
+    assert body["reason_totals"]["dropped"] == {"query_limit": 1}
+
+
+def test_a_web_of_science_record_is_matched_by_its_doi(tmp_path: Path) -> None:
+    """TASK-186: a WoS record (no venue Scholar mode knows, no link to the paper) matches by DOI, case-blind."""
+    p = BY_ID[next(i for i in KEPT + sorted(RESULT) if BY_ID[i].venue == "NeurIPS" and plain(BY_ID[i]))]
+    doi = "10.52202/000000-0001-AB"
+
+    def with_doi(r: Any) -> PaperRecord:
+        paper = attributed(r)
+        if paper.id != p.id:
+            return paper
+        claim = Claim(field="urls.doi", value=doi, source="neurips_proceedings", fetched_at=BUILT)
+        return paper.model_copy(
+            update={
+                "urls": paper.urls.model_copy(update={"doi": doi}),
+                "provenance": (*paper.provenance, claim),
+            }
+        )
+
+    corpus = [*list(records())[:800], list(records())[TWIN]]
+    version = build(corpus, tmp_path / "snapshots", "doi", tmp_path / "indexes", paper=with_doi)
+    (tmp_path / "indexes" / "current").symlink_to(version)
+    file = "\n".join(
+        [
+            "TY  - CPAPER",
+            "TI  - A TITLE THE INDEX DOES NOT HOLD",
+            f"T2  - ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS (NEURIPS {p.year})",
+            f"PY  - {p.year}",
+            f"DO  - {doi.lower()}",
+            "AN  - WOS:000000000000001",
+            "ER  - ",
+            "",
+        ]
+    )
+    with app_of(tmp_path) as client:
+        body = compared(client, file)
+    assert [(r["id"], r["matched_by"]) for r in body["kept"]] == [(p.id, "doi")]
+    assert body["not_compared_total"] == 0

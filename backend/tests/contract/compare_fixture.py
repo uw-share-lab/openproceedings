@@ -1,6 +1,7 @@
 """The `POST /compare` answers the web app's comparison panel is tested against (TASK-177): this API's own
 response for a file with every list in it (`test_compare.the_file`, over that module's corpus), its `/meta`
-limits, and one refusal, so the panel is tested against the contract as served, never a hand-written body.
+limits, one refusal, and the same file against the query with a year limit of its own (`limited`: a
+`query_limit` row, TASK-185), so the panel is tested against the contract as served, never a hand-written body.
 
 `test_frontend_compare_fixture.py` fails while `frontend/src/components/compare/compare-fixture.json` differs
 from what the API answers now. Regenerate with:
@@ -21,7 +22,7 @@ from fastapi.testclient import TestClient
 from openproceedings.api import compare as route
 
 from tests.contract.conftest import attributed, build, make_app
-from tests.contract.test_compare import COMPARE, DATE, NO_COOLDOWN, RIS, TWIN, Q, the_file
+from tests.contract.test_compare import BY_ID, COMPARE, DATE, KEPT, NO_COOLDOWN, RIS, TWIN, Q, the_file
 from tests.fixtures.corpus.synthetic_5k import records
 
 REPO = Path(__file__).resolve().parents[3]
@@ -41,6 +42,10 @@ def answers() -> dict[str, Any]:
             refused = client.post(COMPARE, params={"q": Q}, content=b"\xff\xfe", headers=RIS)
             assert refused.status_code == 422, refused.text
             search = client.get("/api/v1/search", params={"q": Q, "limit": 0})
+            # the same file against the query with a limit of its own, which leaves a kept paper out (TASK-185)
+            limited_q = f"{Q} AND NOT year:{BY_ID[KEPT[0]].year}"
+            limited = client.post(COMPARE, params={"q": limited_q}, content=file.encode("utf-8"), headers=RIS)
+            assert limited.status_code == 200, limited.text
             return {
                 "q": Q,
                 "mode": "native",
@@ -49,6 +54,7 @@ def answers() -> dict[str, Any]:
                 "search_total": search.json()["total"],
                 "response": r.json(),
                 "invalid": refused.json(),
+                "limited": {"q": limited_q, "response": limited.json()},
             }
 
 
