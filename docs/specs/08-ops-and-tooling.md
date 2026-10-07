@@ -64,8 +64,10 @@ kept an unterminated construct as text and 3.12.12+ drops it, which would cut `f
 in a fragment: `_feed_all` hands such a tail to the parser as text when it holds no `>` (linear on either release).
 And 3.12.12+ reads `title`, `textarea`, `xmp`, `iframe`, `noembed`, `noframes` and `plaintext` bodies as raw text,
 so one unclosed `<title>` would swallow a listing's later rows: `_RawTextParser` keeps raw text to `script` and
-`style`. The rest is left to the parser, which 3.12.12+ reads differently: an unterminated construct whose tail
-holds a `>` (a comment, a `<![CDATA[`, a quoted attribute value: `a <b x='y > c` gives `a`), the empty comment
+`style`. Since TASK-209 a `<` that doesn't start a real tag never reaches the parser as one (`escape_bare_lt`,
+spec 01 §Pipeline step 2), which also takes an unterminated quoted value (`a <b x='y > c`) out of the parser's
+hands: it stays text on every release. The rest is left to the parser, which 3.12.12+ reads differently: an unterminated construct whose tail
+holds a `>` (a comment, a `<![CDATA[`), the empty comment
 `<!-->` and `--!>`, `</script x>` as an end tag, an end tag with a quoted `>` in it, and some malformed attributes
 (`href==x` keeps the second `=` in the value). In the track paths such a change can only drop a listing entry (an
 unparsed link is skipped and counted, a lost section fails its count check), never reclassify one. The evidence

@@ -275,6 +275,13 @@ warnings, the save's index check), the design doc says so; its open questions li
    and `/parse` only (no client arithmetic beyond reading them). Highlights and the abstract excerpt:
    `src/lib/excerpt.ts`. `/paper/[id]`: `src/components/paper/paper-view.tsx`.
 
+   *As built (TASK-210).* An abstract the API sends with an `abstract_note` (ICML 1997 and 1998, read from the
+   conference's submission pages, TASK-207) says so in the API's words, "Submission-time abstract: as the authors submitted it, which may differ from the published paper's."
+   (copy RH-19, PA-11): in the result, a line right under its "Abstract: ICML conference site …" attribution;
+   on the paper page, right under the abstract text. Not shown for a withheld or missing abstract. The text is the
+   API's, never the frontend's own, so the page and every export say the same sentence (`AbstractNote` in
+   `src/components/search/hit-item.tsx`).
+
    *As built (TASK-162, decision-029).* A record with twins (the API's `twins`: the same paper kept as two
    records, an ICLR 2017 workshop copy and its conference submission) says "See also (the same paper's other
    record): `<id>`" ("other records" for two) in the result, after the abstract, and on the paper page, after its
@@ -530,8 +537,10 @@ warnings, the save's index check), the design doc says so; its open questions li
   fixed `ubuntu-24.04` runner label (whose hosted image revision can still change). What an instance's
   configuration decides is left out of the baselines (`e2e/visual.css`): the footer's contact, and the
   "Compare with your records" button, offered only where comparisons are on. The Add `$` notice, the builder
-  with its group counts and an answered comparison are element baselines of their own
-  (`word-forms-*`, `group-counts-*`, `comparison-*`; TASK-182). New baselines are written by `npm run
+  with its group counts, an answered comparison and a result with a submission-time abstract's note are element
+  baselines of their own (`word-forms-*`, `group-counts-*`, `comparison-*`, TASK-182; `submission-note-*`,
+  TASK-210: the fixture server gives one paper of `trust venue:ICML`, off the default `trust` page, such an
+  abstract, and axe samples its result and its paper page). New baselines are written by `npm run
   e2e:update --workspace frontend`, on the platform they are for: the Linux ones on an amd64 `ubuntu-24.04`
   host or runner, never on an arm64 Mac. No workflow writes them: without such a host, take them from CI's
   own run. A test whose baseline is missing fails there and leaves its screenshot as

@@ -54,6 +54,12 @@ async function compare(page: Page): Promise<void> {
 /** A record's "See also" line (copy RH-18, PA-10): the fixture's two twins draw one each. */
 const seeAlso = (page: Page) => page.locator("p").filter({ hasText: /^See also \(the same paper/ });
 
+/** A submission-time abstract's note (copy RH-19, PA-11; TASK-210): the fixture gives one paper of the
+ * `trust venue:ICML` results page such an abstract (fixture_server.py `SUBMITTED_QUERY`). */
+const SUBMITTED_QUERY = "trust venue:ICML";
+const submissionNote = (page: Page) =>
+  page.locator("p").filter({ hasText: /^Submission-time abstract: as the authors submitted it/ });
+
 const states: State[] = [
   {
     name: "home",
@@ -69,6 +75,30 @@ const states: State[] = [
       await search(page);
       // the fixture makes the first two `trust` results twins (fixture_server.py, TASK-162)
       await expect(seeAlso(page).first()).toBeVisible();
+    },
+  },
+  {
+    name: "submission-time abstract result",
+    open: async (page) => {
+      await search(page, SUBMITTED_QUERY);
+      await expect(submissionNote(page)).toHaveCount(1);
+      await expect(submissionNote(page)).toBeVisible();
+    },
+  },
+  {
+    name: "submission-time abstract paper",
+    open: async (page) => {
+      await search(page, SUBMITTED_QUERY);
+      await page
+        .locator("article")
+        .filter({ has: submissionNote(page) })
+        .getByRole("heading")
+        .getByRole("link")
+        .click();
+      await expect(page).toHaveURL(/\/paper\//);
+      await expect(
+        page.getByRole("region", { name: "Abstract" }).locator(submissionNote(page)),
+      ).toBeVisible();
     },
   },
   {

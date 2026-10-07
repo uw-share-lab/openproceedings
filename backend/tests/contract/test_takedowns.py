@@ -539,7 +539,8 @@ def test_the_check_catches_a_hit_that_keeps_its_source_or_loses_its_marker(
 
     def leaky(found: Any, source: Any, *, withheld: bool, twins: tuple[str, ...]) -> Any:
         hit = real(found, source, withheld=withheld, twins=twins)
-        update = {"abstract_source": source} if leak == "abstract_source" else {"abstract_withheld": False}
+        leaked = search_route.abstract_source(source)  # `_hit` takes the attribution (TASK-210)
+        update = {"abstract_source": leaked} if leak == "abstract_source" else {"abstract_withheld": False}
         return hit.model_copy(update=update) if withheld else hit
 
     monkeypatch.setattr(search_route, "_hit", leaky)

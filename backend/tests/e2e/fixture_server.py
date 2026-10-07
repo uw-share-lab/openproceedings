@@ -2,7 +2,10 @@
 and each abstract's source claim (`attributed`, TASK-134), so the results list's attribution is exercised. The
 first two results of the default `trust` search are made twins (a `twin` claim each, decision-029; TASK-162),
 so the "See also" line is drawn on the first results page and the first result's paper page: a claim is
-provenance only, so the ranking that picks them is the final index's. Comparisons are on (`POST /compare`,
+provenance only, so the ranking that picks them is the final index's. One ICML paper of the `trust venue:ICML`
+results page, off the default `trust` page (so that baseline is unchanged), takes its abstract from an ICML
+submission page (an `icml_site` claim whose evidence says it is as submitted, as TASK-207's are), so its
+result and paper page draw the submission-time note (TASK-210). Comparisons are on (`POST /compare`,
 TASK-177), as on a local instance, so the search page's "Compare with your records" panel is exercised.
 
 The ports are 8000 (API) and 3000 (web) unless `OP_E2E_API_PORT` / `OP_E2E_WEB_PORT` say otherwise
@@ -30,6 +33,7 @@ from pathlib import Path
 from openproceedings.api import ApiConfig, RateLimit
 from openproceedings.api.server import serve, uvicorn_config
 from openproceedings.engine.tantivy_engine import TantivyEngine
+from openproceedings.ingest.dedup import AS_SUBMITTED
 from openproceedings.ingest.record import Claim, PaperRecord
 from openproceedings.query.parser import parse
 from openproceedings.search import run
@@ -40,21 +44,39 @@ from tests.fixtures.corpus.synthetic_5k import records
 
 BUILT = datetime(2026, 9, 26, tzinfo=UTC)  # the twin claims' fetch time (the fixture's build time)
 TWINNED_QUERY = "trust"  # frontend/e2e/accessibility.spec.ts searches it and opens its first result
+SUBMITTED_QUERY = "trust venue:ICML"  # accessibility.spec.ts finds the submission-time note there
+PAGE = 50  # the web app's results page
+# the ICML-98 submission page a TASK-207 claim names (`icml_sites.toml`), as the claim's url and evidence give it
+SUBMISSION_PAGE = "http://www.cs.wisc.edu:80/icml98/papers/paper2.html"
+SUBMISSION_CAPTURE = f"https://web.archive.org/web/19991009084141id_/{SUBMISSION_PAGE}"
 
 
-def _twinned(data: Path) -> dict[str, str]:
-    """The first two hits of the default `TWINNED_QUERY` search, each → the other, from a scratch build."""
+def _chosen(data: Path) -> tuple[dict[str, str], str]:
+    """From a scratch build: the first two hits of the default `TWINNED_QUERY` search, each → the other; and the
+    first hit of `SUBMITTED_QUERY`'s first page that the default search's first page doesn't show."""
     version = build(
         list(records()), data / "scratch-snapshots", "fixture", data / "scratch-indexes", attributed
     )
     engine = TantivyEngine(data / "scratch-indexes" / version)
-    first, second = (h.id for h in run(engine, parse(TWINNED_QUERY), limit=2).hits)
-    return {first: second, second: first}
+    shown = [h.id for h in run(engine, parse(TWINNED_QUERY), limit=PAGE).hits]
+    first, second = shown[:2]
+    # any year: the synthetic corpus pairs this paper's own year with a 1998 capture's attribution, a fixture
+    # artifact (the real notes are on ICML 1997 and 1998 only)
+    submitted = next(h.id for h in run(engine, parse(SUBMITTED_QUERY), limit=PAGE).hits if h.id not in shown)
+    return {first: second, second: first}, submitted
 
 
-def _with_twins(twins: dict[str, str]) -> Callable[[Rec], PaperRecord]:
+def _with_claims(twins: dict[str, str], submitted: str) -> Callable[[Rec], PaperRecord]:
     def paper(r: Rec) -> PaperRecord:
         p = attributed(r)
+        if p.id == submitted:  # precedence ranks `pmlr` over `icml_site` over `ris`: so it replaces `pmlr`'s
+            kept = tuple(c for c in p.provenance if not (c.field == "abstract" and c.source == "pmlr"))
+            claim = Claim(
+                field="abstract", value=p.abstract, source="icml_site", url=SUBMISSION_CAPTURE, fetched_at=BUILT,
+                evidence=f"official ICML 1998 page {SUBMISSION_PAGE}, Internet Archive capture "
+                f"{SUBMISSION_CAPTURE}: {AS_SUBMITTED}; the page's contact details are not kept",
+            )  # fmt: skip
+            return p.model_copy(update={"provenance": (*kept, claim)})
         if p.id not in twins:
             return p
         claim = Claim(field="twin", value=(twins[p.id],), source="openreview_v1", fetched_at=BUILT)
@@ -66,8 +88,10 @@ def _with_twins(twins: dict[str, str]) -> Callable[[Rec], PaperRecord]:
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="openproceedings-e2e-") as raw:
         data = Path(raw)
-        twins = _twinned(data)
-        version = build(list(records()), data / "snapshots", "fixture", data / "indexes", _with_twins(twins))
+        twins, submitted = _chosen(data)
+        version = build(
+            list(records()), data / "snapshots", "fixture", data / "indexes", _with_claims(twins, submitted)
+        )
         (data / "indexes" / "current").symlink_to(version)
         config = ApiConfig(
             data_dir=data,

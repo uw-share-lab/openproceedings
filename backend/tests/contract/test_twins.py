@@ -152,7 +152,7 @@ def _twins_in(fmt: str, text: str) -> dict[str, list[str]]:
         }
     if fmt == "csv":
         rows = csv.DictReader(io.StringIO(text.removeprefix("﻿")))
-        assert rows.fieldnames is not None and rows.fieldnames[-1] == "twins"
+        assert rows.fieldnames is not None and rows.fieldnames[-2] == "twins"
         return {row["id"]: row["twins"].split("; ") if row["twins"] else [] for row in rows}
     objs = [json.loads(line) for line in text.splitlines()]
     return {o["id"]: o.get("twins", []) for o in objs}

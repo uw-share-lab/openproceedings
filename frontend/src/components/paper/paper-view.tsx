@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * `/paper/[id]` (spec 05 §Pages; design P1–P5; copy PA-1–10): the full record, its twins as links (PA-10,
- * decision-029), with the query in the link
+ * `/paper/[id]` (spec 05 §Pages; design P1–P5; copy PA-1–11): the full record, its twins as links (PA-10,
+ * decision-029), a submission-time abstract's note under it (PA-11, TASK-210), with the query in the link
  * (`?q=&mode=`) drawn as `GET /papers/{id}?q=&mode=` returns it: `matched` and `highlights`, the API's spans
  * only (never re-matched). Without `q` (a direct link) the record alone. A `q` the API refuses (422, 429, 503
  * `API_BUSY`) is dropped: the paper is fetched without it and a one-line notice says why. 404 and 422
@@ -21,7 +21,7 @@ import { CopyButton } from "../copy-button";
 import { Highlighted } from "../highlighted";
 import { PaperBadges, statusWords } from "../paper-badges";
 import { PaperLinks } from "../paper-links";
-import { ABSTRACT_WITHHELD, TwinLinks, WITHHELD_TERMS } from "../search/hit-item";
+import { ABSTRACT_WITHHELD, AbstractNote, TwinLinks, WITHHELD_TERMS } from "../search/hit-item";
 import { FailureBlock } from "../search/search-states";
 
 export type PaperResponse = MethodResponse<Api, "get", "/api/v1/papers/{id}">;
@@ -240,9 +240,12 @@ function Paper({
         ) : paper.abstract === null ? (
           <p className="text-sm text-muted-foreground">No abstract in the index</p>
         ) : (
-          <p className="text-sm break-words">
-            <Highlighted text={paper.abstract} spans={abstract} />
-          </p>
+          <>
+            <p className="text-sm break-words">
+              <Highlighted text={paper.abstract} spans={abstract} />
+            </p>
+            <AbstractNote note={data.abstract_note} />
+          </>
         )}
       </section>
       <section aria-labelledby="links-h" className="space-y-1">

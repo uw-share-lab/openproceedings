@@ -55,6 +55,10 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   field rather than a sentence in `note`, since changing `note` is breaking and styles typeset it. A record
   a takedown withholds (TASK-136, decision-022: on the takedown list, or withheld by the exported index's
   snapshot) gets the same field with `export.TAKEDOWN`: `abstract_withheld = {Abstract withheld: removed from this site at a rights holder's request, so no abstract is exported (decision-022).}`.
+- `abstract_note = {Submission-time abstract: as the authors submitted it, which may differ from the published paper's.}` right after `abstract_source`, only for a submission-time abstract (TASK-210: an
+  ICML 1997 or 1998 abstract read from a submission page, TASK-207; `ingest/dedup.py::SUBMISSION_NOTE`, the API's
+  `abstract_note`). A field of its own for the reason `abstract_source` is: `note` keeps exactly the provenance
+  line (decision-021). Every other entry is byte for byte what it was.
 - `author`: `Last, First` joined by ` and `. Brace a name that contains the word `and` or a comma, or
   that is an organisation (`{OpenAI Team}`).
 

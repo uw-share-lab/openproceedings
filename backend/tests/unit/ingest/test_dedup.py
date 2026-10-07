@@ -12,9 +12,11 @@ from hypothesis import example, given
 from hypothesis import strategies as st
 from openproceedings.ingest import urls
 from openproceedings.ingest.dedup import (
+    AS_SUBMITTED,
     CONFLICT_FIELDS,
     MIN_ABSTRACT_TOKENS,
     PRECEDENCE,
+    SUBMISSION_NOTE,
     Attribution,
     Conflict,
     Merge,
@@ -1152,6 +1154,56 @@ def test_when_the_evidence_and_the_proceedings_link_name_different_sites_the_evi
     assert both == Attribution("ris", "neurips_proceedings", None)
     agree = attribution("T", [_via(NIPS_CUT)], forum=None, proceedings=NIPS_PAGE, native=NATIVE)
     assert agree == Attribution("ris", "neurips_proceedings", NIPS_PAGE)  # same site: the record's link
+
+
+# --- a submission-time abstract (TASK-210) ----------------------------------------------------------------------
+CAPTURE_98 = (
+    "https://web.archive.org/web/19991009084141id_/http://www.cs.wisc.edu:80/icml98/papers/paper2.html"
+)
+SUBMITTED_EVIDENCE = (
+    "official ICML 1998 page http://www.cs.wisc.edu:80/icml98/papers/paper2.html, Internet Archive capture "
+    f"{CAPTURE_98}: {AS_SUBMITTED}; the page's contact details are not kept"
+)
+
+
+def test_an_icml_submission_pages_abstract_says_it_is_as_submitted() -> None:
+    """The claim's evidence (as `icml_sites._evidence` writes it for 1997 and 1998) is read when the snapshot is
+    loaded: the attribution says so, and its note is the one sentence the API and every export carry."""
+    got = attribution("T", [_abstract("icml_site", "T", CAPTURE_98, SUBMITTED_EVIDENCE)], forum=None,
+                      proceedings=None, native="dblp-X98")  # fmt: skip
+    assert got == Attribution("icml_site", "icml_site", CAPTURE_98, as_submitted=True)
+    assert got.note == SUBMISSION_NOTE
+    assert SUBMISSION_NOTE.startswith("Submission-time abstract: ") and "published paper's" in SUBMISSION_NOTE
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        # another year's official page (2001-2007): as published, no note
+        _abstract("icml_site", "T", CAPTURE_98, "official ICML 2003 page http://example.org/a.html"),
+        _abstract("icml_site", "T", CAPTURE_98),  # no evidence at all
+        # the words in another source's evidence don't make its abstract a submission's: only `icml_site` says so
+        _abstract("pmlr", "T", PMLR_PAGE, SUBMITTED_EVIDENCE),
+        _abstract("ris", "T", evidence=f"scholarmend:proceedings_page {PMLR_PAGE} {AS_SUBMITTED}"),
+    ],
+)
+def test_any_other_abstract_has_no_note(claim: Claim) -> None:
+    got = attribution("T", [claim], forum=None, proceedings=PMLR_PAGE, native="pmlr-v162-a22a")
+    assert got is not None and not got.as_submitted and got.note is None
+
+
+def test_the_note_follows_the_claim_precedence_took_the_abstract_from() -> None:
+    """A submission page's claim beside a higher-ranked one with the same text: the abstract is credited to the
+    higher one, so no note; with different text, the record's abstract decides which claim is credited."""
+    submitted = _abstract("icml_site", "T", CAPTURE_98, SUBMITTED_EVIDENCE)
+    pmlr = _abstract("pmlr", "T", PMLR_PAGE)
+    both = attribution("T", [submitted, pmlr], forum=None, proceedings=PMLR_PAGE, native="pmlr-v162-a22a")
+    assert both == Attribution("pmlr", "pmlr", PMLR_PAGE) and both.note is None
+    other = _abstract("pmlr", "Other text.", PMLR_PAGE)
+    credited = attribution(
+        "T", [submitted, other], forum=None, proceedings=PMLR_PAGE, native="pmlr-v162-a22a"
+    )
+    assert credited is not None and credited.note == SUBMISSION_NOTE
 
 
 # --- imported copies (TASK-179) -------------------------------------------------------------------------------

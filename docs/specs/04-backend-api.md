@@ -136,7 +136,8 @@ reviews without the UI.
               "year": 2025, "track": "main", "status": "accepted", "presentation": "poster", "score": 12.3,
               "highlights": { "title": [[0,5]], "abstract": [[102,114]] }, "urls": {...},
               "abstract_source": { "source": "ris", "origin": "pmlr",
-                                   "url": "https://proceedings.mlr.press/v202/…html" } } ]
+                                   "url": "https://proceedings.mlr.press/v202/…html" },
+              "abstract_withheld": false, "twins": [], "abstract_note": null } ]
 }
 ```
 
@@ -181,6 +182,16 @@ The object is null when `abstract` is null or no claim holds the abstract's text
 record's attribution once, in its load pass over the served snapshot (`ingest/dedup.py::attribution`), so the
 route does a dict lookup per hit: no file I/O, and nothing about matching or the index changes (cost: spec 03
 §Performance budgets).
+
+`abstract_note` (TASK-210, additive) is what a reader should know about the abstract beside its source, or null.
+Today one value exists: for an abstract read from an official ICML submission page (ICML 1997 and 1998, TASK-207:
+an `icml_site` claim whose evidence says it is "a submission-time abstract, as the authors submitted it (not necessarily the published paper's)", `ingest/dedup.py::AS_SUBMITTED`, which
+`icml_sites._evidence` writes), "Submission-time abstract: as the authors submitted it, which may differ from the published paper's."
+(`ingest/dedup.py::SUBMISSION_NOTE`, the one wording: the exports and the web app say exactly this). It is the
+attribution's `note` (`Attribution.note`), read from the claim precedence took the abstract from when the
+snapshot is loaded, never stored in the record or the index: a record whose abstract a higher-ranked claim
+(PMLR, OpenReview, a proceedings site) also holds is credited to that claim and has no note. Null when the
+abstract is null or withheld (a takedown). `GET /papers/{id}` carries the same `abstract_note` at its top level.
 
 `excluded` always has this shape: `total` (= the `identification_ast` count − `total`, 03 §Exclusion
 accounting) plus a `track` and a `status` map whose buckets sum to it. Each map always carries an `unknown`
@@ -372,7 +383,8 @@ route execution.
   in its proceedings).` (`unknown` reads "not known to be in its proceedings"; `desk_rejected` reads "desk
   rejected"), so the Notes a screener sees say it plainly; `TY` and `T2` are unchanged. A record whose abstract
   has a source then has `N1  - Abstract source: <site> <url>` before the provenance line (**Abstract source
-  in every format**, below; TASK-138). Checked against
+  in every format**, below; TASK-138), and a submission-time abstract one more, the note, right after it
+  (**Submission-time abstract**, below; TASK-210). Checked against
   the reference RIS parser, `scholarmend.parse.parse_ris` (the pinned `scholarmend` PyPI package), plus one
   fixture imported into Covidence by hand (`docs/results/2026-09-27-covidence-check.md`, done 2026-09-27).
 - **Status in every format** (task-004 review). The venue string names the conference a paper was
@@ -467,6 +479,22 @@ route execution.
   BibTeX and JSONL (the JSONL key is left out, not null); CSV, whose columns are fixed, gains the one empty
   cell. An export whose snapshot can't be verified (decision-021) names no twins. Covidence shows screeners no `N1` (`docs/results/2026-09-27-covidence-check.md`), so in a Covidence import the twins sit side by
   side with nothing visible linking them: find them in the CSV/JSONL `twins` before import, and count any the review removes in its own duplicates-removed box.
+  **Submission-time abstract** (TASK-210): an abstract whose `/search` hit has an `abstract_note` (above: ICML
+  1997 and 1998, read from the conference's submission pages, TASK-207) says so in every format, in the same
+  sentence, `Submission-time abstract: as the authors submitted it, which may differ from the published paper's.`
+  (`SUBMISSION_NOTE`, from the record's `Attribution`, as `abstract_source` is):
+
+  | Format | Carries it as |
+  |---|---|
+  | RIS | one more `N1`, right after `Abstract source:` (so the provenance line stays the last `N1`) |
+  | BibTeX | a field `abstract_note`, right after `abstract_source`; `note` stays the provenance line (decision-021) |
+  | CSV | a column `abstract_note`, appended last (after `twins`), empty for every other record |
+  | JSONL | a key `abstract_note`, only on such a record (as `twins`) |
+
+  Additive under decision-021: every other record exports byte for byte as before in RIS, BibTeX and JSONL; CSV
+  gains the one empty cell. A withheld abstract (a takedown, or an export whose snapshot can't be verified) has
+  no note, since none of it goes out. Covidence shows screeners no `N1`, so a Covidence review that screens
+  these years should read the CSV's `abstract_note` (or the results list, which shows it) before import.
 - **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
   translator (`RIS.js`, 2026-01-05) imports `CPAPER` as `conferencePaper` and puts `T2` in its
   `conferenceName`; a `JOUR` would become a `journalArticle` with the conference in `publicationTitle`.
@@ -522,7 +550,8 @@ route execution.
   pinned by a search record; JSONL has the same five fields, null when not pinned), then the abstract-source
   columns `abstract_source`, `abstract_origin`, `abstract_url` and `abstract_withheld` (TASK-138, above;
   JSONL: an `abstract_source` object and `abstract_withheld`), then `abstract_withheld_reason` (TASK-136;
-  JSONL the same key), then `twins` (TASK-162; JSONL a list, only on a record with a twin), UTF-8 with a BOM
+  JSONL the same key), then `twins` (TASK-162; JSONL a list, only on a record with a twin), then
+  `abstract_note` (TASK-210; JSONL the same key, only on a submission-time abstract), UTF-8 with a BOM
   (so Excel opens it correctly).
 - **BibTeX:** `@inproceedings` for an `accepted` paper, with `booktitle` = the venue string. Any other status
   (`rejected`, `withdrawn`, `desk_rejected`, `unknown`) is `@unpublished`, BibTeX's type for a paper with an
@@ -546,7 +575,8 @@ route execution.
   the `Submitted to …` sentence on an `@unpublished` entry).
   Every entry carries `openproceedings_id = {<id>}`, so a round-trip recovers the id of every record,
   proceedings-only (PMLR, NeurIPS) ones included, and an entry with an attributed abstract carries
-  `abstract_source = {<site> <url>}` after `abstract` (TASK-138, above). Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
+  `abstract_source = {<site> <url>}` after `abstract` (TASK-138, above), then, for a submission-time abstract,
+  `abstract_note = {<the note>}` (TASK-210, above). Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
 - As built (task-030, `export.py`, used by `op export` and, byte for byte, by `GET /export` since task-036):
   - **RIS:** `TY  - CPAPER`, with `UR` forum, then pdf, then proceedings. Each record ends `ER  - `. Line breaks
     inside a value become single spaces and control characters are dropped, since RIS is line-based. URLs
@@ -555,7 +585,8 @@ route execution.
     provenance columns `index_version`, `canonical_hash`, `exported_at` (the UTC date), `record_id` and
   `searched_at` (empty unless pinned by a record), then `abstract_source`, `abstract_origin` and
   `abstract_url` (empty when the abstract names no source), then `abstract_withheld` (`true`/`false`), then
-  `abstract_withheld_reason` (`takedown`, `source_unavailable` or empty; TASK-136), then `twins` (TASK-162). Two fields of
+  `abstract_withheld_reason` (`takedown`, `source_unavailable` or empty; TASK-136), then `twins` (TASK-162), then
+  `abstract_note` (TASK-210). Two fields of
     spec 01 are left out: `provenance` (per-field claims, a nested list) and `content_hash`. Both stay in the
     snapshot that `index_version` pins. Lists are joined with "; " (ambiguous if a value holds one; JSONL
     keeps lists). A text cell starting, after leading spaces, with `=`, `+`, `-` or `@` (full-width forms
@@ -571,7 +602,7 @@ route execution.
     an odd backslash run before it loses one backslash). A value never ends on a backslash. An
     author name holding a standalone `and`, or `others`, is braced, so it isn't split or read as et al.
   - **JSONL:** one object per record, with `index_version`, `canonical_hash`, `exported_at`, `record_id` and
-    `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null), `abstract_withheld` and `abstract_withheld_reason`, and `twins` on a record with a twin: the lossless
+    `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null), `abstract_withheld` and `abstract_withheld_reason`, `twins` on a record with a twin, and `abstract_note` on a submission-time abstract: the lossless
     format (CSV's formula guard adds a `'` to some cells). U+2028, U+2029 and U+0085 are escaped, so a record
     stays one line for every reader.
 

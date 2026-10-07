@@ -53,9 +53,14 @@ function answer(over: Partial<Paper> = {}): Paper {
     highlights: null,
     abstract_withheld: false,
     twins: [],
+    abstract_note: null,
     ...over,
   };
 }
+
+/** The API's `abstract_note` for a submission-time abstract (TASK-210; `ingest/dedup.py::SUBMISSION_NOTE`). */
+const NOTE =
+  "Submission-time abstract: as the authors submitted it, which may differ from the published paper's.";
 
 const papers = (calls: Call[]) => calls.filter((c) => c.path.startsWith("/api/v1/papers/"));
 
@@ -158,6 +163,40 @@ describe("a withheld abstract (TASK-136, decision-022, PA-8)", () => {
     );
     await screen.findByRole("heading", { level: 1 });
     expect(document.body.textContent).not.toContain("removed abstract");
+  });
+});
+
+describe("a submission-time abstract (TASK-210, PA-11)", () => {
+  it("says so under the abstract, in the API's words", async () => {
+    draw(
+      null,
+      api(() => json(answer({ abstract_note: NOTE }))),
+    );
+    const heading = await screen.findByRole("heading", { level: 2, name: "Abstract" });
+    const section = heading.closest("section");
+    expect(section).not.toBeNull();
+    const note = within(section as HTMLElement).getByText(NOTE);
+    expect(note.previousElementSibling?.textContent).toBe(PAPER.abstract); // right under the text
+  });
+
+  it("says nothing for any other abstract", async () => {
+    draw(
+      null,
+      api(() => json(answer())),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(document.body.textContent).not.toContain("Submission-time");
+  });
+
+  it("says nothing when the abstract is withheld, whatever a client was sent", async () => {
+    draw(
+      null,
+      api(() =>
+        json(answer({ paper: { ...PAPER, abstract: null }, abstract_withheld: true, abstract_note: NOTE })),
+      ),
+    );
+    await screen.findByText(ABSTRACT_WITHHELD);
+    expect(screen.queryByText(NOTE)).toBeNull();
   });
 });
 

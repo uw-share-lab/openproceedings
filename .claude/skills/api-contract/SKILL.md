@@ -31,7 +31,9 @@ each concept group's count alone, the query with every other group removed, and 
 has `id, title, abstract, authors, venue, year, track, status, presentation, score, highlights{field:
 [[start,end]]}, urls, abstract_source{source, origin, url}|null` (the claim the abstract came from, the site that
 published it, for `ris` read from the claim's evidence, and the paper's page there; TASK-134, decision-018;
-computed per record at snapshot load, `RecordFile.attributions`).
+computed per record at snapshot load, `RecordFile.attributions`), and `abstract_note` (TASK-210, additive: the
+attribution's `note`, `ingest/dedup.py::SUBMISSION_NOTE` for an ICML 1997/1998 submission-time abstract, else null;
+`/papers/{id}` carries it at its top level).
 
 **Every response** (not only `/search`) carries `index_version`, `tokenizer_version` and `query_version`
 (spec 04 §Conventions; `.claude/skills/index-versioning/SKILL.md`).
@@ -119,7 +121,11 @@ same way; CSV appends `abstract_withheld_reason` (`takedown`, `source_unavailabl
 `/papers/{id}` also carry `twins` (TASK-162, additive; decision-029): the sorted ids of the record's twins (its
 `twin` claims, `RecordFile.twins`), usually `[]`; every export names them (RIS `N1  - See also: …`, BibTeX
 `openproceedings_twins`, a last CSV column `twins`, a JSONL `twins` list only on a record with one), and a
-record without one exports byte for byte as before except CSV's one more empty cell.
+record without one exports byte for byte as before except CSV's one more empty cell. A submission-time abstract
+(the hit's `abstract_note`, TASK-210) says so in every export in that one sentence (RIS one more `N1` right after
+`Abstract source:`, BibTeX `abstract_note` after `abstract_source`, a last CSV column `abstract_note`, a JSONL
+`abstract_note` key only on such a record); every other record is byte for byte what it was, but CSV's one more
+empty cell.
 
 ## A file as a request body (`POST /compare`, TASK-177)
 The one route that takes a file takes it as the raw body, never a form: no multipart parser runs (Starlette's

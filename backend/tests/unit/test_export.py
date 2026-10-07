@@ -22,7 +22,7 @@ from openproceedings.engine.index import build_index
 from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.export import Provenance, bibtex_key, write
-from openproceedings.ingest.dedup import Attribution, Origin
+from openproceedings.ingest.dedup import SUBMISSION_NOTE, Attribution, Origin
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import parse
@@ -970,7 +970,7 @@ def test_each_format_names_a_pmlr_abstracts_source_byte_for_byte() -> None:
     assert attributed_export("csv", PMLR_RECORD, PMLR) == (
         "﻿" + ",".join(export.CSV_COLUMNS) + "\r\n"
         'op:icml:2023:pmlr-v202-okafor23a,Sample-Efficient Evaluation,We adapt.,"Okafor, Chidi",ICML,2023,'
-        f"main,accepted,,,,,{PMLR_PAGE},,,abcdef123456,{'0' * 64},2026-09-26,,,pmlr,pmlr,{PMLR_PAGE},false,,\r\n"
+        f"main,accepted,,,,,{PMLR_PAGE},,,abcdef123456,{'0' * 64},2026-09-26,,,pmlr,pmlr,{PMLR_PAGE},false,,,\r\n"
     )
     (obj,) = [json.loads(x) for x in attributed_export("jsonl", PMLR_RECORD, PMLR).splitlines()]
     assert obj["abstract_source"] == {"source": "pmlr", "origin": "pmlr", "url": PMLR_PAGE}
@@ -1000,6 +1000,77 @@ def test_an_official_icml_page_capture_is_named_in_every_format() -> None:
     assert obj["abstract_source"] == {"source": "icml_site", "origin": "icml_site", "url": capture}
 
 
+# --- a submission-time abstract says so (TASK-210; spec 04 §Exports) ---------------------------------------------
+CAPTURE_98 = (
+    "https://web.archive.org/web/19991009084141id_/http://www.cs.wisc.edu:80/icml98/papers/paper2.html"
+)
+SUBMITTED = Attribution("icml_site", "icml_site", CAPTURE_98, as_submitted=True)
+RECORD_98: dict[str, object] = {
+    **PMLR_RECORD, "id": "op:icml:1998:dblp-Doe98", "year": 1998,
+    "urls": {"forum": None, "pdf": None, "proceedings": "https://dblp.org/rec/conf/icml/Doe98", "doi": None},
+}  # fmt: skip
+
+
+def test_a_submission_time_abstract_says_so_in_every_format_byte_for_byte() -> None:
+    """The note sits right after the source it qualifies: RIS one more `N1` before the provenance line (still the
+    last), BibTeX `abstract_note` after `abstract_source` (`note` stays the provenance line), CSV the last
+    column, JSONL `abstract_note`. One sentence, `SUBMISSION_NOTE`, everywhere."""
+    from scholarmend.parse import parse_ris
+
+    ris = attributed_export("ris", RECORD_98, SUBMITTED)
+    assert ris.endswith(
+        "ID  - op:icml:1998:dblp-Doe98\nKW  - main\nKW  - status:accepted\n"
+        f"N1  - Abstract source: ICML conference site {CAPTURE_98}\n"
+        f"N1  - {SUBMISSION_NOTE}\n"
+        f"N1  - {PROVENANCE.line()}\nER  - \n\n"
+    )
+    rejected = attributed_export("ris", {**RECORD_98, "status": "rejected"}, SUBMITTED)
+    (parsed,) = parse_ris(rejected, "x.ris")
+    assert parsed.fields["N1"][1:] == [
+        f"Abstract source: ICML conference site {CAPTURE_98}",
+        SUBMISSION_NOTE,
+        PROVENANCE.line(),
+    ]
+    bib = attributed_export("bibtex", RECORD_98, SUBMITTED)
+    assert (
+        f"  abstract_source = {{ICML conference site {CAPTURE_98}}},\n  abstract_note = {{{SUBMISSION_NOTE}}},\n"
+    ) in bib
+    (entry,) = parse_string(bib)
+    assert entry.fields["abstract_note"] == SUBMISSION_NOTE and entry.fields["note"] == PROVENANCE.line()
+    text = attributed_export("csv", RECORD_98, SUBMITTED)
+    assert text.endswith(f',icml_site,icml_site,{CAPTURE_98},false,,,"{SUBMISSION_NOTE}"\r\n')
+    (row,) = csv.DictReader(io.StringIO(text.removeprefix("\ufeff")))
+    assert row["abstract_note"] == SUBMISSION_NOTE
+    (obj,) = [json.loads(x) for x in attributed_export("jsonl", RECORD_98, SUBMITTED).splitlines()]
+    assert obj["abstract_note"] == SUBMISSION_NOTE
+    assert obj["abstract_source"] == {"source": "icml_site", "origin": "icml_site", "url": CAPTURE_98}
+
+
+@pytest.mark.parametrize("fmt", export.FORMATS)
+def test_any_other_abstract_exports_byte_for_byte_as_before_the_note(fmt: str) -> None:
+    """A record whose abstract isn't a submission's (another site, an ICML page as published, none, no claim) is
+    what it was in RIS, BibTeX and JSONL; CSV only gains its last, empty cell."""
+    published = Attribution("icml_site", "icml_site", CAPTURE_98)  # 2001-2007's pages: as published
+    for record, source in ((PMLR_RECORD, PMLR), (RECORD_98, published), (PMLR_RECORD, None)):
+        text = attributed_export(fmt, record, source)
+        assert SUBMISSION_NOTE not in text and "abstract_note" not in text.split("\n", 1)[-1]
+        if fmt == "csv":
+            assert text.endswith(",,\r\n")
+
+
+@pytest.mark.parametrize("fmt", export.FORMATS)
+def test_a_withheld_submission_time_abstract_has_no_note(fmt: str) -> None:
+    """No abstract goes out, so nothing is said of it: a takedown, or an export whose snapshot can't be
+    verified (decision-021)."""
+    rid = str(RECORD_98["id"])
+    takedown = "".join(
+        export.entries(fmt, [RECORD_98], PROVENANCE, sources={rid: SUBMITTED}, withheld=frozenset({rid}))
+    )
+    unattributed = "".join(export.entries(fmt, [RECORD_98], PROVENANCE, sources=None))
+    for text in (takedown, unattributed):
+        assert SUBMISSION_NOTE not in text and "abstract_note" not in text
+
+
 def test_without_a_source_every_format_is_byte_for_byte_what_it_was() -> None:
     """A record whose abstract no claim holds (or with none) gets no line and no field; CSV its three source
     columns empty (`abstract_withheld` false), JSONL `abstract_source: null`."""
@@ -1008,7 +1079,7 @@ def test_without_a_source_every_format_is_byte_for_byte_what_it_was() -> None:
         ris = attributed_export("ris", record, source)
         assert "Abstract source" not in ris and ris.count("N1  - ") == 1
         assert "abstract_source" not in attributed_export("bibtex", record, source)
-        assert attributed_export("csv", record, source).endswith(",2026-09-26,,,,,,false,,\r\n")
+        assert attributed_export("csv", record, source).endswith(",2026-09-26,,,,,,false,,,\r\n")
         (obj,) = [json.loads(x) for x in attributed_export("jsonl", record, source).splitlines()]
         assert obj["abstract_source"] is None
 
@@ -1018,6 +1089,7 @@ def test_the_csv_columns_before_task_138_keep_their_positions() -> None:
         *CSV_COLUMNS_BEFORE, "abstract_source", "abstract_origin", "abstract_url", "abstract_withheld",
         "abstract_withheld_reason",  # TASK-136, appended last (decision-021 rule 1)
         "twins",  # TASK-162, appended after it
+        "abstract_note",  # TASK-210, appended after that
     ) == export.CSV_COLUMNS  # fmt: skip
 
 
@@ -1156,7 +1228,7 @@ def test_without_sources_every_abstract_is_withheld_and_each_record_says_so() ->
     (entry,) = parse_string(withheld("bibtex", PMLR_RECORD))
     assert "abstract" not in entry.fields and "abstract_source" not in entry.fields
     assert entry.fields["abstract_withheld"] == export.WITHHELD and entry.fields["note"] == PROVENANCE.line()
-    assert withheld("csv", PMLR_RECORD).endswith(",2026-09-26,,,,,,true,source_unavailable,\r\n")
+    assert withheld("csv", PMLR_RECORD).endswith(",2026-09-26,,,,,,true,source_unavailable,,\r\n")
     assert ",We adapt.," not in withheld("csv", PMLR_RECORD)
     (obj,) = [json.loads(x) for x in withheld("jsonl", PMLR_RECORD).splitlines()]
     assert obj["abstract"] is None and obj["abstract_source"] is None and obj["abstract_withheld"] is True

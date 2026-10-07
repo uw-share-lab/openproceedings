@@ -88,6 +88,7 @@ const HIT: Hit = {
   },
   abstract_withheld: false,
   twins: [],
+  abstract_note: null,
 };
 
 function body(over: Partial<Body> = {}): Body {
