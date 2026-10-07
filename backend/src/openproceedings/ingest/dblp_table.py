@@ -24,10 +24,14 @@ from importlib.resources import files
 from types import MappingProxyType
 from typing import Any
 
+from openproceedings.ingest.record import DBLP_YEARS
 from openproceedings.ingest.sources.http import PinnedFile
 from openproceedings.vocab import venue_name
 
-FIRST_YEAR, LAST_YEAR = 1988, 2012  # ICML's first conference under its name; PMLR v28 (2013) takes over
+FIRST_YEAR, LAST_YEAR = (
+    DBLP_YEARS[0],
+    DBLP_YEARS[-1],
+)  # ICML's first meeting as a conference; PMLR v28 (2013) on
 _KEY = re.compile(r"conf/icml/[A-Za-z0-9_-]+")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _DOI = re.compile(r"10\.4230/dblp\.xml(?:\.dtd)?\.[0-9]{4}-[0-9]{2}-[0-9]{2}")

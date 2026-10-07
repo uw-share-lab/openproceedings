@@ -16,7 +16,8 @@ from pathlib import Path
 import pytest
 from openproceedings.ingest import dblp_table
 from openproceedings.ingest.dedup import dedup
-from openproceedings.ingest.sources import dblp
+from openproceedings.ingest.record import PaperRecord
+from openproceedings.ingest.sources import dblp, dblp_xml
 from openproceedings.ingest.sources.common import CrawlError
 from openproceedings.ingest.sources.http import CacheMiss
 from openproceedings.ingest.statuses import statuses_indexed
@@ -225,6 +226,45 @@ def test_dblp_records_are_proceedings_only_accepted_and_merge_with_nothing_else(
     assert statuses_indexed({"dblp"}, "ICML", 1990) == ["accepted"]
     result = dedup(records)
     assert [r.id for r in result.records] == [r.id for r in records] and not result.merges
+
+
+def test_a_proceedings_record_with_no_readable_year_must_be_classified(tmp_path: Path) -> None:
+    extract = prepared(tmp_path)
+    no_year = dblp_xml.DblpEntry("proceedings", "conf/icml/odd", "2020-01-01", None, {"title": "x"}, {})
+    with pytest.raises(CrawlError, match="no year") as e:
+        dblp.check_extract(dblp.Extract(extract.doi, extract.sha256, extract.fetched_at,
+                                        (*extract.entries, no_year)), TABLE)  # fmt: skip
+    assert e.value.reason == "unlisted_proceedings"
+
+
+def test_a_stale_extract_is_written_again_from_the_cached_release(tmp_path: Path) -> None:
+    prepared(tmp_path)
+    path = dblp.extract_path(tmp_path, TABLE)
+    stale = json.loads(path.read_text())
+    stale["format"] = "0"
+    path.write_text(json.dumps(stale))
+    with pytest.raises(CrawlError, match="malformed"):
+        dblp.load_extract(tmp_path, TABLE)
+    again = dblp.prepare(tmp_path, None, TABLE)  # offline: the release is on disk, so it is read again
+    assert json.loads(path.read_text())["format"] == dblp.EXTRACT_FORMAT and again.entries
+
+
+def test_a_year_marked_under_another_release_is_refused_on_replay(tmp_path: Path) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    with pytest.raises(CrawlError, match="not the pinned") as e:
+        crawl._replay_dblp(tmp_path, (1990, "10.4230/dblp.xml.2026-09-01"))
+    assert e.value.reason == "release_changed"
+
+
+@pytest.mark.parametrize("year", [2013, 2024])  # PMLR's years; before 1988 the venue name refuses it first
+def test_a_dblp_id_outside_1988_to_2012_is_refused(tmp_path: Path, year: int) -> None:
+    [r] = dblp.mine_year(1990, prepared(tmp_path), table=TABLE).records
+    with pytest.raises(ValueError, match="ICML 1988-2012"):
+        PaperRecord.model_validate(
+            r.model_dump(exclude={"venue_name"}) | {"id": f"op:icml:{year}:dblp-Synthetic90", "year": year},
+            context={"rehash": True},
+        )
 
 
 def test_the_fetch_time_is_the_downloads(tmp_path: Path) -> None:

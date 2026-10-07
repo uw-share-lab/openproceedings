@@ -38,10 +38,9 @@ from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
 from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
-RECORD_SCHEMA_VERSION = (
-    "5"  # 5: the `dblp` and `icml_site` sources and the `dblp-<key>` native id (TASK-205/206,
-)
-# decision-047); 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-029)
+# 5: the `dblp` and `icml_site` sources and the `dblp-<key>` native id (TASK-205/206, decision-047);
+# 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-029)
+RECORD_SCHEMA_VERSION = "5"
 # Sent with a record, never stored: computed from its fields, so a snapshot line never holds it (`record_line`)
 # and the shape above is unchanged (TASK-112). Output only: a dump that is validated again excludes it.
 DERIVED = frozenset({"venue_name"})
@@ -71,6 +70,8 @@ PROCEEDINGS_NATIVE = {
     # ICML 1988-2012 from the pinned dblp release: the dblp key after `conf/icml/` (sources/dblp.py, decision-047)
     "dblp": (re.compile(r"dblp-[A-Za-z0-9_-]+"), "ICML"),
 }
+# the years a `dblp-` id may name: ICML before PMLR (v28, 2013), so dblp and PMLR never hold one venue-year
+DBLP_YEARS = range(1988, 2013)
 
 
 def is_paper_id(text: str) -> bool:
@@ -335,6 +336,10 @@ class PaperRecord(BaseModel):
             if not pattern.fullmatch(native) or venue != self.venue:
                 raise ValueError(
                     f"native id {native!r} is not a valid {venue} proceedings id for {self.venue}"
+                )
+            if native.startswith("dblp-") and self.year not in DBLP_YEARS:
+                raise ValueError(
+                    f"native id {native!r} is not a valid id for {self.year}: dblp ids are ICML 1988-2012"
                 )
             if native.rsplit("-", 1)[-1] in NEURIPS_DB_2021_ROUNDS and self.year != 2021:
                 raise ValueError(

@@ -261,6 +261,10 @@ def test_a_proceedings_hash_links_no_two_years() -> None:
     merges = [(forum, f"op:neurips:2022:{H}"), (survivor, f"op:neurips:2024:{H}")]
     held = [forum, f"op:neurips:2022:{H}", survivor, f"op:neurips:2024:{H}"]
     assert takedowns.same_paper(frozenset({forum}), merges, held) == {forum, f"op:neurips:2022:{H}"}
+    # a dblp record moved to another year is followed by its key, as a PMLR one is (decision-047)
+    assert takedowns.same_paper(
+        frozenset({"op:icml:2009:dblp-SzitaL09"}), (), ["op:icml:2008:dblp-SzitaL09"]
+    ) == {"op:icml:2008:dblp-SzitaL09"}
     iclr = "iclr-0123456789abcdef0123456789abcdef"
     assert (
         takedowns.same_paper(frozenset({f"op:iclr:2024:{iclr}"}), (), [f"op:iclr:2026:{iclr}"]) == frozenset()
@@ -270,7 +274,8 @@ def test_a_proceedings_hash_links_no_two_years() -> None:
 @pytest.mark.parametrize(
     ("rid", "linked"),
     [("op:iclr:2024:Abcd1234", True), ("op:icml:2024:pmlr-v235-smith24a", True), (f"op:neurips:2019:{H}", False),
-     (f"op:neurips:2021:{H}-round1", False), ("op:iclr:2015:iclr-0123456789abcdef0123456789abcdef", False)],
+     (f"op:neurips:2021:{H}-round1", False), ("op:iclr:2015:iclr-0123456789abcdef0123456789abcdef", False),
+     ("op:icml:2009:dblp-SzitaL09", True)],  # a dblp key is unique across dblp (decision-047)
 )  # fmt: skip
 def test_only_globally_unique_native_ids_link(rid: str, linked: bool) -> None:
     assert (takedowns.global_native(rid) is not None) is linked

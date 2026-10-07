@@ -66,9 +66,12 @@ def _start_tag(prefix: str) -> re.Pattern[bytes]:
 
 
 def doctype_system_id(path: Path) -> str:
-    """The DTD the release names in its `<!DOCTYPE dblp SYSTEM "…">` (the file's second line)."""
+    """The DTD the release names in its `<!DOCTYPE dblp SYSTEM "…">` (the file's second line), after checking its
+    first declares ISO-8859-1 (the encoding `_parse` gives each record)."""
     with gzip.open(path, "rb") as fh:
         head = fh.read(4096)
+    if not head.startswith(b'<?xml version="1.0" encoding="ISO-8859-1"?>'):
+        raise DblpFormatError("the release doesn't declare ISO-8859-1, the encoding each record is parsed in")
     m = re.search(rb'<!DOCTYPE dblp SYSTEM "([^"]+)">', head)
     if m is None:
         raise DblpFormatError("the release has no <!DOCTYPE dblp SYSTEM ...> line")

@@ -94,6 +94,12 @@ def test_reads_only_the_stream_across_shared_lines_with_entities_and_markup(tmp_
     assert entries[3].publtype == "withdrawn"
 
 
+def test_the_release_must_declare_the_encoding_records_are_parsed_in(tmp_path: Path) -> None:
+    path = release(tmp_path, head=HEAD.replace("ISO-8859-1", "UTF-8"))
+    with pytest.raises(DblpFormatError, match="ISO-8859-1"):
+        read_stream(path, DTD, DTD_NAME, "conf/icml/")
+
+
 def test_the_release_must_name_the_pinned_dtd(tmp_path: Path) -> None:
     path = release(tmp_path, head=HEAD.replace(DTD_NAME, "dblp-2019-11-22.dtd"))
     assert doctype_system_id(path) == "dblp-2019-11-22.dtd"
@@ -162,10 +168,10 @@ def test_a_download_that_is_not_the_pin_is_refused_and_not_kept(tmp_path: Path) 
     with pytest.raises(FetchError, match="not the pinned") as e:
         fetch_file(PIN, tmp_path / "f.xml.gz", Stream((200, b"y" * 3000)), hosts=HOSTS, clock=FakeClock())
     assert e.value.reason == "pin_mismatch" and not list(tmp_path.iterdir())
-    with pytest.raises(FetchError):  # longer than the pin: cut off, retried, never kept
-        fetch_file(
-            PIN, tmp_path / "f.xml.gz", Stream(*[(200, BYTES + b"z")] * 3), hosts=HOSTS, clock=FakeClock()
-        )
+    longer = Stream(*[(200, BYTES + b"z")] * 3)
+    with pytest.raises(FetchError, match="over the pinned") as e:  # longer than the pin: cut off at once
+        fetch_file(PIN, tmp_path / "f.xml.gz", longer, hosts=HOSTS, clock=FakeClock())
+    assert e.value.reason == "pin_mismatch" and len(longer.sent) == 1  # never fetched again in full
     assert not list(tmp_path.iterdir())
 
 

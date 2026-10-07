@@ -44,6 +44,12 @@ log = logging.getLogger(__name__)
 SOURCE: Source = "icml_site"
 CACHE_DIR = "icml_sites"  # <data>/cache/icml_sites
 ARCHIVE_HOST = "web.archive.org"
+# the official sites a capture may be of (the survey's: icml.cc, IMLS, and each year's own conference host); a
+# capture of anything else (ACM DL, arXiv, Scholar, an author's page) is refused when the table loads
+OFFICIAL_HOSTS = frozenset({
+    "icml.cc", "www.icml.cc", "machinelearning.org", "www.machinelearning.org", "www.ecn.purdue.edu",
+    "www.hpl.hp.com", "www.aicml.cs.ualberta.ca", "oregonstate.edu",
+})  # fmt: skip
 MIN_INTERVAL = (
     3.0  # seconds between requests: the Internet Archive's pace for a polite client, kept for icml.cc too
 )
@@ -93,6 +99,7 @@ class SiteAbstract:
     url: str
     fetched_at: datetime
     evidence: str
+    pdf_codes: int = 0  # `(cid:N)` codes repaired (decision-047)
 
 
 @dataclass
@@ -104,6 +111,9 @@ class SiteYear:
     fetched: list[datetime] = field(default_factory=list)
     unjoined: int = (
         0  # halves (a number with only a title, or only an abstract) the year's pages don't complete
+    )
+    dropped: int = (
+        0  # entries with a title and abstract text that leave no title or no usable abstract (empty)
     )
 
 
@@ -220,7 +230,7 @@ def _row(raw: Mapping[str, Any]) -> SitePage:
         raise ValueError(f"{where}: no parser {page.parser!r}")
     if page.charset not in ("utf-8", "cp1252"):
         raise ValueError(f"{where}: charset utf-8 or cp1252")
-    if type(page.entries) is not int or page.entries <= 0 or not isinstance(page.verified, date):
+    if type(page.entries) is not int or page.entries <= 0 or type(page.verified) is not date:
         raise ValueError(f"{where}: entries must be a positive integer and verified a date")
     host = (urlparse(page.url).hostname or "").lower()
     capture = _CAPTURE.fullmatch(page.url)
@@ -228,6 +238,16 @@ def _row(raw: Mapping[str, Any]) -> SitePage:
         if capture is None or capture.group(2) != page.official:
             raise ValueError(f"{where}: an Internet Archive URL pins one capture of the official URL, exactly "
                              "(/web/<14 digits>id_/<official>)")  # fmt: skip
+        try:
+            taken = datetime.strptime(capture.group(1), "%Y%m%d%H%M%S").date()
+        except ValueError:
+            raise ValueError(f"{where}: the capture timestamp is not a date") from None
+        if taken > page.verified:
+            raise ValueError(f"{where}: a capture taken after the row was verified")
+        if (urlparse(page.official).hostname or "").lower() not in OFFICIAL_HOSTS:
+            raise ValueError(
+                f"{where}: a capture of {page.official}, not an official ICML site (OFFICIAL_HOSTS)"
+            )
     elif page.url != page.official or not page.url.startswith("https://") or host != "icml.cc":
         raise ValueError(f"{where}: a live page is an https icml.cc page fetched at its official URL")
     return page
@@ -283,12 +303,19 @@ def read_year(
         if len(got) != page.entries:
             raise CrawlError(f"ICML {year}: {page.url} gives {len(got)} entries, the table verified "
                              f"{page.entries}; check the page and the parser", reason="site_count_mismatch")  # fmt: skip
+        if page.charset == "cp1252" and _utf8_in_cp1252(fetched.text):
+            raise CrawlError(f"ICML {year}: {page.url} reads as UTF-8 decoded as cp1252; its table row's charset "
+                             "is wrong (fix it, then fetch the page again with --refresh)",
+                             reason="wrong_charset")  # fmt: skip
         out.pages.append(page.url)
         out.fetched.append(fetched.fetched_at)
         for e in got:
             if e.title is not None and e.abstract is not None:
                 complete.append((e.title, e.abstract, page, fetched))
             elif e.title is not None and e.key is not None:
+                if e.key in titles:
+                    raise CrawlError(f"ICML {year}: paper {e.key} is listed twice on {page.url}",
+                                     reason="duplicate_paper")  # fmt: skip
                 titles[e.key] = e.title
             elif e.abstract is not None and e.key is not None:
                 halves.append((e.key, e.abstract, page, fetched))
@@ -297,12 +324,27 @@ def read_year(
     out.unjoined = sum(k not in titles for k, *_ in halves) + sum(k not in joined for k in titles)
     for raw_title, raw_abstract, page, fetched in complete:
         title = title_text(raw_title)[0]
-        abstract, spaced = clean_abstract(raw_abstract)
-        if title and abstract:
-            out.entries.append(
-                SiteAbstract(title, abstract, spaced, page.url, fetched.fetched_at, _evidence(page))
-            )
+        cleaned = clean_abstract(raw_abstract)
+        if title and cleaned.text:
+            out.entries.append(SiteAbstract(title, cleaned.text, cleaned.spaced, page.url, fetched.fetched_at,
+                                            _evidence(page), cleaned.pdf_codes))  # fmt: skip
+        else:
+            out.dropped += 1
+    log.debug("icml_site_year_read", extra={"year": year, "pages": len(out.pages), "entries": len(out.entries),
+                                            "unjoined": out.unjoined, "dropped": out.dropped})  # fmt: skip
     return out
+
+
+def _utf8_in_cp1252(text: str) -> bool:
+    """Whether text decoded as cp1252 was UTF-8 (`â€™` for `’`): its non-ASCII bytes form valid UTF-8."""
+    if text.isascii():
+        return False
+    try:
+        raw = text.encode("cp1252")
+        raw.decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return False
+    return True
 
 
 def plan_year(

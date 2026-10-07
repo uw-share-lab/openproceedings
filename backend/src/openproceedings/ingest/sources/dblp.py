@@ -59,7 +59,12 @@ from openproceedings.ingest.record import (
     title_evidence,
     title_text,
 )
-from openproceedings.ingest.sources.common import CrawlError, ListingReport, record_from_claims
+from openproceedings.ingest.sources.common import (
+    CrawlError,
+    ListingReport,
+    pdf_codes_evidence,
+    record_from_claims,
+)
 from openproceedings.ingest.sources.dblp_xml import DblpEntry, read_stream
 from openproceedings.ingest.sources.http import FileEntry, StreamTransport, fetch_file
 from openproceedings.ingest.sources.icml_sites import SOURCE as SITE_SOURCE
@@ -120,9 +125,13 @@ def prepare(cache: Path, stream: StreamTransport | None, table: Table = TABLE) -
     extract checked against the table; one run at a time (`<cache>/dblp/.lock`)."""
     with storage.exclusive(cache / CACHE_DIR):
         release, dtd = fetch_release(cache, stream, table)
+        extract = None
         if release.cached and extract_path(cache, table).exists():
-            extract = load_extract(cache, table)
-        else:
+            try:
+                extract = load_extract(cache, table)
+            except CrawlError:  # written under another DTD pin or extract format: read the release again
+                log.info("dblp_extract_stale", extra={"doi": table.release.doi})
+        if extract is None:
             extract = write_extract(cache, release, dtd, table)
     check_extract(extract, table)
     return extract
@@ -178,10 +187,11 @@ def check_extract(extract: Extract, table: Table = TABLE) -> None:
     proceedings = {e.key: e for e in extract.entries if e.type == "proceedings"}
     for key, e in sorted(proceedings.items()):
         year = int(e.fields["year"]) if e.fields.get("year", "").isdigit() else None
-        if year is not None and FIRST_YEAR <= year <= LAST_YEAR and table.main_key(key) is None \
-                and key not in table.excluded:  # fmt: skip
-            raise CrawlError(f"dblp proceedings {key} ({year}) is neither a main conference nor excluded in "
-                             "dblp_icml.toml; a person must classify it", reason="unlisted_proceedings")  # fmt: skip
+        in_range = year is None or FIRST_YEAR <= year <= LAST_YEAR  # no readable year: it may be in range
+        if in_range and table.main_key(key) is None and key not in table.excluded:
+            raise CrawlError(f"dblp proceedings {key} ({year or 'no year'}) is neither a main conference nor "
+                             "excluded in dblp_icml.toml; a person must classify it",
+                             reason="unlisted_proceedings")  # fmt: skip
     for row in table.years.values():
         for key in row.proceedings:
             held = proceedings.get(key)
@@ -204,13 +214,15 @@ class DblpReport(ListingReport):
     site_unmatched: int = 0  # page entries whose title key no record of the year has
     site_ambiguous: int = 0  # page entries whose title key two entries, or two records, share
     site_unjoined: int = 0  # 2007's halves: a paper number with a title but no abstract page, or the reverse
+    site_dropped: int = 0  # page entries with no usable title or abstract (an empty abstract page)
 
     def to_manifest(self) -> dict[str, Any]:
         out = super().to_manifest()
         if self.sites:
             out |= {"sites": list(self.sites), "site_entries": self.site_entries,
                     "abstract_attached": self.abstract_attached, "site_unmatched": self.site_unmatched,
-                    "site_ambiguous": self.site_ambiguous, "site_unjoined": self.site_unjoined}  # fmt: skip
+                    "site_ambiguous": self.site_ambiguous, "site_unjoined": self.site_unjoined,
+                    "site_dropped": self.site_dropped}  # fmt: skip
         return dict(sorted(out.items()))
 
 
@@ -285,13 +297,15 @@ def mine_year(
             log.debug("dblp_record_invalid", extra={"year": year, "key": e.key, "error": type(err).__name__})
             continue
         records.append(record)
-        report.count(record, None if record.abstract else "no_abstract", found.spaced if found else 0)
+        report.count(record, None if record.abstract else "no_abstract", found.spaced if found else 0,
+                     found.pdf_codes if found else 0)  # fmt: skip
     report.abstract_attached = sum(r.abstract is not None for r in records)
     log.info("dblp_year_mined", extra={
         "year": year, "listed": report.listed, "stated": report.stated, "records": report.records,
         "abstract_attached": report.abstract_attached, "abstract_missing": report.abstract_missing,
         "site_entries": report.site_entries, "site_unmatched": report.site_unmatched,
-        "site_ambiguous": report.site_ambiguous, "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+        "site_ambiguous": report.site_ambiguous, "site_unjoined": report.site_unjoined,
+        "site_dropped": report.site_dropped, "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     if not report.count_ok:
         log.warning("listing_count_mismatch", extra={"year": year, "listing": report.listing,
                                                      "listed": report.listed, "stated": report.stated})  # fmt: skip
@@ -312,6 +326,7 @@ def _match(
     report.sites = list(site.pages)
     report.site_entries = len(site.entries)
     report.site_unjoined = site.unjoined
+    report.site_dropped = site.dropped
     report.fetched += site.fetched
     papers: dict[str, list[str]] = defaultdict(list)
     for _tail, e, title in kept:
@@ -356,8 +371,9 @@ def _record(year: int, tail: str, e: DblpEntry, extract: Extract, table: Table,
     if found is not None:
         claims.append(Claim(field="abstract", value=found.abstract, source=SITE_SOURCE, url=found.url,
                             fetched_at=found.fetched_at,
-                            evidence=controls_evidence(f"{found.evidence}; its title key is dblp record {e.key}'s",
-                                                       found.spaced)))  # fmt: skip
+                            evidence=pdf_codes_evidence(controls_evidence(
+                                f"{found.evidence}; its title key is dblp record {e.key}'s", found.spaced),
+                                found.pdf_codes)))  # fmt: skip
     return record_from_claims(f"op:icml:{year}:dblp-{tail}", claims)
 
 

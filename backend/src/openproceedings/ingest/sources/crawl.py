@@ -176,13 +176,22 @@ PMLR: Crawls[pmlr.VolumeResult] = Crawls(
     lambda k: f"PMLR v{k[0]}", "op ingest pmlr",
     lambda cache, k: pmlr.mine_volume(k[0], fetcher(cache, pmlr.CACHE_DIR, pmlr.HOSTS, offline=True)),
 )  # fmt: skip
+
+
+def _replay_dblp(cache: Path, key: tuple[Any, ...]) -> dblp.YearResult:
+    """One marked ICML year, from the extract and the ICML pages in the cache. A year marked under another
+    release than the table pins is refused: it was crawled from other bytes (guarantee 4)."""
+    year, release = key
+    if release != DBLP_TABLE.release.doi:
+        raise MinerError(f"ICML {year} was ingested from dblp release {release}, not the pinned "
+                         f"{DBLP_TABLE.release.doi}; re-run op ingest dblp", reason="release_changed")  # fmt: skip
+    site = icml_sites.read_year(year, fetcher(cache, icml_sites.CACHE_DIR, icml_sites.HOSTS, offline=True))
+    return dblp.mine_year(year, dblp.load_extract(cache), site=site)
+
+
 DBLP: Crawls[dblp.YearResult] = Crawls(
-    lambda cache: crawls_dir(cache, dblp.CACHE_DIR), lambda m: (int(m["year"]),),
-    lambda k: f"ICML {k[0]} (dblp)", "op ingest dblp",
-    lambda cache, k: dblp.mine_year(
-        k[0], dblp.load_extract(cache),
-        site=icml_sites.read_year(k[0], fetcher(cache, icml_sites.CACHE_DIR, icml_sites.HOSTS, offline=True)),
-    ),
+    lambda cache: crawls_dir(cache, dblp.CACHE_DIR), lambda m: (int(m["year"]), str(m["release"])),
+    lambda k: f"ICML {k[0]} (dblp)", "op ingest dblp", _replay_dblp,
 )  # fmt: skip
 SOURCES: tuple[Crawls[Any], ...] = (openreview_v2.CRAWLS, openreview_v1.CRAWLS, ICLR, NEURIPS, PMLR, DBLP)
 

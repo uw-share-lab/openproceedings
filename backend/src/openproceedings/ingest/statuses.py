@@ -36,11 +36,9 @@ SOURCE_STATUSES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "iclr_archive": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "neurips_proceedings": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "pmlr": (ACCEPTED_ONLY, ACCEPTED_ONLY),
-    "dblp": (ACCEPTED_ONLY, ACCEPTED_ONLY),  # ICML 1988-2012: published papers only (decision-047)
-    "icml_site": (
-        ACCEPTED_ONLY,
-        ACCEPTED_ONLY,
-    ),  # an official ICML page's abstract of a dblp paper (TASK-206)
+    # ICML 1988-2012: published papers only (decision-047), and an official ICML page's abstract of one (TASK-206)
+    "dblp": (ACCEPTED_ONLY, ACCEPTED_ONLY),
+    "icml_site": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "ris": (EVERY_STATUS, ACCEPTED_ONLY),
 }
 if set(SOURCE_STATUSES) != set(get_args(Source)):  # a new claim source needs a row before it can build

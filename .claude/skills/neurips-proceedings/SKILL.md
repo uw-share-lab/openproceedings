@@ -96,6 +96,12 @@ The alias means one track never counts as two in the manifest. Mapping an unknow
   an abstract); an ellipsis inside a real abstract (`x₁, …, x_n`) is kept (spec 01, record-schema).
 - Missing abstract: `abstract=null` and count it in the manifest (the report splits out
   `abstract_title_mismatch` and `page_missing`).
+- 1987–2003 pages (decision-047): `Abstract Unavailable` is a placeholder, never an abstract
+  (`common.PLACEHOLDERS`; counted missing). PDF-extraction codes are repaired (`common.repair_pdf_codes`):
+  `(cid:173)` (a soft hyphen at a line break) is removed with the whitespace after it, so `princi(cid:173) ples`
+  reads `principles`; any other `(cid:N)` becomes a space. The claim's evidence and the listing's
+  `abstract_pdf_codes` count them; `abstract_short` counts abstracts under five words (extractor fragments such
+  as an author's name), kept as the page gives them.
 
 ## The miner (as built, task-052)
 `backend/src/openproceedings/ingest/sources/neurips.py`, run by `op ingest neurips --year <Y|Y-Y>`

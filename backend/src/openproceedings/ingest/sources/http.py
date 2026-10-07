@@ -758,8 +758,11 @@ def _stream_to(tmp: Path, chunks: Iterable[bytes], limit: int) -> tuple[str, int
     with tmp.open("wb") as fh:
         for block in chunks:
             size += len(block)
-            if size > limit:
-                raise TransportError(_TOO_LARGE)
+            if size > limit:  # not the pinned file: refused at once, never fetched again in full
+                fh.close()
+                tmp.unlink(missing_ok=True)
+                raise FetchError(f"{tmp.name}: over the pinned {limit} bytes; the release changed or the pin is wrong",
+                                 reason="pin_mismatch")  # fmt: skip
             digest.update(block)
             fh.write(block)
         fh.flush()

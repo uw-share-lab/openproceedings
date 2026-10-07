@@ -37,10 +37,12 @@ from openproceedings.ingest.record import (
     title_text,
 )
 from openproceedings.ingest.sources.common import (
+    Cleaned,
     ListingReport,
     MinerError,
     clean_abstract,
     missing_reason,
+    pdf_codes_evidence,
     record_from_claims,
     titles_match,
 )
@@ -205,7 +207,7 @@ def mine_volume(
         page = fetcher.get(entry.url, keep_absent=True)
         report.fetched.append(page.fetched_at)
         try:
-            record, missing, spaced = _record(volume, native, entry, index, page)
+            record, missing, cleaned = _record(volume, native, entry, index, page)
         except (ValidationError, ValueError) as e:
             report.skipped["invalid"] += 1
             log.debug(  # counted in the volume's one `listing_attention` WARNING
@@ -214,7 +216,7 @@ def mine_volume(
             )
             continue
         records.append(record)
-        report.count(record, missing, spaced)
+        report.count(record, missing, cleaned.spaced, cleaned.pdf_codes)
         if time.monotonic() - last >= PROGRESS_SECONDS:
             last = time.monotonic()
             log.info("pmlr_volume_progress", extra={"volume": number, "done": n, "of": len(entries)})
@@ -242,9 +244,9 @@ def mine_volume(
 
 def _record(
     volume: Volume, native: str, entry: Entry, index: Page, page: Page
-) -> tuple[PaperRecord, str | None, int]:
-    """The record, why it has no abstract when it has none (`common.missing_reason`), and how many control
-    characters its abstract lost (`common.clean_abstract`; the volume counts them, TASK-199)."""
+) -> tuple[PaperRecord, str | None, Cleaned]:
+    """The record, why it has no abstract when it has none (`common.missing_reason`), and what cleaning its
+    abstract changed (`common.clean_abstract`: control characters, `(cid:N)` codes; the volume counts them)."""
     assert volume.year is not None
     title, replaced = title_text(entry.title)  # a control character becomes a space (decision-036)
     claims: list[Claim] = []
@@ -267,12 +269,14 @@ def _record(
 
     parsed = parse_paper_page(page.text, page.url) if page.ok else None
     matches = parsed is not None and titles_match(title, parsed.title)
-    abstract, spaced = clean_abstract(parsed.abstract) if parsed is not None and matches else (None, 0)
+    cleaned = clean_abstract(parsed.abstract) if parsed is not None and matches else Cleaned(None)
+    abstract = cleaned.text
     missing = missing_reason(page.ok, matches, abstract)
     if abstract is not None:
-        evidence = controls_evidence(
-            "div#abstract (citation_title matches the listing)", spaced
-        )  # decision-044
+        evidence = pdf_codes_evidence(
+            controls_evidence("div#abstract (citation_title matches the listing)", cleaned.spaced),
+            cleaned.pdf_codes,
+        )  # decision-044, decision-047
         claim("abstract", abstract, evidence, page.fetched_at)
     if parsed is not None and matches and parsed.authors:
         claim("authors", parsed.authors, "citation_author", page.fetched_at)
@@ -283,4 +287,4 @@ def _record(
         claim("urls.pdf", page_pdf, "citation_pdf_url", page.fetched_at)
     elif entry.pdf and is_url(entry.pdf) and urls.native(entry.pdf) == native:
         claim("urls.pdf", entry.pdf, listed_on, index.fetched_at)
-    return record_from_claims(f"op:icml:{volume.year}:{native}", claims), missing, spaced
+    return record_from_claims(f"op:icml:{volume.year}:{native}", claims), missing, cleaned

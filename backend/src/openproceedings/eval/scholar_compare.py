@@ -194,9 +194,10 @@ def openreview_id(url: str) -> str | None:
 
 def proceedings_key(url: str) -> ProceedingsKey | None:
     """The proceedings paper a URL names, or None: `urls.native`'s id with the venue and year the URL itself
-    carries (a NeurIPS or ICLR proceedings path; for PMLR, the ICML volume's year from the volume table)."""
+    carries (a NeurIPS or ICLR proceedings path; for PMLR, the ICML volume's year from the volume table). A dblp
+    record page (`dblp-<key>`, ICML 1988-2012; decision-047) carries no year, so it names no key here: None."""
     native = urls.native(url)
-    if native is None:
+    if native is None or urls.dblp_icml(url) is not None:
         return None
     if (parts := urls.proceedings_parts(url)) is not None:
         return (parts[0], parts[1], native)

@@ -1,7 +1,7 @@
 # openproceedings
 
-Exact, reproducible Boolean search over **NeurIPS, ICLR and ICML** titles and abstracts, built for systematic
-reviews. Reviews of ML research need a search they can report: a query string, a date and a hit count that
+Exact, reproducible Boolean search over **NeurIPS (from 1987), ICLR (from 2013) and ICML (from 1988)** titles
+and abstracts, built for systematic reviews. Reviews of ML research need a search they can report: a query string, a date and a hit count that
 anyone can run again. Google Scholar can't give that: it searches full text, stems terms, mixes workshop
 papers into the results, and its results drift. Neither can OpenReview, which has no Boolean search.
 
@@ -125,6 +125,8 @@ uv run op ingest neurips --year 2013                       # one small year: 360
 uv run op ingest neurips --year 2013-2025                  # the NeurIPS proceedings (26,019 pages, over 7 h)
 uv run op ingest pmlr --year 2013-2025                     # ICML via PMLR (14,281 pages, at least 3.9 h)
 uv run op ingest iclr --year 2014-2016                     # the ICLR archive years
+uv run op ingest neurips --year 1987-2012                  # NeurIPS before 2013 (decision-047; NEURIPS_PAGES pages)
+uv run op ingest dblp --year 1988-2012                     # ICML before 2013: the pinned dblp release (1.1 GB, once) + 159 ICML pages, at least 8 minutes
 uv run op ingest openreview --venue ICLR --years 2013-2025 # also NeurIPS 2021-2025, ICML 2023-2025
 ```
 #### Import an existing Google Scholar RIS collection

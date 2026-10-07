@@ -349,10 +349,15 @@ def test_a_page_abstract_with_a_control_character_is_imported_with_a_space() -> 
         '<div id="abstract">The LiDAR modal\x02ity, 500x\x02 longer.</div>'
     )
     index = Page(volume.index_url, 200, "", T0)
-    record, missing, spaced = pmlr._record(
+    record, missing, cleaned = pmlr._record(
         volume, "pmlr-v235-abe24a", entry, index, Page(entry.url, 200, html, T0)
     )
-    assert (record.abstract, missing, spaced) == ("The LiDAR modal ity, 500x longer.", None, 2)
+    assert (record.abstract, missing, cleaned.spaced, cleaned.pdf_codes) == (
+        "The LiDAR modal ity, 500x longer.",
+        None,
+        2,
+        0,
+    )
     [abstract] = record.claims("abstract")
     assert (
         abstract.evidence

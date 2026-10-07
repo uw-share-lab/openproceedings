@@ -285,10 +285,10 @@ year = 2007
 url = "https://web.archive.org/web/20071116064835id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/148.htm"
 official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/148.htm"
 parser = "icml2007_paper"
-charset = "cp1252"
+charset = "utf-8"
 entries = 1
 verified = 2026-10-06
-note = "paper 148's abstract on the Oregon State site (earliest 200 capture)"
+note = "paper 148's abstract on the Oregon State site (earliest 200 capture); served as UTF-8, unlike the other captures"
 
 [[page]]
 year = 2007
@@ -505,10 +505,10 @@ year = 2007
 url = "https://web.archive.org/web/20071116065033id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/225.htm"
 official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/225.htm"
 parser = "icml2007_paper"
-charset = "cp1252"
+charset = "utf-8"
 entries = 1
 verified = 2026-10-06
-note = "paper 225's abstract on the Oregon State site (earliest 200 capture)"
+note = "paper 225's abstract on the Oregon State site (earliest 200 capture); served as UTF-8, unlike the other captures"
 
 [[page]]
 year = 2007
@@ -575,10 +575,10 @@ year = 2007
 url = "https://web.archive.org/web/20071116065121id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/245.htm"
 official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/245.htm"
 parser = "icml2007_paper"
-charset = "cp1252"
+charset = "utf-8"
 entries = 1
 verified = 2026-10-06
-note = "paper 245's abstract on the Oregon State site (earliest 200 capture)"
+note = "paper 245's abstract on the Oregon State site (earliest 200 capture); served as UTF-8, unlike the other captures"
 
 [[page]]
 year = 2007
@@ -615,10 +615,10 @@ year = 2007
 url = "https://web.archive.org/web/20071116065143id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/260.htm"
 official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/260.htm"
 parser = "icml2007_paper"
-charset = "cp1252"
+charset = "utf-8"
 entries = 1
 verified = 2026-10-06
-note = "paper 260's abstract on the Oregon State site (earliest 200 capture)"
+note = "paper 260's abstract on the Oregon State site (earliest 200 capture); served as UTF-8, unlike the other captures"
 
 [[page]]
 year = 2007
@@ -715,10 +715,10 @@ year = 2007
 url = "https://web.archive.org/web/20071116065238id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/326.htm"
 official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/326.htm"
 parser = "icml2007_paper"
-charset = "cp1252"
+charset = "utf-8"
 entries = 1
 verified = 2026-10-06
-note = "paper 326's abstract on the Oregon State site (earliest 200 capture)"
+note = "paper 326's abstract on the Oregon State site (earliest 200 capture); served as UTF-8, unlike the other captures"
 
 [[page]]
 year = 2007

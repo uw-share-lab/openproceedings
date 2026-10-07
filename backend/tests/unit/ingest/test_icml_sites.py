@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 from openproceedings.ingest.sources import dblp, icml_sites
 from openproceedings.ingest.sources.common import CrawlError
+from openproceedings.ingest.sources.dblp_xml import DblpEntry
+from openproceedings.ingest.sources.http import Fetcher
 from openproceedings.ingest.sources.icml_sites import Entry, SitePage
 
 from tests.unit.ingest.proceedings_helpers import fetcher, seed
@@ -138,6 +140,16 @@ def row(**over: object) -> str:
         ({"parser": '"guess"'}, "no parser"),
         ({"year": 2013}, "1988 to 2012"),
         ({"charset": '"latin-1"'}, "charset"),
+        # a capture of a site that isn't an official ICML one, however well pinned
+        ({"url": '"https://web.archive.org/web/20090101000000id_/https://dl.acm.org/doi/x"',
+          "official": '"https://dl.acm.org/doi/x"'}, "not an official ICML site"),
+        ({"url": '"https://web.archive.org/web/20090101000000id_/https://arxiv.org/abs/x"',
+          "official": '"https://arxiv.org/abs/x"'}, "not an official ICML site"),
+        ({"url": '"https://web.archive.org/web/20091399000000id_/https://icml.cc/x"',
+          "official": '"https://icml.cc/x"'}, "not a date"),
+        ({"url": '"https://web.archive.org/web/20270101000000id_/https://icml.cc/x"',
+          "official": '"https://icml.cc/x"'}, "after the row was verified"),
+        ({"verified": "2026-10-06T00:00:00"}, "verified a date"),
     ],
 )  # fmt: skip
 def test_a_row_off_the_rules_is_refused(over: dict[str, object], why: str) -> None:
@@ -236,3 +248,58 @@ def test_an_abstract_attaches_only_by_an_exact_title_key_one_to_one(tmp_path: Pa
     assert two.reports[0].abstract_missing == 1
     # no pages for the year: the report says nothing about sites
     assert "sites" not in dblp.mine_year(1990, extract, table=TABLE).reports[0].to_manifest()
+
+
+def one_page(
+    tmp_path: Path, text: str, *, charset: str = "utf-8", status: int = 200
+) -> tuple[Fetcher, dict[int, tuple[SitePage, ...]]]:
+    url = "https://icml.cc/Conferences/1990/abstracts.html"
+    seed(tmp_path, "icml_sites", url, text, status=status, at=T)
+    f, _ = fetcher(tmp_path / "icml_sites", None, frozenset({"icml.cc"}))
+    return f, {1990: (SitePage(1990, url, url, "cyberchair", charset, 2, T.date(), "t"),)}
+
+
+def test_a_page_gone_or_misread_stops_the_crawl(tmp_path: Path) -> None:
+    f, pages = one_page(tmp_path, "", status=404)
+    with pytest.raises(CrawlError, match="answered HTTP 404") as e:
+        icml_sites.read_year(1990, f, pages=pages)
+    assert e.value.reason == "no_listing"
+    # UTF-8 bytes decoded as cp1252 (`â€™` for `’`): the row's charset is wrong, never a garbled abstract
+    f, pages = one_page(tmp_path, CYBERCHAIR.replace("one.", "Shannonâ€™s one."), charset="cp1252")
+    with pytest.raises(CrawlError, match="charset is wrong") as e:
+        icml_sites.read_year(1990, f, pages=pages)
+    assert e.value.reason == "wrong_charset"
+    f, pages = one_page(tmp_path, CYBERCHAIR.replace("one.", "Renée’s one."), charset="cp1252")
+    assert icml_sites.read_year(1990, f, pages=pages) is not None  # real cp1252 text is not UTF-8
+
+
+def test_an_entry_left_without_an_abstract_is_counted_as_dropped(tmp_path: Path) -> None:
+    f, pages = one_page(tmp_path, CYBERCHAIR.replace("Synthetic abstract two.", " "))
+    site = icml_sites.read_year(1990, f, pages=pages)
+    assert site is not None and (len(site.entries), site.dropped) == (1, 1)
+    hit = dblp.mine_year(1990, prepared(tmp_path / "x"), table=TABLE, site=site)
+    assert hit.reports[0].to_manifest()["site_dropped"] == 1
+
+
+def test_a_paper_number_listed_twice_stops_the_crawl(tmp_path: Path) -> None:
+    listing = "https://icml.cc/Conferences/2007/paperlist.html"
+    seed(tmp_path, "icml_sites", listing, LIST2007.replace('name="242"', 'name="105"'), at=T)
+    f, _ = fetcher(tmp_path / "icml_sites", None, frozenset({"icml.cc"}))
+    pages = {2007: (SitePage(2007, listing, listing, "icml2007_list", "utf-8", 2, T.date(), "t"),)}
+    with pytest.raises(CrawlError, match="listed twice") as e:
+        icml_sites.read_year(2007, f, pages=pages)
+    assert e.value.reason == "duplicate_paper"
+
+
+def test_a_title_key_two_dblp_papers_share_attaches_nothing(tmp_path: Path) -> None:
+    extract = prepared(tmp_path)
+    [paper] = [e for e in extract.entries if e.key == "conf/icml/Synthetic90"]
+    twin = DblpEntry(
+        paper.type, "conf/icml/Synthetic90b", paper.mdate, None, dict(paper.fields), dict(paper.lists)
+    )
+    doubled = dblp.Extract(extract.doi, extract.sha256, extract.fetched_at, (*extract.entries, twin))
+    result = dblp.mine_year(
+        1990, doubled, table=TABLE, site=site_year(("Synthetic title with markup 1", ABSTRACT))
+    )
+    assert [r.abstract for r in result.records] == [None, None]
+    assert result.reports[0].site_ambiguous == 1
