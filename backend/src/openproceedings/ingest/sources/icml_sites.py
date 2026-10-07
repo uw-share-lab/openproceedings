@@ -136,7 +136,8 @@ def _segments(text: str, start: str) -> list[tuple[str, str]]:
 
 
 # Every parser below finds an opening mark (a pattern that can't run across tags) and then the nearest closing
-# string with plain searches, never a lazy `(.*?)` between the two: on a page that lost its closing tags such a
+# pattern of fixed shape, searched forward once (CyberChair walks the HTML tree, 2007's list uses a binary search),
+# never a lazy `(.*?)` between the two: on a page that lost its closing tags such a
 # pattern backtracks from every opening and took minutes on a few hundred kB (the review gate's probe).
 
 
@@ -211,7 +212,9 @@ def _cyberchair_tables(text: str, url: str) -> list[tuple[str, str]]:
     """Each top-level CyberChair table's `<th>` title and second `<td>` (the abstract; the first is the authors),
     from one walk of the shared HTML tree (`html.parse`). A cell belongs to its nearest table, and a table inside
     another is no paper's table: each top-level table's subtree is read once, so nested tables can't multiply the
-    work (the review gate's probe: a thousand nested tables)."""
+    work (the review gate's probe: a thousand nested tables). The shared tree doesn't close implied end tags, so a
+    cell left unclosed holds the next one; the walk goes on inside cells and takes each cell in document order, so
+    that next cell is still the table's."""
     tables: list[tuple[list[Element], list[Element]]] = []  # (th cells, td cells) of each top-level table
     stack: list[tuple[Element, int | None, bool]] = [
         (parse(text, url), None, False)
@@ -224,15 +227,9 @@ def _cyberchair_tables(text: str, url: str) -> list[tuple[str, str]]:
                 table = len(tables) - 1
             else:
                 table, nested = None, True  # a table inside another: its cells are nobody's
-        frames = []
-        for child in node.children:
-            if not isinstance(child, Element):
-                continue
-            if table is not None and child.tag in ("th", "td"):
-                tables[table][0 if child.tag == "th" else 1].append(child)
-                continue  # a cell's own subtree is read as its text, never walked for more cells
-            frames.append((child, table, nested))
-        stack.extend(reversed(frames))
+        elif table is not None and node.tag in ("th", "td"):
+            tables[table][0 if node.tag == "th" else 1].append(node)
+        stack.extend(reversed([(c, table, nested) for c in node.children if isinstance(c, Element)]))
     return [(node_text(th[0]), node_text(td[1])) for th, td in tables if th and len(td) >= 2]
 
 
@@ -244,12 +241,14 @@ def cyberchair(text: str, url: str) -> list[Entry]:
 
 def icml2007_list(text: str, url: str) -> list[Entry]:
     """icml.cc/Conferences/2007/paperlist.html: each paper's number and title, `<a name="N"> title</a>`. Every
-    `</a>` is found once and each anchor takes the next one (a binary search), so the page is read in linear time
-    whatever it holds."""
+    `</a>` is found once and each anchor takes the next one (a binary search) only when it comes before the next
+    anchor; otherwise the anchor gives no entry and the page's entry count stops the crawl. The page is read in
+    linear time whatever it holds."""
     closes = [m.start() for m in re.finditer("</a>", text, re.I)]
     marks = list(re.finditer(r'<a name="([0-9]{1,9})">', text, re.I))
     out = []
-    for m, nxt in zip(marks, [*(x.start() for x in marks[1:]), len(text)], strict=True):
+    nexts = [x.start() for x in marks[1:]] + ([len(text)] if marks else [])  # no anchor: no entry at all
+    for m, nxt in zip(marks, nexts, strict=True):
         i = bisect.bisect_left(closes, m.end())
         if (
             i < len(closes) and closes[i] <= nxt

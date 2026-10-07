@@ -412,10 +412,10 @@ def test_a_hostile_page_is_parsed_in_linear_time(parser: str) -> None:
     assert time.monotonic() - started < 2.0
 
 
-@pytest.mark.parametrize("parser", ["icml2008", "icml2009", "icml2010", "icml2011", "icml2012"])
+@pytest.mark.parametrize("parser", sorted(icml_sites.PARSERS))
 def test_a_page_that_lost_its_papers_gives_none_and_stops_the_crawl(tmp_path: Path, parser: str) -> None:
     moved = "<html><body>This page has moved.</body></html>"
-    assert icml_sites.PARSERS[parser](moved, "https://icml.cc/x") == []
+    assert icml_sites.PARSERS[parser](moved, "https://icml.cc/Conferences/2007/abstracts/1.htm") == []
     url = "https://icml.cc/Conferences/1990/abstracts.html"
     seed(tmp_path, "icml_sites", url, moved, at=T)
     f, _ = fetcher(tmp_path / "icml_sites", None, frozenset({"icml.cc"}))
@@ -441,3 +441,13 @@ def test_a_table_inside_a_paper_table_is_nobodys_and_its_cells_stay_out() -> Non
     assert icml_sites.cyberchair(page, "https://icml.cc/x") == [
         Entry(None, "Title", "Abstract inner a b text.")
     ]
+
+
+def test_an_unclosed_author_cell_still_gives_the_abstract() -> None:
+    page = "<table><tr><th>T</th></tr><tr><td>Authors<tr><td>The abstract.</table>"
+    assert icml_sites.cyberchair(page, "https://icml.cc/x") == [Entry(None, "T", "The abstract.")]
+
+
+def test_the_cross_conference_track_is_cut_whatever_the_case_of_its_anchor() -> None:
+    page = P2011.replace('<a name="cross">', '<A NAME="cross">')
+    assert [e.key for e in icml_sites.icml2011(page, "https://icml.cc/2011/papers.php")] == ["6"]
