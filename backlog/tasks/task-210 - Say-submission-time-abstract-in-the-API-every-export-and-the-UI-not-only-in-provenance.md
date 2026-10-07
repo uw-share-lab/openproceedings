@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-07 17:07'
-updated_date: '2026-10-07 18:48'
+updated_date: '2026-10-07 19:01'
 labels:
   - api
   - export
@@ -39,7 +39,5 @@ One definition (ingest/dedup.py SUBMISSION_NOTE, read through Attribution.as_sub
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-make openapi regenerated openapi.json and schema.ts; record-fixture.json regenerated. Tests: backend unit+contract green, vitest 4,865, make e2e 66 passed (darwin baselines submission-note-{light,dark}-darwin.png added). Linux baselines come from CI's e2e artifact (spec 05 §Testing: never on an arm64 Mac). Owner choices to confirm: JSONL key only when present (as twins) vs null everywhere; exact wording.
-
-Open question for the owner (2026-10-07, not decided by this branch): JSONL carries abstract_note only on a record that has one (as twins does) rather than null on every record; and the wording. Spec 04 describes what is built; either change is a follow-up.
+make openapi regenerated openapi.json and schema.ts; record-fixture.json regenerated. Tests: backend unit+contract green, vitest 4,865, make e2e 66 passed (darwin baselines submission-note-{light,dark}-darwin.png added). Linux baselines come from CI's e2e artifact (spec 05 §Testing: never on an arm64 Mac). Open question for the owner (2026-10-07, not decided by this branch; spec 04 describes what is built): JSONL carries abstract_note only on a record that has one (as twins does) rather than null on every record; and the exact wording of the note.
 <!-- SECTION:NOTES:END -->

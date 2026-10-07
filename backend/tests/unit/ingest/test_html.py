@@ -226,8 +226,9 @@ REAL_TAGS = [
     ("<script>if (a<b && c>d) {}</script>after", "after"),  # a script body is copied as it is
     ('<p>x</p y="1">z', "x z"),  # an end tag with attributes
     ("a</b and c>d", "ad"),  # an end tag with a known name, whatever follows it
-    ("<div v-cloak>t</div>after", "t after"),
-    ("<p xml:lang>q</p><p xmlns>r</p>", "q r"),  # `xml` names  # hyphenated attribute names: framework markup
+    ("<div v-cloak>t</div>after", "t after"),  # hyphenated attribute names: framework markup
+    ("<p xml:lang>q</p><p xmlns>r</p>", "q r"),  # `xml` names
+    ("<p data-track_id>q</p><p aria-x_y>r</p>", "q r"),  # any `data-`/`aria-` name, not only hyphenated ones
     ("<style amp-custom>.a{color:red}</style>t", "t"),  # a script or style tag is real whatever it says
     ("<script amp-boilerplate>var a=1;</script>t", "t"),
     ("<layer>l</layer><xml>x</xml>", "lx"),  # Netscape- and IE-era elements

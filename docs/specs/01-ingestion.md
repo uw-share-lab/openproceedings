@@ -195,8 +195,8 @@ the NeurIPS 1987–2012, dblp and ICML sites rows on 2026-10-06 (`docs/research/
    A `<` that doesn't start a real tag is text, with everything up to the next `>` (`html.escape_bare_lt`, before
    every parse, the meta reader's included; TASK-209): a real start tag has an HTML, SVG or MathML element name (or a
    custom `my-el` or namespaced `o:p` one), parses up to its `>` with no `<` outside a quoted value, and has an
-   attribute with a value or only HTML, `data-`/`aria-`/`xml` or hyphenated attribute names (`<td nowrap>`, `<div v-cloak>`;
-   a `script` or `style` tag that parses is always real), so `if a<b and c>d then`, `$1<p<\infty$`
+   attribute with a value or only HTML, `data-`/`aria-`/`xml` or hyphenated attribute names (`<td nowrap>`,
+   `<div v-cloak>`; a `script` or `style` tag that parses is always real), so `if a<b and c>d then`, `$1<p<\infty$`
    and `<human, action, object>` keep their words while `<b>`, `<a href=x>` and `<br/>` stay markup (`a<b>c` reads
    `ac`, as a browser shows it). Real markup is copied unchanged; the crawl-cache replay that measured it is
    `docs/results/2026-10-07-bare-lt.md`.
