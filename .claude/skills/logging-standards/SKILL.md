@@ -83,7 +83,8 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   WARNING with its `reason` (`sidecar_mismatch`, `size_mismatch`, `hash_mismatch`); `dblp_extract_started` /
   `dblp_extract_progress` (`lines`, `records`, at most every 30 s) / `dblp_extract_written` for the streaming read,
   `dblp_extract_stale` (with `reason`) when an extract is read again; `icml_site_year_started` /
-  `icml_site_year_progress` (`done`, `of`) / `icml_site_year_read` (pages, entries, `unjoined`, `dropped`) for a
+  `icml_site_year_progress` (`done`, `of`) / `icml_site_year_read` (pages, entries, `unjoined`, `dropped`,
+  `withheld`: 1997/1998 abstracts withheld for a contact detail, counted and never their text, TASK-207) for a
   year's ICML pages; one `dblp_year_mined` per year (records, `abstract_attached`, `abstract_missing`, the `site_*`
   counts, `abstract_control_characters`, `abstract_pdf_codes`, `abstract_short`), and `dblp_ingested` (`years`,
   `requests`, `cached`). Never a line per item.
