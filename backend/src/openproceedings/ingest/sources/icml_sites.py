@@ -3,7 +3,10 @@ decision-047; TASK-206).
 
 dblp gives the pre-2013 ICML papers no abstracts. Some years' official conference sites listed them, and some of
 those pages survive: live on icml.cc (which still serves the 2007–2012 sites' pages), or as an Internet Archive
-capture of the conference's own site (2001, 2003, 2004 and 2007's per-paper pages). The per-year survey is
+capture of the conference's own site (1997's program page, 1998's per-submission pages, 2001, 2003, 2004 and 2007's
+per-paper pages). 1997 and 1998's pages are the submissions as the authors filled in the form, contact details
+included: only the abstract is kept, and one that still holds a contact detail is withheld (TASK-207, owner
+decision of 2026-10-07). The per-year survey is
 `docs/research/2026-10-06-icml-pre-2013-abstract-sources.md`. The table `icml_sites.toml` names each page by year:
 the URL fetched (an archived page by its exact capture, `https://web.archive.org/web/<14-digit timestamp>id_/<the
 URL the archive holds>`, so the same bytes come back every time and Wayback never redirects to another capture),
@@ -18,7 +21,7 @@ and only by an exact title key (the dedup key: the token contract over the NFC t
 exactly one dblp paper of the year share. Everything else is counted, never guessed: page entries no paper
 matches, keys two entries or two papers share, and the papers left with no abstract. An abstract claim (source
 `icml_site`) carries the page it came from as fetched (a capture URL names its timestamp), that page's fetch time,
-and evidence naming the official URL and the capture.
+and evidence naming the official URL and the capture (and, for 1997 and 1998, that the abstract is as submitted).
 """
 
 from __future__ import annotations
@@ -37,7 +40,7 @@ from urllib.parse import urlparse
 
 from openproceedings.ingest.record import Source, title_text
 from openproceedings.ingest.sources.common import CrawlError, clean_abstract
-from openproceedings.ingest.sources.html import Element, node_text, parse, text_of
+from openproceedings.ingest.sources.html import Element, collapse, node_text, parse, text_of, unescape
 from openproceedings.ingest.sources.http import Fetcher, FetchError, Heartbeat, Page
 
 log = logging.getLogger(__name__)
@@ -49,14 +52,19 @@ ARCHIVE_HOST = "web.archive.org"
 # page (icml.cc's "past conferences" pages: Conferences/2007/pastconferences.html names the 2001 Purdue, 2003 HP
 # Labs and 2004 Banff sites, Conferences/2008/past_icmls.shtml.html the 2007 Oregon State one; the 2003 site's own
 # titlesAndAuthors.html links each paper to /conferences/icml2003/allAbstracts.html, and icml.cc names the Banff site
-# as /_banff04/icml/, whose pages the archive holds at /banff04/icml/, their stylesheet's own path). A capture of anything else,
+# as /_banff04/icml/, whose pages the archive holds at /banff04/icml/, their stylesheet's own path; the same icml.cc
+# pages name the 1998 Madison site, www.cs.wisc.edu/icml98/, which also answered at /ICML98/ (the archive holds both
+# spellings with the same digests; five papers' earliest captures are under /ICML98/); no icml.cc page names a 1997 site, but the ICML-97/COLT-97
+# site's joint schedule, ~mlccolt/schedule.html, capture 19980209071717, links each ICML-97 paper to
+# ~icml97/program.html#N, TASK-207). A capture of anything else,
 # another page of those hosts included, is refused when the table loads: never ACM DL, arXiv, Scholar or an author.
 OFFICIAL_SITES: tuple[tuple[str, str], ...] = (
     ("icml.cc", "/"), ("www.icml.cc", "/"), ("machinelearning.org", "/proceedings/"),
     ("www.machinelearning.org", "/proceedings/"), ("www.ecn.purdue.edu", "/ICML2001/"),
     ("www.hpl.hp.com", "/conferences/icml03/"), ("www.hpl.hp.com", "/conferences/icml2003/"),
     ("www.aicml.cs.ualberta.ca", "/banff04/icml/"), ("www.aicml.cs.ualberta.ca", "/_banff04/icml/"),
-    ("oregonstate.edu", "/conferences/icml2007/"),
+    ("oregonstate.edu", "/conferences/icml2007/"), ("cswww.vuse.vanderbilt.edu", "/~icml97/"),
+    ("www.cs.wisc.edu", "/icml98/"), ("www.cs.wisc.edu", "/ICML98/"),
 )  # fmt: skip
 MIN_INTERVAL = 3.0  # seconds between requests: the Internet Archive's polite pace, kept for icml.cc too
 _CAPTURE = re.compile(r"https://web\.archive\.org/web/([0-9]{14})id_/(https?://\S+)")
@@ -92,6 +100,7 @@ class Entry:
     key: str | None
     title: str | None
     abstract: str | None
+    withheld: bool = False  # 1997/1998: an abstract that still held a contact detail, never kept (TASK-207)
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +129,10 @@ class SiteYear:
     )
     dropped: int = (
         0  # entries with a title and abstract text that leave no title or no usable abstract (empty)
+    )
+    withheld: int = 0  # 1997/1998 abstracts withheld whole for a contact detail (TASK-207)
+    as_submitted: bool = (
+        False  # the year's pages are submissions (`SUBMISSION_PARSERS`): its abstracts are as submitted
     )
 
 
@@ -265,10 +278,153 @@ def icml2007_paper(text: str, url: str) -> list[Entry]:
     return [Entry(number.group(1), None, tables[0][1])] if number and tables else []
 
 
+# --- 1997 and 1998: submission-time abstracts beside the authors' contact details (TASK-207) ---------------------
+#
+# Both years' pages are the call for papers' submission form as each author filled it in, free text: a title, the
+# authors with postal addresses, an abstract, keywords, then the contact author's e-mail address and phone (and
+# fax) number, in a layout and wording that vary by paper. Only the abstract is kept: the text after an `Abstract`
+# heading line up to the first line that starts a later field (keywords, e-mail, phone, …) or holds an e-mail
+# address or a phone-shaped number. What that leaves is checked again (`contact_detail`): an abstract that still
+# holds an e-mail address, a phone-shaped number, a contact label or a postal code is withheld whole and counted,
+# never cut and never logged. An entry with no `Abstract` heading gives no abstract (the author block and the
+# abstract run together there, so no line can be trusted to start it).
+
+_BLOCK = re.compile(
+    r"<(?:br|p|/p|ol|/ol|ul|/ul|li|/li|dl|/dl|dt|dd|hr|pre|/pre|h[1-6]|/h[1-6]|div|/div|table|/table|tr|/tr|td|/td|"
+    r"th|/th|blockquote|/blockquote|center|/center)\b[^<>]{0,2000}>", re.I)  # fmt: skip
+_TAG = re.compile(r"<[^<>]{0,2000}>")
+# an `Abstract` heading: the word alone on its line, maybe with a parenthesis ("(200 word maximum)") and a colon,
+# or with a colon and the abstract's first words after it
+_ABSTRACT_HEAD = re.compile(
+    r"abstract(?:[ \t]{0,9}\([^()\n]{0,80}\))?[ \t]{0,9}(?::[ \t]{0,9}(.*)|\.?)", re.I
+)
+_FIELD = re.compile(  # a line that starts a field the form puts after the abstract
+    r"(?:key[ \t-]?words?\b"
+    r"|(?:e-?mail|electronic mail|phone|telephone|tel\b|fax|voice|contact|corresponding author|topics?|areas?"
+    r"|category|paper (?:category|type)|track|submitted)[^:\n]{0,60}:)",
+    re.I,
+)
+_EMAIL = re.compile(
+    r"@|\b[\w.+-]{1,64} ?(?:\(at\)|\[at\]| at ) ?[\w-]{1,64}(?:\.| dot )(?:edu|com|org|net|gov)\b", re.I
+)
+_PHONE = re.compile(
+    r"(?<![\w)+])\+\(?[0-9][0-9 ()./-]{5,40}[0-9]"  # +1 503 737 5552, +(34-1) 624 9418; never `t+1` or `a + b`
+    r"|\([0-9]{3}\)[-. ]{0,3}[0-9]{3}[-. ][0-9]{4}\b"  # (609) 258-4455, (541)-737-5552
+)
+# digit groups joined by `-`, `.`, `/` or a space, read as a phone number when they hold 7 digits or more and are not
+# all years: 609-258-4455, 972-3-640-8829, 624 9418; never `1993-1997`, `1987 1988 1989` or `10 000`
+_DIGIT_GROUPS = re.compile(r"\b[0-9]{1,5}(?:[-./ ][0-9]{1,5}){1,5}\b")
+_YEAR = re.compile(r"(?:19|20)[0-9]{2}")
+_RULE = re.compile(r"[-=_*~ \t]{3,200}")  # a line of dashes under a heading
+_LABEL = re.compile(r"\b(?:e-?mail|phone|telephone|tel|fax|voice)\s{0,3}[:.]", re.I)
+_POSTAL = re.compile(
+    r"\b[A-Z]{2}[ \t]{1,3}[0-9]{5}(?:-[0-9]{4})?\b"
+)  # a US state and ZIP code: `NJ 08544-2087`
+
+
+def _phone(text: str) -> bool:
+    if _PHONE.search(text):
+        return True
+    for m in _DIGIT_GROUPS.finditer(text):
+        groups = re.split(r"[-./ ]", m.group())
+        if sum(map(len, groups)) >= 7 and not all(_YEAR.fullmatch(g) for g in groups):
+            return True
+    return False
+
+
+def contact_detail(text: str) -> str | None:
+    """Which kind of contact detail `text` holds (`email`, `phone`, `label`, `postal`), or None. Checked on every
+    1997/1998 abstract before it is kept: such an abstract is withheld whole."""
+    if _EMAIL.search(text):
+        return "email"
+    if _phone(text):
+        return "phone"
+    for kind, pattern in (("label", _LABEL), ("postal", _POSTAL)):
+        if pattern.search(text):
+            return kind
+    return None
+
+
+def _lines(fragment: str) -> list[str]:
+    """A fragment's text, one string per line: block tags become line breaks, other tags go, entities decode."""
+    return [collapse(unescape(_TAG.sub(" ", line))) for line in _BLOCK.sub("\n", fragment).split("\n")]
+
+
+def _submission_abstract(lines: list[str]) -> tuple[str | None, bool]:
+    """(the abstract, withheld) from a submission's lines: the text after the first `Abstract` heading up to the
+    next field, a blank line after it never ending it; (None, False) with no heading; (None, True) when what is
+    left still holds a contact detail."""
+    heads = ((i, m) for i, line in enumerate(lines) if (m := _ABSTRACT_HEAD.fullmatch(line)))
+    start, head = next(heads, (None, None))
+    if start is None or head is None:
+        return None, False
+    body: list[str] = [head.group(1)] if head.group(1) else []
+    for line in lines[start + 1 :]:
+        if _FIELD.match(line):
+            break
+        if not _RULE.fullmatch(line):  # a line of dashes under the heading is layout, not text
+            body.append(line)
+    text = collapse(" ".join(body))
+    if contact_detail(text) is not None:
+        return None, True
+    return text, False
+
+
+def icml1997(text: str, url: str) -> list[Entry]:
+    """cswww.vuse.vanderbilt.edu/~icml97/program.html: a list `<li><a href="#N"> title</a>`, then each paper's
+    `<a name="N"></a>` and its submission as free text (`_submission_abstract`). The title is the list's."""
+    titles: dict[str, str] = {}
+    for m in re.finditer(r'<li>[ \t]{0,9}<a href="#([0-9]{1,9})">([^<>]{0,2000})</a>', text, re.I):
+        titles.setdefault(m.group(1), text_of(m.group(2)))
+    out = []
+    for key, seg in _segments(text, r'<a name="([0-9]{1,9})"></a>'):
+        abstract, withheld = _submission_abstract(_lines(seg))
+        out.append(Entry(key, titles.get(key), abstract or "", withheld))
+    return out
+
+
+_TITLE_LABEL = re.compile(r"title[ \t]{0,9}:[ \t]{0,9}(.*)", re.I)
+_AFTER_TITLE = re.compile(r"(?:authors?|author\(s\)|abstract)\b", re.I)
+
+
+def _submission_title(lines: list[str]) -> str | None:
+    """A 1998 submission's title: after a `Title:` label (on its line, or the lines after it up to a blank line or
+    the authors), else the first lines of text up to a blank line."""
+    labels = ((i, m) for i, line in enumerate(lines) if (m := _TITLE_LABEL.fullmatch(line)))
+    at, label = next(labels, (None, None))
+    rest = lines if at is None or label is None else [label.group(1), *lines[at + 1 :]]
+    words: list[str] = []
+    for line in rest:
+        if not line:
+            if words:
+                break
+            continue
+        if words and _AFTER_TITLE.match(line):
+            break
+        words.append(line)
+    return collapse(" ".join(words)) or None
+
+
+def icml1998_paper(text: str, url: str) -> list[Entry]:
+    """A per-submission page of the ICML-98 site (`…/icml98/papers/paperN.html`): `<H1>ICML-98 Submission #N</H1>`,
+    then the submission as free text, in a `<PRE>` or in HTML. The number is the URL's and must be the heading's;
+    the title is the text's own (`_submission_title`)."""
+    number = re.search(r"/paper([0-9]{1,9})\.html\Z", url)
+    head = re.search(r"<h1>[ \t]{0,9}ICML-98 Submission #([0-9]{1,9})[ \t]{0,9}</h1>", text, re.I)
+    if number is None or head is None or head.group(1) != number.group(1):
+        return []
+    lines = _lines(text[head.end() :])
+    abstract, withheld = _submission_abstract(lines)
+    return [Entry(number.group(1), _submission_title(lines), abstract or "", withheld)]
+
+
+# the parsers whose pages are submissions: their abstracts are as submitted, not as published
+SUBMISSION_PARSERS = frozenset({"icml1997", "icml1998_paper"})
+
 PARSERS: dict[str, Parser] = {
     "icml2012": icml2012, "icml2011": icml2011, "icml2010": icml2010, "icml2009": icml2009,
     "icml2008": icml2008, "cyberchair": cyberchair, "icml2007_list": icml2007_list,
-    "icml2007_paper": icml2007_paper,
+    "icml2007_paper": icml2007_paper, "icml1997": icml1997, "icml1998_paper": icml1998_paper,
 }  # fmt: skip
 
 
@@ -349,9 +505,13 @@ HOSTS: frozenset[str] = hosts_of(PAGES)
 
 
 def _evidence(page: SitePage) -> str:
+    where = f"official ICML {page.year} page {page.official}"
     if page.capture is not None:
-        return f"official ICML {page.year} page {page.official}, Internet Archive capture {page.capture}"
-    return f"official ICML {page.year} page {page.official}"
+        where += f", Internet Archive capture {page.capture}"
+    if page.parser in SUBMISSION_PARSERS:
+        where += (": a submission-time abstract, as the authors submitted it (not the published paper's); "
+                  "the page's contact details are not kept")  # fmt: skip
+    return where
 
 
 def read_year(
@@ -392,9 +552,12 @@ def read_year(
                              "is wrong (fix it, then fetch the page again with --refresh)",
                              reason="wrong_charset")  # fmt: skip
         out.pages.append(page.url)
+        out.as_submitted |= page.parser in SUBMISSION_PARSERS
         out.fetched.append(fetched.fetched_at)
         for e in got:
-            if e.title is not None and e.abstract is not None:
+            if e.withheld:  # a submission's abstract that held a contact detail: counted, never kept
+                out.withheld += 1
+            elif e.title is not None and e.abstract is not None:
                 complete.append((e.title, e.abstract, page, fetched))
             elif e.title is not None and e.key is not None:
                 if e.key in titles:
@@ -416,7 +579,7 @@ def read_year(
             out.dropped += 1
     log.info("icml_site_year_read", extra={
         "year": year, "pages": len(out.pages), "entries": len(out.entries), "unjoined": out.unjoined,
-        "dropped": out.dropped, "ms": round((fetcher.clock.monotonic() - started) * 1000, 1)})  # fmt: skip
+        "dropped": out.dropped, "withheld": out.withheld, "ms": round((fetcher.clock.monotonic() - started) * 1000, 1)})  # fmt: skip
     return out
 
 

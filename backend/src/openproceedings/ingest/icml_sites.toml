@@ -1,7 +1,9 @@
 # Official ICML pages with per-paper abstracts, 1988-2012 (spec 01 §Sources, ICML sites row; decision-047;
 # TASK-206). Data, not code: `ingest/sources/icml_sites.py` loads and checks it. The survey behind every row,
-# and the years with no surviving page (1988-1996, 1999, 2000, 2002, 2005, 2006; 1997 and 1998 have only
-# submission abstracts with contact details, not used: an owner question), is docs/research/2026-10-06-icml-pre-2013-abstract-sources.md.
+# and the years with no surviving page (1988-1996, 1999, 2000, 2002, 2005, 2006), is
+# docs/research/2026-10-06-icml-pre-2013-abstract-sources.md. 1997 and 1998 have only submission-time abstracts beside
+# the authors' contact details: used by the owner's decision of 2026-10-07 (TASK-207), the abstract only; the parsers
+# `icml1997` and `icml1998_paper` keep nothing else and withhold an abstract that still holds a contact detail.
 #
 # [[page]] one page: year; url (what is fetched: a live icml.cc page, or an Internet Archive capture pinned to
 #          its exact timestamp, https://web.archive.org/web/<14 digits>id_/<official>); official (the page the
@@ -9,8 +11,679 @@
 #          text/html); entries (what the parser read off it when verified; a different count stops the crawl);
 #          verified; note.
 # Allowed: official ICML / IMLS conference pages only (a capture must be on `icml_sites.OFFICIAL_SITES`, each site named
-# by an official page: the 2007 Oregon State site by icml.cc Conferences/2008/past_icmls.shtml.html). Never ACM DL,
+# by an official page: the 2007 Oregon State site by icml.cc Conferences/2008/past_icmls.shtml.html, the 1998 Madison
+# site by icml.cc Conferences/2007/pastconferences.html, the 1997 program page by the ICML-97/COLT-97 schedule). Never ACM DL,
 # Scholar, Semantic Scholar, author pages, arXiv.
+
+[[page]]
+year = 1997
+url = "https://web.archive.org/web/19970619200718id_/http://cswww.vuse.vanderbilt.edu:80/~icml97/program.html"
+official = "http://cswww.vuse.vanderbilt.edu:80/~icml97/program.html"
+parser = "icml1997"
+charset = "cp1252"
+entries = 49
+verified = 2026-10-07
+note = "the ICML-97 program page: each paper's submission (title, authors' addresses, abstract, keywords, contact e-mail and phone) as free text; only the abstract is kept (TASK-207). The ICML-97/COLT-97 schedule ~mlccolt/schedule.html (capture 19980209071717) links each paper here; earliest 200 capture"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991009084141id_/http://www.cs.wisc.edu:80/icml98/papers/paper2.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper2.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 2 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991009123733id_/http://www.cs.wisc.edu:80/icml98/papers/paper23.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper23.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 23 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991009144917id_/http://www.cs.wisc.edu:80/icml98/papers/paper25.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper25.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 25 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991009162541id_/http://www.cs.wisc.edu:80/icml98/papers/paper26.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper26.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 26 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991009183450id_/http://www.cs.wisc.edu:80/icml98/papers/paper29.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper29.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 29 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991009205446id_/http://www.cs.wisc.edu:80/icml98/papers/paper30.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper30.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 30 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991009223918id_/http://www.cs.wisc.edu:80/icml98/papers/paper32.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper32.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 32 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010002028id_/http://www.cs.wisc.edu:80/icml98/papers/paper34.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper34.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 34 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010011247id_/http://www.cs.wisc.edu:80/icml98/papers/paper37.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper37.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 37 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010024220id_/http://www.cs.wisc.edu:80/icml98/papers/paper39.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper39.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 39 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/20000118165054id_/http://www.cs.wisc.edu:80/ICML98/papers/paper41.html"
+official = "http://www.cs.wisc.edu:80/ICML98/papers/paper41.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 41 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/20000118175644id_/http://www.cs.wisc.edu:80/ICML98/papers/paper42.html"
+official = "http://www.cs.wisc.edu:80/ICML98/papers/paper42.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 42 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010042411id_/http://www.cs.wisc.edu:80/icml98/papers/paper43.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper43.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 43 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010052914id_/http://www.cs.wisc.edu:80/icml98/papers/paper44.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper44.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 44 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010055738id_/http://www.cs.wisc.edu:80/icml98/papers/paper46.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper46.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 46 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010065411id_/http://www.cs.wisc.edu:80/icml98/papers/paper47.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper47.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 47 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010090950id_/http://www.cs.wisc.edu:80/icml98/papers/paper50.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper50.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 50 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010105828id_/http://www.cs.wisc.edu:80/icml98/papers/paper56.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper56.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 56 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010132603id_/http://www.cs.wisc.edu:80/icml98/papers/paper58.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper58.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 58 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991104022421id_/http://www.cs.wisc.edu:80/icml98/papers/paper63.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper63.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 63 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010164420id_/http://www.cs.wisc.edu:80/icml98/papers/paper66.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper66.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 66 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010193638id_/http://www.cs.wisc.edu:80/icml98/papers/paper67.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper67.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 67 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991010204128id_/http://www.cs.wisc.edu:80/icml98/papers/paper71.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper71.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 71 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991104073707id_/http://www.cs.wisc.edu:80/icml98/papers/paper76.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper76.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 76 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991104083545id_/http://www.cs.wisc.edu:80/icml98/papers/paper78.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper78.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 78 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991011001741id_/http://www.cs.wisc.edu:80/icml98/papers/paper81.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper81.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 81 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991011010431id_/http://www.cs.wisc.edu:80/icml98/papers/paper84.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper84.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 84 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991011021854id_/http://www.cs.wisc.edu:80/icml98/papers/paper86.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper86.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 86 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991011030024id_/http://www.cs.wisc.edu:80/icml98/papers/paper92.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper92.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 92 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991007082712id_/http://www.cs.wisc.edu:80/icml98/papers/paper101.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper101.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 101 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991007104906id_/http://www.cs.wisc.edu:80/icml98/papers/paper102.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper102.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 102 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991007125853id_/http://www.cs.wisc.edu:80/icml98/papers/paper103.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper103.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 103 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/20000118123103id_/http://www.cs.wisc.edu:80/ICML98/papers/paper104.html"
+official = "http://www.cs.wisc.edu:80/ICML98/papers/paper104.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 104 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/20000118132530id_/http://www.cs.wisc.edu:80/ICML98/papers/paper110.html"
+official = "http://www.cs.wisc.edu:80/ICML98/papers/paper110.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 110 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991007150016id_/http://www.cs.wisc.edu:80/icml98/papers/paper116.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper116.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 116 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991007163549id_/http://www.cs.wisc.edu:80/icml98/papers/paper117.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper117.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 117 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991007183601id_/http://www.cs.wisc.edu:80/icml98/papers/paper119.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper119.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 119 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991007201544id_/http://www.cs.wisc.edu:80/icml98/papers/paper124.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper124.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 124 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991007222630id_/http://www.cs.wisc.edu:80/icml98/papers/paper125.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper125.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 125 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008003416id_/http://www.cs.wisc.edu:80/icml98/papers/paper127.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper127.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 127 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008012418id_/http://www.cs.wisc.edu:80/icml98/papers/paper131.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper131.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 131 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008015922id_/http://www.cs.wisc.edu:80/icml98/papers/paper132.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper132.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 132 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008025825id_/http://www.cs.wisc.edu:80/icml98/papers/paper137.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper137.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 137 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008040336id_/http://www.cs.wisc.edu:80/icml98/papers/paper142.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper142.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 142 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008052652id_/http://www.cs.wisc.edu:80/icml98/papers/paper143.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper143.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 143 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008060558id_/http://www.cs.wisc.edu:80/icml98/papers/paper144.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper144.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 144 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008073505id_/http://www.cs.wisc.edu:80/icml98/papers/paper145.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper145.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 145 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008084556id_/http://www.cs.wisc.edu:80/icml98/papers/paper151.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper151.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 151 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/20000619015357id_/http://www.cs.wisc.edu:80/ICML98/papers/paper152.html"
+official = "http://www.cs.wisc.edu:80/ICML98/papers/paper152.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 152 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008113427id_/http://www.cs.wisc.edu:80/icml98/papers/paper153.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper153.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 153 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008130803id_/http://www.cs.wisc.edu:80/icml98/papers/paper154.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper154.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 154 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008150752id_/http://www.cs.wisc.edu:80/icml98/papers/paper155.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper155.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 155 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008164014id_/http://www.cs.wisc.edu:80/icml98/papers/paper157.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper157.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 157 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008191318id_/http://www.cs.wisc.edu:80/icml98/papers/paper160.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper160.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 160 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008204258id_/http://www.cs.wisc.edu:80/icml98/papers/paper162.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper162.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 162 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991008221520id_/http://www.cs.wisc.edu:80/icml98/papers/paper172.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper172.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 172 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991110234847id_/http://www.cs.wisc.edu:80/icml98/papers/paper179.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper179.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 179 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991009002221id_/http://www.cs.wisc.edu:80/icml98/papers/paper184.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper184.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 184 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991111032535id_/http://www.cs.wisc.edu:80/icml98/papers/paper185.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper185.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 185 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991111044420id_/http://www.cs.wisc.edu:80/icml98/papers/paper187.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper187.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 187 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991111055406id_/http://www.cs.wisc.edu:80/icml98/papers/paper192.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper192.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 192 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991009035841id_/http://www.cs.wisc.edu:80/icml98/papers/paper194.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper194.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 194 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991009053346id_/http://www.cs.wisc.edu:80/icml98/papers/paper195.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper195.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 195 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991009062907id_/http://www.cs.wisc.edu:80/icml98/papers/paper198.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper198.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 198 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991103025057id_/http://www.cs.wisc.edu:80/icml98/papers/paper199.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper199.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 199 (earliest 200 capture); only the abstract is kept"
+
+[[page]]
+year = 1998
+url = "https://web.archive.org/web/19991009111223id_/http://www.cs.wisc.edu:80/icml98/papers/paper200.html"
+official = "http://www.cs.wisc.edu:80/icml98/papers/paper200.html"
+parser = "icml1998_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-07
+note = "ICML-98 submission 200 (earliest 200 capture); only the abstract is kept"
 
 [[page]]
 year = 2001

@@ -43,6 +43,13 @@ The owner decided (2026-10-06): the corpus covers NeurIPS from 1987 and ICML fro
   entry and one paper of the year share; anything else stays `null` and is counted (TASK-206, owner update of
   2026-10-06). This is a clause of spec 01's abstract-source rule ("OpenReview's, else the proceedings page's"):
   the official ICML pages, for dblp's records only.
+- **ICML 1997 and 1998** (owner decision of 2026-10-07, TASK-207): their official pages hold submission-time
+  abstracts beside the authors' postal addresses, e-mail addresses and phone and fax numbers, and are used for the
+  abstract text alone. The parsers keep the text after an `Abstract` heading up to the form's next field; one that
+  still holds an e-mail address, a phone-shaped number, a contact label or a postal code is withheld whole and
+  counted (`site_withheld`), and none of those details reaches a record, the snapshot, the index, an export or a log
+  line (tested). The abstract claim's evidence says it is a submission-time abstract from the official page, with
+  the Internet Archive capture's timestamp.
 - **Old abstract text** is cleaned the way decision-044 cleans control characters: a NeurIPS page's placeholder
   (`Abstract Unavailable`) is no abstract, and PDF-extraction codes are repaired (`(cid:173)`, a soft hyphen at a
   line end, is removed so the word is whole; any other `(cid:N)` becomes a space), each counted and noted in the
@@ -64,9 +71,11 @@ The owner decided (2026-10-06): the corpus covers NeurIPS from 1987 and ICML fro
   accepted count (dblp is a bibliography, not the conference's statement), so those cells are reported, not gated.
 - Moving to a newer dblp release is a change to `dblp_icml.toml` and a snapshot-diff event; a year marked under
   another release is refused on replay.
-- 1997 and 1998 have official pages with submission abstracts and authors' contact details; they are not used.
-  Whether to use them (abstract text only, never the contact details) is an owner question, not filed as a task:
-  no task id was reserved for this branch.
+- 1997 and 1998 have official pages with submission abstracts and authors' contact details. They were first left
+  out as an owner question; on 2026-10-07 the owner decided to use their abstract text only (the Decision's 1997/1998
+  bullet, TASK-207). A submission abstract can differ from the published paper's, and the claim's evidence says
+  which it is. The published titles can differ from the submitted ones too, so some of those years' abstracts find no
+  exact title key and stay unattached (counted as `site_unmatched`), as in every other year.
 - 1989, 1991 and 1992 are exported under the ICML name (`International Conference on Machine Learning (ICML
   <year>)`), like every ICML year, though they were held as the International Workshop on Machine Learning: a
   normalisation spec 04 §Exports and the coverage report's scope lines state.
@@ -74,3 +83,11 @@ The owner decided (2026-10-06): the corpus covers NeurIPS from 1987 and ICML fro
   when the pinned release was read; the records reflect the release (its DOI and date) and the official pages'
   captures, not a crawl on those dates. The coverage report the methods text cites says so in its scope lines
   (spec 05 §Methods text), rather than a new clause in the methods text itself.
+
+## Owner confirmation (2026-10-07)
+
+After PR #120 the owner confirmed three labelling choices this record and `dblp_icml.toml` already make, so they
+are settled, not open: (a) ICML 1989, 1991 and 1992, which dblp files as workshops (the International Workshop on
+Machine Learning), are indexed as ICML main-conference years; (b) ICML 2010's invited application papers stay in
+the main track; (c) the 27 entries that are no paper (2009's workshop and tutorial summaries and invited talks,
+1994–1996's invited-talk abstracts) stay track `other`. No code or data changed with this confirmation.

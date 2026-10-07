@@ -118,12 +118,18 @@ def test_a_2007_paper_page_gives_its_number_and_abstract_never_its_broken_title(
 
 
 def test_the_shipped_table_names_official_pages_only() -> None:
-    assert set(icml_sites.PAGES) == {2001, 2003, 2004, 2007, 2008, 2009, 2010, 2011, 2012}
+    assert set(icml_sites.PAGES) == {1997, 1998, 2001, 2003, 2004, 2007, 2008, 2009, 2010, 2011, 2012}
     assert {"icml.cc", "web.archive.org"} == icml_sites.HOSTS
     for pages in icml_sites.PAGES.values():
         for p in pages:
             assert p.capture is not None or p.url.startswith("https://icml.cc/")
     assert len(icml_sites.PAGES[2007]) == 151  # the list and its 150 per-paper captures
+    # 1997's program page and 1998's 66 submission pages: captures, read by the parsers that keep the abstract only
+    assert len(icml_sites.PAGES[1997]) == 1 and len(icml_sites.PAGES[1998]) == 66
+    for year in (1997, 1998):
+        assert all(p.capture and p.parser in icml_sites.SUBMISSION_PARSERS for p in icml_sites.PAGES[year])
+    assert not any(p.parser in icml_sites.SUBMISSION_PARSERS for y, ps in icml_sites.PAGES.items() if y > 1998
+                   for p in ps)  # fmt: skip
 
 
 def row(**over: object) -> str:
@@ -395,6 +401,13 @@ HOSTILE = {  # the review gate's probes: openings whose closing tag never comes,
     "icml2010": '<a name="1"></a>' + "<h3>" * 20_000 + '<p class="abstracts">' * 20_000,
     "icml2011": "<a name='1'><h3>t</h3>" + "Abstract: </span>" * 20_000,
     "icml2012": '<div class="paper" id="paper-1">' + "<h2>" * 20_000 + "<strong>Abstract: </strong>" * 5_000,
+    # 1997/1998 (TASK-207): many anchors and unclosed tags, and one long submission of headings and digits
+    "icml1997": '<li><a href="#1">' * 10_000 + '<a name="1"></a>Abstract:\n' * 10_000 + "<a b" * 20_000,
+    "icml1998_paper": "<h1>ICML-98 Submission #1</h1>"
+    + "Abstract:\n" * 20_000
+    + "12 34 " * 20_000
+    + "<"
+    + "a" * 100_000,
 }
 
 

@@ -240,6 +240,8 @@ class DblpReport(ListingReport):
     site_ambiguous: int = 0  # page entries whose title key two entries, or two records, share
     site_unjoined: int = 0  # 2007's halves: a paper number with a title but no abstract page, or the reverse
     site_dropped: int = 0  # page entries with no usable title or abstract (an empty abstract page)
+    site_withheld: int = 0  # 1997/1998 submission abstracts withheld for a contact detail (TASK-207)
+    abstracts_as_submitted: bool = False  # the pages are the submissions (1997, 1998): abstracts as submitted
 
     def to_manifest(self) -> dict[str, Any]:
         out = super().to_manifest()
@@ -247,7 +249,8 @@ class DblpReport(ListingReport):
             out |= {"sites": list(self.sites), "site_entries": self.site_entries,
                     "abstract_attached": self.abstract_attached, "site_unmatched": self.site_unmatched,
                     "site_ambiguous": self.site_ambiguous, "site_unjoined": self.site_unjoined,
-                    "site_dropped": self.site_dropped}  # fmt: skip
+                    "site_dropped": self.site_dropped, "site_withheld": self.site_withheld,
+                    "abstracts_as_submitted": self.abstracts_as_submitted}  # fmt: skip
         return dict(sorted(out.items()))
 
 
@@ -332,7 +335,7 @@ def mine_year(
         "site_ambiguous": report.site_ambiguous, "site_unjoined": report.site_unjoined,
         "abstract_control_characters": report.abstract_control_characters,
         "abstract_pdf_codes": report.abstract_pdf_codes, "abstract_short": report.abstract_short,
-        "site_dropped": report.site_dropped, "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+        "site_dropped": report.site_dropped, "site_withheld": report.site_withheld, "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     if not report.count_ok:
         log.warning("listing_count_mismatch", extra={"year": year, "listing": report.listing,
                                                      "listed": report.listed, "stated": report.stated})  # fmt: skip
@@ -354,6 +357,8 @@ def _match(
     report.site_entries = len(site.entries)
     report.site_unjoined = site.unjoined
     report.site_dropped = site.dropped
+    report.site_withheld = site.withheld
+    report.abstracts_as_submitted = site.as_submitted
     report.fetched += site.fetched
     papers: dict[str, list[str]] = defaultdict(list)
     for _tail, e, title in kept:

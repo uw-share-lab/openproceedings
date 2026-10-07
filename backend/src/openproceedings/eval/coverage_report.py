@@ -445,13 +445,22 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
         sites = sorted({u for x in dblp for u in x.get("sites", [])})
         attached = sum(int(x.get("abstract_attached", 0)) for x in dblp)
         records = sum(int(x["records"]) for x in dblp)
+        submitted = [
+            x for x in dblp if x.get("abstracts_as_submitted") and int(x.get("abstract_attached", 0))
+        ]
+        as_submitted = (
+            f" {sum(int(x['abstract_attached']) for x in submitted):,} of those abstracts (ICML "
+            f"{', '.join(str(x['year']) for x in sorted(submitted, key=lambda x: int(x['year'])))}) are submission-time "
+            "abstracts from official pages that list the submissions, not the published papers' (TASK-207)."
+            if submitted else ""
+        )  # fmt: skip
         out.append(
             f"- ICML {held[0]}–{held[-1]}: from the pinned dblp snapshot release {', '.join(releases)} (a "
             "bibliography read from one pinned file, so it reflects that release, not a crawl on the dates above; "
             f"decision-047). {attached:,} of its {records:,} records have an abstract, each from an official ICML "
             f"page ({len(sites)} pages, live or Internet Archive captures: `ingest/icml_sites.toml`); the rest are "
             "title-only. 1989, 1991 and 1992, held as the International Workshop on Machine Learning, are exported "
-            "under the ICML name."
+            f"under the ICML name.{as_submitted}"
         )
     return out
 
