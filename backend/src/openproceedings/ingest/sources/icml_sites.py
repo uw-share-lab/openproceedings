@@ -37,7 +37,7 @@ from urllib.parse import urlparse
 
 from openproceedings.ingest.record import Source, title_text
 from openproceedings.ingest.sources.common import CrawlError, clean_abstract
-from openproceedings.ingest.sources.html import node_text, parse, text_of
+from openproceedings.ingest.sources.html import Element, node_text, parse, text_of
 from openproceedings.ingest.sources.http import Fetcher, FetchError, Heartbeat, Page
 
 log = logging.getLogger(__name__)
@@ -131,8 +131,8 @@ Parser = Callable[[str, str], list[Entry]]
 def _segments(text: str, start: str) -> list[tuple[str, str]]:
     """(the start pattern's first group, the text up to the next start) for each match of `start`."""
     marks = list(re.finditer(start, text, _S))
-    return [(m.group(1), text[m.end() : nxt.start() if nxt else len(text)])
-            for m, nxt in zip(marks, [*marks[1:], None], strict=True)]  # fmt: skip
+    nexts = [m.start() for m in marks[1:]] + ([len(text)] if marks else [])  # no mark: no segment at all
+    return [(m.group(1), text[m.end() : nxt]) for m, nxt in zip(marks, nexts, strict=True)]
 
 
 # Every parser below finds an opening mark (a pattern that can't run across tags) and then the nearest closing
@@ -141,16 +141,16 @@ def _segments(text: str, start: str) -> list[tuple[str, str]]:
 
 
 def _span(seg: str, opener: str, *ends: str, to_end: bool = False) -> str | None:
-    """The text of `seg` after the first match of `opener` up to the nearest of `ends` (case-blind), or to the end
-    of `seg` when none is there and `to_end`; None when `opener` isn't there, or no end is and not `to_end`."""
+    """The text of `seg` after the first match of `opener` up to the nearest match of any of `ends` (patterns of
+    fixed shape, case-blind, searched forward once), or to the end of `seg` when none is there and `to_end`; None
+    when `opener` isn't there, or no end is and not `to_end`."""
     m = re.search(opener, seg, re.I)
     if m is None:
         return None
-    lower = seg.lower()
-    found = [i for e in ends if (i := lower.find(e.lower(), m.end())) >= 0]
-    if not found and not to_end:
+    end = re.compile("|".join(ends), re.I).search(seg, m.end())
+    if end is None and not to_end:
         return None
-    return text_of(seg[m.end() : min(found) if found else len(seg)])
+    return text_of(seg[m.end() : end.start() if end else len(seg)])
 
 
 def icml2012(text: str, url: str) -> list[Entry]:
@@ -159,25 +159,25 @@ def icml2012(text: str, url: str) -> list[Entry]:
     out = []
     for key, block in _segments(text, r'<div class="paper" id="paper-([0-9]+)">'):
         block = block.split("</div>", 1)[0]
-        kind = _span(block, r'<p class="type">', "<p", to_end=True) or ""
+        kind = _span(block, r'<p class="type">', r"<p\b", to_end=True) or ""
         if "not for proceedings" in kind.lower():
             continue
-        out.append(Entry(key, _span(block, r"<h2>", "</h2>"),
-                         _span(block, r"<strong>\s{0,9}Abstract:\s{0,9}</strong>", "<p", to_end=True)))  # fmt: skip
+        out.append(Entry(key, _span(block, r"<h2>", r"</h2>"),
+                         _span(block, r"<strong>\s{0,9}Abstract:\s{0,9}</strong>", r"<p\b", to_end=True)))  # fmt: skip
     return out
 
 
 def icml2011(text: str, url: str) -> list[Entry]:
     """icml.cc/Conferences/2011/papers.php.html: `<a name='N'><h3>` title, `Abstract:</span>` text `</p>`. The
     Invited Cross-Conference Track after `<a name="cross">` (no abstracts; other venues' papers) is left out."""
-    main = text.split('<a name="cross">', 1)[0]
-    return [Entry(key, _span(seg, r"<h3\b[^<>]*>", "</h3>"), _span(seg, r"Abstract:\s{0,9}</span>", "</p>"))
+    main = re.split(r'<a name="cross">', text, maxsplit=1, flags=re.I)[0]
+    return [Entry(key, _span(seg, r"<h3\b[^<>]*>", r"</h3>"), _span(seg, r"Abstract:\s{0,9}</span>", r"</p>"))
             for key, seg in _segments(main, r"<a name='([0-9]+)'>(?=\s*<h3)")]  # fmt: skip
 
 
 def icml2010(text: str, url: str) -> list[Entry]:
     """icml.cc/Conferences/2010/abstracts.html: `<a name="N">`, `<h3>` title, `<p class="abstracts">`."""
-    return [Entry(key, _span(seg, r"<h3>", "</h3>"), _span(seg, r'<p class="abstracts">', "</p>"))
+    return [Entry(key, _span(seg, r"<h3>", r"</h3>"), _span(seg, r'<p class="abstracts">', r"</p>"))
             for key, seg in _segments(text, r'<a name="([0-9]+)"></a>')]  # fmt: skip
 
 
@@ -185,8 +185,8 @@ def icml2009(text: str, url: str) -> list[Entry]:
     """icml.cc/Conferences/2009/abstracts.html: `<h3><a name="N"></a>` title `</h3>`, authors, `paper ID: N`,
     then the abstract up to the `[Full paper]` links. A heading with no `paper ID` (the sidebar's "For
     Participants", which reuses `name="10"`) is no paper."""
-    return [Entry(key, _span(seg, r"^", "</h3>"),
-                  _span(seg, r"paper ID:\s{0,9}[0-9]{1,9}\s{0,9}</p>", "[<a", "<hr", to_end=True))
+    return [Entry(key, _span(seg, r"^", r"</h3>"),
+                  _span(seg, r"paper ID:\s{0,9}[0-9]{1,9}\s{0,9}</p>", r"\[<a\b", r"<hr", to_end=True))
             for key, seg in _segments(text, r'<h3>\s*<a name="([0-9]+)"></a>')
             if re.search(r"paper ID:\s{0,9}[0-9]", seg, re.I)]  # fmt: skip
 
@@ -203,19 +203,37 @@ def _between_authors_and_links(seg: str) -> str | None:
 def icml2008(text: str, url: str) -> list[Entry]:
     """icml.cc/Conferences/2008/abstracts.shtml.html: `<a name="N">`, `paper ID`, `<h3>` title, `<p><i>` authors
     `</p>`, then the abstract up to the `<p>[Full paper]` links."""
-    return [Entry(key, _span(seg, r"<h3>", "</h3>"), _between_authors_and_links(seg))
+    return [Entry(key, _span(seg, r"<h3>", r"</h3>"), _between_authors_and_links(seg))
             for key, seg in _segments(text, r'<a name="([0-9]+)"></a>')]  # fmt: skip
 
 
 def _cyberchair_tables(text: str, url: str) -> list[tuple[str, str]]:
-    """Each CyberChair table's `<th>` title and second `<td>` (the abstract; the first is the authors), read with
-    the shared HTML tree (`html.parse`: bounded, linear), never a backtracking pattern."""
-    out = []
-    for table in parse(text, url).iter("table"):
-        heads, cells = table.iter("th"), table.iter("td")
-        if heads and len(cells) >= 2:
-            out.append((node_text(heads[0]), node_text(cells[1])))
-    return out
+    """Each top-level CyberChair table's `<th>` title and second `<td>` (the abstract; the first is the authors),
+    from one walk of the shared HTML tree (`html.parse`). A cell belongs to its nearest table, and a table inside
+    another is no paper's table: each top-level table's subtree is read once, so nested tables can't multiply the
+    work (the review gate's probe: a thousand nested tables)."""
+    tables: list[tuple[list[Element], list[Element]]] = []  # (th cells, td cells) of each top-level table
+    stack: list[tuple[Element, int | None, bool]] = [
+        (parse(text, url), None, False)
+    ]  # (node, its table, nested)
+    while stack:  # depth-first, in document order: a frame's children are pushed in reverse
+        node, table, nested = stack.pop()
+        if node.tag == "table":
+            if table is None and not nested:  # a top-level table, met in document order
+                tables.append(([], []))
+                table = len(tables) - 1
+            else:
+                table, nested = None, True  # a table inside another: its cells are nobody's
+        frames = []
+        for child in node.children:
+            if not isinstance(child, Element):
+                continue
+            if table is not None and child.tag in ("th", "td"):
+                tables[table][0 if child.tag == "th" else 1].append(child)
+                continue  # a cell's own subtree is read as its text, never walked for more cells
+            frames.append((child, table, nested))
+        stack.extend(reversed(frames))
+    return [(node_text(th[0]), node_text(td[1])) for th, td in tables if th and len(td) >= 2]
 
 
 def cyberchair(text: str, url: str) -> list[Entry]:
@@ -229,10 +247,13 @@ def icml2007_list(text: str, url: str) -> list[Entry]:
     `</a>` is found once and each anchor takes the next one (a binary search), so the page is read in linear time
     whatever it holds."""
     closes = [m.start() for m in re.finditer("</a>", text, re.I)]
+    marks = list(re.finditer(r'<a name="([0-9]{1,9})">', text, re.I))
     out = []
-    for m in re.finditer(r'<a name="([0-9]{1,9})">', text, re.I):
+    for m, nxt in zip(marks, [*(x.start() for x in marks[1:]), len(text)], strict=True):
         i = bisect.bisect_left(closes, m.end())
-        if i < len(closes):
+        if (
+            i < len(closes) and closes[i] <= nxt
+        ):  # its own `</a>`, before the next anchor: slices never overlap
             out.append(Entry(m.group(1), text_of(text[m.end() : closes[i]]), None))
     return out
 

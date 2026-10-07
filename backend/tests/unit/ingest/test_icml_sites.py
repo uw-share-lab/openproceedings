@@ -387,9 +387,10 @@ def test_a_page_listed_twice_or_a_capture_off_the_official_sites_path_is_refused
 
 HOSTILE = {  # the review gate's probes: openings whose closing tag never comes, about 0.3 MB each
     "cyberchair": "<table>" + "<th>x</th><td>" * 20_000,
-    "icml2007_paper": "<table>" + "<th>x</th><td>" * 20_000,
-    "icml2007_list": '<a name="1">' * 20_000,
+    "icml2007_paper": "<table>" * 1_000 + "<th>x</th><td>y</td>" * 20_000,  # deep nesting, then many cells
+    "icml2007_list": '<a name="1">' * 20_000 + "</a>",  # one far closing tag after every opening
     "icml2008": '<a name="1"></a>' + "<h3>" * 20_000 + "<p><i>a</p>" * 10_000,
+    # the old 2009 patterns were bounded already; the row keeps a future rewrite honest
     "icml2009": '<h3><a name="1"></a>paper ID: 1</p>' + "x" * 300_000,
     "icml2010": '<a name="1"></a>' + "<h3>" * 20_000 + '<p class="abstracts">' * 20_000,
     "icml2011": "<a name='1'><h3>t</h3>" + "Abstract: </span>" * 20_000,
@@ -409,3 +410,34 @@ def test_a_hostile_page_is_parsed_in_linear_time(parser: str) -> None:
     with contextlib.suppress(HTMLBudgetError):  # the shared tree's nesting bound: a refusal, fine, and fast
         icml_sites.PARSERS[parser](hostile, CAPTURE)
     assert time.monotonic() - started < 2.0
+
+
+@pytest.mark.parametrize("parser", ["icml2008", "icml2009", "icml2010", "icml2011", "icml2012"])
+def test_a_page_that_lost_its_papers_gives_none_and_stops_the_crawl(tmp_path: Path, parser: str) -> None:
+    moved = "<html><body>This page has moved.</body></html>"
+    assert icml_sites.PARSERS[parser](moved, "https://icml.cc/x") == []
+    url = "https://icml.cc/Conferences/1990/abstracts.html"
+    seed(tmp_path, "icml_sites", url, moved, at=T)
+    f, _ = fetcher(tmp_path / "icml_sites", None, frozenset({"icml.cc"}))
+    pages = {1990: (SitePage(1990, url, url, parser, "utf-8", 1, T.date(), "t"),)}
+    with pytest.raises(CrawlError, match="gives 0 entries") as e:
+        icml_sites.read_year(1990, f, pages=pages)
+    assert e.value.reason == "site_count_mismatch"
+
+
+def test_a_span_cuts_at_the_right_place_whatever_the_text_and_never_at_pre() -> None:
+    """`str.lower()` can lengthen a string (U+0130 lowers to two code points), so ends are searched in the text
+    itself; `<p\\b` ends a paragraph, `<pre>` doesn't."""
+    assert icml_sites._span("\u0130\u0130\u0130<h3>Title</h3>rest", r"<h3>", r"</h3>") == "Title"
+    assert icml_sites._span("<h3>\u0130\u0130 Title</h3>", r"<h3>", r"</h3>") == "\u0130\u0130 Title"
+    page = '<div class="paper" id="paper-1"><h2>T</h2><p class="type">Accepted<p class="abstract">' \
+           "<strong>Abstract: </strong>a <pre>b</pre> c<p>links</div>"  # fmt: skip
+    assert icml_sites.icml2012(page, "https://icml.cc/2012/papers/") == [Entry("1", "T", "a b c")]
+
+
+def test_a_table_inside_a_paper_table_is_nobodys_and_its_cells_stay_out() -> None:
+    page = ("<table><tr><th>Title</th></tr><tr><td>Authors</td></tr><tr><td>Abstract "
+            "<table><tr><th>inner</th><td>a</td><td>b</td></tr></table> text.</td></tr></table>")  # fmt: skip
+    assert icml_sites.cyberchair(page, "https://icml.cc/x") == [
+        Entry(None, "Title", "Abstract inner a b text.")
+    ]

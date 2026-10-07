@@ -79,7 +79,7 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   `time.monotonic`, checked after each record built. Their `_mined` lines also carry `abstract_pdf_codes` and
   `abstract_short` (decision-047). The dblp source (decision-047): `pinned_file_fetch_started` /
   `pinned_file_progress` (`bytes`, `of`, at most every 30 s of the injected clock) / `pinned_file_fetched` for the
-  release download, `pinned_file_verify_started` before a cached copy's sha256 is checked, `pinned_file_mismatch`
+  release download, `pinned_file_verify_started` / `pinned_file_verified` (`ok`, `ms`) around a cached copy's sha256 check, `pinned_file_mismatch`
   WARNING with its `reason` (`sidecar_mismatch`, `size_mismatch`, `hash_mismatch`); `dblp_extract_started` /
   `dblp_extract_progress` (`lines`, `records`, at most every 30 s) / `dblp_extract_written` for the streaming read,
   `dblp_extract_stale` (with `reason`) when an extract is read again; `icml_site_year_started` /
