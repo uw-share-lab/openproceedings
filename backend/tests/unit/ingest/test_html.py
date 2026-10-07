@@ -156,13 +156,42 @@ def test_malformed_markup_parses_in_linear_time() -> None:
         ("x &amp; y <a", "x & y <a"),
         ("tail <!-- c", "tail <!-- c"),
         ("end </a", "end </a"),
-        ("<p>one</p><script>x<y", "one"),  # an unclosed script body stays out of the text
         ("<p>bound n<k</p>", "bound n"),  # a later `>` makes it a tag, on every release
-        ("a <!-- b > c", "a"),  # a tail with a `>` is left to close(): an unterminated comment
+        ("<title>a<b>c</b></title> d", "ac d"),  # title, textarea, xmp, iframe: markup inside, as on 3.12.9
+        ("<textarea>a<b>c</b></textarea> d", "ac d"),
+        ("<xmp>a<b>c</xmp> d", "ac d"),
+        ("<iframe>a<b>c</b></iframe> d", "ac d"),
+        ("a <plaintext> b <i>c</i>", "a b c"),
     ],
 )
-def test_an_unterminated_tail_without_a_closing_bracket_stays_text(markup: str, text: str) -> None:
-    """TASK-208: from 3.12.12 HTMLParser.close drops an unterminated construct at the end of its input, where
-    3.12.9 kept it as text; `_feed_all` keeps a tail with no `>`, so a fragment such as an ICML page's abstract
-    cell keeps its words on either release (the crawl cache replays to identical records under both)."""
+def test_text_is_read_as_on_3_12_9(markup: str, text: str) -> None:
+    """TASK-208: the readings 3.12.12+ changed that `html.py` keeps as 3.12.9 had them, so a fragment keeps its
+    words and a page its structure on either release. A tail with no `>` stays text (`_feed_all`): 3.12.12+'s
+    `close` would drop it. Only `script` and `style` are raw text (`_RawTextParser`)."""
+    assert text_of(markup) == node_text(parse(markup)) == text
+
+
+def test_an_unclosed_raw_text_tag_does_not_swallow_the_rows_after_it() -> None:
+    """3.12.12+ reads an unclosed `<title>` to the end as text: a listing would lose every later row, and the
+    abstract page its `citation_title` (TASK-208)."""
+    assert len(parse("<ul><li>Why <title> tags</li><li>Second paper</li></ul>").iter("li")) == 2
+    assert metas('<title>x<meta name="citation_title" content="T">', "citation_title") == ["T"]
+    script = parse("<p>one</p><script>x<y").iter("script")
+    assert [node.children for node in script] == [["x<y"]]  # an unclosed script body stays inside it
+
+
+@pytest.mark.parametrize(
+    ("markup", "text"),
+    [
+        ("a <!-- b > c", "a"),  # a tail with a `>` is left to close(): an unterminated comment
+        ("a <![CDATA[ b > c", "a"),
+        ("a <b x='y > c", "a"),  # an unterminated quoted attribute value
+        ("a <!--> b", "a b"),  # HTML5's empty comment
+        ("a <!-- b --!> c", "a c"),
+    ],
+)
+def test_the_readings_left_to_the_pinned_parser(markup: str, text: str) -> None:
+    """What 3.12.12+ reads differently from 3.12.9 and `html.py` leaves to it (spec 08 "Python pin"); 3.12.9
+    kept each of these as text. Pinned here so a release that changes them again shows up."""
+    assert html_parser_fixed(sys.version_info[:3])
     assert text_of(markup) == node_text(parse(markup)) == text

@@ -11,6 +11,8 @@ The standard-library HTML parser reads markup without executing or fetching anyt
   text: `&#x27;Catch` became `⟊tch`, `&rsquo;s` stayed `&rsquos` (TASK-128).
 - An unterminated construct at the end with no `>` after it (`for all p<q we show`) stays text (`_feed_all`):
   Python 3.12.12+ (the CVE-2025-6069 fix) would drop it where 3.12.9 kept it (TASK-208).
+- Only `script` and `style` bodies are raw text (`_RawTextParser`): 3.12.12+ would also read `title`,
+  `textarea`, `xmp`, `iframe`, `noembed`, `noframes` and `plaintext` that way (TASK-208).
 - Whitespace collapses to single spaces. LaTeX is kept verbatim (spec 03 decides its tokens).
 - The tree is bounded (`MAX_DEPTH`, `MAX_ELEMENTS`). A page past a bound is `HTMLBudgetError`, which names the
   page's URL (when the miner passes it) and how to recover: a page that size is a corrupt or wrong cache entry,
@@ -105,7 +107,20 @@ class Element:
         return self is other or any(node is other for node in self.iter())
 
 
-class _TreeParser(HTMLParser):
+class _RawTextParser(HTMLParser):
+    """HTMLParser with only `script` and `style` bodies read as raw text, as on 3.12.9 (TASK-208).
+
+    3.12.12+ also reads `title` and `textarea` (escapable), `xmp`, `iframe`, `noembed`, `noframes` and `plaintext`
+    as raw text, so one unclosed `<title>` in a listing would turn every later row into literal text and hide a
+    later `citation_title` meta. Proceedings pages use none of these as containers of the text we read, so every
+    parser here keeps the reading the corpus was built with."""
+
+    def set_cdata_mode(self, elem: str, *, escapable: bool = False) -> None:
+        if elem.lower() in ("script", "style"):
+            super().set_cdata_mode(elem)  # never escapable: 3.12.9's signature has no such argument
+
+
+class _TreeParser(_RawTextParser):
     VOID = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source"})
 
     def __init__(self, url: str | None = None) -> None:
@@ -151,13 +166,16 @@ class _TreeParser(HTMLParser):
         self.stack[-1].children.append(_reference(name, numeric=True))
 
 
-def _feed_all(parser: HTMLParser, markup: str) -> None:
+def _feed_all(parser: _TreeParser | _TextParser, markup: str) -> None:
     """Feed all of `markup`, then close, keeping an unterminated tag-like tail as text (TASK-208).
 
-    `feed` leaves the input's unfinished end in `rawdata`. When that tail holds no `>` (`for all p<q we show`,
+    One `feed` leaves the input's unfinished end in `rawdata` (an undocumented attribute, so this rests on the
+    exact `.python-version` pin and `test_html.py`). When that tail holds no `>` (`for all p<q we show`,
     `tail <!-- c`), no tag can end in it, and 3.12.9's `close` passed it on as text; from 3.12.12 (the
     CVE-2025-6069 fix) `close` drops it, which would cut a fragment's words. So such a tail is handed over as
-    data here, the same text on either release; a tail with a `>` is left to `close`. One `handle_data`: linear."""
+    data here: the same text on either release (an unclosed script body now stays inside its element, where no
+    reader looks). A tail with a `>` is left to `close`. One `handle_data`: linear. Raw only for the parsers
+    with `convert_charrefs=False`, whose references `unescape` decodes later; 3.12.9 decoded them for `True`."""
     parser.feed(markup)
     tail = parser.rawdata
     if tail and ">" not in tail:
@@ -223,7 +241,7 @@ def text_after(container: Element, target: Element) -> str:
     return collapse(unescape("".join(parts)))
 
 
-class _TextParser(HTMLParser):
+class _TextParser(_RawTextParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=False)
         self.parts: list[str] = []
@@ -268,7 +286,7 @@ def text_of(fragment: str) -> str:
     return collapse(unescape("".join(parser.parts)))
 
 
-class _TagParser(HTMLParser):
+class _TagParser(_RawTextParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.tags: list[tuple[str, dict[str, str]]] = []
