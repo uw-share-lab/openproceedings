@@ -191,13 +191,18 @@ def test_an_unclosed_raw_text_tag_does_not_swallow_the_rows_after_it() -> None:
         ("a <b x='y > c", "a"),  # an unterminated quoted attribute value
         ("a <!--> b", "a b"),  # HTML5's empty comment
         ("a <!-- b --!> c", "a c"),
+        ("<script>s</script x>after", "after"),  # an end tag with attributes ends the script
+        ("a </p y='>'> b", "a b"),  # an end tag with a quoted `>`
+        ("<a href==x>t</a>", "t"),  # `href==x`: the value is `=x` (checked below)
     ],
 )
 def test_the_readings_left_to_the_pinned_parser(markup: str, text: str) -> None:
     """What 3.12.12+ reads differently from 3.12.9 and `html.py` leaves to it (spec 08 "Python pin"); 3.12.9
-    kept each of these as text. Pinned here so a release that changes them again shows up."""
+    read each of these differently. Pinned here so a release that changes them again shows up."""
     running = sys.version_info[:3]
     assert html_parser_fixed(running), (
         f"Python {'.'.join(map(str, running))} has CVE-2025-6069: run the release .python-version pins"
     )
     assert text_of(markup) == node_text(parse(markup)) == text
+    if "href==" in markup:
+        assert [a.attributes["href"] for a in parse(markup).iter("a")] == ["=x"]
