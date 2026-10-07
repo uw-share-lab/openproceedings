@@ -49,7 +49,7 @@ autofix and CI, and write the URL↔state reducer.
 - [ ] task-078 — `/parse` reports each filter field's top-level clause span and values.
 
 ## Propagated to
-- Skill / agent / CLAUDE.md updated? — `.claude/skills/{nextjs-conventions,typescript-standards,autolint}/SKILL.md`, `CLAUDE.md`, `CONTRIBUTING.md`, specs 05 and 08
+- Skill / agent / CLAUDE.md updated? — `.claude/skills/{nextjs-conventions,typescript-standards,autolint}/SKILL.md`, `CLAUDE.md`, `CONTRIBUTING.md`, specs 05 and 08; 2026-10-07: the Dependabot review checks in spec 08 §CI ("Dependabot") and `.claude/agents/ci-engineer.md`
 - Test or hook added? — `.claude/hooks/tests/test-openproceedings-gates.sh` (autofix row now uses the root `node_modules`) and its mutant in `.claude/scripts/mutants/gates.json`; `Makefile` `frontend-deps`
 
 ## Addendum — 2026-09-27 (review round 1)
@@ -77,15 +77,32 @@ platform-specific optional packages, and keep the as-built frontend stack descri
 with its manifest. PR #100 updates Next/eslint-config-next to 16.3.7 and Vitest to 5.0.3;
 `docs/specs/05-frontend.md` now also corrects the inherited stale React description to 19.3.0.
 
-## Addendum — 2026-10-07: Dependabot writes the caret back on every bump
+## Addendum — 2026-10-07: Dependabot's npm updater can write a caret into the workspace entry (twice so far)
 
-PR #124 (Next and eslint-config-next 16.3.7 → 16.3.8) recorded `"eslint-config-next": "^16.3.8"` in the
-lockfile's `packages["frontend"]` again, while `frontend/package.json` pins `16.3.8` exactly: the same
-drift PR #100 corrected for Vitest (`^5.0.3`), now on a different package, so it comes from Dependabot's
-npm updater, not a one-off. `npm ci --ignore-scripts`
-accepts the drifted lock and leaves it as it is, so no CI job notices. Every npm Dependabot PR therefore gets
-one check before review: compare each `dependencies`/`devDependencies` entry in `frontend/package.json` with
-`packages["frontend"]` in `package-lock.json` (equal strings, no extra names) and correct the single field by
-hand. The same PR's audit showed two high advisories in production transitive packages that the bump does
-not touch (`sharp` < 0.35.5, `source-map-js` ≤ 1.2.1), so "zero vulnerabilities" from PR #100 is not a
-standing fact: run `npm audit --omit=dev` on each npm update and report what predates it.
+- **The caret.** PR #124 (Next and eslint-config-next 16.3.7 → 16.3.8) recorded
+  `"eslint-config-next": "^16.3.8"` in the lockfile's `packages["frontend"]`, while `frontend/package.json` pins
+  `16.3.8` exactly. In PR #100 the same updater wrote `^5.0.3` for Vitest and kept Next exact; here it kept Next,
+  TanStack Query and `@types/node` exact. So it is one entry per bump, on a different package each time, and it
+  comes from Dependabot, not from a hand edit. `npm ci --ignore-scripts` accepts the drifted lock and leaves it
+  unchanged, so no CI job notices. Each npm Dependabot PR therefore gets a check before review: every
+  `dependencies`/`devDependencies` entry in `frontend/package.json` equals `packages["frontend"]` in
+  `package-lock.json` (the same strings, no extra names), and a drifted field is corrected by hand.
+- **Next 16.3.8 is a security release.** Its notes list seven advisories, among them a server-side request
+  forgery in Image Optimization (GHSA-cjq9-62q9-8jv4; `/_next/image` is on in the standalone build) and cache
+  poisoning of SSG/ISR pages (GHSA-4jqv-mc3x-m676, GHSA-mcj8-r9mp-w47p). They were published as repository
+  advisories, and `npm audit` on 16.3.7 reported none of them. So read the release notes of each bumped
+  package: the audit alone does not show what a bump fixes.
+- **The audit still finds what predates a bump.** `npm audit --omit=dev` on the Dependabot head reported two
+  high advisories in production transitive packages the bump did not touch: `sharp` 0.35.4
+  (GHSA-wq5f-xc86-pv6w, fixed in 0.35.5) and `source-map-js` 1.2.1 (GHSA-68fv-2mgg-jv7q, fixed in 1.2.2).
+  "Zero vulnerabilities" from PR #100 is not a standing fact. PR #124 took both fixes in the lockfile alone
+  (`npm update sharp source-map-js --package-lock-only`; both versions sit in the existing ranges, and the
+  publishers are the same as before), after which the production audit reports 0.
+- **A local npm older than CI's drops fields from the lock.** That `npm update` ran on the machine's default
+  npm 10.8.2 (Node 20, not `.nvmrc`'s 22), which rewrote the lock without the `libc` field on 48
+  platform-specific entries (`@next/swc-linux-*`, `@img/sharp-*`, lightningcss, rolldown and others). `npm ci`
+  takes platform fields from the lock, so without `libc` a Linux install can fetch both the glibc and the musl
+  builds. The fields were put back from the
+  previous lock with a script, and the final lock diff holds only version, resolved, integrity and dependency-pin
+  changes. Run lockfile edits under the `.nvmrc` Node (`nvm use`), and diff the lock by entry, not by line
+  count, before committing.
