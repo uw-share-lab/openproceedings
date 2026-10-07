@@ -59,20 +59,20 @@ image half; its PR fails that test until `.python-version` follows). The minor s
 2028-10), so ruff's `py312` and mypy's `3.12` targets don't move; a new minor is a hand-made PR.
 
 The fix also changed how the parser reads malformed markup, so extracted text can depend on the release.
-`ingest/sources/html.py` keeps two of those readings as 3.12.9 had them. At the end of the input, 3.12.9's
-`close` kept an unterminated construct as text and 3.12.12+ drops it, which would cut `for all p<q we show` to
-`for all p` in a fragment: `_feed_all` hands such a tail to the parser as text when it holds no `>` (linear on
-either release). And 3.12.12+ reads `title`, `textarea`, `xmp`, `iframe`, `noembed`, `noframes` and `plaintext`
-bodies as raw text, so one unclosed `<title>` would swallow a listing's later rows: `_RawTextParser` keeps raw
-text to `script` and `style`. The rest is left to the parser, which 3.12.12+ reads differently: an unterminated
-construct whose tail holds a `>` (a comment, a `<![CDATA[`, a quoted attribute value: `a <b x='y > c` gives `a`),
-the empty comment `<!-->` and `--!>`, `</script x>` as an end tag, and some malformed attributes (`href==x` keeps
-the second `=` in the value). In the track paths such a change can only drop a listing entry (an unparsed link
-is skipped and counted, a lost section fails its count check), never reclassify one. The evidence
-(`docs/results/2026-10-07-python-upgrade.md`): the whole crawl cache replays to byte-identical records under
-3.12.9 and 3.12.15; an index built from the same snapshot has identical segment bytes and the same
-`index_version`; and over 200,000 seeded malformed strings the new `html.py` on 3.12.9 gives exactly the old
-output, while on 3.12.15 one in five still differs, nearly all through `<!` constructs.
+`ingest/sources/html.py` keeps two of those readings as 3.12.9 had them. At the end of the input, 3.12.9's `close`
+kept an unterminated construct as text and 3.12.12+ drops it, which would cut `for all p<q we show` to `for all p`
+in a fragment: `_feed_all` hands such a tail to the parser as text when it holds no `>` (linear on either release).
+And 3.12.12+ reads `title`, `textarea`, `xmp`, `iframe`, `noembed`, `noframes` and `plaintext` bodies as raw text,
+so one unclosed `<title>` would swallow a listing's later rows: `_RawTextParser` keeps raw text to `script` and
+`style`. The rest is left to the parser, which 3.12.12+ reads differently: an unterminated construct whose tail
+holds a `>` (a comment, a `<![CDATA[`, a quoted attribute value: `a <b x='y > c` gives `a`), the empty comment
+`<!-->` and `--!>`, `</script x>` as an end tag, an end tag with a quoted `>` in it, and some malformed attributes
+(`href==x` keeps the second `=` in the value). In the track paths such a change can only drop a listing entry (an
+unparsed link is skipped and counted, a lost section fails its count check), never reclassify one. The evidence
+(`docs/results/2026-10-07-python-upgrade.md`): the whole crawl cache replays to byte-identical records under 3.12.9
+and 3.12.15; an index built from the same snapshot has identical segment bytes and the same `index_version`; and
+over 200,000 seeded malformed strings the new `html.py` on 3.12.9 gives the old text and metas, while on 3.12.15 one
+in five still differs, nearly all through `<!` constructs.
 
 ## CLI (`op`)
 
@@ -205,16 +205,16 @@ again (skill `task-hygiene`, §Ids). The rows are in `.claude/scripts/tests/test
 mutants in `.claude/scripts/mutants/backlog.json`.
 
 **Dependabot** (`.github/dependabot.yml`, weekly) watches `github-actions` (prefix `ci`), `uv` and `npm` (prefix
-`deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch version updates
-are grouped into one PR per ecosystem (a docker digest bump is not a version change and comes as its own PR),
-and semver-major updates are ignored (`dependency-name: "*"`,
-`version-update:semver-major`), so a major upgrade is a deliberate, hand-made PR; adopted 2026-10-01, after the
-npm entry's first run opened six PRs, majors among them. The `uv` entry also ignores `tantivy` entirely
-(§Release, "Upgrading Tantivy"), and the `docker` entry still bumps the base-image digests, which are not majors
-(§Deploy), and ignores a new `python` minor (`version-update:semver-minor`): the api image's tag names the
-patch release `.python-version` pins, so a patch bump arrives as a PR that must move `.python-version` too, and a
-minor is done by hand (§Monorepo layout, "Python pin"). GitHub applies `ignore` to security updates too, so a vulnerability whose fix is a major, or any
-Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
+`deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch version updates are
+grouped into one PR per ecosystem (a docker digest bump is not a version change and comes as its own PR), and
+semver-major updates are ignored (`dependency-name: "*"`, `version-update:semver-major`), so a major upgrade is a
+deliberate, hand-made PR; adopted 2026-10-01, after the npm entry's first run opened six PRs, majors among them. The
+`uv` entry also ignores `tantivy` entirely (§Release, "Upgrading Tantivy"), and the `docker` entry still bumps the
+base-image digests, which are not majors (§Deploy), and ignores a new `python` minor
+(`version-update:semver-minor`): the api image's tag names the patch release `.python-version` pins, so a patch bump
+arrives as a PR that must move `.python-version` too, and a minor is done by hand (§Monorepo layout, "Python pin").
+GitHub applies `ignore` to security updates too, so a vulnerability whose fix is a major, or any Tantivy fix, shows
+up as a Dependabot alert and is fixed by a hand-made PR.
 
 ## Git and PR rules
 
@@ -397,21 +397,21 @@ must fail at `web-build-gate.sh` (TASK-148).
 
 **Base images are digest-pinned (TASK-149).** Every `FROM` in `deploy/` names its base image as
 `name:tag@sha256:<digest>`, the tag kept for readers (the api image's `python` tag names the patch release
-`.python-version` pins, and a bump of it fails `test_python_pin.py` until `.python-version` follows: "Python
-pin") and the digest that of the multi-arch index (not of one platform's manifest), so a rebuild uses the image that was reviewed; a `FROM` naming an earlier build stage, or
-`scratch`, needs none. The same holds for every other image a build pulls: a `# syntax=` parser directive
-(the BuildKit frontend; `web.Dockerfile` has none, so the builder's built-in one is used), `COPY --from=` and
-`RUN --mount=…,from=`. `.claude/scripts/check_digest_pins.py` (`make tooling`, CI `claude-tooling`; case rows
-in `test-tooling-scripts.sh`) reads every `*Dockerfile*` or `*Containerfile*` under `deploy/` as BuildKit does
-(a BOM dropped, continuation lines glued, the `escape` directive honoured) and fails on any of those images
-without a digest, or with an `ARG` in its name. Dependabot's `docker` entry for `/deploy` and its
-subdirectories (weekly, prefix `build`; §CI, "Dependabot") bumps the `FROM` digests; it reads no other line, so a pinned `syntax`,
-`COPY --from` or `RUN --mount` image (none today) is bumped by hand; a new Node major (`22-…` → `24-…`) is
-ignored there, like every semver-major update (§CI), and done by hand along with `.nvmrc` and CI. A digest is resolved from the registry,
-e.g. `docker buildx imagetools inspect node:22-bookworm-slim` (its top-level `Digest:`, with media type
-`…image.index…`), which needs no running daemon; where that hangs, the registry answers directly (a token from
-`auth.docker.io`, then a `HEAD` on `/v2/library/<name>/manifests/<tag>` with the OCI index `Accept` header returns
-`docker-content-digest`).
+`.python-version` pins, and a bump of it fails `test_python_pin.py` until `.python-version` follows: "Python pin")
+and the digest that of the multi-arch index (not of one platform's manifest), so a rebuild uses the image that was
+reviewed; a `FROM` naming an earlier build stage, or `scratch`, needs none. The same holds for every other image a
+build pulls: a `# syntax=` parser directive (the BuildKit frontend; `web.Dockerfile` has none, so the builder's
+built-in one is used), `COPY --from=` and `RUN --mount=…,from=`. `.claude/scripts/check_digest_pins.py` (`make
+tooling`, CI `claude-tooling`; case rows in `test-tooling-scripts.sh`) reads every `*Dockerfile*` or
+`*Containerfile*` under `deploy/` as BuildKit does (a BOM dropped, continuation lines glued, the `escape` directive
+honoured) and fails on any of those images without a digest, or with an `ARG` in its name. Dependabot's `docker`
+entry for `/deploy` and its subdirectories (weekly, prefix `build`; §CI, "Dependabot") bumps the `FROM` digests; it
+reads no other line, so a pinned `syntax`, `COPY --from` or `RUN --mount` image (none today) is bumped by hand; a
+new Node major (`22-…` → `24-…`) is ignored there, like every semver-major update (§CI), and done by hand along with
+`.nvmrc` and CI. A digest is resolved from the registry, e.g. `docker buildx imagetools inspect
+node:22-bookworm-slim` (its top-level `Digest:`, with media type `…image.index…`), which needs no running daemon;
+where that hangs, the registry answers directly (a token from `auth.docker.io`, then a `HEAD` on
+`/v2/library/<name>/manifests/<tag>` with the OCI index `Accept` header returns `docker-content-digest`).
 
 The e2e suite
 builds with the placeholder `takedown@example.org` (`frontend/playwright.config.ts`); `frontend/.env.example`

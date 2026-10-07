@@ -36,9 +36,10 @@ input; every crawler parses pages with it), without changing the tokenizer, sche
   turns a listing's later rows into literal text and hides a later `citation_title` meta (the dedup auditor
   found it by diffing the two stdlib `html/parser.py` files). My fuzz atoms had none of those tags, so it reported
   "only comments". Overriding `set_cdata_mode` to pass only `script` and `style` (`_RawTextParser`) restores
-  3.12.9's reading; with those tags added to the atoms, old code on 3.12.15 differs from 3.12.9 on 61 % of
+  3.12.9's reading; with those tags added to the atoms, old code on 3.12.15 differs from 3.12.9 on 60 % of
   strings, the new code on 20 %, nearly all through `<!` constructs (a tail with a `>`, `<!-->`, `--!>`), and
-  the new code on 3.12.9 on none. Read the stdlib diff before trusting a fuzz's alphabet.
+  the new code on 3.12.9 on none. Read the stdlib diff before trusting a fuzz's alphabet, and count differences
+  row by row (the check script's `compare`): `diff | grep -c '^<'` miscounted them by a few hundred.
 - **The bundled expat moved too** (2.7.1 → 2.8.5, which `dblp_xml.py` parses dblp's release with); the dblp
   replay was identical.
 - **It changed no record in today's corpus.** `crawl.replay_all` over an APFS clone of the cache (`cp -cR`,

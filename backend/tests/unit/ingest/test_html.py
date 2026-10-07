@@ -162,6 +162,9 @@ def test_malformed_markup_parses_in_linear_time() -> None:
         ("<xmp>a<b>c</xmp> d", "ac d"),
         ("<iframe>a<b>c</b></iframe> d", "ac d"),
         ("a <plaintext> b <i>c</i>", "a b c"),
+        ("<noembed>a<b>c</b></noembed> d", "ac d"),
+        ("<noframes>a<b>c</b></noframes> d", "ac d"),
+        ("<style>.a<i{}</style><p>kept</p>", "kept"),  # style stays raw text
     ],
 )
 def test_text_is_read_as_on_3_12_9(markup: str, text: str) -> None:
@@ -193,5 +196,8 @@ def test_an_unclosed_raw_text_tag_does_not_swallow_the_rows_after_it() -> None:
 def test_the_readings_left_to_the_pinned_parser(markup: str, text: str) -> None:
     """What 3.12.12+ reads differently from 3.12.9 and `html.py` leaves to it (spec 08 "Python pin"); 3.12.9
     kept each of these as text. Pinned here so a release that changes them again shows up."""
-    assert html_parser_fixed(sys.version_info[:3])
+    running = sys.version_info[:3]
+    assert html_parser_fixed(running), (
+        f"Python {'.'.join(map(str, running))} has CVE-2025-6069: run the release .python-version pins"
+    )
     assert text_of(markup) == node_text(parse(markup)) == text

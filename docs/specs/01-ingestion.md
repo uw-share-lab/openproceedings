@@ -191,10 +191,11 @@ the NeurIPS 1987–2012, dblp and ICML sites rows on 2026-10-06 (`docs/research/
    so its pages agree (`count`, rows and ids; a mismatch is still refused, re-run with `--refresh`).
 2. **Normalize.** Map each source's shape to `PaperRecord`. Strip HTML (`ingest/sources/html.py`, the standard
    library's parser on the pinned Python, spec 08 "Python pin"; an unterminated tag-like tail with no `>`, as in
-   `for all p<q we show`, stays text, and only `script` and `style` bodies are raw text, as on 3.12.9; TASK-208). Keep LaTeX verbatim (03 decides
-   how it is tokenized). Then the **ingest caps** (`ingest/caps.py`, decision-026, TASK-155), applied once to
-   every source's records before dedup (`snapshot.load_sources`), bound what the tokenizer's NFKC reordering
-   can cost. That cost is superlinear in a long run of marks with alternating combining classes.
+   `for all p<q we show`, stays text, and only `script` and `style` bodies are raw text, as on 3.12.9; TASK-208).
+   Keep LaTeX verbatim (03 decides how it is tokenized). Then the **ingest caps** (`ingest/caps.py`, decision-026,
+   TASK-155), applied once to every source's records before dedup (`snapshot.load_sources`), bound what the
+   tokenizer's NFKC reordering can cost. That cost is superlinear in a long run of marks with alternating combining
+   classes.
    - **Marks.** A run of combining marks in a title or abstract keeps 8 marks, and the rest are dropped.
      - A mark is a character whose NFKD form starts with a non-zero canonical combining class.
      - A run is the marks after one base character, or at the start of the text. It is counted in NFKD

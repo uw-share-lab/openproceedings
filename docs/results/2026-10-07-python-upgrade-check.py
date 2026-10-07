@@ -6,6 +6,9 @@
     python -I 2026-10-07-python-upgrade-check.py fuzz <html.py> <out.jsonl> <seed> <count>
         a copy of `ingest/sources/html.py` (old or new, loaded from its path) over seeded random malformed markup:
         `text_of`, `node_text(parse(…))` and `metas` per string
+    python -I 2026-10-07-python-upgrade-check.py compare <a.jsonl> <b.jsonl>
+        two fuzz outputs row by row: how many strings differ, by the construct they hold (`<!`, `</script` or
+        `</style`, `<?`, other)
 
 Both need an environment with the openproceedings package installed (`uv sync`); `replay` reads the clone only.
 Clone the cache with `cp -cR data/cache <scratch>/cache` (APFS: instant, no space), never replay `data/` itself.
@@ -58,10 +61,35 @@ def fuzz(html_py: Path, out: Path, seed: int, count: int) -> None:
     print(sys.version.split()[0], count, file=sys.stderr)
 
 
+def compare(a: Path, b: Path) -> None:
+    kinds: dict[str, int] = {}
+    total = differ = 0
+    with a.open(encoding="utf-8") as fa, b.open(encoding="utf-8") as fb:
+        for la, lb in zip(fa, fb, strict=True):
+            (s, ra), (sb, rb) = json.loads(la), json.loads(lb)
+            assert s == sb, "the two runs used different seeds or counts"
+            total += 1
+            if ra == rb:
+                continue
+            differ += 1
+            if "<!" in s or "--!>" in s:
+                kind = "<!"
+            elif "</script" in s or "</style" in s:
+                kind = "</script or </style"
+            elif "<?" in s:
+                kind = "<?"
+            else:
+                kind = "other"
+            kinds[kind] = kinds.get(kind, 0) + 1
+    print(f"{differ} of {total} differ ({differ / total:.1%}):", dict(sorted(kinds.items())))
+
+
 if __name__ == "__main__":
     if sys.argv[1:2] == ["replay"] and len(sys.argv) == 4:
         replay(Path(sys.argv[2]), Path(sys.argv[3]))
     elif sys.argv[1:2] == ["fuzz"] and len(sys.argv) == 6:
         fuzz(Path(sys.argv[2]), Path(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]))
+    elif sys.argv[1:2] == ["compare"] and len(sys.argv) == 4:
+        compare(Path(sys.argv[2]), Path(sys.argv[3]))
     else:
         raise SystemExit(__doc__)
