@@ -7,10 +7,12 @@
 # same owner and mode.
 # Base images are pinned by the digest of their multi-arch index, the tag kept for readers (TASK-149;
 # .claude/scripts/check_digest_pins.py checks it, Dependabot's `docker` entry bumps the FROM digests).
+# The python tag names the patch release .python-version pins, 3.12.15, which has the CVE-2025-6069 fix
+# (TASK-208): the two move together, and backend/tests/unit/test_python_pin.py fails while they differ.
 
 FROM ghcr.io/astral-sh/uv:0.12.22@sha256:f513a91fc62fe7c17567eee97230dd198e43edb8a9fbecca843714a4358fe1bc AS uv
 
-FROM python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3 AS build
+FROM python:3.12.15-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258 AS build
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_PROJECT_ENVIRONMENT=/app/.venv
 WORKDIR /repo
@@ -22,7 +24,7 @@ RUN uv sync --locked --no-dev --no-install-workspace
 COPY backend/src backend/src
 RUN uv sync --locked --no-dev --no-editable
 
-FROM python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3
+FROM python:3.12.15-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
 # op-api's uid and gid: 10001 unless the host already uses it for another account (compose passes
 # OP_API_UID/OP_API_GID; deploy/README.md §Permissions)
 ARG OP_API_UID=10001

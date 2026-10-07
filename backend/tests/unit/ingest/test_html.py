@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 from openproceedings.ingest.sources import html
-from openproceedings.ingest.sources.html import MAX_DEPTH, HTMLBudgetError, node_text, parse
+from openproceedings.ingest.sources.html import MAX_DEPTH, HTMLBudgetError, metas, node_text, parse, text_of
 from openproceedings.ingest.sources.http import PageCache, SourceError
+
+from tests.unit.test_python_pin import html_parser_fixed
 
 
 def test_deep_html_is_walked_iteratively_but_refused_past_the_explicit_depth_budget() -> None:
@@ -100,3 +103,30 @@ def test_attribute_values_are_decoded_by_htmlparser_not_the_reference_handlers()
     assert anchor.attributes["title"] == "A 'Catch Fréchet Fréchet it’s &#x27;9 R&D"  # decoded once
     assert html.attrs(f'<a title="{value}">') == {"title": "A 'Catch Fréchet Fréchet it’s &#x27;9 R&D"}
     assert html.metas(f'<meta name="citation_title" content="{value}">', "citation_title") == [decoded]
+
+
+def test_malformed_markup_parses_in_linear_time() -> None:
+    """CVE-2025-6069 (TASK-208): before the fix, HTMLParser took quadratic time on an unterminated construct at
+    the end of its input, so one malformed cached page could stall a crawl or a snapshot replay. These are
+    CPython's own regression inputs (python/cpython#135462) at a sixth of its size: on a fixed release each
+    pass takes milliseconds; on 3.12.9 the same inputs at n = 2,000 already took 12 s, and n = 20,000 is about
+    a hundred times that. No wall clock is read (testing-standards §Rules 5): a vulnerable interpreter fails the
+    version check first, with the reason, instead of hanging the run."""
+    running = sys.version_info[:3]
+    assert html_parser_fixed(running), f"Python {running} has CVE-2025-6069: run the pinned .python-version"
+    n = 20_000
+    for page in (
+        "<a " * n,
+        "<a a=" * n,
+        "</a " * 14 * n,
+        "</a a=" * 11 * n,
+        "<!--" * 4 * n,
+        "<!" * 60 * n,
+        "<?" * 19 * n,
+        "</$" * 15 * n,
+        "<![CDATA[" * 9 * n,
+        "<!doctype" * 35 * n,
+    ):
+        # every entry point the miners use: the tree, fragment text, and the meta/attribute reader
+        assert node_text(parse(page)) == text_of(page) == ""
+        assert metas(page, "citation_title") == []

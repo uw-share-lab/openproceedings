@@ -13,7 +13,7 @@ openproceedings/
 ├── .claude/                     # committed: agents, skills, commands, hooks, learnings (roster: .claude/README.md)
 ├── .githooks/                   # commit-msg (attribution), pre-push (make lint + make tooling)
 ├── .github/                     # workflows (below), dependabot.yml
-├── backend/                     # uv workspace member: Python package `openproceedings` (Python 3.12, .python-version)
+├── backend/                     # uv workspace member: Python package `openproceedings` (Python 3.12.15, pinned by .python-version)
 │   ├── pyproject.toml
 │   ├── src/openproceedings/
 │   │   ├── ingest/              # 01: record.py, classify.py, urls.py, volumes.py (+ pmlr_volumes.toml), ris.py, dedup.py, snapshot.py (built); sources/ (M4 crawlers: http.py (the one HTTP layer), common.py, openreview_client.py, openreview_v2.py, openreview_v1.py, iclr.py, neurips.py, pmlr.py, crawl.py)
@@ -45,6 +45,19 @@ openproceedings/
 **Environment:** uv for all Python. `uv sync` at the root installs every workspace member and the dev tools
 into one `.venv` from one `uv.lock`. New Python packages join by adding their directory to
 `[tool.uv.workspace] members`. npm for the frontend. `scripts/setup-dev.sh` once per clone.
+
+**Python pin (TASK-208).** `.python-version` names one exact CPython patch release, 3.12.15, which uv installs
+for development and for every CI job (`setup-uv` brings the latest uv; a local uv must be 0.12.22 or later to
+know 3.12.15). `requires-python` (both `pyproject.toml`s, recorded in `uv.lock`) is `>=3.12.12`, the first 3.12
+with the fix for CVE-2025-6069 (quadratic time in `html.parser.HTMLParser` on malformed input, which every
+crawler parses pages with; python/cpython#135462, fixed in 3.12.12, 3.13.6 and 3.14.0), and the api image's
+`FROM python:3.12.15-slim-bookworm` names the same release (§Deploy). `backend/tests/unit/test_python_pin.py`
+holds them together and fails on an interpreter without the fix; a patch upgrade moves `.python-version`, the
+image tag and digest together (Dependabot's `docker` entry proposes the image half; its PR fails that test until
+`.python-version` follows). The minor stays 3.12 (security fixes until 2028-10), so ruff's `py312` and mypy's
+`3.12` targets don't move; a new minor is a hand-made PR. The upgrade from the 3.12.9 the corpus was built with
+changed no ingest output: the whole crawl cache replays to byte-identical records under both, and an index built
+from the same snapshot has identical segment bytes and the same `index_version`.
 
 ## CLI (`op`)
 
@@ -183,7 +196,9 @@ and semver-major updates are ignored (`dependency-name: "*"`,
 `version-update:semver-major`), so a major upgrade is a deliberate, hand-made PR; adopted 2026-10-01, after the
 npm entry's first run opened six PRs, majors among them. The `uv` entry also ignores `tantivy` entirely
 (§Release, "Upgrading Tantivy"), and the `docker` entry still bumps the base-image digests, which are not majors
-(§Deploy). GitHub applies `ignore` to security updates too, so a vulnerability whose fix is a major, or any
+(§Deploy), and ignores a new `python` minor (`version-update:semver-minor`): the api image's tag names the
+patch release `.python-version` pins, so a patch bump arrives as a PR that must move `.python-version` too, and a
+minor is done by hand (§Monorepo layout, "Python pin"). GitHub applies `ignore` to security updates too, so a vulnerability whose fix is a major, or any
 Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
 
 ## Git and PR rules

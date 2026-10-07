@@ -2,7 +2,7 @@
 name = "openproceedings"
 version = "0.2.0"
 description = "Exact, reproducible Boolean search over NeurIPS, ICLR and ICML titles and abstracts."
-requires-python = ">=3.12"
+requires-python = ">=3.12.12"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [

@@ -41,7 +41,10 @@ updates:
   # digest when the tag moves (a digest bump is not a major). A new Node major (22-… → 24-…) moves with
   # .nvmrc and CI, so it is done by hand.
   # The group is for symmetry: a major-only tag like 22-bookworm-slim moves only by a major (ignored), so the
-  # updates expected here are digest bumps, each its own PR.
+  # updates expected here are digest bumps, each its own PR. The api image's `python:3.12.N-slim-bookworm` tag
+  # names the patch .python-version pins (TASK-208): a patch bump arrives here, and its PR fails CI's
+  # test_python_pin.py until .python-version moves with it; a new minor (3.12 → 3.13) is done by hand, with
+  # .python-version, requires-python and the ruff/mypy targets.
   - package-ecosystem: docker
     directories: ["/deploy", "/deploy/**"]
     schedule: { interval: weekly }
@@ -52,3 +55,5 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      - dependency-name: python
+        update-types: ["version-update:semver-minor"]
