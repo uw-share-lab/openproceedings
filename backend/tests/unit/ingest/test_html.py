@@ -284,7 +284,7 @@ def test_a_bare_lt_costs_linear_time() -> None:
     """Shapes that make a tag match scan far, at n = 20,000: each scan ends at the next `<` outside a quoted
     value, so the whole escape is linear (no wall clock: a quadratic one would time out the suite)."""
     n = 20_000
-    for page in ('<a x="' + "<a " * n, "<b and c " * n, "<a x='" * n, '<a x="\'' * n, "<p<" * n, "a<b" * n):
+    for page in ('<a x="' + "<a " * n, "<b and c " * n, "<a x='" * n, "<a x=\"'" * n, "<p<" * n, "a<b" * n):
         assert node_text(parse(page)) == text_of(page) == collapse(page)
         assert metas(page, "citation_title") == []
     long_tag = "<a" + " x" * n  # one tag with 20,000 attributes and no `>`

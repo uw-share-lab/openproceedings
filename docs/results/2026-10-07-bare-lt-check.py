@@ -42,7 +42,9 @@ def classify(old: str | None, new: str | None) -> str:
     if old is None or new is None:
         return "other"
     for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
-        if tag != "equal" and (old[i1:i2].strip() or ("<" not in new[j1:j2] and new.count("<") <= old.count("<"))):
+        if tag != "equal" and (
+            old[i1:i2].strip() or ("<" not in new[j1:j2] and new.count("<") <= old.count("<"))
+        ):
             return "other"
     return "restored" if new.count("<") > old.count("<") else "other"
 
@@ -59,8 +61,12 @@ def compare(a: Path, b: Path) -> None:
     for rid in sorted(old.keys() & new.keys()):
         if old[rid] == new[rid]:
             continue
-        for field in sorted(k for k in old[rid].keys() | new[rid].keys() if old[rid].get(k) != new[rid].get(k)):
-            kind = classify(old[rid].get(field), new[rid].get(field)) if field in ("title", "abstract") else "-"
+        for field in sorted(
+            k for k in old[rid].keys() | new[rid].keys() if old[rid].get(k) != new[rid].get(k)
+        ):
+            kind = (
+                classify(old[rid].get(field), new[rid].get(field)) if field in ("title", "abstract") else "-"
+            )
             counts[(old[rid]["venue"], field, kind)] += 1
             if kind == "other":
                 others.append((rid, field, old[rid].get(field), new[rid].get(field)))

@@ -42,9 +42,15 @@ _ENTITY = re.compile(r"&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]
 _BARE_AMP = re.compile(r"&(?!#[0-9]{1,7};|#[xX][0-9a-fA-F]{1,6};|[A-Za-z][A-Za-z0-9]{1,31};)")
 
 # --- a bare `<` (TASK-209) -------------------------------------------------------------------------------------
+
+
+def _names(text: str) -> frozenset[str]:
+    return frozenset(text.split())
+
+
 # Every element name of HTML (current and obsolete), SVG and MathML: a tag whose name is none of these, and
 # isn't a custom (`my-element`) or namespaced (`o:p`) name, is text that happens to start with `<`.
-_ELEMENTS = frozenset(
+_ELEMENTS = _names(
     """
     a abbr acronym address applet area article aside audio b base basefont bdi bdo bgsound big blink blockquote
     body br button canvas caption center cite code col colgroup data datalist dd del details dfn dialog dir div dl
@@ -63,13 +69,13 @@ _ELEMENTS = frozenset(
     math annotation maction maligngroup malignmark menclose merror mfenced mfrac mglyph mi mlabeledtr mlongdiv
     mmultiscripts mn mo mover mpadded mphantom mprescripts mroot mrow ms mscarries mscarry msgroup msline mspace
     msqrt msrow mstack mstyle msub msubsup msup mtable mtd mtext mtr munder munderover none semantics
-    """.split()
+    """
 )
 _CUSTOM_OR_NAMESPACED = re.compile(r"[a-z][a-z0-9_.]*(?:[-:][a-z0-9_.]+)+")
 # Every attribute name of HTML (current, HTML 4 and presentational): a tag with no attribute value whose
 # attribute names aren't all among these, or `data-`/`aria-`/`xml` names, is prose (`<b and c>`), while legacy
 # markup's bare attributes (`<table border>`, `<td nowrap>`) stay a tag.
-_ATTRIBUTE_NAMES = frozenset(
+_ATTRIBUTE_NAMES = _names(
     """
     abbr accept accept-charset accesskey action align alink allow allowfullscreen allowpaymentrequest alt archive
     async autocapitalize autocomplete autocorrect autofocus autoplay axis background bgcolor blocking border
@@ -85,16 +91,14 @@ _ATTRIBUTE_NAMES = frozenset(
     seamless selected shadowrootmode shape size sizes slot sortable span spellcheck src srcdoc srclang srcset standby
     start step style summary tabindex target text title topmargin translate truespeed type typemustmatch usemap
     valign value valuetype version vlink vspace width wrap
-    """.split()
+    """
 )
 _ATTRIBUTE_PREFIXES = ("data-", "aria-", "xml")
 # The tag grammar: CPython 3.12.9's tolerant start tag (`locatestarttagend_tolerant`, `attrfind_tolerant`), except
 # that no `<` may stand outside a quoted value, so a match ends at the next `<` or quote pair and the scan below
 # stays linear; the attribute run is atomic (no backtracking into it).
 _ATTRIBUTE = r"""(?<=['"\s/])([^\s/>=<][^\s/=><]*)(\s*=+\s*(?:'[^']*'|"[^"]*"|(?!['"])[^>\s<]*))?"""
-_START_TAG = re.compile(
-    rf"<([a-zA-Z][^\t\n\r\f />\x00<]*)((?>(?:[\s/]*{_ATTRIBUTE}(?:\s|/(?!>))*)*))\s*/?>"
-)
+_START_TAG = re.compile(rf"<([a-zA-Z][^\t\n\r\f />\x00<]*)((?>(?:[\s/]*{_ATTRIBUTE}(?:\s|/(?!>))*)*))\s*/?>")
 _ATTRIBUTES = re.compile(_ATTRIBUTE)
 _END_TAG = re.compile(r"""</([a-zA-Z][^\t\n\r\f />\x00<]*)(?>(?:[^<>"']+|"[^"]*"|'[^']*')*)>""")
 _TAG_OPEN = re.compile(r"</?[a-zA-Z]")
@@ -123,9 +127,9 @@ def escape_bare_lt(markup: str) -> str:
 
     A real start tag has an HTML, SVG or MathML element name (or a custom or namespaced one), parses by the tag
     grammar above up to its `>`, and either has an attribute with a value or has only HTML attribute names
-    (`<td nowrap>`, `<table border>`; none at all counts); a real end tag has such a name. So `<b and c>`, `<p<\\infty$`, `<i$.`,
-    `<x, \\theta^*>` and `<human, action, object>` stay text, while `<b>`, `<a href=x>` and `<br/>` stay tags:
-    `a<b>c` reads `ac`, as a browser shows it. Only a `<` followed by a letter (or `/` and a letter) is ever
+    (`<td nowrap>`, `<table border>`; none at all counts); a real end tag has such a name. So `<b and c>`,
+    `<p<\\infty$`, `<i$.`, `<x, \\theta^*>` and `<human, action, object>` stay text, while `<b>`, `<a href=x>` and
+    `<br/>` stay tags: `a<b>c` reads `ac`, as a browser shows it. Only a `<` followed by a letter (or `/` and a letter) is ever
     escaped: that is all HTMLParser reads as a tag, and `<!`, `<?`, `<=` and `< ` are left to it as before. A
     `script` or `style` body is copied as it is, up to its end tag. Real tags are copied unchanged, so a page
     with no bare `<` parses exactly as before. One left-to-right pass: a tag match stops at the first `<` outside
