@@ -307,7 +307,8 @@ def test_a_same_day_report_is_replaced_whole(
     assert (out / "2026-10-01-coverage.md").read_text().startswith("# Coverage report, 2026-10-01")
     logged = [json.loads(ln) for ln in capsys.readouterr().err.splitlines() if ln.startswith("{")]
     [written] = [e for e in logged if e.get("event") == "coverage_report_written"]  # one INFO line per run
-    assert (written["replaced"], written["gated"]) == (True, 46)  # the real official table's gated cells
+    # the real official table's gated cells (+26: NeurIPS 1987-2012, decision-047)
+    assert (written["replaced"], written["gated"]) == (True, 72)
     assert sorted(p.name for p in out.iterdir()) == ["2026-10-01-coverage.md"]  # no temp file left
 
 
