@@ -234,6 +234,8 @@ RIS_VIA_OPENREVIEW = "scholarmend:openreview_api"
 RIS_VIA_PROCEEDINGS = "scholarmend:proceedings_page"
 # how an `icml_site` claim's evidence says its page is a submission (ICML 1997 and 1998, TASK-207:
 # `icml_sites.SUBMISSION_PARSERS`), so its abstract is as the authors submitted it, not as published
+# (the snapshot stores this text in the claim's evidence: reword it and snapshots built before stop carrying the
+# note; test_icml_submissions.py checks it from crawl to export)
 AS_SUBMITTED = (
     "a submission-time abstract, as the authors submitted it (not necessarily the published paper's)"
 )
