@@ -1,12 +1,12 @@
 # Python 3.12.9 → 3.12.15: ingest output and index bytes (TASK-208)
 
 The upgrade fixes CVE-2025-6069 (quadratic time in `html.parser.HTMLParser`, CPython issue #135462). These runs
-check that it changes no record and no index, and measure where the new parser reads malformed markup
-differently. Machine: Apple M1 Pro, macOS 15 (Darwin 24.6). Interpreters: Homebrew CPython 3.12.9 and uv's
-CPython 3.12.15 (python-build-standalone 20261001), each with this branch's locked environment (`uv sync
---locked`). "Old code" is `ingest/sources/html.py` at `dc05f6de` (origin/dev); "new code" is this branch's.
-The commands use [the committed script](2026-10-07-python-upgrade-check.py); no query text or abstracts are
-recorded here.
+check that it changes no record and no index, and measure where the new parser reads malformed markup differently.
+Machine: Apple M1 Pro, macOS 15 (Darwin 24.6). Interpreters: Homebrew CPython 3.12.9 and uv's CPython 3.12.15
+(python-build-standalone 20261001), each with this branch's locked environment (`uv sync --locked`). "Old code" is
+`ingest/sources/html.py` at `dc05f6de` (origin/dev when the first runs were made; `html.py` is unchanged at
+`d378045b`); "new code" is this branch's. The commands use [the committed
+script](2026-10-07-python-upgrade-check.py); no query text or abstracts are recorded here.
 
 | Check | Result |
 | --- | --- |
