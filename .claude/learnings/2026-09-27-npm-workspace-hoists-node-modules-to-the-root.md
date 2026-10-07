@@ -76,3 +76,16 @@ records the intended exact pin. Correct that single metadata field without regen
 platform-specific optional packages, and keep the as-built frontend stack description synchronized
 with its manifest. PR #100 updates Next/eslint-config-next to 16.3.7 and Vitest to 5.0.3;
 `docs/specs/05-frontend.md` now also corrects the inherited stale React description to 19.3.0.
+
+## Addendum — 2026-10-07: Dependabot writes the caret back on every bump
+
+PR #124 (Next and eslint-config-next 16.3.7 → 16.3.8) recorded `"eslint-config-next": "^16.3.8"` in the
+lockfile's `packages["frontend"]` again, while `frontend/package.json` pins `16.3.8` exactly: the same
+drift PR #100 corrected for Vitest (`^5.0.3`), now on a different package, so it comes from Dependabot's
+npm updater, not a one-off. `npm ci --ignore-scripts`
+accepts the drifted lock and leaves it as it is, so no CI job notices. Every npm Dependabot PR therefore gets
+one check before review: compare each `dependencies`/`devDependencies` entry in `frontend/package.json` with
+`packages["frontend"]` in `package-lock.json` (equal strings, no extra names) and correct the single field by
+hand. The same PR's audit showed two high advisories in production transitive packages that the bump does
+not touch (`sharp` < 0.35.5, `source-map-js` ≤ 1.2.1), so "zero vulnerabilities" from PR #100 is not a
+standing fact: run `npm audit --omit=dev` on each npm update and report what predates it.
