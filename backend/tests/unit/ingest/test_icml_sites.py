@@ -8,6 +8,7 @@ titles and abstracts synthetic). No network: pages are seeded into a page cache.
 
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -15,6 +16,7 @@ import pytest
 from openproceedings.ingest.sources import dblp, icml_sites
 from openproceedings.ingest.sources.common import CrawlError
 from openproceedings.ingest.sources.dblp_xml import DblpEntry
+from openproceedings.ingest.sources.html import HTMLBudgetError
 from openproceedings.ingest.sources.http import Fetcher, Response
 from openproceedings.ingest.sources.icml_sites import Entry, SitePage
 
@@ -344,3 +346,16 @@ def test_a_page_listed_twice_or_a_capture_off_the_official_sites_path_is_refused
     assert icml_sites.load(
         row(url=on_path, official='"http://oregonstate.edu:80/conferences/icml2007/a/1.htm"')
     )
+
+
+@pytest.mark.parametrize("parser", ["cyberchair", "icml2007_paper", "icml2008"])
+def test_a_hostile_page_is_parsed_in_linear_time(parser: str) -> None:
+    """The review gate's probe: unclosed `<th>`/`<td>` runs made a backtracking pattern take 87 s at 5.6 KB. The
+    tree parser and plain string searches read a 40 KB page of them at once."""
+    import time
+
+    hostile = "<table>" + "<th>x</th><td>" * 3000 + '<a name="1"></a><p><i>a</p>' * 500
+    started = time.monotonic()
+    with contextlib.suppress(HTMLBudgetError):  # the shared tree's nesting bound: a refusal, fine, and fast
+        icml_sites.PARSERS[parser](hostile, CAPTURE)
+    assert time.monotonic() - started < 2.0

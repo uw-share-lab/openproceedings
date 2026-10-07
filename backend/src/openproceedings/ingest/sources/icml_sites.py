@@ -36,7 +36,7 @@ from urllib.parse import urlparse
 
 from openproceedings.ingest.record import Source, title_text
 from openproceedings.ingest.sources.common import CrawlError, clean_abstract
-from openproceedings.ingest.sources.html import text_of
+from openproceedings.ingest.sources.html import node_text, parse, text_of
 from openproceedings.ingest.sources.http import Fetcher, FetchError, Page
 
 log = logging.getLogger(__name__)
@@ -180,23 +180,37 @@ def icml2009(text: str, url: str) -> list[Entry]:
             if re.search(r"paper ID:\s*[0-9]+", seg, _S)]  # fmt: skip
 
 
+def _between_authors_and_links(seg: str) -> str | None:
+    """2008's abstract: the text after the authors' `<p><i>…</p>` and before the `<p>[Full paper]` links, found with
+    plain string searches (a backtracking pattern over a changed page could take minutes)."""
+    authors = re.search(r"<p>\s*<i>", seg, re.I)
+    close = seg.find("</p>", authors.end()) if authors else -1
+    links = re.compile(r"<p>\s*\[<a\b", re.I).search(seg, close) if close >= 0 else None
+    return text_of(seg[close + 4 : links.start()]) if links else None
+
+
 def icml2008(text: str, url: str) -> list[Entry]:
     """icml.cc/Conferences/2008/abstracts.shtml.html: `<a name="N">`, `paper ID`, `<h3>` title, `<p><i>` authors
     `</p>`, then the abstract up to the `<p>[Full paper]` links."""
-    return [Entry(key, _text(re.search(r"<h3>(.*?)</h3>", seg, _S)),
-                  _text(re.search(r"<p>\s*<i>.*?</p>(.*?)<p>\s*\[<a\b", seg, _S)))
+    return [Entry(key, _text(re.search(r"<h3>(.*?)</h3>", seg, _S)), _between_authors_and_links(seg))
             for key, seg in _segments(text, r'<a name="([0-9]+)"></a>')]  # fmt: skip
+
+
+def _cyberchair_tables(text: str, url: str) -> list[tuple[str, str]]:
+    """Each CyberChair table's `<th>` title and second `<td>` (the abstract; the first is the authors), read with
+    the shared HTML tree (`html.parse`: bounded, linear), never a backtracking pattern."""
+    out = []
+    for table in parse(text, url).iter("table"):
+        heads, cells = table.iter("th"), table.iter("td")
+        if heads and len(cells) >= 2:
+            out.append((node_text(heads[0]), node_text(cells[1])))
+    return out
 
 
 def cyberchair(text: str, url: str) -> list[Entry]:
     """A CyberChair "all abstracts" page (ICML 2001, 2003, 2004): one `<table>` per paper, `<th>` title, a `<td>`
     of authors, a `<td>` (often `<pre>`) abstract."""
-    out = []
-    for table in re.findall(r"<table\b.*?</table>", text, _S):
-        m = re.search(r"<th>(.*?)</th>.*?<td>.*?</td>.*?<td>(.*?)</td>", table, _S)
-        if m is not None:
-            out.append(Entry(None, text_of(m.group(1)), text_of(m.group(2))))
-    return out
+    return [Entry(None, title, abstract) for title, abstract in _cyberchair_tables(text, url)]
 
 
 def icml2007_list(text: str, url: str) -> list[Entry]:
@@ -209,8 +223,8 @@ def icml2007_paper(text: str, url: str) -> list[Entry]:
     """An ICML 2007 per-paper abstract page (`…/icml2007/abstracts/N.htm`, CyberChair): the number from its URL,
     the abstract from the table's second `<td>`. Its own `<th>` title is PDF-extracted and broken, so unused."""
     number = re.search(r"/abstracts/([0-9]+)\.htm\Z", url)
-    m = re.search(r"<th>.*?</th>.*?<td>.*?</td>.*?<td>(.*?)</td>", text, _S)
-    return [Entry(number.group(1), None, text_of(m.group(1)))] if number and m else []
+    tables = _cyberchair_tables(text, url)
+    return [Entry(number.group(1), None, tables[0][1])] if number and tables else []
 
 
 PARSERS: dict[str, Parser] = {

@@ -112,6 +112,11 @@ def test_the_release_must_name_the_pinned_dtd(tmp_path: Path) -> None:
     ("body", "why"),
     [
         ('<www key="homepages/x">\n<note>key="conf/icml/X90"</note>\n</www>\n', "outside a record start tag"),
+        # another spelling of the attribute: never read as no record at all
+        ("<inproceedings mdate=\"1\" key='conf/icml/A90'>\n<title>T.</title>\n</inproceedings>\n",
+         "outside a record start tag"),
+        ('<inproceedings mdate="1" key = "conf/icml/A90">\n<title>T.</title>\n</inproceedings>\n',
+         "outside a record start tag"),
         ('<inproceedings mdate="1" key="conf/icml/A90">\n<title>T.</title>\n', "ends inside"),
         ('<inproceedings mdate="1" key="conf/icml/A90">\n<title>T &nosuchentity; .</title>\n</inproceedings>\n',
          "the DTD doesn.t define"),
@@ -219,3 +224,21 @@ def test_the_fetch_time_is_the_clocks_utc(tmp_path: Path) -> None:
     clock = FakeClock()
     got = fetch_file(PIN, tmp_path / "f.xml.gz", Stream((200, BYTES)), hosts=HOSTS, clock=clock)
     assert got.fetched_at == clock.now().astimezone(UTC) and isinstance(got.fetched_at, datetime)
+
+
+def test_a_dtd_name_that_is_not_ascii_is_a_format_error(tmp_path: Path) -> None:
+    path = tmp_path / "x.xml.gz"
+    path.write_bytes(gzip.compress(HEAD.replace(DTD_NAME, "dblp-\u00e9.dtd").encode("latin-1") + b"</dblp>"))
+    with pytest.raises(DblpFormatError, match="not ASCII"):
+        doctype_system_id(path)
+
+
+def test_a_retry_after_past_the_bound_aborts_rather_than_waits(tmp_path: Path) -> None:
+    class Slow(Stream):
+        def __call__(self, request: Request, timeout: float) -> StreamResponse:
+            self.sent.append(request.url)
+            return StreamResponse(503, {"retry-after": "7200"}, ())
+
+    with pytest.raises(FetchError, match="asked to wait") as e:
+        fetch_file(PIN, tmp_path / "f.xml.gz", Slow(), hosts=HOSTS, clock=FakeClock())
+    assert e.value.reason == "wait_too_long"

@@ -9,7 +9,9 @@ an import error, never a best guess):
 - `[[year]]` names a year's main-conference proceedings key(s) (`conf/icml/1990`), the number of papers the
   release lists under them when verified, and the proceedings' title as dblp gives it.
 - `[[excluded]]` names every other `conf/icml/` proceedings key of those years (workshops, companion volumes)
-  with the reason it is not the main conference. The miner refuses an extract holding a `conf/icml/`
+  with the reason it is not the main conference.
+- `[[not_paper]]` names each entry under a main-conference key that is no paper (2009's workshop and tutorial
+  summaries and invited talks, 1994-1996's invited-talk abstracts): a record of track `other`, never `main`. The miner refuses an extract holding a `conf/icml/`
   proceedings key of 1988–2012 that is in neither list: a new key is decided by a person, never by its title.
 """
 
@@ -73,11 +75,26 @@ class Excluded:
 
 
 @dataclass(frozen=True, slots=True)
+class NotPaper:
+    """An entry dblp lists under a main-conference key that is no paper: a workshop or tutorial summary, an invited
+    talk's abstract. A record of track `other`, so the default `track:main` filter leaves it out and counts it."""
+
+    key: str
+    year: int
+    kind: str  # workshop summary | tutorial summary | invited talk
+    reason: str
+
+
+NOT_PAPER_KINDS = frozenset({"workshop summary", "tutorial summary", "invited talk"})
+
+
+@dataclass(frozen=True, slots=True)
 class Table:
     release: Pinned
     dtd: Pinned
     years: Mapping[int, IcmlYear]
     excluded: Mapping[str, Excluded]
+    not_papers: Mapping[str, NotPaper] = MappingProxyType({})
 
     def main_key(self, crossref: str) -> IcmlYear | None:
         """The year whose main conference `crossref` is, or None."""
@@ -129,7 +146,7 @@ def _year(raw: Mapping[str, Any]) -> IcmlYear:
 
 def load(text: str) -> Table:
     raw = tomllib.loads(text)
-    if unknown := set(raw) - {"release", "dtd", "year", "excluded"}:
+    if unknown := set(raw) - {"release", "dtd", "year", "excluded", "not_paper"}:
         raise ValueError(f"dblp_icml.toml: unknown tables {sorted(unknown)}")
     years: dict[int, IcmlYear] = {}
     seen: set[str] = set()
@@ -149,9 +166,18 @@ def load(text: str) -> Table:
         if r["key"] in seen or r["key"] in excluded:
             raise ValueError(f"dblp_icml.toml: {r['key']} is both excluded and listed, or listed twice")
         excluded[r["key"]] = Excluded(str(r["key"]), r["year"], str(r["reason"]))
+    not_papers: dict[str, NotPaper] = {}
+    for r in raw.get("not_paper", []):
+        _check(r, {"key", "year", "kind", "reason"}, f"not_paper {r.get('key')!r}")
+        if not _KEY.fullmatch(str(r["key"])) or r["year"] not in years or r["kind"] not in NOT_PAPER_KINDS \
+                or not str(r["reason"]) or r["key"] in not_papers or r["key"] in seen or r["key"] in excluded:  # fmt: skip
+            raise ValueError(f"dblp_icml.toml not_paper {r['key']!r}: a conf/icml paper key, listed once, of a year "
+                             f"the table has, with a kind of {sorted(NOT_PAPER_KINDS)} and a reason")  # fmt: skip
+        not_papers[r["key"]] = NotPaper(str(r["key"]), r["year"], str(r["kind"]), str(r["reason"]))
     return Table(
         _pinned(raw["release"], "[release]"), _pinned(raw["dtd"], "[dtd]"),
         MappingProxyType(dict(sorted(years.items()))), MappingProxyType(dict(sorted(excluded.items()))),
+        MappingProxyType(dict(sorted(not_papers.items()))),
     )  # fmt: skip
 
 

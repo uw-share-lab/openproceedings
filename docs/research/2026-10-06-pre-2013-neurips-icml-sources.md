@@ -68,7 +68,15 @@ Every `conf/icml/` proceedings record dblp dates 1988–2012, and how the table 
 
 1989, 1991 and 1992 were held as the International Workshop on Machine Learning (ML 1989, ML91, ML 1992), the
 series' meeting in those years: `vocab.CONFERENCES` counts ICML from 1988, its 5th meeting, so they are its main
-conference. No `conf/icml/` inproceedings of 1988–2012 lacks a crossref. dblp's `conf/icml/2013` (283) onward is
+conference. No `conf/icml/` inproceedings of 1988–2012 lacks a crossref.
+
+Not every entry under a main-conference key is a paper. 2009's key holds 9 "Workshop summary:", 9 "Tutorial
+summary:" and 2 "Invited talk:" entries (180 entries; the conference's own page lists 160 papers), and 1994–1996
+hold one-page invited-talk abstracts (`Pereira94`, `Croft95`, `Heckerman95`, `Pomerleau95`, `Mannila96`, `Moore96`,
+`Vapnik96`). The table lists these 27 as `[[not_paper]]` rows: they are records of track `other`, which the default
+`track:main` leaves out and the exclusion banner counts. Found by the review gate (2026-10-07) by reading every
+title with "summary", "invited", "tutorial", "panel" or "(Abstract)" and every one-page entry; no other year has
+such entries. dblp's `conf/icml/2013` (283) onward is
 PMLR's, never read, so dblp and PMLR never hold the same venue-year. 2009 has one paper with
 `publtype="withdrawn"`, counted and not a record.
 
@@ -95,7 +103,7 @@ counts an entry whose abstract page is empty (paper 394).
 | 2006 | 140 | 140 | 0 | 140 | — | — | — | none (17 workshop papers excluded) |
 | 2007 | 150 | 150 | 140 | 10 | 149 (1 dropped) | 9 | 0 | icml.cc list + 150 Oregon State captures (5 served as UTF-8) |
 | 2008 | 157 | 157 | 153 | 4 | 158 | 5 | 0 | icml.cc |
-| 2009 | 180 | 179 | 153 | 26 | 160 | 7 | 0 | icml.cc (1 withdrawn paper not a record) |
+| 2009 | 180 | 179 | 153 | 26 | 160 | 7 | 0 | icml.cc (1 withdrawn paper not a record; 20 records are summaries or talks, track `other`) |
 | 2010 | 159 | 159 | 151 | 8 | 159 | 8 | 0 | icml.cc |
 | 2011 | 152 | 152 | 144 | 8 | 152 | 8 | 0 | icml.cc |
 | 2012 | 243 | 243 | 242 | 1 | 243 | 1 | 0 | icml.cc |

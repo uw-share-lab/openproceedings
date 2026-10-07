@@ -75,7 +75,10 @@ def doctype_system_id(path: Path) -> str:
     m = re.search(rb'<!DOCTYPE dblp SYSTEM "([^"]+)">', head)
     if m is None:
         raise DblpFormatError("the release has no <!DOCTYPE dblp SYSTEM ...> line")
-    return m.group(1).decode("ascii")
+    try:
+        return m.group(1).decode("ascii")
+    except UnicodeDecodeError:
+        raise DblpFormatError("the release's DTD name is not ASCII") from None
 
 
 PROGRESS_LINES = 1_000_000  # how often `_records` reports its progress (the caller rate-limits the lines)
@@ -85,7 +88,8 @@ def _records(path: Path, prefix: str, progress: Callable[[int, int], None] | Non
     """Each wanted record's bytes, from its start tag through its end tag, in file order. dblp writes a record's
     end tag and the next record's start tag on one line (`</incollection><incollection …>`), so a record is found
     by its start tag anywhere in a line, and every occurrence of `key="<prefix>` must be inside one."""
-    wanted = f'key="{prefix}'.encode()
+    marker = prefix.encode()  # cheap prefilter: every wanted record's line names the prefix
+    wanted = re.compile(rb"\bkey\s*=\s*[\"']" + re.escape(marker))  # any spelling of the attribute
     start = _start_tag(prefix)
     block: list[bytes] = []
     end: bytes | None = None
@@ -94,14 +98,14 @@ def _records(path: Path, prefix: str, progress: Callable[[int, int], None] | Non
         for n, line in enumerate(fh, 1):
             if progress is not None and n % PROGRESS_LINES == 0:
                 progress(n, kept)
-            if end is None and wanted not in line:
+            if end is None and marker not in line:
                 continue
             pos = 0
             while True:
                 if end is None:
                     m = start.search(line, pos)
                     rest = line[pos:] if m is None else line[pos : m.start()]
-                    if wanted in rest:
+                    if wanted.search(rest):
                         raise DblpFormatError(f"line {n}: a {prefix} key outside a record start tag")
                     if m is None:
                         break

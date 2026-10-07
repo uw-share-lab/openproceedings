@@ -209,6 +209,18 @@ def check_extract(extract: Extract, table: Table = TABLE) -> None:
             if held is None or held.fields.get("year") != str(row.year):
                 raise CrawlError(f"dblp_icml.toml names {key} for {row.year}, but release {extract.doi} "
                                  "doesn't hold it for that year", reason="table_mismatch")  # fmt: skip
+        listed = sum(e.type == "inproceedings" and e.fields.get("crossref") in row.proceedings
+                     for e in extract.entries)  # fmt: skip
+        if (
+            listed != row.papers
+        ):  # the table's count was verified against this release: a difference is a read error
+            raise CrawlError(f"ICML {row.year}: release {extract.doi} lists {listed} papers under "
+                             f"{', '.join(row.proceedings)}, the table verified {row.papers}", reason="table_mismatch")  # fmt: skip
+    papers = {e.key: e.fields.get("crossref") for e in extract.entries if e.type == "inproceedings"}
+    for np in table.not_papers.values():
+        if papers.get(np.key) not in table.years[np.year].proceedings:
+            raise CrawlError(f"dblp_icml.toml's not_paper {np.key} is not an ICML {np.year} paper of release "
+                             f"{extract.doi}", reason="table_mismatch")  # fmt: skip
 
 
 # --- records ---------------------------------------------------------------------------------------------------
@@ -377,7 +389,13 @@ def _record(year: int, tail: str, e: DblpEntry, extract: Extract, table: Table,
     claim("title", title, title_evidence(f"{where}: title, dblp's closing period dropped", replaced))
     if authors := tuple(a for a in (clean_author(x) for x in e.lists.get("author", [])) if a):
         claim("authors", authors, f"{where}: author (dblp homonym numbers dropped)")
-    claim("track", "main", f"crossref {e.fields['crossref']}: ICML {year} main conference (dblp_icml.toml)")
+    if (np := table.not_papers.get(e.key)) is not None:  # in the proceedings, but no paper: never `main`
+        claim("track", "other", f"crossref {e.fields['crossref']}: in the ICML {year} proceedings but not a paper "
+                                f"({np.kind}; dblp_icml.toml not_paper: {np.reason})")  # fmt: skip
+    else:
+        claim(
+            "track", "main", f"crossref {e.fields['crossref']}: ICML {year} main conference (dblp_icml.toml)"
+        )
     claim("status", "accepted", f"in ICML {year}'s proceedings {e.fields['crossref']}: {where}")
     for fld, link in links(e.key, e.lists.get("ee", [])).items():
         claim(fld, link, where if fld == "urls.proceedings" else f"{where}: ee")

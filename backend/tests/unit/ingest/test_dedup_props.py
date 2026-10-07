@@ -37,6 +37,7 @@ PROCEEDINGS = {  # native id → its venue
     **{f"nips-{H[n]}": "NeurIPS" for n in (1, 2)},
     **{f"iclr-{H[n]}": "ICLR" for n in (1, 2)},
     **{f"pmlr-v202-key{n}": "ICML" for n in (1, 2)},
+    **{f"dblp-Key0{n}": "ICML" for n in (1, 2)},  # ICML 1988-2012 (decision-047): years 2009-2010 below
 }
 SOURCE_NATIVES = {
     "openreview_v2": FORUMS,
@@ -44,6 +45,7 @@ SOURCE_NATIVES = {
     "iclr_archive": [n for n in PROCEEDINGS if n.startswith("iclr-")],
     "neurips_proceedings": [n for n in PROCEEDINGS if n.startswith(("nips-", "iclr-"))],
     "pmlr": [n for n in PROCEEDINGS if n.startswith("pmlr-")],
+    "dblp": [n for n in PROCEEDINGS if n.startswith("dblp-")],
     "ris": [*FORUMS, *PROCEEDINGS],
 }
 
@@ -64,7 +66,7 @@ def records(draw: st.DrawFn) -> PaperRecord:
         draw(st.integers(0, 3)) == 0
     ):  # a forum link: a listing's (PMLR v235), a note's own, or a contradicting one
         extra["urls_forum"] = forum_url(draw(st.sampled_from(FORUMS)))
-    year = draw(st.sampled_from([2023, 2024]))
+    year = draw(st.sampled_from([2009, 2010] if native.startswith("dblp-") else [2023, 2024]))
     return paper(
         native,
         draw(st.sampled_from(TITLES)),
@@ -556,7 +558,10 @@ def test_a_creative_ai_listing_merges_with_its_own_note_and_nothing_else(
             assert is_creative_ai(x)
 
 
-OPENREVIEW, OFFICIAL = ("openreview_v2", "openreview_v1"), ("iclr_archive", "neurips_proceedings", "pmlr")
+OPENREVIEW, OFFICIAL = (
+    ("openreview_v2", "openreview_v1"),
+    ("iclr_archive", "neurips_proceedings", "pmlr", "dblp"),
+)
 
 
 @given(pools)

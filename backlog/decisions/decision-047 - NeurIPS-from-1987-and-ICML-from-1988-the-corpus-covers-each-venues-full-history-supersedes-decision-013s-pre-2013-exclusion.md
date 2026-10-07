@@ -33,8 +33,10 @@ The owner decided (2026-10-06): the corpus covers NeurIPS from 1987 and ICML fro
 - **NeurIPS 1987–2012** come from the proceedings site, as 2013–2020 do (TASK-204).
 - **ICML 1988–2012** come from one pinned dblp snapshot release, `10.4230/dblp.xml.2026-10-03` (sha256
   `20e45961…aebe969`), read through the shared HTTP layer from drops.dagstuhl.de and never from dblp.org: each
-  year's main-conference proceedings key is data (`ingest/dblp_icml.toml`), every record is `main`/`accepted`, and
-  every claim names the release (TASK-205). 1989, 1991 and 1992, held as the International Workshop on Machine
+  year's main-conference proceedings key is data (`ingest/dblp_icml.toml`), every record is `main`/`accepted`
+  but the 27 entries the table lists as no paper (2009's workshop and tutorial summaries and invited talks, 1994–
+  1996's invited-talk abstracts: track `other`, found by the review gate), and every claim names the release
+  (TASK-205). 1989, 1991 and 1992, held as the International Workshop on Machine
   Learning, are the series' meetings those years and count as the main conference.
 - **Abstracts for ICML 1988–2012** come only from official ICML/IMLS pages, live or a pinned Internet Archive
   capture, named in `ingest/icml_sites.toml`, and attach to a dblp record only by an exact title key that one page

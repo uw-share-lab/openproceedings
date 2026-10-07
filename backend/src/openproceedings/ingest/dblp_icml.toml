@@ -253,3 +253,167 @@ key = "conf/icml/2011utl"
 year = 2012
 reason = "Unsupervised and Transfer Learning workshop at ICML 2011 (JMLR W&CP 27, 2012)"
 
+# Entries dblp lists under a main-conference key that are no paper (records of track `other`, never `main`;
+# found by the review gate, 2026-10-07): 2009's workshop and tutorial summaries and invited talks, and the
+# invited-talk abstracts of 1994-1996.
+[[not_paper]]
+key = "conf/icml/Pereira94"
+year = 1994
+kind = "invited talk"
+reason = "a one-page abstract of an invited talk (p. 380, titled \"... - Abstract\")"
+
+[[not_paper]]
+key = "conf/icml/Croft95"
+year = 1995
+kind = "invited talk"
+reason = "a one-page invited-talk abstract (p. 587, titled \"(Abstract)\")"
+
+[[not_paper]]
+key = "conf/icml/Heckerman95"
+year = 1995
+kind = "invited talk"
+reason = "a one-page invited-talk abstract (p. 588, titled \"(Abstract)\")"
+
+[[not_paper]]
+key = "conf/icml/Pomerleau95"
+year = 1995
+kind = "invited talk"
+reason = "a one-page invited-talk abstract (p. 589, beside the 1995 talks on pp. 587-588)"
+
+[[not_paper]]
+key = "conf/icml/Mannila96"
+year = 1996
+kind = "invited talk"
+reason = "a one-page invited-talk abstract (p. 555, titled \"(Abstract)\")"
+
+[[not_paper]]
+key = "conf/icml/Moore96"
+year = 1996
+kind = "invited talk"
+reason = "a one-page invited-talk abstract (p. 556, titled \"(Abstract)\")"
+
+[[not_paper]]
+key = "conf/icml/Vapnik96"
+year = 1996
+kind = "invited talk"
+reason = "a one-page invited-talk abstract (p. 557, titled \"(Abstract)\")"
+
+[[not_paper]]
+key = "conf/icml/AgostaABDGR09"
+year = 2009
+kind = "workshop summary"
+reason = "titled \"Workshop summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/AudibertALMRS09"
+year = 2009
+kind = "workshop summary"
+reason = "titled \"Workshop summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/BennettBC09"
+year = 2009
+kind = "tutorial summary"
+reason = "titled \"Tutorial summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/BeygelzimerLZ09"
+year = 2009
+kind = "tutorial summary"
+reason = "titled \"Tutorial summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/Cortes09"
+year = 2009
+kind = "invited talk"
+reason = "titled \"Invited talk: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/DasguptaL09"
+year = 2009
+kind = "tutorial summary"
+reason = "titled \"Tutorial summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/DrummondJKM09"
+year = 2009
+kind = "workshop summary"
+reason = "titled \"Workshop summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/EckEH09"
+year = 2009
+kind = "workshop summary"
+reason = "titled \"Workshop summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/Even-DarM09"
+year = 2009
+kind = "tutorial summary"
+reason = "titled \"Tutorial summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/Freund09"
+year = 2009
+kind = "invited talk"
+reason = "titled \"Invited talk: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/Leskovec09"
+year = 2009
+kind = "tutorial summary"
+reason = "titled \"Tutorial summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/MurphyHN09"
+year = 2009
+kind = "workshop summary"
+reason = "titled \"Workshop summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/Niv09"
+year = 2009
+kind = "tutorial summary"
+reason = "titled \"Tutorial summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/SeegerSC09"
+year = 2009
+kind = "workshop summary"
+reason = "titled \"Workshop summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/Simsek09"
+year = 2009
+kind = "workshop summary"
+reason = "titled \"Workshop summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/Smith09"
+year = 2009
+kind = "tutorial summary"
+reason = "titled \"Tutorial summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/TrespY09"
+year = 2009
+kind = "tutorial summary"
+reason = "titled \"Tutorial summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/WarmuthV09"
+year = 2009
+kind = "tutorial summary"
+reason = "titled \"Tutorial summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/WingateDLTF09"
+year = 2009
+kind = "workshop summary"
+reason = "titled \"Workshop summary: ...\" in the ICML 2009 proceedings"
+
+[[not_paper]]
+key = "conf/icml/YuSLHB09"
+year = 2009
+kind = "workshop summary"
+reason = "titled \"Workshop summary: ...\" in the ICML 2009 proceedings"

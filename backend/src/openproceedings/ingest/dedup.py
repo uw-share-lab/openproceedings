@@ -105,6 +105,8 @@ CONFLICT_FIELDS: tuple[ClaimField, ...] = ("title", "track", "status")
 # proceedings also host Creative AI, which the taxonomy files under `other`; `other` holds more than Creative AI
 # (Education_Program, High_School_Projects_Track, …), so it is not listed here: dedup's track rule admits Creative
 # AI by its own evidence (`is_creative_ai`, TASK-137), and reconcile never judges it.
+# dblp (ICML 1988-2012, decision-047) is not one: it is a bibliography of the proceedings, and no other source holds
+# its venue-years, so reconcile never judges them; its records are still listings by their `dblp-<key>` id.
 PROCEEDINGS_SOURCES: frozenset[str] = frozenset({"iclr_archive", "neurips_proceedings", "pmlr"})
 OPENREVIEW_SOURCES: frozenset[str] = frozenset({"openreview_v2", "openreview_v1"})
 PROCEEDINGS_TRACKS: frozenset[str] = frozenset({"main", "datasets_benchmarks", "position"})

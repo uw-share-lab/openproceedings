@@ -78,7 +78,9 @@ def stream() -> Stream:
 
 
 def prepared(tmp_path: Path, table: dblp_table.Table = TABLE) -> dblp.Extract:
-    release, dtd = dblp.fetch_release(tmp_path, stream(), table)
+    release, dtd = dblp.fetch_release(
+        tmp_path, stream() if not dblp.release_on_disk(tmp_path, table) else None, table
+    )
     extract = dblp.write_extract(tmp_path, release, dtd, table)
     assert dblp.load_extract(tmp_path, table) == extract  # the replay reads back what was written
     return extract
@@ -343,3 +345,53 @@ def test_ingest_dblp_dry_run_fetches_nothing_and_a_year_off_the_table_is_refused
     with pytest.raises(CrawlError, match="covers ICML") as e:
         crawl.ingest_dblp([2013], tmp_path, table=TABLE, pages=site_pages())
     assert e.value.reason == "no_year"
+
+
+NOT_PAPER = (
+    '\n[[not_paper]]\nkey = "conf/icml/Synthetic90"\nyear = 1990\nkind = "invited talk"\nreason = "a test"\n'
+)
+
+
+def test_an_entry_the_table_names_as_no_paper_is_an_other_record_never_main(tmp_path: Path) -> None:
+    """The review gate found workshop and tutorial summaries and invited talks under main-conference keys (2009,
+    1994-1996): the table lists each, and its record is `other`, so the default `track:main` leaves it out."""
+    table = dblp_table.load(table_text(extra=NOT_PAPER))
+    extract = prepared(tmp_path, table)
+    dblp.check_extract(extract, table)
+    [r] = dblp.mine_year(1990, extract, table=table).records
+    assert (r.track, r.status) == ("other", "accepted")
+    [track] = r.claims("track")
+    assert track.evidence == (
+        "crossref conf/icml/1990: in the ICML 1990 proceedings but not a paper (invited talk; dblp_icml.toml "
+        "not_paper: a test)"
+    )
+    # the shipped table: 2009's 18 summaries and 2 talks, and 1994-1996's 7 talk abstracts
+    kinds: dict[str, int] = {}
+    for np in REAL.not_papers.values():
+        kinds[np.kind] = kinds.get(np.kind, 0) + 1
+    assert kinds == {"workshop summary": 9, "tutorial summary": 9, "invited talk": 9}
+    assert {np.year for np in REAL.not_papers.values()} == {1994, 1995, 1996, 2009}
+
+
+@pytest.mark.parametrize(
+    ("extra", "why"),
+    [
+        (NOT_PAPER.replace("year = 1990", "year = 1991"), "a year the table has"),
+        (NOT_PAPER.replace('"invited talk"', '"keynote"'), "kind of"),
+        (NOT_PAPER + NOT_PAPER, "listed once"),
+    ],
+)
+def test_a_malformed_not_paper_row_is_refused(extra: str, why: str) -> None:
+    with pytest.raises(ValueError, match=why):
+        dblp_table.load(table_text(extra=extra))
+
+
+def test_a_not_paper_the_release_does_not_hold_or_a_changed_count_stops_the_ingest(tmp_path: Path) -> None:
+    extract = prepared(tmp_path)
+    ghost = dblp_table.load(table_text(extra=NOT_PAPER.replace("Synthetic90", "Ghost90")))
+    with pytest.raises(CrawlError, match="not_paper conf/icml/Ghost90") as e:
+        dblp.check_extract(extract, ghost)
+    assert e.value.reason == "table_mismatch"
+    with pytest.raises(CrawlError, match=r"lists 1 papers .* the table verified 2") as e:
+        dblp.check_extract(extract, dblp_table.load(table_text(papers=2)))
+    assert e.value.reason == "table_mismatch"

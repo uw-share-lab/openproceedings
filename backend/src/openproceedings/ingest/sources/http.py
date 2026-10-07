@@ -675,7 +675,7 @@ def file_sha256(path: Path) -> str:
 
 def fetch_file(
     pinned: PinnedFile, path: Path, transport: StreamTransport | None, *, hosts: frozenset[str],
-    attempts: int = 3, backoff: tuple[float, float] = (5.0, 300.0), timeout: float = 60.0,
+    attempts: int = 3, backoff: tuple[float, float] = (5.0, 300.0), timeout: float = 60.0, max_wait: float = 3600.0,
     clock: Clock | None = None, verify: Callable[[Path], str] = file_sha256,
 ) -> FileEntry:  # fmt: skip
     """The pinned file at `path`: the copy on disk when it hashes to the pin (its sidecar `<name>.json` names the
@@ -749,7 +749,9 @@ def fetch_file(
             finally:
                 response.close()
         if attempt + 1 < attempts:
-            wait = min(backoff[0] * 2**attempt, backoff[1]) if hint is None else min(hint, 3600.0)
+            if hint is not None and hint > max_wait:  # as HttpClient without cap_waits: never wait that long
+                raise FetchError(f"{pinned.url}: asked to wait {hint:.0f}s ({why})", reason="wait_too_long")
+            wait = min(backoff[0] * 2**attempt, backoff[1]) if hint is None else hint
             log.warning(CRAWL_EVENTS.retry_wait, extra={"host": p.netloc, "why": why, "attempt": attempt + 1,
                                                          "wait_s": round(wait, 1)})  # fmt: skip
             clock.sleep(wait)
