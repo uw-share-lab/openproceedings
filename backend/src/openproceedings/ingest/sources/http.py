@@ -12,7 +12,10 @@ ICLR archive, NeurIPS proceedings and PMLR) fetches through `HttpClient`, and on
 - **Politeness.** At least `min_interval` seconds between requests. 429 and 5xx wait for `Retry-After`
   (seconds or an HTTP date), else `ratelimit-reset` (seconds from now; never `x-ratelimit-reset`, an epoch),
   else an exponential back-off (`backoff[0] · 2^n`, capped at `backoff[1]`, plus jitter); so do a network
-  error and a truncated 200 (an HTML page without `</html>`, or JSON that doesn't parse). A spent budget
+  error and a truncated 200 (an HTML page without `</html>`, or JSON that doesn't parse; a page the caller asks to
+  judge by length, an Internet Archive capture whose original may never have had `</html>`, is truncated when its
+  body is not the `Content-Length` the response states, or, when it states none, by the closing-tag rule, logged
+  as `truncated_no_length`; TASK-207). A spent budget
   (`ratelimit-remaining: 0` on a 200) waits for its reset. A wait past `max_wait` is capped or aborts the
   crawl (`cap_waits`). Any other response is returned for the source to judge; retries are bounded.
 - **Cache.** `ResponseCache`: one JSON file per canonical URL under `<root>/[<subdir>/]<sha256[:2]>/<sha256>.json`,
@@ -397,9 +400,10 @@ class HttpClient[T]:
                  extra={"url": url, "age_s": round(age), "ttl_s": round(ttl)})  # fmt: skip
         return True
 
-    def send(self, request: Request) -> Response:
-        """One request, paced, retried on 429, 5xx, a network error and a truncated 200; any other response
-        is returned for the source to judge."""
+    def send(self, request: Request, *, by_length: bool = False) -> Response:
+        """One request, paced, retried on 429, 5xx, a network error and a truncated 200 (`_truncated`; with
+        `by_length`, judged by the stated `Content-Length` when there is one); any other response is returned for
+        the source to judge."""
         assert self.transport is not None
         policy, url = self.policy, self.check(request.url)
         request = replace(request, url=url)  # only the canonical form is ever sent
@@ -429,8 +433,8 @@ class HttpClient[T]:
                     raise FetchError(f"{url}: body over {policy.max_body} bytes", reason="too_large")
                 if response.status == 429 or response.status >= 500:
                     why, hint = f"http_{response.status}", retry_after(response.headers, self.clock.now())
-                elif response.status == 200 and self._truncated(response):
-                    why = "truncated"
+                elif response.status == 200 and (cut := self._truncated(response, by_length)):
+                    why = cut
                 else:
                     if response.status == 200:
                         self._respect_budget(response, url)
@@ -443,16 +447,25 @@ class HttpClient[T]:
             f"{url}: gave up after {policy.attempts} attempts; re-run later (cached responses are not fetched again)"
         )
 
-    def _truncated(self, response: Response) -> bool:
+    def _truncated(self, response: Response, by_length: bool = False) -> str | None:
+        """Why a 200 is not whole (`truncated`; `truncated_no_length` for a page judged by length that states none
+        and lacks `</html>` too), or None when it is."""
+        stated = response.headers.get("content-length", "").strip()
+        # a capture's bytes are fixed: whole when all there. A length that isn't 1-19 ASCII digits (`²`, or past
+        # int()'s digit limit) is no length, never a crash
+        if by_length and stated.isascii() and stated.isdecimal() and len(stated) <= 19:
+            return "truncated" if int(stated) != len(response.body) else None
         if self.policy.expect == "html":
-            return b"</html>" not in response.body[-4096:].lower()
+            if b"</html>" in response.body[-4096:].lower():
+                return None
+            return "truncated_no_length" if by_length else "truncated"
         if not is_json(response):
-            return False  # not JSON at all (a challenge page): the source judges it
+            return None  # not JSON at all (a challenge page): the source judges it
         try:
             json.loads(response.body)
         except ValueError:
-            return True
-        return False
+            return "truncated"
+        return None
 
     def _pace(self) -> None:
         if (
@@ -574,22 +587,24 @@ class Fetcher(HttpClient[Page]):
         super().__init__(cache, transport, policy, clock)
 
     def get(
-        self, url: str, *, refresh: bool = False, keep_absent: bool = False, charset: str = "utf-8"
-    ) -> Page:
+        self, url: str, *, refresh: bool = False, keep_absent: bool = False, charset: str = "utf-8",
+        by_length: bool = False,
+    ) -> Page:  # fmt: skip
         """The page at `url`: from the cache unless `refresh`, else fetched (and cached when it is a 200, or a
         404/410 with `keep_absent`). Offline, a miss raises instead of fetching. `charset` decodes a body whose
         `Content-Type` names none (a 1990s-2000s page served as bare `text/html`, TASK-206); one the response
-        names always wins."""
+        names always wins. `by_length` judges a 200 whole by its `Content-Length` rather than a closing `</html>`
+        (an archived capture of a page that never had one: ICML 1997/1998, TASK-207)."""
 
         def fetch(canonical_url: str) -> tuple[Page, bool]:
-            page = self._page(canonical_url, charset)
+            page = self._page(canonical_url, charset, by_length)
             return page, page.ok or (keep_absent and page.status in _ABSENT)
 
         return self.through_cache(url, fetch, refresh=refresh)
 
-    def _page(self, url: str, default_charset: str = "utf-8") -> Page:
+    def _page(self, url: str, default_charset: str = "utf-8", by_length: bool = False) -> Page:
         request = Request("GET", url, {"User-Agent": USER_AGENT, "Accept": self.policy.accept})
-        resp = self.send(request)
+        resp = self.send(request, by_length=by_length)
         if resp.status == 200:
             content_type = resp.headers.get("content-type", "text/html; charset=utf-8")
             charset = m.group(1) if (m := _CHARSET.search(content_type)) else default_charset

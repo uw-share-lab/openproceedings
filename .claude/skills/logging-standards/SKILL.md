@@ -83,10 +83,11 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   WARNING with its `reason` (`sidecar_mismatch`, `size_mismatch`, `hash_mismatch`); `dblp_extract_started` /
   `dblp_extract_progress` (`lines`, `records`, at most every 30 s) / `dblp_extract_written` for the streaming read,
   `dblp_extract_stale` (with `reason`) when an extract is read again; `icml_site_year_started` /
-  `icml_site_year_progress` (`done`, `of`) / `icml_site_year_read` (pages, entries, `unjoined`, `dropped`) for a
-  year's ICML pages; one `dblp_year_mined` per year (records, `abstract_attached`, `abstract_missing`, the `site_*`
-  counts, `abstract_control_characters`, `abstract_pdf_codes`, `abstract_short`), and `dblp_ingested` (`years`,
-  `requests`, `cached`). Never a line per item.
+  `icml_site_year_progress` (`done`, `of`) / `icml_site_year_read` (pages, entries, `unjoined`, `dropped`,
+  `withheld`: 1997/1998 abstracts withheld for a contact detail or because no field ends them, counted and never
+  their text, TASK-207) for a year's ICML pages; one `dblp_year_mined` per year (records, `abstract_attached`,
+  `abstract_missing`, the `site_*` counts, `abstract_control_characters`, `abstract_pdf_codes`, `abstract_short`),
+  and `dblp_ingested` (`years`, `requests`, `cached`). Never a line per item.
 - **Record-level anomalies are DEBUG** (`openreview_unknown_track`, `openreview_v1_unmapped`,
   `openreview_v1_conflict`, `openreview_v1_twin_outcome`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `openreview_presentation_unmapped`, `openreview_title_control_characters` (forum and count, never the title), `neurips_record_invalid`,
   `pmlr_record_invalid`, `dblp_record_invalid` (the dblp key and the error type), and per cache entry `openreview_cache_incompatible`, a purged pre-projection entry,

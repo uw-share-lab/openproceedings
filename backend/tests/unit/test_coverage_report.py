@@ -867,6 +867,32 @@ def test_the_scope_lines_say_each_venues_years_and_what_the_dblp_years_rest_on()
         in icml
     )
     assert "242 of its 292 records have an abstract" in icml and "(1 pages" in icml
+    assert "submission-time" not in icml
+    # 1997 and 1998's abstracts are as submitted (TASK-207): the scope line says how many and which years
+    manifest["sources"]["dblp"]["listings"] += [
+        {
+            "year": 1998,
+            "listing": doi,
+            "records": 66,
+            "abstract_attached": 51,
+            "abstracts_as_submitted": True,
+        },
+        {
+            "year": 1997,
+            "listing": doi,
+            "records": 48,
+            "abstract_attached": 40,
+            "abstracts_as_submitted": True,
+        },
+        {
+            "year": 1996,
+            "listing": doi,
+            "records": 66,
+            "abstracts_as_submitted": True,
+        },  # none attached: not named
+    ]
+    _, icml = _scope(cov, manifest)
+    assert "Of the 333 abstracts, 91 (ICML 1997, 1998) are submission-time abstracts" in icml
     assert _scope(cov, {}) == [years]  # no dblp source: no dblp line
     own = OfficialCount(90, "papers in the NeurIPS 1987 proceedings index (every accepted paper; the page's own count)",
                         "https://proceedings.neurips.cc/paper_files/paper/1987", date(2026, 10, 6))  # fmt: skip

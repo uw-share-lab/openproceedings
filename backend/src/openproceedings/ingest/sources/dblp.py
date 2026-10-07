@@ -239,7 +239,12 @@ class DblpReport(ListingReport):
     site_unmatched: int = 0  # page entries whose title key no record of the year has
     site_ambiguous: int = 0  # page entries whose title key two entries, or two records, share
     site_unjoined: int = 0  # 2007's halves: a paper number with a title but no abstract page, or the reverse
-    site_dropped: int = 0  # page entries with no usable title or abstract (an empty abstract page)
+    # page entries with no usable title or abstract (an empty page; a 1997/1998 submission with no `Abstract` heading)
+    site_dropped: int = 0
+    # 1997/1998 submission abstracts withheld whole: a contact detail, or no field ends them (TASK-207)
+    site_withheld: int = 0
+    # the year's pages are the submissions (1997, 1998), so its abstracts are as submitted
+    abstracts_as_submitted: bool = False
 
     def to_manifest(self) -> dict[str, Any]:
         out = super().to_manifest()
@@ -247,7 +252,8 @@ class DblpReport(ListingReport):
             out |= {"sites": list(self.sites), "site_entries": self.site_entries,
                     "abstract_attached": self.abstract_attached, "site_unmatched": self.site_unmatched,
                     "site_ambiguous": self.site_ambiguous, "site_unjoined": self.site_unjoined,
-                    "site_dropped": self.site_dropped}  # fmt: skip
+                    "site_dropped": self.site_dropped, "site_withheld": self.site_withheld,
+                    "abstracts_as_submitted": self.abstracts_as_submitted}  # fmt: skip
         return dict(sorted(out.items()))
 
 
@@ -332,7 +338,7 @@ def mine_year(
         "site_ambiguous": report.site_ambiguous, "site_unjoined": report.site_unjoined,
         "abstract_control_characters": report.abstract_control_characters,
         "abstract_pdf_codes": report.abstract_pdf_codes, "abstract_short": report.abstract_short,
-        "site_dropped": report.site_dropped, "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+        "site_dropped": report.site_dropped, "site_withheld": report.site_withheld, "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     if not report.count_ok:
         log.warning("listing_count_mismatch", extra={"year": year, "listing": report.listing,
                                                      "listed": report.listed, "stated": report.stated})  # fmt: skip
@@ -347,13 +353,16 @@ def _match(
 ) -> dict[str, SiteAbstract]:
     """dblp key → the one page entry whose title key is that paper's alone (the dedup title key: the token
     contract over the NFC title, never a fuzzy match). A key two page entries or two papers share attaches
-    nothing (`site_ambiguous`); a page entry no paper's key matches is `site_unmatched`."""
+    nothing (`site_ambiguous`); a page entry no paper's key matches is `site_unmatched`. Entries the pages
+    dropped or withheld (`SiteYear.dropped`, `.withheld`) never reach here, so they take no part in either count."""
     if site is None:
         return {}
     report.sites = list(site.pages)
     report.site_entries = len(site.entries)
     report.site_unjoined = site.unjoined
     report.site_dropped = site.dropped
+    report.site_withheld = site.withheld
+    report.abstracts_as_submitted = site.as_submitted
     report.fetched += site.fetched
     papers: dict[str, list[str]] = defaultdict(list)
     for _tail, e, title in kept:

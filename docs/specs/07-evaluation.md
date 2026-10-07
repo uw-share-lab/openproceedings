@@ -217,8 +217,10 @@ The source of statuses indexed is spec 01's source table as `ingest/statuses.py`
 cell (manifest format 2, TASK-082).
 The methods text cites the coverage report (with its snapshot hash) as the database-scope caveat. Under its header
 the report states each venue's indexed years, and, when the snapshot holds the dblp release, that ICML 1988–2012
-rests on that pinned bibliography and official ICML pages rather than a crawl on the window's dates; after the
-gate verdict it says how many gated cells compare the crawl with its own listing's stated count (decision-047).
+rests on that pinned bibliography and official ICML pages rather than a crawl on the window's dates. It also says
+how many of those official pages' abstracts (ICML 1997 and 1998's) are submission-time abstracts, which can differ
+from the published papers' (TASK-207). After the gate verdict it says how many gated cells compare the crawl with
+its own listing's stated count (decision-047).
 `GET /coverage` serves every column per cell (`venue_years[].tracks`: sources, indexed accepted,
 `official_accepted` with its citation, `delta`, `delta_pct`, `gated`, `within_gate`, missing abstracts) and
 the statuses indexed per venue-year; `/coverage` in the UI renders the same data. A takedown (TASK-136,
