@@ -46,7 +46,7 @@ The owner decided (2026-10-06): the corpus covers NeurIPS from 1987 and ICML fro
 - **ICML 1997 and 1998** (owner decision of 2026-10-07, TASK-207): their official pages hold submission-time
   abstracts beside the authors' postal addresses, e-mail addresses and phone and fax numbers, and are used for the
   abstract text alone. The parsers keep the text after an `Abstract` heading up to the form's next field; one that
-  still holds an e-mail address, a phone-shaped number, a contact label or a postal code is withheld whole and
+  no field ends, or that still holds an e-mail address, a phone-shaped number, a contact label or a postal code is withheld whole and
   counted (`site_withheld`), and none of those details reaches a record, the snapshot, the index, an export or a log
   line (tested). The abstract claim's evidence says it is a submission-time abstract from the official page, with
   the Internet Archive capture's timestamp.

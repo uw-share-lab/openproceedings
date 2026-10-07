@@ -239,8 +239,13 @@ class DblpReport(ListingReport):
     site_unmatched: int = 0  # page entries whose title key no record of the year has
     site_ambiguous: int = 0  # page entries whose title key two entries, or two records, share
     site_unjoined: int = 0  # 2007's halves: a paper number with a title but no abstract page, or the reverse
-    site_dropped: int = 0  # page entries with no usable title or abstract (an empty abstract page)
-    site_withheld: int = 0  # 1997/1998 submission abstracts withheld for a contact detail (TASK-207)
+    site_dropped: int = (
+        0  # page entries with no usable title or abstract (an empty page; a 1997/1998 submission
+    )
+    # with no `Abstract` heading)
+    site_withheld: int = (
+        0  # 1997/1998 submission abstracts withheld: a contact detail, or no field ends them (TASK-207)
+    )
     abstracts_as_submitted: bool = False  # the pages are the submissions (1997, 1998): abstracts as submitted
 
     def to_manifest(self) -> dict[str, Any]:

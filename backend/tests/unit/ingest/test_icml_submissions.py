@@ -205,10 +205,13 @@ def test_a_1998_page_whose_heading_is_not_its_urls_paper_gives_nothing() -> None
         ("write to a.b@example.org", "email"), ("{x,y}@example.org", "email"), ("x at example dot edu", "email"),
         ("call (609) 258-4455", "phone"), ("609-258-4455", "phone"), ("+(34-1) 624 9418", "phone"),
         ("+1 503 737 5552", "phone"), ("972-3-640-8829", "phone"), ("0231 755 4708", "phone"),
+        ("5550199", "phone"), ("6095550199", "phone"), ("609 5550199", "phone"), ("123456789012", "phone"),
+        ("name at cs.example.edu", "email"), ("name at cs dot example dot ac dot uk", "email"),
         ("Fax: none", "label"), ("tel. none", "label"), ("Princeton, NJ 08544", "postal"), ("NJ 08544-2087", "phone"), ("624 9418", "phone"),
         # an abstract's own text is no contact detail
         ("the state at t+1", None), ("a + b log T", None), ("from 1993-1997", None), ("C++ classes", None),
-        ("up to 29% over 10 000 documents", None), ("in 1987 1988 1989", None), ("telephone speech and voice", None), ("O(n^2) time", None),
+        ("up to 29% over 10 000 documents", None), ("in 1987 1988 1989", None), ("telephone speech and voice", None), ("O(n^2) time", None), ("Areas under the ROC curve", None),
+        ("at least 30 examples", None),
     ],
 )  # fmt: skip
 def test_contact_details_are_recognised_and_an_abstracts_own_text_is_not(text: str, kind: str | None) -> None:
@@ -226,6 +229,18 @@ def test_an_abstract_that_still_holds_a_contact_detail_is_withheld_whole(inside:
     assert entry == Entry("101", "Synthetic title with markup 1", "", withheld=True)
 
 
+def test_an_abstract_line_that_reads_like_a_field_stays_and_one_no_field_ends_is_withheld() -> None:
+    page = P1998_PRE.replace(
+        "  submission, Informática.", "  submission.\nAreas under the ROC curve: a study."
+    )
+    [entry] = icml_sites.icml1998_paper(page, PAPER_CAPTURE.format(n=101))
+    assert entry.abstract == "Synthetic abstract from the submission. Areas under the ROC curve: a study."
+    # no field after the abstract: an address in a layout no rule knows could follow it, so it is withheld
+    cut = P1998_PRE.split("Keywords:", 1)[0] + "Synthetic Institute\nVeldweg 1, 6500 HB Nijmegen\n</PRE>"
+    [entry] = icml_sites.icml1998_paper(cut, PAPER_CAPTURE.format(n=101))
+    assert entry.withheld and entry.abstract == ""
+
+
 def test_a_hostile_1998_page_is_parsed_in_linear_time() -> None:
     page = "<h1>ICML-98 Submission #1</h1>" + "Abstract:\n" * 20_000 + "12 34 " * 20_000 + "<" + "a" * 100_000
     started = time.monotonic()
@@ -236,35 +251,45 @@ def test_a_hostile_1998_page_is_parsed_in_linear_time() -> None:
 # --- end to end: no contact detail reaches records, the snapshot, the index, an export or a log line ------------
 
 
-def pages_1990() -> dict[int, tuple[SitePage, ...]]:
-    """The synthetic dblp release's year (1990, one paper: "Synthetic title with markup 1") read through a 1998
-    submission page and a page that will be withheld, as the shipped 1998 rows are read."""
-    return {1990: (
-        SitePage(1990, PAPER_CAPTURE.format(n=101), PAPER.format(n=101), "icml1998_paper", "cp1252", 1, date(2026, 10, 7), "t"),
-        SitePage(1990, PAPER_CAPTURE.format(n=2), PAPER.format(n=2), "icml1998_paper", "cp1252", 1, date(2026, 10, 7), "t"),
-    )}  # fmt: skip
+V = date(2026, 10, 7)
+WITHHELD_1998 = P1998_HTML.replace("on two lines.", "on two lines; ask two@example.org.")
+# The synthetic dblp release's year (1990, one paper: "Synthetic title with markup 1"), read through the 1997 program
+# page, or through a 1998 submission page and a 1998 page whose abstract is withheld, as the shipped rows are read.
+CASES = {
+    "1997": ({PROGRAM_CAPTURE: P1997},
+             (SitePage(1990, PROGRAM_CAPTURE, PROGRAM, "icml1997", "cp1252", 3, V, "t"),),
+             # attached, withheld, entries kept, dropped (#14 has no heading), the abstract, its capture
+             (1, 0, 2, 1, "Synthetic submission abstract one, on two lines.", "19970619200718")),
+    "1998": ({PAPER_CAPTURE.format(n=101): P1998_PRE, PAPER_CAPTURE.format(n=2): WITHHELD_1998},
+             (SitePage(1990, PAPER_CAPTURE.format(n=101), PAPER.format(n=101), "icml1998_paper", "cp1252", 1, V, "t"),
+              SitePage(1990, PAPER_CAPTURE.format(n=2), PAPER.format(n=2), "icml1998_paper", "cp1252", 1, V, "t")),
+             (1, 1, 1, 0, "Synthetic abstract from the submission, Informática.", "19991009084141")),
+}  # fmt: skip
 
 
+@pytest.mark.parametrize("case", sorted(CASES))
 def test_no_contact_detail_reaches_a_record_the_snapshot_the_index_an_export_or_a_log(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, case: str
 ) -> None:
-    withheld = P1998_HTML.replace("on two lines.", "on two lines; ask two@example.org.")
-    transport = FakeTransport({  # bare `text/html`, cp1252 bytes, as the archive serves them
-        PAPER_CAPTURE.format(n=101): Response(200, {"content-type": "text/html"}, P1998_PRE.encode("cp1252")),
-        PAPER_CAPTURE.format(n=2): Response(200, {"content-type": "text/html"}, withheld.encode("cp1252")),
+    served, rows, (attached, withheld, kept, dropped, abstract, capture) = CASES[case]
+    pages = {1990: rows}
+    transport = FakeTransport({  # bare `text/html`, cp1252 bytes and their length, as the archive serves them
+        url: Response(200, {"content-type": "text/html", "content-length": str(len(text.encode("cp1252")))},
+                      text.encode("cp1252")) for url, text in served.items()
     })  # fmt: skip
     with caplog.at_level(logging.DEBUG):
         out = crawl.ingest_dblp([1990], tmp_path / "cache", stream=stream(), transport=transport, table=TABLE,
-                                pages=pages_1990())  # fmt: skip
+                                pages=pages)  # fmt: skip
         [listing] = out["listings"]
-        assert (listing["abstract_attached"], listing["site_withheld"], listing["site_entries"]) == (1, 1, 1)
-        replayed = crawl._replay_dblp(tmp_path / "cache", (1990, TABLE.release.doi), TABLE, pages_1990())
+        assert (listing["abstract_attached"], listing["site_withheld"], listing["site_entries"],
+                listing["site_dropped"], listing["abstracts_as_submitted"]) == (attached, withheld, kept, dropped, True)  # fmt: skip
+        replayed = crawl._replay_dblp(tmp_path / "cache", (1990, TABLE.release.doi), TABLE, pages)
         records = replayed.records
         [record] = records
-        assert record.abstract == "Synthetic abstract from the submission, Informática."
+        assert record.abstract == abstract
         [claim] = record.claims("abstract")
-        assert claim.url == PAPER_CAPTURE.format(n=101)
-        assert "Internet Archive capture 19991009084141" in (claim.evidence or "")
+        assert claim.url == rows[0].url
+        assert f"Internet Archive capture {capture}" in (claim.evidence or "")
         assert "submission-time abstract" in (claim.evidence or "")
 
         snapshot = tmp_path / "snapshots" / "2026-10-07-test"
@@ -287,12 +312,14 @@ def test_no_contact_detail_reaches_a_record_the_snapshot_the_index_an_export_or_
     assert indexed is not None and engine.match_ids(indexed) == frozenset(
         {record.id}
     )  # the abstract is indexed
-    for word in ("springfield", "example", "middletown", "institute", "keywords", "phone"):
+    for word in ("springfield", "example", "middletown", "institute", "keywords", "phone", "voice", "fax"):
         ast = parse(word).effective_ast
         assert ast is not None and engine.match_ids(ast) == frozenset(), word
     surfaces = {"ingest output": json.dumps(out), "records": "".join(r.model_dump_json() for r in records),
-                "logs": "\n".join(repr(r.__dict__) for r in caplog.records),  # every field, before any scrub **{f"snapshot {k}": v.decode("utf-8") for k, v in files.items()},
+                "logs": "\n".join(repr(r.__dict__) for r in caplog.records),  # every field, before any scrub
+                **{f"snapshot {k}": v.decode("utf-8") for k, v in files.items()},
                 **{f"export {k}": v for k, v in exports.items()}}  # fmt: skip
+    assert {"snapshot records.jsonl", "snapshot manifest.json", "export ris", "export jsonl"} <= set(surfaces)
     for where, text in surfaces.items():
         for detail in CONTACT:
             assert detail not in text, (where, detail)

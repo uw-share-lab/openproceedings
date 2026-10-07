@@ -128,9 +128,12 @@ class SiteYear:
         0  # halves (a number with only a title, or only an abstract) the year's pages don't complete
     )
     dropped: int = (
-        0  # entries with a title and abstract text that leave no title or no usable abstract (empty)
+        0  # entries with a title and abstract text that leave no title or no usable abstract (empty; for 1997 and
+        # 1998 also a submission with no `Abstract` heading)
     )
-    withheld: int = 0  # 1997/1998 abstracts withheld whole for a contact detail (TASK-207)
+    withheld: int = (
+        0  # 1997/1998 abstracts withheld whole: a contact detail, or no field ends them (TASK-207)
+    )
     as_submitted: bool = (
         False  # the year's pages are submissions (`SUBMISSION_PARSERS`): its abstracts are as submitted
     )
@@ -283,10 +286,10 @@ def icml2007_paper(text: str, url: str) -> list[Entry]:
 # Both years' pages are the call for papers' submission form as each author filled it in, free text: a title, the
 # authors with postal addresses, an abstract, keywords, then the contact author's e-mail address and phone (and
 # fax) number, in a layout and wording that vary by paper. Only the abstract is kept: the text after an `Abstract`
-# heading line up to the first line that starts a later field (keywords, e-mail, phone, …) or holds an e-mail
-# address or a phone-shaped number. What that leaves is checked again (`contact_detail`): an abstract that still
-# holds an e-mail address, a phone-shaped number, a contact label or a postal code is withheld whole and counted,
-# never cut and never logged. An entry with no `Abstract` heading gives no abstract (the author block and the
+# heading line up to the first line that starts a later field (keywords, e-mail, phone, …); an abstract that no
+# such line ends is withheld, since what follows it is unknown. What is kept is checked again (`contact_detail`):
+# an abstract that still holds an e-mail address, a phone-shaped number, a contact label or a postal code is
+# withheld whole and counted, never cut and never logged. An entry with no `Abstract` heading gives no abstract (the author block and the
 # abstract run together there, so no line can be trusted to start it).
 
 _BLOCK = re.compile(
@@ -299,22 +302,27 @@ _ABSTRACT_HEAD = re.compile(
     r"abstract(?:[ \t]{0,9}\([^()\n]{0,80}\))?[ \t]{0,9}(?::[ \t]{0,9}(.*)|\.?)", re.I
 )
 _FIELD = re.compile(  # a line that starts a field the form puts after the abstract
-    r"(?:key[ \t-]?words?\b"
-    r"|(?:e-?mail|electronic mail|phone|telephone|tel\b|fax|voice|contact|corresponding author|topics?|areas?"
-    r"|category|paper (?:category|type)|track|submitted)[^:\n]{0,60}:)",
+    r"(?:key[ \t-]?words?\b"  # `Keywords`, `KEY WORDS:`
+    # a contact field, whatever words follow its label: `Email address of contact author:`, `Phone number (X):`
+    r"|(?:e-?mail|electronic mail|phone|telephone|tel\b|fax|voice|contact|corresponding author)[^:\n]{0,60}:"
+    # another field only with its colon right after the label, so `Areas under the ROC curve: …` stays text
+    r"|(?:topics?|areas?|category|paper (?:category|type)|track|submitted)[ \t]{0,9}:)",
     re.I,
 )
-_EMAIL = re.compile(
-    r"@|\b[\w.+-]{1,64} ?(?:\(at\)|\[at\]| at ) ?[\w-]{1,64}(?:\.| dot )(?:edu|com|org|net|gov)\b", re.I
+_EMAIL = re.compile(  # any `@`, or an address spelled out: `name at cs dot example dot edu`, `name (at) host.ac.uk`
+    r"@|\b[\w.+-]{1,64} ?(?:\(at\)|\[at\]| at ) ?(?:[\w-]{1,64}(?:\.| dot )){1,4}[a-z]{2,6}\b", re.I
 )
 _PHONE = re.compile(
     r"(?<![\w)+])\+\(?[0-9][0-9 ()./-]{5,40}[0-9]"  # +1 503 737 5552, +(34-1) 624 9418; never `t+1` or `a + b`
     r"|\([0-9]{3}\)[-. ]{0,3}[0-9]{3}[-. ][0-9]{4}\b"  # (609) 258-4455, (541)-737-5552
 )
-# digit groups joined by `-`, `.`, `/` or a space, read as a phone number when they hold 7 digits or more and are not
-# all years: 609-258-4455, 972-3-640-8829, 624 9418; never `1993-1997`, `1987 1988 1989` or `10 000`
-_DIGIT_GROUPS = re.compile(r"\b[0-9]{1,5}(?:[-./ ][0-9]{1,5}){1,5}\b")
+# digits, alone or in groups joined by `-`, `.`, `/` or a space, read as a phone number when they hold 7 digits or
+# more and are not all years: 5550199, 609-258-4455, 972-3-640-8829, 624 9418; never `1993-1997`, `1987 1988 1989`
+# or `10 000`. It errs towards withholding: `1 000 000` or `84.5 85.2 86.7` read as a phone number too, which only
+# withholds an abstract (counted), never lets a number through; keep it that way.
+_DIGIT_GROUPS = re.compile(r"\b[0-9]{1,6}(?:[-./ ][0-9]{1,6}){1,5}\b")
 _YEAR = re.compile(r"(?:19|20)[0-9]{2}")
+_RUN = re.compile(r"[0-9]{7}")  # seven digits in a row, however long the run: 5550199, 6095550199
 _RULE = re.compile(r"[-=_*~ \t]{3,200}")  # a line of dashes under a heading
 _LABEL = re.compile(r"\b(?:e-?mail|phone|telephone|tel|fax|voice)\s{0,3}[:.]", re.I)
 _POSTAL = re.compile(
@@ -323,7 +331,7 @@ _POSTAL = re.compile(
 
 
 def _phone(text: str) -> bool:
-    if _PHONE.search(text):
+    if _PHONE.search(text) or _RUN.search(text):
         return True
     for m in _DIGIT_GROUPS.finditer(text):
         groups = re.split(r"[-./ ]", m.group())
@@ -352,20 +360,23 @@ def _lines(fragment: str) -> list[str]:
 
 def _submission_abstract(lines: list[str]) -> tuple[str | None, bool]:
     """(the abstract, withheld) from a submission's lines: the text after the first `Abstract` heading up to the
-    next field, a blank line after it never ending it; (None, False) with no heading; (None, True) when what is
-    left still holds a contact detail."""
+    next field, a blank line after it never ending it; (None, False) with no heading; (None, True) when no field
+    ends it (what follows it is unknown) or what is left still holds a contact detail."""
     heads = ((i, m) for i, line in enumerate(lines) if (m := _ABSTRACT_HEAD.fullmatch(line)))
     start, head = next(heads, (None, None))
     if start is None or head is None:
         return None, False
     body: list[str] = [head.group(1)] if head.group(1) else []
+    ended = False
     for line in lines[start + 1 :]:
         if _FIELD.match(line):
+            ended = True
             break
         if not _RULE.fullmatch(line):  # a line of dashes under the heading is layout, not text
             body.append(line)
     text = collapse(" ".join(body))
-    if contact_detail(text) is not None:
+    # no field ends it: whatever follows (an address in a layout the rules don't know) may be in it, so withhold
+    if not ended or contact_detail(text) is not None:
         return None, True
     return text, False
 
@@ -535,7 +546,10 @@ def read_year(
         if beat.due():
             log.info("icml_site_year_progress", extra={"year": year, "done": n - 1, "of": len(rows)})
         try:
-            fetched = fetcher.get(page.url, refresh=refresh, charset=page.charset)
+            # a capture's bytes never change, and some 1990s pages never had `</html>`: whole by Content-Length
+            fetched = fetcher.get(
+                page.url, refresh=refresh, charset=page.charset, by_length=page.capture is not None
+            )
         except FetchError as err:
             if err.reason != "undecodable":
                 raise

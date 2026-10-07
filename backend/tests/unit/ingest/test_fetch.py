@@ -21,6 +21,7 @@ from openproceedings.ingest.sources.http import (
     Page,
     PageCache,
     Response,
+    RetriesExhausted,
     canonical,
     entry_from_fixture,
 )
@@ -113,6 +114,29 @@ def test_a_truncated_body_and_a_network_error_are_retried(tmp_path: Path) -> Non
     f, clock = fetcher(tmp_path, t, HOSTS, min_interval=0)
     assert f.get(URL).text == PAGE
     assert len(t.calls) == 3 and clock.sleeps == [5.0, 10.0]
+
+
+def test_a_capture_judged_by_length_is_whole_without_a_closing_html_tag(tmp_path: Path) -> None:
+    """A 1990s page that never had `</html>` (ICML 1997/1998 captures, TASK-207): with `by_length`, its stated
+    `Content-Length` decides; a body shorter than stated is retried, and with no length the `</html>` rule holds."""
+    old = "<body><pre>An old page.</pre>"
+
+    def sized(body: str, length: int | None) -> Response:
+        headers = {"content-type": "text/html"} | (
+            {"content-length": str(length)} if length is not None else {}
+        )
+        return response(body, headers=headers)
+
+    t = FakeTransport({URL: [sized(old[:10], len(old)), sized(old, len(old))]})
+    f, clock = fetcher(tmp_path / "a", t, HOSTS, min_interval=0)
+    assert f.get(URL, by_length=True).text == old
+    assert len(t.calls) == 2 and clock.sleeps == [5.0]  # the short body was retried once
+    # without `by_length`, or with no stated length, the same page is truncated: retried until given up
+    for by_length, length in ((False, len(old)), (True, None)):
+        t = FakeTransport({URL: sized(old, length)})
+        f, _ = fetcher(tmp_path / f"{by_length}{length}", t, HOSTS, min_interval=0)
+        with pytest.raises(RetriesExhausted):
+            f.get(URL, by_length=by_length)
 
 
 def test_query_strings_and_fragments_are_dropped() -> None:

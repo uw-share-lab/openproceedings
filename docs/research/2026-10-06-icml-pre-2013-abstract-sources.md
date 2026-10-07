@@ -54,13 +54,19 @@ Each submission is the call for papers' form as its authors filled it in, so the
 with the first words after it, sometimes underlined with dashes; then `Keywords`, `Email address of contact author`,
 `EMAIL`, `VOICE`, `FAX`, `Phone number`, `Tel`, `Corresponding author` and other spellings. The parsers
 (`icml_sites.icml1997`, `icml1998_paper`) keep only the lines after the first `Abstract` heading, up to the first
-line that starts one of those later fields; a line of dashes under the heading is dropped. An entry with no
+line that starts one of those later fields (a contact label with any words before its colon; `Topic`, `Area`,
+`Category`, `Track` only with the colon right after them, so an abstract line such as `Areas under the ROC curve: …`
+stays text); a line of dashes under the heading is dropped, and an abstract that no field ends is withheld, since
+whatever follows it is unknown. An entry with no
 `Abstract` heading (1997: 3; 1998: 1) gives no abstract: there the authors' block and the abstract run together.
 What is kept is checked once more (`icml_sites.contact_detail`): an abstract holding an e-mail address, a
-phone-shaped number (7 digits or more in groups that are not all years, or a `+` country code), a contact label
+phone-shaped number (7 digits or more, in a row or in groups that are not all years, or a `+` country code), a contact label
 (`Phone:`, `Fax.`) or a US state and ZIP code is withheld whole and counted. Read against every 1997 and 1998 page on
 2026-10-07: no abstract was withheld, none ran into a later field, and none was cut short. The Internet Archive
 answered many requests that day with a dropped connection or a 503; a retry a few seconds later succeeded each time.
+26 of the 66 1998 pages and the 1997 page end without `</html>` (the archive serves the original bytes, with their
+`Content-Length`), so these captures are judged whole by that length, not by the closing tag the shared HTTP layer
+otherwise requires.
 
 ## How the table uses it
 

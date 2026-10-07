@@ -21,6 +21,10 @@ addresses, e-mails or phone numbers reach anything we store or serve.
   A withhold is the safe failure; a stop inside an abstract silently truncates, so the final rule only withholds.
 - **`caplog.text` hides what a leak would look like.** It holds only the message names, not the `extra` fields the
   JSON formatter writes, and the formatter scrubs; the privacy test reads every `LogRecord.__dict__` instead.
+- **The shared HTTP layer would have refused most of these pages.** It retries a 200 without `</html>` as truncated,
+  and 26 of the 66 1998 captures and the 1997 page never had one; the unit tests seeded the cache, so only the
+  end-to-end test through a transport showed it (5 retries, then `RetriesExhausted`). A capture's bytes are fixed and
+  the archive states their `Content-Length`, so captures are now judged whole by that length (`by_length`).
 - **Some archive captures are under another spelling of the same site.** Five ICML-98 papers' earliest captures are
   at `/ICML98/`, with the same digests as `/icml98/`; one of them has no lower-case capture of that content, so the
   official-site list names both spellings.
@@ -45,5 +49,5 @@ addresses, e-mails or phone numbers reach anything we store or serve.
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/logging-standards/SKILL.md` (`icml_site_year_read`'s
   `withheld` count); spec 01 §Sources and decision-047 state the rule.
-- Test or hook added? — `backend/tests/unit/ingest/test_icml_submissions.py` (every surface), hostile-input rows in
-  `test_icml_sites.py`.
+- Test or hook added? — `backend/tests/unit/ingest/test_icml_submissions.py` (every surface, through a transport, both
+  years), hostile-input rows in `test_icml_sites.py`, `test_fetch.py` (a capture judged by length).
