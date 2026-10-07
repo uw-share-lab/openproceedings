@@ -100,9 +100,8 @@ class Entry:
     key: str | None
     title: str | None
     abstract: str | None
-    withheld: bool = (
-        False  # 1997/1998: an abstract withheld (a contact detail, or no field ends it), never kept
-    )
+    # 1997/1998: an abstract withheld (a contact detail, or no field ends it), never kept
+    withheld: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -581,9 +580,8 @@ def read_year(
         out.as_submitted |= page.parser in SUBMISSION_PARSERS
         out.fetched.append(fetched.fetched_at)
         for e in got:
-            if (
-                e.withheld
-            ):  # a submission's abstract withheld (a contact detail, or no field ends it): counted
+            # a submission's abstract withheld (a contact detail, or no field ends it): counted, never kept
+            if e.withheld:
                 out.withheld += 1
             elif e.title is not None and e.abstract is not None:
                 complete.append((e.title, e.abstract, page, fetched))

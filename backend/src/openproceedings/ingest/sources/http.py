@@ -451,9 +451,9 @@ class HttpClient[T]:
         """Why a 200 is not whole (`truncated`; `truncated_no_length` for a page judged by length that states none
         and lacks `</html>` too), or None when it is."""
         stated = response.headers.get("content-length", "").strip()
-        if (
-            by_length and stated.isascii() and stated.isdecimal()
-        ):  # a capture's bytes are fixed: whole when all there
+        # a capture's bytes are fixed: whole when all there. A length that isn't 1-19 ASCII digits (`²`, or past
+        # int()'s digit limit) is no length, never a crash
+        if by_length and stated.isascii() and stated.isdecimal() and len(stated) <= 19:
             return "truncated" if int(stated) != len(response.body) else None
         if self.policy.expect == "html":
             if b"</html>" in response.body[-4096:].lower():
