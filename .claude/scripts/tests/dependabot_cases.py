@@ -215,6 +215,13 @@ def _(c: Case) -> None:
     c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM b: removed")
 
 
+@row("uv: a minor bump is not a major")
+def _(c: Case) -> None:
+    pypi(c, "mypy", "2.4.0")
+    args = uv_case(c, [uv_pkg("mypy", "2.3.1")], [uv_pkg("mypy", "2.4.0")])
+    c.expect("uv_lock.py", args, OK, r"^uv\.lock: 0 problems")
+
+
 @row("uv: a semver-major bump")
 def _(c: Case) -> None:
     pypi(c, "mypy", "3.0.0")
@@ -472,7 +479,7 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     args = npm_bump(c)
     del c.npm["next@16.3.8"]
-    c.expect("npm_lock.py", args, ERROR, r"^ERROR .*npm view next@16\.3\.8")
+    c.expect("npm_lock.py", args, ERROR, r"^ERROR .*npm view next@16\.3\.8 .*exited 1")
 
 
 # --- docker --------------------------------------------------------------------------------------------
@@ -534,6 +541,16 @@ def _(c: Case) -> None:
 @row("docker: a registry failure is an error, not a pass")
 def _(c: Case) -> None:
     c.expect("docker_digest.py", node_case(c, status=500), ERROR, r"^ERROR .*HTTP 500")
+
+
+@row("docker: a token realm that isn't https is refused before any request")
+def _(c: Case) -> None:
+    args = node_case(c)
+    url = "https://registry-1.docker.io/v2/library/node/manifests/22-bookworm-slim"
+    c.curl[url][-1]["headers"]["www-authenticate"] = TOKEN_AUTH.replace("https://", "http://")
+    c.expect(
+        "docker_digest.py", args, ERROR, r"^ERROR +refusing a non-https URL: http://auth\.docker\.io/token"
+    )
 
 
 def uv_image_case(c: Case, attested: bool) -> list[str]:

@@ -51,6 +51,9 @@ def curl(args: list[str]) -> int:
     if opts.get("--proto") != "=https":
         print("fake curl: called without --proto =https", file=sys.stderr)
         return 2
+    if not url.startswith("https://"):  # what curl --proto =https does
+        print("curl: (1) Protocol not supported or disabled", file=sys.stderr)
+        return 1
     cands = fixtures("curl.json").get(url, [])
     for c in cands if isinstance(cands, list) else [cands]:
         want = c.get("if", {})
@@ -81,6 +84,8 @@ def npm(args: list[str]) -> int:
         return 1
     data = fixtures("npm.json").get(args[1])
     if data is None:
+        # as npm does with --json: the error object on stdout, a non-zero exit
+        print(json.dumps({"error": {"code": "E404", "summary": f"{args[1]} is not in this registry."}}))
         print(f"npm error 404 {args[1]}", file=sys.stderr)
         return 1
     print(json.dumps(data))

@@ -4,6 +4,7 @@ title: Weekly routine reviews and merges Dependabot PRs with /dependabot-review
 status: In Progress
 assignee: []
 created_date: '2026-10-07 20:29'
+updated_date: '2026-10-07 21:25'
 labels:
   - ops
   - tooling
@@ -20,9 +21,21 @@ Owner decision 2026-10-07: Dependabot PRs into dev are handled by a weekly sched
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 .claude/commands/dependabot-review.md holds the full procedure, self-contained for a cloud session with zero context, ending in a merged / left-open summary
-- [ ] #2 .claude/scripts/dependabot/ holds standard-library, typed helper scripts (uv.lock vs PyPI, npm lock vs the registry, manifest/lock pins, docker digests, Actions pins, libc restore, PR listing, queue watch)
-- [ ] #3 The scripts have a case table under .claude/scripts/tests/ run by make tooling, and mutants run by make mutate-changed
-- [ ] #4 The command is registered in roster_index.py and .claude/README.md is regenerated
-- [ ] #5 Spec 08 §CI Dependabot states the weekly routine, what it may merge and what it must leave open; a decision record explains why
+- [x] #1 .claude/commands/dependabot-review.md holds the full procedure, self-contained for a cloud session with zero context, ending in a merged / left-open summary
+- [x] #2 .claude/scripts/dependabot/ holds standard-library, typed helper scripts (uv.lock vs PyPI, npm lock vs the registry, manifest/lock pins, docker digests, Actions pins, libc restore, PR listing, queue watch)
+- [x] #3 The scripts have a case table under .claude/scripts/tests/ run by make tooling, and mutants run by make mutate-changed
+- [x] #4 The command is registered in roster_index.py and .claude/README.md is regenerated
+- [x] #5 Spec 08 §CI Dependabot states the weekly routine, what it may merge and what it must leave open; a decision record explains why
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Script each check from the 2026-10-07 run under .claude/scripts/dependabot/ (stdlib, subprocess for every outside call), test with fakes on PATH, mutants; write the command; spec 08 + decision-048.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Scripts verified against the real #123-#125 diffs: uv_lock.py passes #125's head, npm_lock.py passes #124's merged head and FIXes Dependabot's original commit 34059c0f (the eslint-config-next caret), docker_digest.py passes #123 incl. gh attestation verify for astral-sh/uv. github_actions PRs are reviewed too (actions_pins.py), since Dependabot watches that ecosystem.
+<!-- SECTION:NOTES:END -->
