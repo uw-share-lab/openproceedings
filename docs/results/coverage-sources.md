@@ -1,13 +1,17 @@
 # Official accepted counts per venue × year × track (coverage gate sources)
 
 This is the cited table behind spec 07 §C's coverage gate (TASK-108; `coverage-reporting` skill). It has
-one row per main-track and D&B cell from 2013 (decision-013), and since decision-047 NeurIPS main 1987–2012
-(each year page's own count; ICML 1988–2012 has no official count, so it is reported, not gated): ICLR, ICML and NeurIPS main 2013–2025, and
+one row per main-track and D&B cell from 2013 (decision-013): ICLR, ICML and NeurIPS main 2013–2025, and
 NeurIPS D&B 2021–2025. That is 44 cells, and **all 44 are sourced**. Every one of those numbers was read on
 2026-09-27 from a public page, on the conference's own site or in its proceedings, with no login.
 The 2026 crawl (TASK-178) adds two rows, ICLR 2026 main and ICML 2026 main: 46 rows in all. Both were fetched
 and counted on 2026-10-05 by the AI assistant session working for the project owner, which recorded the sha256
 of each fetched page below so the count can be repeated. NeurIPS 2026 has published nothing; §Not covered here says so.
+Since decision-047 (2026-10-06) the corpus also holds NeurIPS from 1987 and ICML from 1988. The 26 NeurIPS main
+rows for 1987–2012 are each year page's own count (`N papers`), read on 2026-10-06 by the crawl that indexed them
+(TASK-204): 72 rows in all. ICML 1988–2012 has no row: its records come from the pinned dblp release, a
+bibliography, and no ICML statement of accepted counts was found for those years (the official pages of 2001–2012
+list papers, but not every year's full set), so those cells are reported, not gated.
 The `official_counts.OFFICIAL_ACCEPTED` machine-readable copy is kept equal to this table by a test, and
 `GET /coverage` joins it to each matching cell to compute the gate verdict. This file deliberately holds
 exactly one Markdown table so the equality test can read every line starting with `|` as a data row.
@@ -59,6 +63,32 @@ skipped NeurIPS 2021, because its D&B listing states no count, so no NeurIPS 202
 | ICML | 2024 | main | 2,610 | papers in PMLR volume 235, including the 75 position papers (fact sheet), which ICML 2024 did not publish as a separate track | https://proceedings.mlr.press/v235/ | 2026-09-27 |
 | ICML | 2025 | main | 3,260 | main-track accepted papers in the fact sheet; the 73 position papers are counted separately | https://media.icml.cc/Conferences/ICML2025/ICML2025_Fact_Sheet.pdf | 2026-09-27 |
 | ICML | 2026 | main | 6,341 | papers on the ICML 2026 virtual-site paper list that link an OpenReview forum (6,554 of its 6,628 posters; the 74 TMLR/JMLR journal-track posters excluded) and are not among the 213 on the site's position-papers listing; both lists counted entry by entry | https://icml.cc/static/virtual/data/icml-2026-orals-posters.json and https://icml.cc/virtual/2026/events/2026-position-papers | 2026-10-05 |
+| NeurIPS | 1987 | main | 90 | papers in the NeurIPS 1987 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1987 | 2026-10-06 |
+| NeurIPS | 1988 | main | 94 | papers in the NeurIPS 1988 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1988 | 2026-10-06 |
+| NeurIPS | 1989 | main | 101 | papers in the NeurIPS 1989 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1989 | 2026-10-06 |
+| NeurIPS | 1990 | main | 143 | papers in the NeurIPS 1990 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1990 | 2026-10-06 |
+| NeurIPS | 1991 | main | 144 | papers in the NeurIPS 1991 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1991 | 2026-10-06 |
+| NeurIPS | 1992 | main | 127 | papers in the NeurIPS 1992 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1992 | 2026-10-06 |
+| NeurIPS | 1993 | main | 158 | papers in the NeurIPS 1993 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1993 | 2026-10-06 |
+| NeurIPS | 1994 | main | 140 | papers in the NeurIPS 1994 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1994 | 2026-10-06 |
+| NeurIPS | 1995 | main | 152 | papers in the NeurIPS 1995 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1995 | 2026-10-06 |
+| NeurIPS | 1996 | main | 152 | papers in the NeurIPS 1996 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1996 | 2026-10-06 |
+| NeurIPS | 1997 | main | 150 | papers in the NeurIPS 1997 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1997 | 2026-10-06 |
+| NeurIPS | 1998 | main | 151 | papers in the NeurIPS 1998 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1998 | 2026-10-06 |
+| NeurIPS | 1999 | main | 150 | papers in the NeurIPS 1999 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1999 | 2026-10-06 |
+| NeurIPS | 2000 | main | 152 | papers in the NeurIPS 2000 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2000 | 2026-10-06 |
+| NeurIPS | 2001 | main | 197 | papers in the NeurIPS 2001 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2001 | 2026-10-06 |
+| NeurIPS | 2002 | main | 207 | papers in the NeurIPS 2002 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2002 | 2026-10-06 |
+| NeurIPS | 2003 | main | 198 | papers in the NeurIPS 2003 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2003 | 2026-10-06 |
+| NeurIPS | 2004 | main | 207 | papers in the NeurIPS 2004 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2004 | 2026-10-06 |
+| NeurIPS | 2005 | main | 207 | papers in the NeurIPS 2005 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2005 | 2026-10-06 |
+| NeurIPS | 2006 | main | 204 | papers in the NeurIPS 2006 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2006 | 2026-10-06 |
+| NeurIPS | 2007 | main | 217 | papers in the NeurIPS 2007 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2007 | 2026-10-06 |
+| NeurIPS | 2008 | main | 250 | papers in the NeurIPS 2008 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2008 | 2026-10-06 |
+| NeurIPS | 2009 | main | 262 | papers in the NeurIPS 2009 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2009 | 2026-10-06 |
+| NeurIPS | 2010 | main | 292 | papers in the NeurIPS 2010 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2010 | 2026-10-06 |
+| NeurIPS | 2011 | main | 306 | papers in the NeurIPS 2011 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2011 | 2026-10-06 |
+| NeurIPS | 2012 | main | 370 | papers in the NeurIPS 2012 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2012 | 2026-10-06 |
 | NeurIPS | 2013 | main | 360 | papers in the NeurIPS 2013 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2013 | 2026-09-27 |
 | NeurIPS | 2014 | main | 411 | papers in the NeurIPS 2014 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2014 | 2026-09-27 |
 | NeurIPS | 2015 | main | 403 | papers in the NeurIPS 2015 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2015 | 2026-09-27 |

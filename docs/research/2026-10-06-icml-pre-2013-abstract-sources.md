@@ -14,7 +14,8 @@ About 80 survey requests were made, at least 3 s apart on web.archive.org (the C
 icml.cc still serves copies of the old conference sites under `https://icml.cc/Conferences/<year>/<original
 file name>` (sometimes with `.html` appended); only the directory index pages answer 404. machinelearning.org
 (IMLS) now redirects to icml.cc, so its old proceedings pages exist only as captures. Every page here is served
-as bare `text/html` with no charset: the bytes are cp1252 (2001–2011; curly quotes and accented names in the
+as bare `text/html` with no charset: the bytes are cp1252 (2001–2011, but for five 2007 captures, 148, 225, 245,
+260 and 326, which are UTF-8; curly quotes and accented names in the
 0x80–0x9F range) or UTF-8 (2009 is ASCII, 2012 UTF-8), recorded per page in the table.
 
 ## Per year

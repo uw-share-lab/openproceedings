@@ -15,13 +15,19 @@ decision-013's 2013 floor. ICLR is unchanged: it began in 2013.
 already covered them, and the only change was the miner's floor (`neurips.FIRST_YEAR`, 2013 → 1987). The 1987
 year and abstract pages are recorded, scrubbed, as `backend/tests/fixtures/http/neurips/1987/`.
 
-Per-year counts are in the table at the end (NEURIPS_COUNTS).
+Per-year counts are in the table at the end (§NeurIPS per year).
 
-Old abstracts are PDF-extracted text. They carry the extractor's artifacts verbatim, as the record schema keeps
-source text: `(cid:173)` where a soft hyphen broke a word (`non(cid:173) linear`), doubled spaces, and the odd split
-word. The tokenizer reads `(cid:173)` as the tokens `cid` and `173`, so `nonlinear` doesn't match
-`non(cid:173) linear`. CID_COUNTS. Whether to repair these at ingest (as decision-044 repaired control characters)
-is an owner question, filed as a follow-up.
+Old abstracts are PDF-extracted text, with the extractor's artifacts: `(cid:173)` where a soft hyphen broke a word
+at a line end (`non(cid:173) linear`), other `(cid:N)` codes for glyphs it couldn't map, doubled spaces and the odd
+split word. The tokenizer read `(cid:173)` as the tokens `cid` and `173`, so `nonlinear` didn't match
+`non(cid:173) linear`; 1,676 of the 4,821 records have at least one code, nearly all from 1987–2002. 1987–2012 pages
+also show the placeholder `Abstract Unavailable` where a paper has no abstract (55 records have none).
+
+Both are cleaned at ingest (decision-047, spec 01 §Pipeline 2), as decision-044 cleans control characters:
+`(cid:173)` and the whitespace after it are removed (`princi(cid:173) ples` → `principles`), any other code becomes
+a space, and the claim's evidence and the listing's `abstract_pdf_codes` count them; the placeholder is no abstract
+(counted missing). Abstracts under five words, extractor fragments such as an author's name, are kept and counted
+(`abstract_short`, 15). No page from 2013 on holds a code or a placeholder.
 
 ## ICML 1988–2012: the pinned dblp release
 
@@ -73,9 +79,10 @@ PMLR's, never read, so dblp and PMLR never hold the same venue-year. 2009 has on
 ## Per year: records, abstracts and where they came from
 
 `op ingest dblp --year 1988-2012`, 2026-10-07 (the abstract sources: `2026-10-06-icml-pre-2013-abstract-sources.md`).
-"Unmatched" counts page entries whose title key no paper of the year has (the title differs: "Online Learning of
-Pseudo-Metrics" on the 2004 page is "Online and batch learning of pseudo-metrics" in dblp); no near title is ever
-matched.
+"Unmatched" counts page entries whose title key no record of the year has: the title differs ("Online Learning of
+Pseudo-Metrics" on the 2004 page is "Online and batch learning of pseudo-metrics" in dblp), or the paper is no record
+(2009's withdrawn paper, whose page entry is the removal notice). No near title is ever matched. "Dropped" (2007: 1)
+counts an entry whose abstract page is empty (paper 394).
 
 | Year | dblp papers | Records | With an abstract | Without | Page entries | Unmatched | Ambiguous | Source |
 |---|---|---|---|---|---|---|---|---|
@@ -86,7 +93,7 @@ matched.
 | 2004 | 117 | 117 | 112 | 5 | 118 | 6 | 0 | Banff site, capture 20040907123036 |
 | 2005 | 134 | 134 | 0 | 134 | — | — | — | none |
 | 2006 | 140 | 140 | 0 | 140 | — | — | — | none (17 workshop papers excluded) |
-| 2007 | 150 | 150 | 140 | 10 | 149 | 9 | 0 | icml.cc list + 150 Oregon State captures |
+| 2007 | 150 | 150 | 140 | 10 | 149 (1 dropped) | 9 | 0 | icml.cc list + 150 Oregon State captures (5 served as UTF-8) |
 | 2008 | 157 | 157 | 153 | 4 | 158 | 5 | 0 | icml.cc |
 | 2009 | 180 | 179 | 153 | 26 | 160 | 7 | 0 | icml.cc (1 withdrawn paper not a record) |
 | 2010 | 159 | 159 | 151 | 8 | 159 | 8 | 0 | icml.cc |
@@ -97,4 +104,38 @@ matched.
 1988–2000 by year: 1988 49, 1989 128, 1990 50, 1991 128, 1992 60, 1993 44, 1994 45, 1995 71, 1996 66, 1997 48,
 1998 66, 1999 54, 2000 151 (each equal to the table's verified count).
 
-NEURIPS_COUNTS
+## NeurIPS per year
+
+`op ingest neurips --year 1987-2012`, 2026-10-06/07: 4,847 requests (26 year pages, 4,821 abstract pages), no
+retry; counts as `op snapshot build` replays them with decision-047's cleaning. Every year's listing matched its
+stated count; no page was missing and no title mismatched.
+
+| Year | Listed (= the page's count) | Records | No abstract | (cid:N) repaired | Short (<5 words) |
+|---|---|---|---|---|---|
+| 1987 | 90 | 90 | 8 | 46 | 5 |
+| 1988 | 94 | 94 | 10 | 54 | 2 |
+| 1989 | 101 | 101 | 3 | 73 | 0 |
+| 1990 | 143 | 143 | 1 | 94 | 2 |
+| 1991 | 144 | 144 | 1 | 114 | 1 |
+| 1992 | 127 | 127 | 1 | 98 | 0 |
+| 1993 | 158 | 158 | 12 | 123 | 0 |
+| 1994 | 140 | 140 | 2 | 110 | 0 |
+| 1995 | 152 | 152 | 5 | 123 | 1 |
+| 1996 | 152 | 152 | 0 | 128 | 0 |
+| 1997 | 150 | 150 | 0 | 132 | 0 |
+| 1998 | 151 | 151 | 1 | 125 | 0 |
+| 1999 | 150 | 150 | 0 | 131 | 0 |
+| 2000 | 152 | 152 | 1 | 133 | 0 |
+| 2001 | 197 | 197 | 2 | 90 | 0 |
+| 2002 | 207 | 207 | 2 | 55 | 1 |
+| 2003 | 198 | 198 | 1 | 21 | 2 |
+| 2004 | 207 | 207 | 0 | 4 | 0 |
+| 2005 | 207 | 207 | 0 | 7 | 0 |
+| 2006 | 204 | 204 | 2 | 4 | 1 |
+| 2007 | 217 | 217 | 0 | 9 | 0 |
+| 2008 | 250 | 250 | 0 | 1 | 0 |
+| 2009 | 262 | 262 | 0 | 0 | 0 |
+| 2010 | 292 | 292 | 0 | 0 | 0 |
+| 2011 | 306 | 306 | 0 | 1 | 0 |
+| 2012 | 370 | 370 | 3 | 0 | 0 |
+| **all** | **4,821** | **4,821** | **55** | **1,676** | **15** |
