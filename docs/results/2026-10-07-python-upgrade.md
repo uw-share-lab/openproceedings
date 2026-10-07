@@ -12,6 +12,7 @@ recorded here.
 | --- | --- |
 | Crawl cache replayed (`crawl.replay_all`, 55,292 cached files, all seven sources) | 168,181 records under each |
 | Old code on 3.12.9 vs new code on 3.12.15 (also old code on 3.12.15) | byte-identical (`cmp`; sha256 `d0cdab2d30420654…`) |
+| The same after rebasing onto `d378045b` (TASK-207's ICML 1997-1998 pages; 55,359 cached files): `d378045b`'s code on 3.12.9 vs this branch on 3.12.15 | 168,181 records under each, byte-identical (sha256 `c1855a1669ed8af1…`) |
 | `tests.deploy.fixture_data` under each interpreter | the same three `index_version`s: `1124992660a9`, `6f8ef960d9bd`, `924b0d2c95bf` |
 | `op index build --snapshot small` under each | `6f8ef960d9bd` both; every segment file's sha256 equal; only Tantivy's random segment names, `meta.json`, `.managed.json` and `manifest.json` (`built_at`, `build_ms`, the names) differ |
 | Fuzz, 200,000 seeded malformed strings (seed 7), new code on 3.12.9 vs old code on 3.12.9 | 0 differ (`text_of`, `node_text(parse(…))`, `metas`) |
