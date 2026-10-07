@@ -10,7 +10,7 @@ that is TASK-064's decision. The requirements behind each setting are in
 |---|---|
 | `compose.yml` | the stack, plus two one-off services under the `ops` profile: `ops` (index retire) and `takedown-check` |
 | `Caddyfile` | the proxy: site name from `OP_DOMAIN`, Caddy's local CA for `localhost`, ACME for a real name |
-| `api.Dockerfile` | the `api` image: the backend package and its locked dependencies, user `op-api` (uid and gid 10001) |
+| `api.Dockerfile` | the `api` image: the backend package and its locked dependencies on `python:3.12.15-slim-bookworm` (the release `.python-version` pins, TASK-208), user `op-api` (uid and gid 10001) |
 | `web.Dockerfile`, `web-build-gate.sh` | the `web` image; a public build needs a takedown contact (decision-018, TASK-136) |
 | `caddy.Dockerfile` | Caddy with the Caddyfile, as user `caddy` (uid 10002) |
 | `index-permissions.sh` | gives `op-api` read access to one index version (§Permissions) |

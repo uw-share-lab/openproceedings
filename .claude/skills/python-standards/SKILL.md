@@ -12,7 +12,8 @@ description: The backend Python standard for openproceedings — Python 3.12 wit
   to run (`uv run pytest`, `uv run op search …`); `uv add <pkg>` (in the member) / `uv add --dev <pkg>` to
   add deps. Never `pip install` into the workspace, never a hand-edited lock. `uv.lock` is committed and a
   lockfile or `pyproject.toml` change routes to `security-reviewer` and `qa-auditor`.
-- Python **3.12**. Use `type X = …` aliases, `StrEnum`, `match` where it clarifies AST dispatch.
+- Python **3.12**, the exact patch release pinned by `.python-version` (3.12.15; never one before 3.12.12, which has
+  CVE-2025-6069 in `html.parser`: `backend/tests/unit/test_python_pin.py`, TASK-208). Use `type X = …` aliases, `StrEnum`, `match` where it clarifies AST dispatch.
 - Ruff's configuration lives **only** in the root `pyproject.toml`; members inherit it. No per-package
   ruff sections without a recorded decision (`.claude/skills/autolint/SKILL.md`).
 - `autofix.sh` (PostToolUse) runs `ruff format` and `ruff check --fix` on each file as it's edited and

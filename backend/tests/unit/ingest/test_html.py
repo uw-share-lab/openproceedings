@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 from openproceedings.ingest.sources import html
-from openproceedings.ingest.sources.html import MAX_DEPTH, HTMLBudgetError, node_text, parse
+from openproceedings.ingest.sources.html import (
+    MAX_DEPTH,
+    HTMLBudgetError,
+    collapse,
+    metas,
+    node_text,
+    parse,
+    text_of,
+)
 from openproceedings.ingest.sources.http import PageCache, SourceError
+
+from tests.unit.test_python_pin import html_parser_fixed
 
 
 def test_deep_html_is_walked_iteratively_but_refused_past_the_explicit_depth_budget() -> None:
@@ -100,3 +111,98 @@ def test_attribute_values_are_decoded_by_htmlparser_not_the_reference_handlers()
     assert anchor.attributes["title"] == "A 'Catch Fréchet Fréchet it’s &#x27;9 R&D"  # decoded once
     assert html.attrs(f'<a title="{value}">') == {"title": "A 'Catch Fréchet Fréchet it’s &#x27;9 R&D"}
     assert html.metas(f'<meta name="citation_title" content="{value}">', "citation_title") == [decoded]
+
+
+def test_malformed_markup_parses_in_linear_time() -> None:
+    """CVE-2025-6069 (TASK-208): before the fix, HTMLParser's `close` took quadratic time on an unterminated
+    construct at the end of its input, so one malformed cached page could stall a crawl or a snapshot replay.
+
+    The first ten inputs are CPython's own regression inputs (python/cpython#135462) at a sixth of its size; their
+    tails hold no `>`, so `_feed_all` keeps them as text and never asks `close` to parse them. The last two end in
+    tails with a `>`, which `close` does parse: on 3.12.9 they cost 0.14 s at n = 3,000 and grow with the
+    square of n; a fixed release takes milliseconds at n = 20,000. No wall clock is read (testing-standards
+    §Rules 5): a vulnerable interpreter fails the version check first, with the reason, instead of hanging."""
+    running = sys.version_info[:3]
+    assert html_parser_fixed(running), (
+        f"Python {'.'.join(map(str, running))} has CVE-2025-6069: run the release .python-version pins"
+    )
+    n = 20_000
+    kept = (
+        "<a " * n,
+        "<a a=" * n,
+        "</a " * 14 * n,
+        "</a a=" * 11 * n,
+        "<!--" * 4 * n,
+        "<!" * 60 * n,
+        "<?" * 19 * n,
+        "</$" * 15 * n,
+        "<![CDATA[" * 9 * n,
+        "<!doctype" * 35 * n,
+    )
+    for page in kept:
+        # every entry point the miners use: the tree, fragment text, and the meta/attribute reader
+        assert node_text(parse(page)) == text_of(page) == collapse(page)
+        assert metas(page, "citation_title") == []
+    for page in ("<!--x>" * n, "<!--a>b" * n):  # an unterminated comment: close() reads it to the end
+        assert node_text(parse(page)) == text_of(page) == ""
+        assert metas(page, "citation_title") == []
+
+
+@pytest.mark.parametrize(
+    ("markup", "text"),
+    [
+        ("for all p<q we show", "for all p<q we show"),  # an abstract's inequality, at a fragment's end
+        ("title <i>x</i> and p<q", "title x and p<q"),
+        ("x &amp; y <a", "x & y <a"),
+        ("tail <!-- c", "tail <!-- c"),
+        ("end </a", "end </a"),
+        ("<p>bound n<k</p>", "bound n"),  # a later `>` makes it a tag, on every release
+        ("<title>a<b>c</b></title> d", "ac d"),  # title, textarea, xmp, iframe: markup inside, as on 3.12.9
+        ("<textarea>a<b>c</b></textarea> d", "ac d"),
+        ("<xmp>a<b>c</xmp> d", "ac d"),
+        ("<iframe>a<b>c</b></iframe> d", "ac d"),
+        ("a <plaintext> b <i>c</i>", "a b c"),
+        ("<noembed>a<b>c</b></noembed> d", "ac d"),
+        ("<noframes>a<b>c</b></noframes> d", "ac d"),
+        ("<style>.a<i{}</style><p>kept</p>", "kept"),  # style stays raw text
+    ],
+)
+def test_text_is_read_as_on_3_12_9(markup: str, text: str) -> None:
+    """TASK-208: the readings 3.12.12+ changed that `html.py` keeps as 3.12.9 had them, so a fragment keeps its
+    words and a page its structure on either release. A tail with no `>` stays text (`_feed_all`): 3.12.12+'s
+    `close` would drop it. Only `script` and `style` are raw text (`_RawTextParser`)."""
+    assert text_of(markup) == node_text(parse(markup)) == text
+
+
+def test_an_unclosed_raw_text_tag_does_not_swallow_the_rows_after_it() -> None:
+    """3.12.12+ reads an unclosed `<title>` to the end as text: a listing would lose every later row, and the
+    abstract page its `citation_title` (TASK-208)."""
+    assert len(parse("<ul><li>Why <title> tags</li><li>Second paper</li></ul>").iter("li")) == 2
+    assert metas('<title>x<meta name="citation_title" content="T">', "citation_title") == ["T"]
+    script = parse("<p>one</p><script>x<y").iter("script")
+    assert [node.children for node in script] == [["x<y"]]  # an unclosed script body stays inside it
+
+
+@pytest.mark.parametrize(
+    ("markup", "text"),
+    [
+        ("a <!-- b > c", "a"),  # a tail with a `>` is left to close(): an unterminated comment
+        ("a <![CDATA[ b > c", "a"),
+        ("a <b x='y > c", "a"),  # an unterminated quoted attribute value
+        ("a <!--> b", "a b"),  # HTML5's empty comment
+        ("a <!-- b --!> c", "a c"),
+        ("<script>s</script x>after", "after"),  # an end tag with attributes ends the script
+        ("a </p y='>'> b", "a b"),  # an end tag with a quoted `>`
+        ("<a href==x>t</a>", "t"),  # `href==x`: the value is `=x` (checked below)
+    ],
+)
+def test_the_readings_left_to_the_pinned_parser(markup: str, text: str) -> None:
+    """What 3.12.12+ reads differently from 3.12.9 and `html.py` leaves to it (spec 08 "Python pin"); 3.12.9
+    read each of these differently. Pinned here so a release that changes them again shows up."""
+    running = sys.version_info[:3]
+    assert html_parser_fixed(running), (
+        f"Python {'.'.join(map(str, running))} has CVE-2025-6069: run the release .python-version pins"
+    )
+    assert text_of(markup) == node_text(parse(markup)) == text
+    if "href==" in markup:
+        assert [a.attributes["href"] for a in parse(markup).iter("a")] == ["=x"]

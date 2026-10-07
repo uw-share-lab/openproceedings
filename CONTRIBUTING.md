@@ -5,7 +5,7 @@ To run the app (get data, build an index, start the API and UI), follow the READ
 [Quickstart](README.md#quickstart). What follows is the contributor setup on top of it.
 ```bash
 scripts/setup-dev.sh          # git hooks (.githooks: commit-msg, pre-push), executable tooling, .env skeleton
-uv sync                       # the root uv workspace: backend package + dev tools (Python 3.12, pinned by .python-version)
+uv sync                       # the root uv workspace: backend package + dev tools (Python 3.12.15, pinned by .python-version; uv 0.12.22+)
 uv run pytest                 # backend tests; `uv run op --help` for the CLI
 npm ci --ignore-scripts       # the root npm workspace (frontend/); Node 22, pinned by .nvmrc
 npm test --workspace frontend # frontend tests (Vitest); `npm run dev --workspace frontend` serves the UI

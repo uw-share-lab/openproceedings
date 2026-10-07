@@ -94,7 +94,7 @@ so those searches replay the same ids (decision-022). This is the project's deci
 
 ### 1. Prerequisites
 - git and GNU make
-- [uv](https://docs.astral.sh/uv/) (it fetches Python 3.12, pinned by `.python-version`, if you don't have it)
+- [uv](https://docs.astral.sh/uv/) 0.12.22 or later (it fetches Python 3.12.15, pinned by `.python-version`, if you don't have it; an older uv doesn't know that release)
 - Node 22 (pinned by `.nvmrc`) and npm
 - `shellcheck` if you will run `make lint` (`brew install shellcheck` or `apt-get install shellcheck`)
 - An [OpenReview](https://openreview.net) account, only to crawl OpenReview
