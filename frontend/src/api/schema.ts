@@ -830,6 +830,11 @@ export interface components {
         Hit: {
             /** Abstract */
             abstract: string | null;
+            /**
+             * Abstract Note
+             * @description TASK-210 (additive): what to know about the abstract beside its source; null when there is nothing, or when `abstract` is null or withheld. Today only a submission-time abstract has one (an `icml_site` claim read from an official ICML 1997 or 1998 submission page, TASK-207), and it reads, word for word as in every export: Submission-time abstract: as the authors submitted it, which may differ from the published paper's. It is read from the abstract's claim when the snapshot is loaded (`ingest/dedup.py`), never stored in the record.
+             */
+            abstract_note: string | null;
             /** @description Where the hit's `abstract` came from, for attribution (decision-018). `source`: the provenance claim precedence took it from (decision-005), as `GET /papers/{id}` lists it; `ris` means it came through an imported RIS file. `origin`: the site that published it, for a `ris` claim read from the claim's evidence (`scholarmend:openreview_api` → `openreview`, `scholarmend:proceedings_page` → the proceedings its `urls.proceedings` names), null when that names no known site. `url`: the paper's page at `origin` (the OpenReview forum, or the proceedings page; PMLR's CC BY 4.0 terms ask for this link), null when there is none. The whole object is null when `abstract` is null or no claim holds its text. */
             abstract_source: components["schemas"]["AbstractSource"] | null;
             /**
@@ -1072,6 +1077,11 @@ export interface components {
         };
         /** PaperResponse */
         PaperResponse: {
+            /**
+             * Abstract Note
+             * @description TASK-210 (additive): what to know about the abstract beside its source; null when there is nothing, or when `abstract` is null or withheld. Today only a submission-time abstract has one (an `icml_site` claim read from an official ICML 1997 or 1998 submission page, TASK-207), and it reads, word for word as in every export: Submission-time abstract: as the authors submitted it, which may differ from the published paper's. It is read from the abstract's claim when the snapshot is loaded (`ingest/dedup.py`), never stored in the record.
+             */
+            abstract_note: string | null;
             /**
              * Abstract Withheld
              * @description True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.

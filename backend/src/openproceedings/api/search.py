@@ -5,11 +5,12 @@ Transport only: `/parse` is `query.parser.parse`, `/search` is `openproceedings.
 what the facets count or what the defaults removed. Each hit's `abstract_source` (TASK-134, decision-018) is
 looked up in what the served snapshot's reader computed at load (`RecordFile.attributions`): the index's
 display record keeps no provenance. Likewise each hit's `twins` (TASK-162, decision-029), from
-`RecordFile.twins`.
+`RecordFile.twins`. Each hit's `abstract_note` (TASK-210) is its attribution's `note` (`Attribution.note`): the
+submission-time sentence for an abstract read from an ICML 1997 or 1998 submission page, else null.
 
 A takedown (TASK-136, decision-022) changes what a hit shows, never whether it is one: a hit whose abstract this
 instance withholds (`Served.withheld_in`) has `abstract` null, no abstract highlight spans, `abstract_source`
-null and `abstract_withheld` true. Its title spans, its score, `total` and the facets are what the index gives.
+null, `abstract_note` null and `abstract_withheld` true. Its title spans, its score, `total` and the facets are what the index gives.
 """
 
 from __future__ import annotations
@@ -53,6 +54,7 @@ from openproceedings.api.models import (
 from openproceedings.api.openapi import BUSY
 from openproceedings.diagnostics import DiagnosticCode, InternalError
 from openproceedings.engine.exclusions import identified_total, unclassified_total
+from openproceedings.ingest.dedup import Attribution
 from openproceedings.ingest.record import Urls
 from openproceedings.ingest.snapshot import RecordFile
 from openproceedings.query.clauses import filter_clauses
@@ -129,7 +131,7 @@ def search(
     access_fields(request).update(groups=found.groups.found, groups_counted=len(found.groups.counts))
     if found.groups.not_counted is not None:
         access_fields(request)["groups_not_counted"] = found.groups.not_counted
-    sources = page_attributions(served.records, [h.id for h in found.hits])
+    credits = page_attributions(served.records, [h.id for h in found.hits])
     hidden = served.withheld_in(served.records)  # the takedown list, as this bundle's load read it
     assert result.canonical is not None and result.canonical_hash is not None  # it parsed
     assert result.identification_query is not None and found.facets is not None
@@ -159,31 +161,33 @@ def search(
             not_counted=found.groups.not_counted,
         ),
         hits=[
-            _hit(h, sources[h.id], withheld=h.id in hidden, twins=served.records.twins.get(h.id, ()))
+            _hit(h, credits[h.id], withheld=h.id in hidden, twins=served.records.twins.get(h.id, ()))
             for h in found.hits
         ],
     )
 
 
-def page_attributions(records: RecordFile, ids: list[str]) -> dict[str, AbstractSource | None]:
-    """Each hit's `abstract_source`, looked up in what the served snapshot's reader computed at load (no file
+def page_attributions(records: RecordFile, ids: list[str]) -> dict[str, Attribution | None]:
+    """Each hit's abstract attribution, looked up in what the served snapshot's reader computed at load (no file
     I/O here). A hit the verified snapshot doesn't hold is an invariant broken (500), as on `/papers/{id}`."""
-    out: dict[str, AbstractSource | None] = {}
+    out: dict[str, Attribution | None] = {}
     for i in ids:
         if i not in records.attributions:
             raise InternalError(
                 DiagnosticCode.API_INTERNAL, "a paper the index holds is missing from its snapshot"
             )
-        a = records.attributions[i]
-        out[i] = None if a is None else AbstractSource(source=a.source, origin=a.origin, url=a.url)
+        out[i] = records.attributions[i]
     return out
 
 
-def _hit(
-    found: Found, abstract_source: AbstractSource | None, *, withheld: bool, twins: tuple[str, ...]
-) -> Hit:
+def abstract_source(a: Attribution | None) -> AbstractSource | None:
+    """An attribution as the API's `abstract_source` object."""
+    return None if a is None else AbstractSource(source=a.source, origin=a.origin, url=a.url)
+
+
+def _hit(found: Found, credit: Attribution | None, *, withheld: bool, twins: tuple[str, ...]) -> Hit:
     """The API's hit; with `withheld`, without its abstract, the abstract's spans (they would say where the
-    query matched the withheld text) and its source."""
+    query matched the withheld text), its source and its note."""
     r: Any = found.record
     assert found.highlights is not None
     return Hit(
@@ -201,7 +205,8 @@ def _hit(
             title=found.highlights["title"], abstract=[] if withheld else found.highlights["abstract"]
         ),
         urls=Urls.model_validate(r["urls"]),
-        abstract_source=None if withheld else abstract_source,
+        abstract_source=None if withheld else abstract_source(credit),
         abstract_withheld=withheld,
         twins=list(twins),
+        abstract_note=None if withheld or credit is None else credit.note,
     )

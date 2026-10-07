@@ -1409,6 +1409,18 @@
             ],
             "title": "Abstract"
           },
+          "abstract_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "TASK-210 (additive): what to know about the abstract beside its source; null when there is nothing, or when `abstract` is null or withheld. Today only a submission-time abstract has one (an `icml_site` claim read from an official ICML 1997 or 1998 submission page, TASK-207), and it reads, word for word as in every export: Submission-time abstract: as the authors submitted it, which may differ from the published paper's. It is read from the abstract's claim when the snapshot is loaded (`ingest/dedup.py`), never stored in the record.",
+            "title": "Abstract Note"
+          },
           "abstract_source": {
             "anyOf": [
               {
@@ -1534,7 +1546,8 @@
           "urls",
           "abstract_source",
           "abstract_withheld",
-          "twins"
+          "twins",
+          "abstract_note"
         ],
         "title": "Hit",
         "type": "object"
@@ -2089,6 +2102,18 @@
       },
       "PaperResponse": {
         "properties": {
+          "abstract_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "TASK-210 (additive): what to know about the abstract beside its source; null when there is nothing, or when `abstract` is null or withheld. Today only a submission-time abstract has one (an `icml_site` claim read from an official ICML 1997 or 1998 submission page, TASK-207), and it reads, word for word as in every export: Submission-time abstract: as the authors submitted it, which may differ from the published paper's. It is read from the abstract's claim when the snapshot is loaded (`ingest/dedup.py`), never stored in the record.",
+            "title": "Abstract Note"
+          },
           "abstract_withheld": {
             "description": "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.",
             "title": "Abstract Withheld",
@@ -2150,7 +2175,8 @@
           "matched",
           "highlights",
           "abstract_withheld",
-          "twins"
+          "twins",
+          "abstract_note"
         ],
         "title": "PaperResponse",
         "type": "object"

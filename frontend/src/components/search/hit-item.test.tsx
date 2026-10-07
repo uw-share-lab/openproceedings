@@ -33,7 +33,12 @@ const HIT: Hit = {
   abstract_source: { source: "pmlr", origin: "pmlr", url: PMLR_PAGE },
   abstract_withheld: false,
   twins: [],
+  abstract_note: null,
 };
+
+/** The API's `abstract_note` for a submission-time abstract (TASK-210; `ingest/dedup.py::SUBMISSION_NOTE`). */
+const NOTE =
+  "Submission-time abstract: as the authors submitted it, which may differ from the published paper's.";
 
 function show(over: Partial<Hit> = {}) {
   render(<HitItem hit={{ ...HIT, ...over }} q="trust" mode="native" />);
@@ -181,6 +186,41 @@ describe("the abstract's attribution (decision-018, RH-12)", () => {
     const article = show({ abstract: null, abstract_source: null });
     expect(within(article).getByText("No abstract in the index")).toBeTruthy();
     expect(attribution(article)).toBeUndefined();
+  });
+});
+
+describe("a submission-time abstract (TASK-210, RH-19)", () => {
+  const CAPTURE =
+    "https://web.archive.org/web/19991009084141id_/http://www.cs.wisc.edu:80/icml98/papers/paper2.html";
+  const SUBMITTED: Partial<Hit> = {
+    abstract_source: { source: "icml_site", origin: "icml_site", url: CAPTURE },
+    abstract_note: NOTE,
+  };
+
+  it("says so under its attribution, in the API's words", () => {
+    const article = show(SUBMITTED);
+    const line = attribution(article);
+    expect(line?.textContent).toBe("Abstract: ICML conference site (Internet Archive copy, 1999-10-09)");
+    const note = within(article).getByText(NOTE);
+    expect(note.tagName).toBe("P");
+    expect(line?.nextElementSibling).toBe(note); // right after the source it qualifies, before the links
+  });
+
+  it("says nothing for any other abstract", () => {
+    const article = show();
+    expect(article.textContent).not.toContain("Submission-time");
+    expect(attribution(article)?.nextElementSibling?.textContent).not.toContain("Submission-time");
+  });
+
+  it("says nothing when the abstract is withheld or missing, whatever a client was sent", () => {
+    for (const over of [
+      { ...SUBMITTED, abstract: null, abstract_withheld: true },
+      { ...SUBMITTED, abstract: null },
+    ]) {
+      const article = show(over);
+      expect(within(article).queryByText(NOTE)).toBeNull();
+      cleanup();
+    }
   });
 });
 

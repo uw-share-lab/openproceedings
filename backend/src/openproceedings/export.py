@@ -10,23 +10,32 @@ openproceedings id, so an export round-trips to the ids it came from.
   then pdf, then proceedings), DO, ID, KW (the track, then `status:<status>`), N1 (for a paper not accepted,
   first `Submitted to <venue>; status: <status in words> (not in its proceedings).`), N1 (`See also: <twin
   ids> (…)`, only for a record with a twin, TASK-162), N1 (`Abstract source: <site> <url>`, when the abstract
-  has one; or the withheld sentence), N1 (provenance), ER. RIS is line-based, so line breaks inside a value
+  has one; or the withheld sentence), N1 (`Submission-time abstract: …`, `SUBMISSION_NOTE`, when the abstract is
+  one, TASK-210), N1 (provenance), ER. RIS is line-based, so line breaks inside a value
   become single spaces.
 - CSV: the record fields of spec 01 plus `index_version`, `canonical_hash`, `exported_at`, `record_id` and
   `searched_at` (the last two empty unless pinned by a record), then `abstract_source`, `abstract_origin` and
   `abstract_url`, then `abstract_withheld` (`true`/`false`), then `abstract_withheld_reason` (`takedown`,
-  `source_unavailable` or empty), then `twins` (the record's twins' ids, empty for most; TASK-162), UTF-8 with a
-  BOM (Excel). Lists (authors, keywords, twins) are joined with "; ".
+  `source_unavailable` or empty), then `twins` (the record's twins' ids, empty for most; TASK-162), then
+  `abstract_note` (`SUBMISSION_NOTE` or empty; TASK-210), UTF-8 with a BOM (Excel). Lists (authors, keywords,
+  twins) are joined with "; ".
 - BibTeX: `@inproceedings` for an accepted paper, `@unpublished` (no `booktitle`; `note` starts "Submitted to
   <venue>, status: <status in words>.") for any other; keyed `<first author's last name><year><first title
   word>` (ASCII, lower-case), a repeat key suffixed a, b, … (decision-007); `keywords` holds the track and
-  `status:<status>`, `abstract_source` the abstract's source (`<site> <url>`), `abstract_withheld` the withheld
-  sentence (only when withheld), `note` the provenance, `openproceedings_id` the id and `openproceedings_twins`
+  `status:<status>`, `abstract_source` the abstract's source (`<site> <url>`), `abstract_note` the
+  submission-time sentence (only for such an abstract, TASK-210), `abstract_withheld` the withheld sentence (only
+  when withheld), `note` the provenance, `openproceedings_id` the id and `openproceedings_twins`
   its twins' ids (only for a record with a twin, TASK-162). Every `@` is written `{@}`.
 - JSONL: one JSON object per record, with `index_version`, `canonical_hash`, `exported_at`, `record_id` and
   `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null),
   `abstract_withheld` (a boolean) and `abstract_withheld_reason` (`takedown`, `source_unavailable` or null), and
-  `twins` (a list of ids) only on a record with a twin (TASK-162).
+  `twins` (a list of ids) only on a record with a twin (TASK-162), and `abstract_note` (`SUBMISSION_NOTE`) only
+  on a record whose abstract is a submission-time one (TASK-210).
+
+A submission-time abstract (TASK-210: an ICML 1997 or 1998 abstract read from the conference's submission pages,
+TASK-207) says so beside its source in every format, in the one sentence the API sends as `abstract_note`
+(`Attribution.note`, `ingest/dedup.py::SUBMISSION_NOTE`), read from the attribution, never from the record. Every
+other record exports byte for byte as before in RIS, BibTeX and JSONL; CSV gains one last, empty cell.
 
 A record's twins (decision-029: an ICLR 2017 workshop copy and its conference submission, two records of one
 paper, never merged) are the ids its `twin` claims name (`RecordFile.twins`, the same ones `GET /search` sends as
@@ -76,10 +85,10 @@ CSV_COLUMNS = (
     "id", "title", "abstract", "authors", "venue", "year", "track", "status", "presentation",
     "venue_id_raw", "forum", "pdf", "proceedings", "doi", "keywords", "index_version", "canonical_hash",
     "exported_at", "record_id", "searched_at", "abstract_source", "abstract_origin", "abstract_url",
-    "abstract_withheld", "abstract_withheld_reason", "twins",
+    "abstract_withheld", "abstract_withheld_reason", "twins", "abstract_note",
 )  # fmt: skip
-# (TASK-138's four abstract columns, then TASK-136's reason, then TASK-162's twins, are appended last: every
-# earlier column keeps its position)
+# (TASK-138's four abstract columns, then TASK-136's reason, then TASK-162's twins, then TASK-210's note, are
+# appended last: every earlier column keeps its position)
 # each record id → its abstract's attribution (`RecordFile.attributions`, computed at snapshot load)
 type Sources = Mapping[str, Attribution | None]
 # each record id with a twin → its twins' ids (`RecordFile.twins`: its `twin` claims, decision-029, TASK-162)
@@ -301,6 +310,8 @@ def _ris(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             lines.append(("N1", see_also(r[_TWINS])))
         if (source := _credit_of(r)) is not None:  # after the status sentence, before the provenance line
             lines.append(("N1", f"Abstract source: {credit(source)}"))
+            if source.note is not None:  # right after the source it qualifies (TASK-210)
+                lines.append(("N1", source.note))
         elif r.get(_WITHHELD):
             lines.append(("N1", SENTENCES[r[_REASON]]))
         lines.append(("N1", p.line()))
@@ -334,6 +345,7 @@ def _csv(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             "abstract_withheld": "true" if r.get(_WITHHELD) else "false",
             "abstract_withheld_reason": r.get(_REASON),
             "twins": "; ".join(r.get(_TWINS) or ()),
+            "abstract_note": source.note if source else None,
         }
         yield _csv_row(csv_cell(row[c]) for c in CSV_COLUMNS)
 
@@ -478,6 +490,8 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             fields.append(("abstract", _braced(r["abstract"])))
         if (source := _credit_of(r)) is not None:
             fields.append(("abstract_source", _braced(credit(source))))
+            if source.note is not None:  # a field of its own, so `note` stays the provenance (TASK-210)
+                fields.append(("abstract_note", _braced(source.note)))
         elif r.get(_WITHHELD):
             fields.append(("abstract_withheld", _braced(SENTENCES[r[_REASON]])))
         urls = _urls(r)
@@ -522,6 +536,8 @@ def _jsonl(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         row = {
             **{k: v for k, v in r.items() if k != _TWINS},
             **({_TWINS: list(r[_TWINS])} if r.get(_TWINS) else {}),  # only on a record with a twin (TASK-162)
+            # only on a submission-time abstract (TASK-210)
+            **({"abstract_note": source.note} if source is not None and source.note is not None else {}),
             _SOURCE: None
             if source is None
             else {"source": source.source, "origin": source.origin, "url": source.url},

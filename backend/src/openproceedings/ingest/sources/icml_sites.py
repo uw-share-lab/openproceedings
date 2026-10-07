@@ -38,6 +38,7 @@ from types import MappingProxyType
 from typing import Any
 from urllib.parse import urlparse
 
+from openproceedings.ingest.dedup import AS_SUBMITTED
 from openproceedings.ingest.record import Source, title_text
 from openproceedings.ingest.sources.common import CrawlError, clean_abstract
 from openproceedings.ingest.sources.html import Element, collapse, node_text, parse, text_of, unescape
@@ -530,9 +531,8 @@ def _evidence(page: SitePage) -> str:
     where = f"official ICML {page.year} page {page.official}"
     if page.capture is not None:
         where += f", Internet Archive capture {page.capture}"
-    if page.parser in SUBMISSION_PARSERS:
-        where += (": a submission-time abstract, as the authors submitted it (not necessarily the published paper's); "
-                  "the page's contact details are not kept")  # fmt: skip
+    if page.parser in SUBMISSION_PARSERS:  # the marker `dedup.attribution` reads back (TASK-210)
+        where += f": {AS_SUBMITTED}; the page's contact details are not kept"
     return where
 
 

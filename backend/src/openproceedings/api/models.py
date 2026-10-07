@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.engine.index import VERSION_NAME
-from openproceedings.ingest.dedup import Origin
+from openproceedings.ingest.dedup import SUBMISSION_NOTE, Origin
 from openproceedings.ingest.record import PaperRecord, Presentation, Source, Urls
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import MIN_YEAR, FilterField, Node, TextField
@@ -161,6 +161,14 @@ ORIGIN_DOC = (
     "conference page (live, or a pinned Internet Archive capture), for ICML 1988-2012 (decision-047)."
 )
 
+ABSTRACT_NOTE_DOC = (
+    "TASK-210 (additive): what to know about the abstract beside its source; null when there is nothing, or "
+    "when `abstract` is null or withheld. Today only a submission-time abstract has one (an `icml_site` claim "
+    "read from an official ICML 1997 or 1998 submission page, TASK-207), and it reads, word for word as in "
+    f"every export: {SUBMISSION_NOTE} It is read from the abstract's claim when the snapshot is loaded "
+    "(`ingest/dedup.py`), never stored in the record."
+)
+
 
 ABSTRACT_WITHHELD_DOC = (
     "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, "
@@ -209,6 +217,7 @@ class Hit(Model):
     abstract_source: AbstractSource | None = Field(description=ABSTRACT_SOURCE_DOC)  # TASK-134: additive
     abstract_withheld: bool = Field(description=ABSTRACT_WITHHELD_DOC)  # TASK-136: additive
     twins: list[str] = Field(description=TWINS_DOC)  # TASK-162: additive
+    abstract_note: str | None = Field(description=ABSTRACT_NOTE_DOC)  # TASK-210: additive
 
 
 IDENTIFIED_DOC = (
@@ -464,6 +473,7 @@ class PaperResponse(Versioned):
     )
     abstract_withheld: bool = Field(description=ABSTRACT_WITHHELD_DOC)  # TASK-136: additive
     twins: list[str] = Field(description=TWINS_DOC)  # TASK-162: additive
+    abstract_note: str | None = Field(description=ABSTRACT_NOTE_DOC)  # TASK-210: additive
 
 
 # --- /records (task-037; spec 04 §Search records) -----------------------------------------------------

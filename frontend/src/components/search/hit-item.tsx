@@ -4,7 +4,8 @@
  * One result (ui-design-system §Result item; design W5; copy RH-8–13): an `h3` title linking to
  * `/paper/<id>?q=&mode=`, the authors (the first three and "et al.", with a button for the full list), badges,
  * the abstract excerpt, the abstract's attribution ("Abstract: PMLR", linking to the paper's page there;
- * decision-018, the API's `abstract_source`) and the outbound links. An abstract this instance withholds at a
+ * decision-018, the API's `abstract_source`), then what to know of the abstract (the API's `abstract_note`, copy
+ * RH-19: a submission-time abstract, TASK-210) and the outbound links. An abstract this instance withholds at a
  * rights holder's request (the API's `abstract_withheld`, decision-022) says so (copy RH-15), never "No abstract
  * in the index". A record with twins (the API's `twins`, decision-029) names each, a link to its paper page (copy
  * RH-18). Highlights are the API's spans only
@@ -166,6 +167,14 @@ function AbstractSource({ from, title }: { from: AbstractFrom; title: string }) 
   );
 }
 
+/** What to know of an abstract, under its attribution (copy RH-19, PA-11; TASK-210): the API's `abstract_note`,
+ * word for word as every export says it ("Submission-time abstract: as the authors submitted it, which may differ
+ * from the published paper's."). Nothing when the API sends none. */
+export function AbstractNote({ note }: { note: string | null }) {
+  if (note === null) return null;
+  return <p className="text-xs text-muted-foreground">{note}</p>;
+}
+
 function Abstract({ text, spans }: { text: string; spans: readonly (readonly number[])[] }) {
   const [full, setFull] = useState(false);
   const regionId = useId();
@@ -227,6 +236,7 @@ export function HitItem({ hit, q, mode }: { hit: SearchHit; q: string; mode: Mod
         <>
           <Abstract text={hit.abstract} spans={hit.highlights.abstract} />
           {hit.abstract_source !== null && <AbstractSource from={hit.abstract_source} title={hit.title} />}
+          <AbstractNote note={hit.abstract_note} />
         </>
       )}
       <TwinLinks twins={hit.twins} q={q} mode={mode} />

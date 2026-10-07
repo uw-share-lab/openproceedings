@@ -21,7 +21,7 @@ import pytest
 from openproceedings import export
 from openproceedings.engine.index import build_index
 from openproceedings.engine.tantivy_engine import TantivyEngine
-from openproceedings.ingest.dedup import DedupResult
+from openproceedings.ingest.dedup import SUBMISSION_NOTE, DedupResult
 from openproceedings.ingest.snapshot import RecordFile, render
 from openproceedings.ingest.sources import crawl, icml_sites
 from openproceedings.ingest.sources.http import Response
@@ -329,6 +329,10 @@ def test_no_contact_detail_reaches_a_record_the_snapshot_the_index_an_export_or_
                          sources=RecordFile(snapshot).attributions)  # fmt: skip
             exports[fmt] = buf.getvalue()
 
+    # TASK-210: the claim's evidence makes the served attribution say so, and every export carries the note
+    credit = RecordFile(snapshot).attributions[record.id]
+    assert credit is not None and credit.as_submitted and credit.note == SUBMISSION_NOTE
+    assert all(SUBMISSION_NOTE in exports[fmt] for fmt in export.FORMATS)
     indexed = parse("submission").effective_ast
     assert indexed is not None and engine.match_ids(indexed) == frozenset(
         {record.id}

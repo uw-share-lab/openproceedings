@@ -232,17 +232,35 @@ _SITE_ORIGIN: dict[str, Origin] = {
 # how `ingest/ris.py` writes an abstract claim's evidence: `scholarmend:<its abstract source> <its evidence>`
 RIS_VIA_OPENREVIEW = "scholarmend:openreview_api"
 RIS_VIA_PROCEEDINGS = "scholarmend:proceedings_page"
+# how an `icml_site` claim's evidence says its page is a submission (ICML 1997 and 1998, TASK-207:
+# `icml_sites.SUBMISSION_PARSERS`), so its abstract is as the authors submitted it, not as published
+AS_SUBMITTED = (
+    "a submission-time abstract, as the authors submitted it (not necessarily the published paper's)"
+)
+# what the API (`abstract_note`), every export and the UI say of such an abstract (TASK-210): the one wording
+SUBMISSION_NOTE = (
+    "Submission-time abstract: as the authors submitted it, which may differ from the published paper's."
+)
 
 
 @dataclass(frozen=True, slots=True)
 class Attribution:
     """Where a record's abstract came from (decision-018): `source`, the claim precedence took it from;
     `origin`, the site that published it (for a `ris` claim, read from its evidence; None when that names no
-    known site); `url`, the paper's page at `origin` (None when there is none)."""
+    known site); `url`, the paper's page at `origin` (None when there is none); `as_submitted`, whether
+    that page holds the abstract as the authors submitted it (its claim's evidence says `AS_SUBMITTED`;
+    TASK-210)."""
 
     source: Source
     origin: Origin | None
     url: str | None
+    as_submitted: bool = False
+
+    @property
+    def note(self) -> str | None:
+        """What the API and every export say of the abstract beside its source: `SUBMISSION_NOTE` for a
+        submission-time abstract, else None (TASK-210)."""
+        return SUBMISSION_NOTE if self.as_submitted else None
 
 
 class AbstractClaim(Protocol):
@@ -291,6 +309,8 @@ def attribution(
     origin: Origin | None = _DIRECT_ORIGIN.get(source)
     if origin == "openreview":
         return Attribution(source, origin, forum)
+    if origin == "icml_site":  # a submission page's evidence says so (TASK-207); read here, never re-derived
+        return Attribution(source, origin, claim.url, AS_SUBMITTED in (claim.evidence or ""))
     if origin is not None:
         return Attribution(source, origin, claim.url)
     via, _, rest = (claim.evidence or "").partition(" ")

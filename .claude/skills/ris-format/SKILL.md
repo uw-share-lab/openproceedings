@@ -26,7 +26,7 @@ fixtures. The reference parser strips values, so it reads either ending.
 | `DO` | DOI, only if present | |
 | `ID` | the openproceedings paper `id` | So exports round-trip (spec 04 §Exports). Exactly one line. |
 | `KW` | two lines: the `track` value (`main`, `datasets_benchmarks`, …), then `status:<status>` | Track from `.claude/skills/track-taxonomy/SKILL.md`. The status line is meant to show a Covidence screener that a paper was rejected or withdrawn, since `T2` names the conference it was submitted to (spec 04 §Exports). Covidence shows neither `KW` nor `N1` to screeners (hand check, `docs/results/2026-09-27-covidence-check.md`), so a Covidence review must exclude by status before import (default `status:accepted`); Zotero and EndNote show both. |
-| `N1` | for a paper not `accepted`, first `Submitted to <venue string>; status: <status in words> (not in its proceedings).` (`unknown`: "not known to be in its proceedings"); then, for a record with twins, `See also: <ids> (…)` (below); then, when the abstract has a source, `Abstract source: <site> <url>` (below); then, on every record, `openproceedings <index_version> · query <canonical_hash> · exported <UTC date>`, plus ` · record <record_id> · searched <UTC date>` when the export is pinned by a search record | Exactly one provenance line, always the last `N1`. `·` is U+00B7. Dates are `YYYY-MM-DD` UTC. The status sentence is what a screener reads in Notes; `TY` stays `CPAPER` and `T2` the venue string whatever the status (spec 04 §Exports). |
+| `N1` | for a paper not `accepted`, first `Submitted to <venue string>; status: <status in words> (not in its proceedings).` (`unknown`: "not known to be in its proceedings"); then, for a record with twins, `See also: <ids> (…)` (below); then, when the abstract has a source, `Abstract source: <site> <url>` (below); then, for a submission-time abstract, the note (below); then, on every record, `openproceedings <index_version> · query <canonical_hash> · exported <UTC date>`, plus ` · record <record_id> · searched <UTC date>` when the export is pinned by a search record | Exactly one provenance line, always the last `N1`. `·` is U+00B7. Dates are `YYYY-MM-DD` UTC. The status sentence is what a screener reads in Notes; `TY` stays `CPAPER` and `T2` the venue string whatever the status (spec 04 §Exports). |
 | `ER` | empty | |
 
 **Abstract source (TASK-138, decision-018; spec 04 §Exports).** One `N1  - Abstract source: <site> <url>`
@@ -41,6 +41,13 @@ cleanly (it shows no `N1` to screeners). A reader that wants the provenance take
 the first or the only one (decision-021 names that reader as one additions don't protect). The Covidence
 fixture's records have no claims, so its bytes are unchanged; an attributed rejected paper has three `N1`
 lines, untested in Covidence (low risk).
+
+**Submission-time abstract (TASK-210; spec 04 §Exports).** An abstract read from an ICML 1997 or 1998
+submission page (TASK-207; its attribution's `as_submitted`, the API's `abstract_note`) has one more `N1`, right
+after its `Abstract source:` line: `N1  - Submission-time abstract: as the authors submitted it, which may differ from the published paper's.`
+(`ingest/dedup.py::SUBMISSION_NOTE`, the sentence the API and the web app use). The provenance line stays last.
+Every other record is byte for byte what it was; a withheld abstract has no note. Covidence shows screeners no
+`N1`, so a Covidence review reads it from the CSV's `abstract_note` (or the results list) before import.
 
 **Withheld abstracts (decision-021).** A pinned export whose index's snapshot can't be verified has no `AB`
 and no `Abstract source:` line; instead each record has `N1  - Abstract withheld: its source could not be
