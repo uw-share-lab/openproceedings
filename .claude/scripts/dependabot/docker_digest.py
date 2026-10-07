@@ -8,12 +8,14 @@ the merge base of origin/dev and HEAD) and `head` (default HEAD). For each pin t
 the image's registry anonymously (the token its 401 challenge names), with a HEAD request for
 `/v2/<repository>/manifests/<tag>` and the OCI-index `Accept` header, and requires `Docker-Content-Digest` to
 equal the pinned digest and the answer to be an index (a multi-arch pin, spec 08 §Deploy). An image on
-ghcr.io must also pass `gh attestation verify oci://<image>@<digest> --owner <its owner>`. When the
-`python` image's tag moves, `.python-version` at `head` must name the same patch release (TASK-208).
+ghcr.io must also pass `gh attestation verify oci://<image>@<digest> --owner <its owner>`. Each changed file
+must differ only in its pins' `:tag@digest` (the image names and every other line stay the same).
 
-A PROBLEM, the PR stays open: a digest that doesn't resolve or differs, a non-index answer, a failed
-attestation, an image that wasn't pinned before, a semver-major tag change, or a `python` minor change
-(hand-only, spec 08 §Monorepo layout). A `.python-version` that doesn't match is a FIX. An image reference
+A PROBLEM, the PR stays open: a change outside the pins, a digest that doesn't resolve or differs, a non-index
+answer, a failed attestation, an image that wasn't pinned before, a semver-major tag change, or any change of
+the `python` image's tag (decision-048: a new Python release changes how the crawlers parse pages, spec 08
+§Monorepo layout "Python pin", and the replay that shows records unchanged needs the owner's `data/`; a new
+digest for the same tag is fine). An image reference
 that lost its digest is not this script's to find: `check_digest_pins.py` (in `make tooling`, which the command
 runs and CI's `claude-tooling` check runs) refuses any unpinned image a `deploy/` build pulls.
 """
@@ -66,11 +68,18 @@ def pins(text: str | None) -> set[Pin]:
 
 
 def registry(image: str) -> tuple[str, str]:
-    """(registry host, repository): `node` → (registry-1.docker.io, library/node)."""
+    """(registry host, repository): `node` and `docker.io/library/node` → (registry-1.docker.io, library/node)."""
     first, _, rest = image.partition("/")
-    if rest and ("." in first or ":" in first or first == "localhost"):
+    if first in ("docker.io", "index.docker.io") and rest:
+        image, (first, _, rest) = rest, rest.partition("/")
+    elif rest and ("." in first or ":" in first or first == "localhost"):
         return first, rest
     return "registry-1.docker.io", image if rest else f"library/{image}"
+
+
+def outside_pins(text: str | None) -> str:
+    """The file with each pin's `:tag@digest` blanked: what must stay the same."""
+    return PIN.sub(lambda m: f"{m.group(1)}:<pin>", text or "")
 
 
 def resolve(image: str, tag: str) -> tuple[str, str]:
@@ -101,7 +110,7 @@ def is_python(image: str) -> bool:
     return registry(image) == ("registry-1.docker.io", "library/python")
 
 
-def check_pin(rep: Report, pin: Pin, before: set[Pin], head: str) -> None:
+def check_pin(rep: Report, pin: Pin, before: set[Pin]) -> None:
     olds = sorted({p.tag for p in before if p.image == pin.image})
     if not olds:
         rep.problem(f"{pin}: {pin.image} was not pinned before (a new image)")
@@ -109,13 +118,12 @@ def check_pin(rep: Report, pin: Pin, before: set[Pin], head: str) -> None:
     old_tag = max(olds, key=version_tuple)
     if pin.tag != old_tag and is_major(old_tag, pin.tag):
         rep.problem(f"{pin}: semver-major tag change from {old_tag}")
-    if is_python(pin.image) and pin.tag != old_tag and is_minor_or_more(old_tag, pin.tag):
-        rep.problem(f"{pin}: a new Python minor from {old_tag} is done by hand (spec 08 §Monorepo layout)")
-    if is_python(pin.image):
-        want = ".".join(str(n) for n in version_tuple(pin.tag))
-        have = (git_show(head, ".python-version") or "").strip()
-        if have != want:
-            rep.fix(f"{pin}: .python-version is {have!r}; move it to {want!r} with the image (TASK-208)")
+    if is_python(pin.image) and pin.tag != old_tag:
+        what = "minor" if is_minor_or_more(old_tag, pin.tag) else "patch"
+        rep.problem(
+            f"{pin}: a new Python {what} from {old_tag}; the owner merges it after the crawl-cache replay"
+            " (spec 08 §Monorepo layout, decision-048)"
+        )
     digest, ctype = resolve(pin.image, pin.tag)
     if digest != pin.digest:
         rep.problem(f"{pin}: the registry resolves {pin.tag} to {digest or 'nothing'}, not the pinned digest")
@@ -150,12 +158,15 @@ def main() -> None:
     before: set[Pin] = set()
     after: set[Pin] = set()
     for path in paths:
-        before |= pins(git_show(base, path))
-        after |= pins(git_show(head, path))
+        old_text, new_text = git_show(base, path), git_show(head, path)
+        if outside_pins(old_text) != outside_pins(new_text):
+            rep.problem(f"{path}: changed outside its image pins")
+        before |= pins(old_text)
+        after |= pins(new_text)
     if not after - before:
         rep.ok(f"no new pins in {len(paths)} changed deploy/ file(s)")
     for pin in sorted(after - before, key=str):
-        check_pin(rep, pin, before, head)
+        check_pin(rep, pin, before)
     rep.finish()
 
 

@@ -14,7 +14,12 @@ the npm provenance: present before means present now, from the same source repos
 `workflow.repository`, read from `dist.attestations.url`). Then it checks that every dependency in
 `package.json` and `frontend/package.json` at `head` is written exactly as the lock's `packages[""]` and
 `packages["frontend"]` entries hold it (Dependabot's npm updater can write a caret into the lock's workspace
-entry; `npm ci` accepts it).
+entry; `npm ci` accepts it). A version newer than `COOLDOWN_DAYS` (the registry's `time`) is held back.
+
+The shape of the change is checked too: the lock's top-level fields stay the same; its non-`node_modules/`
+entries (the root and the workspace) and the two manifests change only dependency values, each of a package
+whose locked version moved, so a script, an override or any other field can't ride along. An entry that moved
+within the tree (npm dedupes) is checked against the registry like a changed one, not reported as new.
 
 A PROBLEM, the PR stays open: an added or removed package, an entry that changes its package name (an alias)
 or turns into or out of a `link`, a mismatch with the registry, a field dropped from an entry whose version
@@ -31,7 +36,19 @@ import json
 import tempfile
 from typing import Any
 
-from _common import Report, ToolError, git_show, http_json, is_major, main_guard, resolve_refs, run_json
+from _common import (
+    COOLDOWN_DAYS,
+    Report,
+    ToolError,
+    age_days,
+    git_show,
+    http_json,
+    is_major,
+    main_guard,
+    resolve_refs,
+    run_json,
+    version_tuple,
+)
 
 REGISTRY = "https://registry.npmjs.org/"
 DEP_FIELDS = ("dependencies", "optionalDependencies", "peerDependencies", "os", "cpu", "libc")
@@ -148,6 +165,12 @@ def check_entry(rep: Report, key: str, old: Entry | None, new: Entry) -> None:
             rep.fix(f"{label}: libc missing (restore_libc.py, or edit the lock under the .nvmrc Node)")
     if bool(new.get("hasInstallScript")) != bool(install_scripts(m)):
         rep.problem(f"{label}: hasInstallScript disagrees with the registry manifest")
+    if old_v != new_v:
+        released = (m.get("time") or {}).get(new_v)
+        if not released:
+            rep.problem(f"{label}: the registry gives no publish time for {new_v}")
+        elif (days := age_days(str(released))) < COOLDOWN_DAYS:
+            rep.problem(f"{label}: published {days:.1f} days ago (under {COOLDOWN_DAYS}; decision-048)")
     if old is not None and old_v != new_v:
         before = view(name, str(old_v))
         added = install_scripts(m) - install_scripts(before)
@@ -164,13 +187,37 @@ def check_entry(rep: Report, key: str, old: Entry | None, new: Entry) -> None:
         rep.ok(f"{label}: matches the registry (publisher {npm_user(m)!r})")
 
 
-def check_manifests(rep: Report, lock: dict[str, Any], head: str) -> None:
+def without_deps(doc: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in doc.items() if k not in MANIFEST_SECTIONS}
+
+
+def check_dep_values(
+    rep: Report, where: str, old: dict[str, Any], new: dict[str, Any], moved: set[str]
+) -> None:
+    """`new` may differ from `old` only in dependency values of packages whose locked version moved."""
+    if without_deps(old) != without_deps(new):
+        rep.problem(f"{where}: changed outside its dependency lists")
+    for section in MANIFEST_SECTIONS:
+        o, n = old.get(section) or {}, new.get(section) or {}
+        if set(o) != set(n):
+            rep.problem(f"{where} {section}: a dependency was added or removed")
+        for dep in sorted(set(o) & set(n)):
+            if o[dep] != n[dep] and dep not in moved:
+                rep.problem(
+                    f"{where} {section}.{dep}: {o[dep]!r} -> {n[dep]!r}, but the lock didn't move {dep}"
+                )
+
+
+def check_manifests(rep: Report, lock: dict[str, Any], base: str, head: str, moved: set[str]) -> None:
     packages = lock.get("packages", {})
+    found = len(rep.problems) + len(rep.fixes)
     for key, path in WORKSPACES.items():
         text = git_show(head, path)
         if text is None:
             continue
         manifest = load(text, f"{path} at {head}")
+        before = git_show(base, path)
+        check_dep_values(rep, path, load(before, f"{path} at {base}") if before else {}, manifest, moved)
         entry = packages.get(key, {})
         for section in MANIFEST_SECTIONS:
             want, got = manifest.get(section) or {}, entry.get(section) or {}
@@ -181,7 +228,8 @@ def check_manifests(rep: Report, lock: dict[str, Any], head: str) -> None:
                         f"{path} {section}.{dep} is {want.get(dep)!r}, the lock's {where} has {got.get(dep)!r}"
                         " (edit the lock by hand to match the manifest)"
                     )
-    rep.ok("package.json and frontend/package.json checked against the lock's workspace entries")
+    if len(rep.problems) + len(rep.fixes) == found:
+        rep.ok("package.json and frontend/package.json match the lock's workspace entries")
 
 
 def main() -> None:
@@ -190,15 +238,43 @@ def main() -> None:
     ap.add_argument("--head", default="HEAD")
     a = ap.parse_args()
     base, head = resolve_refs(a.base, a.head)
-    old = load(git_show(base, "package-lock.json"), f"package-lock.json at {base}").get("packages", {})
+    old_lock = load(git_show(base, "package-lock.json"), f"package-lock.json at {base}")
     new_lock = load(git_show(head, "package-lock.json"), f"package-lock.json at {head}")
-    new = new_lock.get("packages", {})
+    old, new = old_lock.get("packages", {}), new_lock.get("packages", {})
     rep = Report("package-lock.json")
+    for key in sorted((set(old_lock) | set(new_lock)) - {"packages"}):
+        if old_lock.get(key) != new_lock.get(key):
+            rep.problem(f"package-lock.json: `{key}` changed")
     deps = {k for k in set(old) | set(new) if k.startswith("node_modules/") or "/node_modules/" in k}
+    versions: list[dict[str, set[str]]] = [{}, {}]
+    for side, packages in enumerate((old, new)):
+        for k in deps & set(packages):
+            versions[side].setdefault(package_name(k, packages[k]), set()).add(
+                str(packages[k].get("version"))
+            )
+    moved = {
+        name for name in set(versions[0]) | set(versions[1]) if versions[0].get(name) != versions[1].get(name)
+    }
+    for k in sorted((set(old) | set(new)) - deps):
+        if old.get(k) != new.get(k):
+            check_dep_values(
+                rep, f'package-lock.json packages["{k}"]', old.get(k) or {}, new.get(k) or {}, moved
+            )
     for k in sorted(deps - set(new)):
-        rep.problem(f"{k}: removed from the lock")
+        name = package_name(k, old[k])
+        if name in versions[1]:
+            rep.ok(f"{k}: {name} moved within the tree")
+        else:
+            rep.problem(f"{k}: removed from the lock")
     for k in sorted(deps - set(old)):
-        rep.problem(f"{k} {new[k].get('version')}: added to the lock (a new package)")
+        name = package_name(k, new[k])
+        if name not in versions[0]:
+            rep.problem(f"{k} {new[k].get('version')}: added to the lock (a new package)")
+            continue
+        olds = [ok for ok in deps & set(old) if package_name(ok, old[ok]) == name]
+        source = max(olds, key=lambda ok: version_tuple(str(old[ok].get("version"))))
+        rep.ok(f"{k}: {name} moved within the tree (from {source})")
+        check_entry(rep, k, {**old[source], **({"name": name} if "name" in new[k] else {})}, new[k])
     for k in sorted(deps & set(old) & set(new)):
         o, n = old[k], new[k]
         if o == n:
@@ -207,7 +283,7 @@ def main() -> None:
             rep.problem(f"{k}: a link entry changed ({o.get('resolved')} -> {n.get('resolved')})")
             continue
         check_entry(rep, k, o, n)
-    check_manifests(rep, new_lock, head)
+    check_manifests(rep, new_lock, base, head, moved)
     rep.finish()
 
 

@@ -32,6 +32,16 @@ with no context and no access to the owner's machine can run it, and script its 
   publishing makes `_npmUser` the same generic user for any repository, and `node_modules/` never reinstalled
   after switching to the PR, so the tests would have run dev's packages. Compare what an entry *is* (its
   registry name, every file's publisher, the provenance's source repository), not only what changed in it.
+- The full review gate (round 2) found that an unattended reviewer of a bot's PR runs untrusted code: the
+  checkers lived on the PR branch (a PR could rewrite them to pass), `make test` would run a `package.json`
+  script or a `[build-system]` requirement the PR added, and a Dockerfile `RUN` line or a workflow
+  `permissions:` would merge unread, because every check looked only at versions and pins. The fix is to trust
+  only `dev`: run the checkers from `dev`'s copy, gate the PR (`prs.py check`: Dependabot-only verified commits,
+  files by ecosystem from git, the head unchanged) before anything of it runs, reject any change beyond
+  versions and pins, keep the token out of the tests' environment, and queue with `--match-head-commit`.
+- A legitimate pipeline can publish a bad release that passes every provenance check; Dependabot's `cooldown`
+  (7 days) plus a checker stop on a younger release is the cheap defence, and leaves security updates (which
+  ignore cooldown) to the owner.
 - Every outside call through a subprocess (`git`, `curl`, `npm`, `gh`) made the whole family testable with PATH
   fakes and no network, the same way `changelog.py` fakes `gh`.
 

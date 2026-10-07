@@ -11,6 +11,7 @@ status and one line of its output. No row reaches the network. Mutants: .claude/
 from __future__ import annotations
 
 import base64
+import datetime as dt
 import hashlib
 import json
 import os
@@ -62,12 +63,13 @@ class Case:
         self.git("init", "-q", "-b", "work")
         self.files: dict[str, str] = {}
 
-    def git(self, *args: str) -> str:
+    def git(self, *args: str, env: dict[str, str] | None = None) -> str:
         cmd = ["git", "-C", str(self.repo), "-c", "user.name=t", "-c", "user.email=t@example.org"]
         cmd += ["-c", "commit.gpgsign=false", *args]
-        return subprocess.run(cmd, capture_output=True, text=True, check=True, env=ENV).stdout.strip()
+        run_env = {**ENV, **(env or {})}
+        return subprocess.run(cmd, capture_output=True, text=True, check=True, env=run_env).stdout.strip()
 
-    def commit(self, files: dict[str, str | None]) -> str:
+    def commit(self, files: dict[str, str | None], who: dict[str, str] | None = None) -> str:
         for path, text in files.items():
             p = self.repo / path
             if text is None:
@@ -78,7 +80,7 @@ class Case:
             p.write_text(text)
             self.files[path] = text
         self.git("add", "-A")
-        self.git("commit", "-q", "--allow-empty", "-m", "c")
+        self.git("commit", "-q", "--allow-empty", "-m", "c", env=who)
         return self.git("rev-parse", "HEAD")
 
     def run(self, script: str, *args: str) -> tuple[int, str]:
@@ -120,9 +122,16 @@ def uv_lock(*pkgs: str, requires: str = ">=3.12") -> str:
     return f'version = 1\nrevision = 3\nrequires-python = "{requires}"\n\n' + "\n".join(pkgs)
 
 
-def pypi(c: Case, name: str, version: str, *, yanked: bool = False, files: list[str] | None = None) -> None:
+OLD_RELEASE = "2020-01-01T00:00:00.000000Z"  # far past any cooldown
+NOW = dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def pypi(
+    c: Case, name: str, version: str, *, yanked: bool = False, files: list[str] | None = None,
+    uploaded: str = OLD_RELEASE,
+) -> None:  # fmt: skip
     urls = [
-        {"filename": f, "digests": {"sha256": h(f, "")}, "yanked": yanked}
+        {"filename": f, "digests": {"sha256": h(f, "")}, "yanked": yanked, "upload_time_iso_8601": uploaded}
         for f in (files if files is not None else uv_files(name, version))
     ]
     c.curl[f"https://pypi.org/pypi/{name}/{version}/json"] = {"status": 200, "body": {"urls": urls}}
@@ -261,6 +270,121 @@ def _(c: Case) -> None:
     c.expect("uv_lock.py", args, ERROR, r"^ERROR +KeyError")
 
 
+@row("uv: a release younger than the cooldown")
+def _(c: Case) -> None:
+    args = uv_bump(c)
+    pypi(c, "ruff", "0.16.10", uploaded=NOW)
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM .*uploaded 0\.\d days ago \(under 7")
+
+
+@row("uv: an sdist without provenance doesn't hide the old wheel's publisher")
+def _(c: Case) -> None:
+    pypi(c, "ruff", "0.16.10")
+    prov(c, "ruff", "0.16.9", "o/ruff", only=["ruff-0.16.9-py3-none-any.whl"])
+    prov(c, "ruff", "0.16.10", "evil/ruff")
+    args = uv_case(c, [uv_pkg("ruff", "0.16.9")], [uv_pkg("ruff", "0.16.10")])
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM .*publisher changed .*o/ruff.*evil/ruff")
+
+
+@row("uv: provenance on the previous wheel only, none now")
+def _(c: Case) -> None:
+    pypi(c, "ruff", "0.16.10")
+    prov(c, "ruff", "0.16.9", "o/ruff", only=["ruff-0.16.9-py3-none-any.whl"])
+    args = uv_case(c, [uv_pkg("ruff", "0.16.9")], [uv_pkg("ruff", "0.16.10")])
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM .*has no provenance; 0\.16\.9 had")
+
+
+@row("uv: same version, another source")
+def _(c: Case) -> None:
+    args = uv_case(c, [uv_pkg("a", "1.0")], [uv_pkg("a", "1.0", source="https://evil.example/simple")])
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM a 1\.0: same version, different source")
+
+
+@row("uv: a lock setting outside the package list changes")
+def _(c: Case) -> None:
+    base = c.commit({"uv.lock": uv_lock(uv_pkg("a", "1.0"))})
+    head = c.commit(
+        {
+            "uv.lock": uv_lock(uv_pkg("a", "1.0")).replace(
+                "revision = 3", 'revision = 3\n[options]\nexclude-newer = "2030-01-01T00:00:00Z"\n'
+            )
+        }
+    )
+    c.expect("uv_lock.py", ["--base", base, "--head", head], PROBLEM, r"^PROBLEM uv\.lock: `options` changed")
+
+
+PYPROJECT = '[project]\nname = "root"\ndependencies = ["ruff>={v}"]\n[dependency-groups]\ndev = ["mypy>=2.3"]\n{extra}'
+
+
+def pyproject_case(c: Case, new_spec: str, extra: str = "") -> list[str]:
+    pypi(c, "ruff", "0.16.10")
+    base = c.commit(
+        {
+            "uv.lock": uv_lock(uv_pkg("ruff", "0.16.9")),
+            "pyproject.toml": PYPROJECT.format(v="0.16.9", extra=""),
+        }
+    )
+    head = c.commit(
+        {
+            "uv.lock": uv_lock(uv_pkg("ruff", "0.16.10")),
+            "pyproject.toml": PYPROJECT.format(v=new_spec, extra=extra),
+        }
+    )
+    return ["--base", base, "--head", head]
+
+
+@row("uv: a pyproject specifier of a package the lock moved passes")
+def _(c: Case) -> None:
+    c.expect(
+        "uv_lock.py", pyproject_case(c, "0.16.10"), OK, r"^ok +pyproject\.toml: checked against the lock"
+    )
+
+
+@row("uv: a pyproject change outside the dependency lists (a build requirement)")
+def _(c: Case) -> None:
+    args = pyproject_case(c, "0.16.10", '[build-system]\nrequires = ["evil-build-helper"]\n')
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM pyproject\.toml: changed outside its dependency lists")
+
+
+@row("uv: a pyproject specifier of a package the lock didn't move")
+def _(c: Case) -> None:
+    pypi(c, "ruff", "0.16.10")
+    base = c.commit(
+        {
+            "uv.lock": uv_lock(uv_pkg("ruff", "0.16.9")),
+            "pyproject.toml": PYPROJECT.format(v="0.16.9", extra=""),
+        }
+    )
+    text = PYPROJECT.format(v="0.16.10", extra="").replace("mypy>=2.3", "mypy>=2.4")
+    head = c.commit({"uv.lock": uv_lock(uv_pkg("ruff", "0.16.10")), "pyproject.toml": text})
+    c.expect(
+        "uv_lock.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"^PROBLEM pyproject\.toml dependency-groups\.dev: .*didn't move mypy",
+    )
+
+
+def member(source: str, deps: str) -> str:
+    return f'[[package]]\nname = "openproceedings"\nversion = "0.0.0"\nsource = {{ editable = "{source}" }}\ndependencies = [{deps}]\n'
+
+
+@row("uv: a workspace member's dependency list may change")
+def _(c: Case) -> None:
+    args = uv_case(
+        c,
+        [member("backend", '{ name = "a" }'), uv_pkg("a", "1.0")],
+        [member("backend", '{ name = "a", marker = "x" }'), uv_pkg("a", "1.0")],
+    )
+    c.expect("uv_lock.py", args, OK, r"^uv\.lock: 0 problems")
+
+
+@row("uv: a workspace member's source may not")
+def _(c: Case) -> None:
+    args = uv_case(c, [member("backend", ""), uv_pkg("a", "1.0")], [member("evil", ""), uv_pkg("a", "1.0")])
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM openproceedings 0\.0\.0: same version, different source")
+
+
 @row("uv: an added package")
 def _(c: Case) -> None:
     pypi(c, "ruff", "0.16.10")
@@ -304,7 +428,7 @@ def _(c: Case) -> None:
 @row("uv: same version, different hashes")
 def _(c: Case) -> None:
     args = uv_case(c, [uv_pkg("a", "1.0")], [uv_pkg("a", "1.0", salt="x")])
-    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM a 1\.0: same version, different files")
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM a 1\.0: same version, different sdist, wheels")
 
 
 @row("uv: PyPI failing is an error, not a pass")
@@ -343,7 +467,9 @@ def entry(name: str, v: str, **extra: Any) -> dict[str, Any]:
     }
 
 
-def view(c: Case, name: str, v: str, *, user: str = "alice", **extra: Any) -> None:
+def view(
+    c: Case, name: str, v: str, *, user: str = "alice", released: str = OLD_RELEASE, **extra: Any
+) -> None:
     e = entry(name, v)
     dist: dict[str, Any] = {"integrity": e["integrity"], "tarball": e["resolved"]}
     repo = extra.pop("attest", None)
@@ -361,6 +487,7 @@ def view(c: Case, name: str, v: str, *, user: str = "alice", **extra: Any) -> No
         "version": v,
         "dist": dist,
         "_npmUser": f"{user} <{user}@example.org>",
+        "time": {"created": OLD_RELEASE, v: released},
         **extra,
     }
 
@@ -521,6 +648,7 @@ def _(c: Case) -> None:
     c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM .*16\.3\.8 -> 17\.0\.0: semver-major")
     _, out = c.run("npm_lock.py", *args)
     assert not re.search(r"^ok .*next .*matches the registry", out, re.MULTILINE), out
+    assert re.search(r"^ok .*match the lock's workspace entries", out, re.MULTILINE), out
 
 
 @row("npm: same version, different integrity")
@@ -563,24 +691,137 @@ def _(c: Case) -> None:
     c.expect("npm_lock.py", args, OK, r"^package-lock\.json: 0 problems")
 
 
+def front(next_version: str) -> str:
+    return json.dumps({"name": "frontend", "dependencies": {"next": next_version}})
+
+
 @row("npm: a caret in the lock's frontend entry is a FIX")
 def _(c: Case) -> None:
-    view(c, "x", "1.0.0")
-    args = npm_case(c, {"x": entry("x", "1.0.0")}, {"x": entry("x", "1.0.0")}, front={"next": "^16.3.8"})
+    view(c, "next", "16.3.7")
+    view(c, "next", "16.3.8")
+    old = lock({"next": entry("next", "16.3.7")}, {"next": "16.3.7"})
+    base = c.commit({**MANIFESTS, "frontend/package.json": front("16.3.7"), "package-lock.json": old})
+    new = lock({"next": entry("next", "16.3.8")}, {"next": "^16.3.8"})
+    head = c.commit({"frontend/package.json": front("16.3.8"), "package-lock.json": new})
     c.expect(
         "npm_lock.py",
-        args,
+        ["--base", base, "--head", head],
         FIX,
         r"""^FIX .*frontend/package\.json dependencies\.next is '16\.3\.8'.*'\^16\.3\.8'""",
     )
 
 
-@row("npm: the root manifest is compared too")
+@row("npm: a dependency added to the root manifest")
 def _(c: Case) -> None:
     base = c.commit({**MANIFESTS, "package-lock.json": lock({})})
-    head = c.commit({"package.json": json.dumps({"name": "root", "devDependencies": {"prettier": "3.0.0"}})})
+    head = c.commit(
+        {
+            "package.json": json.dumps(
+                {"name": "root", "workspaces": ["frontend"], "devDependencies": {"prettier": "3.0.0"}}
+            )
+        }
+    )
     c.expect(
-        "npm_lock.py", ["--base", base, "--head", head], FIX, r"^FIX +package\.json devDependencies\.prettier"
+        "npm_lock.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"^PROBLEM package\.json devDependencies: a dependency was added",
+    )
+
+
+@row("npm: a manifest script changed")
+def _(c: Case) -> None:
+    args = npm_bump(c)
+    c.commit(
+        {
+            "frontend/package.json": json.dumps(
+                {"name": "frontend", "scripts": {"test": "curl x | sh"}, "dependencies": {"next": "16.3.8"}}
+            )
+        }
+    )
+    args[3] = c.git("rev-parse", "HEAD")
+    c.expect(
+        "npm_lock.py", args, PROBLEM, r"^PROBLEM frontend/package\.json: changed outside its dependency lists"
+    )
+
+
+@row("npm: a manifest pin moved for a package the lock didn't move")
+def _(c: Case) -> None:
+    view(c, "x", "1.0.0")
+    base = c.commit({**MANIFESTS, "package-lock.json": lock({"next": entry("next", "16.3.8")})})
+    head = c.commit(
+        {
+            "frontend/package.json": front("16.3.9"),
+            "package-lock.json": lock({"next": entry("next", "16.3.8")}, {"next": "16.3.9"}),
+        }
+    )
+    c.expect(
+        "npm_lock.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"^PROBLEM frontend/package\.json dependencies\.next: .*didn't move next",
+    )
+
+
+@row("npm: a lock field outside packages changes")
+def _(c: Case) -> None:
+    base = c.commit({**MANIFESTS, "package-lock.json": lock({})})
+    head = c.commit({"package-lock.json": lock({}).replace('"lockfileVersion": 3', '"lockfileVersion": 2')})
+    c.expect(
+        "npm_lock.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"^PROBLEM package-lock\.json: `lockfileVersion` changed",
+    )
+
+
+@row("npm: a version younger than the cooldown")
+def _(c: Case) -> None:
+    args = npm_bump(c)
+    view(c, "next", "16.3.8", released=NOW)
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM .*published 0\.\d days ago \(under 7")
+
+
+@row("npm: resolved on the registry but another tarball")
+def _(c: Case) -> None:
+    args = npm_bump(c, resolved=f"{REG}next/-/next-16.3.6.tgz")
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM .*resolved differs from the registry's tarball URL")
+
+
+@row("npm: same version, another resolved on the registry")
+def _(c: Case) -> None:
+    view(c, "x", "1.0.0")
+    args = npm_case(
+        c, {"x": entry("x", "1.0.0")}, {"x": entry("x", "1.0.0", resolved=f"{REG}x/-/x-0.9.0.tgz")}
+    )
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM x 1\.0\.0: same version, different resolved")
+
+
+@row("npm: a field other than libc dropped from an unchanged entry")
+def _(c: Case) -> None:
+    view(c, "x", "1.0.0")
+    args = npm_case(c, {"x": entry("x", "1.0.0", engines={"node": ">=18"})}, {"x": entry("x", "1.0.0")})
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM x 1\.0\.0: field\(s\) dropped: engines")
+
+
+@row("npm: an install script both versions have passes")
+def _(c: Case) -> None:
+    view(c, "sharp", "0.35.4", scripts={"install": "node install.js"})
+    view(c, "sharp", "0.35.5", scripts={"install": "node install.js"})
+    old = {"sharp": entry("sharp", "0.35.4", hasInstallScript=True)}
+    new = {"sharp": entry("sharp", "0.35.5", hasInstallScript=True)}
+    c.expect("npm_lock.py", npm_case(c, old, new), OK, r"^package-lock\.json: 0 problems")
+
+
+@row("npm: an entry moved within the tree is checked, not called new")
+def _(c: Case) -> None:
+    view(c, "x", "1.0.0")
+    args = npm_case(c, {"frontend/node_modules/x": entry("x", "1.0.0")}, {"x": entry("x", "1.0.0")})
+    c.expect(
+        "npm_lock.py",
+        args,
+        OK,
+        r"^ok +node_modules/x: x moved within the tree \(from frontend/node_modules/x\)",
     )
 
 
@@ -605,7 +846,7 @@ def registry(
     c: Case, host: str, repo: str, tag: str, dig: str, *, ctype: str = INDEX, status: int = 200
 ) -> None:
     c.curl[f"https://{host}/v2/{repo}/manifests/{tag}"] = [
-        {"if": {"Authorization": "Bearer T", "Accept": INDEX}, "status": status,
+        {"if": {"Authorization": "Bearer T", "Accept": INDEX}, "status": status, "proxy": True,
          "headers": {"docker-content-digest": dig, "content-type": ctype}},
         {"if": {"Authorization": "Bearer T"}, "status": 200,
          "headers": {"docker-content-digest": digest("platform"), "content-type": "application/vnd.oci.image.manifest.v1+json"}},
@@ -755,20 +996,51 @@ def python_case(c: Case, tag: str, pin: str) -> list[str]:
     )  # fmt: skip
 
 
-@row("docker: a Python patch bump with .python-version moved passes")
+@row("docker: a new Python patch is left for the owner")
 def _(c: Case) -> None:
+    args = python_case(c, "3.12.16-slim-bookworm", "3.12.16\n")
+    c.expect("docker_digest.py", args, PROBLEM, r"^PROBLEM .*a new Python patch from 3\.12\.15")
+
+
+@row("docker: a new digest for the same Python tag passes")
+def _(c: Case) -> None:
+    args = python_case(c, "3.12.15-slim-bookworm", "3.12.15\n")
+    c.expect("docker_digest.py", args, OK, r"^docker pins: 0 problems")
+
+
+@row("docker: a fully qualified docker.io image resolves on Docker Hub")
+def _(c: Case) -> None:
+    new = digest("node-new")
+    registry(c, "registry-1.docker.io", "library/node", "22-bookworm-slim", new)
+    args = docker_case(
+        c,
+        f"docker.io/library/node:22-bookworm-slim@{digest('n')}",
+        f"docker.io/library/node:22-bookworm-slim@{new}",
+    )
+    c.expect("docker_digest.py", args, OK, r"^docker pins: 0 problems")
+
+
+@row("docker: a line other than a pin changes")
+def _(c: Case) -> None:
+    new = digest("node-new")
+    registry(c, "registry-1.docker.io", "library/node", "22-bookworm-slim", new)
+    base = c.commit({"deploy/web.Dockerfile": f"FROM node:22-bookworm-slim@{digest('n')}\n"})
+    head = c.commit({"deploy/web.Dockerfile": f"FROM node:22-bookworm-slim@{new}\nRUN curl x | sh\n"})
     c.expect(
         "docker_digest.py",
-        python_case(c, "3.12.16-slim-bookworm", "3.12.16\n"),
-        OK,
-        r"^docker pins: 0 problems",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"^PROBLEM deploy/web\.Dockerfile: changed outside its image pins",
     )
 
 
-@row("docker: a Python patch bump without .python-version is a FIX")
+@row("docker: a challenge that isn't Bearer is an error")
 def _(c: Case) -> None:
-    args = python_case(c, "3.12.16-slim-bookworm", "3.12.15\n")
-    c.expect("docker_digest.py", args, FIX, r"^FIX .*\.python-version is '3\.12\.15'; move it to '3\.12\.16'")
+    args = node_case(c)
+    c.curl["https://registry-1.docker.io/v2/library/node/manifests/22-bookworm-slim"][-1]["headers"][
+        "www-authenticate"
+    ] = "Basic realm=x"
+    c.expect("docker_digest.py", args, ERROR, r"^ERROR .*unexpected auth challenge")
 
 
 @row("docker: a Python minor is hand-only")
@@ -844,6 +1116,46 @@ def _(c: Case) -> None:
     )
 
 
+@row("actions: a run line changes beside the pin")
+def _(c: Case) -> None:
+    tag_ref(c, "actions/checkout", "v7.0.2", sha("b"))
+    base = c.commit({".github/workflows/lint.yml": wf(f"actions/checkout@{sha('a')} # v7.0.1")})
+    head = c.commit(
+        {
+            ".github/workflows/lint.yml": wf(f"actions/checkout@{sha('b')} # v7.0.2")
+            + "      - run: curl x | sh\n"
+        }
+    )
+    c.expect(
+        "actions_pins.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"^PROBLEM .*lint\.yml: changed outside its action pins",
+    )
+
+
+@row("actions: one used action swapped for another")
+def _(c: Case) -> None:
+    tag_ref(c, "actions/setup-node", "v7.0.1", sha("b"))
+    old = wf(f"actions/checkout@{sha('a')} # v7.0.1", f"actions/setup-node@{sha('c')} # v7.0.0")
+    new = wf(f"actions/setup-node@{sha('b')} # v7.0.1", f"actions/setup-node@{sha('c')} # v7.0.0")
+    base = c.commit({".github/workflows/lint.yml": old})
+    head = c.commit({".github/workflows/lint.yml": new})
+    c.expect(
+        "actions_pins.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"^PROBLEM .*changed outside its action pins",
+    )
+
+
+@row("actions: no earlier tag to compare the major with")
+def _(c: Case) -> None:
+    tag_ref(c, "actions/checkout", "v8.0.0", sha("b"))
+    args = actions_case(c, f"actions/checkout@{sha('a')}", f"actions/checkout@{sha('b')} # v8.0.0")
+    c.expect("actions_pins.py", args, PROBLEM, r"^PROBLEM .*no earlier `# <tag>` to compare the major with")
+
+
 @row("actions: a tag that is another commit")
 def _(c: Case) -> None:
     tag_ref(c, "actions/checkout", "v7.0.2", sha("other"))
@@ -893,6 +1205,16 @@ def _(c: Case) -> None:
     assert got["node_modules/x"] == entry("x", "1.0.0")
 
 
+@row("restore_libc: repairs every entry, not just the first")
+def _(c: Case) -> None:
+    keys = ["@img/sharp-linux-x64", "@img/sharp-linux-arm64"]
+    base = c.commit({"package-lock.json": lock({k: {"version": "1", "libc": ["glibc"]} for k in keys})})
+    c.commit({"package-lock.json": lock({k: {"version": "2"} for k in keys})})
+    c.expect("restore_libc.py", ["--base", base], OK, r"^2 entries repaired")
+    got = json.loads((c.repo / "package-lock.json").read_text())["packages"]
+    assert all(got[f"node_modules/{k}"]["libc"] == ["glibc"] for k in keys), got
+
+
 @row("restore_libc: a lock that lost nothing is left byte-for-byte")
 def _(c: Case) -> None:
     text = lock({"x": entry("x", "1.0.0")})
@@ -904,35 +1226,110 @@ def _(c: Case) -> None:
 # --- prs.py --------------------------------------------------------------------------------------------
 
 
-def pr(n: int, head: str, title: str, *paths: str) -> dict[str, Any]:
-    return {
-        "number": n,
-        "title": title,
-        "headRefName": head,
-        "url": "u",
-        "files": [{"path": p} for p in paths],
+BOT = {
+    "GIT_AUTHOR_NAME": "dependabot[bot]", "GIT_AUTHOR_EMAIL": "49699333+dependabot[bot]@users.noreply.github.com",
+    "GIT_COMMITTER_NAME": "GitHub", "GIT_COMMITTER_EMAIL": "noreply@github.com",
+}  # fmt: skip
+
+
+def check_case(c: Case, head: str, files: dict[str, str | None], *, who: dict[str, str] | None = None,
+               title: str = "deps: bump x", verified: bool = True, gh_head: str | None = None) -> list[str]:  # fmt: skip
+    base = c.commit({"uv.lock": "a\n", "README.md": "r\n"})
+    c.git("update-ref", "refs/remotes/origin/dev", base)
+    sha_ = c.commit(files, who=BOT if who is None else who)
+    c.gh["pr view 7"] = {"state": "OPEN", "author": {"login": "app/dependabot"}, "baseRefName": "dev",
+                         "headRefName": head, "headRefOid": gh_head or sha_, "title": title}  # fmt: skip
+    c.gh[f"api repos/uw-share-lab/openproceedings/commits/{sha_}"] = {
+        "commit": {"verification": {"verified": verified, "reason": "valid" if verified else "unsigned"}}
     }
+    return ["check", "7", "--head", sha_]
 
 
-@row("prs list: names files outside the ecosystem, unknown ecosystems and tantivy")
+@row("prs check: a Dependabot-only uv PR passes")
 def _(c: Case) -> None:
-    c.gh["pr list"] = [
-        pr(1, "dependabot/npm_and_yarn/g", "deps: bump next", "package-lock.json", "frontend/package.json"),
-        pr(2, "dependabot/npm_and_yarn/h", "deps: bump x", "package-lock.json", ".npmrc"),
-        pr(3, "dependabot/cargo/i", "deps: bump y", "Cargo.lock"),
-        pr(4, "dependabot/uv/j", "deps: bump tantivy", "uv.lock"),
-        pr(5, "dependabot/docker/deploy/k", "build: bump uv", "deploy/api.Dockerfile"),
-    ]
-    got, out = c.run("prs.py", "list")
-    assert got == 0, out
-    problems = re.findall(r"^PROBLEM #(\d+)", out, re.MULTILINE)
-    assert problems == ["2", "3", "4"], out
-    assert ".npmrc is outside" in out and "'cargo'" in out and "tantivy" in out, out
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n", "backend/pyproject.toml": "x\n"})
+    c.expect("prs.py", args, OK, r"^ok +uv: 2 file\(s\) and 1 commit\(s\), all Dependabot's")
+
+
+@row("prs check: a composite action's action.yml is an actions file")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/github_actions/g", {".github/actions/setup/action.yml": "x\n"})
+    c.expect("prs.py", args, OK, r"^ok +github_actions: 1 file")
+
+
+@row("prs check: a uv PR touching the Makefile")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n", "Makefile": "x\n"})
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM Makefile is outside what a uv update touches")
+
+
+@row("prs check: a file named like an allowed one is matched whole")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock.orig": "x\n"})
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM uv\.lock\.orig is outside")
+
+
+@row("prs check: an actions PR touching dependabot.yml")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/github_actions/g", {".github/dependabot.yml": "x\n"})
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM \.github/dependabot\.yml is outside")
+
+
+@row("prs check: a docker PR touching a deploy script")
+def _(c: Case) -> None:
+    args = check_case(
+        c, "dependabot/docker/deploy/g", {"deploy/api.Dockerfile": "x\n", "deploy/smoke-test.sh": "x\n"}
+    )
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM deploy/smoke-test\.sh is outside")
+
+
+@row("prs check: an npm PR adding an .npmrc")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/npm_and_yarn/g", {"package-lock.json": "x\n", ".npmrc": "x\n"})
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM \.npmrc is outside")
+
+
+@row("prs check: an ecosystem the routine doesn't review")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/cargo/g", {"Cargo.lock": "x\n"})
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM ecosystem 'cargo'")
+
+
+@row("prs check: a commit someone else pushed")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, who={})
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM commit .* is by t <t@example\.org>.*not Dependabot's alone")
+
+
+@row("prs check: a commit GitHub doesn't verify")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, verified=False)
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM commit .*doesn't verify its signature \(unsigned\)")
+
+
+@row("prs check: the head moved on GitHub since the fetch")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, gh_head="f" * 40)
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub's head is ffffffffffff, not the fetched")
+
+
+@row("prs check: a title naming tantivy")
+def _(c: Case) -> None:
+    args = check_case(
+        c, "dependabot/uv/g", {"uv.lock": "b\n"}, title="deps: bump tantivy from 0.26.2 to 0.26.3"
+    )
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the title names a hand-only dependency")
+
+
+@row("prs list: prints each PR with its ecosystem")
+def _(c: Case) -> None:
+    c.gh["pr list"] = [{"number": 3, "title": "deps: bump x", "headRefName": "dependabot/uv/g", "url": "u"}]
+    c.expect("prs.py", ["list"], OK, r"^#3 \[uv\] dependabot/uv/g$")
 
 
 @row("prs list: a PR of the wrong shape is an error, not a crash")
 def _(c: Case) -> None:
-    c.gh["pr list"] = [{"number": 1, "title": "t", "files": []}]
+    c.gh["pr list"] = [{"number": 1, "title": "t"}]
     c.expect("prs.py", ["list"], ERROR, r"^ERROR +KeyError")
 
 
@@ -964,6 +1361,22 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     c.gh["graphql"] = [gql(("OPEN", None, None)), gql(("OPEN", QUEUED, None)), gql(("MERGED", None, None))]
     c.expect("prs.py", ["watch", "1", "--interval", "0"], 0, r"^all merged")
+
+
+@row("prs watch: one PR merged while another still waits is not a drop")
+def _(c: Case) -> None:
+    c.gh["graphql"] = [
+        gql(("OPEN", QUEUED, None), ("OPEN", QUEUED, None)),
+        gql(("MERGED", None, None), ("OPEN", QUEUED, None)),
+        gql(("MERGED", None, None), ("OPEN", QUEUED, None)),
+        gql(("MERGED", None, None), ("MERGED", None, None)),
+    ]
+    c.expect("prs.py", ["watch", "1", "2", "--interval", "0"], 0, r"^all merged")
+
+
+@row("prs watch: gh failing is an error")
+def _(c: Case) -> None:
+    c.expect("prs.py", ["watch", "1", "--interval", "0"], ERROR, r"^ERROR .*gh api graphql")
 
 
 @row("prs watch: a PR closed unmerged exits 1")

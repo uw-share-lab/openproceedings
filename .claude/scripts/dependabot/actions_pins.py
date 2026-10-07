@@ -7,10 +7,13 @@ Reads every `uses: <owner>/<repo>[/<path>]@<40-hex sha> # <tag>` (block or flow 
 `.github/` (workflows and composite actions) that changed between `base` (default: the merge base of origin/dev
 and HEAD) and `head` (default HEAD). For each pin that is new at `head`, the tag ref
 (`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`, an annotated tag peeled to its commit; never a branch of the
-same name) must name the pinned sha (the version comment is the tag the sha came from).
+same name) must name the pinned sha (the version comment is the tag the sha came from). Each changed file must
+differ only in its pins' `@<sha> # <tag>` (the action names and every other line, `on:`, `permissions:` and
+`run:` included, stay the same).
 
-A PROBLEM, the PR stays open: a tag that resolves to another commit, an action that wasn't used before, a
-semver-major tag change, or a `uses:` line in a changed file that isn't pinned to a full sha.
+A PROBLEM, the PR stays open: a change outside the pins, a tag that resolves to another commit, an action that
+wasn't used before, a semver-major tag change (or no earlier tag to compare with), or a `uses:` in a changed file
+that isn't pinned to a full sha.
 """
 
 from __future__ import annotations
@@ -26,6 +29,8 @@ from _common import Report, ToolError, changed_files, git_show, is_major, main_g
 USES = re.compile(
     r"(?:^|[\s{,])['\"]?uses['\"]?:\s*['\"]?([^\s'\",}#]+)['\"]?[ \t]*(?:#[ \t]*(\S+))?", re.MULTILINE
 )
+# a pinned `uses:` value's `@<sha>` and its `# <tag>` comment, to blank them: what remains must not change
+PIN_SPAN = re.compile(r"(uses['\"]?:\s*['\"]?[^\s'\",}#@]+)@[0-9a-f]{40}(['\"]?)[ \t]*(?:#[ \t]*\S+)?")
 PINNED = re.compile(r"^([\w.-]+/[\w.-]+)(/[^@]*)?@([0-9a-f]{40})$")
 
 
@@ -81,8 +86,11 @@ def main() -> None:
     before: set[Use] = set()
     after: set[Use] = set()
     for path in paths:
-        before |= uses(git_show(base, path))
-        after |= uses(git_show(head, path), rep, path)
+        old_text, new_text = git_show(base, path) or "", git_show(head, path) or ""
+        if PIN_SPAN.sub(r"\1@<pin>\2", old_text) != PIN_SPAN.sub(r"\1@<pin>\2", new_text):
+            rep.problem(f"{path}: changed outside its action pins")
+        before |= uses(old_text)
+        after |= uses(new_text, rep, path)
     if not after - before:
         rep.ok(f"no new pins in {len(paths)} changed .github/ file(s)")
     for use in sorted(after - before, key=str):
@@ -93,7 +101,9 @@ def main() -> None:
         if not use.tag:
             rep.problem(f"{use}: no `# <tag>` comment to check the sha against")
             continue
-        if any(is_major(o, use.tag) for o in olds if o):
+        if not any(olds):
+            rep.problem(f"{use}: no earlier `# <tag>` to compare the major with")
+        elif any(is_major(o, use.tag) for o in olds if o):
             rep.problem(f"{use}: semver-major from {', '.join(olds)}")
         got = tag_sha(use.repo, use.tag)
         if got != use.sha:

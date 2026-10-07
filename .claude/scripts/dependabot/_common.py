@@ -5,21 +5,28 @@ Every outside call goes through a subprocess (`git`, `curl`, `npm`, `gh`), so th
 Each checker prints one line per finding, `ok      …`, `FIX     …` (the routine repairs it in the PR) or
 `PROBLEM …` (the PR stays open for the owner), then a summary. Exit status: 0 clean; 1 at least one PROBLEM;
 2 the check itself could not run (a tool or the network failed: the PR also stays open, and the run log says
-why); 3 only FIX findings (fix them, commit, and run the check again).
+why); 3 only FIX findings (fix them, commit, and run the check again). `prs.py` and `restore_libc.py` are
+helpers, not checkers; their docstrings give their own output.
 """
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import re
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NoReturn
 
 TIMEOUT = 120  # seconds for one outside call
+# A release younger than this is left for the owner (decision-048): Dependabot's `cooldown` holds version updates
+# back as long, so only a security update (which ignores cooldown) or a changed config arrives this fresh, and a
+# compromised release is most often pulled within days.
+COOLDOWN_DAYS = 7
 
 
 class ToolError(Exception):
@@ -80,7 +87,7 @@ class Response:
 
 
 def http(url: str, headers: dict[str, str] | None = None, *, head: bool = False) -> Response:
-    """One HTTPS request through curl (https only, no redirects to other schemes, a time limit)."""
+    """One HTTPS request through curl: https only, no redirects followed, a time limit."""
     if not url.startswith("https://"):
         raise ToolError(f"refusing a non-https URL: {url}")
     with tempfile.TemporaryDirectory(prefix="op-depbot-") as d:
@@ -166,7 +173,15 @@ class Report:
         sys.exit(0)
 
 
-def main_guard(fn: Any) -> NoReturn:
+def age_days(timestamp: str) -> float:
+    """Days since an ISO 8601 timestamp (`2026-09-30T16:07:21.198Z`, `2026-09-30T16:07:21`, UTC when unzoned)."""
+    t = dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=dt.UTC)
+    return (dt.datetime.now(dt.UTC) - t).total_seconds() / 86400
+
+
+def main_guard(fn: Callable[[], object]) -> NoReturn:
     """Run a checker's main. A ToolError, or any unexpected error (an answer of the wrong shape), exits 2 with
     its message, so a failed check never reads as a pass or as a PROBLEM the PR caused."""
     try:

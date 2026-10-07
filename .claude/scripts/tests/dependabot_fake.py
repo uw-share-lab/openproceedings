@@ -72,7 +72,9 @@ def curl(args: list[str]) -> int:
         lines = [f"HTTP/1.1 {answer['status']} X"] + [
             f"{k}: {v}" for k, v in answer.get("headers", {}).items()
         ]
-        Path(opts["-D"]).write_text("\r\n".join(lines) + "\r\n\r\n")
+        # behind an HTTPS proxy curl's -D starts with the CONNECT answer; the real response is the last block
+        proxy = "HTTP/1.1 200 Connection established\r\n\r\n" if answer.get("proxy") else ""
+        Path(opts["-D"]).write_text(proxy + "\r\n".join(lines) + "\r\n\r\n")
     if "-o" in opts and not head:
         body = answer.get("body", "")
         Path(opts["-o"]).write_text(body if isinstance(body, str) else json.dumps(body))
@@ -107,7 +109,9 @@ def gh(args: list[str]) -> int:
         counter = FIX / "graphql.count"
         n = int(counter.read_text()) if counter.exists() else 0
         counter.write_text(str(n + 1))
-        if not seq:
+        if not seq:  # as gh does on an API error: the error body on stdout, a non-zero exit
+            print(json.dumps({"message": "Not Found", "status": "404"}))
+            print("gh: Not Found (HTTP 404)", file=sys.stderr)
             return 1
         print(json.dumps(seq[min(n, len(seq) - 1)]))
         return 0
@@ -130,11 +134,14 @@ def gh(args: list[str]) -> int:
             print("fake gh: pr list without the Dependabot/dev/open filter", file=sys.stderr)
             return 2
         key = "pr list"
+    elif args[:2] == ["pr", "view"]:
+        key = f"pr view {args[2]}"
     else:
         print(f"fake gh: unexpected call {args}", file=sys.stderr)
         return 2
     if key not in fx:
-        print(f"fake gh: HTTP 404 ({key})", file=sys.stderr)
+        print(json.dumps({"message": "Not Found", "status": "404"}))
+        print(f"gh: Not Found (HTTP 404) ({key})", file=sys.stderr)
         return 1
     print(json.dumps(fx[key]))
     return 0
