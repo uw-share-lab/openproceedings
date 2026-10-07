@@ -110,7 +110,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
     ingest = sub.add_parser(
-        "ingest", help="fetch sources into the cache: ris | iclr | neurips | pmlr | openreview (spec 01)"
+        "ingest", help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | openreview (spec 01)"
     )
     sources = ingest.add_subparsers(dest="source", metavar="<source>", required=True)
     ris = sources.add_parser(
@@ -141,7 +141,10 @@ def build_parser() -> argparse.ArgumentParser:
         ("iclr", "ICLR 2014-2016 accepted-paper archive pages (iclr.cc)"),
         ("neurips", "NeurIPS proceedings years (proceedings.neurips.cc; 2021 adds the D&B host)"),
         ("pmlr", "ICML years from PMLR (the volume in ingest/pmlr_volumes.toml)"),
-    ):
+        ("dblp", "ICML 1988-2012 from the pinned dblp release (ingest/dblp_icml.toml; downloaded once from "
+                 "drops.dagstuhl.de, never dblp.org) with the abstracts the official ICML pages in "
+                 "ingest/icml_sites.toml give"),
+    ):  # fmt: skip
         crawl = sources.add_parser(name, help=f"crawl {about} into <data-dir>/cache/{name}")
         crawl.add_argument(
             "--year", dest="years", action="append", required=True, type=_years, metavar="YYYY[-YYYY]",
@@ -529,7 +532,7 @@ def _ingest_openreview(ns: argparse.Namespace) -> int:
 
 
 def _ingest_crawl(ns: argparse.Namespace) -> int:
-    from openproceedings.ingest.sources.crawl import ingest_iclr, ingest_neurips, ingest_pmlr
+    from openproceedings.ingest.sources.crawl import ingest_dblp, ingest_iclr, ingest_neurips, ingest_pmlr
 
     if not math.isfinite(ns.delay):
         raise _usage("--delay must be finite")
@@ -537,7 +540,7 @@ def _ingest_crawl(ns: argparse.Namespace) -> int:
         raise _usage(f"--delay must be at least {MIN_DELAY} seconds (politeness)")
     if ns.dry_run and ns.offline:
         raise _usage("--dry-run and --offline don't combine: a dry run reads the live index pages")
-    run = {"iclr": ingest_iclr, "neurips": ingest_neurips, "pmlr": ingest_pmlr}[ns.source]
+    run = {"iclr": ingest_iclr, "neurips": ingest_neurips, "pmlr": ingest_pmlr, "dblp": ingest_dblp}[ns.source]
     years = sorted({y for chunk in ns.years for y in chunk})
     _print(
         run(years, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run, refresh=ns.refresh,

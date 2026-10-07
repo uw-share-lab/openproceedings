@@ -108,6 +108,34 @@ def test_2013_listing_gives_accepted_main_records_with_their_evidence(tmp_path: 
     assert report.role == "primary" and dict(report.tracks) == {"main": 2}
 
 
+A87, B87 = "03004620ea802b9118dd44d69f07af56", "0316d8d63a0c252a3ec57921d7d2429b"
+Y87 = "neurips/1987/year-index.json"
+ABS87 = "neurips/1987/abstract.json"
+
+
+def test_1987_the_first_nips_is_mined_like_any_token_less_year(tmp_path: Path) -> None:
+    """decision-047 (TASK-204): the crawl starts at the first NIPS. The recorded 1987 year and abstract pages
+    have the shape of 2013's (`paper-list`, `paper-count`, token-less `-Abstract.html` links), so the same
+    host-and-year rule gives `main`, and the abstract page's citation_title matches its listing as recorded."""
+    cache = cache_of(tmp_path)
+    seed_fixture(cache, "neurips", Y87)
+    seed_fixture(cache, "neurips", ABS87, at=T1)
+    seed(cache, "neurips", neurips_abs(1987, B87), "", status=404, at=T1)
+    result = mine(cache, 1987)
+    records = by_id(result.records)
+    a, b = records[f"op:neurips:1987:nips-{A87}"], records[f"op:neurips:1987:nips-{B87}"]
+    assert {(r.venue, r.year, r.track, r.status) for r in (a, b)} == {("NeurIPS", 1987, "main", "accepted")}
+    assert (a.title, a.abstract) == ("Synthetic title 1", "Synthetic abstract 5")
+    assert a.authors == ("Synthetic Author 2", "Synthetic Author 3")
+    assert a.urls.pdf == f"https://{MAIN}/paper_files/paper/1987/file/{A87}-Paper.pdf"
+    assert a.venue_name == "Conference on Neural Information Processing Systems (NIPS 1987)"
+    assert claim(a, "track").evidence == "proceedings.neurips.cc 1987: no track token, so the main track (host and year)"
+    assert b.abstract is None
+    [report] = result.reports
+    assert (report.stated, report.listed, report.records, report.role) == (90, 2, 2, "primary")
+    assert (report.abstract_missing, report.page_missing) == (1, 1)
+
+
 def test_an_abstract_is_taken_only_when_citation_title_matches(tmp_path: Path) -> None:
     cache = cache_of(tmp_path)
     seed_2013(cache, match=False)  # the recorded page: its citation_title is not the listed title
@@ -498,7 +526,7 @@ def test_an_unpublished_year_and_one_before_the_window_are_refused(tmp_path: Pat
         ingest_neurips([2026], cache_of(tmp_path), transport=t, min_interval=0)
     assert e.value.reason == "no_listing"
     with pytest.raises(MinerError) as e:
-        ingest_neurips([2012], cache_of(tmp_path), transport=t, min_interval=0)
+        ingest_neurips([1986], cache_of(tmp_path), transport=t, min_interval=0)
     assert e.value.reason == "before_window"
 
 

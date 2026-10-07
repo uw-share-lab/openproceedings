@@ -38,12 +38,15 @@ from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
 from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
-RECORD_SCHEMA_VERSION = "4"  # 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-029)
+RECORD_SCHEMA_VERSION = "5"  # 5: the `dblp` and `icml_site` sources and the `dblp-<key>` native id (TASK-205/206,
+# decision-047); 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-029)
 # Sent with a record, never stored: computed from its fields, so a snapshot line never holds it (`record_line`)
 # and the shape above is unchanged (TASK-112). Output only: a dump that is validated again excludes it.
 DERIVED = frozenset({"venue_name"})
 
-Source = Literal["openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris"]
+Source = Literal[
+    "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ris",
+]  # fmt: skip
 Presentation = Literal["oral", "spotlight", "poster"]
 ClaimField = Literal[
     "title", "abstract", "authors", "venue", "year", "track", "status", "presentation", "venue_id_raw",
@@ -63,6 +66,8 @@ PROCEEDINGS_NATIVE = {
         "NeurIPS",
     ),
     "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), "ICLR"),
+    # ICML 1988-2012 from the pinned dblp release: the dblp key after `conf/icml/` (sources/dblp.py, decision-047)
+    "dblp": (re.compile(r"dblp-[A-Za-z0-9_-]+"), "ICML"),
 }
 
 

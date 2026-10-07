@@ -63,7 +63,7 @@ SOURCE: Source = "neurips_proceedings"
 CACHE_DIR = "neurips"  # <data>/cache/neurips
 MAIN_HOST = "proceedings.neurips.cc"
 HOSTS = frozenset({MAIN_HOST, NEURIPS_DB_2021_HOST})
-FIRST_YEAR = 2013  # decision-013: every venue from ICLR's first year
+FIRST_YEAR = 1987  # decision-047: the first NIPS (vocab.CONFERENCES); the site lists every year from it
 OPENREVIEW_FROM = 2021  # OpenReview hosts NeurIPS from 2021 (v1), so the proceedings confirm from then on
 PROGRESS_SECONDS = 30.0
 
@@ -187,7 +187,7 @@ def mine_year(
     listing isn't there (not published yet: re-crawl later, never infer absence)."""
     if year < FIRST_YEAR:
         raise MinerError(
-            f"NeurIPS {year}: the crawl starts in {FIRST_YEAR} (decision-013)", reason="before_window"
+            f"NeurIPS {year}: the crawl starts in {FIRST_YEAR}, the first NIPS (decision-047)", reason="before_window"
         )
     records: list[PaperRecord] = []
     reports: list[ListingReport] = []

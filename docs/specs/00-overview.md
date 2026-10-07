@@ -23,7 +23,8 @@ venues.
 ## Scope
 
 **In scope (v1):**
-- Venues: NeurIPS (including the Datasets & Benchmarks track), ICLR, ICML (on OpenReview and in PMLR).
+- Venues: NeurIPS (including the Datasets & Benchmarks track; from 1987), ICLR (from 2013), ICML (from 1988: on
+  OpenReview, in PMLR, and before 2013 from a pinned dblp release; decision-047).
 - Content: title and abstract, plus metadata (authors, venue, year, track, acceptance status, links).
 - Search: exact-token Boolean search with phrases, proximity, explicit wildcards, field scopes, and
   filters written inside the query itself.
@@ -63,7 +64,7 @@ venues.
 ```
             ┌──────────────── ingestion (01) ────────────────┐
  OpenReview │ API v2 / v1 crawlers ─┐                         │
- PMLR       │ proceedings miners ───┼─► normalize ─► dedup ─► │ corpus snapshot
+ PMLR, dblp │ proceedings miners ───┼─► normalize ─► dedup ─► │ corpus snapshot
  NeurIPS    │ RIS importer (M2) ────┘   + track/status        │ (JSONL, content-hashed)
             └─────────────────────────────────────────────────┘
                                    │
@@ -133,9 +134,13 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
    public rejected, withdrawn and desk-rejected submission is indexed with `status:rejected`,
    `status:withdrawn` or `status:desk_rejected` and excluded by the default `status:accepted`, counted
    in the exclusion banner. ICLR publishes all of them; NeurIPS and ICML only those whose authors opt in.
-3. ~~**Earliest year (M4).**~~ **Closed 2026-09-27 (decision-013):** every venue is crawled from 2013
-   (ICLR's first year, when it was already on OpenReview) wherever a spec 01 source holds the
-   venue-year; the query's `year:` filter narrows it. OpenReview cannot establish conference acceptance
+3. ~~**Earliest year (M4).**~~ **Closed 2026-09-27 (decision-013), reopened and closed again 2026-10-06
+   (decision-047):** every venue is crawled from its first year a spec 01 source holds: NeurIPS from 1987 (its
+   proceedings), ICML from 1988 (the pinned dblp snapshot release until 2012, then PMLR and OpenReview; its
+   pre-2013 abstracts only where an official ICML page gives one) and ICLR from 2013 (its first year, when it
+   was already on OpenReview); the query's `year:` filter narrows it. decision-047 superseded decision-013's
+   "years before 2013 stay out" at the owner's request, for the full history of both venues. So per-venue year
+   coverage differs before 2013, which the coverage page says. OpenReview cannot establish conference acceptance
    for ICLR 2014–2016, so the public ICLR archive supplies those accepted main-track records (TASK-096).
 4. **Planning tool (M0).** Backlog.md CLI (as in Kreate) or GitHub Issues.
 5. **Hosting (M6).** A lab VM, a university server, or a PaaS.

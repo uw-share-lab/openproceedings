@@ -255,15 +255,15 @@ export interface components {
         AbstractSource: {
             /**
              * Origin
-             * @description The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources).
+             * @description The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources). `icml_site`: an official ICML conference page (live, or a pinned Internet Archive capture), for ICML 1988-2012 (decision-047).
              */
-            origin: ("openreview" | "neurips_proceedings" | "iclr_proceedings" | "pmlr" | "iclr_archive") | null;
+            origin: ("openreview" | "neurips_proceedings" | "iclr_proceedings" | "pmlr" | "iclr_archive" | "icml_site") | null;
             /**
              * Source
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            source: "openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "ris";
+            source: "openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "dblp" | "icml_site" | "ris";
             /** Url */
             url: string | null;
         };
@@ -322,7 +322,7 @@ export interface components {
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            source: "openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "ris";
+            source: "openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "dblp" | "icml_site" | "ris";
             /** Url */
             url: string | null;
             value: components["schemas"]["ClaimValue"];
@@ -1743,7 +1743,7 @@ export interface components {
              * Sources
              * @description The sources the track's records came from (claim sources).
              */
-            sources: ("openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "ris")[];
+            sources: ("openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "dblp" | "icml_site" | "ris")[];
             /**
              * Track
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.

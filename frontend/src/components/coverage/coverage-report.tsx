@@ -19,7 +19,37 @@ function None() {
   );
 }
 
-/** The snapshot facts and totals above the table (design C1; copy deck CV-1 to CV-3). */
+/** Each venue's first and last indexed year, in venue order (copy deck CV-7). */
+export function yearSpans(venueYears: readonly VenueYear[]): { venue: string; from: number; to: number }[] {
+  const spans = new Map<string, { venue: string; from: number; to: number }>();
+  for (const vy of venueYears) {
+    const span = spans.get(vy.venue);
+    spans.set(vy.venue, {
+      venue: vy.venue,
+      from: span === undefined ? vy.year : Math.min(span.from, vy.year),
+      to: span === undefined ? vy.year : Math.max(span.to, vy.year),
+    });
+  }
+  return [...spans.values()].sort((a, b) => (a.venue < b.venue ? -1 : a.venue > b.venue ? 1 : 0));
+}
+
+/** "Years indexed: …", and when the venues start in different years, why that matters (copy deck CV-7,
+ * decision-047: NeurIPS from 1987, ICML from 1988, ICLR from 2013). */
+function YearSpans({ venueYears }: { venueYears: readonly VenueYear[] }) {
+  const spans = yearSpans(venueYears);
+  if (spans.length === 0) return null;
+  const differ = new Set(spans.map((s) => s.from)).size > 1;
+  return (
+    <p className="tabular-nums">
+      Years indexed: {spans.map((s) => `${s.venue} ${s.from === s.to ? s.from : `${s.from}–${s.to}`}`).join(" · ")}
+      {differ
+        ? ". The venues start in different years, so a search without a year: filter compares them over different years."
+        : null}
+    </p>
+  );
+}
+
+/** The snapshot facts and totals above the table (design C1; copy deck CV-1 to CV-3, CV-7). */
 function Header({ coverage }: { coverage: Coverage }) {
   const { snapshot, totals } = coverage;
   const corpus = corpusWindow(snapshot);
@@ -67,6 +97,7 @@ function Header({ coverage }: { coverage: Coverage }) {
           </>
         )}
       </p>
+      <YearSpans venueYears={coverage.venue_years} />
       <p className="text-muted-foreground">
         Only titles and abstracts are indexed. A record without an abstract can be found by its title only.
       </p>

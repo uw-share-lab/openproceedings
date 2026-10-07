@@ -74,10 +74,10 @@ from openproceedings.ingest.record import Claim, ClaimField, PaperRecord, Source
 from openproceedings.query.normalize import normalize
 
 _TEXT: tuple[Source, ...] = (
-    "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris",
+    "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ris",
 )  # fmt: skip
 _ACCEPTANCE: tuple[Source, ...] = (
-    "iclr_archive", "neurips_proceedings", "pmlr", "openreview_v2", "openreview_v1", "ris",
+    "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "openreview_v2", "openreview_v1", "ris",
 )  # fmt: skip
 # decision-005: OpenReview first for text and track; the official proceedings decide acceptance; RIS last.
 # Track is decided per track (owner, 2026-09-29; TASK-130): an OpenReview track claim is the note's own
@@ -214,10 +214,13 @@ def _sources(records: Iterable[PaperRecord]) -> frozenset[str]:
 
 # The site that published an abstract, as the results list names it (TASK-134, decision-018). Distinct from a
 # claim's `Source`: a `ris` claim is a route, and its evidence says which of these the abstract came from.
-Origin = Literal["openreview", "neurips_proceedings", "iclr_proceedings", "pmlr", "iclr_archive"]
+Origin = Literal["openreview", "neurips_proceedings", "iclr_proceedings", "pmlr", "iclr_archive", "icml_site"]
 _DIRECT_ORIGIN: dict[str, Origin] = {
     "openreview_v2": "openreview", "openreview_v1": "openreview", "neurips_proceedings": "neurips_proceedings",
     "pmlr": "pmlr", "iclr_archive": "iclr_archive",
+    # an official ICML conference page (live, or a pinned Internet Archive capture of one; TASK-206): its claim's
+    # url is the page as fetched, so the link reaches the capture
+    "icml_site": "icml_site",
 }  # fmt: skip
 _SITE_ORIGIN: dict[str, Origin] = {
     "NeurIPS": "neurips_proceedings",

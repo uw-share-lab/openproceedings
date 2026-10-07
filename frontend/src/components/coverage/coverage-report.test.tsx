@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Schemas } from "@/api/client";
-import { CoverageReport } from "./coverage-report";
+import { CoverageReport, yearSpans } from "./coverage-report";
 import fixture from "./coverage-fixture.json";
 import { count, percent, signed } from "./format";
 
@@ -288,5 +288,40 @@ describe("no hard-coded numbers (TASK-045 AC1)", () => {
     }
     expect(numbers.length).toBeGreaterThan(100);
     for (const n of new Set(numbers)) expect(served, n).toContain(n.replaceAll(",", ""));
+  });
+});
+
+describe("the years indexed per venue (copy deck CV-7, decision-047)", () => {
+  it("names each venue's first and last year from the API's venue-years", () => {
+    const c = copy();
+    const base = c.venue_years[0]!;
+    c.venue_years = [
+      { ...base, venue: "NeurIPS", year: 1987 },
+      { ...base, venue: "NeurIPS", year: 2025 },
+      { ...base, venue: "ICLR", year: 2013 },
+      { ...base, venue: "ICML", year: 1988 },
+      { ...base, venue: "ICML", year: 2026 },
+    ];
+    expect(yearSpans(c.venue_years)).toEqual([
+      { venue: "ICLR", from: 2013, to: 2013 },
+      { venue: "ICML", from: 1988, to: 2026 },
+      { venue: "NeurIPS", from: 1987, to: 2025 },
+    ]);
+    render(<CoverageReport coverage={c} />);
+    expect(screen.getByText(/^Years indexed:/).textContent).toBe(
+      "Years indexed: ICLR 2013 · ICML 1988–2026 · NeurIPS 1987–2025. The venues start in different years, so a " +
+        "search without a year: filter compares them over different years.",
+    );
+  });
+
+  it("says nothing about different spans when every venue starts in the same year", () => {
+    const c = copy();
+    const base = c.venue_years[0]!;
+    c.venue_years = [
+      { ...base, venue: "ICLR", year: 2020 },
+      { ...base, venue: "ICML", year: 2020 },
+    ];
+    render(<CoverageReport coverage={c} />);
+    expect(screen.getByText(/^Years indexed:/).textContent).toBe("Years indexed: ICLR 2020 · ICML 2020");
   });
 });

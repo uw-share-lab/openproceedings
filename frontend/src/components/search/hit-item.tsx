@@ -107,6 +107,7 @@ const ORIGIN_NAMES: Readonly<Record<string, string>> = {
   iclr_proceedings: "ICLR Proceedings",
   pmlr: "PMLR",
   iclr_archive: "ICLR archive",
+  icml_site: "ICML conference site",
 };
 
 type AbstractFrom = NonNullable<SearchHit["abstract_source"]>;

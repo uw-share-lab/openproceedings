@@ -203,10 +203,14 @@ machine-readable copy, which `GET /coverage` serves, and a test holds the two eq
 ±1%, or an owner-accepted exception (below). Cells with no official count are reported but not gated. The same definition appears in 00 and in the
 `coverage-reporting` skill. Also report, per cell: missing-abstract count, `unknown`-track count, and
 **statuses indexed**, meaning which statuses the sources for that venue-year can even contain. For example,
-NeurIPS 2013–2020 and ICML 2013–2022 come from proceedings only, so no rejected papers exist there to
-exclude; NeurIPS and ICML on OpenReview hold only the rejected papers whose authors opted in, while ICLR
-holds every rejected, withdrawn and desk-rejected submission (decision-012). The crawl window is 2013 on
-(decision-013); any venue-year with no source is a reported gap, never a silent zero. ICLR 2014–2016 are
+NeurIPS 1987–2020 and ICML 2013–2022 come from proceedings only, and ICML 1988–2012 from the pinned dblp
+release (decision-047), so no rejected papers exist there to exclude; NeurIPS and ICML on OpenReview hold only the rejected papers whose authors opted in, while ICLR
+holds every rejected, withdrawn and desk-rejected submission (decision-012). The crawl window is each venue's
+first year on: NeurIPS 1987, ICML 1988, ICLR 2013 (decision-047, superseding decision-013's 2013 floor); any
+venue-year with no source is a reported gap, never a silent zero. Before 2013 only NeurIPS and ICML have cells,
+so cross-venue counts over those years compare two venues, not three. ICML 1988–2012 records come from dblp,
+which has no abstracts: only the years whose official ICML pages give abstracts have them (TASK-206), and every
+other record of those years is title-only, counted in the cell's missing abstracts. ICLR 2014–2016 are
 not gaps: their public archive listings supply accepted main-track records (TASK-096).
 The source of statuses indexed is spec 01's source table as `ingest/statuses.py` holds it (spec 01
 §Pipeline 5); the snapshot manifest records them per venue-year, and the missing abstracts and sources per

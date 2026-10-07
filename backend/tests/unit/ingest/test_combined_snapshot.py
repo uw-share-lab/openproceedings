@@ -45,8 +45,10 @@ BUILT = datetime(2026, 9, 28, tzinfo=UTC)
 # reverting that one value in memory restores the prior files hash. The corpus hash is unchanged.
 # Release 0.2.0 likewise changed only openproceedings_version, "0.1.0" to "0.2.0": setting it back to "0.1.0" in
 # memory returns the files hash to ce0f3eba… (checked 2026-10-06), and SNAPSHOT_HASH is unchanged.
+# TASK-205/206 changed FILES_HASH: record schema v5 (the `dblp` and `icml_site` sources and the `dblp-<key>` native
+# id, decision-047) changed the manifest's record_schema_version, from e0caaefc…; no record here changed.
 SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bdd"
-FILES_HASH = "e0caaefc10aa977accd790098a9179eb2896f4272bbc3c2b9b10a1c0f238e2f6"
+FILES_HASH = "9dd604badfb9e8c1349115515c90d290986855b6c1fc9ad11a450e4a208ad0a1"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:
