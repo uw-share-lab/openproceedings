@@ -323,6 +323,15 @@ def cpu_batch(f: Callable[[str], object], arg: str) -> float:
         lambda n: "<a" + '"x' * n,
         lambda n: "</" + "a" * n,
         lambda n: "</a" + "'" * n,
+        # one attempt per `<`: each failed attempt must stop near its own `<`, not scan on to the end of the
+        # input (the automated push review's shape for a quadratic total across positions)
+        lambda n: '<a x="' * n,
+        lambda n: '</a "' * n,
+        lambda n: "<a-" * n,
+        lambda n: "<x:y " * n,
+        lambda n: "<a x='" + "<b and c " * n,
+        lambda n: "</a '" + "<p<" * n,
+        lambda n: "<!--" + "<a x=\"'" * n,
     ],
 )
 def test_escape_bare_lt_is_linear(shape: Callable[[int], str]) -> None:
