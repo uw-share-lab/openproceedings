@@ -83,25 +83,7 @@ def sources_manifest(reports: Iterable[Report]) -> dict[str, Any]:
     return out
 
 
-# --- progress ---------------------------------------------------------------------------------------------
-
-PROGRESS_SECONDS = 30.0  # logging-standards: a long crawl's periodic summary, at most this often
-
-
-class Heartbeat:
-    """When a long crawl's next progress line is due: at most one every `every` seconds on a monotonic clock
-    (the HTTP client's, so a test's fake clock drives it), never per item (TASK-116)."""
-
-    def __init__(self, monotonic: Callable[[], float], every: float = PROGRESS_SECONDS) -> None:
-        self._monotonic, self._every = monotonic, every
-        self._last = monotonic()
-
-    def due(self) -> bool:
-        now = self._monotonic()
-        if now - self._last < self._every:
-            return False
-        self._last = now
-        return True
+# --- progress: `Heartbeat` and `PROGRESS_SECONDS` live in `http.py` (its file download uses them too) ---------
 
 
 # --- crawl markers and the one replay ----------------------------------------------------------------------
@@ -203,14 +185,52 @@ def titles_match(listed: str, page: str | None) -> bool:
     return bool(keys(listed) & keys(page))
 
 
-def clean_abstract(text: str | None) -> tuple[str | None, int]:
+# What a proceedings page shows where it has no abstract (NeurIPS 1987-2012 pages, decision-047): never an
+# abstract. Compared whole, case-blind, after whitespace is collapsed.
+PLACEHOLDERS = frozenset({"abstract unavailable", "abstract missing"})
+# A PDF text extractor's code for a glyph it couldn't map (`(cid:173)`), left in NeurIPS 1987-2011 abstracts (most before 2004)
+# (decision-047). 173 is the soft hyphen at a line break (`princi(cid:173) ples`): the word is joined again. Any
+# other code stands for a lost character (a ligature, a symbol) and becomes a space, as a control character does.
+_SOFT_HYPHEN_CODE = re.compile(r"\(cid:173\)\s*")
+_PDF_CODE = re.compile(r"\(cid:[0-9]+\)")
+SHORT_ABSTRACT_WORDS = 5  # fewer words than this: counted (`abstract_short`), never dropped by a guess
+
+
+def repair_pdf_codes(text: str) -> tuple[str, int]:
+    """`text` with each `(cid:N)` extractor code repaired (`_SOFT_HYPHEN_CODE` joined, any other a space), and how
+    many there were. Text without one is unchanged."""
+    joined, soft = _SOFT_HYPHEN_CODE.subn("", text)
+    spaced, other = _PDF_CODE.subn(" ", joined)
+    return spaced, soft + other
+
+
+def pdf_codes_evidence(evidence: str, repaired: int) -> str:
+    """An abstract claim's evidence, saying how many `(cid:N)` codes `repair_pdf_codes` repaired; unchanged when
+    none were."""
+    if not repaired:
+        return evidence
+    return f"{evidence} ({repaired} PDF-extraction (cid:N) code{'' if repaired == 1 else 's'} repaired)"
+
+
+@dataclass(frozen=True, slots=True)
+class Cleaned:
+    """An abstract as a record may hold it (None: missing), and what cleaning it changed."""
+
+    text: str | None
+    spaced: int = 0  # control characters that became a space (decision-044)
+    pdf_codes: int = 0  # `(cid:N)` codes repaired (decision-047)
+
+
+def clean_abstract(text: str | None) -> Cleaned:
     """An abstract as a record may hold it, or None, and how many control characters became a space
-    (`record.abstract_text`, decision-044; the claim's evidence says so). Empty, or starting or ending with `…`
+    (`record.abstract_text`, decision-044) and `(cid:N)` codes were repaired (`repair_pdf_codes`, decision-047);
+    the claim's evidence says both. Empty, a page's placeholder (`PLACEHOLDERS`), or starting or ending with `…`
     (a snippet, not an abstract; spec 01), is missing. An ellipsis inside (`x₁, …, x_n`) is kept."""
-    text, replaced = abstract_text(text or "")
-    if not text or text.startswith(SNIPPET) or text.endswith(SNIPPET):
-        return None, 0
-    return text, replaced
+    repaired, codes = repair_pdf_codes(text or "")
+    text, replaced = abstract_text(repaired)
+    if not text or text.startswith(SNIPPET) or text.endswith(SNIPPET) or text.casefold() in PLACEHOLDERS:
+        return Cleaned(None)
+    return Cleaned(text, replaced, codes)
 
 
 def missing_reason(page_ok: bool, title_matches: bool, abstract: str | None) -> str | None:
@@ -236,7 +256,7 @@ class ListingReport(Report):
     Every miner appends the index page's fetch first, so `fetched[0]` is when the listing was read (reconcile's
     absence claims carry it)."""
 
-    source: str  # iclr_archive | neurips_proceedings | pmlr
+    source: str  # iclr_archive | neurips_proceedings | pmlr | dblp
     venue: str
     year: int
     listing: str  # the index URL
@@ -254,16 +274,25 @@ class ListingReport(Report):
     abstract_control_characters: int = (
         0  # records whose abstract had a control character replaced (decision-044)
     )
+    abstract_pdf_codes: int = 0  # records whose abstract had a `(cid:N)` code repaired (decision-047)
+    abstract_short: int = (
+        0  # records whose abstract has fewer than SHORT_ABSTRACT_WORDS words (kept, counted)
+    )
     to_fetch: int | None = None  # a dry run: paper pages not yet in the cache (never in a manifest)
     see_also: list[str] = field(default_factory=list)  # other volumes the page points to, not crawled
 
     manifest_key: ClassVar[str] = "listings"
 
-    def count(self, record: PaperRecord, missing: str | None, spaced: int = 0) -> None:
+    def count(self, record: PaperRecord, missing: str | None, spaced: int = 0, pdf_codes: int = 0) -> None:
         """Count one record made from this listing (after it validated); `spaced` is how many control characters
-        its abstract lost (`clean_abstract`'s own count, never read back from the evidence; TASK-199)."""
+        its abstract lost and `pdf_codes` how many `(cid:N)` codes were repaired (`clean_abstract`'s own counts,
+        never read back from the evidence; TASK-199, decision-047)."""
         self.records += 1
         self.abstract_control_characters += spaced > 0
+        self.abstract_pdf_codes += pdf_codes > 0
+        self.abstract_short += (
+            record.abstract is not None and len(record.abstract.split()) < SHORT_ABSTRACT_WORDS
+        )
         self.tracks[record.track] += 1
         self.unknown_track += record.track == "unknown"
         if missing is not None:
@@ -285,8 +314,10 @@ class ListingReport(Report):
             "abstract_title_mismatch": self.abstract_title_mismatch, "page_missing": self.page_missing,
             "unknown_track": self.unknown_track,
         }  # fmt: skip
-        if self.abstract_control_characters:  # listed only when there are any, so a listing's shape is kept
-            out["abstract_control_characters"] = self.abstract_control_characters
+        # each listed only when there are any, so a listing's shape is kept
+        for key in ("abstract_control_characters", "abstract_pdf_codes", "abstract_short"):
+            if value := getattr(self, key):
+                out[key] = value
         if self.volume is not None:
             out["volume"] = self.volume
         if self.see_also:

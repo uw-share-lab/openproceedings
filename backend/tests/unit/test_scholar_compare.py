@@ -184,6 +184,8 @@ def test_proceedings_key_carries_the_urls_own_venue_and_year() -> None:
     )
     assert proceedings_key("https://proceedings.mlr.press/v238/smith24a.html") is None  # AISTATS: not ICML
     assert proceedings_key("https://arxiv.org/abs/2401.00001") is None
+    # a dblp ICML record page names a dblp-<key> native but no year: no key, never a crash (decision-047)
+    assert proceedings_key("https://dblp.org/rec/conf/icml/SzitaL09") is None
 
 
 # --- matching ----------------------------------------------------------------------------------------------

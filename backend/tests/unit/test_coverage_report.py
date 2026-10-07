@@ -44,7 +44,7 @@ def official(n: int) -> OfficialCount:
 
 
 # ICLR 2013 main: 24 of 24 (✓); ICLR 2014 main: 30 of 35 (✗, −14.3%); ICLR 2015 main: no records (a gap);
-# ICLR 2014 workshop and ICLR 2016 workshop: not gated; ICML 2020 main: records but no official count (no source)
+# ICLR 2014 workshop and ICLR 2016 workshop: not gated; ICML 2020 main: records but no official count
 TABLE = {("ICLR", 2013, "main"): official(24), ("ICLR", 2014, "main"): official(35),
          ("ICLR", 2015, "main"): official(31)}  # fmt: skip
 
@@ -119,7 +119,7 @@ def test_a_gated_official_cell_with_no_records_is_a_reported_gap_never_a_silent_
 def test_cells_outside_the_gate_are_reported_as_such() -> None:
     text = report()
     assert "not gated" in row(text, "ICLR", 2016, "workshop")
-    assert "no source" in row(text, "ICML", 2020, "main")
+    assert "no official count" in row(text, "ICML", 2020, "main")
 
 
 def test_the_verdict_counts_every_gated_cell_including_gaps() -> None:
@@ -307,7 +307,8 @@ def test_a_same_day_report_is_replaced_whole(
     assert (out / "2026-10-01-coverage.md").read_text().startswith("# Coverage report, 2026-10-01")
     logged = [json.loads(ln) for ln in capsys.readouterr().err.splitlines() if ln.startswith("{")]
     [written] = [e for e in logged if e.get("event") == "coverage_report_written"]  # one INFO line per run
-    assert (written["replaced"], written["gated"]) == (True, 46)  # the real official table's gated cells
+    # the real official table's gated cells (+26: NeurIPS 1987-2012, decision-047)
+    assert (written["replaced"], written["gated"]) == (True, 72)
     assert sorted(p.name for p in out.iterdir()) == ["2026-10-01-coverage.md"]  # no temp file left
 
 
@@ -837,3 +838,41 @@ def test_the_report_says_which_cells_count_imported_only_records() -> None:
     assert "only an imported set holds" not in render(
         cov, json.loads(manifest["manifest.json"]), META, official=TABLE
     )
+
+
+def test_the_scope_lines_say_each_venues_years_and_what_the_dblp_years_rest_on() -> None:
+    """decision-047: the methods text cites this report as the database scope, so it says each venue's indexed
+    years, that ICML 1988-2012 comes from a pinned bibliography release (not a crawl on the window's dates) with
+    abstracts only from official ICML pages, and how many gated cells check the crawl against its own listing."""
+    from openproceedings.eval.coverage_report import _own_count_note, _scope
+    from openproceedings.official_counts import OfficialCount
+
+    def vy(venue: str, year: int, records: int = 1) -> dict[str, Any]:
+        return {"venue": venue, "year": year, "records": records, "tracks": [{"track": "main"}]}
+
+    cov = {"venue_years": [vy("ICLR", 2013), vy("ICML", 1988), vy("ICML", 2026), vy("NeurIPS", 1987),
+                           vy("NeurIPS", 2026), vy("ICLR", 2012, records=0)]}  # fmt: skip
+    doi = "https://doi.org/10.4230/dblp.xml.2026-10-03"
+    manifest = {"sources": {"dblp": {"listings": [
+        {"year": 1988, "listing": doi, "records": 49},
+        {"year": 2012, "listing": doi, "records": 243, "abstract_attached": 242,
+         "sites": ["https://icml.cc/2012/papers/"]},
+    ]}}}  # fmt: skip
+    years, icml = _scope(cov, manifest)
+    assert years == (
+        "- Years indexed: ICLR 2013–2013 · ICML 1988–2026 · NeurIPS 1987–2026 (the venues start in different years)"
+    )
+    assert (
+        "ICML 1988–2012: from the pinned dblp snapshot release https://doi.org/10.4230/dblp.xml.2026-10-03"
+        in icml
+    )
+    assert "242 of its 292 records have an abstract" in icml and "(1 pages" in icml
+    assert _scope(cov, {}) == [years]  # no dblp source: no dblp line
+    own = OfficialCount(90, "papers in the NeurIPS 1987 proceedings index (every accepted paper; the page's own count)",
+                        "https://proceedings.neurips.cc/paper_files/paper/1987", date(2026, 10, 6))  # fmt: skip
+    note = _own_count_note(cov, {("NeurIPS", 1987, "main"): own})
+    assert note.startswith(" 1 gated cell compares the crawl with its listing page's own stated count")
+    two = _own_count_note({"venue_years": [*cov["venue_years"], vy("NeurIPS", 1988)]},
+                          {("NeurIPS", 1987, "main"): own, ("NeurIPS", 1988, "main"): own})  # fmt: skip
+    assert two.startswith(" 2 gated cells compare")
+    assert _own_count_note(cov, {}) == ""

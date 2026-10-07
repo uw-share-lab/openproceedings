@@ -332,7 +332,12 @@ def _row(
                 f"| ✗ gap | 0 | {unknown} | {statuses} |")  # fmt: skip
     indexed = cell["indexed_accepted"]
     if cell["official_accepted"] is None:
-        verdict, off, delta, pct = ("no source" if track in GATED_TRACKS else "not gated"), "—", "—", "—"
+        verdict, off, delta, pct = (
+            ("no official count" if track in GATED_TRACKS else "not gated"),
+            "—",
+            "—",
+            "—",
+        )
     else:
         off, delta, pct = f"{cell['official_accepted']:,}", _signed(cell["delta"]), _pct(cell["delta_pct"])
         verdict = ("✓" if cell["within_gate"] else "✗") if cell["gated"] else "not gated"
@@ -418,6 +423,55 @@ def _reasons(skipped: Mapping[str, int]) -> str:
     return ", ".join(f"{k} {n:,}" for k, n in sorted(skipped.items())) or "—"
 
 
+OWN_COUNT = (
+    "the page's own count"  # how coverage-sources.md describes a row read off the crawled listing itself
+)
+
+
+def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
+    """The database scope a methods section cites (decision-047): each venue's indexed years (CV-7's spans), and,
+    when the snapshot holds the dblp release, which years come from that bibliography rather than a crawl."""
+    years: dict[str, set[int]] = {}
+    for vy in cov["venue_years"]:
+        if vy["records"]:
+            years.setdefault(vy["venue"], set()).add(vy["year"])
+    spans = " · ".join(f"{v} {min(ys)}–{max(ys)}" for v, ys in sorted(years.items()))
+    out = [f"- Years indexed: {spans}" + (" (the venues start in different years)"
+                                          if len({min(ys) for ys in years.values()}) > 1 else "")]  # fmt: skip
+    dblp = manifest.get("sources", {}).get("dblp", {}).get("listings", [])
+    if dblp:
+        held = sorted({int(x["year"]) for x in dblp})
+        releases = sorted({str(x["listing"]) for x in dblp})
+        sites = sorted({u for x in dblp for u in x.get("sites", [])})
+        attached = sum(int(x.get("abstract_attached", 0)) for x in dblp)
+        records = sum(int(x["records"]) for x in dblp)
+        out.append(
+            f"- ICML {held[0]}–{held[-1]}: from the pinned dblp snapshot release {', '.join(releases)} (a "
+            "bibliography read from one pinned file, so it reflects that release, not a crawl on the dates above; "
+            f"decision-047). {attached:,} of its {records:,} records have an abstract, each from an official ICML "
+            f"page ({len(sites)} pages, live or Internet Archive captures: `ingest/icml_sites.toml`); the rest are "
+            "title-only. 1989, 1991 and 1992, held as the International Workshop on Machine Learning, are exported "
+            "under the ICML name."
+        )
+    return out
+
+
+def _own_count_note(cov: Mapping[str, Any], official: OfficialTable) -> str:
+    """How many gated cells compare the crawl with the very listing it read (the listing's own stated count),
+    rather than an independent statement of accepted papers."""
+    own = sum(
+        1 for vy in cov["venue_years"] for t in vy["tracks"]
+        if (row := official.get((vy["venue"], vy["year"], t["track"]))) is not None and OWN_COUNT in row.counts
+    )  # fmt: skip
+    if not own:
+        return ""
+    cells, verb = ("cell", "compares") if own == 1 else ("cells", "compare")
+    return (
+        f" {own} gated {cells} {verb} the crawl with its listing page's own stated count (`{OWN_COUNT}` in "
+        "coverage-sources.md), not with an independent statement."
+    )
+
+
 def render(
     cov: Mapping[str, Any],
     manifest: Mapping[str, Any],
@@ -459,6 +513,7 @@ def render(
             else "none"
         ),
         f"- Command: `{meta.command}`",
+        *_scope(cov, manifest),
         "",
         f"**M4 gate: {'PASS' if verdict.passed else 'FAIL'}** — {verdict.passing} of {verdict.gated} gated cells "
         f"within ±1%; {verdict.gaps} gap{'' if verdict.gaps == 1 else 's'}; {len(verdict.accepted)} owner-accepted "
@@ -466,7 +521,8 @@ def render(
         "main-track and D&B cell with an official count; other cells are reported, not gated. An owner-accepted "
         "exception passes its cell only while the cell's counts are exactly the accepted ones and its papers are "
         "the gap. Δ% is rounded to "
-        "one decimal; the gate compares exactly (100 × |Δ| ≤ official), so a cell shown at 1.0% can still fail.",
+        "one decimal; the gate compares exactly (100 × |Δ| ≤ official), so a cell shown at 1.0% can still fail."
+        + _own_count_note(cov, official),
         "",
     ]
     keys = set(cells) | {k for k in official if k[2] in GATED_TRACKS}

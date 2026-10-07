@@ -32,7 +32,7 @@ fixtures. The reference parser strips values, so it reads either ending.
 **Abstract source (TASK-138, decision-018; spec 04 §Exports).** One `N1  - Abstract source: <site> <url>`
 line for a record whose abstract has an attribution (the snapshot's `RecordFile.attributions`, what `/search`
 sends as `abstract_source`; never recomputed): `<site>` is the results list's name (`OpenReview`,
-`NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`), plus ` (via RIS import)` for a `ris`
+`NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`, `ICML conference site`), plus ` (via RIS import)` for a `ris`
 claim; `an imported RIS file` when the route names no known site; no url when there is none. For example
 `N1  - Abstract source: PMLR https://proceedings.mlr.press/v202/okafor23a.html` (PMLR's CC BY 4.0 asks for the
 link). No abstract, or none a claim holds: no line. It is additive: `N1` was already repeatable, the status

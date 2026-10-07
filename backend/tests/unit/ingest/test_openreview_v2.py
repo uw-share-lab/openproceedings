@@ -19,9 +19,8 @@ from openproceedings.ingest import snapshot as snap
 from openproceedings.ingest.classify import V2_PRESENTATION, classify_venueid
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources import openreview_v2 as orv
-from openproceedings.ingest.sources.common import PROGRESS_SECONDS, Heartbeat
+from openproceedings.ingest.sources.http import PROGRESS_SECONDS, Heartbeat, Request, Response
 from openproceedings.ingest.sources.http import CacheMiss as OpenReviewCacheMiss
-from openproceedings.ingest.sources.http import Request, Response
 from openproceedings.ingest.sources.http import RetriesExhausted as OpenReviewRetriesExhausted
 from openproceedings.ingest.sources.openreview_client import Credentials, OpenReviewClient
 

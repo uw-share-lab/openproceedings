@@ -11,6 +11,7 @@ import pytest
 from openproceedings import cli
 from openproceedings.ingest import snapshot as snap
 from openproceedings.ingest import status_check as sc
+from openproceedings.ingest.dedup import PRECEDENCE
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.statuses import EVERY_STATUS, SOURCE_STATUSES
 
@@ -104,7 +105,11 @@ def test_cells_come_in_venue_year_status_order() -> None:
 
 def test_every_claim_source_has_a_row() -> None:
     for source in SOURCE_STATUSES:
-        assert sc.unexpected_statuses([paper("SyntheticA1", source=source)]) == []
+        if source in PRECEDENCE["status"]:
+            assert sc.unexpected_statuses([paper("SyntheticA1", source=source)]) == []
+    # an official ICML page claims only an abstract, on a dblp record (TASK-206): it answers no status
+    assert set(SOURCE_STATUSES) - set(PRECEDENCE["status"]) == {"icml_site"}
+    assert SOURCE_STATUSES["icml_site"] == SOURCE_STATUSES["dblp"] == (("accepted",), ("accepted",))
 
 
 # --- the build ----------------------------------------------------------------------------------------------

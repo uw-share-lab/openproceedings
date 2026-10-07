@@ -35,6 +35,7 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | OpenReview (v1 or v2) | forum id, as-is (case-sensitive) |
 | PMLR only | `pmlr-v<N>-<key>` (ICML volumes only, `ingest/volumes.py`) |
 | NeurIPS proceedings only | `nips-<hash>`, the 32-hex hash from the paper_files path; on the 2021 D&B host `nips-<hash>-round1`/`-round2` (its hash is md5 of a per-round paper number, so rounds and the main track reuse hashes; a D&B link without a round gets no id). One function, `urls.proceedings_native`, makes it for the miner, the RIS importer and dedup |
+| dblp release (ICML 1988–2012) | `dblp-<key>`, the dblp key after `conf/icml/` (`conf/icml/SzitaL09` → `dblp-SzitaL09`; one paper in every year, as dblp keys are unique); the record's `urls.proceedings` is its dblp page, `https://dblp.org/rec/conf/icml/<key>`, which `urls.native` reads back (never fetched) |
 | ICLR proceedings / archive | `iclr-<hash>` from a proceedings path; for the official 2014–2016 archive, an OpenReview target keeps its forum id and any other target is `iclr-<sha256(canonical-target)[:32]>` |
 | RIS import | a venueid plus its forum id → the forum id; else the proceedings or PMLR form above, from scholarmend's `proceedings_url` / `pmlr_url` claim (`ingest/urls.py`). A record with neither is skipped and counted (`unresolved` / `no_id`), never given a minted id. |
 
@@ -52,7 +53,7 @@ forum the page links.
 
 ## Provenance claims
 One `Claim` per (field, source): `field`, `value`, `source` (`openreview_v2`, `openreview_v1`,
-`iclr_archive`, `neurips_proceedings`, `pmlr`, `ris`), `url`, `fetched_at` (**from the cache entry**, never `now()` at
+`iclr_archive`, `neurips_proceedings`, `pmlr`, `dblp`, `icml_site`, `ris`), `url`, `fetched_at` (**from the cache entry**, never `now()` at
 build time), `evidence` (for example `venueid=ICLR.cc/2024/Conference`, or a decision note id). Evidence starting
 `not listed:` is **reserved** for reconcile's absence claims (`dedup.is_absence`, decision-005): no miner or
 importer may write it, or its claim would stop counting as a listing. Claims are
@@ -67,7 +68,7 @@ field may answer it, best first. A source not listed may never answer it. Decide
 |---|---|
 | `status` | the official proceedings where the venue-year's are published and crawled (listed → `accepted`; OpenReview-accepted but not listed → `unknown` + `conflicts.csv`), otherwise `openreview_v2` via `content.venueid`, `openreview_v1` via its year's adapter (`content.venue`, `content.decision`, the decision note or the withdrawn / desk-rejected invitation; never the v1 venueid); `ris` only through claims |
 | `track` | `openreview_v2` via `content.venueid`, `openreview_v1` via its year's adapter (the status evidence when it names a track, else the listing invitation the note was submitted under, checked against the venueid); proceedings only where OpenReview doesn't hold the venue-year's track (per track, decision-005, 2026-09-29): a record with an OpenReview track claim takes it; a record with no OpenReview track claim (the track isn't on OpenReview, or the paper's note didn't merge) takes its listing's |
-| `title`, `abstract`, `authors` | `openreview_v2`, `openreview_v1`, then `iclr_archive`, `neurips_proceedings`, `pmlr` (papers or years not on OpenReview), then `ris` |
+| `title`, `abstract`, `authors` | `openreview_v2`, `openreview_v1`, then `iclr_archive`, `neurips_proceedings`, `pmlr` (papers or years not on OpenReview), then `dblp` and `icml_site` (ICML 1988–2012 only: dblp's text, an official ICML page's abstract; decision-047), then `ris` |
 | `year`, `venue` | the source that defined the crawl scope and agrees with the venueid; a disagreement is a conflict |
 
 All claims are kept, including the losing ones. Two same-rank sources that disagree produce a
@@ -90,7 +91,8 @@ in Scholar. The abstract is never Scholar's (`null` instead).
 
 ## Versions
 `RECORD_SCHEMA_VERSION` (`record.py`) names this shape: the fields, native-id forms and content_hash
-rule. It is `4` since TASK-159/157 added two provenance-only claim fields, `twin` (a v1 copy's linked twins, a tuple of
+rule. It is `5` since TASK-205/206 added the `dblp` and `icml_site` sources and the `dblp-<key>` native id (decision-047);
+it was `4` from TASK-159/157, which added two provenance-only claim fields, `twin` (a v1 copy's linked twins, a tuple of
 record ids, decision-029) and `invitation` (scholarmend 0.1.5's v1 submission invitation); it was `3` from TASK-118,
 which added the round-qualified `nips-<hash>-round1`/`-round2` form, and `2` from TASK-096, which added the
 `iclr_archive` provenance source. Change any of them and bump it;

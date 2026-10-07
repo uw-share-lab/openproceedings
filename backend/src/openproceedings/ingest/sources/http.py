@@ -32,7 +32,10 @@ ICLR archive, NeurIPS proceedings and PMLR) fetches through `HttpClient`, and on
   `cli.main` and in `snapshot.load_sources`. No message holds a credential, a token or response text.
 
 The proceedings' page fetcher (`Fetcher`, `Page`, `PageCache`) is here too; OpenReview's login and JSON
-entries are layered on top in `openreview_client`.
+entries are layered on top in `openreview_client`. So is `fetch_file`, for a file too large to hold in memory
+that is named by its bytes (`PinnedFile`: URL, size, sha256; the dblp release, TASK-205): streamed to a `.tmp-`
+file through the same host check, no-redirect rule and retry waits, kept only when it hashes to the pin, and
+read from disk afterwards (a sidecar `<name>.json` records the download time every claim from it carries).
 """
 
 from __future__ import annotations
@@ -42,11 +45,12 @@ import functools
 import hashlib
 import json
 import logging
+import os
 import re
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from http.client import HTTPException
@@ -569,22 +573,26 @@ class Fetcher(HttpClient[Page]):
                          max_wait=max_wait, timeout=timeout)  # fmt: skip
         super().__init__(cache, transport, policy, clock)
 
-    def get(self, url: str, *, refresh: bool = False, keep_absent: bool = False) -> Page:
+    def get(
+        self, url: str, *, refresh: bool = False, keep_absent: bool = False, charset: str = "utf-8"
+    ) -> Page:
         """The page at `url`: from the cache unless `refresh`, else fetched (and cached when it is a 200, or a
-        404/410 with `keep_absent`). Offline, a miss raises instead of fetching."""
+        404/410 with `keep_absent`). Offline, a miss raises instead of fetching. `charset` decodes a body whose
+        `Content-Type` names none (a 1990s-2000s page served as bare `text/html`, TASK-206); one the response
+        names always wins."""
 
         def fetch(canonical_url: str) -> tuple[Page, bool]:
-            page = self._page(canonical_url)
+            page = self._page(canonical_url, charset)
             return page, page.ok or (keep_absent and page.status in _ABSENT)
 
         return self.through_cache(url, fetch, refresh=refresh)
 
-    def _page(self, url: str) -> Page:
+    def _page(self, url: str, default_charset: str = "utf-8") -> Page:
         request = Request("GET", url, {"User-Agent": USER_AGENT, "Accept": self.policy.accept})
         resp = self.send(request)
         if resp.status == 200:
             content_type = resp.headers.get("content-type", "text/html; charset=utf-8")
-            charset = m.group(1) if (m := _CHARSET.search(content_type)) else "utf-8"
+            charset = m.group(1) if (m := _CHARSET.search(content_type)) else default_charset
             try:
                 text = resp.body.decode(charset)
             except (LookupError, UnicodeDecodeError) as e:
@@ -593,6 +601,209 @@ class Fetcher(HttpClient[Page]):
         if resp.status in _ABSENT:
             return Page(url, resp.status, "", self.clock.now(), resp.headers.get("content-type", ""))
         raise HTTPRefused(url, resp.status)
+
+
+# --- progress lines -----------------------------------------------------------------------------------------
+
+PROGRESS_SECONDS = (
+    30.0  # logging-standards: a long crawl's or download's periodic summary, at most this often
+)
+
+
+class Heartbeat:
+    """When a long crawl's next progress line is due: at most one every `every` seconds on a monotonic clock
+    (the HTTP client's, so a test's fake clock drives it), never per item (TASK-116)."""
+
+    def __init__(self, monotonic: Callable[[], float], every: float = PROGRESS_SECONDS) -> None:
+        self._monotonic, self._every = monotonic, every
+        self._last = monotonic()
+
+    def due(self) -> bool:
+        now = self._monotonic()
+        if now - self._last < self._every:
+            return False
+        self._last = now
+        return True
+
+
+# --- a pinned file (the dblp release, TASK-205) ----------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class StreamResponse:
+    """A response whose body is read in chunks, never held whole: status, lower-case headers, the chunks, and
+    how to release the connection."""
+
+    status: int
+    headers: Mapping[str, str]
+    chunks: Iterable[bytes] = field(repr=False)
+    close: Callable[[], None] = field(default=lambda: None, repr=False)
+
+
+StreamTransport = Callable[[Request, float], StreamResponse]
+CHUNK = 1024 * 1024
+
+
+def urllib_stream(request: Request, timeout: float = 60.0) -> StreamResponse:
+    """The live streaming transport: no redirects (a 3xx is a response), the body read in `CHUNK`s. Tests never
+    use it against a real host (conftest blocks the network)."""
+    req = urllib.request.Request(request.url, headers=dict(request.headers), method=request.method)
+    try:
+        try:
+            resp = _OPENER.open(req, timeout=timeout)
+        except urllib.error.HTTPError as e:
+            e.close()
+            return StreamResponse(e.code, {k.lower(): v for k, v in (e.headers or {}).items()}, ())
+    except (urllib.error.URLError, OSError, HTTPException, ValueError) as e:
+        raise TransportError(type(e).__name__) from None
+
+    def chunks() -> Iterator[bytes]:
+        try:
+            while block := resp.read(CHUNK):
+                yield block
+        except (OSError, HTTPException) as e:
+            raise TransportError(type(e).__name__) from None
+
+    return StreamResponse(resp.status, {k.lower(): v for k, v in resp.headers.items()}, chunks(), resp.close)
+
+
+@dataclass(frozen=True)
+class PinnedFile:
+    """A file named by its exact bytes: where it is published, its size and its sha256 (guarantee 4: the same
+    pin is the same input). A download that doesn't hash to the pin is refused and never kept."""
+
+    url: str
+    size: int
+    sha256: str
+
+
+@dataclass(frozen=True)
+class FileEntry:
+    path: Path
+    fetched_at: datetime  # when the pinned bytes were downloaded (every claim built from them carries it)
+    cached: bool  # True: already on disk and verified, nothing fetched
+
+
+def _sidecar(path: Path) -> Path:
+    return path.with_name(f"{path.name}.json")
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        while block := fh.read(CHUNK):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def fetch_file(
+    pinned: PinnedFile, path: Path, transport: StreamTransport | None, *, hosts: frozenset[str],
+    attempts: int = 3, backoff: tuple[float, float] = (5.0, 300.0), timeout: float = 60.0, max_wait: float = 3600.0,
+    clock: Clock | None = None, verify: Callable[[Path], str] = file_sha256,
+) -> FileEntry:  # fmt: skip
+    """The pinned file at `path`: the copy on disk when it hashes to the pin (its sidecar `<name>.json` names the
+    URL, the sha256 and the download time), else downloaded once through `transport` (only `hosts`, no
+    redirect, 429/5xx and network errors retried with `Retry-After` or back-off, any other status refused),
+    streamed to a `.tmp-` file while hashing, checked against the pin's size and sha256, and renamed into place
+    with its sidecar. Without a transport (offline) a missing or mismatched copy is a `CacheMiss`."""
+    clock = clock or SystemClock()
+    p = urlparse(pinned.url)
+    if p.scheme != "https" or p.netloc.lower() not in hosts:
+        raise FetchError(f"{pinned.url!r} is not on {sorted(hosts)}", reason="off_host")
+    side = _sidecar(path)
+    if path.exists() and side.exists():
+        try:
+            meta = json.loads(side.read_text(encoding="utf-8"))
+            fetched = datetime.fromisoformat(meta["fetched_at"])
+            named = (meta["url"], meta["sha256"])
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise CacheError(
+                f"{side.name} is unreadable ({type(e).__name__}); delete it and {path.name}"
+            ) from e
+        if fetched.tzinfo is None:
+            raise CacheError(f"{side.name} has a naive fetched_at; delete it and {path.name}")
+        if named != (pinned.url, pinned.sha256):
+            reason = "sidecar_mismatch"
+        elif path.stat().st_size != pinned.size:
+            reason = "size_mismatch"
+        else:
+            log.info("pinned_file_verify_started", extra={"file": path.name, "bytes": pinned.size})
+            hashed = time.monotonic()
+            reason = "hash_mismatch" if verify(path) != pinned.sha256 else ""
+            log.info("pinned_file_verified", extra={"file": path.name, "ok": not reason,
+                                                    "ms": elapsed_ms(hashed, time.monotonic)})  # fmt: skip
+        if not reason:
+            return FileEntry(path, fetched.astimezone(UTC), cached=True)
+        log.warning("pinned_file_mismatch", extra={"file": path.name, "reason": reason})
+    if transport is None:
+        raise CacheMiss(pinned.url)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{storage.TMP}{path.name}")
+    request = Request("GET", pinned.url, {"User-Agent": USER_AGENT, "Accept": "*/*"})
+    log.info("pinned_file_fetch_started", extra={"file": path.name, "bytes_expected": pinned.size})
+    for attempt in range(attempts):
+        started = time.monotonic()
+        hint: float | None = None
+        try:
+            response = transport(request, timeout)
+        except TransportError as e:
+            why = str(e)
+        else:
+            try:
+                if response.status == 200:
+                    digest, size = _stream_to(tmp, response.chunks, pinned.size, clock, path.name)
+                    if (size, digest) != (pinned.size, pinned.sha256):
+                        tmp.unlink(missing_ok=True)
+                        raise FetchError(
+                            f"{pinned.url}: {size} bytes with sha256 {digest[:12]}…, not the pinned "
+                            f"{pinned.size} bytes / {pinned.sha256[:12]}…; the release changed or the pin is wrong",
+                            reason="pin_mismatch",
+                        )
+                    now = clock.now()
+                    os.replace(tmp, path)
+                    storage.write_json(side, {"url": pinned.url, "sha256": pinned.sha256, "size": pinned.size,
+                                              "fetched_at": now.astimezone(UTC).isoformat()})  # fmt: skip
+                    log.info("pinned_file_fetched", extra={"file": path.name, "bytes": size,
+                                                           "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+                    return FileEntry(path, now.astimezone(UTC), cached=False)
+                if response.status != 429 and response.status < 500:
+                    raise HTTPRefused(pinned.url, response.status)
+                why, hint = f"http_{response.status}", retry_after(response.headers, clock.now())
+            except TransportError as e:
+                tmp.unlink(missing_ok=True)
+                why = str(e)
+            finally:
+                response.close()
+        if attempt + 1 < attempts:
+            if hint is not None and hint > max_wait:  # as HttpClient without cap_waits: never wait that long
+                raise FetchError(f"{pinned.url}: asked to wait {hint:.0f}s ({why})", reason="wait_too_long")
+            wait = min(backoff[0] * 2**attempt, backoff[1]) if hint is None else hint
+            log.warning(CRAWL_EVENTS.retry_wait, extra={"host": p.netloc, "why": why, "attempt": attempt + 1,
+                                                         "wait_s": round(wait, 1)})  # fmt: skip
+            clock.sleep(wait)
+    raise RetriesExhausted(f"{pinned.url}: gave up after {attempts} attempts; re-run later")
+
+
+def _stream_to(tmp: Path, chunks: Iterable[bytes], limit: int, clock: Clock, name: str) -> tuple[str, int]:
+    """Write `chunks` to `tmp`, returning (sha256, size); more than `limit` bytes is refused at once
+    (`pin_mismatch`). A `pinned_file_progress` line when a `Heartbeat` on `clock` is due."""
+    digest, size = hashlib.sha256(), 0
+    beat = Heartbeat(clock.monotonic)
+    with tmp.open("wb") as fh:
+        for block in chunks:
+            size += len(block)
+            if beat.due():
+                log.info("pinned_file_progress", extra={"file": name, "bytes": size, "of": limit})
+            if size > limit:  # not the pinned file: refused at once, never fetched again in full
+                fh.close()
+                tmp.unlink(missing_ok=True)
+                raise FetchError(f"{tmp.name}: over the pinned {limit} bytes; the release changed or the pin is wrong",
+                                 reason="pin_mismatch")  # fmt: skip
+            digest.update(block)
+            fh.write(block)
+        fh.flush()
+        os.fsync(fh.fileno())
+    return digest.hexdigest(), size
 
 
 def entry_from_fixture(fixture: Mapping[str, Any], fetched_at: datetime) -> Page:

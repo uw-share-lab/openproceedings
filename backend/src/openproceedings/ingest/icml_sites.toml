@@ -1,0 +1,1603 @@
+# Official ICML pages with per-paper abstracts, 1988-2012 (spec 01 §Sources, ICML sites row; decision-047;
+# TASK-206). Data, not code: `ingest/sources/icml_sites.py` loads and checks it. The survey behind every row,
+# and the years with no surviving page (1988-1996, 1999, 2000, 2002, 2005, 2006; 1997 and 1998 have only
+# submission abstracts with contact details, not used: an owner question), is docs/research/2026-10-06-icml-pre-2013-abstract-sources.md.
+#
+# [[page]] one page: year; url (what is fetched: a live icml.cc page, or an Internet Archive capture pinned to
+#          its exact timestamp, https://web.archive.org/web/<14 digits>id_/<official>); official (the page the
+#          capture is of, as the archive holds it); parser (icml_sites.PARSERS); charset (the servers send bare
+#          text/html); entries (what the parser read off it when verified; a different count stops the crawl);
+#          verified; note.
+# Allowed: official ICML / IMLS conference pages only (a capture must be on `icml_sites.OFFICIAL_SITES`, each site named
+# by an official page: the 2007 Oregon State site by icml.cc Conferences/2008/past_icmls.shtml.html). Never ACM DL,
+# Scholar, Semantic Scholar, author pages, arXiv.
+
+[[page]]
+year = 2001
+url = "https://web.archive.org/web/20010708012312id_/http://www.ecn.purdue.edu:80/ICML2001/accepted-papers.html"
+official = "http://www.ecn.purdue.edu:80/ICML2001/accepted-papers.html"
+parser = "cyberchair"
+charset = "cp1252"
+entries = 79
+verified = 2026-10-06
+note = "the ICML 2001 site at Purdue (named by icml.cc Conferences/2007/pastconferences.html); not on icml.cc"
+
+[[page]]
+year = 2003
+url = "https://web.archive.org/web/20030628150843id_/http://www.hpl.hp.com:80/conferences/icml2003/allAbstracts.html"
+official = "http://www.hpl.hp.com:80/conferences/icml2003/allAbstracts.html"
+parser = "cyberchair"
+charset = "cp1252"
+entries = 118
+verified = 2026-10-06
+note = "the ICML 2003 site at HP Labs (icml.cc Conferences/2007/pastconferences.html names /conferences/icml03/, whose titlesAndAuthors.html, capture 20030628150503, links each paper here); not on icml.cc"
+
+[[page]]
+year = 2004
+url = "https://web.archive.org/web/20040907123036id_/http://www.aicml.cs.ualberta.ca:80/banff04/icml/pages/abstracts/allAbstracts.html"
+official = "http://www.aicml.cs.ualberta.ca:80/banff04/icml/pages/abstracts/allAbstracts.html"
+parser = "cyberchair"
+charset = "cp1252"
+entries = 118
+verified = 2026-10-06
+note = "the ICML 2004 Banff site (named by icml.cc Conferences/2007/pastconferences.html): its camera-ready abstracts in <pre>; icml.cc's per-paper copies glue words at line breaks"
+
+[[page]]
+year = 2007
+url = "https://icml.cc/Conferences/2007/paperlist.html"
+official = "https://icml.cc/Conferences/2007/paperlist.html"
+parser = "icml2007_list"
+charset = "cp1252"
+entries = 150
+verified = 2026-10-06
+note = "titles by paper number; the abstracts are the per-paper pages below (icml.cc's copies are 404)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116070015id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/7.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/7.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 7's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20070526114116id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/16.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/16.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 16's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064958id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/21.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/21.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 21's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065218id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/29.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/29.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 29's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065313id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/35.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/35.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 35's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065358id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/37.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/37.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 37's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20070626113635id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/60.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/60.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 60's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116070010id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/62.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/62.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 62's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116070020id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/72.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/72.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 72's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116070025id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/75.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/75.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 75's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116070030id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/81.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/81.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 81's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116070035id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/85.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/85.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 85's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116070041id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/87.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/87.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 87's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116070046id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/89.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/89.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 89's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116070051id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/98.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/98.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 98's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064757id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/105.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/105.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 105's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064802id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/106.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/106.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 106's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064807id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/114.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/114.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 114's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064812id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/124.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/124.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 124's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071114181202id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/129.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/129.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 129's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064817id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/137.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/137.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 137's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064822id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/139.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/139.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 139's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064827id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/140.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/140.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 140's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064835id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/148.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/148.htm"
+parser = "icml2007_paper"
+charset = "utf-8"
+entries = 1
+verified = 2026-10-06
+note = "paper 148's abstract on the Oregon State site (earliest 200 capture); served as UTF-8, unlike the other captures"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064837id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/154.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/154.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 154's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064845id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/158.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/158.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 158's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064852id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/160.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/160.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 160's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064857id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/161.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/161.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 161's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064902id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/162.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/162.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 162's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064907id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/168.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/168.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 168's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064912id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/169.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/169.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 169's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064917id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/170.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/170.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 170's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064922id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/173.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/173.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 173's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064928id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/180.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/180.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 180's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064933id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/182.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/182.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 182's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064938id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/188.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/188.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 188's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064943id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/192.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/192.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 192's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064948id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/205.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/205.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 205's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116064953id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/206.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/206.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 206's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065003id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/211.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/211.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 211's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065008id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/215.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/215.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 215's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20070526114126id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/216.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/216.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 216's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065018id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/219.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/219.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 219's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065023id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/222.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/222.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 222's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065028id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/224.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/224.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 224's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065033id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/225.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/225.htm"
+parser = "icml2007_paper"
+charset = "utf-8"
+entries = 1
+verified = 2026-10-06
+note = "paper 225's abstract on the Oregon State site (earliest 200 capture); served as UTF-8, unlike the other captures"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065038id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/229.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/229.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 229's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065043id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/233.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/233.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 233's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065101id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/237.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/237.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 237's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065106id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/242.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/242.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 242's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065111id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/243.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/243.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 243's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065116id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/244.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/244.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 244's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065121id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/245.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/245.htm"
+parser = "icml2007_paper"
+charset = "utf-8"
+entries = 1
+verified = 2026-10-06
+note = "paper 245's abstract on the Oregon State site (earliest 200 capture); served as UTF-8, unlike the other captures"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065126id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/252.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/252.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 252's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065131id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/255.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/255.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 255's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065137id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/257.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/257.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 257's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065143id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/260.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/260.htm"
+parser = "icml2007_paper"
+charset = "utf-8"
+entries = 1
+verified = 2026-10-06
+note = "paper 260's abstract on the Oregon State site (earliest 200 capture); served as UTF-8, unlike the other captures"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065148id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/276.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/276.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 276's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065153id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/278.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/278.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 278's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065158id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/280.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/280.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 280's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065203id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/282.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/282.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 282's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065208id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/284.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/284.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 284's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065213id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/285.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/285.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 285's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065223id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/291.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/291.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 291's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065228id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/303.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/303.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 303's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065233id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/312.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/312.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 312's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065238id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/326.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/326.htm"
+parser = "icml2007_paper"
+charset = "utf-8"
+entries = 1
+verified = 2026-10-06
+note = "paper 326's abstract on the Oregon State site (earliest 200 capture); served as UTF-8, unlike the other captures"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065243id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/329.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/329.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 329's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065248id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/331.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/331.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 331's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065253id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/335.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/335.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 335's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065258id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/336.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/336.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 336's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065303id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/341.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/341.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 341's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065308id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/349.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/349.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 349's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065325id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/351.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/351.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 351's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065331id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/354.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/354.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 354's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065336id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/358.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/358.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 358's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065342id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/360.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/360.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 360's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065347id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/366.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/366.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 366's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065352id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/369.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/369.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 369's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065403id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/370.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/370.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 370's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065408id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/371.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/371.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 371's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065413id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/372.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/372.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 372's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065418id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/375.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/375.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 375's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065423id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/377.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/377.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 377's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065428id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/378.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/378.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 378's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065433id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/379.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/379.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 379's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065438id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/380.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/380.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 380's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065446id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/381.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/381.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 381's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065453id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/387.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/387.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 387's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065458id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/388.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/388.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 388's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065503id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/392.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/392.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 392's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065508id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/394.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/394.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 394's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065513id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/398.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/398.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 398's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065518id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/401.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/401.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 401's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065524id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/403.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/403.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 403's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065529id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/404.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/404.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 404's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065534id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/407.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/407.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 407's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065539id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/408.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/408.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 408's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065544id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/409.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/409.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 409's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065549id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/416.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/416.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 416's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065554id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/422.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/422.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 422's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065559id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/425.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/425.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 425's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065604id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/426.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/426.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 426's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065609id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/441.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/441.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 441's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065614id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/444.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/444.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 444's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065619id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/448.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/448.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 448's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065624id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/449.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/449.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 449's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065629id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/450.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/450.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 450's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065634id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/453.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/453.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 453's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065639id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/455.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/455.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 455's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065644id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/457.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/457.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 457's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065649id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/458.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/458.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 458's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065654id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/461.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/461.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 461's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065659id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/463.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/463.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 463's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065704id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/467.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/467.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 467's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065709id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/470.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/470.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 470's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065714id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/471.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/471.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 471's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065719id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/472.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/472.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 472's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065724id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/483.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/483.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 483's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065730id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/489.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/489.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 489's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065735id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/491.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/491.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 491's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065740id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/493.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/493.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 493's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065745id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/495.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/495.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 495's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065750id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/497.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/497.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 497's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065755id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/515.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/515.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 515's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065800id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/517.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/517.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 517's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065805id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/518.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/518.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 518's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065810id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/521.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/521.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 521's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065815id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/523.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/523.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 523's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071023065140id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/532.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/532.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 532's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065820id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/537.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/537.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 537's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065825id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/541.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/541.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 541's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065830id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/546.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/546.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 546's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065835id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/548.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/548.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 548's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065840id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/549.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/549.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 549's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065845id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/553.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/553.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 553's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065854id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/558.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/558.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 558's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065859id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/559.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/559.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 559's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065905id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/561.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/561.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 561's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065910id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/562.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/562.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 562's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065915id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/564.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/564.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 564's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065920id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/568.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/568.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 568's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065925id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/575.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/575.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 575's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065930id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/581.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/581.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 581's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065935id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/587.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/587.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 587's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065940id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/589.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/589.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 589's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065945id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/591.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/591.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 591's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116065950id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/596.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/596.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 596's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116070000id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/601.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/601.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 601's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2007
+url = "https://web.archive.org/web/20071116070005id_/http://oregonstate.edu:80/conferences/icml2007/abstracts/605.htm"
+official = "http://oregonstate.edu:80/conferences/icml2007/abstracts/605.htm"
+parser = "icml2007_paper"
+charset = "cp1252"
+entries = 1
+verified = 2026-10-06
+note = "paper 605's abstract on the Oregon State site (earliest 200 capture)"
+
+[[page]]
+year = 2008
+url = "https://icml.cc/Conferences/2008/abstracts.shtml.html"
+official = "https://icml.cc/Conferences/2008/abstracts.shtml.html"
+parser = "icml2008"
+charset = "cp1252"
+entries = 158
+verified = 2026-10-06
+note = "icml.cc's copy of the Helsinki site's abstracts page"
+
+[[page]]
+year = 2009
+url = "https://icml.cc/Conferences/2009/abstracts.html"
+official = "https://icml.cc/Conferences/2009/abstracts.html"
+parser = "icml2009"
+charset = "utf-8"
+entries = 160
+verified = 2026-10-06
+note = "the proceedings page"
+
+[[page]]
+year = 2010
+url = "https://icml.cc/Conferences/2010/abstracts.html"
+official = "https://icml.cc/Conferences/2010/abstracts.html"
+parser = "icml2010"
+charset = "cp1252"
+entries = 159
+verified = 2026-10-06
+note = "icml.cc's copy of icml2010.org's abstracts page (now a spam site)"
+
+[[page]]
+year = 2011
+url = "https://icml.cc/Conferences/2011/papers.php.html"
+official = "https://icml.cc/Conferences/2011/papers.php.html"
+parser = "icml2011"
+charset = "cp1252"
+entries = 152
+verified = 2026-10-06
+note = "icml.cc's copy of icml-2011.org's papers page; the Invited Cross-Conference Track is left out"
+
+[[page]]
+year = 2012
+url = "https://icml.cc/2012/papers/"
+official = "https://icml.cc/2012/papers/"
+parser = "icml2012"
+charset = "utf-8"
+entries = 243
+verified = 2026-10-06
+note = "the 2012 papers page; 4 papers typed Not for proceedings are left out"

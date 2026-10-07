@@ -20,6 +20,7 @@ from openproceedings.ingest.sources.http import (
     FetchError,
     Page,
     PageCache,
+    Response,
     canonical,
     entry_from_fixture,
 )
@@ -180,3 +181,20 @@ def test_every_crawler_log_event_is_a_constant_never_built() -> None:
             receivers.add(ast.unparse(node.func.value))
     assert checked >= 30  # the walk found the crawlers' log calls
     assert {"log", "logger", "self._log"} <= receivers  # every receiver form the crawlers use was checked
+
+
+def test_a_body_with_no_charset_decodes_with_the_one_asked_for_and_a_named_one_wins(tmp_path: Path) -> None:
+    """TASK-206: old conference pages are served as bare `text/html` in cp1252. `get(charset=)` decodes such a
+    body; a charset the response names still wins; utf-8 stays the default, so a cp1252 body is refused."""
+    url = "https://icml.cc/Conferences/2010/abstracts.html"
+    page = "<html>Naïve “quoted”</html>"
+    bare = Response(200, {"content-type": "text/html"}, page.encode("cp1252"))
+    f, _ = fetcher(tmp_path / "a", FakeTransport({url: bare}), frozenset({"icml.cc"}), min_interval=0)
+    assert f.get(url, charset="cp1252").text == page
+    f, _ = fetcher(tmp_path / "b", FakeTransport({url: bare}), frozenset({"icml.cc"}), min_interval=0)
+    with pytest.raises(FetchError, match="not utf-8") as e:
+        f.get(url)
+    assert e.value.reason == "undecodable"
+    named = Response(200, {"content-type": "text/html; charset=utf-8"}, "café</html>".encode())
+    f, _ = fetcher(tmp_path / "c", FakeTransport({url: named}), frozenset({"icml.cc"}), min_interval=0)
+    assert f.get(url, charset="cp1252").text == "café</html>"

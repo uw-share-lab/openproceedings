@@ -26,3 +26,10 @@ Close the M4 review's observability findings before the first full-corpus crawl'
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/logging-standards/SKILL.md` (§Crawl lines, levels), `.claude/skills/openreview-api/SKILL.md`, `docs/specs/01-ingestion.md`
 - Test or hook added? — `test_fetch.py::test_every_crawler_log_event_is_a_constant_never_built`, `test_openreview_v2.py::test_the_heartbeat_is_due_at_most_every_30_seconds_of_monotonic_time`, the per-API start-and-heartbeat and `test_per_note_anomalies_are_debug_and_the_crawl_has_one_attention_warning` tests in `test_openreview_v1.py`/`test_openreview_v2.py`, `test_openreview_client.py::test_a_projection_refusal_names_the_canonical_request_and_nothing_else`, and the budget tests in `test_neurips.py`/`test_pmlr.py`/`test_iclr.py`
+
+## Addendum — 2026-10-07
+
+`Heartbeat` and `PROGRESS_SECONDS` moved from `ingest/sources/common.py` to `ingest/sources/http.py` (TASK-205/206):
+the pinned-file download in `http.py` needs them, and `common` imports `http`. The dblp release download, its
+extract read and a year's ICML pages now use the same heartbeat (`pinned_file_progress`, `dblp_extract_progress`,
+`icml_site_year_progress`), so a crawl's progress lines keep one rule and one clock.

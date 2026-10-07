@@ -104,13 +104,33 @@ def names_native(url: str, native_id: str) -> bool:
 
 
 def native(url: str) -> str | None:
-    """The proceedings native id a URL names (`proceedings_native`, or `pmlr-v<N>-<key>` for an ICML
-    volume), or None."""
+    """The proceedings native id a URL names (`proceedings_native`, `pmlr-v<N>-<key>` for an ICML volume, or
+    `dblp-<key>` for an ICML record's dblp page), or None."""
     if proceedings(url) is not None:
         return proceedings_native(url)
     if (q := pmlr(url)) is not None and q[0] in ICML_PMLR_VOLUMES:
         return f"pmlr-v{q[0]}-{q[1]}"
+    if (key := dblp_icml(url)) is not None:
+        return f"dblp-{key}"
     return None
+
+
+_DBLP_REC = re.compile(r"/rec/conf/icml/([A-Za-z0-9_-]+)(?:\.html)?")
+
+
+def dblp_record_url(key: str) -> str:
+    """The dblp page of a record (`https://dblp.org/rec/conf/icml/<key>`): a link for people and the dblp
+    records' `urls.proceedings` (sources/dblp.py), never fetched (dblp.org forbids crawling; decision-047)."""
+    return f"https://dblp.org/rec/{key}"
+
+
+def dblp_icml(url: str) -> str | None:
+    """The key after `conf/icml/` of a dblp record page URL (any scheme and host case, `dblp.org`), or None."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.netloc.lower() != "dblp.org":
+        return None
+    m = _DBLP_REC.fullmatch(parsed.path)
+    return m.group(1) if m else None
 
 
 def forum_id(url: str) -> str | None:

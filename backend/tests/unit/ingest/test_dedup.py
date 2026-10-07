@@ -52,6 +52,8 @@ def self_url(native: str, year: int) -> str | None:
     if prefix == "pmlr":
         volume, _, key = rest.partition("-")
         return f"https://proceedings.mlr.press/{volume}/{key}.html"
+    if prefix == "dblp":
+        return f"https://dblp.org/rec/conf/icml/{rest}"
     return None
 
 
@@ -157,11 +159,13 @@ def test_a_decomposed_title_keys_as_its_composed_form(title: str, key: str) -> N
 
 
 def test_the_precedence_table_is_decision_005() -> None:
-    text = ("openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris")
+    text = ("openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site",
+            "ris")  # fmt: skip
     assert PRECEDENCE["status"] == (
         "iclr_archive",
         "neurips_proceedings",
         "pmlr",
+        "dblp",  # decision-047: ICML 1988-2012, where no other source holds the venue-year
         "openreview_v2",
         "openreview_v1",
         "ris",
@@ -1760,3 +1764,13 @@ def test_a_lone_title_partner_keeping_the_abstract_keeps_the_title_merge() -> No
     note = paper("AbCd1234", "One", abstract=LONG, **ICLR)
     copy = imported(f"iclr-{H[1]}", "One", abstract=LONG, **ICLR)
     assert rules(dedup([note, copy])) == [(note.id, copy.id, "title_venue_year")]
+
+
+def test_two_dblp_records_sharing_a_title_are_never_merged() -> None:
+    """decision-047: two dblp papers of one ICML year with the same title key are two proceedings ids: kept apart,
+    with a conflicts.csv row, never folded."""
+    a = paper("dblp-Smith09", "Trust in AI", source="dblp", venue="ICML", year=2009)
+    b = paper("dblp-Smith09b", "trust in AI!", source="dblp", venue="ICML", year=2009)
+    result = dedup([a, b])
+    assert sorted(r.id for r in result.records) == ["op:icml:2009:dblp-Smith09", "op:icml:2009:dblp-Smith09b"]
+    assert not result.merges and result.conflicts

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Schemas } from "@/api/client";
-import { CoverageReport } from "./coverage-report";
+import { CoverageReport, yearSpans } from "./coverage-report";
 import fixture from "./coverage-fixture.json";
 import { count, percent, signed } from "./format";
 
@@ -288,5 +288,67 @@ describe("no hard-coded numbers (TASK-045 AC1)", () => {
     }
     expect(numbers.length).toBeGreaterThan(100);
     for (const n of new Set(numbers)) expect(served, n).toContain(n.replaceAll(",", ""));
+  });
+});
+
+describe("the years indexed per venue (copy deck CV-7, decision-047)", () => {
+  it("names each venue's first and last year from the API's venue-years", () => {
+    const c = copy();
+    const base = c.venue_years[0]!;
+    c.venue_years = [
+      { ...base, venue: "NeurIPS", year: 1987 },
+      { ...base, venue: "NeurIPS", year: 2025 },
+      { ...base, venue: "ICLR", year: 2013 },
+      { ...base, venue: "ICML", year: 1988 },
+      { ...base, venue: "ICML", year: 2026 },
+    ];
+    expect(yearSpans(c.venue_years)).toEqual([
+      { venue: "ICLR", from: 2013, to: 2013, missing: [] },
+      { venue: "ICML", from: 1988, to: 2026, missing: Array.from({ length: 37 }, (_, i) => 1989 + i) },
+      { venue: "NeurIPS", from: 1987, to: 2025, missing: Array.from({ length: 37 }, (_, i) => 1988 + i) },
+    ]);
+    c.venue_years = [
+      ...[2013, 2014, 2015].map((year) => ({ ...base, venue: "ICLR" as const, year })),
+      ...[1988, 1989, 2015].map((year) => ({ ...base, venue: "ICML" as const, year })),
+    ];
+    render(<CoverageReport coverage={c} />);
+    const line = screen.getByText(/^Years indexed:/);
+    expect(line.textContent).toBe(
+      "Years indexed: ICLR 2013–2015 · ICML 1988–2015 (none in " +
+        Array.from({ length: 25 }, (_, i) => 1990 + i).join(", ") +
+        "). The venues start in different years, so a search without a year: filter compares them over " +
+        "different years. Add year:2013..2015 to compare them over the same years.",
+    );
+    expect([...line.querySelectorAll("code")].map((n) => n.textContent)).toEqual([
+      "year:",
+      "year:2013..2015",
+    ]);
+  });
+
+  it("suggests no year: clause when the venues' spans share no year", () => {
+    const c = copy();
+    const base = c.venue_years[0]!;
+    c.venue_years = [
+      ...[2013, 2014, 2015].map((year) => ({ ...base, venue: "ICLR" as const, year })),
+      ...[1988, 1989, 1990].map((year) => ({ ...base, venue: "ICML" as const, year })),
+    ];
+    render(<CoverageReport coverage={c} />);
+    const line = screen.getByText(/^Years indexed:/);
+    expect(line.textContent).toBe(
+      "Years indexed: ICLR 2013–2015 · ICML 1988–1990. The venues start in different years, so a search " +
+        "without a year: filter compares them over different years.",
+    );
+    expect(line.querySelectorAll("code")).toHaveLength(1);
+  });
+
+  it("says nothing about different spans when every venue starts in the same year", () => {
+    const c = copy();
+    const base = c.venue_years[0]!;
+    c.venue_years = [
+      { ...base, venue: "ICLR", year: 2020 },
+      { ...base, venue: "ICML", year: 2020 },
+    ];
+    render(<CoverageReport coverage={c} />);
+    expect(screen.getByText(/^Years indexed:/).textContent).toBe("Years indexed: ICLR 2020 · ICML 2020");
   });
 });

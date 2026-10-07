@@ -225,10 +225,15 @@ def test_venue_names_are_pinned(venue: str, year: int) -> None:
 
 
 def test_every_crawlable_year_has_one_venue_name() -> None:
-    """2013–2026 for all three venues (the review's 2020–2026 and task-049's 2018 proposal inside it): one
-    string per venue and year, whatever the track or status, with the year it names equal to `PY`."""
+    """Every year each venue's sources can yield, to 2026 (decision-047: NeurIPS from the first NIPS, ICML from the
+    dblp release's first year, ICLR from 2013): one string per venue and year, whatever the track or status, with
+    the year it names equal to `PY`."""
+    from openproceedings.ingest.record import DBLP_YEARS
+    from openproceedings.ingest.sources import neurips
+
+    first = {"NeurIPS": neurips.FIRST_YEAR, "ICLR": 2013, "ICML": DBLP_YEARS[0]}
     for venue in ("NeurIPS", "ICLR", "ICML"):
-        for year in range(2013, 2027):
+        for year in range(first[venue], 2027):
             name = export.venue_name(venue, year)
             acronym = "NIPS" if venue == "NeurIPS" and year < 2018 else venue
             assert name.endswith(f" ({acronym} {year})") and "\n" not in name and "{" not in name
@@ -975,6 +980,24 @@ def test_each_format_names_a_pmlr_abstracts_source_byte_for_byte() -> None:
         **PMLR_RECORD, "index_version": "abcdef123456", "canonical_hash": "0" * 64, "exported_at": "2026-09-26",
         "record_id": None, "searched_at": None,
     }  # fmt: skip
+
+
+def test_an_official_icml_page_capture_is_named_in_every_format() -> None:
+    """decision-047: an ICML 1988-2012 record (a `dblp-` id) whose abstract an Internet Archive capture of an
+    official ICML page gave: every format names the ICML conference site and the capture."""
+    capture = "https://web.archive.org/web/20030628150843id_/http://www.hpl.hp.com:80/conferences/icml2003/allAbstracts.html"
+    record = {**PMLR_RECORD, "id": "op:icml:2003:dblp-MannorRG03", "year": 2003,
+              "urls": {**PMLR_RECORD["urls"], "proceedings": "https://dblp.org/rec/conf/icml/MannorRG03"}}  # type: ignore[dict-item]  # fmt: skip
+    source = Attribution("icml_site", "icml_site", capture)
+    ris = attributed_export("ris", record, source)
+    assert f"N1  - Abstract source: ICML conference site {capture}\n" in ris
+    assert "T2  - International Conference on Machine Learning (ICML 2003)\n" in ris
+    assert f"abstract_source = {{ICML conference site {capture}}}" in attributed_export(
+        "bibtex", record, source
+    )
+    assert f",icml_site,icml_site,{capture}," in attributed_export("csv", record, source)
+    (obj,) = [json.loads(x) for x in attributed_export("jsonl", record, source).splitlines()]
+    assert obj["abstract_source"] == {"source": "icml_site", "origin": "icml_site", "url": capture}
 
 
 def test_without_a_source_every_format_is_byte_for_byte_what_it_was() -> None:

@@ -104,14 +104,15 @@ def load(path: Path, *, required: bool = False) -> Withheld:
 
 
 # native ids unique only within their venue-year: a proceedings hash is md5 of a per-year paper number
-# the proceedings hash forms (`record.PROCEEDINGS_NATIVE` but PMLR's, whose key names its volume)
-_LOCAL_NATIVE = tuple(f"{prefix}-" for prefix in PROCEEDINGS_NATIVE if prefix != "pmlr")
+# the proceedings hash forms (`record.PROCEEDINGS_NATIVE` but PMLR's, whose key names its volume, and dblp's,
+# whose key is unique across dblp; decision-047)
+_LOCAL_NATIVE = tuple(f"{prefix}-" for prefix in PROCEEDINGS_NATIVE if prefix not in ("pmlr", "dblp"))
 
 
 def global_native(rid: str) -> str | None:
     """A record id's native part (`op:<venue>:<year>:<native>`) when it names one paper in every venue and year,
-    so a corrected venue or year leaves the paper recognisable by it: an OpenReview forum id or a PMLR volume
-    and key. None for a proceedings hash (`nips-…`, `iclr-…`), which names one paper only within its
+    so a corrected venue or year leaves the paper recognisable by it: an OpenReview forum id, a PMLR volume
+    and key, or a dblp key (`dblp-<key>`). None for a proceedings hash (`nips-…`, `iclr-…`), which names one paper only within its
     venue-year (TASK-067 review, measured): a NeurIPS hash is md5 of a per-year paper number, and 1,281 of them
     name two to five papers each in the 2026-09-29 snapshot; ICLR proceedings hashes collided across years too
     (5 in the 2026-09-23 snapshot). The 2014-2016 ICLR archive's `iclr-<sha256(target)>` ids are unique but share

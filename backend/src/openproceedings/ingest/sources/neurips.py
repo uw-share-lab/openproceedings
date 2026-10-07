@@ -46,10 +46,12 @@ from openproceedings.ingest.record import (
     title_text,
 )
 from openproceedings.ingest.sources.common import (
+    Cleaned,
     ListingReport,
     MinerError,
     clean_abstract,
     missing_reason,
+    pdf_codes_evidence,
     record_from_claims,
     titles_match,
 )
@@ -63,7 +65,7 @@ SOURCE: Source = "neurips_proceedings"
 CACHE_DIR = "neurips"  # <data>/cache/neurips
 MAIN_HOST = "proceedings.neurips.cc"
 HOSTS = frozenset({MAIN_HOST, NEURIPS_DB_2021_HOST})
-FIRST_YEAR = 2013  # decision-013: every venue from ICLR's first year
+FIRST_YEAR = 1987  # decision-047: the first NIPS (vocab.CONFERENCES); the site lists every year from it
 OPENREVIEW_FROM = 2021  # OpenReview hosts NeurIPS from 2021 (v1), so the proceedings confirm from then on
 PROGRESS_SECONDS = 30.0
 
@@ -187,7 +189,8 @@ def mine_year(
     listing isn't there (not published yet: re-crawl later, never infer absence)."""
     if year < FIRST_YEAR:
         raise MinerError(
-            f"NeurIPS {year}: the crawl starts in {FIRST_YEAR} (decision-013)", reason="before_window"
+            f"NeurIPS {year}: the crawl starts in {FIRST_YEAR}, the first NIPS (decision-047)",
+            reason="before_window",
         )
     records: list[PaperRecord] = []
     reports: list[ListingReport] = []
@@ -257,7 +260,7 @@ def _mine_listing(
         page = fetcher.get(entry.url, keep_absent=True)
         report.fetched.append(page.fetched_at)
         try:
-            record, missing, spaced = _record(year, native, entry, cls.track, rule, listing, index, page)
+            record, missing, cleaned = _record(year, native, entry, cls.track, rule, listing, index, page)
         except (ValidationError, ValueError) as e:
             report.skipped["invalid"] += 1
             log.debug(  # counted in the listing's one `listing_attention` WARNING
@@ -266,7 +269,7 @@ def _mine_listing(
             )
             continue
         records.append(record)
-        report.count(record, missing, spaced)
+        report.count(record, missing, cleaned.spaced, cleaned.pdf_codes)
         if time.monotonic() - last >= PROGRESS_SECONDS:
             last = time.monotonic()
             log.info("neurips_listing_progress", extra={"year": year, "done": n, "of": len(entries)})
@@ -276,9 +279,9 @@ def _mine_listing(
 
 def _record(
     year: int, native: str, entry: Entry, track: str, rule: str, listing: str, index: Page, page: Page
-) -> tuple[PaperRecord, str | None, int]:  # fmt: skip
-    """The record, why it has no abstract when it has none (`common.MISSING`), and how many control characters
-    its abstract lost (`common.clean_abstract`; the listing counts them, TASK-199)."""
+) -> tuple[PaperRecord, str | None, Cleaned]:  # fmt: skip
+    """The record, why it has no abstract when it has none (`common.missing_reason`), and what cleaning its abstract
+    changed (`common.clean_abstract`: control characters, `(cid:N)` codes; the listing counts them)."""
     title, replaced = title_text(entry.title)  # a control character becomes a space (decision-036)
     claims: list[Claim] = []
 
@@ -300,12 +303,14 @@ def _record(
 
     parsed = parse_abstract_page(page.text, page.url) if page.ok else None
     matches = parsed is not None and titles_match(title, parsed.title)
-    abstract, spaced = clean_abstract(parsed.abstract) if parsed is not None and matches else (None, 0)
+    cleaned = clean_abstract(parsed.abstract) if parsed is not None and matches else Cleaned(None)
+    abstract = cleaned.text
     missing = missing_reason(page.ok, matches, abstract)
     if abstract is not None:
-        evidence = controls_evidence(
-            "p.paper-abstract (citation_title matches the listing)", spaced
-        )  # decision-044
+        evidence = pdf_codes_evidence(
+            controls_evidence("p.paper-abstract (citation_title matches the listing)", cleaned.spaced),
+            cleaned.pdf_codes,
+        )  # decision-044, decision-047
         claim("abstract", abstract, evidence, page.fetched_at)
     if parsed is not None and matches and parsed.authors:
         claim("authors", parsed.authors, "citation_author", page.fetched_at)
@@ -316,7 +321,7 @@ def _record(
             claim("urls.pdf", parsed.pdf, "citation_pdf_url", page.fetched_at)
         if doi := _doi(parsed.doi):
             claim("urls.doi", doi, "citation_doi", page.fetched_at)
-    return record_from_claims(f"op:neurips:{year}:{native}", claims), missing, spaced
+    return record_from_claims(f"op:neurips:{year}:{native}", claims), missing, cleaned
 
 
 def _log_done(report: ListingReport, started: float) -> None:
@@ -324,6 +329,7 @@ def _log_done(report: ListingReport, started: float) -> None:
         "year": report.year, "listing": report.listing, "listed": report.listed, "stated": report.stated,
         "records": report.records, "abstract_missing": report.abstract_missing,
         "abstract_control_characters": report.abstract_control_characters,
+        "abstract_pdf_codes": report.abstract_pdf_codes, "abstract_short": report.abstract_short,
         "unknown_track": report.unknown_track, "ms": elapsed_ms(started, time.monotonic),
     }  # fmt: skip
     log.info("neurips_listing_mined", extra=fields)

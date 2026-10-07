@@ -254,8 +254,10 @@ The UI toggles edit these same clauses; they are not a separate state.
   its own exclusion bucket (03 §Exclusion accounting). Those buckets are complete for ICLR, which
   publishes every submission, and a floor for NeurIPS and ICML, which publish rejected papers only when
   the authors opt in (01 §Status handling). `status:(accepted OR rejected)` or removing the default brings
-  them into the result set. The index covers every year from 2013 (decision-013); a year range is always
-  a `year:` clause the user writes, never a default.
+  them into the result set. The index covers each venue from its first year a source holds: NeurIPS from 1987, ICML from 1988,
+  ICLR from 2013 (decision-047, which superseded decision-013's 2013 floor); a year range is always a `year:`
+  clause the user writes, never a default. Before 2013 only NeurIPS and ICML are indexed, so a search without
+  a `year:` clause compares venues over different year spans.
 
 - **A default is recognised by its content, not by where it came from.** A top-level AND conjunct that
   exactly equals a default clause is treated as the automated default, whether the parser inserted it,

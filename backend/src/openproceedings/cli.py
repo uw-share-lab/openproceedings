@@ -110,7 +110,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
     ingest = sub.add_parser(
-        "ingest", help="fetch sources into the cache: ris | iclr | neurips | pmlr | openreview (spec 01)"
+        "ingest",
+        help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | openreview (spec 01)",
     )
     sources = ingest.add_subparsers(dest="source", metavar="<source>", required=True)
     ris = sources.add_parser(
@@ -141,8 +142,16 @@ def build_parser() -> argparse.ArgumentParser:
         ("iclr", "ICLR 2014-2016 accepted-paper archive pages (iclr.cc)"),
         ("neurips", "NeurIPS proceedings years (proceedings.neurips.cc; 2021 adds the D&B host)"),
         ("pmlr", "ICML years from PMLR (the volume in ingest/pmlr_volumes.toml)"),
-    ):
-        crawl = sources.add_parser(name, help=f"crawl {about} into <data-dir>/cache/{name}")
+        ("dblp", "ICML 1988-2012 from the pinned dblp release (ingest/dblp_icml.toml; downloaded once from "
+                 "drops.dagstuhl.de, never dblp.org) with the abstracts the official ICML pages in "
+                 "ingest/icml_sites.toml give"),
+    ):  # fmt: skip
+        dblp = name == "dblp"  # its own cache layout and flags' meaning (decision-047, spec 01 §CLI)
+        crawl = sources.add_parser(
+            name,
+            help=f"read {about} into <data-dir>/cache/dblp and <data-dir>/cache/icml_sites" if dblp
+            else f"crawl {about} into <data-dir>/cache/{name}",
+        )  # fmt: skip
         crawl.add_argument(
             "--year", dest="years", action="append", required=True, type=_years, metavar="YYYY[-YYYY]",
             help="a year or an inclusive range; repeatable",
@@ -150,18 +159,31 @@ def build_parser() -> argparse.ArgumentParser:
         crawl.add_argument(
             "--dry-run",
             action="store_true",
-            help="read only the index pages; report what a crawl would fetch",
+            help="fetch nothing; say whether the release and its extract are on disk and how many ICML pages a "
+            "run would fetch"
+            if dblp
+            else "read only the index pages; report what a crawl would fetch",
         )
-        crawl.add_argument("--offline", action="store_true", help="use the page cache only (no network)")
         crawl.add_argument(
-            "--refresh", action="store_true", help="re-fetch the index pages (a newly published year)"
+            "--offline",
+            action="store_true",
+            help="use the release, extract and ICML pages already on disk (no network)" if dblp
+            else "use the page cache only (no network)",
+        )  # fmt: skip
+        crawl.add_argument(
+            "--refresh",
+            action="store_true",
+            help="re-fetch the year's ICML pages"
+            if dblp
+            else "re-fetch the index pages (a newly published year)",
         )
         crawl.add_argument(
             "--delay",
             type=float,
             default=1.0,
-            help=f"seconds between requests (default 1, at least {MIN_DELAY})",
-        )
+            help="seconds between requests to the ICML pages (never under 3: the Internet Archive's pace)" if dblp
+            else f"seconds between requests (default 1, at least {MIN_DELAY})",
+        )  # fmt: skip
         crawl.set_defaults(run=_ingest_crawl)
     for name, task in PLANNED_SOURCES.items():
         _stub(sources.add_parser(name, help=_stub_status(task)), f"ingest {name}", task)
@@ -529,7 +551,7 @@ def _ingest_openreview(ns: argparse.Namespace) -> int:
 
 
 def _ingest_crawl(ns: argparse.Namespace) -> int:
-    from openproceedings.ingest.sources.crawl import ingest_iclr, ingest_neurips, ingest_pmlr
+    from openproceedings.ingest.sources.crawl import ingest_dblp, ingest_iclr, ingest_neurips, ingest_pmlr
 
     if not math.isfinite(ns.delay):
         raise _usage("--delay must be finite")
@@ -537,7 +559,9 @@ def _ingest_crawl(ns: argparse.Namespace) -> int:
         raise _usage(f"--delay must be at least {MIN_DELAY} seconds (politeness)")
     if ns.dry_run and ns.offline:
         raise _usage("--dry-run and --offline don't combine: a dry run reads the live index pages")
-    run = {"iclr": ingest_iclr, "neurips": ingest_neurips, "pmlr": ingest_pmlr}[ns.source]
+    run = {"iclr": ingest_iclr, "neurips": ingest_neurips, "pmlr": ingest_pmlr, "dblp": ingest_dblp}[
+        ns.source
+    ]
     years = sorted({y for chunk in ns.years for y in chunk})
     _print(
         run(years, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run, refresh=ns.refresh,
