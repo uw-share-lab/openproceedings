@@ -83,25 +83,7 @@ def sources_manifest(reports: Iterable[Report]) -> dict[str, Any]:
     return out
 
 
-# --- progress ---------------------------------------------------------------------------------------------
-
-PROGRESS_SECONDS = 30.0  # logging-standards: a long crawl's periodic summary, at most this often
-
-
-class Heartbeat:
-    """When a long crawl's next progress line is due: at most one every `every` seconds on a monotonic clock
-    (the HTTP client's, so a test's fake clock drives it), never per item (TASK-116)."""
-
-    def __init__(self, monotonic: Callable[[], float], every: float = PROGRESS_SECONDS) -> None:
-        self._monotonic, self._every = monotonic, every
-        self._last = monotonic()
-
-    def due(self) -> bool:
-        now = self._monotonic()
-        if now - self._last < self._every:
-            return False
-        self._last = now
-        return True
+# --- progress: `Heartbeat` and `PROGRESS_SECONDS` live in `http.py` (its file download uses them too) ---------
 
 
 # --- crawl markers and the one replay ----------------------------------------------------------------------

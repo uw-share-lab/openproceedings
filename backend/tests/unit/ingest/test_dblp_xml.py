@@ -242,3 +242,42 @@ def test_a_retry_after_past_the_bound_aborts_rather_than_waits(tmp_path: Path) -
     with pytest.raises(FetchError, match="asked to wait") as e:
         fetch_file(PIN, tmp_path / "f.xml.gz", Slow(), hosts=HOSTS, clock=FakeClock())
     assert e.value.reason == "wait_too_long"
+
+
+def test_a_download_says_when_it_starts_how_far_it_has_got_and_why_a_copy_was_not_used(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    import logging
+
+    class Ticking(FakeClock):  # every read of the monotonic clock is 31 s on: each progress check is due
+        def monotonic(self) -> float:
+            self.t += 31
+            return self.t
+
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources.http"):
+        fetch_file(PIN, tmp_path / "f.xml.gz", Stream((200, BYTES)), hosts=HOSTS, clock=Ticking())
+    events = [r.getMessage() for r in caplog.records]
+    assert events[0] == "pinned_file_fetch_started" and "pinned_file_progress" in events
+    assert events[-1] == "pinned_file_fetched"
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources.http"):
+        fetch_file(PIN, tmp_path / "f.xml.gz", None, hosts=HOSTS)  # a verified copy: hashed, and said so
+    assert [r.getMessage() for r in caplog.records] == ["pinned_file_verify_started", "pinned_file_verified"]
+    side = tmp_path / "f.xml.gz.json"
+    meta = json.loads(side.read_text())
+    for change, reason in (
+        (lambda: side.write_text(json.dumps(meta | {"sha256": "0" * 64})), "sidecar_mismatch"),
+        (lambda: (tmp_path / "f.xml.gz").write_bytes(BYTES + b"!"), "size_mismatch"),
+        (lambda: (tmp_path / "f.xml.gz").write_bytes(b"y" * len(BYTES)), "hash_mismatch"),
+    ):
+        side.write_text(json.dumps(meta))
+        (tmp_path / "f.xml.gz").write_bytes(BYTES)
+        change()
+        caplog.clear()
+        with (
+            caplog.at_level(logging.WARNING, logger="openproceedings.ingest.sources.http"),
+            pytest.raises(CacheMiss),
+        ):
+            fetch_file(PIN, tmp_path / "f.xml.gz", None, hosts=HOSTS)
+        [mismatch] = [r for r in caplog.records if r.getMessage() == "pinned_file_mismatch"]
+        assert mismatch.reason == reason  # type: ignore[attr-defined]

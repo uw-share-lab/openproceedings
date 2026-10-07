@@ -186,7 +186,7 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   `spaced` set `note_record` fills, never by reading the evidence back; keywords keep theirs.
 - Logs (TASK-116; logging-standards skill §Crawl lines), the same for v1 and v2: `openreview_crawl_started`
   (`api`, `venue`, `year`, `offline`, `page_size`), `openreview_crawl_progress` at most every 30 s of the
-  client's monotonic clock (`common.Heartbeat`; notes read, `forums` on v1, imported, skipped, `requests`,
+  client's monotonic clock (`http.Heartbeat`; notes read, `forums` on v1, imported, skipped, `requests`,
   `cached`), `openreview_crawl_finished`, and at most one `openreview_crawl_attention` WARNING with the
   anomaly counts (v1 and v2 both count `duplicate`, v1 also `duplicate_submission`; both report `cache_incompatible`, the pre-projection
   entries the client purged and re-fetched). Per-note anomalies (`openreview_unknown_track`,

@@ -603,6 +603,29 @@ class Fetcher(HttpClient[Page]):
         raise HTTPRefused(url, resp.status)
 
 
+# --- progress lines -----------------------------------------------------------------------------------------
+
+PROGRESS_SECONDS = (
+    30.0  # logging-standards: a long crawl's or download's periodic summary, at most this often
+)
+
+
+class Heartbeat:
+    """When a long crawl's next progress line is due: at most one every `every` seconds on a monotonic clock
+    (the HTTP client's, so a test's fake clock drives it), never per item (TASK-116)."""
+
+    def __init__(self, monotonic: Callable[[], float], every: float = PROGRESS_SECONDS) -> None:
+        self._monotonic, self._every = monotonic, every
+        self._last = monotonic()
+
+    def due(self) -> bool:
+        now = self._monotonic()
+        if now - self._last < self._every:
+            return False
+        self._last = now
+        return True
+
+
 # --- a pinned file (the dblp release, TASK-205) ----------------------------------------------------------------
 
 
@@ -705,7 +728,10 @@ def fetch_file(
             reason = "size_mismatch"
         else:
             log.info("pinned_file_verify_started", extra={"file": path.name, "bytes": pinned.size})
+            hashed = time.monotonic()
             reason = "hash_mismatch" if verify(path) != pinned.sha256 else ""
+            log.info("pinned_file_verified", extra={"file": path.name, "ok": not reason,
+                                                    "ms": elapsed_ms(hashed, time.monotonic)})  # fmt: skip
         if not reason:
             return FileEntry(path, fetched.astimezone(UTC), cached=True)
         log.warning("pinned_file_mismatch", extra={"file": path.name, "reason": reason})
@@ -758,21 +784,15 @@ def fetch_file(
     raise RetriesExhausted(f"{pinned.url}: gave up after {attempts} attempts; re-run later")
 
 
-PROGRESS_SECONDS = (
-    30.0  # a long download: one progress line at most this often (logging-standards §Crawl lines)
-)
-
-
 def _stream_to(tmp: Path, chunks: Iterable[bytes], limit: int, clock: Clock, name: str) -> tuple[str, int]:
     """Write `chunks` to `tmp`, returning (sha256, size); more than `limit` bytes is refused at once
-    (`pin_mismatch`). A `pinned_file_progress` line at most every `PROGRESS_SECONDS` of `clock`."""
+    (`pin_mismatch`). A `pinned_file_progress` line when a `Heartbeat` on `clock` is due."""
     digest, size = hashlib.sha256(), 0
-    last = clock.monotonic()
+    beat = Heartbeat(clock.monotonic)
     with tmp.open("wb") as fh:
         for block in chunks:
             size += len(block)
-            if clock.monotonic() - last >= PROGRESS_SECONDS:
-                last = clock.monotonic()
+            if beat.due():
                 log.info("pinned_file_progress", extra={"file": name, "bytes": size, "of": limit})
             if size > limit:  # not the pinned file: refused at once, never fetched again in full
                 fh.close()

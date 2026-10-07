@@ -188,6 +188,42 @@ def test_a_year_is_read_through_the_cache_and_a_changed_page_stops_it(tmp_path: 
     assert e.value.reason == "site_count_mismatch"
 
 
+def test_a_years_pages_log_a_start_progress_and_end_line(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """2007's 151 pages take over 7 minutes at 3 s apart: a start line, a progress line whenever the heartbeat on
+    the fetcher's clock is due, and the end line with the counts (never page text)."""
+    import logging
+
+    class Ticking:  # every read of the monotonic clock is 31 s on: each progress check is due
+        t = 0.0
+
+        def monotonic(self) -> float:
+            self.t += 31
+            return self.t
+
+        def sleep(self, seconds: float) -> None:
+            pass
+
+        def now(self) -> datetime:
+            return T
+
+    listing = "https://icml.cc/Conferences/2007/paperlist.html"
+    seed(tmp_path, "icml_sites", listing, LIST2007, at=T)
+    seed(tmp_path, "icml_sites", CAPTURE, PAPER2007, at=T)
+    f, _ = fetcher(tmp_path / "icml_sites", None, frozenset({"icml.cc", "web.archive.org"}))
+    f.clock = Ticking()
+    pages = {2007: (SitePage(2007, listing, listing, "icml2007_list", "utf-8", 2, T.date(), "t"),
+                    SitePage(2007, CAPTURE, CAPTURE.split("id_/", 1)[1], "icml2007_paper", "utf-8", 1, T.date(), "t"))}  # fmt: skip
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources.icml_sites"):
+        icml_sites.read_year(2007, f, pages=pages)
+    lines = {r.getMessage(): r for r in caplog.records}
+    assert list(lines) == ["icml_site_year_started", "icml_site_year_progress", "icml_site_year_read"]
+    read = lines["icml_site_year_read"]
+    assert (read.pages, read.entries, read.unjoined, read.dropped) == (2, 1, 1, 0)  # type: ignore[attr-defined]
+    assert "Synthetic" not in caplog.text
+
+
 def test_2007s_halves_are_joined_by_paper_number_and_the_rest_counted(tmp_path: Path) -> None:
     listing = "https://icml.cc/Conferences/2007/paperlist.html"
     seed(tmp_path, "icml_sites", listing, LIST2007, at=T)
@@ -339,6 +375,7 @@ def test_an_ascii_page_is_never_taken_for_utf8_and_the_rows_charset_reaches_the_
 def test_a_page_listed_twice_or_a_capture_off_the_official_sites_path_is_refused() -> None:
     with pytest.raises(ValueError, match="listed twice"):
         icml_sites.load(row() + row())
+    assert not icml_sites.is_official("http://www.ecn.purdue.edu:80/ICML2001/../admissions/x.html")
     off_path = '"https://web.archive.org/web/20070101000000id_/http://oregonstate.edu:80/admissions/x.html"'
     with pytest.raises(ValueError, match="not an official ICML site"):
         icml_sites.load(row(url=off_path, official='"http://oregonstate.edu:80/admissions/x.html"'))
@@ -348,13 +385,26 @@ def test_a_page_listed_twice_or_a_capture_off_the_official_sites_path_is_refused
     )
 
 
-@pytest.mark.parametrize("parser", ["cyberchair", "icml2007_paper", "icml2008"])
+HOSTILE = {  # the review gate's probes: openings whose closing tag never comes, about 0.3 MB each
+    "cyberchair": "<table>" + "<th>x</th><td>" * 20_000,
+    "icml2007_paper": "<table>" + "<th>x</th><td>" * 20_000,
+    "icml2007_list": '<a name="1">' * 20_000,
+    "icml2008": '<a name="1"></a>' + "<h3>" * 20_000 + "<p><i>a</p>" * 10_000,
+    "icml2009": '<h3><a name="1"></a>paper ID: 1</p>' + "x" * 300_000,
+    "icml2010": '<a name="1"></a>' + "<h3>" * 20_000 + '<p class="abstracts">' * 20_000,
+    "icml2011": "<a name='1'><h3>t</h3>" + "Abstract: </span>" * 20_000,
+    "icml2012": '<div class="paper" id="paper-1">' + "<h2>" * 20_000 + "<strong>Abstract: </strong>" * 5_000,
+}
+
+
+@pytest.mark.parametrize("parser", sorted(HOSTILE))
 def test_a_hostile_page_is_parsed_in_linear_time(parser: str) -> None:
-    """The review gate's probe: unclosed `<th>`/`<td>` runs made a backtracking pattern take 87 s at 5.6 KB. The
-    tree parser and plain string searches read a 40 KB page of them at once."""
+    """Unclosed tags made a backtracking pattern take 87 s at 5.6 KB, and lazy `(.*?)` openings tens of seconds
+    at 0.4 MB. Every parser reads such a page at once."""
     import time
 
-    hostile = "<table>" + "<th>x</th><td>" * 3000 + '<a name="1"></a><p><i>a</p>' * 500
+    assert sorted(HOSTILE) == sorted(icml_sites.PARSERS)
+    hostile = HOSTILE[parser]
     started = time.monotonic()
     with contextlib.suppress(HTMLBudgetError):  # the shared tree's nesting bound: a refusal, fine, and fast
         icml_sites.PARSERS[parser](hostile, CAPTURE)

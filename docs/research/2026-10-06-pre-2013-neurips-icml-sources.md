@@ -76,7 +76,9 @@ hold one-page invited-talk abstracts (`Pereira94`, `Croft95`, `Heckerman95`, `Po
 `Vapnik96`). The table lists these 27 as `[[not_paper]]` rows: they are records of track `other`, which the default
 `track:main` leaves out and the exclusion banner counts. Found by the review gate (2026-10-07) by reading every
 title with "summary", "invited", "tutorial", "panel" or "(Abstract)" and every one-page entry; no other year has
-such entries. dblp's `conf/icml/2013` (283) onward is
+such entries. ICML 2010's seven invited application papers (IDs 901–907 on the official page, two of them
+two-page entries in dblp: `Apte10`, `FelzenszwalbGMR10`) are papers the conference listed with abstracts, so they
+stay `main`. dblp's `conf/icml/2013` (283) onward is
 PMLR's, never read, so dblp and PMLR never hold the same venue-year. 2009 has one paper with
 `publtype="withdrawn"`, counted and not a record.
 

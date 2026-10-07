@@ -23,6 +23,7 @@ and evidence naming the official URL and the capture.
 
 from __future__ import annotations
 
+import bisect
 import logging
 import re
 import tomllib
@@ -37,19 +38,18 @@ from urllib.parse import urlparse
 from openproceedings.ingest.record import Source, title_text
 from openproceedings.ingest.sources.common import CrawlError, clean_abstract
 from openproceedings.ingest.sources.html import node_text, parse, text_of
-from openproceedings.ingest.sources.http import Fetcher, FetchError, Page
+from openproceedings.ingest.sources.http import Fetcher, FetchError, Heartbeat, Page
 
 log = logging.getLogger(__name__)
 
 SOURCE: Source = "icml_site"
 CACHE_DIR = "icml_sites"  # <data>/cache/icml_sites
 ARCHIVE_HOST = "web.archive.org"
-# the official sites a capture may be of (the survey's: icml.cc, IMLS, and each year's own conference host); a
-# capture of anything else (ACM DL, arXiv, Scholar, an author's page) is refused when the table loads
 # The official sites a capture may be of: (host, path prefix), each named as that year's ICML site by an official
 # page (icml.cc's "past conferences" pages: Conferences/2007/pastconferences.html names the 2001 Purdue, 2003 HP
 # Labs and 2004 Banff sites, Conferences/2008/past_icmls.shtml.html the 2007 Oregon State one; the 2003 site's own
-# titlesAndAuthors.html links each paper to /conferences/icml2003/allAbstracts.html). A capture of anything else,
+# titlesAndAuthors.html links each paper to /conferences/icml2003/allAbstracts.html, and icml.cc names the Banff site
+# as /_banff04/icml/, whose pages the archive holds at /banff04/icml/, their stylesheet's own path). A capture of anything else,
 # another page of those hosts included, is refused when the table loads: never ACM DL, arXiv, Scholar or an author.
 OFFICIAL_SITES: tuple[tuple[str, str], ...] = (
     ("icml.cc", "/"), ("www.icml.cc", "/"), ("machinelearning.org", "/proceedings/"),
@@ -59,7 +59,6 @@ OFFICIAL_SITES: tuple[tuple[str, str], ...] = (
     ("oregonstate.edu", "/conferences/icml2007/"),
 )  # fmt: skip
 MIN_INTERVAL = 3.0  # seconds between requests: the Internet Archive's polite pace, kept for icml.cc too
-PROGRESS_SECONDS = 30.0  # a year's pages: one progress line at most this often (2007 has 151, at 3 s each)
 _CAPTURE = re.compile(r"https://web\.archive\.org/web/([0-9]{14})id_/(https?://\S+)")
 _S = re.S | re.I
 
@@ -129,15 +128,29 @@ class SiteYear:
 Parser = Callable[[str, str], list[Entry]]
 
 
-def _text(m: re.Match[str] | None, group: int = 1) -> str | None:
-    return text_of(m.group(group)) if m is not None else None
-
-
 def _segments(text: str, start: str) -> list[tuple[str, str]]:
     """(the start pattern's first group, the text up to the next start) for each match of `start`."""
     marks = list(re.finditer(start, text, _S))
     return [(m.group(1), text[m.end() : nxt.start() if nxt else len(text)])
             for m, nxt in zip(marks, [*marks[1:], None], strict=True)]  # fmt: skip
+
+
+# Every parser below finds an opening mark (a pattern that can't run across tags) and then the nearest closing
+# string with plain searches, never a lazy `(.*?)` between the two: on a page that lost its closing tags such a
+# pattern backtracks from every opening and took minutes on a few hundred kB (the review gate's probe).
+
+
+def _span(seg: str, opener: str, *ends: str, to_end: bool = False) -> str | None:
+    """The text of `seg` after the first match of `opener` up to the nearest of `ends` (case-blind), or to the end
+    of `seg` when none is there and `to_end`; None when `opener` isn't there, or no end is and not `to_end`."""
+    m = re.search(opener, seg, re.I)
+    if m is None:
+        return None
+    lower = seg.lower()
+    found = [i for e in ends if (i := lower.find(e.lower(), m.end())) >= 0]
+    if not found and not to_end:
+        return None
+    return text_of(seg[m.end() : min(found) if found else len(seg)])
 
 
 def icml2012(text: str, url: str) -> list[Entry]:
@@ -146,27 +159,25 @@ def icml2012(text: str, url: str) -> list[Entry]:
     out = []
     for key, block in _segments(text, r'<div class="paper" id="paper-([0-9]+)">'):
         block = block.split("</div>", 1)[0]
-        kind = _text(re.search(r'<p class="type">(.*?)(?=<p\b|$)', block, _S)) or ""
+        kind = _span(block, r'<p class="type">', "<p", to_end=True) or ""
         if "not for proceedings" in kind.lower():
             continue
-        out.append(Entry(key, _text(re.search(r"<h2>(.*?)</h2>", block, _S)),
-                         _text(re.search(r"<strong>\s*Abstract:\s*</strong>(.*?)(?=<p\b|$)", block, _S))))  # fmt: skip
+        out.append(Entry(key, _span(block, r"<h2>", "</h2>"),
+                         _span(block, r"<strong>\s{0,9}Abstract:\s{0,9}</strong>", "<p", to_end=True)))  # fmt: skip
     return out
 
 
 def icml2011(text: str, url: str) -> list[Entry]:
     """icml.cc/Conferences/2011/papers.php.html: `<a name='N'><h3>` title, `Abstract:</span>` text `</p>`. The
     Invited Cross-Conference Track after `<a name="cross">` (no abstracts; other venues' papers) is left out."""
-    main = re.split(r'<a name="cross">', text, maxsplit=1, flags=_S)[0]
-    return [Entry(key, _text(re.search(r"<h3[^>]*>(.*?)</h3>", seg, _S)),
-                  _text(re.search(r"Abstract:\s*</span>(.*?)</p>", seg, _S)))
+    main = text.split('<a name="cross">', 1)[0]
+    return [Entry(key, _span(seg, r"<h3\b[^<>]*>", "</h3>"), _span(seg, r"Abstract:\s{0,9}</span>", "</p>"))
             for key, seg in _segments(main, r"<a name='([0-9]+)'>(?=\s*<h3)")]  # fmt: skip
 
 
 def icml2010(text: str, url: str) -> list[Entry]:
     """icml.cc/Conferences/2010/abstracts.html: `<a name="N">`, `<h3>` title, `<p class="abstracts">`."""
-    return [Entry(key, _text(re.search(r"<h3>(.*?)</h3>", seg, _S)),
-                  _text(re.search(r'<p class="abstracts">(.*?)</p>', seg, _S)))
+    return [Entry(key, _span(seg, r"<h3>", "</h3>"), _span(seg, r'<p class="abstracts">', "</p>"))
             for key, seg in _segments(text, r'<a name="([0-9]+)"></a>')]  # fmt: skip
 
 
@@ -174,25 +185,25 @@ def icml2009(text: str, url: str) -> list[Entry]:
     """icml.cc/Conferences/2009/abstracts.html: `<h3><a name="N"></a>` title `</h3>`, authors, `paper ID: N`,
     then the abstract up to the `[Full paper]` links. A heading with no `paper ID` (the sidebar's "For
     Participants", which reuses `name="10"`) is no paper."""
-    return [Entry(key, _text(re.search(r"^(.*?)</h3>", seg, _S)),
-                  _text(re.search(r"paper ID:\s*[0-9]+\s*</p>(.*?)(?:\[<a\b|<hr|$)", seg, _S)))
+    return [Entry(key, _span(seg, r"^", "</h3>"),
+                  _span(seg, r"paper ID:\s{0,9}[0-9]{1,9}\s{0,9}</p>", "[<a", "<hr", to_end=True))
             for key, seg in _segments(text, r'<h3>\s*<a name="([0-9]+)"></a>')
-            if re.search(r"paper ID:\s*[0-9]+", seg, _S)]  # fmt: skip
+            if re.search(r"paper ID:\s{0,9}[0-9]", seg, re.I)]  # fmt: skip
 
 
 def _between_authors_and_links(seg: str) -> str | None:
     """2008's abstract: the text after the authors' `<p><i>…</p>` and before the `<p>[Full paper]` links, found with
-    plain string searches (a backtracking pattern over a changed page could take minutes)."""
-    authors = re.search(r"<p>\s*<i>", seg, re.I)
+    plain string searches."""
+    authors = re.search(r"<p>\s{0,9}<i>", seg, re.I)
     close = seg.find("</p>", authors.end()) if authors else -1
-    links = re.compile(r"<p>\s*\[<a\b", re.I).search(seg, close) if close >= 0 else None
+    links = re.compile(r"<p>\s{0,9}\[<a\b", re.I).search(seg, close) if close >= 0 else None
     return text_of(seg[close + 4 : links.start()]) if links else None
 
 
 def icml2008(text: str, url: str) -> list[Entry]:
     """icml.cc/Conferences/2008/abstracts.shtml.html: `<a name="N">`, `paper ID`, `<h3>` title, `<p><i>` authors
     `</p>`, then the abstract up to the `<p>[Full paper]` links."""
-    return [Entry(key, _text(re.search(r"<h3>(.*?)</h3>", seg, _S)), _between_authors_and_links(seg))
+    return [Entry(key, _span(seg, r"<h3>", "</h3>"), _between_authors_and_links(seg))
             for key, seg in _segments(text, r'<a name="([0-9]+)"></a>')]  # fmt: skip
 
 
@@ -214,9 +225,16 @@ def cyberchair(text: str, url: str) -> list[Entry]:
 
 
 def icml2007_list(text: str, url: str) -> list[Entry]:
-    """icml.cc/Conferences/2007/paperlist.html: each paper's number and title, `<a name="N"> title</a>`."""
-    return [Entry(m.group(1), text_of(m.group(2)), None)
-            for m in re.finditer(r'<a name="([0-9]+)">(.*?)</a>', text, _S)]  # fmt: skip
+    """icml.cc/Conferences/2007/paperlist.html: each paper's number and title, `<a name="N"> title</a>`. Every
+    `</a>` is found once and each anchor takes the next one (a binary search), so the page is read in linear time
+    whatever it holds."""
+    closes = [m.start() for m in re.finditer("</a>", text, re.I)]
+    out = []
+    for m in re.finditer(r'<a name="([0-9]{1,9})">', text, re.I):
+        i = bisect.bisect_left(closes, m.end())
+        if i < len(closes):
+            out.append(Entry(m.group(1), text_of(text[m.end() : closes[i]]), None))
+    return out
 
 
 def icml2007_paper(text: str, url: str) -> list[Entry]:
@@ -278,6 +296,8 @@ def is_official(url: str) -> bool:
     """Whether `url` is on one of `OFFICIAL_SITES` (host and path prefix; the port the archive keeps is ignored)."""
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
+    if ".." in parsed.path.split("/"):  # `/ICML2001/../x` is not under /ICML2001/
+        return False
     return any(host == h and parsed.path.startswith(prefix) for h, prefix in OFFICIAL_SITES)
 
 
@@ -325,14 +345,14 @@ def read_year(
     if not rows:
         return None
     out = SiteYear()
-    started = last = fetcher.clock.monotonic()
+    started = fetcher.clock.monotonic()
+    beat = Heartbeat(fetcher.clock.monotonic)  # 2007 has 151 pages, 3 s apart
     log.info("icml_site_year_started", extra={"year": year, "pages": len(rows)})
     titles: dict[str, str] = {}
     halves: list[tuple[str, str, SitePage, Page]] = []  # (number, abstract text, page, fetched)
     complete: list[tuple[str, str, SitePage, Page]] = []  # (title, abstract text, page, fetched)
     for n, page in enumerate(rows, 1):
-        if fetcher.clock.monotonic() - last >= PROGRESS_SECONDS:
-            last = fetcher.clock.monotonic()
+        if beat.due():
             log.info("icml_site_year_progress", extra={"year": year, "done": n - 1, "of": len(rows)})
         try:
             fetched = fetcher.get(page.url, refresh=refresh, charset=page.charset)

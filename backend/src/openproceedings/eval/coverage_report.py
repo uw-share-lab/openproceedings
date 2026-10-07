@@ -465,8 +465,9 @@ def _own_count_note(cov: Mapping[str, Any], official: OfficialTable) -> str:
     )  # fmt: skip
     if not own:
         return ""
+    cells, verb = ("cell", "compares") if own == 1 else ("cells", "compare")
     return (
-        f" {own} gated cells compare the crawl with its listing page's own stated count (`{OWN_COUNT}` in "
+        f" {own} gated {cells} {verb} the crawl with its listing page's own stated count (`{OWN_COUNT}` in "
         "coverage-sources.md), not with an independent statement."
     )
 

@@ -702,7 +702,7 @@
           "abstract_withheld": 0,
           "sources": ["ris"],
           "official_accepted": 1428,
-          "official_counts": "papers in the NeurIPS 2019 proceedings index (every accepted paper)",
+          "official_counts": "papers in the NeurIPS 2019 proceedings index (every accepted paper; the page's own count)",
           "official_citation": "https://proceedings.neurips.cc/paper_files/paper/2019",
           "official_accessed": "2026-09-27",
           "delta": -1427,

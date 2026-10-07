@@ -25,7 +25,7 @@ One venue-year at a time (ICLR 2024+, NeurIPS 2023+, ICML 2023+; earlier years a
    `presentation_unmapped`, in the report and the crawl's lines.
 
 **Logs** (logging-standards; TASK-116): `openreview_crawl_started`, then `openreview_crawl_progress` at most every
-30 s on the client's monotonic clock (`common.Heartbeat`), then `openreview_crawl_finished` (all INFO, with `api`,
+30 s on the client's monotonic clock (`http.Heartbeat`), then `openreview_crawl_finished` (all INFO, with `api`,
 `venue`, `year`, the counts so far, `requests` and `cached`), and at most one `openreview_crawl_attention`
 WARNING with the anomaly counts (including `cache_incompatible`: pre-projection cache entries purged and
 re-fetched, each a DEBUG `openreview_cache_incompatible` line). Per-note anomalies are DEBUG. API v1 (`openreview_v1`) logs the same lines.
@@ -65,8 +65,8 @@ from openproceedings.ingest.record import (
     title_evidence,
     title_text,
 )
-from openproceedings.ingest.sources.common import CrawlError, Crawls, Heartbeat, Report
-from openproceedings.ingest.sources.http import CacheMiss
+from openproceedings.ingest.sources.common import CrawlError, Crawls, Report
+from openproceedings.ingest.sources.http import CacheMiss, Heartbeat
 from openproceedings.ingest.sources.openreview_client import OpenReviewClient
 from openproceedings.logs import elapsed_ms
 
@@ -309,7 +309,7 @@ def note_record(
 
 class Progress:
     """One crawl's start line and its heartbeats (INFO, both API versions): `tick()`, called before each note,
-    logs `openreview_crawl_progress` when one is due (`common.Heartbeat`, on the client's monotonic clock), with
+    logs `openreview_crawl_progress` when one is due (`http.Heartbeat`, on the client's monotonic clock), with
     the venue-year, the API, `counts()` (what has been processed so far), `requests` and `cached`."""
 
     def __init__(self, logger: logging.Logger, client: OpenReviewClient, api: str, venue: str, year: int,

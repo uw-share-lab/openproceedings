@@ -66,7 +66,7 @@ from openproceedings.ingest.sources.common import (
     record_from_claims,
 )
 from openproceedings.ingest.sources.dblp_xml import DblpEntry, read_stream
-from openproceedings.ingest.sources.http import FileEntry, StreamTransport, fetch_file
+from openproceedings.ingest.sources.http import FileEntry, Heartbeat, StreamTransport, fetch_file
 from openproceedings.ingest.sources.icml_sites import SOURCE as SITE_SOURCE
 from openproceedings.ingest.sources.icml_sites import SiteAbstract, SiteYear
 from openproceedings.logs import elapsed_ms
@@ -74,7 +74,6 @@ from openproceedings.logs import elapsed_ms
 log = logging.getLogger(__name__)
 
 SOURCE: Source = "dblp"
-PROGRESS_SECONDS = 30.0  # reading the release: one progress line at most this often
 CACHE_DIR = "dblp"  # <data>/cache/dblp
 HOSTS = frozenset({"drops.dagstuhl.de"})
 PREFIX = "conf/icml/"
@@ -138,15 +137,18 @@ def prepare(cache: Path, stream: StreamTransport | None, table: Table = TABLE) -
     return extract
 
 
-def write_extract(cache: Path, release: FileEntry, dtd: FileEntry, table: Table = TABLE) -> Extract:
-    """Read the release's `conf/icml/` records (streaming) into the extract file, atomically."""
-    started = last = time.monotonic()
+def write_extract(
+    cache: Path, release: FileEntry, dtd: FileEntry, table: Table = TABLE,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> Extract:  # fmt: skip
+    """Read the release's `conf/icml/` records (streaming) into the extract file, atomically; a
+    `dblp_extract_progress` line when a `Heartbeat` on `monotonic` is due."""
+    started = time.monotonic()
+    beat = Heartbeat(monotonic)
     log.info("dblp_extract_started", extra={"doi": table.release.doi, "bytes": table.release.file.size})
 
     def progress(lines: int, kept: int) -> None:
-        nonlocal last
-        if time.monotonic() - last >= PROGRESS_SECONDS:
-            last = time.monotonic()
+        if beat.due():
             log.info(
                 "dblp_extract_progress", extra={"doi": table.release.doi, "lines": lines, "records": kept}
             )

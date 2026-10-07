@@ -325,6 +325,22 @@ describe("the years indexed per venue (copy deck CV-7, decision-047)", () => {
     ]);
   });
 
+  it("suggests no year: clause when the venues' spans share no year", () => {
+    const c = copy();
+    const base = c.venue_years[0]!;
+    c.venue_years = [
+      ...[2013, 2014, 2015].map((year) => ({ ...base, venue: "ICLR" as const, year })),
+      ...[1988, 1989, 1990].map((year) => ({ ...base, venue: "ICML" as const, year })),
+    ];
+    render(<CoverageReport coverage={c} />);
+    const line = screen.getByText(/^Years indexed:/);
+    expect(line.textContent).toBe(
+      "Years indexed: ICLR 2013–2015 · ICML 1988–1990. The venues start in different years, so a search " +
+        "without a year: filter compares them over different years.",
+    );
+    expect(line.querySelectorAll("code")).toHaveLength(1);
+  });
+
   it("says nothing about different spans when every venue starts in the same year", () => {
     const c = copy();
     const base = c.venue_years[0]!;

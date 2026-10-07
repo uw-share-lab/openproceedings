@@ -871,5 +871,8 @@ def test_the_scope_lines_say_each_venues_years_and_what_the_dblp_years_rest_on()
     own = OfficialCount(90, "papers in the NeurIPS 1987 proceedings index (every accepted paper; the page's own count)",
                         "https://proceedings.neurips.cc/paper_files/paper/1987", date(2026, 10, 6))  # fmt: skip
     note = _own_count_note(cov, {("NeurIPS", 1987, "main"): own})
-    assert note.startswith(" 1 gated cells compare the crawl with its listing page's own stated count")
+    assert note.startswith(" 1 gated cell compares the crawl with its listing page's own stated count")
+    two = _own_count_note({"venue_years": [*cov["venue_years"], vy("NeurIPS", 1988)]},
+                          {("NeurIPS", 1987, "main"): own, ("NeurIPS", 1988, "main"): own})  # fmt: skip
+    assert two.startswith(" 2 gated cells compare")
     assert _own_count_note(cov, {}) == ""

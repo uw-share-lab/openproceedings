@@ -112,6 +112,8 @@ def test_the_shipped_table_pins_one_release_and_every_year_1988_to_2012() -> Non
         (lambda t: t.replace("drops.dagstuhl.de/storage/artifacts/dblp/xml/2026", "dblp.org/xml/release"),
          "dblp.org forbids crawling"),
         (lambda t: t + '\n[[excluded]]\nkey = "conf/icml/1990"\nyear = 1990\nreason = "x"\n', "both excluded and"),
+        (lambda t: t.replace("[[excluded]]\nkey = \"conf/icml/2006sna\"\nyear = 2007", "[[excluded]]\nkey = \"conf/icml/2006sna\"\nyear = 2013"),
+         "a conf/icml key, a year and a reason"),
         (lambda t: t.replace('source = "test"', 'source = "test"\nextra = 1', 1), "unknown columns"),
     ],
 )  # fmt: skip
@@ -395,3 +397,32 @@ def test_a_not_paper_the_release_does_not_hold_or_a_changed_count_stops_the_inge
     with pytest.raises(CrawlError, match=r"lists 1 papers .* the table verified 2") as e:
         dblp.check_extract(extract, dblp_table.load(table_text(papers=2)))
     assert e.value.reason == "table_mismatch"
+
+
+def test_a_not_paper_row_naming_an_excluded_key_is_refused() -> None:
+    extra = NOT_PAPER.replace("conf/icml/Synthetic90", "conf/icml/2006sna")
+    with pytest.raises(ValueError, match="listed once"):
+        dblp_table.load(table_text(extra=extra))
+
+
+def test_reading_the_release_says_when_it_starts_and_how_far_it_has_got(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The 1.1 GB read takes about 75 s: a start line, a progress line whenever the heartbeat (on the given clock)
+    is due, and the written line."""
+    import logging
+
+    from openproceedings.ingest.sources import dblp_xml as reader
+
+    release, dtd = dblp.fetch_release(tmp_path, stream(), TABLE)
+    ticks = iter(range(0, 10_000, 31))  # every read of the clock is 31 s on: each progress check is due
+    old = reader.PROGRESS_LINES
+    reader.PROGRESS_LINES = 1  # report after every line
+    try:
+        with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources.dblp"):
+            dblp.write_extract(tmp_path, release, dtd, TABLE, monotonic=lambda: float(next(ticks)))
+    finally:
+        reader.PROGRESS_LINES = old
+    events = [r.getMessage() for r in caplog.records]
+    assert events[0] == "dblp_extract_started" and events[-1] == "dblp_extract_written"
+    assert "dblp_extract_progress" in events

@@ -109,8 +109,13 @@ dedup, crawl gap) before changing anything. Never adjust the official number to 
 ## Report shape
 As built (`op eval coverage`, `backend/src/openproceedings/eval/coverage_report.py`, TASK-054). Header: date,
 snapshot name and hash, `index_version`, the sha256 of `coverage-sources.md` and of `coverage-causes.toml` (or
-"none"), the command. Then the verdict
-line (`**M4 gate: PASS|FAIL** — n of m gated cells within ±1%; k gaps; e owner-accepted exceptions`). Then a table per venue: every cell,
+"none"), the command, and the scope lines a methods section cites (decision-047): each venue's indexed years, and,
+when the snapshot holds the dblp release, that ICML 1988–2012 rests on that pinned bibliography (its DOI) and the
+official ICML pages, how many of its records have an abstract, and that 1989/1991/1992 are exported under the ICML
+name. Then the verdict
+line (`**M4 gate: PASS|FAIL** — n of m gated cells within ±1%; k gaps; e owner-accepted exceptions`), ending with how
+many gated cells compare the crawl with its own listing's stated count (rows whose "what it counts" says "the page's
+own count"). Then a table per venue: every cell,
 indexed accepted, official, Δ, `delta_pct` to one decimal, gate (✓, ✗, `✗ gap` for a gated official cell with
 no records, `not gated` for another track, `no official count` for a main or D&B cell with none),
 missing abstracts, the venue-year's `unknown`-track and `unknown`-status counts, and **statuses indexed**
