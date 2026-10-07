@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import re
 import subprocess
 import sys
@@ -173,12 +174,17 @@ class Report:
         sys.exit(0)
 
 
-def age_days(timestamp: str) -> float:
-    """Days since an ISO 8601 timestamp (`2026-09-30T16:07:21.198Z`, `2026-09-30T16:07:21`, UTC when unzoned)."""
+def parse_time(timestamp: str) -> dt.datetime:
+    """An ISO 8601 timestamp (`2026-09-30T16:07:21.198Z`, `2026-09-30T16:07:21`), UTC when unzoned."""
     t = dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-    if t.tzinfo is None:
-        t = t.replace(tzinfo=dt.UTC)
-    return (dt.datetime.now(dt.UTC) - t).total_seconds() / 86400
+    return t if t.tzinfo else t.replace(tzinfo=dt.UTC)
+
+
+def age_days(timestamp: str) -> float:
+    """Days from `timestamp` to now (`OP_DEPENDABOT_NOW`, when set, is now: the case table's fixed clock)."""
+    fixed = os.environ.get("OP_DEPENDABOT_NOW")
+    now = parse_time(fixed) if fixed else dt.datetime.now(dt.UTC)
+    return (now - parse_time(timestamp)).total_seconds() / 86400
 
 
 def main_guard(fn: Callable[[], object]) -> NoReturn:

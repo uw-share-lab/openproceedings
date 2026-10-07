@@ -654,6 +654,72 @@
     "new": "            if value[:1] in (\"^\", \"~\", \"g\"):\n"
   },
   {
+    "label": "dependabot: npm: a moved entry not checked",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "        check_entry(rep, k, {**old[source], **({\"name\": name} if \"name\" in new[k] else {})}, new[k])\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: npm: workspace entries not compared",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "    for k in sorted((set(old) | set(new)) - deps):\n",
+    "new": "    for k in []:\n"
+  },
+  {
+    "label": "dependabot: npm: a missing publish time accepted",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "            rep.problem(f\"{label}: the registry gives no publish time for {new_v}\")",
+    "new": "            rep.ok(f\"{label}: the registry gives no publish time for {new_v}\")"
+  },
+  {
+    "label": "dependabot: uv: every same-version entry treated as a member",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "            member = not o[v].get(\"source\", {}).get(\"registry\")\n",
+    "new": "            member = True\n"
+  },
+  {
+    "label": "dependabot: uv: renamed dependency lists accepted",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "        rep.problem(f\"{path}: its dependency lists were added, removed or renamed\")",
+    "new": "        rep.ok(f\"{path}: its dependency lists were added, removed or renamed\")"
+  },
+  {
+    "label": "dependabot: uv: an added direct dependency accepted",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "            rep.problem(f\"{path} {where}: a dependency was added or removed\")",
+    "new": "            rep.ok(f\"{path} {where}: a dependency was added or removed\")"
+  },
+  {
+    "label": "dependabot: uv: old files with two publishers accepted",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "        rep.problem(f\"{label}: the files of {old_v} name {len(olds)} publishers; compare by hand\")\n        return\n",
+    "new": "        olds = {sorted(olds)[0]}\n"
+  },
+  {
+    "label": "dependabot: uv: cooldown on the oldest file",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "age_days(max(uploads))",
+    "new": "age_days(min(uploads))"
+  },
+  {
+    "label": "dependabot: actions: pin span swallows the rest of the line",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "(['\\\"]?)[ \\t]*(?:#[ \\t]*\\S+)?\")",
+    "new": "(['\\\"]?)[^\\n]*\")"
+  },
+  {
+    "label": "dependabot: prs: closed or non-dev PRs accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if pr[\"state\"] != \"OPEN\" or pr[\"baseRefName\"] != \"dev\":\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: any PR author accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if pr[\"author\"][\"login\"] not in (\"app/dependabot\", \"dependabot[bot]\"):\n",
+    "new": "    if False:\n"
+  },
+  {
     "label": "dependabot: restore_libc: stops after the first entry",
     "file": ".claude/scripts/dependabot/restore_libc.py",
     "old": "        repaired.append(key)\n",

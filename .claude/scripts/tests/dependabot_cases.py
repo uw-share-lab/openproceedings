@@ -11,7 +11,6 @@ status and one line of its output. No row reaches the network. Mutants: .claude/
 from __future__ import annotations
 
 import base64
-import datetime as dt
 import hashlib
 import json
 import os
@@ -87,6 +86,7 @@ class Case:
         for name, data in (("curl.json", self.curl), ("npm.json", self.npm), ("gh.json", self.gh)):
             (self.fix / name).write_text(json.dumps(data))
         env = {**ENV, "PATH": f"{self.bin}{os.pathsep}{ENV.get('PATH', '')}", "DEPBOT_FIX": str(self.fix)}
+        env["OP_DEPENDABOT_NOW"] = CLOCK
         r = subprocess.run(
             [sys.executable, str(SCRIPTS / script), *args],
             cwd=self.repo, capture_output=True, text=True, env=env, timeout=120,
@@ -123,7 +123,8 @@ def uv_lock(*pkgs: str, requires: str = ">=3.12") -> str:
 
 
 OLD_RELEASE = "2020-01-01T00:00:00.000000Z"  # far past any cooldown
-NOW = dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+CLOCK = "2026-10-07T12:00:00Z"  # the scripts' now, through OP_DEPENDABOT_NOW: no row reads the wall clock
+NOW = "2026-10-07T00:00:00.000000Z"  # half a day before CLOCK
 
 
 def pypi(
@@ -383,6 +384,63 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     args = uv_case(c, [member("backend", ""), uv_pkg("a", "1.0")], [member("evil", ""), uv_pkg("a", "1.0")])
     c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM openproceedings 0\.0\.0: same version, different source")
+
+
+@row("uv: the cooldown reads the newest file, not the oldest")
+def _(c: Case) -> None:
+    args = uv_bump(c)
+    url = "https://pypi.org/pypi/ruff/0.16.10/json"
+    c.curl[url]["body"]["urls"][1]["upload_time_iso_8601"] = NOW
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM .*uploaded 0\.5 days ago")
+
+
+@row("uv: an unmoved registry package's dependencies change")
+def _(c: Case) -> None:
+    deps = 'dependencies = [{{ name = "{}" }}]\n'
+    old = uv_pkg("a", "1.0") + deps.format("b")
+    new = uv_pkg("a", "1.0") + deps.format("evil")
+    args = uv_case(
+        c, [old, uv_pkg("b", "1.0"), uv_pkg("evil", "1.0")], [new, uv_pkg("b", "1.0"), uv_pkg("evil", "1.0")]
+    )
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM a 1\.0: same version, different dependencies")
+
+
+@row("uv: a direct dependency added to a pyproject (already locked)")
+def _(c: Case) -> None:
+    args = pyproject_case(c, "0.16.10")
+    text = PYPROJECT.format(v="0.16.10", extra="").replace(
+        '"ruff>=0.16.10"]', '"ruff>=0.16.10", "mypy>=2.3"]'
+    )
+    args[3] = c.commit({"pyproject.toml": text})
+    c.expect(
+        "uv_lock.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM pyproject\.toml project\.dependencies: a dependency was added or removed",
+    )
+
+
+@row("uv: a dependency list added to a pyproject")
+def _(c: Case) -> None:
+    args = pyproject_case(c, "0.16.10")
+    text = PYPROJECT.format(v="0.16.10", extra="") + '[project.optional-dependencies]\nx = ["mypy>=2.3"]\n'
+    args[3] = c.commit({"pyproject.toml": text.replace("[dependency-groups]", "[dependency-groups]", 1)})
+    c.expect(
+        "uv_lock.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM pyproject\.toml: its dependency lists were added, removed or renamed",
+    )
+
+
+@row("uv: the previous version's files name two publishers")
+def _(c: Case) -> None:
+    pypi(c, "ruff", "0.16.10")
+    prov(c, "ruff", "0.16.9", "o/ruff", only=["ruff-0.16.9.tar.gz"])
+    prov(c, "ruff", "0.16.9", "other/ruff", only=["ruff-0.16.9-py3-none-any.whl"])
+    prov(c, "ruff", "0.16.10", "o/ruff")
+    args = uv_case(c, [uv_pkg("ruff", "0.16.9")], [uv_pkg("ruff", "0.16.10")])
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM .*the files of 0\.16\.9 name 2 publishers")
 
 
 @row("uv: an added package")
@@ -742,6 +800,37 @@ def _(c: Case) -> None:
         PROBLEM,
         r"^PROBLEM frontend/package\.json dependencies\.next: '\^16\.3\.8' is not a version",
     )
+
+
+@row("npm: an entry moved within the tree with a tampered integrity")
+def _(c: Case) -> None:
+    view(c, "x", "1.0.0")
+    args = npm_case(
+        c,
+        {"frontend/node_modules/x": entry("x", "1.0.0")},
+        {"x": entry("x", "1.0.0", integrity="sha512-bad")},
+    )
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM x 1\.0\.0: integrity differs from the registry's")
+
+
+@row("npm: a field added to the lock's workspace entry")
+def _(c: Case) -> None:
+    base = c.commit({**MANIFESTS, "package-lock.json": lock({})})
+    text = lock({}).replace('"version": "0.1.0",', '"version": "0.1.0", "bin": {"x": "evil.js"},')
+    head = c.commit({"package-lock.json": text})
+    c.expect(
+        "npm_lock.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r'^PROBLEM package-lock\.json packages\["frontend"\]: changed outside its dependency lists',
+    )
+
+
+@row("npm: a version the registry gives no publish time for")
+def _(c: Case) -> None:
+    args = npm_bump(c)
+    del c.npm["next@16.3.8"]["time"]["16.3.8"]
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM .*the registry gives no publish time for 16\.3\.8")
 
 
 @row("npm: a dependency added to the root manifest")
@@ -1167,6 +1256,20 @@ def _(c: Case) -> None:
     )
 
 
+@row("actions: a flow-style with: changed on the pinned line")
+def _(c: Case) -> None:
+    tag_ref(c, "actions/checkout", "v7.0.2", sha("b"))
+    flow = "jobs:\n  j:\n    steps:\n      - {{uses: actions/checkout@{}, with: {{x: {}}}}}\n"
+    base = c.commit({".github/workflows/lint.yml": flow.format(sha("a"), 1)})
+    head = c.commit({".github/workflows/lint.yml": flow.format(sha("b"), 2)})
+    c.expect(
+        "actions_pins.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"^PROBLEM .*changed outside its action pins",
+    )
+
+
 @row("actions: one used action swapped for another")
 def _(c: Case) -> None:
     tag_ref(c, "actions/setup-node", "v7.0.1", sha("b"))
@@ -1266,12 +1369,13 @@ BOT = {
 
 
 def check_case(c: Case, head: str, files: dict[str, str | None], *, who: dict[str, str] | None = None,
-               title: str = "deps: bump x", verified: bool = True, gh_head: str | None = None) -> list[str]:  # fmt: skip
+               title: str = "deps: bump x", verified: bool = True, gh_head: str | None = None,
+               **pr: Any) -> list[str]:  # fmt: skip
     base = c.commit({"uv.lock": "a\n", "README.md": "r\n"})
     c.git("update-ref", "refs/remotes/origin/dev", base)
     sha_ = c.commit(files, who=BOT if who is None else who)
     c.gh["pr view 7"] = {"state": "OPEN", "author": {"login": "app/dependabot"}, "baseRefName": "dev",
-                         "headRefName": head, "headRefOid": gh_head or sha_, "title": title}  # fmt: skip
+                         "headRefName": head, "headRefOid": gh_head or sha_, "title": title, **pr}  # fmt: skip
     c.gh[f"api repos/uw-share-lab/openproceedings/commits/{sha_}"] = {
         "commit": {"verification": {"verified": verified, "reason": "valid" if verified else "unsigned"}}
     }
@@ -1344,6 +1448,24 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, gh_head="f" * 40)
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub's head is ffffffffffff, not the fetched")
+
+
+@row("prs check: a closed PR")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, state="CLOSED")
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR is CLOSED into dev")
+
+
+@row("prs check: a PR into main")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, baseRefName="main")
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR is OPEN into main")
+
+
+@row("prs check: a PR someone else opened with Dependabot's commits")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, author={"login": "mallory"})
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR was opened by mallory")
 
 
 @row("prs check: a title naming tantivy")
