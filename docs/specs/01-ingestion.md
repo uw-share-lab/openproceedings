@@ -192,6 +192,13 @@ the NeurIPS 1987–2012, dblp and ICML sites rows on 2026-10-06 (`docs/research/
 2. **Normalize.** Map each source's shape to `PaperRecord`. Strip HTML (`ingest/sources/html.py`, the standard
    library's parser on the pinned Python, spec 08 "Python pin"; an unterminated tag-like tail with no `>`, as in
    `for all p<q we show`, stays text, and only `script` and `style` bodies are raw text, as on 3.12.9; TASK-208).
+   A `<` that doesn't start a real tag is text, with everything up to the next `>` (`html.escape_bare_lt`, before
+   every parse, the meta reader's included; TASK-209): a real start tag has an HTML, SVG or MathML element name (or a
+   custom `my-el` or namespaced `o:p` one), parses up to its `>` with no `<` outside a quoted value, and has an
+   attribute with a value or only HTML attribute names (`<td nowrap>`), so `if a<b and c>d then`, `$1<p<\infty$`
+   and `<human, action, object>` keep their words while `<b>`, `<a href=x>` and `<br/>` stay markup (`a<b>c` reads
+   `ac`, as a browser shows it). Real markup is copied unchanged; the crawl-cache replay that measured it is
+   `docs/results/2026-10-07-bare-lt.md`.
    Keep LaTeX verbatim (03 decides how it is tokenized). Then the **ingest caps** (`ingest/caps.py`, decision-026,
    TASK-155), applied once to every source's records before dedup (`snapshot.load_sources`), bound what the
    tokenizer's NFKC reordering can cost. That cost is superlinear in a long run of marks with alternating combining

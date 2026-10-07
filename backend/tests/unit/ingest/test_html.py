@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -19,6 +20,8 @@ from openproceedings.ingest.sources.html import (
 from openproceedings.ingest.sources.http import PageCache, SourceError
 
 from tests.unit.test_python_pin import html_parser_fixed
+
+FIXTURES = Path(__file__).parents[2] / "fixtures"
 
 
 def test_deep_html_is_walked_iteratively_but_refused_past_the_explicit_depth_budget() -> None:
@@ -156,7 +159,6 @@ def test_malformed_markup_parses_in_linear_time() -> None:
         ("x &amp; y <a", "x & y <a"),
         ("tail <!-- c", "tail <!-- c"),
         ("end </a", "end </a"),
-        ("<p>bound n<k</p>", "bound n"),  # a later `>` makes it a tag, on every release
         ("<title>a<b>c</b></title> d", "ac d"),  # title, textarea, xmp, iframe: markup inside, as on 3.12.9
         ("<textarea>a<b>c</b></textarea> d", "ac d"),
         ("<xmp>a<b>c</xmp> d", "ac d"),
@@ -183,12 +185,117 @@ def test_an_unclosed_raw_text_tag_does_not_swallow_the_rows_after_it() -> None:
     assert [node.children for node in script] == [["x<y"]]  # an unclosed script body stays inside it
 
 
+# --- a bare `<` (TASK-209) -------------------------------------------------------------------------------------
+# Each row is the synthetic form (decision-004) of a shape the full crawl-cache replay found in a real abstract
+# (docs/results/2026-10-07-bare-lt.md), which every Python release used to read as a tag and drop.
+BARE_LT = [
+    ("if a<b and c>d then", "if a<b and c>d then"),  # known name, attributes that are no attribute names
+    ("<p>bound n<k</p>", "bound n<k"),  # an unknown name (TASK-208 read `bound n`)
+    ("when $W<d$. Our main result", "when $W<d$. Our main result"),
+    ("for $1<p<\\infty$. For $1\\leq p<2$, we show", "for $1<p<\\infty$. For $1\\leq p<2$, we show"),
+    ("$P_T< \\! \\!<P_S$, we develop", "$P_T< \\! \\!<P_S$, we develop"),
+    ("the case $j<i$. The network", "the case $j<i$. The network"),
+    ("J == {Jdl<i<K is the set of weights", "J == {Jdl<i<K is the set of weights"),
+    ("a model $y = <x, \\theta^*>$", "a model $y = <x, \\theta^*>$"),
+    ("predicting <human, action, object> triplets", "predicting <human, action, object> triplets"),
+    ("experience tuples <s,a,s',r> from", "experience tuples <s,a,s',r> from"),
+    ("code at <https://example.org/repo>.", "code at <https://example.org/repo>."),
+    ("a framework called <projektor>, which", "a framework called <projektor>, which"),
+    ("a solution such as <THEORY> and k<R>", "a solution such as <THEORY> and k<R>"),
+    ("kernel k<RT &gt;.", "kernel k<RT >."),  # `rt` is an element; `&gt;.` is no attribute name
+    ("<i and used to explain", "<i and used to explain"),  # an unterminated one, read the same
+    ("a </projektor> b", "a </projektor> b"),  # an end tag with an unknown name
+    ("a <b x='y > c", "a <b x='y > c"),  # an unterminated quoted value: no tag (TASK-208 read `a`)
+]
+REAL_TAGS = [
+    ("a<b>c</b>", "ac"),  # `<b>` is a tag, as a browser reads it
+    ("<p>x<sub>i</sub>-means</p>", "xi-means"),
+    ("<table border><tr><td nowrap>cell</td></tr></table>", "cell"),  # bare legacy attributes
+    ("<PRE WIDTH=80>pre</PRE>", "pre"),
+    ('<a href="x"class="y">t</a>', "t"),  # no space after a quoted value
+    ("<a href=/x/y?a=b>t</a>", "t"),
+    ("one<br/>two<br />three", "one two three"),
+    ("<o:p>word</o:p> <st1:place>w</st1:place>", "word w"),  # namespaced (Word's export)
+    ("<my-el>x</my-el>", "x"),  # a custom element
+    ("<span data-x>y</span>", "y"),
+    ("<script>if (a<b && c>d) {}</script>after", "after"),  # a script body is copied as it is
+    ('<p>x</p y="1">z', "x z"),  # an end tag with attributes
+    ("a</b and c>d", "ad"),  # an end tag with a known name, whatever follows it
+]
+
+
+@pytest.mark.parametrize(("markup", "text"), BARE_LT)
+def test_a_bare_lt_stays_text(markup: str, text: str) -> None:
+    """TASK-209: a `<` that doesn't start a real tag is text, with the words up to the next `>`."""
+    assert text_of(markup) == node_text(parse(markup)) == text
+
+
+@pytest.mark.parametrize(("markup", "text"), REAL_TAGS)
+def test_real_tags_still_parse(markup: str, text: str) -> None:
+    """Real markup is copied unchanged (`escape_bare_lt` leaves it as it is), so it parses as before."""
+    assert html.escape_bare_lt(markup) == markup
+    assert text_of(markup) == node_text(parse(markup)) == text
+
+
+def test_a_bare_lt_no_longer_reshapes_the_tree() -> None:
+    """A `<li and c>` in a listing row used to open a third list item; the listing keeps its two rows."""
+    rows = parse("<ul><li>one if a<li and c>d</li><li>two</li></ul>").iter("li")
+    assert [node_text(row) for row in rows] == ["one if a<li and c>d", "two"]
+    page = '<p>x<y, "z</p><meta name="citation_title" content="T &lt; U">'
+    assert metas(page, "citation_title") == ["T < U"]
+
+
+def test_every_committed_proceedings_page_is_unchanged_by_the_escape() -> None:
+    """The recorded pages have no bare `<` outside script and style: the escape changes none of them, so every
+    crawler reads them exactly as before."""
+    pages = sorted(FIXTURES.glob("http/**/*.json"))
+    checked = 0
+    for path in pages:
+        body = json.loads(path.read_text(encoding="utf-8")).get("response", {}).get("text")
+        if not isinstance(body, str) or "bare-lt" in path.name:
+            continue
+        assert html.escape_bare_lt(body) == body, path
+        checked += 1
+    assert checked >= 10
+
+
+def test_the_shared_path_keeps_a_bare_lt_on_neurips_and_pmlr_pages() -> None:
+    """Real cached pages' structure (NeurIPS 2024, PMLR v202), scrubbed (decision-004), with synthetic abstracts
+    that carry the shapes the replay found. Before TASK-209 the NeurIPS abstract read `… when $Wd then, for $1
+    that predicts triplets; …` and the PMLR one stopped at `… and for $2`."""
+    from openproceedings.ingest.sources import neurips, pmlr
+
+    from tests.unit.ingest.proceedings_helpers import fixture_text
+
+    page = neurips.parse_abstract_page(fixture_text("neurips/2024/abstract-bare-lt.json"))
+    assert page.abstract == (
+        "Synthetic opening sentence about gradient flow (GF) when $W<d$. Synthetic words if a<b and c>d then, for "
+        "$1<p\\le2$ and $k<n$, with a model called <projektor> that predicts <human, action, object> triplets; "
+        "synthetic emphasis stays markup. Code: <https://github.com/synthetic/repo>. Synthetic closing sentence."
+    )
+    paper = pmlr.parse_paper_page(fixture_text("pmlr/v202/paper-bare-lt.json"))
+    assert paper.abstract == (
+        "Synthetic opening words, achieving a bound for $1\\leq p<2$ and for $2<p<\\infty$. For $1\\leq p<2$, "
+        "synthetic words show the bound is tight, and $P_T< \\! \\!<P_S$ holds. Synthetic closing sentence."
+    )
+
+
+def test_a_bare_lt_costs_linear_time() -> None:
+    """Shapes that make a tag match scan far, at n = 20,000: each scan ends at the next `<` outside a quoted
+    value, so the whole escape is linear (no wall clock: a quadratic one would time out the suite)."""
+    n = 20_000
+    for page in ('<a x="' + "<a " * n, "<b and c " * n, "<a x='" * n, '<a x="\'' * n, "<p<" * n, "a<b" * n):
+        assert node_text(parse(page)) == text_of(page) == collapse(page)
+        assert metas(page, "citation_title") == []
+    long_tag = "<a" + " x" * n  # one tag with 20,000 attributes and no `>`
+    assert text_of(long_tag) == collapse(long_tag)
+
+
 @pytest.mark.parametrize(
     ("markup", "text"),
     [
         ("a <!-- b > c", "a"),  # a tail with a `>` is left to close(): an unterminated comment
         ("a <![CDATA[ b > c", "a"),
-        ("a <b x='y > c", "a"),  # an unterminated quoted attribute value
         ("a <!--> b", "a b"),  # HTML5's empty comment
         ("a <!-- b --!> c", "a c"),
         ("<script>s</script x>after", "after"),  # an end tag with attributes ends the script

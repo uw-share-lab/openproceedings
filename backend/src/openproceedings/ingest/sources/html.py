@@ -13,6 +13,9 @@ The standard-library HTML parser reads markup without executing or fetching anyt
   Python 3.12.12+ (the CVE-2025-6069 fix) would drop it where 3.12.9 kept it (TASK-208).
 - Only `script` and `style` bodies are raw text (`_RawTextParser`): 3.12.12+ would also read `title`,
   `textarea`, `xmp`, `iframe`, `noembed`, `noframes` and `plaintext` that way (TASK-208).
+- A `<` that doesn't start a real tag is text (`escape_bare_lt`, run before every parse, `metas` included): every
+  release used to read `if a<b and c>d then` as `if ad then` and `$1<p<\\infty$. For …` as a tag that swallowed
+  the rest of the abstract (TASK-209).
 - Whitespace collapses to single spaces. LaTeX is kept verbatim (spec 03 decides its tokens).
 - The tree is bounded (`MAX_DEPTH`, `MAX_ELEMENTS`). A page past a bound is `HTMLBudgetError`, which names the
   page's URL (when the miner passes it) and how to recover: a page that size is a corrupt or wrong cache entry,
@@ -37,6 +40,123 @@ _BLOCK_TAGS = frozenset(
 )  # fmt: skip
 _ENTITY = re.compile(r"&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});")
 _BARE_AMP = re.compile(r"&(?!#[0-9]{1,7};|#[xX][0-9a-fA-F]{1,6};|[A-Za-z][A-Za-z0-9]{1,31};)")
+
+# --- a bare `<` (TASK-209) -------------------------------------------------------------------------------------
+# Every element name of HTML (current and obsolete), SVG and MathML: a tag whose name is none of these, and
+# isn't a custom (`my-element`) or namespaced (`o:p`) name, is text that happens to start with `<`.
+_ELEMENTS = frozenset(
+    """
+    a abbr acronym address applet area article aside audio b base basefont bdi bdo bgsound big blink blockquote
+    body br button canvas caption center cite code col colgroup data datalist dd del details dfn dialog dir div dl
+    dt em embed fieldset figcaption figure font footer form frame frameset h1 h2 h3 h4 h5 h6 head header hgroup hr
+    html i iframe image img input ins isindex kbd keygen label legend li link listing main map mark marquee menu
+    menuitem meta meter multicol nav nextid nobr noembed noframes noscript object ol optgroup option output p param
+    picture plaintext pre progress q rb rp rt rtc ruby s samp script search section select slot small source spacer
+    span strike strong style sub summary sup table tbody td template textarea tfoot th thead time title tr track tt
+    u ul var video wbr xmp
+    svg animate animatemotion animatetransform circle clippath defs desc ellipse feblend fecolormatrix
+    fecomponenttransfer fecomposite feconvolvematrix fediffuselighting fedisplacementmap fedistantlight
+    fedropshadow feflood fefunca fefuncb fefuncg fefuncr fegaussianblur feimage femerge femergenode femorphology
+    feoffset fepointlight fespecularlighting fespotlight fetile feturbulence filter foreignobject g line
+    lineargradient marker mask metadata mpath path pattern polygon polyline radialgradient rect set stop switch
+    symbol text textpath tspan use view
+    math annotation maction maligngroup malignmark menclose merror mfenced mfrac mglyph mi mlabeledtr mlongdiv
+    mmultiscripts mn mo mover mpadded mphantom mprescripts mroot mrow ms mscarries mscarry msgroup msline mspace
+    msqrt msrow mstack mstyle msub msubsup msup mtable mtd mtext mtr munder munderover none semantics
+    """.split()
+)
+_CUSTOM_OR_NAMESPACED = re.compile(r"[a-z][a-z0-9_.]*(?:[-:][a-z0-9_.]+)+")
+# Every attribute name of HTML (current, HTML 4 and presentational): a tag with no attribute value whose
+# attribute names aren't all among these, or `data-`/`aria-`/`xml` names, is prose (`<b and c>`), while legacy
+# markup's bare attributes (`<table border>`, `<td nowrap>`) stay a tag.
+_ATTRIBUTE_NAMES = frozenset(
+    """
+    abbr accept accept-charset accesskey action align alink allow allowfullscreen allowpaymentrequest alt archive
+    async autocapitalize autocomplete autocorrect autofocus autoplay axis background bgcolor blocking border
+    bordercolor cellpadding cellspacing char charoff charset checked cite class classid clear code codebase codetype
+    color cols colspan compact content contenteditable controls coords crossorigin data datetime declare decoding
+    default defer dir dirname disabled download draggable enctype enterkeyhint face fetchpriority for form
+    formaction formenctype formmethod formnovalidate formtarget frame frameborder headers height hidden high href
+    hreflang hspace http-equiv id inert inputmode integrity is ismap itemid itemprop itemref itemscope itemtype kind
+    label lang language leftmargin link list longdesc loop low marginheight marginwidth max maxlength media method
+    min minlength multiple muted name nohref nomodule nonce noresize noshade novalidate nowrap object open optimum
+    pattern ping placeholder playsinline popover popovertarget popovertargetaction poster preload profile property
+    readonly referrerpolicy rel required rev reversed role rows rowspan rules sandbox scheme scope scoped scrolling
+    seamless selected shadowrootmode shape size sizes slot sortable span spellcheck src srcdoc srclang srcset standby
+    start step style summary tabindex target text title topmargin translate truespeed type typemustmatch usemap
+    valign value valuetype version vlink vspace width wrap
+    """.split()
+)
+_ATTRIBUTE_PREFIXES = ("data-", "aria-", "xml")
+# The tag grammar: CPython 3.12.9's tolerant start tag (`locatestarttagend_tolerant`, `attrfind_tolerant`), except
+# that no `<` may stand outside a quoted value, so a match ends at the next `<` or quote pair and the scan below
+# stays linear; the attribute run is atomic (no backtracking into it).
+_ATTRIBUTE = r"""(?<=['"\s/])([^\s/>=<][^\s/=><]*)(\s*=+\s*(?:'[^']*'|"[^"]*"|(?!['"])[^>\s<]*))?"""
+_START_TAG = re.compile(
+    rf"<([a-zA-Z][^\t\n\r\f />\x00<]*)((?>(?:[\s/]*{_ATTRIBUTE}(?:\s|/(?!>))*)*))\s*/?>"
+)
+_ATTRIBUTES = re.compile(_ATTRIBUTE)
+_END_TAG = re.compile(r"""</([a-zA-Z][^\t\n\r\f />\x00<]*)(?>(?:[^<>"']+|"[^"]*"|'[^']*')*)>""")
+_TAG_OPEN = re.compile(r"</?[a-zA-Z]")
+_RAW_TEXT_END = {name: re.compile(rf"</{name}", re.IGNORECASE) for name in ("script", "style")}
+
+
+def _element(name: str) -> bool:
+    name = name.casefold()
+    return name in _ELEMENTS or _CUSTOM_OR_NAMESPACED.fullmatch(name) is not None
+
+
+def _real_start_tag(markup: str, match: re.Match[str]) -> bool:
+    if not _element(match.group(1)):
+        return False
+    attributes = list(_ATTRIBUTES.finditer(markup, match.start(2), match.end(2)))
+    return any(a.group(2) is not None for a in attributes) or all(
+        (name := a.group(1).casefold()) in _ATTRIBUTE_NAMES or name.startswith(_ATTRIBUTE_PREFIXES)
+        for a in attributes
+    )
+
+
+def escape_bare_lt(markup: str) -> str:
+    """`markup` with every `<` that would open a tag but doesn't start a real one escaped as `&lt;`, so the
+    parser keeps it, and the text up to the next `>`, as text (TASK-209): `if a<b and c>d then` used to read
+    `if ad then` on every Python release.
+
+    A real start tag has an HTML, SVG or MathML element name (or a custom or namespaced one), parses by the tag
+    grammar above up to its `>`, and either has an attribute with a value or has only HTML attribute names
+    (`<td nowrap>`, `<table border>`; none at all counts); a real end tag has such a name. So `<b and c>`, `<p<\\infty$`, `<i$.`,
+    `<x, \\theta^*>` and `<human, action, object>` stay text, while `<b>`, `<a href=x>` and `<br/>` stay tags:
+    `a<b>c` reads `ac`, as a browser shows it. Only a `<` followed by a letter (or `/` and a letter) is ever
+    escaped: that is all HTMLParser reads as a tag, and `<!`, `<?`, `<=` and `< ` are left to it as before. A
+    `script` or `style` body is copied as it is, up to its end tag. Real tags are copied unchanged, so a page
+    with no bare `<` parses exactly as before. One left-to-right pass: a tag match stops at the first `<` outside
+    a quoted value and never backtracks into its attributes, so the cost stays linear (CVE-2025-6069's inputs
+    are in `test_html.py`)."""
+    out: list[str] = []
+    i = 0
+    while (j := markup.find("<", i)) >= 0:
+        out.append(markup[i:j])
+        start = _START_TAG.match(markup, j)
+        if start is not None and _real_start_tag(markup, start):
+            out.append(start.group())
+            i = start.end()
+            raw_end = _RAW_TEXT_END.get(start.group(1).casefold())
+            if raw_end is not None and not start.group().endswith("/>"):
+                body = raw_end.search(markup, i)
+                stop = body.start() if body is not None else len(markup)
+                out.append(markup[i:stop])
+                i = stop
+            continue
+        end = _END_TAG.match(markup, j)
+        if end is not None and _element(end.group(1)):
+            out.append(end.group())
+            i = end.end()
+            continue
+        out.append("&lt;" if _TAG_OPEN.match(markup, j) else "<")
+        i = j + 1
+    out.append(markup[i:])
+    return "".join(out)
+
+
 MAX_DEPTH = 1024
 MAX_ELEMENTS = 250_000
 
@@ -188,7 +308,7 @@ def parse(page: str, url: str | None = None) -> Element:
     """Parse bounded, already-fetched HTML into a non-executing element tree. `url` (the page's canonical URL)
     goes into an `HTMLBudgetError`; every miner passes it."""
     parser = _TreeParser(url)
-    _feed_all(parser, _BARE_AMP.sub("&amp;", page))
+    _feed_all(parser, escape_bare_lt(_BARE_AMP.sub("&amp;", page)))
     return parser.root
 
 
@@ -282,7 +402,7 @@ def text_of(fragment: str) -> str:
     """Plain text of an HTML fragment (the rules in the module docstring)."""
     parser = _TextParser()
     # HTMLParser discards a bare ampersand in strings such as `R&D`; protect only non-entities first.
-    _feed_all(parser, _BARE_AMP.sub("&amp;", fragment))
+    _feed_all(parser, escape_bare_lt(_BARE_AMP.sub("&amp;", fragment)))
     return collapse(unescape("".join(parser.parts)))
 
 
@@ -308,7 +428,7 @@ def attrs(tag: str) -> dict[str, str]:
 def metas(page: str, name: str) -> list[str]:
     """The `content` of every `<meta name=…>` with this name, in page order, decoded and collapsed."""
     parser = _TagParser()
-    parser.feed(page)
+    parser.feed(escape_bare_lt(page))
     return [
         collapse(unescape(a["content"]))
         for tag, a in parser.tags
