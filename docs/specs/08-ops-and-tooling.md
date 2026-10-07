@@ -55,7 +55,8 @@ crawler parses pages with; CPython issue #135462, fixed in 3.12.12, 3.13.6 and 3
 image's `FROM python:3.12.15-slim-bookworm` names the same release (§Deploy).
 `backend/tests/unit/test_python_pin.py` holds them together and fails on an interpreter without the fix; a patch
 upgrade moves `.python-version`, the image tag and digest together (Dependabot's `docker` entry proposes the
-image half; its PR fails that test until `.python-version` follows). The minor stays 3.12 (security fixes until
+image half; its PR fails that test until `.python-version` follows, and the weekly routine leaves it for the
+owner, §CI "The weekly routine"). The minor stays 3.12 (security fixes until
 2028-10), so ruff's `py312` and mypy's `3.12` targets don't move; a new minor is a hand-made PR.
 
 The fix also changed how the parser reads malformed markup, so extracted text can depend on the release.
@@ -238,7 +239,8 @@ signature GitHub verified. The checkers then run the checks above, and the shape
 `npm_lock.py`, `docker_digest.py` and `actions_pins.py` allow no change in a file beyond its dependency versions
 and pins (no script, build requirement, `RUN` line or `permissions:` rides along). `restore_libc.py` repairs dropped
 `libc` fields; `prs.py` also lists the PRs and watches the queue. The routine then runs the tests the ecosystem
-calls for (without the GitHub credential in their environment), the reviewers, the dispositions, the review
+calls for (without the GitHub credential in their environment; `.githooks/pre-push` strips it from its `make lint`
+and `make tooling` as well), the reviewers, the dispositions, the review
 record and attestation, the `no-learning` label unless something was learned, and `gh pr merge <n> --auto
 --match-head-commit <sha>`. It fixes what the PR itself can fix: a manifest/lock pin, dropped `libc` fields, a doc
 that states the old version, a review finding. It may merge, through the queue only, a PR that passes all of
@@ -248,8 +250,9 @@ that. It never merges, and leaves open with a comment for the owner, a PR with:
 - an integrity, hash or URL mismatch, or a file off the registry;
 - a new publisher, or provenance the previous version had and the new one lacks;
 - a new install script, or a new or removed package;
-- a release younger than 7 days (the `cooldown` every ecosystem sets holds version updates back that long, so
-  this is a security update, which ignores it);
+- a uv or npm release younger than 7 days (the `cooldown` every ecosystem sets holds version updates back that
+  long, so this is a security update, which ignores it; for actions and docker images the hold is the `cooldown`
+  alone);
 - a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
 - a red required check it can't fix, or a Must it can't fix;
 - any semver-major, anything touching `tantivy`, or a new Python release, patch or minor: a patch changes how the
@@ -263,7 +266,9 @@ outside call goes through `git`, `curl`, `npm` or `gh`, so the case table `.clau
 ends with a summary for its log: merged, left open (with the reason), not reviewed, and what the owner should look
 at. The gates stay on for Dependabot PRs; exempting `dependabot[bot]` from `learnings` and `review-attested` was
 considered and rejected (decision-048). The routine's GitHub token is fine-grained: this repository only,
-`contents`, `pull requests` and `issues` read and write, nothing else (no `administration`, no `workflows`).
+`contents`, `pull requests`, `issues` and `actions` read and write, and `workflows` (to queue an actions PR,
+whose diff touches `.github/workflows/`), nothing else (no `administration`). It is the only credential the
+session holds, in `GH_TOKEN`.
 
 ## Git and PR rules
 

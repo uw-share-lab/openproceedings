@@ -15,7 +15,9 @@ origin/dev and `<sha>`, computed by git rather than read from GitHub's file list
 touch (uv: `uv.lock` and the two `pyproject.toml`s; npm: `package-lock.json` and the two `package.json`s; docker:
 a Dockerfile under `deploy/`; github-actions: a workflow or a composite action's `action.yml`); and every commit
 in that range is Dependabot's (author `dependabot[bot]`, committer GitHub) with a signature GitHub verified. A PR
-someone else pushed to (the routine itself on an earlier run included) is left for the owner. A title naming
+someone else pushed to (the routine itself on an earlier run included) is left for the owner. The identity is
+defence in depth only (a writer can set those names, and GitHub verifies web-flow commits it makes for anyone);
+what stops a hostile push is that every checker allows no change beyond versions and pins. A title naming
 `tantivy` is a PROBLEM too (hand-only, spec 08 §Release).
 
 `watch` polls GitHub's GraphQL API every `--interval` seconds and prints a line whenever a PR's state,

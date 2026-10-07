@@ -482,8 +482,8 @@
   {
     "label": "dependabot: npm: manifest pin of an unmoved package accepted",
     "file": ".claude/scripts/dependabot/npm_lock.py",
-    "old": "            if o[dep] != n[dep] and dep not in moved:\n",
-    "new": "            if False:\n"
+    "old": "            if dep not in moved:\n                rep.problem(",
+    "new": "            if False:\n                rep.problem("
   },
   {
     "label": "dependabot: npm: base manifest not compared",
@@ -640,6 +640,18 @@
     "file": ".claude/scripts/dependabot/npm_lock.py",
     "old": "        added = install_scripts(m) - install_scripts(before)\n",
     "new": "        added = install_scripts(m)\n"
+  },
+  {
+    "label": "dependabot: npm: any moved manifest value accepted",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "            if value not in moved[dep]:\n",
+    "new": "            if False:\n"
+  },
+  {
+    "label": "dependabot: npm: a range accepted in a manifest too",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "            if lock_entry and value[:1] in (\"^\", \"~\"):\n",
+    "new": "            if value[:1] in (\"^\", \"~\", \"g\"):\n"
   },
   {
     "label": "dependabot: restore_libc: stops after the first entry",

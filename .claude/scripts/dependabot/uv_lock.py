@@ -21,6 +21,8 @@ build requirement, an index, a tool setting) can ride along.
 A PROBLEM, the PR stays open: any of the above failing, an added or removed package, a semver-major bump, a
 new publisher, a file without the provenance the previous version had (PyPI accepts files added to a release
 later), files of one release that disagree on provenance, or any `tantivy` change (hand-only, spec 08 §Release).
+It fails safe on one known legal case: when the lock holds a package at two versions and one moves, uv rewrites the
+`dependencies` of packages that name it, and those unmoved entries read as changed; such a PR is left open.
 """
 
 from __future__ import annotations
@@ -181,6 +183,7 @@ def check_pyproject(rep: Report, path: str, base: str, head: str, moved: set[str
     old_text, new_text = git_show(base, path), git_show(head, path)
     if old_text == new_text:
         return
+    found = len(rep.problems)
     if old_text is None or new_text is None:
         rep.problem(f"{path}: added or removed")
         return
@@ -206,7 +209,8 @@ def check_pyproject(rep: Report, path: str, base: str, head: str, moved: set[str
                 rep.problem(f"{path} {where}: {o!r} became {n!r}")
             elif norm_name(nn.group(1)) not in moved:
                 rep.problem(f"{path} {where}: {n!r} changed, but the lock didn't move {nn.group(1)}")
-    rep.ok(f"{path}: checked against the lock")
+    if len(rep.problems) == found:
+        rep.ok(f"{path}: checked against the lock")
 
 
 def main() -> None:

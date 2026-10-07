@@ -192,9 +192,18 @@ def without_deps(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 def check_dep_values(
-    rep: Report, where: str, old: dict[str, Any], new: dict[str, Any], moved: set[str]
+    rep: Report,
+    where: str,
+    old: dict[str, Any],
+    new: dict[str, Any],
+    moved: dict[str, set[str]],
+    *,
+    lock_entry: bool = False,
 ) -> None:
-    """`new` may differ from `old` only in dependency values of packages whose locked version moved."""
+    """`new` may differ from `old` only in dependency values of packages whose locked version moved, and a moved
+    value must name one of the versions the lock now holds: exactly in a manifest; in the lock's own workspace
+    entry also with a `^` or `~` (Dependabot's updater writes one there, and the FIX makes it exact). A URL, a
+    `file:`, an `npm:` alias or any other range is a PROBLEM: a merged manifest would point future installs at it."""
     if without_deps(old) != without_deps(new):
         rep.problem(f"{where}: changed outside its dependency lists")
     for section in MANIFEST_SECTIONS:
@@ -202,13 +211,26 @@ def check_dep_values(
         if set(o) != set(n):
             rep.problem(f"{where} {section}: a dependency was added or removed")
         for dep in sorted(set(o) & set(n)):
-            if o[dep] != n[dep] and dep not in moved:
+            if o[dep] == n[dep]:
+                continue
+            if dep not in moved:
                 rep.problem(
                     f"{where} {section}.{dep}: {o[dep]!r} -> {n[dep]!r}, but the lock didn't move {dep}"
                 )
+                continue
+            value = str(n[dep])
+            if lock_entry and value[:1] in ("^", "~"):
+                value = value[1:]
+            if value not in moved[dep]:
+                rep.problem(
+                    f"{where} {section}.{dep}: {n[dep]!r} is not a version the lock now holds"
+                    f" ({', '.join(sorted(moved[dep])) or 'none'})"
+                )
 
 
-def check_manifests(rep: Report, lock: dict[str, Any], base: str, head: str, moved: set[str]) -> None:
+def check_manifests(
+    rep: Report, lock: dict[str, Any], base: str, head: str, moved: dict[str, set[str]]
+) -> None:
     packages = lock.get("packages", {})
     found = len(rep.problems) + len(rep.fixes)
     for key, path in WORKSPACES.items():
@@ -252,13 +274,20 @@ def main() -> None:
             versions[side].setdefault(package_name(k, packages[k]), set()).add(
                 str(packages[k].get("version"))
             )
-    moved = {
-        name for name in set(versions[0]) | set(versions[1]) if versions[0].get(name) != versions[1].get(name)
+    moved = {  # name → the versions the lock now holds, for each package whose versions changed
+        name: versions[1].get(name, set())
+        for name in set(versions[0]) | set(versions[1])
+        if versions[0].get(name) != versions[1].get(name)
     }
     for k in sorted((set(old) | set(new)) - deps):
         if old.get(k) != new.get(k):
             check_dep_values(
-                rep, f'package-lock.json packages["{k}"]', old.get(k) or {}, new.get(k) or {}, moved
+                rep,
+                f'package-lock.json packages["{k}"]',
+                old.get(k) or {},
+                new.get(k) or {},
+                moved,
+                lock_entry=True,
             )
     for k in sorted(deps - set(new)):
         name = package_name(k, old[k])

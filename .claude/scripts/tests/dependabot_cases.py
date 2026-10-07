@@ -711,6 +711,39 @@ def _(c: Case) -> None:
     )
 
 
+@row("npm: a moved package's manifest value that isn't a locked version (a URL)")
+def _(c: Case) -> None:
+    view(c, "next", "16.3.7")
+    view(c, "next", "16.3.8")
+    old = lock({"next": entry("next", "16.3.7")}, {"next": "16.3.7"})
+    base = c.commit({**MANIFESTS, "frontend/package.json": front("16.3.7"), "package-lock.json": old})
+    url = "git+https://evil.example/next.git"
+    new = lock({"next": entry("next", "16.3.8")}, {"next": url})
+    head = c.commit({"frontend/package.json": front(url), "package-lock.json": new})
+    c.expect(
+        "npm_lock.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"^PROBLEM frontend/package\.json dependencies\.next: 'git\+https://evil\.example/next\.git' is not a version the lock now holds",
+    )
+
+
+@row("npm: a range in a manifest is not an exact pin")
+def _(c: Case) -> None:
+    view(c, "next", "16.3.7")
+    view(c, "next", "16.3.8")
+    old = lock({"next": entry("next", "16.3.7")}, {"next": "16.3.7"})
+    base = c.commit({**MANIFESTS, "frontend/package.json": front("16.3.7"), "package-lock.json": old})
+    new = lock({"next": entry("next", "16.3.8")}, {"next": "^16.3.8"})
+    head = c.commit({"frontend/package.json": front("^16.3.8"), "package-lock.json": new})
+    c.expect(
+        "npm_lock.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"^PROBLEM frontend/package\.json dependencies\.next: '\^16\.3\.8' is not a version",
+    )
+
+
 @row("npm: a dependency added to the root manifest")
 def _(c: Case) -> None:
     base = c.commit({**MANIFESTS, "package-lock.json": lock({})})

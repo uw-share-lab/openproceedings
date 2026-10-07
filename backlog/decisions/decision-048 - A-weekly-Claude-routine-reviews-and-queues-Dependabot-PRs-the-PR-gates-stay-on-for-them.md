@@ -9,8 +9,8 @@ status: accepted
 ## Context
 
 Dependabot (`.github/dependabot.yml`, weekly; spec 08 §CI "Dependabot") opens about one grouped PR a week
-per ecosystem into `dev` (github-actions, uv, npm, docker), plus one PR per docker digest bump. Every PR into `dev` must pass the six
-required checks, two of which a bot's PR can't pass alone: `learnings` (an entry or the `no-learning` label)
+per ecosystem into `dev` (github-actions, uv, npm, docker), plus one PR per docker digest bump. Every PR into
+`dev` must pass the six required checks, two of which a bot's PR can't pass alone: `learnings` (an entry or the `no-learning` label)
 and `review-attested` (the body attests an APPROVE record for the head, which only `record-review.py` writes
 after a review). Until 2026-10-07 the owner's session reviewed each PR by hand. The run that merged #123–#125
 on 2026-10-07 found real work in them: a caret Dependabot wrote into the lock's workspace entry (#124), `libc`
@@ -38,7 +38,7 @@ merge, through the merge queue only, a Dependabot PR that passes the supply-chai
 review, the tests, the reviewers and every required check. It never merges, and leaves open with a comment
 for the owner, a PR with a commit that isn't Dependabot's (signed and verified), a file outside its
 ecosystem or a change beyond dependency versions and pins, an integrity or URL mismatch, a new publisher or lost
-provenance, a new install script, a new package, a release younger than 7 days, a digest that doesn't resolve
+provenance, a new install script, a new package, a uv or npm release younger than 7 days, a digest that doesn't resolve
 or a failed attestation, a red required check it can't fix, a Must it can't fix, any semver-major, anything
 touching `tantivy`, or a new Python release (patch or minor). The gates stay on for Dependabot PRs.
 
@@ -48,8 +48,9 @@ The review gate of TASK-211 shaped three parts of this:
   `package.json` script, a `[build-system]` requirement, a Dockerfile `RUN` line or a workflow `permissions:`
   would otherwise run in `make test` or merge unread), and queues with `--match-head-commit`.
 - **A legitimate pipeline can still publish a bad release**, so Dependabot's `cooldown` holds every version
-  update back 7 days (a compromised release is most often pulled within days), and the checkers stop a younger
-  one, which then can only be a security update: the owner decides.
+  update back 7 days (a compromised release is most often pulled within days), and the uv and npm checkers stop
+  a younger one, which then can only be a security update: the owner decides. For actions and docker images
+  the hold is the `cooldown` alone (no checker reads their age).
 - **A new Python patch is the owner's.** Spec 08's "Python pin" says extracted text can depend on the release;
   TASK-208 proved 3.12.9 → 3.12.15 changed nothing by replaying the whole crawl cache, which needs `data/`, which
   the routine doesn't have. A new digest for the same tag carries no parser change and is merged like any other.
@@ -63,11 +64,15 @@ The review gate of TASK-211 shaped three parts of this:
   (`.claude/scripts/tests/test-dependabot.sh`, in `make tooling`) and mutants
   (`.claude/scripts/mutants/dependabot.json`), so a regression in a check fails CI.
 - The routine needs, in its cloud environment: `gh` authenticated with a **fine-grained token for this
-  repository only, with `contents`, `pull requests` and `issues` read and write and nothing else** (no
-  `administration`, so it can't touch the rulesets; no `workflows`); Node 22, npm, uv 0.12.22 or later,
-  Python 3.11 or later, shellcheck; Playwright's Chromium and Docker when available. Where `make e2e` or
+  repository only, with `contents`, `pull requests`, `issues` and `actions` read and write, and `workflows`
+  (to queue an actions PR, whose diff touches `.github/workflows/`), and nothing else** (no `administration`,
+  so it can't touch the rulesets), held in `GH_TOKEN` only; Node 22, npm, uv 0.12.22 or later, Python 3.11 or
+  later, shellcheck; Playwright's Chromium and Docker when available. Where `make e2e` or
   `deploy/smoke-test.sh` can't run, the PR names the CI check that stands in (`playwright`, `web-image`). The
-  tests run without the token in their environment. Its commits carry the git identity the environment
+  tests, the reviewers' runs and the pre-push hook's `make lint` and `make tooling` run without the token in
+  their environment. What the cloud environment gives every process (a git credential helper, a proxy) stays
+  reachable by dependency code; the shape checks (only registry-verified versions run) are what bound that.
+  Its commits carry the git identity the environment
   configures, which must name a person (the command stops on an empty one or one naming an AI), and no AI
   attribution (the hooks and CI's `attribution` check refuse it).
 - The attestation stays an honesty check, not an access control (spec 08 §CI): the token can edit any PR body.
