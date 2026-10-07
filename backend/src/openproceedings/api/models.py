@@ -172,8 +172,8 @@ ABSTRACT_NOTE_DOC = (
 
 ABSTRACT_WITHHELD_DOC = (
     "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, "
-    "decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight "
-    "spans empty, though an older index version may still match the query on the withheld text (decision-022: "
+    "decision-018, decision-022): `abstract` is then null, `abstract_source` and `abstract_note` null and the "
+    "abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: "
     "a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources "
     "gave none."
 )

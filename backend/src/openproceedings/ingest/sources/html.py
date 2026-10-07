@@ -94,7 +94,7 @@ _ATTRIBUTE_NAMES = _names(
     valign value valuetype version vlink vspace width wrap
     """
 )
-_ATTRIBUTE_PREFIXES = ("data-", "aria-", "xml")
+_ATTRIBUTE_PREFIXES = ("xml",)  # `xmlns`, `xml:lang`; `data-`/`aria-` names are `_HYPHENATED`
 # The tag grammar: CPython 3.12.9's tolerant start tag (`locatestarttagend_tolerant`, `attrfind_tolerant`), except
 # that no `<` may stand outside a quoted value, so a match ends at the next `<` or quote pair, and that every run is
 # possessive and the attribute run atomic: nothing gives characters back, so a failed match is never retried at
@@ -147,7 +147,8 @@ def escape_bare_lt(markup: str) -> str:
     a browser shows it. Only a `<` followed by a letter (or `/` and a letter) is ever escaped: that is all
     HTMLParser reads as a tag, and `<!`, `<?`, `<=` and `< ` are left to it as before. A `script` or `style` body
     is copied as it is, up to its end tag. Real tags are copied unchanged, so a page with no bare `<` parses
-    exactly as before. One left-to-right pass: a tag match stops at the first `<` outside a quoted value and never
+    exactly as before. Comments aren't skipped: a `<script>` or `<style>` inside one with no end tag later makes
+    the rest of the page raw, as the parser alone always read it. One left-to-right pass: a tag match stops at the first `<` outside a quoted value and never
     gives characters back, so the cost is linear (`test_html.py` checks the CPU growth on the shapes that were
     quadratic before the runs were made possessive, and CVE-2025-6069's inputs)."""
     out: list[str] = []

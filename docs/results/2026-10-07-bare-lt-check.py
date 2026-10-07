@@ -6,7 +6,8 @@
         line per record
     python -I 2026-10-07-bare-lt-check.py compare <old.jsonl> <new.jsonl>
         the records whose fields differ, per field and venue, each title or abstract change classified:
-        `restored` when every difference inserts text holding a `<` and anything removed is whitespace, else `other`
+        `restored` when nothing but whitespace is removed and every insertion holds a `<` or the record gains `<`s
+        overall, else `other`
         (printed whole, for a person to read)
 
 Run from an environment with the locked dependencies (`uv sync`); `replay` reads the clone only. Clone the cache

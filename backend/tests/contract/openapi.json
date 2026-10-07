@@ -1433,7 +1433,7 @@
             "description": "Where the hit's `abstract` came from, for attribution (decision-018). `source`: the provenance claim precedence took it from (decision-005), as `GET /papers/{id}` lists it; `ris` means it came through an imported RIS file. `origin`: the site that published it, for a `ris` claim read from the claim's evidence (`scholarmend:openreview_api` → `openreview`, `scholarmend:proceedings_page` → the proceedings its `urls.proceedings` names), null when that names no known site. `url`: the paper's page at `origin` (the OpenReview forum, or the proceedings page; PMLR's CC BY 4.0 terms ask for this link), null when there is none. The whole object is null when `abstract` is null or no claim holds its text."
           },
           "abstract_withheld": {
-            "description": "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.",
+            "description": "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` and `abstract_note` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.",
             "title": "Abstract Withheld",
             "type": "boolean"
           },
@@ -2115,7 +2115,7 @@
             "title": "Abstract Note"
           },
           "abstract_withheld": {
-            "description": "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.",
+            "description": "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` and `abstract_note` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.",
             "title": "Abstract Withheld",
             "type": "boolean"
           },

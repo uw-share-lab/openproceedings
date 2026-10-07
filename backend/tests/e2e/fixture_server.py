@@ -60,6 +60,8 @@ def _chosen(data: Path) -> tuple[dict[str, str], str]:
     engine = TantivyEngine(data / "scratch-indexes" / version)
     shown = [h.id for h in run(engine, parse(TWINNED_QUERY), limit=PAGE).hits]
     first, second = shown[:2]
+    # any year: the synthetic corpus pairs this paper's own year with a 1998 capture's attribution, a fixture
+    # artifact (the real notes are on ICML 1997 and 1998 only)
     submitted = next(h.id for h in run(engine, parse(SUBMITTED_QUERY), limit=PAGE).hits if h.id not in shown)
     return {first: second, second: first}, submitted
 

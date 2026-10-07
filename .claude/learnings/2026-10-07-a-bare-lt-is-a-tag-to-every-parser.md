@@ -30,6 +30,11 @@ Keep the text after a bare `<` in abstracts on every crawler (TASK-209), and mea
 - **Copying real markup unchanged** makes "no bare `<`, no change" checkable: every committed proceedings fixture
   page is byte-identical after the escape (a test), so the change can only touch pages that have the bug.
 
+- **A marker read back from stored evidence is a contract** (TASK-210): the submission-time note is derived at
+  snapshot load from the `icml_site` claim's evidence text (`dedup.AS_SUBMITTED`, the exact words TASK-207 wrote),
+  so snapshots built before TASK-210 carry the note with no rebuild, and rewording the constant would silently drop
+  it from them; the constant's comment says so and `test_icml_submissions.py` checks it from crawl to export.
+
 ## Dead ends — don't repeat these
 - `op eval …` on a command line is refused by the worktree-isolation guard (it matches the word `eval`); a wrapper
   script would get around it, which the rules forbid: ask the maintainer to run it.

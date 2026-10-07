@@ -839,7 +839,7 @@ export interface components {
             abstract_source: components["schemas"]["AbstractSource"] | null;
             /**
              * Abstract Withheld
-             * @description True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.
+             * @description True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` and `abstract_note` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.
              */
             abstract_withheld: boolean;
             /** Authors */
@@ -1084,7 +1084,7 @@ export interface components {
             abstract_note: string | null;
             /**
              * Abstract Withheld
-             * @description True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.
+             * @description True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` and `abstract_note` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.
              */
             abstract_withheld: boolean;
             /** @description With `q`: the spans `/search` gives this paper as a hit for that query, over `paper.title` and `paper.abstract` (code points over the raw text); both lists empty when `matched` is false. Null without `q`. */
