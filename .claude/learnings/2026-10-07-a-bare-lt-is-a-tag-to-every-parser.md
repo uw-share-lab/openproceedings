@@ -20,9 +20,13 @@ Keep the text after a bare `<` in abstracts on every crawler (TASK-209), and mea
 - **A pre-pass is version-independent; parser hooks are not.** Escaping `<` to `&lt;` before the parser keeps
   3.12.9 and 3.12.15 byte-identical over the whole cache, and the cross-release fuzz differences left are all `<!`
   constructs (TASK-208's list); the `</script` and `<?` ones went away too.
-- **Linear by construction**: tag matches stop at the first `<` outside a quoted value and the attribute run is an
-  atomic group (`(?>…)`, Python 3.11+), so each scan ends at the next `<` or quote pair; 2 MB adversarial inputs
-  take 0.3 s. CPython's own tolerant start-tag regex lets names hold `<`, which would make `"<a " * n` quadratic.
+- **An atomic group isn't enough; every run must be possessive.** Stopping each tag match at the next `<` outside a
+  quoted value and making the attribute run atomic (`(?>…)`) still left the tag *name* free to give characters
+  back, and on each give-back the attribute run rescanned the rest of the input: `"<a" + "\xa0x" * n` took 0.8 s at
+  n = 2,000 and 3.4 s at 4,000 (the focused reviewer's CPU-growth probe; my output-only "linear" test at n = 20,000
+  never saw it, since `" x"`-shaped inputs ended early). Possessive runs (`*+`, Python 3.11+) on the name, the
+  attribute name and value, and the end tag's body fix it; `test_escape_bare_lt_is_linear` is a paired CPU-growth
+  check (testing-standards §CPU growth checks) that fails on the old regex (ratio ~16) and passes now (~2.5).
 - **Copying real markup unchanged** makes "no bare `<`, no change" checkable: every committed proceedings fixture
   page is byte-identical after the escape (a test), so the change can only touch pages that have the bug.
 

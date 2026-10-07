@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import sys
+import time
+from collections.abc import Callable
 from pathlib import Path
+from statistics import median
 
 import pytest
 from openproceedings.ingest.sources import html
@@ -12,6 +15,7 @@ from openproceedings.ingest.sources.html import (
     MAX_DEPTH,
     HTMLBudgetError,
     collapse,
+    escape_bare_lt,
     metas,
     node_text,
     parse,
@@ -191,18 +195,19 @@ def test_an_unclosed_raw_text_tag_does_not_swallow_the_rows_after_it() -> None:
 BARE_LT = [
     ("if a<b and c>d then", "if a<b and c>d then"),  # known name, attributes that are no attribute names
     ("<p>bound n<k</p>", "bound n<k"),  # an unknown name (TASK-208 read `bound n`)
-    ("when $W<d$. Our main result", "when $W<d$. Our main result"),
-    ("for $1<p<\\infty$. For $1\\leq p<2$, we show", "for $1<p<\\infty$. For $1\\leq p<2$, we show"),
-    ("$P_T< \\! \\!<P_S$, we develop", "$P_T< \\! \\!<P_S$, we develop"),
-    ("the case $j<i$. The network", "the case $j<i$. The network"),
-    ("J == {Jdl<i<K is the set of weights", "J == {Jdl<i<K is the set of weights"),
+    # in a paragraph: the `>` of its `</p>` is what turned these into tags (alone, TASK-208's tail rule kept them)
+    ("<p>when $W<d$. Our main result</p>", "when $W<d$. Our main result"),
+    ("<p>for $1<p<\\infty$. For $1\\leq p<2$, we show</p>", "for $1<p<\\infty$. For $1\\leq p<2$, we show"),
+    ("<p>$P_T< \\! \\!<P_S$, we develop</p>", "$P_T< \\! \\!<P_S$, we develop"),
+    ("<p>the case $j<i$. The network</p>", "the case $j<i$. The network"),
+    ("<p>J == {Jdl<i<K is the set of weights</p>", "J == {Jdl<i<K is the set of weights"),
     ("a model $y = <x, \\theta^*>$", "a model $y = <x, \\theta^*>$"),
     ("predicting <human, action, object> triplets", "predicting <human, action, object> triplets"),
     ("experience tuples <s,a,s',r> from", "experience tuples <s,a,s',r> from"),
     ("code at <https://example.org/repo>.", "code at <https://example.org/repo>."),
     ("a framework called <projektor>, which", "a framework called <projektor>, which"),
     ("a solution such as <THEORY> and k<R>", "a solution such as <THEORY> and k<R>"),
-    ("kernel k<RT &gt;.", "kernel k<RT >."),  # `rt` is an element; `&gt;.` is no attribute name
+    ("<p>kernel k<RT &gt;.</p>", "kernel k<RT >."),  # `rt` is an element; `&gt;.` is no attribute name
     ("<i and used to explain", "<i and used to explain"),  # an unterminated one, read the same
     ("a </projektor> b", "a </projektor> b"),  # an end tag with an unknown name
     ("a <b x='y > c", "a <b x='y > c"),  # an unterminated quoted value: no tag (TASK-208 read `a`)
@@ -221,6 +226,10 @@ REAL_TAGS = [
     ("<script>if (a<b && c>d) {}</script>after", "after"),  # a script body is copied as it is
     ('<p>x</p y="1">z', "x z"),  # an end tag with attributes
     ("a</b and c>d", "ad"),  # an end tag with a known name, whatever follows it
+    ("<div v-cloak>t</div>after", "t after"),  # hyphenated attribute names: framework markup
+    ("<style amp-custom>.a{color:red}</style>t", "t"),  # a script or style tag is real whatever it says
+    ("<script amp-boilerplate>var a=1;</script>t", "t"),
+    ("<layer>l</layer><xml>x</xml>", "lx"),  # Netscape- and IE-era elements
 ]
 
 
@@ -243,6 +252,9 @@ def test_a_bare_lt_no_longer_reshapes_the_tree() -> None:
     assert [node_text(row) for row in rows] == ["one if a<li and c>d", "two"]
     page = '<p>x<y, "z</p><meta name="citation_title" content="T &lt; U">'
     assert metas(page, "citation_title") == ["T < U"]
+    # a bare `<` with an open quote used to read the meta into its attributes (`metas` escapes too)
+    page = "x<y 'z " + '<meta name="citation_title" content="T">' + "<p>'x>y</p>"
+    assert metas(page, "citation_title") == ["T"]
 
 
 def test_every_committed_proceedings_page_is_unchanged_by_the_escape() -> None:
@@ -282,13 +294,53 @@ def test_the_shared_path_keeps_a_bare_lt_on_neurips_and_pmlr_pages() -> None:
 
 def test_a_bare_lt_costs_linear_time() -> None:
     """Shapes that make a tag match scan far, at n = 20,000: each scan ends at the next `<` outside a quoted
-    value, so the whole escape is linear (no wall clock: a quadratic one would time out the suite)."""
+    value. The output is checked here; the cost in `test_escape_bare_lt_is_linear`."""
     n = 20_000
     for page in ('<a x="' + "<a " * n, "<b and c " * n, "<a x='" * n, "<a x=\"'" * n, "<p<" * n, "a<b" * n):
         assert node_text(parse(page)) == text_of(page) == collapse(page)
         assert metas(page, "citation_title") == []
     long_tag = "<a" + " x" * n  # one tag with 20,000 attributes and no `>`
     assert text_of(long_tag) == collapse(long_tag)
+
+
+def cpu_batch(f: Callable[[str], object], arg: str) -> float:
+    """Amortize the CPU clock over four calls without excluding allocation or GC cost."""
+    t = time.thread_time()
+    for _ in range(4):
+        f(arg)
+    return (time.thread_time() - t) / 4
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        lambda n: "<a" + "\xa0x" * n,  # a name that could give back Unicode whitespace to the attribute run
+        lambda n: "<a" + "\x0bx" * n,
+        lambda n: "<a" + " x" * n,
+        lambda n: "<a" + "'" * n,
+        lambda n: "<a" + '"x' * n,
+        lambda n: "</" + "a" * n,
+        lambda n: "</a" + "'" * n,
+    ],
+)
+def test_escape_bare_lt_is_linear(shape: Callable[[int], str]) -> None:
+    """testing-standards §CPU growth checks: quadrupling the input costs ~4x when linear, ~16x when quadratic.
+    Before the name and attribute runs were possessive, a tag name gave characters back and the attribute run
+    rescanned the rest of the input for each one (TASK-209 review: 0.84 s at n = 2,000, 3.4 s at 4,000)."""
+    small_arg, large_arg = shape(1_000), shape(4_000)
+    escape_bare_lt(small_arg)
+    escape_bare_lt(large_arg)
+    pairs = []
+    for round_number in range(9):
+        if round_number % 2:  # alternate the order against size-correlated CPU frequency and allocation drift
+            large = cpu_batch(escape_bare_lt, large_arg)
+            small = cpu_batch(escape_bare_lt, small_arg)
+        else:
+            small = cpu_batch(escape_bare_lt, small_arg)
+            large = cpu_batch(escape_bare_lt, large_arg)
+        pairs.append((small, large))
+    ratio = median(large / max(small, 1e-9) for small, large in pairs)
+    assert ratio < 8, (ratio, pairs)
 
 
 @pytest.mark.parametrize(

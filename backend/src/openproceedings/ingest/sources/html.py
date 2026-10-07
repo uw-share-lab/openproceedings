@@ -60,6 +60,7 @@ _ELEMENTS = _names(
     picture plaintext pre progress q rb rp rt rtc ruby s samp script search section select slot small source spacer
     span strike strong style sub summary sup table tbody td template textarea tfoot th thead time title tr track tt
     u ul var video wbr xmp
+    comment ilayer layer noindex nolayer xml
     svg animate animatemotion animatetransform circle clippath defs desc ellipse feblend fecolormatrix
     fecomponenttransfer fecomposite feconvolvematrix fediffuselighting fedisplacementmap fedistantlight
     fedropshadow feflood fefunca fefuncb fefuncg fefuncr fegaussianblur feimage femerge femergenode femorphology
@@ -95,12 +96,18 @@ _ATTRIBUTE_NAMES = _names(
 )
 _ATTRIBUTE_PREFIXES = ("data-", "aria-", "xml")
 # The tag grammar: CPython 3.12.9's tolerant start tag (`locatestarttagend_tolerant`, `attrfind_tolerant`), except
-# that no `<` may stand outside a quoted value, so a match ends at the next `<` or quote pair and the scan below
-# stays linear; the attribute run is atomic (no backtracking into it).
-_ATTRIBUTE = r"""(?<=['"\s/])([^\s/>=<][^\s/=><]*)(\s*=+\s*(?:'[^']*'|"[^"]*"|(?!['"])[^>\s<]*))?"""
-_START_TAG = re.compile(rf"<([a-zA-Z][^\t\n\r\f />\x00<]*)((?>(?:[\s/]*{_ATTRIBUTE}(?:\s|/(?!>))*)*))\s*/?>")
+# that no `<` may stand outside a quoted value, so a match ends at the next `<` or quote pair, and that every run is
+# possessive and the attribute run atomic: nothing gives characters back, so a failed match is never retried at
+# another split (a name that gave back let the attributes rescan the rest of the page: quadratic, review of
+# TASK-209). Possessive runs need Python 3.11+.
+_ATTRIBUTE = r"""(?<=['"\s/])([^\s/>=<][^\s/=><]*+)(\s*+=++\s*+(?:'[^']*+'|"[^"]*+"|(?!['"])[^>\s<]*+))?"""
+_START_TAG = re.compile(
+    rf"<([a-zA-Z][^\t\n\r\f />\x00<]*+)((?>(?:[\s/]*+{_ATTRIBUTE}(?:\s|/(?!>))*+)*+))\s*+/?>"
+)
 _ATTRIBUTES = re.compile(_ATTRIBUTE)
-_END_TAG = re.compile(r"""</([a-zA-Z][^\t\n\r\f />\x00<]*)(?>(?:[^<>"']+|"[^"]*"|'[^']*')*)>""")
+_END_TAG = re.compile(r"""</([a-zA-Z][^\t\n\r\f />\x00<]*+)(?>(?:[^<>"']++|"[^"]*+"|'[^']*+')*+)>""")
+# a hyphenated attribute name (`v-cloak`, `ng-app`, `amp-custom`): framework markup, never prose
+_HYPHENATED = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)+")
 _TAG_OPEN = re.compile(r"</?[a-zA-Z]")
 _RAW_TEXT_END = {name: re.compile(rf"</{name}", re.IGNORECASE) for name in ("script", "style")}
 
@@ -113,9 +120,15 @@ def _element(name: str) -> bool:
 def _real_start_tag(markup: str, match: re.Match[str]) -> bool:
     if not _element(match.group(1)):
         return False
+    if (
+        match.group(1).casefold() in _RAW_TEXT_END
+    ):  # the parser reads a script or style body raw whatever it says
+        return True
     attributes = list(_ATTRIBUTES.finditer(markup, match.start(2), match.end(2)))
     return any(a.group(2) is not None for a in attributes) or all(
-        (name := a.group(1).casefold()) in _ATTRIBUTE_NAMES or name.startswith(_ATTRIBUTE_PREFIXES)
+        (name := a.group(1).casefold()) in _ATTRIBUTE_NAMES
+        or name.startswith(_ATTRIBUTE_PREFIXES)
+        or _HYPHENATED.fullmatch(name) is not None
         for a in attributes
     )
 
@@ -126,15 +139,17 @@ def escape_bare_lt(markup: str) -> str:
     `if ad then` on every Python release.
 
     A real start tag has an HTML, SVG or MathML element name (or a custom or namespaced one), parses by the tag
-    grammar above up to its `>`, and either has an attribute with a value or has only HTML attribute names
-    (`<td nowrap>`, `<table border>`; none at all counts); a real end tag has such a name. So `<b and c>`,
-    `<p<\\infty$`, `<i$.`, `<x, \\theta^*>` and `<human, action, object>` stay text, while `<b>`, `<a href=x>` and
-    `<br/>` stay tags: `a<b>c` reads `ac`, as a browser shows it. Only a `<` followed by a letter (or `/` and a letter) is ever
-    escaped: that is all HTMLParser reads as a tag, and `<!`, `<?`, `<=` and `< ` are left to it as before. A
-    `script` or `style` body is copied as it is, up to its end tag. Real tags are copied unchanged, so a page
-    with no bare `<` parses exactly as before. One left-to-right pass: a tag match stops at the first `<` outside
-    a quoted value and never backtracks into its attributes, so the cost stays linear (CVE-2025-6069's inputs
-    are in `test_html.py`)."""
+    grammar above up to its `>`, and either has an attribute with a value or has only HTML attribute names,
+    `data-`/`aria-`/`xml` ones or hyphenated ones (`<td nowrap>`, `<table border>`, `<div v-cloak>`; none at all
+    counts); a `script` or `style` start tag that parses is always real, since the parser reads its body raw
+    whatever it says. A real end tag has such a name. So `<b and c>`, `<p<\\infty$`, `<i$.`, `<x, \\theta^*>` and
+    `<human, action, object>` stay text, while `<b>`, `<a href=x>` and `<br/>` stay tags: `a<b>c` reads `ac`, as
+    a browser shows it. Only a `<` followed by a letter (or `/` and a letter) is ever escaped: that is all
+    HTMLParser reads as a tag, and `<!`, `<?`, `<=` and `< ` are left to it as before. A `script` or `style` body
+    is copied as it is, up to its end tag. Real tags are copied unchanged, so a page with no bare `<` parses
+    exactly as before. One left-to-right pass: a tag match stops at the first `<` outside a quoted value and never
+    gives characters back, so the cost is linear (`test_html.py` checks the CPU growth on the shapes that were
+    quadratic before the runs were made possessive, and CVE-2025-6069's inputs)."""
     out: list[str] = []
     i = 0
     while (j := markup.find("<", i)) >= 0:
