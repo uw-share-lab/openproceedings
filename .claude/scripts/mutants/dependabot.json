@@ -42,6 +42,18 @@
     "new": "return not o or not n or o[:2] != n[:2]"
   },
   {
+    "label": "dependabot: common: token on curl's argv",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "cmd += [\"-w\", \"%{http_code}\", \"-H\", f\"@{sent}\"]",
+    "new": "cmd += [\"-w\", \"%{http_code}\"] + [x for k, v in (headers or {}).items() for x in (\"-H\", f\"{k}: {v}\")]"
+  },
+  {
+    "label": "dependabot: common: an unexpected error crashes",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "    except Exception as e:  # an unexpected shape",
+    "new": "    except ZeroDivisionError as e:  # an unexpected shape"
+  },
+  {
     "label": "dependabot: common: default base is dev's tip",
     "file": ".claude/scripts/dependabot/_common.py",
     "old": "run([\"git\", \"merge-base\", \"origin/dev\", head]).stdout.strip()",
@@ -92,14 +104,38 @@
   {
     "label": "dependabot: uv: lost provenance accepted",
     "file": ".claude/scripts/dependabot/uv_lock.py",
-    "old": "    if before and not now:\n",
-    "new": "    if False:\n"
+    "old": "        if before and not pub:\n",
+    "new": "        if False:\n"
   },
   {
     "label": "dependabot: uv: publisher change accepted",
     "file": ".claude/scripts/dependabot/uv_lock.py",
-    "old": "    elif before and now and before != now:\n",
-    "new": "    elif False:\n"
+    "old": "        elif before and pub != before:\n",
+    "new": "        elif False:\n"
+  },
+  {
+    "label": "dependabot: uv: disagreeing files accepted",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "    if not before and len(set(now.values())) > 1:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: uv: provenance of the first file only",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "for f in files(new)}",
+    "new": "for f in files(new)[:1]}"
+  },
+  {
+    "label": "dependabot: uv: previous ignores the major",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "    same = [v for v in old_versions if version_tuple(v)[:1] == version_tuple(new_v)[:1]]\n",
+    "new": "    same: list[str] = []\n"
+  },
+  {
+    "label": "dependabot: uv: only the publisher's repository compared",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "pubs = {json.dumps(b.get(\"publisher\") or {}, sort_keys=True) for b in bundles}",
+    "new": "pubs = {json.dumps((b.get(\"publisher\") or {}).get(\"repository\")) for b in bundles}"
   },
   {
     "label": "dependabot: uv: provenance 404 is an error",
@@ -182,8 +218,38 @@
   {
     "label": "dependabot: npm: lost provenance accepted",
     "file": ".claude/scripts/dependabot/npm_lock.py",
-    "old": "        if (before.get(\"dist\") or {}).get(\"attestations\") and not dist.get(\"attestations\"):\n",
+    "old": "        if was and not now:\n",
     "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: npm: provenance repository not compared",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "        elif was and now != was:\n",
+    "new": "        elif False:\n"
+  },
+  {
+    "label": "dependabot: npm: alias switch accepted",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "    if old is not None and package_name(key, old) != name:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: npm: link changes skipped",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "        if o.get(\"link\") or n.get(\"link\"):  # a workspace symlink; any change to or from one is not an update\n            rep.problem(f\"{k}: a link entry changed ({o.get('resolved')} -> {n.get('resolved')})\")\n",
+    "new": "        if o.get(\"link\") or n.get(\"link\"):\n"
+  },
+  {
+    "label": "dependabot: npm: nested node_modules ignored",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "if k.startswith(\"node_modules/\") or \"/node_modules/\" in k}",
+    "new": "if k.startswith(\"node_modules/\")}"
+  },
+  {
+    "label": "dependabot: npm: npm view runs in the repo",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "\"--registry\", REGISTRY], cwd=empty)",
+    "new": "\"--registry\", REGISTRY], cwd=None)"
   },
   {
     "label": "dependabot: npm: major not checked",
@@ -292,6 +358,24 @@
     "file": ".claude/scripts/dependabot/docker_digest.py",
     "old": "image if rest else f\"library/{image}\"",
     "new": "image"
+  },
+  {
+    "label": "dependabot: actions: tag looked up as any ref (a branch)",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "path = f\"repos/{repo}/git/ref/tags/{urllib.parse.quote(tag, safe='')}\"",
+    "new": "path = f\"repos/{repo}/commits/{urllib.parse.quote(tag, safe='')}\""
+  },
+  {
+    "label": "dependabot: actions: annotated tags not peeled",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "        if kind != \"tag\":\n",
+    "new": "        if True:\n"
+  },
+  {
+    "label": "dependabot: actions: flow-style uses missed",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "r\"(?:^|[\\s{,])",
+    "new": "r\"(?:^[ \\t]*(?:-[ \\t]*)?)"
   },
   {
     "label": "dependabot: actions: tag sha not compared",

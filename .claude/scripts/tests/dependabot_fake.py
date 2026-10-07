@@ -41,8 +41,14 @@ def curl(args: list[str]) -> int:
             i += 2
             continue
         if a == "-H":
-            k, _, v = args[i + 1].partition(":")
-            headers[k.strip()] = v.strip()
+            value = args[i + 1]
+            lines = Path(value[1:]).read_text().splitlines() if value.startswith("@") else [value]
+            if not value.startswith("@") and value.lower().startswith("authorization"):
+                print("fake curl: a credential on the command line", file=sys.stderr)
+                return 2
+            for line in lines:
+                k, _, v = line.partition(":")
+                headers[k.strip()] = v.strip()
             i += 2
             continue
         head = head or a == "-I"
@@ -88,6 +94,8 @@ def npm(args: list[str]) -> int:
         print(json.dumps({"error": {"code": "E404", "summary": f"{args[1]} is not in this registry."}}))
         print(f"npm error 404 {args[1]}", file=sys.stderr)
         return 1
+    if Path(".npmrc").exists():  # as npm would: a project .npmrc in the working directory redirects the scope
+        data = {**data, "dist": {**data.get("dist", {}), "integrity": "sha512-from-a-project-npmrc"}}
     print(json.dumps(data))
     return 0
 

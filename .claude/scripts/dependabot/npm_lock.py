@@ -4,28 +4,34 @@
     python3 .claude/scripts/dependabot/npm_lock.py [--base REF] [--head REF]
 
 Compares `package-lock.json` at `base` (default: the merge base of origin/dev and HEAD) and `head`
-(default HEAD). Every changed `node_modules/…` entry is checked against the registry's manifest for its
-version (`npm view <name>@<version> --json`, always against registry.npmjs.org): the lock's integrity
-equals `dist.integrity`, `resolved` equals `dist.tarball` on registry.npmjs.org, and the dependencies,
-optional and peer dependencies, `os`, `cpu` and `libc` equal the manifest's (so a `libc` an older npm
-dropped shows up). When the version moved it also compares the publisher (`_npmUser`) and npm provenance
-(`dist.attestations`) with the previous version's, and the install scripts. Then it checks that every
-dependency in `package.json` and `frontend/package.json` at `head` is written exactly as the lock's
-`packages[""]` and `packages["frontend"]` entries hold it (Dependabot's npm updater can write a caret
-into the lock's workspace entry; `npm ci` accepts it).
+(default HEAD). Every changed `node_modules/…` entry (nested ones included) is checked against the registry's
+manifest for its version (`npm view <name>@<version> --json --registry https://registry.npmjs.org/`, run from an
+empty directory so no `.npmrc` in the repo can point a scope elsewhere): the lock's integrity equals
+`dist.integrity`, `resolved` equals `dist.tarball` on registry.npmjs.org, and the dependencies, optional and peer
+dependencies, `os`, `cpu` and `libc` equal the manifest's (so a `libc` an older npm dropped shows up). When the
+version moved it also compares, with the previous version's, the publisher (`_npmUser`), the install scripts and
+the npm provenance: present before means present now, from the same source repository (the SLSA statement's
+`workflow.repository`, read from `dist.attestations.url`). Then it checks that every dependency in
+`package.json` and `frontend/package.json` at `head` is written exactly as the lock's `packages[""]` and
+`packages["frontend"]` entries hold it (Dependabot's npm updater can write a caret into the lock's workspace
+entry; `npm ci` accepts it).
 
-A PROBLEM, the PR stays open: an added or removed package, a mismatch with the registry, a field dropped
-from an entry whose version didn't move, a new install script, a new publisher, provenance the previous
-version had and this one lacks, a semver-major bump, or a manifest/lock pin that differs.
+A PROBLEM, the PR stays open: an added or removed package, an entry that changes its package name (an alias)
+or turns into or out of a `link`, a mismatch with the registry, a field dropped from an entry whose version
+didn't move, a new install script, a new publisher, provenance the previous version had and this one lacks or
+that comes from another repository, a semver-major bump. A FIX, repaired in the PR: a manifest/lock pin that
+differs, a dropped `libc`.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
+import tempfile
 from typing import Any
 
-from _common import Report, ToolError, git_show, is_major, main_guard, resolve_refs, run_json
+from _common import Report, ToolError, git_show, http_json, is_major, main_guard, resolve_refs, run_json
 
 REGISTRY = "https://registry.npmjs.org/"
 DEP_FIELDS = ("dependencies", "optionalDependencies", "peerDependencies", "os", "cpu", "libc")
@@ -33,6 +39,7 @@ MANIFEST_SECTIONS = ("dependencies", "devDependencies", "optionalDependencies", 
 GRAPH_FLAGS = {"dev", "optional", "devOptional", "peer"}  # set by where a package sits in the tree, not by it
 INSTALL_SCRIPTS = ("preinstall", "install", "postinstall")
 WORKSPACES = {"": "package.json", "frontend": "frontend/package.json"}
+SLSA = "https://slsa.dev/provenance/"
 
 Entry = dict[str, Any]
 
@@ -50,11 +57,13 @@ def load(text: str | None, what: str) -> dict[str, Any]:
 
 
 def package_name(key: str, entry: Entry) -> str:
+    """The registry name: an alias entry (`"name": …`) names it; otherwise the path after the last node_modules/."""
     return str(entry.get("name") or key.rsplit("node_modules/", 1)[-1])
 
 
 def view(name: str, version: str) -> dict[str, Any]:
-    data = run_json(["npm", "view", f"{name}@{version}", "--json", "--registry", REGISTRY])
+    with tempfile.TemporaryDirectory(prefix="op-depbot-npm-") as empty:  # no project .npmrc applies here
+        data = run_json(["npm", "view", f"{name}@{version}", "--json", "--registry", REGISTRY], cwd=empty)
     if isinstance(data, list):  # npm prints a list when a range matches several versions
         data = data[-1] if data else {}
     if not isinstance(data, dict) or data.get("version") != version:
@@ -75,6 +84,29 @@ def install_scripts(manifest: dict[str, Any]) -> set[str]:
     return found | ({"gypfile"} if manifest.get("gypfile") else set())
 
 
+def provenance_repo(manifest: dict[str, Any]) -> str | None:
+    """The source repository npm provenance names, or None when the version has no provenance."""
+    att = (manifest.get("dist") or {}).get("attestations")
+    if not att:
+        return None
+    url = str(att.get("url", ""))
+    if not url.startswith(REGISTRY):
+        raise ToolError(f"provenance URL off the registry: {url}")
+    for a in http_json(url).get("attestations", []):
+        if not str(a.get("predicateType", "")).startswith(SLSA):
+            continue
+        payload = a["bundle"]["dsseEnvelope"]["payload"]
+        statement = json.loads(base64.b64decode(payload))
+        predicate = statement.get("predicate", {})
+        workflow = (predicate.get("buildDefinition", {}).get("externalParameters", {})).get("workflow", {})
+        if workflow.get("repository"):
+            return str(workflow["repository"])
+        source = predicate.get("invocation", {}).get("configSource", {}).get("uri", "")  # SLSA v0.2
+        if source:
+            return str(source).removeprefix("git+").split("@", 1)[0]
+    raise ToolError(f"{url} holds no SLSA provenance naming a repository")
+
+
 def norm(value: Any) -> Any:
     return value or None  # [] / {} / missing are the same thing
 
@@ -83,6 +115,10 @@ def check_entry(rep: Report, key: str, old: Entry | None, new: Entry) -> None:
     name = package_name(key, new)
     old_v, new_v = (old or {}).get("version"), str(new.get("version", ""))
     label = f"{name} {old_v} -> {new_v}" if old_v != new_v else f"{name} {new_v}"
+    found = len(rep.problems) + len(rep.fixes)
+    if old is not None and package_name(key, old) != name:
+        rep.problem(f"{key}: the package changed from {package_name(key, old)} to {name} (a new package)")
+        return
     if old is not None and old_v == new_v:
         dropped = sorted(set(old) - set(new) - GRAPH_FLAGS)
         if dropped == ["libc"]:
@@ -99,7 +135,6 @@ def check_entry(rep: Report, key: str, old: Entry | None, new: Entry) -> None:
         rep.problem(f"{label}: resolved is not on registry.npmjs.org: {resolved}")
     m = view(name, new_v)
     dist = m.get("dist") or {}
-    problems = len(rep.problems) + len(rep.fixes)
     if dist.get("integrity") != new.get("integrity"):
         rep.problem(f"{label}: integrity differs from the registry's")
     if dist.get("tarball") != resolved:
@@ -120,9 +155,12 @@ def check_entry(rep: Report, key: str, old: Entry | None, new: Entry) -> None:
             rep.problem(f"{label}: new install script(s): {', '.join(sorted(added))}")
         if npm_user(before) != npm_user(m):
             rep.problem(f"{label}: publisher changed from {npm_user(before)!r} to {npm_user(m)!r}")
-        if (before.get("dist") or {}).get("attestations") and not dist.get("attestations"):
-            rep.problem(f"{label}: {old_v} had npm provenance, {new_v} has none")
-    if len(rep.problems) + len(rep.fixes) == problems:
+        was, now = provenance_repo(before), provenance_repo(m)
+        if was and not now:
+            rep.problem(f"{label}: {old_v} had npm provenance ({was}), {new_v} has none")
+        elif was and now != was:
+            rep.problem(f"{label}: provenance repository changed from {was} to {now}")
+    if len(rep.problems) + len(rep.fixes) == found:
         rep.ok(f"{label}: matches the registry (publisher {npm_user(m)!r})")
 
 
@@ -162,8 +200,13 @@ def main() -> None:
     for k in sorted(deps - set(old)):
         rep.problem(f"{k} {new[k].get('version')}: added to the lock (a new package)")
     for k in sorted(deps & set(old) & set(new)):
-        if old[k] != new[k] and not new[k].get("link"):
-            check_entry(rep, k, old[k], new[k])
+        o, n = old[k], new[k]
+        if o == n:
+            continue
+        if o.get("link") or n.get("link"):  # a workspace symlink; any change to or from one is not an update
+            rep.problem(f"{k}: a link entry changed ({o.get('resolved')} -> {n.get('resolved')})")
+            continue
+        check_entry(rep, k, o, n)
     check_manifests(rep, new_lock, head)
     rep.finish()
 

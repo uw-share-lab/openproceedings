@@ -13,7 +13,9 @@ ghcr.io must also pass `gh attestation verify oci://<image>@<digest> --owner <it
 
 A PROBLEM, the PR stays open: a digest that doesn't resolve or differs, a non-index answer, a failed
 attestation, an image that wasn't pinned before, a semver-major tag change, or a `python` minor change
-(hand-only, spec 08 §Monorepo layout). A `.python-version` that doesn't match is a FIX.
+(hand-only, spec 08 §Monorepo layout). A `.python-version` that doesn't match is a FIX. An image reference
+that lost its digest is not this script's to find: `check_digest_pins.py` (in `make tooling`, which the command
+runs and CI's `claude-tooling` check runs) refuses any unpinned image a `deploy/` build pulls.
 """
 
 from __future__ import annotations
@@ -104,7 +106,7 @@ def check_pin(rep: Report, pin: Pin, before: set[Pin], head: str) -> None:
     if not olds:
         rep.problem(f"{pin}: {pin.image} was not pinned before (a new image)")
         return
-    old_tag = olds[-1]
+    old_tag = max(olds, key=version_tuple)
     if pin.tag != old_tag and is_major(old_tag, pin.tag):
         rep.problem(f"{pin}: semver-major tag change from {old_tag}")
     if is_python(pin.image) and pin.tag != old_tag and is_minor_or_more(old_tag, pin.tag):

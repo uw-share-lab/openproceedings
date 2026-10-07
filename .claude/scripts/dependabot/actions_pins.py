@@ -3,10 +3,11 @@
 
     python3 .claude/scripts/dependabot/actions_pins.py [--base REF] [--head REF]
 
-Reads every `uses: <owner>/<repo>[/<path>]@<40-hex sha> # <tag>` line in the files under `.github/` that
-changed between `base` (default: the merge base of origin/dev and HEAD) and `head` (default HEAD). For each
-pin that is new at `head`, `gh api repos/<owner>/<repo>/commits/<tag>` must return the pinned sha (the
-version comment is the tag the sha came from).
+Reads every `uses: <owner>/<repo>[/<path>]@<40-hex sha> # <tag>` (block or flow style) in the files under
+`.github/` (workflows and composite actions) that changed between `base` (default: the merge base of origin/dev
+and HEAD) and `head` (default HEAD). For each pin that is new at `head`, the tag ref
+(`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`, an annotated tag peeled to its commit; never a branch of the
+same name) must name the pinned sha (the version comment is the tag the sha came from).
 
 A PROBLEM, the PR stays open: a tag that resolves to another commit, an action that wasn't used before, a
 semver-major tag change, or a `uses:` line in a changed file that isn't pinned to a full sha.
@@ -21,7 +22,10 @@ from dataclasses import dataclass
 
 from _common import Report, ToolError, changed_files, git_show, is_major, main_guard, resolve_refs, run_json
 
-USES = re.compile(r"^\s*(?:-\s*)?uses:\s*['\"]?([^\s'\"#]+)['\"]?\s*(?:#\s*(\S+))?", re.MULTILINE)
+# `uses:` anywhere a YAML key can start: block style (`- uses: …`) and flow style (`{uses: …, with: …}`)
+USES = re.compile(
+    r"(?:^|[\s{,])['\"]?uses['\"]?:\s*['\"]?([^\s'\",}#]+)['\"]?[ \t]*(?:#[ \t]*(\S+))?", re.MULTILINE
+)
 PINNED = re.compile(r"^([\w.-]+/[\w.-]+)(/[^@]*)?@([0-9a-f]{40})$")
 
 
@@ -51,11 +55,19 @@ def uses(text: str | None, rep: Report | None = None, path: str = "") -> set[Use
 
 
 def tag_sha(repo: str, tag: str) -> str:
-    data = run_json(["gh", "api", f"repos/{repo}/commits/{urllib.parse.quote(tag, safe='')}"])
-    sha = data.get("sha") if isinstance(data, dict) else None
-    if not isinstance(sha, str):
-        raise ToolError(f"gh api repos/{repo}/commits/{tag} returned no sha")
-    return sha
+    """The commit the tag `tag` names (a tag ref only, never a branch of the same name; annotated tags peeled)."""
+    path = f"repos/{repo}/git/ref/tags/{urllib.parse.quote(tag, safe='')}"
+    for _ in range(5):  # a tag of a tag is legal; peel a few levels, no more
+        obj = (run_json(["gh", "api", path]) or {}).get("object") or {}
+        kind, sha = obj.get("type"), obj.get("sha")
+        if not isinstance(sha, str):
+            raise ToolError(f"gh api {path} returned no sha")
+        if kind == "commit":
+            return sha
+        if kind != "tag":
+            raise ToolError(f"gh api {path}: tag {tag} points to a {kind}, not a commit")
+        path = f"repos/{repo}/git/tags/{sha}"
+    raise ToolError(f"tag {tag} of {repo} is nested too deep")
 
 
 def main() -> None:

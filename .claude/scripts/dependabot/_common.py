@@ -26,10 +26,12 @@ class ToolError(Exception):
     """A tool or service call failed: the check could not be completed."""
 
 
-def run(cmd: list[str], *, ok_codes: tuple[int, ...] = (0,)) -> subprocess.CompletedProcess[str]:
+def run(
+    cmd: list[str], *, ok_codes: tuple[int, ...] = (0,), cwd: str | None = None
+) -> subprocess.CompletedProcess[str]:
     """Run a command (never through a shell). Raises ToolError on a missing tool, a timeout or a bad exit."""
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT, check=False)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT, check=False, cwd=cwd)
     except FileNotFoundError as e:
         raise ToolError(f"{cmd[0]} is not installed") from e
     except subprocess.TimeoutExpired as e:
@@ -39,8 +41,8 @@ def run(cmd: list[str], *, ok_codes: tuple[int, ...] = (0,)) -> subprocess.Compl
     return r
 
 
-def run_json(cmd: list[str]) -> Any:
-    out = run(cmd).stdout
+def run_json(cmd: list[str], *, cwd: str | None = None) -> Any:
+    out = run(cmd, cwd=cwd).stdout
     try:
         return json.loads(out)
     except json.JSONDecodeError as e:
@@ -82,13 +84,13 @@ def http(url: str, headers: dict[str, str] | None = None, *, head: bool = False)
     if not url.startswith("https://"):
         raise ToolError(f"refusing a non-https URL: {url}")
     with tempfile.TemporaryDirectory(prefix="op-depbot-") as d:
-        hdr, body = Path(d) / "headers", Path(d) / "body"
+        hdr, body, sent = Path(d) / "headers", Path(d) / "body", Path(d) / "request-headers"
+        # request headers from a file, so a registry token never sits on curl's argv (visible in ps)
+        sent.write_text("".join(f"{k}: {v}\n" for k, v in (headers or {}).items()))
         cmd = ["curl", "-sS", "--proto", "=https", "--max-time", "60", "-D", str(hdr), "-o", str(body)]
-        cmd += ["-w", "%{http_code}"]
+        cmd += ["-w", "%{http_code}", "-H", f"@{sent}"]
         if head:
             cmd.append("-I")
-        for k, v in (headers or {}).items():
-            cmd += ["-H", f"{k}: {v}"]
         cmd.append(url)
         status_text = run(cmd).stdout.strip()
         if not status_text.isdigit():
@@ -165,10 +167,17 @@ class Report:
 
 
 def main_guard(fn: Any) -> NoReturn:
-    """Run a checker's main; a ToolError exits 2 with its message, so a failed check never reads as a pass."""
+    """Run a checker's main. A ToolError, or any unexpected error (an answer of the wrong shape), exits 2 with
+    its message, so a failed check never reads as a pass or as a PROBLEM the PR caused."""
     try:
         fn()
     except ToolError as e:
         print(f"ERROR   {e} — the check did not complete; leave the PR open", file=sys.stderr)
+        sys.exit(2)
+    except Exception as e:  # an unexpected shape (KeyError, TypeError, …) is a failed check, not a crash
+        print(
+            f"ERROR   {type(e).__name__}: {e} — the check did not complete; leave the PR open",
+            file=sys.stderr,
+        )
         sys.exit(2)
     sys.exit(0)

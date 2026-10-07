@@ -10,6 +10,7 @@ status and one line of its output. No row reaches the network. Mutants: .claude/
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -127,12 +128,18 @@ def pypi(c: Case, name: str, version: str, *, yanked: bool = False, files: list[
     c.curl[f"https://pypi.org/pypi/{name}/{version}/json"] = {"status": 200, "body": {"urls": urls}}
 
 
-def prov(c: Case, name: str, version: str, repo: str | None) -> None:
+def prov(
+    c: Case, name: str, version: str, repo: str | None, *, only: list[str] | None = None, **pub: str
+) -> None:
+    """PEP 740 provenance for every file of the version (or `only` these), from `repo`."""
     if repo is None:
         return
-    url = f"https://pypi.org/integrity/{name}/{version}/{name}-{version}.tar.gz/provenance"
-    body = {"attestation_bundles": [{"publisher": {"kind": "GitHub", "repository": repo}}]}
-    c.curl[url] = [{"if": {"Accept": "application/vnd.pypi.integrity.v1+json"}, "status": 200, "body": body}]
+    for fn in only if only is not None else uv_files(name, version):
+        url = f"https://pypi.org/integrity/{name}/{version}/{fn}/provenance"
+        body = {"attestation_bundles": [{"publisher": {"kind": "GitHub", "repository": repo, **pub}}]}
+        c.curl[url] = [
+            {"if": {"Accept": "application/vnd.pypi.integrity.v1+json"}, "status": 200, "body": body}
+        ]
 
 
 def uv_case(c: Case, old: list[str], new: list[str], **kw: str) -> list[str]:
@@ -153,13 +160,18 @@ def uv_bump(
 @row("uv: a clean bump with the same publisher passes")
 def _(c: Case) -> None:
     c.expect(
-        "uv_lock.py", uv_bump(c), OK, r"^ok .*ruff 0\.16\.9 -> 0\.16\.10: provenance GitHub o/ruff \(same"
+        "uv_lock.py",
+        uv_bump(c),
+        OK,
+        r'^ok .*ruff 0\.16\.9 -> 0\.16\.10: provenance .*"o/ruff".* on every file, as before$',
     )
 
 
 @row("uv: no provenance before or after passes")
 def _(c: Case) -> None:
-    c.expect("uv_lock.py", uv_bump(c, old_repo=None, new_repo=None), OK, r"no provenance, none before either")
+    c.expect(
+        "uv_lock.py", uv_bump(c, old_repo=None, new_repo=None), OK, r"^ok .*provenance none on every file$"
+    )
 
 
 @row("uv: a sha256 PyPI doesn't have")
@@ -194,12 +206,59 @@ def _(c: Case) -> None:
 
 @row("uv: provenance the previous version had is gone")
 def _(c: Case) -> None:
-    c.expect("uv_lock.py", uv_bump(c, new_repo=None), PROBLEM, r"^PROBLEM .*had provenance .* has none")
+    c.expect(
+        "uv_lock.py",
+        uv_bump(c, new_repo=None),
+        PROBLEM,
+        r"^PROBLEM .*tar\.gz has no provenance; 0\.16\.9 had",
+    )
 
 
 @row("uv: a new publisher repository")
 def _(c: Case) -> None:
     c.expect("uv_lock.py", uv_bump(c, new_repo="evil/ruff"), PROBLEM, r"^PROBLEM .*publisher changed")
+
+
+@row("uv: a wheel without the provenance the sdist and the previous version have")
+def _(c: Case) -> None:
+    pypi(c, "ruff", "0.16.10")
+    prov(c, "ruff", "0.16.9", "o/ruff")
+    prov(c, "ruff", "0.16.10", "o/ruff", only=["ruff-0.16.10.tar.gz"])
+    args = uv_case(c, [uv_pkg("ruff", "0.16.9")], [uv_pkg("ruff", "0.16.10")])
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM .*any\.whl has no provenance")
+
+
+@row("uv: the whole publisher record is compared (a new workflow)")
+def _(c: Case) -> None:
+    pypi(c, "ruff", "0.16.10")
+    prov(c, "ruff", "0.16.9", "o/ruff", workflow="release.yml")
+    prov(c, "ruff", "0.16.10", "o/ruff", workflow="evil.yml")
+    args = uv_case(c, [uv_pkg("ruff", "0.16.9")], [uv_pkg("ruff", "0.16.10")])
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM .*publisher changed .*evil\.yml")
+
+
+@row("uv: files of one release that disagree on provenance")
+def _(c: Case) -> None:
+    pypi(c, "ruff", "0.16.10")
+    prov(c, "ruff", "0.16.10", "o/ruff", only=["ruff-0.16.10.tar.gz"])
+    args = uv_case(c, [uv_pkg("ruff", "0.16.9")], [uv_pkg("ruff", "0.16.10")])
+    c.expect("uv_lock.py", args, PROBLEM, r"^PROBLEM .*disagree on provenance")
+
+
+@row("uv: one package at two versions, each bumped within its major")
+def _(c: Case) -> None:
+    for v in ("1.26.5", "2.1.1"):
+        pypi(c, "numpy", v)
+    old = [uv_pkg("numpy", "1.26.4"), uv_pkg("numpy", "2.1.0")]
+    args = uv_case(c, old, [uv_pkg("numpy", "1.26.5"), uv_pkg("numpy", "2.1.1")])
+    c.expect("uv_lock.py", args, OK, r"^ok .*numpy 1\.26\.4 -> 1\.26\.5: 2 file")
+
+
+@row("uv: a PyPI answer of the wrong shape is an error, not a crash")
+def _(c: Case) -> None:
+    args = uv_bump(c)
+    c.curl["https://pypi.org/pypi/ruff/0.16.10/json"] = {"status": 200, "body": {"urls": [{"filename": "x"}]}}
+    c.expect("uv_lock.py", args, ERROR, r"^ERROR +KeyError")
 
 
 @row("uv: an added package")
@@ -287,8 +346,16 @@ def entry(name: str, v: str, **extra: Any) -> dict[str, Any]:
 def view(c: Case, name: str, v: str, *, user: str = "alice", **extra: Any) -> None:
     e = entry(name, v)
     dist: dict[str, Any] = {"integrity": e["integrity"], "tarball": e["resolved"]}
-    if extra.pop("attest", False):
-        dist["attestations"] = {"provenance": {"predicateType": "https://slsa.dev/provenance/v1"}}
+    repo = extra.pop("attest", None)
+    if repo:  # npm provenance: the attestations URL serves an SLSA statement naming the source repository
+        url = f"{REG}-/npm/v1/attestations/{name}@{v}"
+        dist["attestations"] = {"url": url, "provenance": {"predicateType": "https://slsa.dev/provenance/v1"}}
+        stmt = {"predicate": {"buildDefinition": {"externalParameters": {"workflow": {"repository": repo}}}}}
+        payload = base64.b64encode(json.dumps(stmt).encode()).decode()
+        c.curl[url] = {"status": 200, "body": {"attestations": [
+            {"predicateType": "https://github.com/npm/attestation/tree/main/specs/publish/v0.1"},
+            {"predicateType": "https://slsa.dev/provenance/v1", "bundle": {"dsseEnvelope": {"payload": payload}}},
+        ]}}  # fmt: skip
     c.npm[f"{name}@{v}"] = {
         "name": name,
         "version": v,
@@ -304,7 +371,7 @@ def lock(entries: dict[str, dict[str, Any]], front: dict[str, str] | None = None
         "": {"name": "root", "workspaces": ["frontend"]},
         "frontend": {"version": "0.1.0", "dependencies": front},
         "node_modules/frontend": {"resolved": "frontend", "link": True},
-        **{f"node_modules/{k}": v for k, v in entries.items()},
+        **{(k if k.startswith("frontend/") else f"node_modules/{k}"): v for k, v in entries.items()},
     }
     return json.dumps(
         {"name": "root", "lockfileVersion": 3, "requires": True, "packages": packages}, indent=2
@@ -394,16 +461,56 @@ def _(c: Case) -> None:
 @row("npm: provenance the previous version had is gone")
 def _(c: Case) -> None:
     args = npm_bump(c)
-    view(c, "next", "16.3.7", attest=True)
-    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM .*had npm provenance")
+    view(c, "next", "16.3.7", attest="https://github.com/vercel/next.js")
+    c.expect(
+        "npm_lock.py", args, PROBLEM, r"^PROBLEM .*had npm provenance \(https://github\.com/vercel/next\.js\)"
+    )
 
 
 @row("npm: provenance kept passes")
 def _(c: Case) -> None:
     args = npm_bump(c)
-    view(c, "next", "16.3.7", attest=True)
-    view(c, "next", "16.3.8", attest=True)
+    view(c, "next", "16.3.7", attest="https://github.com/vercel/next.js")
+    view(c, "next", "16.3.8", attest="https://github.com/vercel/next.js")
     c.expect("npm_lock.py", args, OK, r"^package-lock\.json: 0 problems")
+
+
+@row("npm: provenance from another source repository")
+def _(c: Case) -> None:
+    args = npm_bump(c)
+    view(c, "next", "16.3.7", attest="https://github.com/vercel/next.js")
+    view(c, "next", "16.3.8", attest="https://github.com/evil/next.js")
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM .*provenance repository changed .*evil/next\.js")
+
+
+@row("npm: an entry that switches to another package (an alias)")
+def _(c: Case) -> None:
+    view(c, "evil", "1.0.1")
+    args = npm_case(c, {"foo": entry("foo", "1.0.0")}, {"foo": {**entry("evil", "1.0.1"), "name": "evil"}})
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM node_modules/foo: the package changed from foo to evil")
+
+
+@row("npm: a registry entry turned into a link")
+def _(c: Case) -> None:
+    args = npm_case(c, {"x": entry("x", "1.0.0")}, {"x": {"resolved": "frontend", "link": True}})
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM node_modules/x: a link entry changed")
+
+
+@row("npm: a nested node_modules entry is checked")
+def _(c: Case) -> None:
+    view(c, "x", "1.0.0")
+    view(c, "x", "1.0.1")
+    old = {"frontend/node_modules/x": entry("x", "1.0.0")}
+    new = {"frontend/node_modules/x": entry("x", "1.0.1", integrity="sha512-bad")}
+    c.expect(
+        "npm_lock.py", npm_case(c, old, new), PROBLEM, r"^PROBLEM x 1\.0\.0 -> 1\.0\.1: integrity differs"
+    )
+
+
+@row("npm: npm view runs outside the repo, so its .npmrc can't redirect a scope")
+def _(c: Case) -> None:
+    c.commit({".npmrc": "@vercel:registry=https://evil.example/\n"})
+    c.expect("npm_lock.py", npm_bump(c), OK, r"^package-lock\.json: 0 problems")
 
 
 @row("npm: a semver-major bump")
@@ -412,6 +519,8 @@ def _(c: Case) -> None:
     view(c, "next", "17.0.0")
     args = npm_case(c, {"next": entry("next", "16.3.8")}, {"next": entry("next", "17.0.0")})
     c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM .*16\.3\.8 -> 17\.0\.0: semver-major")
+    _, out = c.run("npm_lock.py", *args)
+    assert not re.search(r"^ok .*next .*matches the registry", out, re.MULTILINE), out
 
 
 @row("npm: same version, different integrity")
@@ -522,6 +631,40 @@ def node_case(c: Case, **kw: Any) -> list[str]:
 def _(c: Case) -> None:
     c.expect(
         "docker_digest.py", node_case(c), OK, r"^ok .*resolves 22-bookworm-slim to the pinned index digest"
+    )
+
+
+@row("docker: a Docker Hub image says it has no GitHub attestation to verify")
+def _(c: Case) -> None:
+    c.expect(
+        "docker_digest.py", node_case(c), OK, r"^ok .*registry-1\.docker\.io publishes no GitHub attestations"
+    )
+
+
+@row("docker: a COPY --from image pin is checked like a FROM")
+def _(c: Case) -> None:
+    new = digest("uv-new")
+    c.curl["https://ghcr.io/v2/astral-sh/uv/manifests/0.12.24"] = [
+        {
+            "if": {"Accept": INDEX},
+            "status": 200,
+            "headers": {"docker-content-digest": new, "content-type": INDEX},
+        }
+    ]
+    c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{new} astral-sh"] = 0
+    text = (
+        "FROM python:3.12.15-slim-bookworm@{}\nCOPY --from=ghcr.io/astral-sh/uv:{}@{} /uv /usr/local/bin/uv\n"
+    )
+    py = digest("py")
+    base = c.commit(
+        {
+            "deploy/api.Dockerfile": text.format(py, "0.12.23", digest("uv-old")),
+            ".python-version": "3.12.15\n",
+        }
+    )
+    head = c.commit({"deploy/api.Dockerfile": text.format(py, "0.12.24", new)})
+    c.expect(
+        "docker_digest.py", ["--base", base, "--head", head], OK, r"^ok .*uv:0\.12\.24.*attestation verified"
     )
 
 
@@ -645,6 +788,10 @@ def wf(*uses: str) -> str:
     return "jobs:\n  j:\n    steps:\n" + "".join(f"      - uses: {u}\n" for u in uses)
 
 
+def tag_ref(c: Case, repo: str, tag: str, commit: str) -> None:
+    c.gh[f"api repos/{repo}/git/ref/tags/{tag}"] = {"object": {"type": "commit", "sha": commit}}
+
+
 def actions_case(c: Case, old: str, new: str) -> list[str]:
     base = c.commit({".github/workflows/lint.yml": wf(old)})
     head = c.commit({".github/workflows/lint.yml": wf(new)})
@@ -653,14 +800,53 @@ def actions_case(c: Case, old: str, new: str) -> list[str]:
 
 @row("actions: a pin whose tag is that commit passes")
 def _(c: Case) -> None:
-    c.gh["api repos/actions/checkout/commits/v7.0.2"] = {"sha": sha("b")}
+    tag_ref(c, "actions/checkout", "v7.0.2", sha("b"))
     args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v7.0.2")
     c.expect("actions_pins.py", args, OK, r"^ok .*tag v7\.0\.2 is the pinned commit")
 
 
+@row("actions: an annotated tag is peeled to its commit")
+def _(c: Case) -> None:
+    c.gh["api repos/actions/checkout/git/ref/tags/v7.0.2"] = {"object": {"type": "tag", "sha": sha("t")}}
+    c.gh[f"api repos/actions/checkout/git/tags/{sha('t')}"] = {"object": {"type": "commit", "sha": sha("b")}}
+    args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v7.0.2")
+    c.expect("actions_pins.py", args, OK, r"^ok .*tag v7\.0\.2 is the pinned commit")
+
+
+@row("actions: a name that is only a branch, not a tag, is an error")
+def _(c: Case) -> None:
+    c.gh["api repos/actions/checkout/commits/v7.0.2"] = {"sha": sha("b")}
+    args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v7.0.2")
+    c.expect("actions_pins.py", args, ERROR, r"^ERROR .*git/ref/tags/v7\.0\.2 exited 1")
+
+
+@row("actions: a flow-style uses that isn't pinned")
+def _(c: Case) -> None:
+    base = c.commit({".github/workflows/lint.yml": wf(f"actions/checkout@{sha('a')} # v7.0.1")})
+    head = c.commit({".github/workflows/lint.yml": "jobs:\n  j:\n    steps:\n      - {uses: evil/x@v1}\n"})
+    c.expect(
+        "actions_pins.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"^PROBLEM .*`uses: evil/x@v1` is not pinned",
+    )
+
+
+@row("actions: a composite action's pins are checked")
+def _(c: Case) -> None:
+    tag_ref(c, "actions/checkout", "v7.0.2", sha("b"))
+    path = ".github/actions/setup/action.yml"
+    steps = "runs:\n  using: composite\n  steps:\n    - uses: actions/checkout@{} # {}\n"
+    base = c.commit({path: steps.format(sha("a"), "v7.0.1")})
+    head = c.commit({path: steps.format(sha("b"), "v7.0.2")})
+    c.expect(
+        "actions_pins.py", ["--base", base, "--head", head], OK, r"^ok .*tag v7\.0\.2 is the pinned commit"
+    )
+
+
 @row("actions: a tag that is another commit")
 def _(c: Case) -> None:
-    c.gh["api repos/actions/checkout/commits/v7.0.2"] = {"sha": sha("other")}
+    tag_ref(c, "actions/checkout", "v7.0.2", sha("other"))
     args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v7.0.2")
     c.expect("actions_pins.py", args, PROBLEM, r"^PROBLEM .*tag v7\.0\.2 is commit")
 
@@ -679,7 +865,7 @@ def _(c: Case) -> None:
 
 @row("actions: a semver-major tag")
 def _(c: Case) -> None:
-    c.gh["api repos/actions/checkout/commits/v8.0.0"] = {"sha": sha("b")}
+    tag_ref(c, "actions/checkout", "v8.0.0", sha("b"))
     args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v8.0.0")
     c.expect("actions_pins.py", args, PROBLEM, r"^PROBLEM .*semver-major")
 
@@ -742,6 +928,12 @@ def _(c: Case) -> None:
     problems = re.findall(r"^PROBLEM #(\d+)", out, re.MULTILINE)
     assert problems == ["2", "3", "4"], out
     assert ".npmrc is outside" in out and "'cargo'" in out and "tantivy" in out, out
+
+
+@row("prs list: a PR of the wrong shape is an error, not a crash")
+def _(c: Case) -> None:
+    c.gh["pr list"] = [{"number": 1, "title": "t", "files": []}]
+    c.expect("prs.py", ["list"], ERROR, r"^ERROR +KeyError")
 
 
 def gql(*states: tuple[str, dict[str, Any] | None, dict[str, Any] | None]) -> dict[str, Any]:

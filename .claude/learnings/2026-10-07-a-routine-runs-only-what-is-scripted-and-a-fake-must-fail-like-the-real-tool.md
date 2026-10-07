@@ -26,6 +26,12 @@ with no context and no access to the owner's machine can run it, and script its 
   different reason with the same exit; every clean row was a patch bump. Kills: the fake npm prints npm's JSON
   error object on stdout (as `npm view --json` does), the fake curl refuses a non-https URL as `--proto =https`
   does, an http token realm row checks the refusal message, and a clean minor-bump row.
+- The focused review found what a diff-shaped check misses (review round 1): a lock entry that keeps its key
+  but becomes another package (`"name": "evil"`, an npm alias) or a `link`, provenance read from one file
+  while PyPI accepts files added to a release later, npm provenance checked for presence when trusted
+  publishing makes `_npmUser` the same generic user for any repository, and `node_modules/` never reinstalled
+  after switching to the PR, so the tests would have run dev's packages. Compare what an entry *is* (its
+  registry name, every file's publisher, the provenance's source repository), not only what changed in it.
 - Every outside call through a subprocess (`git`, `curl`, `npm`, `gh`) made the whole family testable with PATH
   fakes and no network, the same way `changelog.py` fakes `gh`.
 

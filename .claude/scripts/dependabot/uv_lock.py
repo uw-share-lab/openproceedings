@@ -6,16 +6,19 @@
 Compares `uv.lock` at `base` (default: the merge base of origin/dev and HEAD) and `head` (default HEAD).
 For every package whose version changed it checks, against PyPI's JSON API, that each sdist and wheel the
 lock names is on files.pythonhosted.org with PyPI's sha256, and compares the PEP 740 provenance publisher
-(kind and repository) with the previous version's. A PROBLEM, the PR stays open: an added or removed
-package, a hash or URL that disagrees, a file PyPI doesn't list, a yanked release, a non-PyPI source, a
-semver-major bump, a new publisher or provenance the previous version had and this one lacks, a changed
-`requires-python`, any `tantivy` change (hand-only, spec 08 §Release), or changed files for an unchanged
-version.
+of every file of the new version with the previous version's (its first file's; the whole publisher record:
+kind, repository, workflow, environment). The previous version is the old one with the same major, else the
+newest old one. A PROBLEM, the PR stays open: an added or removed package, a hash or URL that disagrees, a
+file PyPI doesn't list, a yanked release, a non-PyPI source, a semver-major bump, a new publisher, a file
+without the provenance the previous version had (PyPI accepts files added to a release later), files of one
+release that disagree on provenance, a changed `requires-python`, any `tantivy` change (hand-only, spec 08
+§Release), or changed files for an unchanged version.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import tomllib
 from typing import Any
 
@@ -64,24 +67,27 @@ def filename(f: dict[str, Any]) -> str:
     return str(f.get("url", "")).rsplit("/", 1)[-1]
 
 
-def publisher(name: str, version: str, p: Pkg) -> tuple[str, str] | None:
-    """(kind, repository) of the first file's PEP 740 provenance, or None when PyPI has none."""
-    fs = files(p)
-    if not fs:
-        return None
+def publisher(name: str, version: str, fn: str) -> str | None:
+    """One file's PEP 740 provenance publisher as canonical JSON (every field), or None when PyPI has none."""
     r = http(
-        f"{PYPI}/integrity/{name}/{version}/{filename(fs[0])}/provenance",
+        f"{PYPI}/integrity/{name}/{version}/{fn}/provenance",
         {"Accept": "application/vnd.pypi.integrity.v1+json"},
     )
     if r.status == 404:
         return None
     if r.status != 200:
-        raise ToolError(f"provenance of {name} {version}: HTTP {r.status}")
+        raise ToolError(f"provenance of {fn}: HTTP {r.status}")
     bundles = r.json().get("attestation_bundles") or []
-    if not bundles:
-        return None
-    pub = bundles[0].get("publisher") or {}
-    return str(pub.get("kind", "")), str(pub.get("repository", ""))
+    pubs = {json.dumps(b.get("publisher") or {}, sort_keys=True) for b in bundles}
+    if len(pubs) > 1:
+        raise ToolError(f"provenance of {fn} names {len(pubs)} publishers")
+    return pubs.pop() if pubs else None
+
+
+def previous(old_versions: list[str], new_v: str) -> str | None:
+    """The old version a new one is compared with: the newest with the same major, else the newest."""
+    same = [v for v in old_versions if version_tuple(v)[:1] == version_tuple(new_v)[:1]]
+    return max(same or old_versions, key=version_tuple, default=None)
 
 
 def check_version(rep: Report, name: str, old_v: str | None, new_v: str, old: Pkg | None, new: Pkg) -> None:
@@ -114,16 +120,22 @@ def check_version(rep: Report, name: str, old_v: str | None, new_v: str, old: Pk
         rep.problem(f"{label}: the lock lists no files")
     elif not bad:
         rep.ok(f"{label}: {len(files(new))} file(s) match PyPI")
-    now = publisher(name, new_v, new)
-    before = publisher(name, old_v, old) if old is not None and old_v is not None else None
-    if before and not now:
-        rep.problem(f"{label}: {old_v} had provenance ({before[1]}), {new_v} has none")
-    elif before and now and before != now:
-        rep.problem(f"{label}: publisher changed from {before} to {now}")
-    elif now:
-        rep.ok(f"{label}: provenance {now[0]} {now[1]}" + (" (same as before)" if before else ""))
-    else:
-        rep.ok(f"{label}: no provenance, none before either")
+    old_files = files(old) if old is not None and old_v is not None else []
+    before = publisher(name, str(old_v), filename(old_files[0])) if old_files else None
+    now = {filename(f): publisher(name, new_v, filename(f)) for f in files(new)}
+    problems = len(rep.problems)
+    for fn, pub in now.items():
+        if before and not pub:
+            rep.problem(f"{label}: {fn} has no provenance; {old_v} had {before}")
+        elif before and pub != before:
+            rep.problem(f"{label}: {fn} publisher changed from {before} to {pub}")
+    if not before and len(set(now.values())) > 1:
+        rep.problem(
+            f"{label}: the files of {new_v} disagree on provenance: {sorted(map(str, set(now.values())))}"
+        )
+    if len(rep.problems) == problems:
+        pub = next(iter(now.values()), None)
+        rep.ok(f"{label}: provenance {pub or 'none'} on every file" + (", as before" if before else ""))
 
 
 def main() -> None:
@@ -150,11 +162,8 @@ def main() -> None:
         for v in sorted(set(o) & set(n)):
             if files(o[v]) != files(n[v]) or o[v].get("source") != n[v].get("source"):
                 rep.problem(f"{name} {v}: same version, different files or source")
-        added = sorted(set(n) - set(o))
-        if not added:
-            continue
-        prev = max(o, key=version_tuple) if o else None
-        for v in added:
+        for v in sorted(set(n) - set(o)):
+            prev = previous(list(o), v)
             check_version(rep, name, prev, v, o.get(prev) if prev else None, n[v])
     rep.finish()
 

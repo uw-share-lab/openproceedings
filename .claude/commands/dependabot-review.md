@@ -77,9 +77,14 @@ each before starting the next; step 9 then watches every queued PR at once. For 
 ```bash
 git fetch origin dev <head>
 git switch --no-track -c <head> origin/<head>
+npm ci --ignore-scripts              # node_modules must be this PR's lock, not dev's or the last PR's
 ```
 
-`--no-track` matters: the push hook refuses a branch with an upstream written. If `gh pr view <n> --json
+`--no-track` matters: the push hook refuses a branch with an upstream written. (A clone that already has a
+local `<head>` from an earlier run: `git branch -D <head>` first; never `switch -C`, which the hook refuses.)
+Run `npm ci --ignore-scripts` again after every lock change this run makes (steps 2 and 3): `make test`, `make
+lint`, `make e2e` and `npm audit signatures` use whatever `node_modules/` holds, and `make` doesn't reinstall
+it. If `gh pr view <n> --json
 mergeable` says `CONFLICTING`, comment `@dependabot rebase` (`gh api -X POST
 repos/uw-share-lab/openproceedings/issues/<n>/comments -f body='@dependabot rebase'`), leave it for the next run,
 and go to the next PR. Keep an evidence file per PR, `$RUN/evidence-<n>.md`: every script's output, every test
@@ -92,10 +97,10 @@ Run the checks for the PR's ecosystem from the repo root. Each compares the PR h
 
 | Ecosystem (branch `dependabot/<eco>/…`) | Run |
 |---|---|
-| `uv` | `python3 .claude/scripts/dependabot/uv_lock.py`: each bumped package's sdist and wheel sha256 against PyPI's JSON API, every file on files.pythonhosted.org, nothing yanked, PEP 740 provenance publisher against the previous version's; no added or removed package; `requires-python` and `tantivy` untouched |
-| `npm_and_yarn` | `python3 .claude/scripts/dependabot/npm_lock.py`: every changed lock entry's version, `resolved` and `integrity` against `npm view <pkg>@<ver>` on registry.npmjs.org, and its dependencies, `os`, `cpu` and `libc` against the manifest; no package added or removed; no field dropped; no install script appeared; publisher (`_npmUser`) and npm provenance against the previous version's; `package.json` and `frontend/package.json` against the lock's workspace entries (step 3). Then `npm audit signatures` and `npm audit --omit=dev` |
+| `uv` | `python3 .claude/scripts/dependabot/uv_lock.py`: each bumped package's sdist and wheel sha256 against PyPI's JSON API, every file on files.pythonhosted.org, nothing yanked, the PEP 740 provenance publisher of every file against the previous version's; no added or removed package; `requires-python` and `tantivy` untouched |
+| `npm_and_yarn` | `python3 .claude/scripts/dependabot/npm_lock.py`: every changed lock entry's version, `resolved` and `integrity` against `npm view <pkg>@<ver>` on registry.npmjs.org (run outside the repo, so no `.npmrc` there applies), and its dependencies, `os`, `cpu` and `libc` against the manifest; no package added or removed, none switched to another name or to a link; no field dropped; no install script appeared; publisher (`_npmUser`) and npm provenance (present, and from the same source repository) against the previous version's; `package.json` and `frontend/package.json` against the lock's workspace entries (step 3). Then `npm audit signatures` and `npm audit --omit=dev` |
 | `docker` | `python3 .claude/scripts/dependabot/docker_digest.py`: an anonymous token from the registry, then `HEAD /v2/<image>/manifests/<tag>` with the OCI-index `Accept` header must give the pinned digest, as an index; for a ghcr.io image, `gh attestation verify oci://<image>@<digest> --owner <org>`; a new `python` patch needs `.python-version` moved with it (a FIX, TASK-208); a new `python` minor is a hard stop |
-| `github_actions` | `python3 .claude/scripts/dependabot/actions_pins.py`: each new `uses: <owner>/<repo>@<sha> # <tag>` must be the commit `<tag>` names (`gh api repos/<owner>/<repo>/commits/<tag>`); no new action, no unpinned `uses:` |
+| `github_actions` | `python3 .claude/scripts/dependabot/actions_pins.py`: each new `uses: <owner>/<repo>@<sha> # <tag>` must be the commit the tag `<tag>` names (`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`, annotated tags peeled); no new action, no unpinned `uses:` |
 
 `npm audit --omit=dev`: an advisory this PR fixes goes in the PR body. One that predates it goes in the body and
 the summary for the owner; when its fix is a patch or minor of a package already in the lock, it may be taken in
@@ -202,6 +207,8 @@ gh pr merge <n> --auto
 `--attest` adds `<!-- op-review: <sha> APPROVE -->` for the head. `gh pr merge --auto` puts the PR in `dev`'s merge
 queue once its checks are green. Don't rebase it because `dev` moved; the queue tests it on top of `dev`.
 
+Then, before the next PR: `git switch --detach origin/dev` and `npm ci --ignore-scripts` (the same after step 10).
+
 ## 9. Watch the queue
 
 ```bash
@@ -209,7 +216,9 @@ python3 .claude/scripts/dependabot/prs.py watch <n> [<n> ...]
 ```
 
 While a PR is queued, GraphQL's `autoMergeRequest` reads null and `mergeQueueEntry` holds its place; the script
-prints each change and exits 0 when all merged, 1 when one closed or dropped out of the queue, 4 at its timeout.
+prints each change and exits 0 when all merged, 1 when one closed or dropped out of the queue, 2 when GitHub
+couldn't be asked (run it again), 4 at its timeout (120 min; `--timeout` sets it). To fix a queued PR, switch
+back to its `<head>` branch and run `npm ci --ignore-scripts`.
 
 - A required check red on the PR: read it (`gh pr checks <n>`, `gh run view <id> --log-failed`). Fix it in the
   PR (then steps 5 to 8 again for the new head) or leave the PR open.
@@ -220,9 +229,6 @@ prints each change and exits 0 when all merged, 1 when one closed or dropped out
   `gh pr merge <n> --auto` again if the PR left the queue.
 - A queue build failed on a real conflict with another PR ahead of it: leave it open (hard stop) unless the
   cause is plainly the other PR and a rerun clears it.
-
-Before the next PR (after step 8 or 10), `git switch --detach origin/dev`; to fix a queued PR in step 9,
-switch back to its `<head>` branch.
 
 ## 10. Leaving a PR open
 
