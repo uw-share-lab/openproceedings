@@ -44,7 +44,10 @@ addresses, e-mails or phone numbers reach anything we store or serve.
   unattached) → an owner decision to map retitled submissions by hand.
 
 ## Follow-ups
-- [ ] none filed: the unattached retitled submissions follow the exact-key rule every year follows.
+- [ ] not filed (no task id may be created on this branch: TASK-208 is a parallel branch's): label submission-time
+  abstracts in exports (RIS `N1`, CSV `abstract_source`) and the results list, not only in the claim evidence and the
+  coverage report (review round 1, ux-reviewer and review-methodologist); raised with the owner in the PR.
+- The unattached retitled submissions follow the exact-key rule every year follows: nothing to file.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/logging-standards/SKILL.md` (`icml_site_year_read`'s
