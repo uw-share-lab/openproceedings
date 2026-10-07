@@ -303,15 +303,26 @@ describe("the years indexed per venue (copy deck CV-7, decision-047)", () => {
       { ...base, venue: "ICML", year: 2026 },
     ];
     expect(yearSpans(c.venue_years)).toEqual([
-      { venue: "ICLR", from: 2013, to: 2013 },
-      { venue: "ICML", from: 1988, to: 2026 },
-      { venue: "NeurIPS", from: 1987, to: 2025 },
+      { venue: "ICLR", from: 2013, to: 2013, missing: [] },
+      { venue: "ICML", from: 1988, to: 2026, missing: Array.from({ length: 37 }, (_, i) => 1989 + i) },
+      { venue: "NeurIPS", from: 1987, to: 2025, missing: Array.from({ length: 37 }, (_, i) => 1988 + i) },
     ]);
+    c.venue_years = [
+      ...[2013, 2014, 2015].map((year) => ({ ...base, venue: "ICLR" as const, year })),
+      ...[1988, 1989, 2015].map((year) => ({ ...base, venue: "ICML" as const, year })),
+    ];
     render(<CoverageReport coverage={c} />);
-    expect(screen.getByText(/^Years indexed:/).textContent).toBe(
-      "Years indexed: ICLR 2013 · ICML 1988–2026 · NeurIPS 1987–2025. The venues start in different years, so a " +
-        "search without a year: filter compares them over different years.",
+    const line = screen.getByText(/^Years indexed:/);
+    expect(line.textContent).toBe(
+      "Years indexed: ICLR 2013–2015 · ICML 1988–2015 (none in " +
+        Array.from({ length: 25 }, (_, i) => 1990 + i).join(", ") +
+        "). The venues start in different years, so a search without a year: filter compares them over " +
+        "different years. Add year:2013..2015 to compare them over the same years.",
     );
+    expect([...line.querySelectorAll("code")].map((n) => n.textContent)).toEqual([
+      "year:",
+      "year:2013..2015",
+    ]);
   });
 
   it("says nothing about different spans when every venue starts in the same year", () => {

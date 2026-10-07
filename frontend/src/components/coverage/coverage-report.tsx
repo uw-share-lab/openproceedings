@@ -19,33 +19,54 @@ function None() {
   );
 }
 
-/** Each venue's first and last indexed year, in venue order (copy deck CV-7). */
-export function yearSpans(venueYears: readonly VenueYear[]): { venue: string; from: number; to: number }[] {
-  const spans = new Map<string, { venue: string; from: number; to: number }>();
-  for (const vy of venueYears) {
-    const span = spans.get(vy.venue);
-    spans.set(vy.venue, {
-      venue: vy.venue,
-      from: span === undefined ? vy.year : Math.min(span.from, vy.year),
-      to: span === undefined ? vy.year : Math.max(span.to, vy.year),
-    });
-  }
-  return [...spans.values()].sort((a, b) => (a.venue < b.venue ? -1 : a.venue > b.venue ? 1 : 0));
+type Span = { venue: string; from: number; to: number; missing: number[] };
+
+/** Each venue's first and last indexed year, and the years between with no records, in venue order (copy deck
+ * CV-7). */
+export function yearSpans(venueYears: readonly VenueYear[]): Span[] {
+  const years = new Map<string, Set<number>>();
+  for (const vy of venueYears) years.set(vy.venue, (years.get(vy.venue) ?? new Set<number>()).add(vy.year));
+  return [...years.entries()]
+    .map(([venue, held]) => {
+      const from = Math.min(...held);
+      const to = Math.max(...held);
+      const missing = Array.from({ length: to - from + 1 }, (_, i) => from + i).filter((y) => !held.has(y));
+      return { venue, from, to, missing };
+    })
+    .sort((a, b) => (a.venue < b.venue ? -1 : a.venue > b.venue ? 1 : 0));
 }
 
-/** "Years indexed: …", and when the venues start in different years, why that matters (copy deck CV-7,
- * decision-047: NeurIPS from 1987, ICML from 1988, ICLR from 2013). */
+function spanText(s: Span): string {
+  const range = s.from === s.to ? `${s.from}` : `${s.from}–${s.to}`;
+  return s.missing.length === 0
+    ? `${s.venue} ${range}`
+    : `${s.venue} ${range} (none in ${s.missing.join(", ")})`;
+}
+
+/** "Years indexed: …", and when the venues start in different years, why that matters and the `year:` clause
+ * that compares them over the same years (copy deck CV-7, decision-047: NeurIPS from 1987, ICML from 1988, ICLR
+ * from 2013). Display only: the clause is a suggestion the reader may add to their query. */
 function YearSpans({ venueYears }: { venueYears: readonly VenueYear[] }) {
   const spans = yearSpans(venueYears);
   if (spans.length === 0) return null;
   const differ = new Set(spans.map((s) => s.from)).size > 1;
+  const common = { from: Math.max(...spans.map((s) => s.from)), to: Math.min(...spans.map((s) => s.to)) };
   return (
     <p className="tabular-nums">
-      Years indexed:{" "}
-      {spans.map((s) => `${s.venue} ${s.from === s.to ? s.from : `${s.from}–${s.to}`}`).join(" · ")}
-      {differ
-        ? ". The venues start in different years, so a search without a year: filter compares them over different years."
-        : null}
+      Years indexed: {spans.map(spanText).join(" · ")}
+      {differ ? (
+        <>
+          . The venues start in different years, so a search without a{" "}
+          <code className="font-mono">year:</code> filter compares them over different years
+          {common.from <= common.to ? (
+            <>
+              . Add <code className="font-mono">{`year:${common.from}..${common.to}`}</code> to compare them
+              over the same years
+            </>
+          ) : null}
+          .
+        </>
+      ) : null}
     </p>
   );
 }

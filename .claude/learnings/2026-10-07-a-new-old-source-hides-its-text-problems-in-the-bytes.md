@@ -44,10 +44,12 @@ from a pinned dblp release, and attach abstracts from the official ICML pages th
   the tokenizer would otherwise split real words → revisit if a source's codes ever mean something else.
 - Short extractor fragments are kept and counted (`abstract_short`), never dropped → dropping text is a guess → a
   decision with the owner could drop them.
-- 1997 and 1998 submission abstracts (with contact details) are not used → a follow-up decides.
+- 1997 and 1998 submission abstracts (with contact details) are not used → an owner question (no task id was
+  reserved for this branch).
 
 ## Follow-ups
-- [ ] (filed at the end of the branch) 1997/1998 ICML submission abstracts: whether and how to use them.
+- None filed: the 1997/1998 submission abstracts are an owner question, raised with the PR (no task id was
+  reserved for this branch).
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/neurips-proceedings/SKILL.md` (placeholders, PDF codes),

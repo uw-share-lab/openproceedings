@@ -12,11 +12,12 @@ never fetches.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
 from openproceedings.ingest.dblp_table import TABLE as DBLP_TABLE
+from openproceedings.ingest.dblp_table import Table as DblpTable
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources import dblp, iclr, icml_sites, neurips, openreview_v1, openreview_v2, pmlr
 from openproceedings.ingest.sources.common import (
@@ -130,32 +131,37 @@ def ingest_pmlr(
 def ingest_dblp(
     years: Iterable[int], cache: Path, *, offline: bool = False, dry_run: bool = False, refresh: bool = False,
     transport: Transport | None = None, stream: StreamTransport | None = None,
-    min_interval: float = DEFAULT_INTERVAL,
+    min_interval: float = DEFAULT_INTERVAL, table: DblpTable = DBLP_TABLE,
+    pages: Mapping[int, tuple[icml_sites.SitePage, ...]] | None = None,
 ) -> dict[str, Any]:  # fmt: skip
     """ICML years from the pinned dblp release (downloaded and read once into its extract), each with the
     abstracts its official ICML pages give (`icml_sites`), into the cache (decision-047, TASK-205/206). A dry run
     fetches nothing at all: it says whether the release and its extract are on disk, and which pages a crawl would
-    fetch (the site index pages it can read from the cache only)."""
+    fetch. `table` and `pages` are the shipped tables unless a test passes its own."""
     wanted = sorted(set(years))
-    if missing := [y for y in wanted if y not in DBLP_TABLE.years]:
-        raise MinerError(f"ICML {missing[0]}: dblp_icml.toml covers ICML {min(DBLP_TABLE.years)}-"
-                         f"{max(DBLP_TABLE.years)} (PMLR from 2013)", reason="no_year")  # fmt: skip
+    if missing := [y for y in wanted if y not in table.years]:
+        raise MinerError(f"ICML {missing[0]}: dblp_icml.toml covers ICML {min(table.years)}-"
+                         f"{max(table.years)} (PMLR from 2013)", reason="no_year")  # fmt: skip
+    hosts = icml_sites.HOSTS if pages is None else icml_sites.hosts_of(pages)
     # the Internet Archive asks for a slower pace than the proceedings hosts: never under its interval
-    f = fetcher(cache, icml_sites.CACHE_DIR, icml_sites.HOSTS, offline=offline or dry_run, transport=transport,
+    f = fetcher(cache, icml_sites.CACHE_DIR, hosts, offline=offline or dry_run, transport=transport,
                 min_interval=max(min_interval, icml_sites.MIN_INTERVAL))  # fmt: skip
     if dry_run:
-        plans = [icml_sites.plan_year(y, f) for y in wanted]
-        return {"dry_run": True, "release_on_disk": dblp.release_on_disk(cache),
-                "extract_on_disk": dblp.extract_path(cache).exists(), "years": plans,
+        plans = [icml_sites.plan_year(y, f, pages) for y in wanted]
+        return {"dry_run": True, "release_on_disk": dblp.release_on_disk(cache, table),
+                "extract_on_disk": dblp.extract_path(cache, table).exists(), "years": plans,
                 "requests": f.stats.network, "cached": f.stats.cached}  # fmt: skip
-    extract = dblp.prepare(cache, None if offline else (stream or urllib_stream))
+    extract = dblp.prepare(cache, None if offline else (stream or urllib_stream), table)
     mined = DBLP.ingest(
         cache, wanted,
-        lambda year: dblp.mine_year(year, extract, site=icml_sites.read_year(year, f, refresh=refresh)),
-        lambda year, _: (str(year), {"source": dblp.SOURCE, "year": year, "release": DBLP_TABLE.release.doi}),
+        lambda year: dblp.mine_year(
+            year, extract, site=icml_sites.read_year(year, f, refresh=refresh, pages=pages), table=table),
+        lambda year, _: (str(year), {"source": dblp.SOURCE, "year": year, "release": table.release.doi}),
     )  # fmt: skip
     reports = [r for m in mined for r in m.reports]
-    log.info("dblp_ingested", extra={"years": len(reports), "requests": f.stats.network})
+    log.info(
+        "dblp_ingested", extra={"years": len(reports), "requests": f.stats.network, "cached": f.stats.cached}
+    )
     return _output(reports, f, False)
 
 
@@ -178,15 +184,19 @@ PMLR: Crawls[pmlr.VolumeResult] = Crawls(
 )  # fmt: skip
 
 
-def _replay_dblp(cache: Path, key: tuple[Any, ...]) -> dblp.YearResult:
+def _replay_dblp(
+    cache: Path, key: tuple[Any, ...], table: DblpTable = DBLP_TABLE,
+    pages: Mapping[int, tuple[icml_sites.SitePage, ...]] | None = None,
+) -> dblp.YearResult:  # fmt: skip
     """One marked ICML year, from the extract and the ICML pages in the cache. A year marked under another
     release than the table pins is refused: it was crawled from other bytes (guarantee 4)."""
     year, release = key
-    if release != DBLP_TABLE.release.doi:
+    if release != table.release.doi:
         raise MinerError(f"ICML {year} was ingested from dblp release {release}, not the pinned "
-                         f"{DBLP_TABLE.release.doi}; re-run op ingest dblp", reason="release_changed")  # fmt: skip
-    site = icml_sites.read_year(year, fetcher(cache, icml_sites.CACHE_DIR, icml_sites.HOSTS, offline=True))
-    return dblp.mine_year(year, dblp.load_extract(cache), site=site)
+                         f"{table.release.doi}; re-run op ingest dblp", reason="release_changed")  # fmt: skip
+    hosts = icml_sites.HOSTS if pages is None else icml_sites.hosts_of(pages)
+    site = icml_sites.read_year(year, fetcher(cache, icml_sites.CACHE_DIR, hosts, offline=True), pages=pages)
+    return dblp.mine_year(year, dblp.load_extract(cache, table), site=site, table=table)
 
 
 DBLP: Crawls[dblp.YearResult] = Crawls(

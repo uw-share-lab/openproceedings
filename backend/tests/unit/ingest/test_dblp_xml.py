@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 from openproceedings.ingest.sources.dblp_xml import DblpFormatError, doctype_system_id, read_stream
 from openproceedings.ingest.sources.http import (
+    CacheError,
     CacheMiss,
     FetchError,
     HTTPRefused,
@@ -157,6 +158,7 @@ def test_a_pinned_file_is_downloaded_once_verified_and_then_read_from_disk(tmp_p
     t = Stream((503, b""), (200, BYTES))
     first = fetch_file(PIN, tmp_path / "f.xml.gz", t, hosts=HOSTS, clock=clock)
     assert (first.path.read_bytes(), first.cached, len(t.sent)) == (BYTES, False, 2)  # the 503 waited out
+    assert clock.sleeps == [1.0]  # for as long as its Retry-After said, not the back-off
     side = json.loads((tmp_path / "f.xml.gz.json").read_text())
     assert (side["sha256"], side["url"]) == (PIN.sha256, PIN.url)
     again = fetch_file(PIN, tmp_path / "f.xml.gz", None, hosts=HOSTS)  # offline: the verified copy
@@ -188,12 +190,29 @@ def test_off_host_refusals_and_spent_retries(tmp_path: Path) -> None:
     with pytest.raises(FetchError, match="is not on"):
         fetch_file(PinnedFile("https://dblp.org/xml/dblp.xml.gz", 1, "0" * 64), tmp_path / "f", Stream(),
                    hosts=HOSTS)  # fmt: skip
-    with pytest.raises(HTTPRefused):
-        fetch_file(PIN, tmp_path / "f.xml.gz", Stream((404, b"")), hosts=HOSTS, clock=FakeClock())
+    for status in (404, 403):  # any 4xx but 429 is refused at once, never retried
+        refused = Stream((status, b""), (200, BYTES))
+        with pytest.raises(HTTPRefused):
+            fetch_file(PIN, tmp_path / "f.xml.gz", refused, hosts=HOSTS, clock=FakeClock())
+        assert len(refused.sent) == 1
     with pytest.raises(RetriesExhausted):
         fetch_file(PIN, tmp_path / "f.xml.gz", Stream(*[TransportError("ConnectionResetError")] * 3),
                    hosts=HOSTS, clock=FakeClock())  # fmt: skip
     assert not (tmp_path / "f.xml.gz").exists()
+
+
+@pytest.mark.parametrize(
+    ("sidecar", "why"),
+    [("not json", "unreadable"), ('{"url": "u", "sha256": "s"}', "unreadable"),
+     (json.dumps({"url": PIN.url, "sha256": PIN.sha256, "fetched_at": "2026-10-06T00:00:00"}), "naive fetched_at")],
+)  # fmt: skip
+def test_a_sidecar_that_cant_say_when_the_file_was_fetched_is_refused(
+    tmp_path: Path, sidecar: str, why: str
+) -> None:
+    (tmp_path / "f.xml.gz").write_bytes(BYTES)
+    (tmp_path / "f.xml.gz.json").write_text(sidecar)
+    with pytest.raises(CacheError, match=why):
+        fetch_file(PIN, tmp_path / "f.xml.gz", None, hosts=HOSTS)
 
 
 def test_the_fetch_time_is_the_clocks_utc(tmp_path: Path) -> None:

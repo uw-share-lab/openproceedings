@@ -159,7 +159,8 @@ current year, wherever a source above holds the venue-year: NeurIPS from 1987 (t
 never a crawl limit. Per-venue year coverage therefore differs before 2013 (only NeurIPS and ICML), which the
 coverage page says (copy deck CV-7); ICML 1988–2012 records are title-only except where an official ICML page
 gives the abstract. The
-facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-openreview-and-proceedings-facts.md`).
+facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-openreview-and-proceedings-facts.md`),
+the NeurIPS 1987–2012, dblp and ICML sites rows on 2026-10-06 (`docs/research/2026-10-06-pre-2013-neurips-icml-sources.md`).
 
 ## Pipeline
 
@@ -275,7 +276,7 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    evidence: a RIS claim's evidence is the reviewer's file's text and could carry the note without a
    replacement. The OpenReview crawls count only notes that became records.
    **PDF-extraction codes and placeholders in a proceedings abstract (decision-047, TASK-204).** NeurIPS
-   1987–2003 abstract pages hold text a PDF extractor wrote: `(cid:173)` where a soft hyphen broke a word at a
+   1987–2012 abstract pages (nearly all before 2004) hold text a PDF extractor wrote: `(cid:173)` where a soft hyphen broke a word at a
    line end (`princi(cid:173) ples`), other `(cid:N)` codes for glyphs it couldn't map, and the placeholder
    `Abstract Unavailable` where a paper has none. Every proceedings abstract (`common.clean_abstract`: the
    NeurIPS and PMLR pages and the official ICML pages) is cleaned before the control-character rule:
@@ -578,7 +579,8 @@ only the index pages and reports what a crawl would fetch (`to_fetch`); `--offli
 `--refresh` re-fetches index pages (a year published since). `ingest pmlr` maps a year to its ICML volume
 through the volume table and refuses a year the table lacks. Each listing's report (stated vs listed
 count, tracks, abstracts missing and why, unknown tracks, crawl window) goes into the manifest's `sources`
-under `iclr_archive` / `neurips_proceedings` / `pmlr`. The ICLR archive accepts only 2014–2016 and mines
+under `iclr_archive` / `neurips_proceedings` / `pmlr` / `dblp` (whose report adds the ICML pages' counts:
+`sites`, `site_entries`, `abstract_attached`, `site_unmatched`, `site_ambiguous`, `site_unjoined`, `site_dropped`). The ICLR archive accepts only 2014–2016 and mines
 the public accepted-paper listing itself, so its records intentionally retain `abstract=null`.
 
 **Crawl logs** (TASK-116; logging-standards skill §Crawl lines). A crawl logs a start line, heartbeats and an

@@ -66,3 +66,24 @@ def check_native(native: str, ok: bool, year: int) -> None:
     else:
         with pytest.raises(ValueError, match="not a valid"):
             build()
+
+
+@pytest.mark.parametrize(
+    ("url", "key"),
+    [
+        ("https://dblp.org/rec/conf/icml/SzitaL09", "SzitaL09"),
+        ("http://dblp.org/rec/conf/icml/SzitaL09.html", "SzitaL09"),
+        ("https://DBLP.org/rec/conf/icml/Ng04", "Ng04"),
+        ("https://dblp.uni-trier.de/rec/conf/icml/SzitaL09", None),  # another host: no dblp key
+        ("https://example.org/rec/conf/icml/SzitaL09", None),
+        ("https://dblp.org/rec/conf/nips/SzitaL09", None),  # not the ICML stream
+        ("https://dblp.org/rec/conf/icml/bad key", None),
+        ("ftp://dblp.org/rec/conf/icml/SzitaL09", None),
+    ],
+)
+def test_a_dblp_record_page_names_its_icml_key(url: str, key: str | None) -> None:
+    """decision-047: a dblp record's `urls.proceedings` is its dblp page, which `urls.native` reads back as
+    `dblp-<key>` (dedup's proceedings-id check); only dblp.org's ICML pages name one."""
+    assert urls.dblp_icml(url) == key
+    assert urls.native(url) == (f"dblp-{key}" if key else None)
+    assert urls.dblp_record_url("conf/icml/SzitaL09") == "https://dblp.org/rec/conf/icml/SzitaL09"

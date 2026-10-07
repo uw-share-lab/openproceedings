@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import gzip
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -78,7 +78,10 @@ def doctype_system_id(path: Path) -> str:
     return m.group(1).decode("ascii")
 
 
-def _records(path: Path, prefix: str) -> Iterator[bytes]:
+PROGRESS_LINES = 1_000_000  # how often `_records` reports its progress (the caller rate-limits the lines)
+
+
+def _records(path: Path, prefix: str, progress: Callable[[int, int], None] | None = None) -> Iterator[bytes]:
     """Each wanted record's bytes, from its start tag through its end tag, in file order. dblp writes a record's
     end tag and the next record's start tag on one line (`</incollection><incollection …>`), so a record is found
     by its start tag anywhere in a line, and every occurrence of `key="<prefix>` must be inside one."""
@@ -87,7 +90,10 @@ def _records(path: Path, prefix: str) -> Iterator[bytes]:
     block: list[bytes] = []
     end: bytes | None = None
     with gzip.open(path, "rb") as fh:
+        kept = 0
         for n, line in enumerate(fh, 1):
+            if progress is not None and n % PROGRESS_LINES == 0:
+                progress(n, kept)
             if end is None and wanted not in line:
                 continue
             pos = 0
@@ -108,6 +114,7 @@ def _records(path: Path, prefix: str) -> Iterator[bytes]:
                 block.append(inside)
                 if stop < 0:
                     break
+                kept += 1
                 yield b"".join(block)
                 pos, end = stop + len(end), None
     if end is not None:
@@ -177,12 +184,14 @@ def _parse(record: bytes, dtd: bytes, dtd_name: str) -> DblpEntry:
     return entry
 
 
-def read_stream(path: Path, dtd: bytes, dtd_name: str, prefix: str) -> list[DblpEntry]:
+def read_stream(
+    path: Path, dtd: bytes, dtd_name: str, prefix: str, progress: Callable[[int, int], None] | None = None
+) -> list[DblpEntry]:
     """Every record of the release at `path` whose key starts with `prefix`, in file order. The release must
     name `dtd_name` as its DTD (the pinned one); `dtd` is that file's bytes."""
     if (named := doctype_system_id(path)) != dtd_name:
         raise DblpFormatError(f"the release names DTD {named!r}, not the pinned {dtd_name!r}")
-    entries = [_parse(block, dtd, dtd_name) for block in _records(path, prefix)]
+    entries = [_parse(block, dtd, dtd_name) for block in _records(path, prefix, progress)]
     for e in entries:
         if not e.key.startswith(prefix):
             raise DblpFormatError(f"record {e.key!r} isn't in {prefix}")

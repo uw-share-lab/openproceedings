@@ -90,6 +90,8 @@ def test_ingest_neurips_offline_from_a_seeded_cache(
         (["ingest", "pmlr", "--year", "2013", "--dry-run", "--offline"], "don't combine"),
         (["ingest", "pmlr", "--year", "2026", "--offline"], "no verified PMLR volume"),
         (["ingest", "neurips", "--year", "1986", "--offline"], "the first NIPS (decision-047)"),
+        (["ingest", "dblp", "--year", "2013", "--offline"], "covers ICML 1988-2012 (PMLR from 2013)"),
+        (["ingest", "dblp", "--year", "1990", "--offline"], "not in the cache (offline)"),
         (["ingest", "neurips", "--year", "2013", "--offline"], "not in the cache (offline)"),
     ],
 )

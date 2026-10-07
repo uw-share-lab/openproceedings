@@ -19,7 +19,7 @@ year's main-conference proceedings keys.
 A record is an `inproceedings` whose `crossref` is one of the year's main-conference keys: track `main`
 (the table says so; dblp has no track), status `accepted` (dblp lists published papers), title, authors, year
 and links from the release. dblp has no abstracts, so `abstract` is null unless an official ICML page gives one
-(`icml_sites.attach`). Every claim's url is the release's DOI and its evidence names the dblp key and the
+(`_match`, from the pages `icml_sites.read_year` reads). Every claim's url is the release's DOI and its evidence names the dblp key and the
 release, so a reviewer can find the exact record in the exact file.
 
 Text, as dblp writes it: a title's closing period is dblp's convention, not the paper's, and is dropped (one
@@ -74,6 +74,7 @@ from openproceedings.logs import elapsed_ms
 log = logging.getLogger(__name__)
 
 SOURCE: Source = "dblp"
+PROGRESS_SECONDS = 30.0  # reading the release: one progress line at most this often
 CACHE_DIR = "dblp"  # <data>/cache/dblp
 HOSTS = frozenset({"drops.dagstuhl.de"})
 PREFIX = "conf/icml/"
@@ -129,8 +130,8 @@ def prepare(cache: Path, stream: StreamTransport | None, table: Table = TABLE) -
         if release.cached and extract_path(cache, table).exists():
             try:
                 extract = load_extract(cache, table)
-            except CrawlError:  # written under another DTD pin or extract format: read the release again
-                log.info("dblp_extract_stale", extra={"doi": table.release.doi})
+            except CrawlError as e:  # written under another DTD pin or extract format: read the release again
+                log.info("dblp_extract_stale", extra={"doi": table.release.doi, "reason": e.reason})
         if extract is None:
             extract = write_extract(cache, release, dtd, table)
     check_extract(extract, table)
@@ -139,8 +140,18 @@ def prepare(cache: Path, stream: StreamTransport | None, table: Table = TABLE) -
 
 def write_extract(cache: Path, release: FileEntry, dtd: FileEntry, table: Table = TABLE) -> Extract:
     """Read the release's `conf/icml/` records (streaming) into the extract file, atomically."""
-    started = time.monotonic()
-    entries = read_stream(release.path, dtd.path.read_bytes(), table.dtd.filename, PREFIX)
+    started = last = time.monotonic()
+    log.info("dblp_extract_started", extra={"doi": table.release.doi, "bytes": table.release.file.size})
+
+    def progress(lines: int, kept: int) -> None:
+        nonlocal last
+        if time.monotonic() - last >= PROGRESS_SECONDS:
+            last = time.monotonic()
+            log.info(
+                "dblp_extract_progress", extra={"doi": table.release.doi, "lines": lines, "records": kept}
+            )
+
+    entries = read_stream(release.path, dtd.path.read_bytes(), table.dtd.filename, PREFIX, progress)
     extract = Extract(table.release.doi, table.release.file.sha256, release.fetched_at, tuple(entries))
     storage.write_json(extract_path(cache, table), {
         "format": EXTRACT_FORMAT, "release_doi": extract.doi, "release_sha256": extract.sha256,
@@ -305,6 +316,8 @@ def mine_year(
         "abstract_attached": report.abstract_attached, "abstract_missing": report.abstract_missing,
         "site_entries": report.site_entries, "site_unmatched": report.site_unmatched,
         "site_ambiguous": report.site_ambiguous, "site_unjoined": report.site_unjoined,
+        "abstract_control_characters": report.abstract_control_characters,
+        "abstract_pdf_codes": report.abstract_pdf_codes, "abstract_short": report.abstract_short,
         "site_dropped": report.site_dropped, "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     if not report.count_ok:
         log.warning("listing_count_mismatch", extra={"year": year, "listing": report.listing,

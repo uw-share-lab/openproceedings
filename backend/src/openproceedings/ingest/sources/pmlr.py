@@ -225,6 +225,7 @@ def mine_volume(
         extra={"volume": number, "year": volume.year, "listed": report.listed, "stated": report.stated,
                "records": report.records, "abstract_missing": report.abstract_missing,
                "abstract_control_characters": report.abstract_control_characters,
+               "abstract_pdf_codes": report.abstract_pdf_codes, "abstract_short": report.abstract_short,
                "ms": elapsed_ms(started, time.monotonic)},
     )  # fmt: skip
     if not report.count_ok:

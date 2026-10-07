@@ -1,8 +1,8 @@
 # Official accepted counts per venue × year × track (coverage gate sources)
 
-This is the cited table behind spec 07 §C's coverage gate (TASK-108; `coverage-reporting` skill). It has
-one row per main-track and D&B cell from 2013 (decision-013): ICLR, ICML and NeurIPS main 2013–2025, and
-NeurIPS D&B 2021–2025. That is 44 cells, and **all 44 are sourced**. Every one of those numbers was read on
+This is the cited table behind spec 07 §C's coverage gate (TASK-108; `coverage-reporting` skill). It has one row
+per main-track and D&B cell with an official count: ICLR, ICML and NeurIPS main 2013–2025 and NeurIPS D&B 2021–2025
+(44 cells, all sourced, from decision-013's 2013 floor), the 2026 rows, and NeurIPS main 1987–2012 (decision-047). Every one of those numbers was read on
 2026-09-27 from a public page, on the conference's own site or in its proceedings, with no login.
 The 2026 crawl (TASK-178) adds two rows, ICLR 2026 main and ICML 2026 main: 46 rows in all. Both were fetched
 and counted on 2026-10-05 by the AI assistant session working for the project owner, which recorded the sha256
@@ -12,6 +12,40 @@ rows for 1987–2012 are each year page's own count (`N papers`), read on 2026-1
 (TASK-204): 72 rows in all. ICML 1988–2012 has no row: its records come from the pinned dblp release, a
 bibliography, and no ICML statement of accepted counts was found for those years (the official pages of 2001–2012
 list papers, but not every year's full set), so those cells are reported, not gated.
+
+**What the 1987–2012 NeurIPS rows check.** Each is the `N papers` the year page states, and the crawl indexes that
+same page, so these 26 cells check the crawl against its own listing's stated count (every entry parsed and made a
+record), not against an independent statement of accepted papers; their "what it counts" says "the page's own
+count", and the coverage report says how many gated cells are of this kind. The same holds for NeurIPS 2013–2020,
+whose proceedings index is also the only public count. The sha256 of each year page's text as the crawl cached it
+(UTF-8; fetched 2026-10-07 UTC), so the count can be repeated against the very page read:
+
+- NeurIPS 1987: `3e6384327d5de59bc05f4f40b81e7a67854fd4e911f59df8616e7d24c19e28b5` (fetched 2026-10-07)
+- NeurIPS 1988: `369aed0c1937226780ffccda049e3d27ef97e021fd87d60bb04d18f5da108fb9` (fetched 2026-10-07)
+- NeurIPS 1989: `7f0d77133c07bf4084482cbc451f25a3ec87013955d0bd24f4bcb22eb7e20a56` (fetched 2026-10-07)
+- NeurIPS 1990: `c60ed75146205a81bff300d71d7b74283f4f65944b32f9c3f974d10e90a777a6` (fetched 2026-10-07)
+- NeurIPS 1991: `42db09d0d308b6778ee95389d9510219dd4c6011d4308e9f03a1d0f07bdbb1f1` (fetched 2026-10-07)
+- NeurIPS 1992: `5742a561e84af4865aaa7fb1170de427339ba166e1c4720b009b46022c646058` (fetched 2026-10-07)
+- NeurIPS 1993: `82cd6a9d0b927fd6913881a61212b959f679c467510bb30011f8a5418a40342e` (fetched 2026-10-07)
+- NeurIPS 1994: `68557afb931db50881dc1d7b9fff1100b3f6bc7814359e567d88189edd3ff256` (fetched 2026-10-07)
+- NeurIPS 1995: `51dd5cfdea45503fcf7fdcb37977ec59a5fd54d76aca1ca51c4fc36ddf86b7b4` (fetched 2026-10-07)
+- NeurIPS 1996: `0e8e1436764fda1f91d43a91d07264672948eb05b7b522760c4706c009061ca0` (fetched 2026-10-07)
+- NeurIPS 1997: `901e63451a97455577224a5174f72903132f6f3a515846a8529f50b0d75e6112` (fetched 2026-10-07)
+- NeurIPS 1998: `e0acaabcfcec8e4844c09658c924334ce74133e93ffeb5c2fb4cbdabce288ea2` (fetched 2026-10-07)
+- NeurIPS 1999: `4a37cef3815ee97cb2cfa9f3526ec9553d7e7401ddf1fec97b5d4cfd9dba2208` (fetched 2026-10-07)
+- NeurIPS 2000: `85cf2d4aa29c064602d93fe39dee7cf0e5244a59a3a091ff5c8cfd5f4d8b134e` (fetched 2026-10-07)
+- NeurIPS 2001: `87a5ce6ed1e16b857a66a7ebafe86f2defd847421fad3b7ea4c6447c4e47cff0` (fetched 2026-10-07)
+- NeurIPS 2002: `4eeaa1a865f9e7cb64651366e87ab5ee8624643f7a36da40a0b6f67603e985a9` (fetched 2026-10-07)
+- NeurIPS 2003: `81681cbfaede49742c57aba71d2d7a57184d58a6b4546b2a6c6a094efb758d98` (fetched 2026-10-07)
+- NeurIPS 2004: `45f577b378e2431edbd4ca9193212113dac8aed7bf98ac4eea43541909e2a73d` (fetched 2026-10-07)
+- NeurIPS 2005: `55208ab1948369f26ddd6c51b3c397b6a682bb3359bd52cfe0827f563cc0bc5b` (fetched 2026-10-07)
+- NeurIPS 2006: `9df3570a1c6d12b2df5ca7f6bb84f2690d0205f83c8d564b09d08aad1c8ed545` (fetched 2026-10-07)
+- NeurIPS 2007: `a37b46a90d2c17bed0abe5c5ed4ab02079643e1384b60f25813f3f7b6ce0c066` (fetched 2026-10-07)
+- NeurIPS 2008: `67fee009c1fd410d60bc233f510788045922cbf17504a1ceb84b216176d9739a` (fetched 2026-10-07)
+- NeurIPS 2009: `a0863b2a70f98427e155b1d624c628afb6727c7eb20a0ef1e1e09ea5ea023e3b` (fetched 2026-10-07)
+- NeurIPS 2010: `90fbc045c04f678428f23a963a9ca41c85892f37841322ed3b8e3eff4ecbf9c0` (fetched 2026-10-07)
+- NeurIPS 2011: `2da06b422da875c54bd10182ac5813bfc036e7dc548e106cd986a00502441b6b` (fetched 2026-10-07)
+- NeurIPS 2012: `e21f89a97f97cc035ba7c0f404bbf03c8fc0de77c04912834658e6587e530828` (fetched 2026-10-07)
 The `official_counts.OFFICIAL_ACCEPTED` machine-readable copy is kept equal to this table by a test, and
 `GET /coverage` joins it to each matching cell to compute the gate verdict. This file deliberately holds
 exactly one Markdown table so the equality test can read every line starting with `|` as a data row.

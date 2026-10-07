@@ -32,7 +32,7 @@ a space, and the claim's evidence and the listing's `abstract_pdf_codes` count t
 ## ICML 1988–2012: the pinned dblp release
 
 PMLR has no ICML volume before v28 (2013). The earlier proceedings are scattered: icml.cc/2012/papers and
-icml.cc's copies of 2007–2011 survive; 2004–2008 are in the ACM DL (whose terms forbid scraping); earlier years
+icml.cc's copies of the 2008–2011 sites survive (2007: its paper list only); 2004–2008 are in the ACM DL (whose terms forbid scraping); earlier years
 were Morgan Kaufmann print. dblp indexes them all, but:
 
 - **dblp.org forbids crawling.** Its `robots.txt` is `User-agent: * / Disallow: /`, and its HTML pages and search

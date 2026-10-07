@@ -96,7 +96,7 @@ The alias means one track never counts as two in the manifest. Mapping an unknow
   an abstract); an ellipsis inside a real abstract (`x₁, …, x_n`) is kept (spec 01, record-schema).
 - Missing abstract: `abstract=null` and count it in the manifest (the report splits out
   `abstract_title_mismatch` and `page_missing`).
-- 1987–2003 pages (decision-047): `Abstract Unavailable` is a placeholder, never an abstract
+- 1987–2012 pages, nearly all before 2004 (decision-047; the rule runs on every proceedings page): `Abstract Unavailable` is a placeholder, never an abstract
   (`common.PLACEHOLDERS`; counted missing). PDF-extraction codes are repaired (`common.repair_pdf_codes`):
   `(cid:173)` (a soft hyphen at a line break) is removed with the whitespace after it, so `princi(cid:173) ples`
   reads `principles`; any other `(cid:N)` becomes a space. The claim's evidence and the listing's

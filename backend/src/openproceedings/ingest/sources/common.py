@@ -203,10 +203,10 @@ def titles_match(listed: str, page: str | None) -> bool:
     return bool(keys(listed) & keys(page))
 
 
-# What a proceedings page shows where it has no abstract (NeurIPS 1987-2003 abstract pages, decision-047): never an
+# What a proceedings page shows where it has no abstract (NeurIPS 1987-2012 pages, decision-047): never an
 # abstract. Compared whole, case-blind, after whitespace is collapsed.
 PLACEHOLDERS = frozenset({"abstract unavailable", "abstract missing"})
-# A PDF text extractor's code for a glyph it couldn't map (`(cid:173)`), left in pre-2004 NeurIPS abstracts
+# A PDF text extractor's code for a glyph it couldn't map (`(cid:173)`), left in NeurIPS 1987-2011 abstracts (most before 2004)
 # (decision-047). 173 is the soft hyphen at a line break (`princi(cid:173) ples`): the word is joined again. Any
 # other code stands for a lost character (a ligature, a symbol) and becomes a space, as a control character does.
 _SOFT_HYPHEN_CODE = re.compile(r"\(cid:173\)\s*")
@@ -274,7 +274,7 @@ class ListingReport(Report):
     Every miner appends the index page's fetch first, so `fetched[0]` is when the listing was read (reconcile's
     absence claims carry it)."""
 
-    source: str  # iclr_archive | neurips_proceedings | pmlr
+    source: str  # iclr_archive | neurips_proceedings | pmlr | dblp
     venue: str
     year: int
     listing: str  # the index URL

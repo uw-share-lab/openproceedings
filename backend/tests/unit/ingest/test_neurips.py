@@ -21,7 +21,12 @@ from openproceedings.ingest.dedup import dedup
 from openproceedings.ingest.record import Claim, PaperRecord
 from openproceedings.ingest.snapshot import build
 from openproceedings.ingest.sources import neurips
-from openproceedings.ingest.sources.common import MinerError, titles_match
+from openproceedings.ingest.sources.common import (
+    MinerError,
+    pdf_codes_evidence,
+    repair_pdf_codes,
+    titles_match,
+)
 from openproceedings.ingest.sources.crawl import ingest_neurips, load_crawls
 from openproceedings.ingest.sources.html import MAX_DEPTH, HTMLBudgetError, text_of, unescape
 from openproceedings.ingest.sources.http import canonical
@@ -174,6 +179,27 @@ def test_pdf_extraction_codes_are_repaired_and_counted(tmp_path: Path) -> None:
     [report] = result.reports
     assert (report.abstract_pdf_codes, report.abstract_short) == (1, 0)
     assert report.to_manifest()["abstract_pdf_codes"] == 1
+
+
+@pytest.mark.parametrize(
+    ("raw", "text", "codes"),
+    [("a(cid:3)b c", "a b c", 1), ("princi(cid:173)\n  ples", "principles", 1), ("no codes", "no codes", 0),
+     ("(cid:173)(cid:12)x", " x", 2)],
+)  # fmt: skip
+def test_repair_pdf_codes(raw: str, text: str, codes: int) -> None:
+    assert repair_pdf_codes(raw) == (text, codes)
+
+
+def test_the_codes_note_counts_one_and_many() -> None:
+    assert pdf_codes_evidence("e", 0) == "e"
+    assert pdf_codes_evidence("e", 1) == "e (1 PDF-extraction (cid:N) code repaired)"
+    assert pdf_codes_evidence("e", 2) == "e (2 PDF-extraction (cid:N) codes repaired)"
+
+
+@pytest.mark.parametrize(("words", "short"), [(4, 1), (5, 0)])
+def test_short_means_fewer_than_five_words(tmp_path: Path, words: int, short: int) -> None:
+    result = mine_1987_with(tmp_path, " ".join(["word"] * words))
+    assert result.reports[0].abstract_short == short
 
 
 def test_a_short_abstract_is_kept_and_counted(tmp_path: Path) -> None:

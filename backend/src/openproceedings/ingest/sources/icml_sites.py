@@ -37,7 +37,7 @@ from urllib.parse import urlparse
 from openproceedings.ingest.record import Source, title_text
 from openproceedings.ingest.sources.common import CrawlError, clean_abstract
 from openproceedings.ingest.sources.html import text_of
-from openproceedings.ingest.sources.http import Fetcher, Page
+from openproceedings.ingest.sources.http import Fetcher, FetchError, Page
 
 log = logging.getLogger(__name__)
 
@@ -46,13 +46,20 @@ CACHE_DIR = "icml_sites"  # <data>/cache/icml_sites
 ARCHIVE_HOST = "web.archive.org"
 # the official sites a capture may be of (the survey's: icml.cc, IMLS, and each year's own conference host); a
 # capture of anything else (ACM DL, arXiv, Scholar, an author's page) is refused when the table loads
-OFFICIAL_HOSTS = frozenset({
-    "icml.cc", "www.icml.cc", "machinelearning.org", "www.machinelearning.org", "www.ecn.purdue.edu",
-    "www.hpl.hp.com", "www.aicml.cs.ualberta.ca", "oregonstate.edu",
-})  # fmt: skip
-MIN_INTERVAL = (
-    3.0  # seconds between requests: the Internet Archive's pace for a polite client, kept for icml.cc too
-)
+# The official sites a capture may be of: (host, path prefix), each named as that year's ICML site by an official
+# page (icml.cc's "past conferences" pages: Conferences/2007/pastconferences.html names the 2001 Purdue, 2003 HP
+# Labs and 2004 Banff sites, Conferences/2008/past_icmls.shtml.html the 2007 Oregon State one; the 2003 site's own
+# titlesAndAuthors.html links each paper to /conferences/icml2003/allAbstracts.html). A capture of anything else,
+# another page of those hosts included, is refused when the table loads: never ACM DL, arXiv, Scholar or an author.
+OFFICIAL_SITES: tuple[tuple[str, str], ...] = (
+    ("icml.cc", "/"), ("www.icml.cc", "/"), ("machinelearning.org", "/proceedings/"),
+    ("www.machinelearning.org", "/proceedings/"), ("www.ecn.purdue.edu", "/ICML2001/"),
+    ("www.hpl.hp.com", "/conferences/icml03/"), ("www.hpl.hp.com", "/conferences/icml2003/"),
+    ("www.aicml.cs.ualberta.ca", "/banff04/icml/"), ("www.aicml.cs.ualberta.ca", "/_banff04/icml/"),
+    ("oregonstate.edu", "/conferences/icml2007/"),
+)  # fmt: skip
+MIN_INTERVAL = 3.0  # seconds between requests: the Internet Archive's polite pace, kept for icml.cc too
+PROGRESS_SECONDS = 30.0  # a year's pages: one progress line at most this often (2007 has 151, at 3 s each)
 _CAPTURE = re.compile(r"https://web\.archive\.org/web/([0-9]{14})id_/(https?://\S+)")
 _S = re.S | re.I
 
@@ -244,13 +251,20 @@ def _row(raw: Mapping[str, Any]) -> SitePage:
             raise ValueError(f"{where}: the capture timestamp is not a date") from None
         if taken > page.verified:
             raise ValueError(f"{where}: a capture taken after the row was verified")
-        if (urlparse(page.official).hostname or "").lower() not in OFFICIAL_HOSTS:
+        if not is_official(page.official):
             raise ValueError(
-                f"{where}: a capture of {page.official}, not an official ICML site (OFFICIAL_HOSTS)"
+                f"{where}: a capture of {page.official}, not an official ICML site (OFFICIAL_SITES)"
             )
     elif page.url != page.official or not page.url.startswith("https://") or host != "icml.cc":
         raise ValueError(f"{where}: a live page is an https icml.cc page fetched at its official URL")
     return page
+
+
+def is_official(url: str) -> bool:
+    """Whether `url` is on one of `OFFICIAL_SITES` (host and path prefix; the port the archive keeps is ignored)."""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return any(host == h and parsed.path.startswith(prefix) for h, prefix in OFFICIAL_SITES)
 
 
 def load(text: str) -> Mapping[int, tuple[SitePage, ...]]:
@@ -266,10 +280,15 @@ def load(text: str) -> Mapping[int, tuple[SitePage, ...]]:
 PAGES: Mapping[int, tuple[SitePage, ...]] = load(
     files("openproceedings.ingest").joinpath("icml_sites.toml").read_text(encoding="utf-8")
 )
+
+
+def hosts_of(pages: Mapping[int, tuple[SitePage, ...]]) -> frozenset[str]:
+    """The hosts a table's pages are fetched from."""
+    return frozenset((urlparse(p.url).hostname or "").lower() for ps in pages.values() for p in ps)
+
+
 # the only hosts this source fetches: the table's pages' (icml.cc, and the Internet Archive)
-HOSTS: frozenset[str] = frozenset(
-    (urlparse(p.url).hostname or "").lower() for ps in PAGES.values() for p in ps
-)
+HOSTS: frozenset[str] = hosts_of(PAGES)
 
 
 # --- reading a year --------------------------------------------------------------------------------------------
@@ -292,11 +311,22 @@ def read_year(
     if not rows:
         return None
     out = SiteYear()
+    started = last = fetcher.clock.monotonic()
+    log.info("icml_site_year_started", extra={"year": year, "pages": len(rows)})
     titles: dict[str, str] = {}
     halves: list[tuple[str, str, SitePage, Page]] = []  # (number, abstract text, page, fetched)
     complete: list[tuple[str, str, SitePage, Page]] = []  # (title, abstract text, page, fetched)
-    for page in rows:
-        fetched = fetcher.get(page.url, refresh=refresh, charset=page.charset)
+    for n, page in enumerate(rows, 1):
+        if fetcher.clock.monotonic() - last >= PROGRESS_SECONDS:
+            last = fetcher.clock.monotonic()
+            log.info("icml_site_year_progress", extra={"year": year, "done": n - 1, "of": len(rows)})
+        try:
+            fetched = fetcher.get(page.url, refresh=refresh, charset=page.charset)
+        except FetchError as err:
+            if err.reason != "undecodable":
+                raise
+            raise CrawlError(f"ICML {year}: {page.url} is not {page.charset}; its table row's charset is wrong "
+                             "(fix it, then fetch the page again)", reason="wrong_charset") from err  # fmt: skip
         if not fetched.ok:
             raise CrawlError(f"ICML {year}: {page.url} answered HTTP {fetched.status}", reason="no_listing")
         got = PARSERS[page.parser](fetched.text, page.url)
@@ -330,8 +360,9 @@ def read_year(
                                             _evidence(page), cleaned.pdf_codes))  # fmt: skip
         else:
             out.dropped += 1
-    log.debug("icml_site_year_read", extra={"year": year, "pages": len(out.pages), "entries": len(out.entries),
-                                            "unjoined": out.unjoined, "dropped": out.dropped})  # fmt: skip
+    log.info("icml_site_year_read", extra={
+        "year": year, "pages": len(out.pages), "entries": len(out.entries), "unjoined": out.unjoined,
+        "dropped": out.dropped, "ms": round((fetcher.clock.monotonic() - started) * 1000, 1)})  # fmt: skip
     return out
 
 

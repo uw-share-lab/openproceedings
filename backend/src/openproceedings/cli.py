@@ -146,7 +146,12 @@ def build_parser() -> argparse.ArgumentParser:
                  "drops.dagstuhl.de, never dblp.org) with the abstracts the official ICML pages in "
                  "ingest/icml_sites.toml give"),
     ):  # fmt: skip
-        crawl = sources.add_parser(name, help=f"crawl {about} into <data-dir>/cache/{name}")
+        dblp = name == "dblp"  # its own cache layout and flags' meaning (decision-047, spec 01 §CLI)
+        crawl = sources.add_parser(
+            name,
+            help=f"read {about} into <data-dir>/cache/dblp and <data-dir>/cache/icml_sites" if dblp
+            else f"crawl {about} into <data-dir>/cache/{name}",
+        )  # fmt: skip
         crawl.add_argument(
             "--year", dest="years", action="append", required=True, type=_years, metavar="YYYY[-YYYY]",
             help="a year or an inclusive range; repeatable",
@@ -154,18 +159,31 @@ def build_parser() -> argparse.ArgumentParser:
         crawl.add_argument(
             "--dry-run",
             action="store_true",
-            help="read only the index pages; report what a crawl would fetch",
+            help="fetch nothing; say whether the release and its extract are on disk and how many ICML pages a "
+            "run would fetch"
+            if dblp
+            else "read only the index pages; report what a crawl would fetch",
         )
-        crawl.add_argument("--offline", action="store_true", help="use the page cache only (no network)")
         crawl.add_argument(
-            "--refresh", action="store_true", help="re-fetch the index pages (a newly published year)"
+            "--offline",
+            action="store_true",
+            help="use the release, extract and ICML pages already on disk (no network)" if dblp
+            else "use the page cache only (no network)",
+        )  # fmt: skip
+        crawl.add_argument(
+            "--refresh",
+            action="store_true",
+            help="re-fetch the year's ICML pages"
+            if dblp
+            else "re-fetch the index pages (a newly published year)",
         )
         crawl.add_argument(
             "--delay",
             type=float,
             default=1.0,
-            help=f"seconds between requests (default 1, at least {MIN_DELAY})",
-        )
+            help="seconds between requests to the ICML pages (never under 3: the Internet Archive's pace)" if dblp
+            else f"seconds between requests (default 1, at least {MIN_DELAY})",
+        )  # fmt: skip
         crawl.set_defaults(run=_ingest_crawl)
     for name, task in PLANNED_SOURCES.items():
         _stub(sources.add_parser(name, help=_stub_status(task)), f"ingest {name}", task)

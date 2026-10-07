@@ -1,14 +1,16 @@
 # Official ICML pages with per-paper abstracts, 1988-2012 (spec 01 §Sources, ICML sites row; decision-047;
 # TASK-206). Data, not code: `ingest/sources/icml_sites.py` loads and checks it. The survey behind every row,
 # and the years with no surviving page (1988-1996, 1999, 2000, 2002, 2005, 2006; 1997 and 1998 have only
-# submission abstracts with contact details, not used), is docs/research/2026-10-06-icml-pre-2013-abstract-sources.md.
+# submission abstracts with contact details, not used: an owner question), is docs/research/2026-10-06-icml-pre-2013-abstract-sources.md.
 #
 # [[page]] one page: year; url (what is fetched: a live icml.cc page, or an Internet Archive capture pinned to
 #          its exact timestamp, https://web.archive.org/web/<14 digits>id_/<official>); official (the page the
 #          capture is of, as the archive holds it); parser (icml_sites.PARSERS); charset (the servers send bare
 #          text/html); entries (what the parser read off it when verified; a different count stops the crawl);
 #          verified; note.
-# Allowed: official ICML / IMLS conference pages only. Never ACM DL, Scholar, Semantic Scholar, author pages, arXiv.
+# Allowed: official ICML / IMLS conference pages only (a capture must be on `icml_sites.OFFICIAL_SITES`, each site named
+# by an official page: the 2007 Oregon State site by icml.cc Conferences/2008/past_icmls.shtml.html). Never ACM DL,
+# Scholar, Semantic Scholar, author pages, arXiv.
 
 [[page]]
 year = 2001
@@ -18,7 +20,7 @@ parser = "cyberchair"
 charset = "cp1252"
 entries = 79
 verified = 2026-10-06
-note = "the ICML 2001 site at Purdue (named by icml.cc's 2007 past-conferences page); not on icml.cc"
+note = "the ICML 2001 site at Purdue (named by icml.cc Conferences/2007/pastconferences.html); not on icml.cc"
 
 [[page]]
 year = 2003
@@ -28,7 +30,7 @@ parser = "cyberchair"
 charset = "cp1252"
 entries = 118
 verified = 2026-10-06
-note = "the ICML 2003 site at HP Labs; not on icml.cc"
+note = "the ICML 2003 site at HP Labs (icml.cc Conferences/2007/pastconferences.html names /conferences/icml03/, whose titlesAndAuthors.html, capture 20030628150503, links each paper here); not on icml.cc"
 
 [[page]]
 year = 2004
@@ -38,7 +40,7 @@ parser = "cyberchair"
 charset = "cp1252"
 entries = 118
 verified = 2026-10-06
-note = "the Banff site's camera-ready abstracts in <pre>; icml.cc's per-paper copies glue words at line breaks"
+note = "the ICML 2004 Banff site (named by icml.cc Conferences/2007/pastconferences.html): its camera-ready abstracts in <pre>; icml.cc's per-paper copies glue words at line breaks"
 
 [[page]]
 year = 2007

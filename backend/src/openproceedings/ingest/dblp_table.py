@@ -143,7 +143,8 @@ def load(text: str) -> Table:
     excluded: dict[str, Excluded] = {}
     for r in raw.get("excluded", []):
         _check(r, {"key", "year", "reason"}, f"excluded {r.get('key')!r}")
-        if not _KEY.fullmatch(str(r["key"])) or type(r["year"]) is not int or not str(r["reason"]):
+        if not _KEY.fullmatch(str(r["key"])) or type(r["year"]) is not int or not str(r["reason"]) \
+                or not FIRST_YEAR <= r["year"] <= LAST_YEAR:  # fmt: skip
             raise ValueError(f"dblp_icml.toml excluded {r['key']!r}: a conf/icml key, a year and a reason")
         if r["key"] in seen or r["key"] in excluded:
             raise ValueError(f"dblp_icml.toml: {r['key']} is both excluded and listed, or listed twice")

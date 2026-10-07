@@ -14,9 +14,9 @@ About 80 survey requests were made, at least 3 s apart on web.archive.org (the C
 icml.cc still serves copies of the old conference sites under `https://icml.cc/Conferences/<year>/<original
 file name>` (sometimes with `.html` appended); only the directory index pages answer 404. machinelearning.org
 (IMLS) now redirects to icml.cc, so its old proceedings pages exist only as captures. Every page here is served
-as bare `text/html` with no charset: the bytes are cp1252 (2001–2011, but for five 2007 captures, 148, 225, 245,
-260 and 326, which are UTF-8; curly quotes and accented names in the
-0x80–0x9F range) or UTF-8 (2009 is ASCII, 2012 UTF-8), recorded per page in the table.
+as bare `text/html` with no charset. Most pages from 2001 to 2011 are cp1252 (curly quotes and accented names in
+the 0x80–0x9F range); 2009 is ASCII, 2012 is UTF-8, and so are five 2007 captures (papers 148, 225, 245, 260 and
+326). Each page's charset is a column of `backend/src/openproceedings/ingest/icml_sites.toml`.
 
 ## Per year
 
@@ -36,14 +36,15 @@ as bare `text/html` with no charset: the bytes are cp1252 (2001–2011, but for 
 | 2001 | capture `20010708012312` of `http://www.ecn.purdue.edu:80/ICML2001/accepted-papers.html` (the site was at Purdue; icml.cc's 2007 "past conferences" page names it) | one CyberChair page, alphabetical by first author | 79 | `student-abstracts.html`, a separate page of student posters |
 | 2000 | none | — | 0 | `www-csli.stanford.edu/icml2k/` `schedule.html` and `posters.html`: titles only |
 | 1999 | none | — | 0 | icml.cc's `Conferences/1999/accepted.html` and the Bled site: titles only |
-| 1998 | **not used**: per-paper captures of `cs.wisc.edu/icml98/papers/paperN.html` (66) | free-text `<PRE>`: title, authors with addresses, e-mails and phone numbers, abstract, keywords | — | submission abstracts, with contact details; titles may differ from the published papers (follow-up task) |
-| 1997 | **not used**: capture `19970619200718` of `cswww.vuse.vanderbilt.edu/~icml97/program.html` | one page of free-text `<pre>` blocks, layout varying by paper | — | as 1998 (follow-up task) |
+| 1998 | **not used**: per-paper captures of `cs.wisc.edu/icml98/papers/paperN.html` (66) | free-text `<PRE>`: title, authors with addresses, e-mails and phone numbers, abstract, keywords | — | submission abstracts, with contact details; titles may differ from the published papers (an owner question) |
+| 1997 | **not used**: capture `19970619200718` of `cswww.vuse.vanderbilt.edu/~icml97/program.html` | one page of free-text `<pre>` blocks, layout varying by paper | — | as 1998 (an owner question) |
 | 1996 | none | — | 0 | icml.cc's `Conferences/1996/Sched.html` and the di.unito.it site: titles only |
 | 1988–1995 | none | — | 0 | icml.cc has no pages for these years and both official "past ICMLs" lists give no website; other hosts were not guessed |
 
 **Years with an official abstract source used:** 2001, 2003, 2004, 2007, 2008, 2009, 2010, 2011, 2012.
 **Years with none:** 1988–1996, 1999, 2000, 2002, 2005, 2006. **Found but not used:** 1997, 1998 (submission
-abstracts with personal contact details; a follow-up task decides whether and how to use them).
+abstracts with personal contact details; whether to use their abstract text, never the contact details, is an owner
+question, not filed as a task).
 
 ## How the table uses it
 

@@ -699,18 +699,22 @@ def fetch_file(
             ) from e
         if fetched.tzinfo is None:
             raise CacheError(f"{side.name} has a naive fetched_at; delete it and {path.name}")
-        if (
-            named == (pinned.url, pinned.sha256)
-            and path.stat().st_size == pinned.size
-            and verify(path) == pinned.sha256
-        ):
+        if named != (pinned.url, pinned.sha256):
+            reason = "sidecar_mismatch"
+        elif path.stat().st_size != pinned.size:
+            reason = "size_mismatch"
+        else:
+            log.info("pinned_file_verify_started", extra={"file": path.name, "bytes": pinned.size})
+            reason = "hash_mismatch" if verify(path) != pinned.sha256 else ""
+        if not reason:
             return FileEntry(path, fetched.astimezone(UTC), cached=True)
-        log.warning("pinned_file_mismatch", extra={"file": path.name})
+        log.warning("pinned_file_mismatch", extra={"file": path.name, "reason": reason})
     if transport is None:
         raise CacheMiss(pinned.url)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f"{storage.TMP}{path.name}")
     request = Request("GET", pinned.url, {"User-Agent": USER_AGENT, "Accept": "*/*"})
+    log.info("pinned_file_fetch_started", extra={"file": path.name, "bytes_expected": pinned.size})
     for attempt in range(attempts):
         started = time.monotonic()
         hint: float | None = None
@@ -721,7 +725,7 @@ def fetch_file(
         else:
             try:
                 if response.status == 200:
-                    digest, size = _stream_to(tmp, response.chunks, pinned.size)
+                    digest, size = _stream_to(tmp, response.chunks, pinned.size, clock, path.name)
                     if (size, digest) != (pinned.size, pinned.sha256):
                         tmp.unlink(missing_ok=True)
                         raise FetchError(
@@ -752,12 +756,22 @@ def fetch_file(
     raise RetriesExhausted(f"{pinned.url}: gave up after {attempts} attempts; re-run later")
 
 
-def _stream_to(tmp: Path, chunks: Iterable[bytes], limit: int) -> tuple[str, int]:
-    """Write `chunks` to `tmp`, returning (sha256, size); more than `limit` bytes is refused (`TransportError`)."""
+PROGRESS_SECONDS = (
+    30.0  # a long download: one progress line at most this often (logging-standards §Crawl lines)
+)
+
+
+def _stream_to(tmp: Path, chunks: Iterable[bytes], limit: int, clock: Clock, name: str) -> tuple[str, int]:
+    """Write `chunks` to `tmp`, returning (sha256, size); more than `limit` bytes is refused at once
+    (`pin_mismatch`). A `pinned_file_progress` line at most every `PROGRESS_SECONDS` of `clock`."""
     digest, size = hashlib.sha256(), 0
+    last = clock.monotonic()
     with tmp.open("wb") as fh:
         for block in chunks:
             size += len(block)
+            if clock.monotonic() - last >= PROGRESS_SECONDS:
+                last = clock.monotonic()
+                log.info("pinned_file_progress", extra={"file": name, "bytes": size, "of": limit})
             if size > limit:  # not the pinned file: refused at once, never fetched again in full
                 fh.close()
                 tmp.unlink(missing_ok=True)

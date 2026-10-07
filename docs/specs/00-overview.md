@@ -64,7 +64,8 @@ venues.
 ```
             ┌──────────────── ingestion (01) ────────────────┐
  OpenReview │ API v2 / v1 crawlers ─┐                         │
- PMLR, dblp │ proceedings miners ───┼─► normalize ─► dedup ─► │ corpus snapshot
+ PMLR, dblp,│ proceedings miners ───┼─► normalize ─► dedup ─► │ corpus snapshot
+ ICML sites │                       │                         │
  NeurIPS    │ RIS importer (M2) ────┘   + track/status        │ (JSONL, content-hashed)
             └─────────────────────────────────────────────────┘
                                    │

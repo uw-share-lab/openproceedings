@@ -10,19 +10,19 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import date
 from pathlib import Path
 
 import pytest
 from openproceedings.ingest import dblp_table
 from openproceedings.ingest.dedup import dedup
 from openproceedings.ingest.record import PaperRecord
-from openproceedings.ingest.sources import dblp, dblp_xml
+from openproceedings.ingest.sources import dblp, dblp_xml, icml_sites
 from openproceedings.ingest.sources.common import CrawlError
 from openproceedings.ingest.sources.http import CacheMiss
 from openproceedings.ingest.statuses import statuses_indexed
 
-from tests.unit.ingest.openreview_fakes import FakeClock
+from tests.unit.ingest.proceedings_helpers import FakeTransport, response
 from tests.unit.ingest.test_dblp_xml import BODY, DTD, DTD_NAME, HEAD, Stream
 
 GZ = gzip.compress((HEAD + BODY).encode("latin-1"), mtime=0)
@@ -267,8 +267,79 @@ def test_a_dblp_id_outside_1988_to_2012_is_refused(tmp_path: Path, year: int) ->
         )
 
 
-def test_the_fetch_time_is_the_downloads(tmp_path: Path) -> None:
-    clock = FakeClock()
-    release, _ = dblp.fetch_release(tmp_path, stream(), TABLE)
-    assert release.fetched_at.tzinfo is not None and release.fetched_at <= datetime.now(UTC)
-    assert clock.now().tzinfo is not None
+def test_a_table_year_the_release_dates_otherwise_or_a_later_icml_key_are_judged_right(
+    tmp_path: Path,
+) -> None:
+    extract = prepared(tmp_path)
+    # a conf/icml/ proceedings record of 2013 on is PMLR's years: never classified here (the real release has 25)
+    later = dblp_xml.DblpEntry("proceedings", "conf/icml/2025p", "2025-07-01", None, {"year": "2025"}, {})
+    dblp.check_extract(dblp.Extract(extract.doi, extract.sha256, extract.fetched_at,
+                                    (*extract.entries, later)), TABLE)  # fmt: skip
+    # the table names conf/icml/1990 for 1990, but this release dates it 1991
+    moved = tuple(
+        dblp_xml.DblpEntry(e.type, e.key, e.mdate, e.publtype, e.fields | {"year": "1991"}, e.lists)
+        if e.key == "conf/icml/1990" else e for e in extract.entries
+    )  # fmt: skip
+    with pytest.raises(CrawlError, match="doesn't hold it") as e:
+        dblp.check_extract(dblp.Extract(extract.doi, extract.sha256, extract.fetched_at, moved), TABLE)
+    assert e.value.reason == "table_mismatch"
+
+
+def test_an_informal_or_repeated_paper_is_counted_never_a_record(tmp_path: Path) -> None:
+    extract = prepared(tmp_path)
+    [paper] = [e for e in extract.entries if e.key == "conf/icml/Synthetic90"]
+    informal = dblp_xml.DblpEntry(
+        paper.type, "conf/icml/Informal90", paper.mdate, "informal", paper.fields, paper.lists
+    )
+    more = dblp.Extract(extract.doi, extract.sha256, extract.fetched_at, (*extract.entries, informal, paper))
+    result = dblp.mine_year(1990, more, table=TABLE)
+    assert [r.id for r in result.records] == ["op:icml:1990:dblp-Synthetic90"]
+    assert dict(result.reports[0].skipped) == {"publtype_informal": 1, "duplicate": 1}
+
+
+# --- `op ingest dblp` and the replay `op snapshot build` runs --------------------------------------------------
+
+SITE = "https://icml.cc/Conferences/1990/abstracts.html"
+SITE_PAGE = (
+    "<html><table border><tr><th>Synthetic title with markup 1</th></tr><tr><td>Synthetic Author 2</td></tr>"
+    "<tr><td><pre>Synthetic abstract from the official page.</pre></td></tr></table></html>"
+)
+
+
+def site_pages() -> dict[int, tuple[icml_sites.SitePage, ...]]:
+    return {1990: (icml_sites.SitePage(1990, SITE, SITE, "cyberchair", "cp1252", 1, date(2026, 10, 6), "t"),)}
+
+
+def test_ingest_dblp_marks_each_year_under_the_release_and_the_replay_gives_the_same_records(
+    tmp_path: Path,
+) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    pages = FakeTransport({SITE: response(SITE_PAGE)})
+    out = crawl.ingest_dblp(
+        [1990], tmp_path, stream=stream(), transport=pages, table=TABLE, pages=site_pages()
+    )
+    [listing] = out["listings"]
+    assert (listing["records"], listing["abstract_attached"], listing["sites"]) == (1, 1, [SITE])
+    marker = json.loads((tmp_path / "dblp" / "crawls" / "1990.json").read_text())
+    assert marker == {"source": "dblp", "year": 1990, "release": TABLE.release.doi}
+    [record] = dblp.mine_year(1990, dblp.load_extract(tmp_path, TABLE), table=TABLE,
+                              site=icml_sites.read_year(1990, crawl.fetcher(
+                                  tmp_path, icml_sites.CACHE_DIR, frozenset({"icml.cc"}), offline=True),
+                                  pages=site_pages())).records  # fmt: skip
+    replayed = crawl._replay_dblp(tmp_path, (1990, TABLE.release.doi), TABLE, site_pages())
+    assert replayed.records == [record] and record.abstract == "Synthetic abstract from the official page."
+    # offline, from the files already on disk: the same records, nothing fetched
+    again = crawl.ingest_dblp([1990], tmp_path, offline=True, table=TABLE, pages=site_pages())
+    assert again["requests"] == 0 and again["listings"] == out["listings"]
+
+
+def test_ingest_dblp_dry_run_fetches_nothing_and_a_year_off_the_table_is_refused(tmp_path: Path) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    dry = crawl.ingest_dblp([1990], tmp_path, dry_run=True, stream=Stream(), table=TABLE, pages=site_pages())
+    assert dry == {"dry_run": True, "release_on_disk": False, "extract_on_disk": False,
+                   "years": [{"year": 1990, "pages": 1, "to_fetch": 1}], "requests": 0, "cached": 0}  # fmt: skip
+    with pytest.raises(CrawlError, match="covers ICML") as e:
+        crawl.ingest_dblp([2013], tmp_path, table=TABLE, pages=site_pages())
+    assert e.value.reason == "no_year"

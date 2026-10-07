@@ -76,10 +76,20 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   HTTP client's monotonic clock, so a test's fake clock drives it). The proceedings miners:
   `neurips_listing_started` / `_progress` / `_mined` and `pmlr_volume_started` / `_progress` / `_mined`, with the
   year or volume and `done` / `of`; their heartbeat is due at most every `PROGRESS_SECONDS` (30 s) of
-  `time.monotonic`, checked after each record built. Never a line per item.
+  `time.monotonic`, checked after each record built. Their `_mined` lines also carry `abstract_pdf_codes` and
+  `abstract_short` (decision-047). The dblp source (decision-047): `pinned_file_fetch_started` /
+  `pinned_file_progress` (`bytes`, `of`, at most every 30 s of the injected clock) / `pinned_file_fetched` for the
+  release download, `pinned_file_verify_started` before a cached copy's sha256 is checked, `pinned_file_mismatch`
+  WARNING with its `reason` (`sidecar_mismatch`, `size_mismatch`, `hash_mismatch`); `dblp_extract_started` /
+  `dblp_extract_progress` (`lines`, `records`, at most every 30 s) / `dblp_extract_written` for the streaming read,
+  `dblp_extract_stale` (with `reason`) when an extract is read again; `icml_site_year_started` /
+  `icml_site_year_progress` (`done`, `of`) / `icml_site_year_read` (pages, entries, `unjoined`, `dropped`) for a
+  year's ICML pages; one `dblp_year_mined` per year (records, `abstract_attached`, `abstract_missing`, the `site_*`
+  counts, `abstract_control_characters`, `abstract_pdf_codes`, `abstract_short`), and `dblp_ingested` (`years`,
+  `requests`, `cached`). Never a line per item.
 - **Record-level anomalies are DEBUG** (`openreview_unknown_track`, `openreview_v1_unmapped`,
   `openreview_v1_conflict`, `openreview_v1_twin_outcome`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `openreview_presentation_unmapped`, `openreview_title_control_characters` (forum and count, never the title), `neurips_record_invalid`,
-  `pmlr_record_invalid`, and per cache entry `openreview_cache_incompatible`, a purged pre-projection entry,
+  `pmlr_record_invalid`, `dblp_record_invalid` (the dblp key and the error type), and per cache entry `openreview_cache_incompatible`, a purged pre-projection entry,
   which a crawl reports as `cache_incompatible`). Each listing or crawl logs **at most one aggregate WARNING**
   with the counts
   (`listing_attention`, `openreview_crawl_attention`); listing-level conditions (`listing_count_mismatch`,

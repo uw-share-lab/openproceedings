@@ -162,7 +162,9 @@ can attribute it:
   `GET /papers/{id}` lists it). `ris` means it came through an imported RIS file (the Google Scholar
   bootstrap), which is most of the served corpus.
 - `origin`: the site that published it, an open set (`openreview`, `neurips_proceedings`, `iclr_proceedings`,
-  `pmlr`, `iclr_archive`; the last can't occur yet, since the ICLR archive supplies no abstracts). A direct
+  `pmlr`, `iclr_archive`, `icml_site`; `iclr_archive` can't occur yet, since the ICLR archive supplies no abstracts;
+  `icml_site` is an official ICML conference page, for ICML 1988–2012, decision-047, and its `url` is the page as
+  fetched: live, or the Internet Archive capture, `https://web.archive.org/web/<timestamp>id_/<page>`). A direct
   claim maps to its site. A `ris` claim's evidence names its route (`scholarmend:<route> <evidence>`,
   `ingest/ris.py`): `openreview_api` → `openreview`; `proceedings_page` → the site its evidence url's host
   names (NeurIPS, ICLR or PMLR proceedings), or `urls.proceedings`'s when the evidence has no url. Null when
@@ -388,7 +390,8 @@ route execution.
   text out. The attribution is the record's `Attribution` from the exported index's snapshot, computed once
   when the snapshot is loaded (`RecordFile.attributions`, `ingest/dedup.py::attribution`), the same one
   `GET /search` sends as `abstract_source`; nothing recomputes it. `<site>` is the results list's name for the
-  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`; `export.ORIGIN_NAMES`,
+  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`, `ICML conference site`;
+  `export.ORIGIN_NAMES`,
   pinned equal to `hit-item.tsx`'s), plus ` (via RIS import)` when the claim came through an imported RIS file;
   a route that names no known site reads `an imported RIS file`; the url is left out when there is none.
 
@@ -508,8 +511,12 @@ route execution.
   Processing Systems" (so 1987 is the first). [iclr.cc](https://iclr.cc/About) lists its conferences from 2013.
   [icml.cc](https://icml.cc/) calls 2026 the "Forty-Third International Conference on Machine Learning" and
   PMLR's v202 is the 40th (2023), so, counting back annually, 1988 is the 5th, the first held as a conference
-  (the earlier meetings were workshops). `backend/tests/unit/test_export.py` pins each era's first year, the
-  rename and recent years by hand, and every venue from 2013 to 2026.
+  (the earlier meetings were workshops). 1989, 1991 and 1992 were held as the International Workshop on Machine
+  Learning (ML 1989, ML91, ML 1992; dblp's proceedings titles), the series' meetings those years: their records
+  are exported under the ICML name like every other year, a normalisation decision-047 records and the coverage
+  report's scope lines state. `backend/tests/unit/test_export.py` pins each era's first year, the rename and recent
+  years by hand, and every year each venue's sources can yield: NeurIPS from 1987, ICML from 1988, ICLR from 2013,
+  to 2026.
 - **CSV:** one row per paper, the columns of the schema in 01 plus the provenance columns `index_version`,
   `canonical_hash`, `exported_at`, `record_id` and `searched_at` (the last two empty unless the export is
   pinned by a search record; JSONL has the same five fields, null when not pinned), then the abstract-source

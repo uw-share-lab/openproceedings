@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Schemas } from "@/api/client";
 import {
   ABSTRACT_WITHHELD,
+  archiveCapture,
   attributionText,
   HitItem,
   seeAlsoLead,
@@ -157,6 +158,23 @@ describe("the abstract's attribution (decision-018, RH-12)", () => {
     });
     cleanup();
     expect(attribution(show({ abstract_source: null }))).toBeUndefined();
+  });
+
+  it("names an official ICML page, and says an Internet Archive capture is a copy and links its banner view", () => {
+    const live = "https://icml.cc/Conferences/2009/abstracts.html";
+    expect(attributionText({ source: "icml_site", origin: "icml_site", url: live })).toEqual({
+      site: "ICML conference site",
+      via: "",
+    });
+    const capture =
+      "https://web.archive.org/web/20040907123036id_/http://www.aicml.cs.ualberta.ca:80/banff04/icml/pages/abstracts/allAbstracts.html";
+    const line = attribution(
+      show({ abstract_source: { source: "icml_site", origin: "icml_site", url: capture } }),
+    );
+    expect(line?.textContent).toBe("Abstract: ICML conference site (Internet Archive copy, 2004-09-07)");
+    const link = within(line as HTMLElement).getByRole("link");
+    expect(link.getAttribute("href")).toBe(capture.replace("id_/", "/"));
+    expect(archiveCapture(live)).toBeNull();
   });
 
   it("has no attribution when there is no abstract", () => {

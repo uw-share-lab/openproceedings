@@ -15,10 +15,10 @@ import pytest
 from openproceedings.ingest.sources import dblp, icml_sites
 from openproceedings.ingest.sources.common import CrawlError
 from openproceedings.ingest.sources.dblp_xml import DblpEntry
-from openproceedings.ingest.sources.http import Fetcher
+from openproceedings.ingest.sources.http import Fetcher, Response
 from openproceedings.ingest.sources.icml_sites import Entry, SitePage
 
-from tests.unit.ingest.proceedings_helpers import fetcher, seed
+from tests.unit.ingest.proceedings_helpers import FakeTransport, fetcher, seed
 from tests.unit.ingest.test_dblp import TABLE, prepared
 
 ABSTRACT = "Synthetic abstract sentence one about learning. Sentence two about data."
@@ -203,6 +203,13 @@ def test_2007s_halves_are_joined_by_paper_number_and_the_rest_counted(tmp_path: 
     )
     assert "Internet Archive capture 20071116064757" in entry.evidence
     assert site.unjoined == 1  # paper 242 has a title and no abstract page
+    # an abstract page whose number the list doesn't hold is the other kind of half
+    orphan = CAPTURE.replace("/105.htm", "/999.htm")
+    seed(tmp_path, "icml_sites", orphan, PAPER2007, at=T)
+    more = {2007: (*pages[2007],
+                   SitePage(2007, orphan, orphan.split("id_/", 1)[1], "icml2007_paper", "utf-8", 1, T.date(), "t"))}  # fmt: skip
+    again = icml_sites.read_year(2007, f, pages=more)
+    assert again is not None and (len(again.entries), again.unjoined) == (1, 2)
 
 
 def site_year(*entries: tuple[str, str]) -> icml_sites.SiteYear:
@@ -303,3 +310,37 @@ def test_a_title_key_two_dblp_papers_share_attaches_nothing(tmp_path: Path) -> N
     )
     assert [r.abstract for r in result.records] == [None, None]
     assert result.reports[0].site_ambiguous == 1
+
+
+def test_an_ascii_page_is_never_taken_for_utf8_and_the_rows_charset_reaches_the_decoder(
+    tmp_path: Path,
+) -> None:
+    f, pages = one_page(tmp_path, CYBERCHAIR, charset="cp1252")  # ASCII is valid UTF-8 too: no refusal
+    site = icml_sites.read_year(1990, f, pages=pages)
+    assert site is not None and len(site.entries) == 2
+    # through a transport: bare `text/html` cp1252 bytes decode with the row's charset
+    url = "https://icml.cc/Conferences/1990/abstracts.html"
+    body = (CYBERCHAIR.replace("one.", "Naïve “one”.") + "</html>").encode("cp1252")
+    live, _ = fetcher(tmp_path / "live", FakeTransport({url: Response(200, {"content-type": "text/html"}, body)}),
+                      frozenset({"icml.cc"}), min_interval=0)  # fmt: skip
+    read = icml_sites.read_year(1990, live, pages=pages)
+    assert read is not None and read.entries[0].abstract == "Synthetic abstract Naïve “one”."
+    # UTF-8 bytes a cp1252 row can't decode at all (`Á` is C3 81): the row's charset is named as the cause
+    bad = (CYBERCHAIR.replace("one.", "Á one.") + "</html>").encode("utf-8")
+    worse, _ = fetcher(tmp_path / "bad", FakeTransport({url: Response(200, {"content-type": "text/html"}, bad)}),
+                       frozenset({"icml.cc"}), min_interval=0)  # fmt: skip
+    with pytest.raises(CrawlError, match="charset is wrong") as e:
+        icml_sites.read_year(1990, worse, pages=pages)
+    assert e.value.reason == "wrong_charset"
+
+
+def test_a_page_listed_twice_or_a_capture_off_the_official_sites_path_is_refused() -> None:
+    with pytest.raises(ValueError, match="listed twice"):
+        icml_sites.load(row() + row())
+    off_path = '"https://web.archive.org/web/20070101000000id_/http://oregonstate.edu:80/admissions/x.html"'
+    with pytest.raises(ValueError, match="not an official ICML site"):
+        icml_sites.load(row(url=off_path, official='"http://oregonstate.edu:80/admissions/x.html"'))
+    on_path = '"https://web.archive.org/web/20070101000000id_/http://oregonstate.edu:80/conferences/icml2007/a/1.htm"'
+    assert icml_sites.load(
+        row(url=on_path, official='"http://oregonstate.edu:80/conferences/icml2007/a/1.htm"')
+    )

@@ -112,14 +112,30 @@ const ORIGIN_NAMES: Readonly<Record<string, string>> = {
 
 type AbstractFrom = NonNullable<SearchHit["abstract_source"]>;
 
-/** What the attribution says: the site ("PMLR"), and " (via RIS import)" when the claim came through an
- * imported RIS file; a route that names no known site is "an imported RIS file" (or the source as it came). */
+const CAPTURE = /^https:\/\/web\.archive\.org\/web\/(\d{4})(\d{2})(\d{2})\d{6}id_\//;
+
+/** An Internet Archive capture an abstract was read from (an old ICML site, TASK-206; copy RH-12): the day it
+ * was taken, and the archive's own view of it (`id_` dropped, so the reader sees the archive's banner and knows
+ * it is a copy), or null for any other page. */
+export function archiveCapture(url: string | null): { day: string; view: string } | null {
+  const m = url === null ? null : CAPTURE.exec(url);
+  return m === null || url === null
+    ? null
+    : { day: `${m[1]}-${m[2]}-${m[3]}`, view: url.replace("id_/", "/") };
+}
+
+/** What the attribution says: the site ("PMLR"), " (Internet Archive copy, <day>)" when the page is a capture,
+ * and " (via RIS import)" when the claim came through an imported RIS file; a route that names no known site is
+ * "an imported RIS file" (or the source as it came). */
 export function attributionText(from: AbstractFrom): { site: string; via: string } {
   if (from.origin === null) {
     return { site: from.source === "ris" ? "an imported RIS file" : from.source, via: "" };
   }
+  const capture = archiveCapture(from.url);
   return {
-    site: ORIGIN_NAMES[from.origin] ?? from.origin,
+    site:
+      (ORIGIN_NAMES[from.origin] ?? from.origin) +
+      (capture ? ` (Internet Archive copy, ${capture.day})` : ""),
     via: from.source === "ris" ? " (via RIS import)" : "",
   };
 }
@@ -137,7 +153,7 @@ function AbstractSource({ from, title }: { from: AbstractFrom; title: string }) 
         site
       ) : (
         <a
-          href={from.url}
+          href={archiveCapture(from.url)?.view ?? from.url}
           rel="noopener noreferrer"
           aria-label={`${site}, abstract source for ${title}`}
           className="inline-flex min-h-6 items-center underline underline-offset-4"

@@ -44,7 +44,8 @@ The owner decided (2026-10-06): the corpus covers NeurIPS from 1987 and ICML fro
 - **Old abstract text** is cleaned the way decision-044 cleans control characters: a NeurIPS page's placeholder
   (`Abstract Unavailable`) is no abstract, and PDF-extraction codes are repaired (`(cid:173)`, a soft hyphen at a
   line end, is removed so the word is whole; any other `(cid:N)` becomes a space), each counted and noted in the
-  claim's evidence. A focused review found both in the 1987–2003 pages; no page from 2013 on holds either.
+  claim's evidence. A focused review found both in the 1987–2012 pages (nearly all before 2004); no page from
+  2013 on holds either.
 
 ## Consequences
 
@@ -61,5 +62,13 @@ The owner decided (2026-10-06): the corpus covers NeurIPS from 1987 and ICML fro
   accepted count (dblp is a bibliography, not the conference's statement), so those cells are reported, not gated.
 - Moving to a newer dblp release is a change to `dblp_icml.toml` and a snapshot-diff event; a year marked under
   another release is refused on replay.
-- 1997 and 1998 have official pages with submission abstracts and authors' contact details; they are not used
-  (a follow-up task decides).
+- 1997 and 1998 have official pages with submission abstracts and authors' contact details; they are not used.
+  Whether to use them (abstract text only, never the contact details) is an owner question, not filed as a task:
+  no task id was reserved for this branch.
+- 1989, 1991 and 1992 are exported under the ICML name (`International Conference on Machine Learning (ICML
+  <year>)`), like every ICML year, though they were held as the International Workshop on Machine Learning: a
+  normalisation spec 04 §Exports and the coverage report's scope lines state.
+- The crawl window a search record or methods text cites is when sources were read. For ICML 1988–2012 that is
+  when the pinned release was read; the records reflect the release (its DOI and date) and the official pages'
+  captures, not a crawl on those dates. The coverage report the methods text cites says so in its scope lines
+  (spec 05 §Methods text), rather than a new clause in the methods text itself.

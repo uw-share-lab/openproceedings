@@ -329,6 +329,7 @@ def _log_done(report: ListingReport, started: float) -> None:
         "year": report.year, "listing": report.listing, "listed": report.listed, "stated": report.stated,
         "records": report.records, "abstract_missing": report.abstract_missing,
         "abstract_control_characters": report.abstract_control_characters,
+        "abstract_pdf_codes": report.abstract_pdf_codes, "abstract_short": report.abstract_short,
         "unknown_track": report.unknown_track, "ms": elapsed_ms(started, time.monotonic),
     }  # fmt: skip
     log.info("neurips_listing_mined", extra=fields)
