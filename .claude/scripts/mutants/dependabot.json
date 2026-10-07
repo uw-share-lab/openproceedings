@@ -1,0 +1,374 @@
+[
+  {
+    "label": "dependabot: common: a failed tool exit read as success",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "    if r.returncode not in ok_codes:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: common: http allows non-https URLs",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "    if not url.startswith(\"https://\"):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: common: curl without --proto =https",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "\"--proto\", \"=https\", ",
+    "new": ""
+  },
+  {
+    "label": "dependabot: common: ToolError exits 0",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "        sys.exit(2)\n    sys.exit(0)",
+    "new": "        sys.exit(0)\n    sys.exit(0)"
+  },
+  {
+    "label": "dependabot: common: problems exit 0",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "            sys.exit(1)\n",
+    "new": "            sys.exit(0)\n"
+  },
+  {
+    "label": "dependabot: common: fixes exit 0",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "            sys.exit(3)\n",
+    "new": "            sys.exit(0)\n"
+  },
+  {
+    "label": "dependabot: common: major compares two components",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "return not o or not n or o[0] != n[0]",
+    "new": "return not o or not n or o[:2] != n[:2]"
+  },
+  {
+    "label": "dependabot: common: default base is dev's tip",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "run([\"git\", \"merge-base\", \"origin/dev\", head]).stdout.strip()",
+    "new": "run([\"git\", \"rev-parse\", \"origin/dev\"]).stdout.strip()"
+  },
+  {
+    "label": "dependabot: uv: hand-only list empty",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "HAND_ONLY = {\"tantivy\"}",
+    "new": "HAND_ONLY: set[str] = set()"
+  },
+  {
+    "label": "dependabot: uv: major not checked",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "    if old_v is not None and is_major(old_v, new_v):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: uv: any source accepted",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "    if source.get(\"registry\") != REGISTRY:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: uv: yanked ignored",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "    if any(u.get(\"yanked\") for u in listed):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: uv: any file host accepted",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "        if not url.startswith(FILES_HOST):\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: uv: unlisted file accepted",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "        if fn not in pypi:\n            rep.problem",
+    "new": "        if fn not in pypi:\n            rep.ok"
+  },
+  {
+    "label": "dependabot: uv: sha256 not compared",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "removeprefix(\"sha256:\") != pypi[fn]:",
+    "new": "removeprefix(\"sha256:\") == \"\":"
+  },
+  {
+    "label": "dependabot: uv: lost provenance accepted",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "    if before and not now:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: uv: publisher change accepted",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "    elif before and now and before != now:\n",
+    "new": "    elif False:\n"
+  },
+  {
+    "label": "dependabot: uv: provenance 404 is an error",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "    if r.status == 404:\n        return None\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: uv: requires-python not compared",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "    if old_lock.get(\"requires-python\") != new_lock.get(\"requires-python\"):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: uv: removed packages ignored",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "    for name in sorted(set(old) - set(new)):\n",
+    "new": "    for name in []:\n"
+  },
+  {
+    "label": "dependabot: uv: added packages ignored",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "    for name in sorted(set(new) - set(old)):\n",
+    "new": "    for name in []:\n"
+  },
+  {
+    "label": "dependabot: uv: same-version file changes ignored",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "            if files(o[v]) != files(n[v]) or o[v].get(\"source\") != n[v].get(\"source\"):\n",
+    "new": "            if False:\n"
+  },
+  {
+    "label": "dependabot: npm: no --registry pin",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": ", \"--registry\", REGISTRY]",
+    "new": "]"
+  },
+  {
+    "label": "dependabot: npm: integrity not compared",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "    if dist.get(\"integrity\") != new.get(\"integrity\"):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: npm: resolved host not checked",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "    if not resolved.startswith(REGISTRY):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: npm: dependency fields not compared",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "        if norm(m.get(f)) == norm(new.get(f)):\n",
+    "new": "        if True:\n"
+  },
+  {
+    "label": "dependabot: npm: libc mismatch read as a fix",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "        if f != \"libc\" or \"libc\" in new:\n",
+    "new": "        if f != \"libc\":\n"
+  },
+  {
+    "label": "dependabot: npm: hasInstallScript not compared",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "    if bool(new.get(\"hasInstallScript\")) != bool(install_scripts(m)):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: npm: new install scripts ignored",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "        if added:\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: npm: publisher not compared",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "        if npm_user(before) != npm_user(m):\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: npm: lost provenance accepted",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "        if (before.get(\"dist\") or {}).get(\"attestations\") and not dist.get(\"attestations\"):\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: npm: major not checked",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "    if old_v is not None and old_v != new_v and is_major(str(old_v), new_v):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: npm: dropped libc is a problem, not a fix",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "        if dropped == [\"libc\"]:\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: npm: same-version integrity change accepted",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "            if old.get(f) != new.get(f):\n",
+    "new": "            if False:\n"
+  },
+  {
+    "label": "dependabot: npm: graph flags count as dropped",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "set(old) - set(new) - GRAPH_FLAGS",
+    "new": "set(old) - set(new)"
+  },
+  {
+    "label": "dependabot: npm: added packages ignored",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "    for k in sorted(deps - set(old)):\n",
+    "new": "    for k in []:\n"
+  },
+  {
+    "label": "dependabot: npm: removed packages ignored",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "    for k in sorted(deps - set(new)):\n",
+    "new": "    for k in []:\n"
+  },
+  {
+    "label": "dependabot: npm: root manifest not compared",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "WORKSPACES = {\"\": \"package.json\", \"frontend\": \"frontend/package.json\"}",
+    "new": "WORKSPACES = {\"frontend\": \"frontend/package.json\"}"
+  },
+  {
+    "label": "dependabot: npm: manifest pins not compared",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "                if want.get(dep) != got.get(dep):\n",
+    "new": "                if False:\n"
+  },
+  {
+    "label": "dependabot: docker: no index Accept header",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    headers = {\"Accept\": \", \".join(INDEX_TYPES)}\n",
+    "new": "    headers: dict[str, str] = {}\n"
+  },
+  {
+    "label": "dependabot: docker: digest not compared",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    if digest != pin.digest:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: docker: content type not checked",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    if ctype not in INDEX_TYPES:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: docker: attestation failure ignored",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "        if r.returncode:\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: docker: new image accepted",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    if not olds:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: docker: major tag accepted",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    if pin.tag != old_tag and is_major(old_tag, pin.tag):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: docker: python minor accepted",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    if is_python(pin.image) and pin.tag != old_tag and is_minor_or_more(old_tag, pin.tag):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: docker: .python-version not compared",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "        if have != want:\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: docker: no token after a 401",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    if r.status == 401:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: docker: library/ prefix dropped",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "image if rest else f\"library/{image}\"",
+    "new": "image"
+  },
+  {
+    "label": "dependabot: actions: tag sha not compared",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "        if got != use.sha:\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: actions: new action accepted",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "        if not olds:\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: actions: unpinned uses accepted",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "            if rep is not None:\n",
+    "new": "            if False:\n"
+  },
+  {
+    "label": "dependabot: actions: major accepted",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "        if any(is_major(o, use.tag) for o in olds if o):\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: actions: missing tag comment accepted",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "        if not use.tag:\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: restore_libc: libc appended, not in place",
+    "file": ".claude/scripts/dependabot/restore_libc.py",
+    "old": "        for k in before:  # the base entry's key order, libc in its old place\n",
+    "new": "        for k in []:  # type: ignore[assignment]\n"
+  },
+  {
+    "label": "dependabot: restore_libc: rewrites an untouched lock",
+    "file": ".claude/scripts/dependabot/restore_libc.py",
+    "old": "    if repaired:\n        LOCK.write_text",
+    "new": "    if True:\n        LOCK.write_text"
+  },
+  {
+    "label": "dependabot: prs: allowed files not checked",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "            if not any(fnmatch.fnmatchcase(f[\"path\"], pat) for pat in allowed):\n",
+    "new": "            if False:\n"
+  },
+  {
+    "label": "dependabot: prs: unknown ecosystem accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if allowed is None:\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: prs: tantivy title accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "HAND_ONLY_WORDS = (\"tantivy\",)",
+    "new": "HAND_ONLY_WORDS: tuple[str, ...] = ()"
+  },
+  {
+    "label": "dependabot: prs: one unqueued poll is a drop",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "c >= 2]",
+    "new": "c >= 1]"
+  },
+  {
+    "label": "dependabot: prs: drops never detected",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if closed or dropped:\n",
+    "new": "        if closed:\n"
+  },
+  {
+    "label": "dependabot: prs: watch never times out",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if time.monotonic() >= deadline:\n",
+    "new": "        if False:\n"
+  }
+]

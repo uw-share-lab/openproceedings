@@ -71,7 +71,10 @@ tempted to bypass it.
   base-image digests in `deploy/` weekly, minor and patch grouped into one PR per ecosystem and semver-majors
   ignored (a major is a deliberate, hand-made PR; spec 08 §CI); review its PRs like any other, plus the
   Dependabot checks in spec 08 §CI (release notes, supply chain, the manifest against the lock's
-  `packages["frontend"]`, `npm audit --omit=dev`, lock edits under the `.nvmrc` Node). Its `uv` entry
+  `packages["frontend"]`, `npm audit --omit=dev`, lock edits under the `.nvmrc` Node). A weekly routine runs
+  them as `/dependabot-review`, with the scripts in `.claude/scripts/dependabot/` (decision-048, TASK-211); a
+  change to a check changes the script, its rows in `.claude/scripts/tests/dependabot_cases.py` and its
+  mutants in `.claude/scripts/mutants/dependabot.json` together. Its `uv` entry
   ignores `tantivy`, whose upgrade must bump `SCHEMA_VERSION` by hand (spec 08 §Release), and every image a
   `deploy/` build pulls stays digest-pinned (`check_digest_pins.py`, spec 08 §Deploy).
 - Secrets: CI never needs OpenReview credentials — tests use recorded HTTP fixtures. No `data/` in

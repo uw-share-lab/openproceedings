@@ -88,7 +88,7 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
 ## Required CI checks (six)
 | Check (workflow) | Covers |
 |---|---|
-| `lint` (`lint.yml`) | `make lint`: ruff format/check, mypy --strict (once `backend/src` exists), shellcheck; prettier, eslint, tsc; then actionlint |
+| `lint` (`lint.yml`) | `make lint`: ruff format/check, mypy --strict (`backend/src` and the `/dependabot-review` scripts), shellcheck; prettier, eslint, tsc; then actionlint |
 | `test` (`test.yml`) | pytest unit/golden/differential/contract under pytest-xdist, properties at the `pr` profile (200 examples, 2 s deadline); vitest; OpenAPI→TS freshness |
 | `claude-tooling` (`claude-tooling.yml`) | `make tooling`: roster lint, `.claude/README.md` + learnings index freshness, backlog hygiene (no Done task in `tasks/`, no id used twice), every hook case table |
 | `attribution` (`pr-gates.yml`) | no AI attribution in any commit message or the PR title/body |

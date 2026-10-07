@@ -19,7 +19,7 @@ description: The backend Python standard for openproceedings — Python 3.12 wit
 - `autofix.sh` (PostToolUse) runs `ruff format` and `ruff check --fix` on each file as it's edited and
   reports what remains. `make fmt` fixes the whole repo.
 - CI `lint` runs `make lint`: `ruff format --check`, `ruff check`, and `mypy --strict backend/src` (once it
-  exists). Run `make lint` locally before committing; `.githooks/pre-push` runs it too.
+  exists), plus `mypy --strict` on `.claude/scripts/dependabot/` and its case table (TASK-211). Run `make lint` locally before committing; `.githooks/pre-push` runs it too.
 
 ## Typing
 - `mypy --strict` with no blanket ignores. A `# type: ignore[code]` needs the specific code and a comment

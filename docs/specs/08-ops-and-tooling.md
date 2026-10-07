@@ -113,8 +113,8 @@ The CLI and the API call the same functions, so the CLI alone is enough to run a
 ## Testing
 
 - Every hook has a case table under `.claude/hooks/tests/`, and every tooling script one under
-  `.claude/scripts/tests/` (the CI scripts, the network guard, `changelog.py`); `make tooling` and CI
-  `claude-tooling` run them all.
+  `.claude/scripts/tests/` (the CI scripts, the network guard, `changelog.py`, the `/dependabot-review`
+  scripts); `make tooling` and CI `claude-tooling` run them all.
 - `make tooling` also runs the roster lint, the `.claude/README.md`, learnings-index and backlog checks, and
   the digest-pin check on `deploy/` (§Deploy).
 - CLI commands are covered by the suites of the spec they call (07); the CLI adds only argument-parsing
@@ -144,7 +144,7 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 
 | Workflow → required check(s) | Runs |
 |---|---|
-| `lint` → `lint` | `make lint` (ruff format/check, mypy --strict once `backend/src` exists, shellcheck, frontend prettier/eslint/tsc), then actionlint |
+| `lint` → `lint` | `make lint` (ruff format/check, mypy --strict on `backend/src` and on the `/dependabot-review` scripts and their case table, shellcheck, frontend prettier/eslint/tsc), then actionlint |
 | `test` → `test` | pytest under pytest-xdist at the `pr` Hypothesis profile (200 examples, 2 s deadline) (unit, golden, differential@200, contract; the 2,000-example `ci` profile runs nightly, TASK-127); vitest; `next build` (the standalone server must exist); OpenAPI snapshot and TS types freshness (`make openapi`, then `git diff --exit-code` on `backend/tests/contract/openapi.json` and `frontend/src/api/schema.ts`; unconditional, TASK-040) |
 | `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`, no task or decision id used twice: §Merge queue), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha. In a merge-queue build, `merge_group_gate.py` runs the same three checks on every PR in the group (§Merge queue) |
@@ -227,6 +227,32 @@ equals `packages["frontend"]` in `package-lock.json`: Dependabot's npm updater c
 `npm ci` accepts it. Run `npm audit --omit=dev` and report any advisory that predates the bump. A lockfile edit
 runs under the `.nvmrc` Node, because an older npm drops the `libc` fields. Docs that state a bumped version move
 in the same PR.
+
+**The weekly routine** (decision-048, TASK-211). A scheduled Claude Code routine (a cloud session on a fresh clone,
+no access to the owner's machine) runs `/dependabot-review` (`.claude/commands/dependabot-review.md`) once a week.
+For each open Dependabot PR into `dev` it runs the checks above, scripted in `.claude/scripts/dependabot/`
+(`uv_lock.py`, `npm_lock.py`, `docker_digest.py`, `actions_pins.py`; `restore_libc.py` repairs dropped `libc`
+fields, `prs.py` lists the PRs and watches the queue). It then runs the tests the ecosystem calls for, the
+reviewers, the dispositions, the review record and attestation, the `no-learning` label unless something was
+learned, and `gh pr merge <n> --auto`. It fixes what the PR itself can fix: a manifest/lock pin, dropped `libc`
+fields, `.python-version` for a Python patch, a doc that states the old version, a review finding. It may
+merge, through the queue only, a PR that passes all of that. It never merges, and leaves open with a comment for
+the owner, a PR with:
+
+- an integrity, hash or URL mismatch, or a file off the registry;
+- a new publisher, or provenance the previous version had and the new one lacks;
+- a new install script, or a new or removed package;
+- a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
+- a red required check it can't fix, or a Must it can't fix;
+- any semver-major, or anything touching `tantivy` or the Python minor (both hand-only).
+
+Each script prints `ok`, `FIX` (the routine repairs it) or `PROBLEM` (a hard stop) per finding, and exits 0, 3 (only
+FIX lines), 1 (a PROBLEM) or 2 (the check couldn't run, also a hard stop). Every outside call goes through `git`,
+`curl`, `npm` or `gh`, so the case table `.claude/scripts/tests/test-dependabot.sh` (in `make tooling`) runs them
+against fakes; the mutants are in `.claude/scripts/mutants/dependabot.json`. The run ends with a summary for its
+log: merged, left open (with the reason), not reviewed, and what the owner should look at. The gates stay on for
+Dependabot PRs; exempting `dependabot[bot]` from `learnings` and `review-attested` was considered and rejected
+(decision-048).
 
 ## Git and PR rules
 
@@ -711,8 +737,8 @@ Kreate splits `.claude/` per project. Our parts share one query contract, so thi
 
 **The authoritative list is [`.claude/README.md`](../../.claude/README.md).** It is generated from the
 files' frontmatter by `.claude/scripts/roster_index.py`, and CI fails if it is stale. This spec deliberately
-does not repeat the list, because a hand-kept copy is how counts drift. As of M0 there are **49 agents,
-53 skills and 17 commands** (target range 25–150 of each), across these areas:
+does not repeat the list, because a hand-kept copy is how counts drift. At TASK-211 (2026-10-07) there are
+**49 agents, 53 skills and 18 commands** (target range 25–150 of each), across these areas:
 - global roles and process (including `learning-recorder` and the review gate);
 - engineering standards (including `autolint`, `logging-standards`, `observability-reviewer`);
 - ingestion;
@@ -724,7 +750,7 @@ does not repeat the list, because a hand-kept copy is how counts drift. As of M0
   auditor, data-viz designer);
 - semantic layer;
 - evaluation and research;
-- ops.
+- ops (including `/dependabot-review`, the weekly Dependabot routine, §CI).
 
 New agents and skills are added when a milestone brings a new recurring task, never speculatively. Each
 needs an area in `roster_index.py` and a path reference from something that uses it (the lint rejects

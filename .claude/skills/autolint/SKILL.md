@@ -17,7 +17,7 @@ Four layers, each catching what the one before could not:
 ## Tool per file type
 | Files | Fix (autofix hook, `make fmt`) | Check (`make lint`, CI) |
 |---|---|---|
-| `*.py` (backend, `.claude/`) | `ruff format`, `ruff check --fix` | `ruff format --check`, `ruff check`, then `mypy --strict` for `backend/src` |
+| `*.py` (backend, `.claude/`) | `ruff format`, `ruff check --fix` | `ruff format --check`, `ruff check`, then `mypy --strict` for `backend/src` and `.claude/scripts/dependabot/` (with its case table) |
 | `frontend/**/*.{ts,tsx,js,jsx,json,css,md}` | `prettier --write`, `eslint --fix` (ts/tsx/js/jsx) | `prettier --check`, `eslint`, `next typegen` + `tsc --noEmit` |
 | `*.sh`, `.githooks/*` | none; shellcheck cannot fix | `shellcheck` |
 | `*.yml` workflows | none | `actionlint` if installed (CI installs it) |
