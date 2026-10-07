@@ -433,10 +433,8 @@ class HttpClient[T]:
                     raise FetchError(f"{url}: body over {policy.max_body} bytes", reason="too_large")
                 if response.status == 429 or response.status >= 500:
                     why, hint = f"http_{response.status}", retry_after(response.headers, self.clock.now())
-                elif response.status == 200 and self._truncated(response, by_length):
-                    # a capture judged by length that states none is told apart from a short body
-                    stated = response.headers.get("content-length", "").strip().isdigit()
-                    why = "truncated_no_length" if by_length and not stated else "truncated"
+                elif response.status == 200 and (cut := self._truncated(response, by_length)):
+                    why = cut
                 else:
                     if response.status == 200:
                         self._respect_budget(response, url)
@@ -449,19 +447,25 @@ class HttpClient[T]:
             f"{url}: gave up after {policy.attempts} attempts; re-run later (cached responses are not fetched again)"
         )
 
-    def _truncated(self, response: Response, by_length: bool = False) -> bool:
+    def _truncated(self, response: Response, by_length: bool = False) -> str | None:
+        """Why a 200 is not whole (`truncated`; `truncated_no_length` for a page judged by length that states none
+        and lacks `</html>` too), or None when it is."""
         stated = response.headers.get("content-length", "").strip()
-        if by_length and stated.isdigit():  # a capture's bytes are fixed: whole when they are all there
-            return int(stated) != len(response.body)
+        if (
+            by_length and stated.isascii() and stated.isdecimal()
+        ):  # a capture's bytes are fixed: whole when all there
+            return "truncated" if int(stated) != len(response.body) else None
         if self.policy.expect == "html":
-            return b"</html>" not in response.body[-4096:].lower()
+            if b"</html>" in response.body[-4096:].lower():
+                return None
+            return "truncated_no_length" if by_length else "truncated"
         if not is_json(response):
-            return False  # not JSON at all (a challenge page): the source judges it
+            return None  # not JSON at all (a challenge page): the source judges it
         try:
             json.loads(response.body)
         except ValueError:
-            return True
-        return False
+            return "truncated"
+        return None
 
     def _pace(self) -> None:
         if (

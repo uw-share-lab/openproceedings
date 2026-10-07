@@ -892,7 +892,7 @@ def test_the_scope_lines_say_each_venues_years_and_what_the_dblp_years_rest_on()
         },  # none attached: not named
     ]
     _, icml = _scope(cov, manifest)
-    assert "91 of those abstracts (ICML 1997, 1998) are submission-time abstracts" in icml
+    assert "Of the 333 abstracts, 91 (ICML 1997, 1998) are submission-time abstracts" in icml
     assert _scope(cov, {}) == [years]  # no dblp source: no dblp line
     own = OfficialCount(90, "papers in the NeurIPS 1987 proceedings index (every accepted paper; the page's own count)",
                         "https://proceedings.neurips.cc/paper_files/paper/1987", date(2026, 10, 6))  # fmt: skip

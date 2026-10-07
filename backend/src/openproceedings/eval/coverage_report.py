@@ -449,7 +449,7 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
             x for x in dblp if x.get("abstracts_as_submitted") and int(x.get("abstract_attached", 0))
         ]
         as_submitted = (
-            f" {sum(int(x['abstract_attached']) for x in submitted):,} of those abstracts (ICML "
+            f" Of the {attached:,} abstracts, {sum(int(x['abstract_attached']) for x in submitted):,} (ICML "
             f"{', '.join(str(x['year']) for x in sorted(submitted, key=lambda x: int(x['year'])))}) are submission-time "
             "abstracts from official pages that list the submissions, which can differ from the published papers' "
             "(TASK-207)."

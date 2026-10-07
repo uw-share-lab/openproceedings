@@ -85,8 +85,7 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   `dblp_extract_stale` (with `reason`) when an extract is read again; `icml_site_year_started` /
   `icml_site_year_progress` (`done`, `of`) / `icml_site_year_read` (pages, entries, `unjoined`, `dropped`,
   `withheld`: 1997/1998 abstracts withheld for a contact detail or because no field ends them, counted and never
-  their text, TASK-207) for a
-  year's ICML pages; one `dblp_year_mined` per year (records, `abstract_attached`, `abstract_missing`, the `site_*`
+  their text, TASK-207) for a year's ICML pages; one `dblp_year_mined` per year (records, `abstract_attached`, `abstract_missing`, the `site_*`
   counts, `abstract_control_characters`, `abstract_pdf_codes`, `abstract_short`), and `dblp_ingested` (`years`,
   `requests`, `cached`). Never a line per item.
 - **Record-level anomalies are DEBUG** (`openreview_unknown_track`, `openreview_v1_unmapped`,

@@ -209,7 +209,8 @@ def test_a_1998_page_whose_heading_is_not_its_urls_paper_gives_nothing() -> None
         ("name at cs.example.edu", "email"), ("name at cs dot example dot ac dot uk", "email"),
         ("Fax: none", "label"), ("Address: 1 Example Road", "label"),
         ("Exampleton EX1 2ZZ", "postal"), ("Ottawa, Ontario K1A 0R6", "postal"), ("D-53754 Sankt Augustin", "postal"),
-        ("6500 HB Nijmegen", "postal"), ("12 Example Road", "postal"), ("someone {at} example {dot} edu", "email"), ("tel. none", "label"), ("Princeton, NJ 08544", "postal"), ("NJ 08544-2087", "phone"), ("624 9418", "phone"),
+        ("6500 HB Nijmegen", "postal"), ("12 Example Road", "postal"), ("someone {at} example {dot} edu", "email"),
+        ("someone (at) example (dot) edu", "email"), ("someone [at] example [dot] edu", "email"), ("tel. none", "label"), ("Princeton, NJ 08544", "postal"), ("NJ 08544-2087", "phone"), ("624 9418", "phone"),
         # an abstract's own text is no contact detail
         ("the state at t+1", None), ("a + b log T", None), ("from 1993-1997", None), ("C++ classes", None),
         ("up to 29% over 10 000 documents", None), ("in 1987 1988 1989", None), ("telephone speech and voice", None), ("O(n^2) time", None), ("Areas under the ROC curve", None),
@@ -248,7 +249,8 @@ def test_an_abstract_line_that_reads_like_a_field_stays_and_one_no_field_ends_is
     "block",
     ["AUTHORS:\nSynthetic Person\nSynthetic Institute\nVeldweg 1, Exampleton",
      "Address: Veldweg 1, Exampleton", "Mailing address\nVeldweg 1, Exampleton",
-     "Contact author Synthetic Person, Veldweg 1, Exampleton", "Affiliation: Synthetic Institute, Exampleton"],
+     "Contact author Synthetic Person, Veldweg 1, Exampleton", "Affiliation: Synthetic Institute, Exampleton",
+     "Address\nVeldweg 1, Exampleton", "Authors\nSynthetic Person, Veldweg 1", "AFFILIATION\nSynthetic Institute"],
 )  # fmt: skip
 def test_an_author_or_address_block_after_the_abstract_ends_it(block: str) -> None:
     """An address in a form no postal pattern knows (`Veldweg 1, Exampleton`) never joins the abstract: the block's

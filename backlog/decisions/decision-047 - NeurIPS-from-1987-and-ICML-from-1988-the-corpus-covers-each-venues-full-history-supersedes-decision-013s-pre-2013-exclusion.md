@@ -47,9 +47,9 @@ The owner decided (2026-10-06): the corpus covers NeurIPS from 1987 and ICML fro
   abstracts beside the authors' postal addresses, e-mail addresses and phone and fax numbers, and are used for the
   abstract text alone. The parsers keep the text after an `Abstract` heading up to the form's next field; one that
   no field ends, or that still holds an e-mail address, a phone-shaped number, a contact label or a postal code or
-  street address is withheld whole and
-  counted (`site_withheld`), and none of those details reaches a record, the snapshot, the index, an export or a log
-  line (tested). The abstract claim's evidence says it is a submission-time abstract from the official page, with
+  street address is withheld whole and counted (`site_withheld`), and none of those details reaches a record, the
+  snapshot, the index, an export or a log line (tested). The rules were checked against every pinned 1997 and 1998
+  page: none of their abstracts holds a contact detail, and none was withheld. The abstract claim's evidence says it is a submission-time abstract from the official page, with
   the Internet Archive capture's timestamp.
 - **Old abstract text** is cleaned the way decision-044 cleans control characters: a NeurIPS page's placeholder
   (`Abstract Unavailable`) is no abstract, and PDF-extraction codes are repaired (`(cid:173)`, a soft hyphen at a

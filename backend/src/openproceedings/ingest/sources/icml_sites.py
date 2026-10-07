@@ -100,7 +100,9 @@ class Entry:
     key: str | None
     title: str | None
     abstract: str | None
-    withheld: bool = False  # 1997/1998: an abstract that still held a contact detail, never kept (TASK-207)
+    withheld: bool = (
+        False  # 1997/1998: an abstract withheld (a contact detail, or no field ends it), never kept
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,14 +306,17 @@ _FIELD = re.compile(  # a line that starts a field the form puts after the abstr
     r"|(?:e-?mail|electronic mail|phone|telephone|tel\b|fax|voice|contact|corresponding author)[^:\n]{0,60}:"
     # an address block, however it is labelled: `Mailing address`, `Contact author Alex Example`
     r"|(?:mailing|postal|street) address(?:es)?\b|contact(?:ing)? author\b"
+    # an author or address heading alone on its line, as a bare `Abstract` heading is
+    r"|(?:authors?|author\(s\)|address(?:es)?|affiliations?)[ \t]{0,9}:?[ \t]{0,9}\Z"
     # another field only with its colon right after the label, so `Areas under the ROC curve: …` and `we address
-    # this: …` stay text: `Authors:`, `Address:`, `Affiliation:`, `Title:`, `Topic:`
+    # this: …` don't end it (the latter's `address:` is a contact label, so `contact_detail` withholds that abstract):
+    # `Authors:`, `Address:`, `Affiliation:`, `Title:`, `Topic:`
     r"|(?:topics?|areas?|category|paper (?:category|type)|track|submitted|authors?|author\(s\)|address(?:es)?"
     r"|affiliations?|title)[ \t]{0,9}:)",
     re.I,
 )
 _EMAIL = re.compile(  # any `@`, or an address spelled out: `name at cs dot example dot edu`, `name {at} host.ac.uk`
-    r"@|\b[\w.+-]{1,64} ?(?:\(at\)|\[at\]|\{at\}| at ) ?(?:[\w-]{1,64}(?:\.| ?\(dot\) ?| ?\{dot\} ?| dot )){1,4}[a-z]{2,6}\b",
+    r"@|\b[\w.+-]{1,64} ?(?:\(at\)|\[at\]|\{at\}| at ) ?(?:[\w-]{1,64}(?:\.| ?\(dot\) ?| ?\{dot\} ?| ?\[dot\] ?| dot )){1,4}[a-z]{2,6}\b",
     re.I,
 )
 _PHONE = re.compile(
@@ -576,7 +581,9 @@ def read_year(
         out.as_submitted |= page.parser in SUBMISSION_PARSERS
         out.fetched.append(fetched.fetched_at)
         for e in got:
-            if e.withheld:  # a submission's abstract that held a contact detail: counted, never kept
+            if (
+                e.withheld
+            ):  # a submission's abstract withheld (a contact detail, or no field ends it): counted
                 out.withheld += 1
             elif e.title is not None and e.abstract is not None:
                 complete.append((e.title, e.abstract, page, fetched))

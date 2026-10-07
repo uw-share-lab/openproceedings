@@ -134,6 +134,11 @@ def test_a_capture_judged_by_length_is_whole_without_a_closing_html_tag(
     assert f.get(URL, by_length=True).text == old
     assert len(t.calls) == 2 and clock.sleeps == [5.0]  # the short body was retried once
     # without `by_length`, or with no stated length, the same page is truncated: retried until given up
+    # a stated length that isn't plain ASCII digits (`²`) is no length: never a crash, the closing-tag rule
+    t = FakeTransport({URL: response(old, headers={"content-type": "text/html", "content-length": "²"})})
+    f, _ = fetcher(tmp_path / "odd", t, HOSTS, min_interval=0)
+    with pytest.raises(RetriesExhausted):
+        f.get(URL, by_length=True)
     for by_length, length, why in ((False, len(old), "truncated"), (True, None, "truncated_no_length")):
         t = FakeTransport({URL: sized(old, length)})
         f, _ = fetcher(tmp_path / f"{by_length}{length}", t, HOSTS, min_interval=0)
