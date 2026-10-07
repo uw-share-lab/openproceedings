@@ -107,7 +107,11 @@ a no-op; different files under a cached name are refused (a snapshot may already
 `op ingest neurips|pmlr` fills a page cache, `<data-dir>/cache/{neurips,pmlr}/pages/<sha256[:2]>/<sha256>.json`
 (one fixture-shaped entry per URL with its `fetched_at`, each written atomically; a 404 paper page is
 cached as a stable absence), and writes `<data-dir>/cache/<source>/crawls/<year|vN>.json` once a listing's
-pages are all cached. `op snapshot build` re-mines only marked listings, from the cache with no network; a
+pages are all cached. `op ingest dblp` (decision-047) downloads the pinned dblp release into
+`<data-dir>/cache/dblp/release/` (verified by sha256, with a `<name>.json` sidecar holding the download time),
+reads its `conf/icml/` records into `<data-dir>/cache/dblp/extract/<sha256>.json`, fills
+`<data-dir>/cache/icml_sites/pages/` with the official ICML pages, and writes `<data-dir>/cache/dblp/crawls/<year>.json`;
+a snapshot build reads the extract and those pages, never the release. `op snapshot build` re-mines only marked listings, from the cache with no network; a
 marked listing whose pages have gone is a refusal, never a smaller snapshot. An empty cache (no RIS and no
 marked crawl) is refused.
 

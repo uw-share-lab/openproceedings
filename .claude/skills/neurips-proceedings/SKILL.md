@@ -6,8 +6,10 @@ description: The proceedings.neurips.cc source — the paper_files URL grammar, 
 # NeurIPS proceedings (spec 01 §Sources)
 
 ## Role
-- **The only source** for NeurIPS before 2021 (main track; D&B starts in 2021). The crawl covers 2013 on
-  (decision-013); the site index `https://proceedings.neurips.cc/` links every year 1987–2025.
+- **The only source** for NeurIPS before 2021 (main track; D&B starts in 2021). The crawl covers 1987 on
+  (decision-047, which replaced decision-013's 2013 floor); the site index `https://proceedings.neurips.cc/` links
+  every year 1987–2025, and the 1987–2012 year and abstract pages have the 2013 shape (checked 2026-10-06, TASK-204;
+  fixtures `backend/tests/fixtures/http/neurips/1987/`).
 - Published in split volumes: on 2026-09-27 the 2025 base page listed 64 Creative AI papers and linked a
   5,823-paper `vol38-main-conference` page containing main, D&B and position tracks. A year can therefore
   require more than its base URL; follow only a recorded, known companion and never infer absence.
@@ -98,7 +100,7 @@ The alias means one track never counts as two in the manifest. Mapping an unknow
 ## The miner (as built, task-052)
 `backend/src/openproceedings/ingest/sources/neurips.py`, run by `op ingest neurips --year <Y|Y-Y>`
 (`--dry-run`, `--offline`, `--refresh`, `--delay`), cache under `<data-dir>/cache/neurips/`. Years before
-2013 are refused (decision-013); a year whose index page isn't there (404) is refused as not published,
+1987, the first NIPS, are refused (decision-047); a year whose index page isn't there (404) is refused as not published,
 never read as empty. The track rules above live in `classify.classify_neurips_listing(host, year, token)`,
 which returns the rule text that becomes the track claim's evidence; the RIS importer checks a NeurIPS
 listing URL with the same function. Claims (source `neurips_proceedings`): venue, year, title, track,

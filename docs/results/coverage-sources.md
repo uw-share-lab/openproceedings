@@ -1,7 +1,8 @@
 # Official accepted counts per venue × year × track (coverage gate sources)
 
 This is the cited table behind spec 07 §C's coverage gate (TASK-108; `coverage-reporting` skill). It has
-one row per main-track and D&B cell from 2013 (decision-013): ICLR, ICML and NeurIPS main 2013–2025, and
+one row per main-track and D&B cell from 2013 (decision-013), and since decision-047 NeurIPS main 1987–2012
+(each year page's own count; ICML 1988–2012 has no official count, so it is reported, not gated): ICLR, ICML and NeurIPS main 2013–2025, and
 NeurIPS D&B 2021–2025. That is 44 cells, and **all 44 are sourced**. Every one of those numbers was read on
 2026-09-27 from a public page, on the conference's own site or in its proceedings, with no login.
 The 2026 crawl (TASK-178) adds two rows, ICLR 2026 main and ICML 2026 main: 46 rows in all. Both were fetched

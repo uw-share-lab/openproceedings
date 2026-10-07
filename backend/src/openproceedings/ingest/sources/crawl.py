@@ -140,8 +140,9 @@ def ingest_dblp(
     if missing := [y for y in wanted if y not in DBLP_TABLE.years]:
         raise MinerError(f"ICML {missing[0]}: dblp_icml.toml covers ICML {min(DBLP_TABLE.years)}-"
                          f"{max(DBLP_TABLE.years)} (PMLR from 2013)", reason="no_year")  # fmt: skip
+    # the Internet Archive asks for a slower pace than the proceedings hosts: never under its interval
     f = fetcher(cache, icml_sites.CACHE_DIR, icml_sites.HOSTS, offline=offline or dry_run, transport=transport,
-                min_interval=min_interval)  # fmt: skip
+                min_interval=max(min_interval, icml_sites.MIN_INTERVAL))  # fmt: skip
     if dry_run:
         plans = [icml_sites.plan_year(y, f) for y in wanted]
         return {"dry_run": True, "release_on_disk": dblp.release_on_disk(cache),

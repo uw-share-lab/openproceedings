@@ -92,7 +92,9 @@ def _pinned(raw: Mapping[str, Any], where: str) -> Pinned:
     if not _DOI.fullmatch(str(raw["doi"])):
         raise ValueError(f"dblp_icml.toml {where}: {raw['doi']!r} is not a dblp release DOI")
     if not str(raw["url"]).startswith("https://drops.dagstuhl.de/storage/artifacts/dblp/"):
-        raise ValueError(f"dblp_icml.toml {where}: the file must be on drops.dagstuhl.de (dblp.org forbids crawling)")
+        raise ValueError(
+            f"dblp_icml.toml {where}: the file must be on drops.dagstuhl.de (dblp.org forbids crawling)"
+        )
     if type(raw["size"]) is not int or raw["size"] <= 0 or not _SHA256.fullmatch(str(raw["sha256"])):
         raise ValueError(f"dblp_icml.toml {where}: size must be a positive integer and sha256 64 hex digits")
     if not isinstance(raw["verified"], date):
@@ -108,7 +110,11 @@ def _year(raw: Mapping[str, Any]) -> IcmlYear:
     if type(year) is not int or not FIRST_YEAR <= year <= LAST_YEAR:
         raise ValueError(f"dblp_icml.toml {where}: a year from {FIRST_YEAR} to {LAST_YEAR}")
     venue_name("ICML", year)
-    if not isinstance(keys, list) or not keys or not all(isinstance(k, str) and _KEY.fullmatch(k) for k in keys):
+    if (
+        not isinstance(keys, list)
+        or not keys
+        or not all(isinstance(k, str) and _KEY.fullmatch(k) for k in keys)
+    ):
         raise ValueError(f"dblp_icml.toml {where}: proceedings must be conf/icml/<key> strings")
     if type(papers) is not int or papers <= 0:
         raise ValueError(f"dblp_icml.toml {where}: papers must be a positive integer")

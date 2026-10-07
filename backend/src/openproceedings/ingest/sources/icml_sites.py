@@ -2,19 +2,23 @@
 decision-047; TASK-206).
 
 dblp gives the pre-2013 ICML papers no abstracts. Some years' official conference sites listed them, and some of
-those pages survive, live (icml.cc's 2009 and 2012 pages, the 2008 Helsinki site) or as an Internet Archive
-capture. The table `icml_sites.toml` names each page by year: the URL fetched (an archived page by its exact
-capture, `https://web.archive.org/web/<14-digit timestamp>id_/<official URL>`, so the same bytes come back every
-time and Wayback never redirects to another capture), the official URL it is a copy of, the parser that reads it
-and how many entries it gave when verified. Only these pages are fetched (`HOSTS`), never ACM DL, Scholar,
-Semantic Scholar, arXiv or an author's page. A year with no row has no abstracts.
+those pages survive: live on icml.cc (which still serves the 2007–2012 sites' pages), or as an Internet Archive
+capture of the conference's own site (2001, 2003, 2004 and 2007's per-paper pages). The per-year survey is
+`docs/research/2026-10-06-icml-pre-2013-abstract-sources.md`. The table `icml_sites.toml` names each page by year:
+the URL fetched (an archived page by its exact capture, `https://web.archive.org/web/<14-digit timestamp>id_/<the
+URL the archive holds>`, so the same bytes come back every time and Wayback never redirects to another capture),
+the official URL it is a copy of, the parser that reads it, the charset its bytes are in (these servers send bare
+`text/html`), and how many entries it gave when verified. Only these pages are fetched (`HOSTS`): never ACM DL,
+Scholar, Semantic Scholar, arXiv or an author's page. A year with no row has no abstracts.
 
-A page gives (title, abstract) entries. They become abstracts only in `dblp.mine_year`, and only by an exact title
-key (the dedup key: the token contract over the NFC title) that exactly one entry and exactly one dblp paper of
-the year share. Everything else is counted, never guessed: page entries no paper matches, keys two entries or two
-papers share, and the papers left with no abstract. An abstract claim (source `icml_site`) carries the page as
-fetched (the capture URL, whose timestamp says when the Internet Archive saw it), the page's own fetch time, and
-evidence naming the official URL and the capture.
+A page gives entries: a title and an abstract (most years), a paper number and title (2007's list), or a paper
+number and abstract (2007's per-paper pages, whose own titles are mangled by PDF extraction: `Unsup ervised`).
+Entries a year's pages give in parts are joined by paper number. They become abstracts only in `dblp.mine_year`,
+and only by an exact title key (the dedup key: the token contract over the NFC title) that exactly one entry and
+exactly one dblp paper of the year share. Everything else is counted, never guessed: page entries no paper
+matches, keys two entries or two papers share, and the papers left with no abstract. An abstract claim (source
+`icml_site`) carries the page it came from as fetched (a capture URL names its timestamp), that page's fetch time,
+and evidence naming the official URL and the capture.
 """
 
 from __future__ import annotations
@@ -32,7 +36,7 @@ from urllib.parse import urlparse
 
 from openproceedings.ingest.record import Source, title_text
 from openproceedings.ingest.sources.common import CrawlError, clean_abstract
-from openproceedings.ingest.sources.html import Element, node_text, parse
+from openproceedings.ingest.sources.html import text_of
 from openproceedings.ingest.sources.http import Fetcher, Page
 
 log = logging.getLogger(__name__)
@@ -40,18 +44,24 @@ log = logging.getLogger(__name__)
 SOURCE: Source = "icml_site"
 CACHE_DIR = "icml_sites"  # <data>/cache/icml_sites
 ARCHIVE_HOST = "web.archive.org"
+MIN_INTERVAL = (
+    3.0  # seconds between requests: the Internet Archive's pace for a polite client, kept for icml.cc too
+)
 _CAPTURE = re.compile(r"https://web\.archive\.org/web/([0-9]{14})id_/(https?://\S+)")
+_S = re.S | re.I
 
 
 @dataclass(frozen=True, slots=True)
 class SitePage:
-    """One row of the table: an official page that lists a year's papers with their abstracts."""
+    """One row of the table: an official page listing some of a year's papers with their abstracts (or, for
+    2007, their titles or one abstract)."""
 
     year: int
     url: str  # what is fetched: the live official page, or its pinned capture
     official: str  # the official page itself
     parser: str  # a key of `PARSERS`
-    entries: int  # (title, abstract) entries the parser read off it when verified
+    charset: str  # the bytes' encoding (the servers name none)
+    entries: int  # entries the parser read off it when verified
     verified: date
     note: str
 
@@ -63,8 +73,19 @@ class SitePage:
 
 
 @dataclass(frozen=True, slots=True)
+class Entry:
+    """What a parser reads off a page: a paper's number (when the page gives one), title and abstract text,
+    either of which may be absent (2007's list and per-paper pages each give half)."""
+
+    key: str | None
+    title: str | None
+    abstract: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class SiteAbstract:
-    """One paper on a page: its title as the page gives it, the abstract as a record would hold it, where."""
+    """One paper on a year's pages: its title as the page gives it, the abstract as a record would hold it, and
+    where the abstract came from."""
 
     title: str
     abstract: str
@@ -76,67 +97,139 @@ class SiteAbstract:
 
 @dataclass
 class SiteYear:
-    """What a year's pages gave: the pages as fetched, their entries, every page's fetch time."""
+    """What a year's pages gave: the pages as fetched, their papers, every page's fetch time."""
 
     pages: list[str] = field(default_factory=list)
     entries: list[SiteAbstract] = field(default_factory=list)
     fetched: list[datetime] = field(default_factory=list)
+    unjoined: int = (
+        0  # halves (a number with only a title, or only an abstract) the year's pages don't complete
+    )
 
 
-# --- parsers: page text → (title, abstract text) entries --------------------------------------------------------
+# --- parsers: page text → entries ---------------------------------------------------------------------------------
 
-Parser = Callable[[str, str], list[tuple[str, str]]]
+Parser = Callable[[str, str], list[Entry]]
 
 
-def _blocks_after_headings(text: str, base: str, heading: str) -> list[tuple[str, str]]:
-    """A title in each `<heading>`, its abstract the text of the block-level siblings up to the next one."""
-    root = parse(text, base)
-    out: list[tuple[str, str]] = []
-    for container in root.iter():
-        kids = [k for k in container.children if isinstance(k, Element)]
-        if not any(k.tag == heading for k in kids):
+def _text(m: re.Match[str] | None, group: int = 1) -> str | None:
+    return text_of(m.group(group)) if m is not None else None
+
+
+def _segments(text: str, start: str) -> list[tuple[str, str]]:
+    """(the start pattern's first group, the text up to the next start) for each match of `start`."""
+    marks = list(re.finditer(start, text, _S))
+    return [(m.group(1), text[m.end() : nxt.start() if nxt else len(text)])
+            for m, nxt in zip(marks, [*marks[1:], None], strict=True)]  # fmt: skip
+
+
+def icml2012(text: str, url: str) -> list[Entry]:
+    """icml.cc/2012/papers/: `<div class="paper" id="paper-N">` with `<h2>` title, `p.type` and `p.abstract`
+    (`<p>` never closed). A paper typed "Not for proceedings" is not in the proceedings and is left out."""
+    out = []
+    for key, block in _segments(text, r'<div class="paper" id="paper-([0-9]+)">'):
+        block = block.split("</div>", 1)[0]
+        kind = _text(re.search(r'<p class="type">(.*?)(?=<p\b|$)', block, _S)) or ""
+        if "not for proceedings" in kind.lower():
             continue
-        current: tuple[str, list[str]] | None = None
-        for k in kids:
-            if k.tag == heading:
-                if current is not None:
-                    out.append((current[0], " ".join(current[1])))
-                current = (node_text(k), [])
-            elif current is not None:
-                current[1].append(node_text(k))
-        if current is not None:
-            out.append((current[0], " ".join(current[1])))
+        out.append(Entry(key, _text(re.search(r"<h2>(.*?)</h2>", block, _S)),
+                         _text(re.search(r"<strong>\s*Abstract:\s*</strong>(.*?)(?=<p\b|$)", block, _S))))  # fmt: skip
     return out
 
 
-PARSERS: dict[str, Parser] = {}
+def icml2011(text: str, url: str) -> list[Entry]:
+    """icml.cc/Conferences/2011/papers.php.html: `<a name='N'><h3>` title, `Abstract:</span>` text `</p>`. The
+    Invited Cross-Conference Track after `<a name="cross">` (no abstracts; other venues' papers) is left out."""
+    main = re.split(r'<a name="cross">', text, maxsplit=1, flags=_S)[0]
+    return [Entry(key, _text(re.search(r"<h3[^>]*>(.*?)</h3>", seg, _S)),
+                  _text(re.search(r"Abstract:\s*</span>(.*?)</p>", seg, _S)))
+            for key, seg in _segments(main, r"<a name='([0-9]+)'>(?=\s*<h3)")]  # fmt: skip
+
+
+def icml2010(text: str, url: str) -> list[Entry]:
+    """icml.cc/Conferences/2010/abstracts.html: `<a name="N">`, `<h3>` title, `<p class="abstracts">`."""
+    return [Entry(key, _text(re.search(r"<h3>(.*?)</h3>", seg, _S)),
+                  _text(re.search(r'<p class="abstracts">(.*?)</p>', seg, _S)))
+            for key, seg in _segments(text, r'<a name="([0-9]+)"></a>')]  # fmt: skip
+
+
+def icml2009(text: str, url: str) -> list[Entry]:
+    """icml.cc/Conferences/2009/abstracts.html: `<h3><a name="N"></a>` title `</h3>`, authors, `paper ID: N`,
+    then the abstract up to the `[Full paper]` links. A heading with no `paper ID` (the sidebar's "For
+    Participants", which reuses `name="10"`) is no paper."""
+    return [Entry(key, _text(re.search(r"^(.*?)</h3>", seg, _S)),
+                  _text(re.search(r"paper ID:\s*[0-9]+\s*</p>(.*?)(?:\[<a\b|<hr|$)", seg, _S)))
+            for key, seg in _segments(text, r'<h3>\s*<a name="([0-9]+)"></a>')
+            if re.search(r"paper ID:\s*[0-9]+", seg, _S)]  # fmt: skip
+
+
+def icml2008(text: str, url: str) -> list[Entry]:
+    """icml.cc/Conferences/2008/abstracts.shtml.html: `<a name="N">`, `paper ID`, `<h3>` title, `<p><i>` authors
+    `</p>`, then the abstract up to the `<p>[Full paper]` links."""
+    return [Entry(key, _text(re.search(r"<h3>(.*?)</h3>", seg, _S)),
+                  _text(re.search(r"<p>\s*<i>.*?</p>(.*?)<p>\s*\[<a\b", seg, _S)))
+            for key, seg in _segments(text, r'<a name="([0-9]+)"></a>')]  # fmt: skip
+
+
+def cyberchair(text: str, url: str) -> list[Entry]:
+    """A CyberChair "all abstracts" page (ICML 2001, 2003, 2004): one `<table>` per paper, `<th>` title, a `<td>`
+    of authors, a `<td>` (often `<pre>`) abstract."""
+    out = []
+    for table in re.findall(r"<table\b.*?</table>", text, _S):
+        m = re.search(r"<th>(.*?)</th>.*?<td>.*?</td>.*?<td>(.*?)</td>", table, _S)
+        if m is not None:
+            out.append(Entry(None, text_of(m.group(1)), text_of(m.group(2))))
+    return out
+
+
+def icml2007_list(text: str, url: str) -> list[Entry]:
+    """icml.cc/Conferences/2007/paperlist.html: each paper's number and title, `<a name="N"> title</a>`."""
+    return [Entry(m.group(1), text_of(m.group(2)), None)
+            for m in re.finditer(r'<a name="([0-9]+)">(.*?)</a>', text, _S)]  # fmt: skip
+
+
+def icml2007_paper(text: str, url: str) -> list[Entry]:
+    """An ICML 2007 per-paper abstract page (`…/icml2007/abstracts/N.htm`, CyberChair): the number from its URL,
+    the abstract from the table's second `<td>`. Its own `<th>` title is PDF-extracted and broken, so unused."""
+    number = re.search(r"/abstracts/([0-9]+)\.htm\Z", url)
+    m = re.search(r"<th>.*?</th>.*?<td>.*?</td>.*?<td>(.*?)</td>", text, _S)
+    return [Entry(number.group(1), None, text_of(m.group(1)))] if number and m else []
+
+
+PARSERS: dict[str, Parser] = {
+    "icml2012": icml2012, "icml2011": icml2011, "icml2010": icml2010, "icml2009": icml2009,
+    "icml2008": icml2008, "cyberchair": cyberchair, "icml2007_list": icml2007_list,
+    "icml2007_paper": icml2007_paper,
+}  # fmt: skip
 
 
 # --- the table ----------------------------------------------------------------------------------------------------
 
-_COLUMNS = {"year", "url", "official", "parser", "entries", "verified", "note"}
+_COLUMNS = {"year", "url", "official", "parser", "charset", "entries", "verified", "note"}
 
 
 def _row(raw: Mapping[str, Any]) -> SitePage:
     where = f"icml_sites.toml {raw.get('year')!r} {raw.get('url')!r}"
     if set(raw) != _COLUMNS:
         raise ValueError(f"{where}: columns must be exactly {sorted(_COLUMNS)}")
-    page = SitePage(raw["year"], str(raw["url"]), str(raw["official"]), str(raw["parser"]), raw["entries"],
-                    raw["verified"], str(raw["note"]))  # fmt: skip
+    page = SitePage(raw["year"], str(raw["url"]), str(raw["official"]), str(raw["parser"]), str(raw["charset"]),
+                    raw["entries"], raw["verified"], str(raw["note"]))  # fmt: skip
     if type(page.year) is not int or not 1988 <= page.year <= 2012:
         raise ValueError(f"{where}: a year from 1988 to 2012")
     if page.parser not in PARSERS:
         raise ValueError(f"{where}: no parser {page.parser!r}")
+    if page.charset not in ("utf-8", "cp1252"):
+        raise ValueError(f"{where}: charset utf-8 or cp1252")
     if type(page.entries) is not int or page.entries <= 0 or not isinstance(page.verified, date):
         raise ValueError(f"{where}: entries must be a positive integer and verified a date")
     host = (urlparse(page.url).hostname or "").lower()
-    if page.capture is not None:
-        if _CAPTURE.fullmatch(page.url).group(2) != page.official:  # type: ignore[union-attr]
-            raise ValueError(f"{where}: a capture must be of the official URL, exactly")
-    elif page.url != page.official or not page.url.startswith("https://"):
-        raise ValueError(f"{where}: a live page is fetched at its official https URL")
-    if host == ARCHIVE_HOST and page.capture is None:
-        raise ValueError(f"{where}: an Internet Archive URL must pin one capture (/web/<14 digits>id_/<url>)")
+    capture = _CAPTURE.fullmatch(page.url)
+    if host == ARCHIVE_HOST:
+        if capture is None or capture.group(2) != page.official:
+            raise ValueError(f"{where}: an Internet Archive URL pins one capture of the official URL, exactly "
+                             "(/web/<14 digits>id_/<official>)")  # fmt: skip
+    elif page.url != page.official or not page.url.startswith("https://") or host != "icml.cc":
+        raise ValueError(f"{where}: a live page is an https icml.cc page fetched at its official URL")
     return page
 
 
@@ -150,13 +243,13 @@ def load(text: str) -> Mapping[int, tuple[SitePage, ...]]:
     return MappingProxyType({y: tuple(ps) for y, ps in sorted(by_year.items())})
 
 
-def _table() -> Mapping[int, tuple[SitePage, ...]]:
-    return load(files("openproceedings.ingest").joinpath("icml_sites.toml").read_text(encoding="utf-8"))
-
-
-PAGES: Mapping[int, tuple[SitePage, ...]] = _table()
-# the only hosts this source fetches: the table's pages' (the official sites, and the Internet Archive)
-HOSTS: frozenset[str] = frozenset((urlparse(p.url).hostname or "").lower() for ps in PAGES.values() for p in ps)
+PAGES: Mapping[int, tuple[SitePage, ...]] = load(
+    files("openproceedings.ingest").joinpath("icml_sites.toml").read_text(encoding="utf-8")
+)
+# the only hosts this source fetches: the table's pages' (icml.cc, and the Internet Archive)
+HOSTS: frozenset[str] = frozenset(
+    (urlparse(p.url).hostname or "").lower() for ps in PAGES.values() for p in ps
+)
 
 
 # --- reading a year --------------------------------------------------------------------------------------------
@@ -168,41 +261,53 @@ def _evidence(page: SitePage) -> str:
     return f"official ICML {page.year} page {page.official}"
 
 
-def entries_of(page: SitePage, fetched: Page) -> list[SiteAbstract]:
-    """The page's (title, abstract) entries as records would hold them; an entry with no title or no usable
-    abstract (empty, or snippet-shaped) is dropped."""
-    out = []
-    for raw_title, raw_abstract in PARSERS[page.parser](fetched.text, page.url):
-        title = title_text(raw_title)[0]
-        abstract, spaced = clean_abstract(raw_abstract)
-        if title and abstract:
-            out.append(SiteAbstract(title, abstract, spaced, page.url, fetched.fetched_at, _evidence(page)))
-    return out
-
-
-def read_year(year: int, fetcher: Fetcher, *, refresh: bool = False, pages: Mapping[int, tuple[SitePage, ...]] | None = None) -> SiteYear | None:
-    """The year's pages through `fetcher` (offline: the cache only), or None when the table has none. A page
-    that isn't there (404/410), or that now gives a different number of entries than the table verified, stops
-    the crawl: a person checks it."""
+def read_year(
+    year: int, fetcher: Fetcher, *, refresh: bool = False, pages: Mapping[int, tuple[SitePage, ...]] | None = None,
+) -> SiteYear | None:  # fmt: skip
+    """The year's papers from its pages through `fetcher` (offline: the cache only), or None when the table has
+    none. A page that isn't there (404/410), or that now gives another number of entries than the table verified,
+    stops the crawl: a person checks it. A paper needs a title and an abstract that is not empty or snippet-shaped
+    (`clean_abstract`); 2007's halves are joined by paper number."""
     rows = (PAGES if pages is None else pages).get(year)
     if not rows:
         return None
     out = SiteYear()
+    titles: dict[str, str] = {}
+    halves: list[tuple[str, str, SitePage, Page]] = []  # (number, abstract text, page, fetched)
+    complete: list[tuple[str, str, SitePage, Page]] = []  # (title, abstract text, page, fetched)
     for page in rows:
-        fetched = fetcher.get(page.url, refresh=refresh)
+        fetched = fetcher.get(page.url, refresh=refresh, charset=page.charset)
         if not fetched.ok:
             raise CrawlError(f"ICML {year}: {page.url} answered HTTP {fetched.status}", reason="no_listing")
-        got = entries_of(page, fetched)
+        got = PARSERS[page.parser](fetched.text, page.url)
         if len(got) != page.entries:
             raise CrawlError(f"ICML {year}: {page.url} gives {len(got)} entries, the table verified "
                              f"{page.entries}; check the page and the parser", reason="site_count_mismatch")  # fmt: skip
         out.pages.append(page.url)
-        out.entries += got
         out.fetched.append(fetched.fetched_at)
+        for e in got:
+            if e.title is not None and e.abstract is not None:
+                complete.append((e.title, e.abstract, page, fetched))
+            elif e.title is not None and e.key is not None:
+                titles[e.key] = e.title
+            elif e.abstract is not None and e.key is not None:
+                halves.append((e.key, e.abstract, page, fetched))
+    complete += [(titles[k], a, p, f) for k, a, p, f in halves if k in titles]
+    joined = {k for k, *_ in halves if k in titles}
+    out.unjoined = sum(k not in titles for k, *_ in halves) + sum(k not in joined for k in titles)
+    for raw_title, raw_abstract, page, fetched in complete:
+        title = title_text(raw_title)[0]
+        abstract, spaced = clean_abstract(raw_abstract)
+        if title and abstract:
+            out.entries.append(
+                SiteAbstract(title, abstract, spaced, page.url, fetched.fetched_at, _evidence(page))
+            )
     return out
 
 
-def plan_year(year: int, fetcher: Fetcher, pages: Mapping[int, tuple[SitePage, ...]] | None = None) -> dict[str, Any]:
-    """A dry run's view of a year: its pages and which are not yet cached."""
+def plan_year(
+    year: int, fetcher: Fetcher, pages: Mapping[int, tuple[SitePage, ...]] | None = None
+) -> dict[str, Any]:
+    """A dry run's view of a year: its pages and how many are not yet cached."""
     rows = (PAGES if pages is None else pages).get(year, ())
-    return {"year": year, "pages": [p.url for p in rows], "to_fetch": sum(not fetcher.is_cached(p.url) for p in rows)}
+    return {"year": year, "pages": len(rows), "to_fetch": sum(not fetcher.is_cached(p.url) for p in rows)}

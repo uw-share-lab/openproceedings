@@ -93,7 +93,12 @@ def test_the_shipped_table_pins_one_release_and_every_year_1988_to_2012() -> Non
     assert sorted(REAL.years) == list(range(1988, 2013))
     assert sum(y.papers for y in REAL.years.values()) == 2676
     assert all(y.proceedings == (f"conf/icml/{y.year}",) for y in REAL.years.values())
-    assert set(REAL.excluded) == {"conf/icml/2006sna", "conf/icml/2010ltr", "conf/icml/2011otee", "conf/icml/2011utl"}
+    assert set(REAL.excluded) == {
+        "conf/icml/2006sna",
+        "conf/icml/2010ltr",
+        "conf/icml/2011otee",
+        "conf/icml/2011utl",
+    }
 
 
 @pytest.mark.parametrize(
@@ -149,7 +154,9 @@ def test_an_unclassified_icml_proceedings_key_or_a_stale_table_stops_the_ingest(
 # --- records -------------------------------------------------------------------------------------------------------
 
 
-def test_a_main_conference_paper_becomes_an_accepted_main_icml_record_naming_the_release(tmp_path: Path) -> None:
+def test_a_main_conference_paper_becomes_an_accepted_main_icml_record_naming_the_release(
+    tmp_path: Path,
+) -> None:
     extract = prepared(tmp_path)
     result = dblp.mine_year(1990, extract, table=TABLE)
     [r] = result.records
@@ -158,13 +165,17 @@ def test_a_main_conference_paper_becomes_an_accepted_main_icml_record_naming_the
     assert r.title == "Synthetic title with markup 1"  # dblp's closing period dropped
     assert r.authors == ("Synthetic Author 2", "Synthütic Author 3")  # homonym number dropped
     assert r.urls.doi == "10.1016/b978-1-55860-141-3.50001-0" and r.urls.pdf is None  # wikidata dropped
-    assert r.urls.proceedings == "https://dblp.org/rec/conf/icml/Synthetic90"  # names the native id; never fetched
+    assert (
+        r.urls.proceedings == "https://dblp.org/rec/conf/icml/Synthetic90"
+    )  # names the native id; never fetched
     assert r.venue_name == "International Conference on Machine Learning (ICML 1990)"
     for c in r.provenance:
         assert c.source == "dblp" and c.url == "https://doi.org/10.4230/dblp.xml.2026-10-03"
         assert c.fetched_at == extract.fetched_at
     [status] = r.claims("status")
-    assert "conf/icml/Synthetic90" in (status.evidence or "") and "10.4230/dblp.xml.2026-10-03" in (status.evidence or "")
+    assert "conf/icml/Synthetic90" in (status.evidence or "") and "10.4230/dblp.xml.2026-10-03" in (
+        status.evidence or ""
+    )
     [report] = result.reports
     assert (report.stated, report.listed, report.records, report.count_ok) == (1, 1, 1, True)
     assert (report.abstract_missing, report.role, report.source) == (1, "primary", "dblp")
@@ -186,7 +197,13 @@ def test_withdrawn_and_workshop_papers_are_counted_never_records(tmp_path: Path)
 
 @pytest.mark.parametrize(
     ("raw", "title"),
-    [("A title.", "A title"), ("Is it?", "Is it?"), ("Yes!", "Yes!"), ("Wait..", "Wait.."), ("No period", "No period")],
+    [
+        ("A title.", "A title"),
+        ("Is it?", "Is it?"),
+        ("Yes!", "Yes!"),
+        ("Wait..", "Wait.."),
+        ("No period", "No period"),
+    ],
 )
 def test_only_dblps_closing_period_is_dropped(raw: str, title: str) -> None:
     assert dblp.clean_title(raw) == title

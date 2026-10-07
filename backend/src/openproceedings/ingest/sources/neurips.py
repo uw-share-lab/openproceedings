@@ -187,7 +187,8 @@ def mine_year(
     listing isn't there (not published yet: re-crawl later, never infer absence)."""
     if year < FIRST_YEAR:
         raise MinerError(
-            f"NeurIPS {year}: the crawl starts in {FIRST_YEAR}, the first NIPS (decision-047)", reason="before_window"
+            f"NeurIPS {year}: the crawl starts in {FIRST_YEAR}, the first NIPS (decision-047)",
+            reason="before_window",
         )
     records: list[PaperRecord] = []
     reports: list[ListingReport] = []

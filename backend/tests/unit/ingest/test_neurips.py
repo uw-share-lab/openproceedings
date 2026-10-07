@@ -129,7 +129,10 @@ def test_1987_the_first_nips_is_mined_like_any_token_less_year(tmp_path: Path) -
     assert a.authors == ("Synthetic Author 2", "Synthetic Author 3")
     assert a.urls.pdf == f"https://{MAIN}/paper_files/paper/1987/file/{A87}-Paper.pdf"
     assert a.venue_name == "Conference on Neural Information Processing Systems (NIPS 1987)"
-    assert claim(a, "track").evidence == "proceedings.neurips.cc 1987: no track token, so the main track (host and year)"
+    assert (
+        claim(a, "track").evidence
+        == "proceedings.neurips.cc 1987: no track token, so the main track (host and year)"
+    )
     assert b.abstract is None
     [report] = result.reports
     assert (report.stated, report.listed, report.records, report.role) == (90, 2, 2, "primary")

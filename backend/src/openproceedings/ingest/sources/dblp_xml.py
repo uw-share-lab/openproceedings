@@ -158,8 +158,13 @@ def _parse(record: bytes, dtd: bytes, dtd_name: str) -> DblpEntry:
     parser.StartElementHandler = start
     parser.EndElementHandler = end
     parser.CharacterDataHandler = chars
-    doc = (b'<?xml version="1.0" encoding="ISO-8859-1"?>\n<!DOCTYPE dblp SYSTEM "' + dtd_name.encode("ascii")
-        + b'">\n<dblp>' + record + b"</dblp>")
+    doc = (
+        b'<?xml version="1.0" encoding="ISO-8859-1"?>\n<!DOCTYPE dblp SYSTEM "'
+        + dtd_name.encode("ascii")
+        + b'">\n<dblp>'
+        + record
+        + b"</dblp>"
+    )
     try:
         parser.Parse(doc, True)
     except expat.ExpatError as e:

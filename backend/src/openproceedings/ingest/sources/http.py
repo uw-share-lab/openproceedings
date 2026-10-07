@@ -32,7 +32,10 @@ ICLR archive, NeurIPS proceedings and PMLR) fetches through `HttpClient`, and on
   `cli.main` and in `snapshot.load_sources`. No message holds a credential, a token or response text.
 
 The proceedings' page fetcher (`Fetcher`, `Page`, `PageCache`) is here too; OpenReview's login and JSON
-entries are layered on top in `openreview_client`.
+entries are layered on top in `openreview_client`. So is `fetch_file`, for a file too large to hold in memory
+that is named by its bytes (`PinnedFile`: URL, size, sha256; the dblp release, TASK-205): streamed to a `.tmp-`
+file through the same host check, no-redirect rule and retry waits, kept only when it hashes to the pin, and
+read from disk afterwards (a sidecar `<name>.json` records the download time every claim from it carries).
 """
 
 from __future__ import annotations
@@ -570,22 +573,26 @@ class Fetcher(HttpClient[Page]):
                          max_wait=max_wait, timeout=timeout)  # fmt: skip
         super().__init__(cache, transport, policy, clock)
 
-    def get(self, url: str, *, refresh: bool = False, keep_absent: bool = False) -> Page:
+    def get(
+        self, url: str, *, refresh: bool = False, keep_absent: bool = False, charset: str = "utf-8"
+    ) -> Page:
         """The page at `url`: from the cache unless `refresh`, else fetched (and cached when it is a 200, or a
-        404/410 with `keep_absent`). Offline, a miss raises instead of fetching."""
+        404/410 with `keep_absent`). Offline, a miss raises instead of fetching. `charset` decodes a body whose
+        `Content-Type` names none (a 1990s-2000s page served as bare `text/html`, TASK-206); one the response
+        names always wins."""
 
         def fetch(canonical_url: str) -> tuple[Page, bool]:
-            page = self._page(canonical_url)
+            page = self._page(canonical_url, charset)
             return page, page.ok or (keep_absent and page.status in _ABSENT)
 
         return self.through_cache(url, fetch, refresh=refresh)
 
-    def _page(self, url: str) -> Page:
+    def _page(self, url: str, default_charset: str = "utf-8") -> Page:
         request = Request("GET", url, {"User-Agent": USER_AGENT, "Accept": self.policy.accept})
         resp = self.send(request)
         if resp.status == 200:
             content_type = resp.headers.get("content-type", "text/html; charset=utf-8")
-            charset = m.group(1) if (m := _CHARSET.search(content_type)) else "utf-8"
+            charset = m.group(1) if (m := _CHARSET.search(content_type)) else default_charset
             try:
                 text = resp.body.decode(charset)
             except (LookupError, UnicodeDecodeError) as e:
@@ -687,10 +694,16 @@ def fetch_file(
             fetched = datetime.fromisoformat(meta["fetched_at"])
             named = (meta["url"], meta["sha256"])
         except (OSError, ValueError, KeyError, TypeError) as e:
-            raise CacheError(f"{side.name} is unreadable ({type(e).__name__}); delete it and {path.name}") from e
+            raise CacheError(
+                f"{side.name} is unreadable ({type(e).__name__}); delete it and {path.name}"
+            ) from e
         if fetched.tzinfo is None:
             raise CacheError(f"{side.name} has a naive fetched_at; delete it and {path.name}")
-        if named == (pinned.url, pinned.sha256) and path.stat().st_size == pinned.size and verify(path) == pinned.sha256:
+        if (
+            named == (pinned.url, pinned.sha256)
+            and path.stat().st_size == pinned.size
+            and verify(path) == pinned.sha256
+        ):
             return FileEntry(path, fetched.astimezone(UTC), cached=True)
         log.warning("pinned_file_mismatch", extra={"file": path.name})
     if transport is None:

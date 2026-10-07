@@ -156,7 +156,10 @@ def load_extract(cache: Path, table: Table = TABLE) -> Extract:
                          "ingest dblp", reason="crawl_file_invalid") from None  # fmt: skip
     try:
         if (raw["format"], raw["release_doi"], raw["release_sha256"], raw["dtd_sha256"]) != (
-            EXTRACT_FORMAT, table.release.doi, table.release.file.sha256, table.dtd.file.sha256
+            EXTRACT_FORMAT,
+            table.release.doi,
+            table.release.file.sha256,
+            table.dtd.file.sha256,
         ):
             raise ValueError("names another release")
         fetched = datetime.fromisoformat(raw["fetched_at"])
@@ -200,13 +203,14 @@ class DblpReport(ListingReport):
     abstract_attached: int = 0
     site_unmatched: int = 0  # page entries whose title key no record of the year has
     site_ambiguous: int = 0  # page entries whose title key two entries, or two records, share
+    site_unjoined: int = 0  # 2007's halves: a paper number with a title but no abstract page, or the reverse
 
     def to_manifest(self) -> dict[str, Any]:
         out = super().to_manifest()
         if self.sites:
             out |= {"sites": list(self.sites), "site_entries": self.site_entries,
                     "abstract_attached": self.abstract_attached, "site_unmatched": self.site_unmatched,
-                    "site_ambiguous": self.site_ambiguous}  # fmt: skip
+                    "site_ambiguous": self.site_ambiguous, "site_unjoined": self.site_unjoined}  # fmt: skip
         return dict(sorted(out.items()))
 
 
@@ -245,7 +249,9 @@ def selected(extract: Extract, year: int, table: Table = TABLE) -> tuple[list[Db
     return keep, skipped
 
 
-def mine_year(year: int, extract: Extract, *, site: SiteYear | None = None, table: Table = TABLE) -> YearResult:
+def mine_year(
+    year: int, extract: Extract, *, site: SiteYear | None = None, table: Table = TABLE
+) -> YearResult:
     """The year's records from the extract, each with the abstract an official ICML page gives it when exactly
     one of the year's page entries and exactly one of its papers share a title key (`icml_sites`, TASK-206)."""
     started = time.monotonic()
@@ -295,7 +301,9 @@ def mine_year(year: int, extract: Extract, *, site: SiteYear | None = None, tabl
     return YearResult(records, [report])
 
 
-def _match(kept: list[tuple[str, DblpEntry, str]], site: SiteYear | None, report: DblpReport) -> dict[str, SiteAbstract]:
+def _match(
+    kept: list[tuple[str, DblpEntry, str]], site: SiteYear | None, report: DblpReport
+) -> dict[str, SiteAbstract]:
     """dblp key → the one page entry whose title key is that paper's alone (the dedup title key: the token
     contract over the NFC title, never a fuzzy match). A key two page entries or two papers share attaches
     nothing (`site_ambiguous`); a page entry no paper's key matches is `site_unmatched`."""
@@ -303,6 +311,7 @@ def _match(kept: list[tuple[str, DblpEntry, str]], site: SiteYear | None, report
         return {}
     report.sites = list(site.pages)
     report.site_entries = len(site.entries)
+    report.site_unjoined = site.unjoined
     report.fetched += site.fetched
     papers: dict[str, list[str]] = defaultdict(list)
     for _tail, e, title in kept:

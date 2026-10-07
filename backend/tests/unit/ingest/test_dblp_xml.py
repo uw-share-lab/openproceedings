@@ -85,7 +85,9 @@ def test_reads_only_the_stream_across_shared_lines_with_entities_and_markup(tmp_
     ]  # fmt: skip
     paper = entries[0]
     assert (paper.type, paper.mdate, paper.publtype) == ("inproceedings", "2017-05-20", None)
-    assert paper.fields["title"] == "Synthetic title with markup 1."  # markup flattened; dblp's period kept here
+    assert (
+        paper.fields["title"] == "Synthetic title with markup 1."
+    )  # markup flattened; dblp's period kept here
     assert paper.lists["author"] == ["Synthetic Author 2 0001", "Synthütic Author 3"]  # entity from the DTD
     assert paper.fields["crossref"] == "conf/icml/1990" and len(paper.lists["ee"]) == 2
     assert entries[1].type == "proceedings" and entries[1].fields["publisher"] == "Morgan Kaufmann"
@@ -161,7 +163,9 @@ def test_a_download_that_is_not_the_pin_is_refused_and_not_kept(tmp_path: Path) 
         fetch_file(PIN, tmp_path / "f.xml.gz", Stream((200, b"y" * 3000)), hosts=HOSTS, clock=FakeClock())
     assert e.value.reason == "pin_mismatch" and not list(tmp_path.iterdir())
     with pytest.raises(FetchError):  # longer than the pin: cut off, retried, never kept
-        fetch_file(PIN, tmp_path / "f.xml.gz", Stream(*[(200, BYTES + b"z")] * 3), hosts=HOSTS, clock=FakeClock())
+        fetch_file(
+            PIN, tmp_path / "f.xml.gz", Stream(*[(200, BYTES + b"z")] * 3), hosts=HOSTS, clock=FakeClock()
+        )
     assert not list(tmp_path.iterdir())
 
 

@@ -41,7 +41,8 @@ function YearSpans({ venueYears }: { venueYears: readonly VenueYear[] }) {
   const differ = new Set(spans.map((s) => s.from)).size > 1;
   return (
     <p className="tabular-nums">
-      Years indexed: {spans.map((s) => `${s.venue} ${s.from === s.to ? s.from : `${s.from}–${s.to}`}`).join(" · ")}
+      Years indexed:{" "}
+      {spans.map((s) => `${s.venue} ${s.from === s.to ? s.from : `${s.from}–${s.to}`}`).join(" · ")}
       {differ
         ? ". The venues start in different years, so a search without a year: filter compares them over different years."
         : null}

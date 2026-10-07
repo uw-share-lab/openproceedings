@@ -5,8 +5,8 @@ description: The PMLR (proceedings.mlr.press) source for ICML — the volume tab
 
 # PMLR proceedings (spec 01 §Sources)
 
-PMLR is the **primary** source for ICML 2013–2022 (not on OpenReview as full venues; the crawl starts in
-2013, decision-013) and a confirming source for ICML 2023+ (OpenReview v2 is primary there; a paper on
+PMLR is the **primary** source for ICML 2013–2022 (not on OpenReview as full venues; PMLR starts at v28,
+2013, and ICML 1988–2012 comes from the pinned dblp release instead, decision-047, `ingest/sources/dblp.py`) and a confirming source for ICML 2023+ (OpenReview v2 is primary there; a paper on
 OpenReview but not in PMLR, or the reverse, is a `conflicts.csv` row).
 
 ## The volume table is data

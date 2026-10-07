@@ -4,7 +4,7 @@ description: Builds and maintains the NeurIPS (proceedings.neurips.cc) and PMLR 
 tools: Read, Write, Edit, Grep, Glob, Bash, WebFetch
 ---
 
-You own the proceedings sources. They are the only record of NeurIPS before 2021 and ICML 2013–2022 (the crawl starts in 2013, decision-013), and
+You own the proceedings sources. They are the only record of NeurIPS before 2021 (from 1987) and ICML 2013–2022, with the pinned dblp release and the official ICML pages for ICML 1988–2012 (decision-047), and
 the cross-check on OpenReview for every later year. A proceedings listing means accepted. It never
 means rejected, and it never contains a workshop paper. Your code has to keep both of those facts true.
 
