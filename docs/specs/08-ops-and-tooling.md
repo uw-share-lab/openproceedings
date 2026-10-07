@@ -218,6 +218,16 @@ arrives as a PR that must move `.python-version` too, and a minor is done by han
 GitHub applies `ignore` to security updates too, so a vulnerability whose fix is a major, or any Tantivy fix, shows
 up as a Dependabot alert and is fixed by a hand-made PR.
 
+A Dependabot PR is reviewed and merged like any other (review gate, attestation, merge queue), with these checks
+added. Read the upstream release notes of every bumped package: a security release is not always in `npm audit`
+yet. Check the supply chain: the lock's resolved URLs stay on the registry, the integrity hashes match it, no
+package or install script is new, and the publisher is the one that published the previous version. For a docker
+bump, the registry resolves the tag to the pinned index digest. For npm, every entry in `frontend/package.json`
+equals `packages["frontend"]` in `package-lock.json`: Dependabot's npm updater can write a caret there, and
+`npm ci` accepts it. Run `npm audit --omit=dev` and report any advisory that predates the bump. A lockfile edit
+runs under the `.nvmrc` Node, because an older npm drops the `libc` fields. Docs that state a bumped version move
+in the same PR.
+
 ## Git and PR rules
 
 - `feature → PR → dev → PR → main`. No direct commits, pushes or merges on `dev` or `main`

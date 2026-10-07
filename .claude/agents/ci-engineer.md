@@ -69,7 +69,9 @@ tempted to bypass it.
 - Pinning: every action is pinned to a full commit SHA with a `# vX.Y.Z` version comment, and must stay
   that way. Dependabot (`.github/dependabot.yml`) bumps `github-actions`, `uv`, `npm` and the `docker`
   base-image digests in `deploy/` weekly, minor and patch grouped into one PR per ecosystem and semver-majors
-  ignored (a major is a deliberate, hand-made PR; spec 08 §CI); review its PRs like any other. Its `uv` entry
+  ignored (a major is a deliberate, hand-made PR; spec 08 §CI); review its PRs like any other, plus the
+  Dependabot checks in spec 08 §CI (release notes, supply chain, the manifest against the lock's
+  `packages["frontend"]`, `npm audit --omit=dev`, lock edits under the `.nvmrc` Node). Its `uv` entry
   ignores `tantivy`, whose upgrade must bump `SCHEMA_VERSION` by hand (spec 08 §Release), and every image a
   `deploy/` build pulls stays digest-pinned (`check_digest_pins.py`, spec 08 §Deploy).
 - Secrets: CI never needs OpenReview credentials — tests use recorded HTTP fixtures. No `data/` in

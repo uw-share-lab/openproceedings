@@ -107,7 +107,7 @@ flash. A 422 is data, not an exception: render its `diagnostics` (spec 04 error 
   emoji) shift every later highlight.
 - Export links carry the same `q`/`mode`; compare `X-Total` and `index_version` with the shown search and
   warn on mismatch (index swapped between the two).
-- Next 16 (pinned 16.3.6) passes `params`/`searchParams` as Promises; type pages with the generated
+- Next 16 (pinned 16.3.8) passes `params`/`searchParams` as Promises; type pages with the generated
   `PageProps<"/route">` / `LayoutProps<"/">` globals, which `next typegen` writes (`make lint` runs it
   before `tsc`).
 - Dependencies are hoisted to the repo-root `node_modules`, so `next.config.ts` sets

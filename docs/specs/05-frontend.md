@@ -14,7 +14,7 @@ Next.js (App Router) + TypeScript (strict). Tailwind + shadcn/ui for components.
 editor. TanStack Query for API state. Types are generated from 04's OpenAPI schema, not written by hand.
 Tests: Vitest + Testing Library (units), Playwright (e2e against the fixture API).
 
-As built (TASK-039): Next 16.3.7, React 19.3.0, Tailwind 4.3 (CSS-first `@theme`, no `tailwind.config`),
+As built (TASK-039): Next 16.3.8, React 19.3.0, Tailwind 4.3 (CSS-first `@theme`, no `tailwind.config`),
 shadcn/ui via `components.json` (`radix-nova`, CSS variables; components are added with `npx shadcn add`
 as pages need them), `next-themes` for the class-based theme, Vitest 5 with Testing Library
 (`@testing-library/react`). Node 22. TASK-041 added CodeMirror 6 (`@codemirror/*`, `@lezer/*`) and TanStack
