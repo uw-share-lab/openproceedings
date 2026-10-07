@@ -22,7 +22,7 @@ addresses, e-mails or phone numbers reach anything we store or serve.
 - **`caplog.text` hides what a leak would look like.** It holds only the message names, not the `extra` fields the
   JSON formatter writes, and the formatter scrubs; the privacy test reads every `LogRecord.__dict__` instead.
 - **The shared HTTP layer would have refused most of these pages.** It retries a 200 without `</html>` as truncated,
-  and 26 of the 66 1998 captures and the 1997 page never had one; the unit tests seeded the cache, so only the
+  and 27 of the 66 1998 captures and the 1997 page never had one; the unit tests seeded the cache, so only the
   end-to-end test through a transport showed it (5 retries, then `RetriesExhausted`). A capture's bytes are fixed and
   the archive states their `Content-Length`, so captures are now judged whole by that length (`by_length`).
 - **Some archive captures are under another spelling of the same site.** Five ICML-98 papers' earliest captures are

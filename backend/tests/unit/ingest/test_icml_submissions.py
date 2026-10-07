@@ -207,10 +207,13 @@ def test_a_1998_page_whose_heading_is_not_its_urls_paper_gives_nothing() -> None
         ("+1 503 737 5552", "phone"), ("972-3-640-8829", "phone"), ("0231 755 4708", "phone"),
         ("5550199", "phone"), ("6095550199", "phone"), ("609 5550199", "phone"), ("123456789012", "phone"),
         ("name at cs.example.edu", "email"), ("name at cs dot example dot ac dot uk", "email"),
-        ("Fax: none", "label"), ("tel. none", "label"), ("Princeton, NJ 08544", "postal"), ("NJ 08544-2087", "phone"), ("624 9418", "phone"),
+        ("Fax: none", "label"), ("Address: 1 Example Road", "label"),
+        ("Exampleton EX1 2ZZ", "postal"), ("Ottawa, Ontario K1A 0R6", "postal"), ("D-53754 Sankt Augustin", "postal"),
+        ("6500 HB Nijmegen", "postal"), ("12 Example Road", "postal"), ("someone {at} example {dot} edu", "email"), ("tel. none", "label"), ("Princeton, NJ 08544", "postal"), ("NJ 08544-2087", "phone"), ("624 9418", "phone"),
         # an abstract's own text is no contact detail
         ("the state at t+1", None), ("a + b log T", None), ("from 1993-1997", None), ("C++ classes", None),
         ("up to 29% over 10 000 documents", None), ("in 1987 1988 1989", None), ("telephone speech and voice", None), ("O(n^2) time", None), ("Areas under the ROC curve", None),
+        ("the problems we address.", None),
         ("at least 30 examples", None),
     ],
 )  # fmt: skip
@@ -239,6 +242,22 @@ def test_an_abstract_line_that_reads_like_a_field_stays_and_one_no_field_ends_is
     cut = P1998_PRE.split("Keywords:", 1)[0] + "Synthetic Institute\nVeldweg 1, 6500 HB Nijmegen\n</PRE>"
     [entry] = icml_sites.icml1998_paper(cut, PAPER_CAPTURE.format(n=101))
     assert entry.withheld and entry.abstract == ""
+
+
+@pytest.mark.parametrize(
+    "block",
+    ["AUTHORS:\nSynthetic Person\nSynthetic Institute\nVeldweg 1, Exampleton",
+     "Address: Veldweg 1, Exampleton", "Mailing address\nVeldweg 1, Exampleton",
+     "Contact author Synthetic Person, Veldweg 1, Exampleton", "Affiliation: Synthetic Institute, Exampleton"],
+)  # fmt: skip
+def test_an_author_or_address_block_after_the_abstract_ends_it(block: str) -> None:
+    """An address in a form no postal pattern knows (`Veldweg 1, Exampleton`) never joins the abstract: the block's
+    own label ends it, whatever comes before the keywords."""
+    page = P1998_PRE.replace("Keywords: synthetic", f"{block}\n\nKeywords: synthetic")
+    [entry] = icml_sites.icml1998_paper(page, PAPER_CAPTURE.format(n=101))
+    assert entry == Entry(
+        "101", "Synthetic title with markup 1", "Synthetic abstract from the submission, Informática."
+    )
 
 
 def test_a_hostile_1998_page_is_parsed_in_linear_time() -> None:

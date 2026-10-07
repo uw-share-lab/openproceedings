@@ -13,8 +13,9 @@ ICLR archive, NeurIPS proceedings and PMLR) fetches through `HttpClient`, and on
   (seconds or an HTTP date), else `ratelimit-reset` (seconds from now; never `x-ratelimit-reset`, an epoch),
   else an exponential back-off (`backoff[0] · 2^n`, capped at `backoff[1]`, plus jitter); so do a network
   error and a truncated 200 (an HTML page without `</html>`, or JSON that doesn't parse; a page the caller asks to
-  judge by length, an Internet Archive capture whose original may never have had `</html>`, is truncated only when
-  its body is not the `Content-Length` the response states, TASK-207). A spent budget
+  judge by length, an Internet Archive capture whose original may never have had `</html>`, is truncated when its
+  body is not the `Content-Length` the response states, or, when it states none, by the closing-tag rule, logged
+  as `truncated_no_length`; TASK-207). A spent budget
   (`ratelimit-remaining: 0` on a 200) waits for its reset. A wait past `max_wait` is capped or aborts the
   crawl (`cap_waits`). Any other response is returned for the source to judge; retries are bounded.
 - **Cache.** `ResponseCache`: one JSON file per canonical URL under `<root>/[<subdir>/]<sha256[:2]>/<sha256>.json`,
@@ -433,7 +434,9 @@ class HttpClient[T]:
                 if response.status == 429 or response.status >= 500:
                     why, hint = f"http_{response.status}", retry_after(response.headers, self.clock.now())
                 elif response.status == 200 and self._truncated(response, by_length):
-                    why = "truncated"
+                    # a capture judged by length that states none is told apart from a short body
+                    stated = response.headers.get("content-length", "").strip().isdigit()
+                    why = "truncated_no_length" if by_length and not stated else "truncated"
                 else:
                     if response.status == 200:
                         self._respect_budget(response, url)

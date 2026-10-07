@@ -46,7 +46,8 @@ The owner decided (2026-10-06): the corpus covers NeurIPS from 1987 and ICML fro
 - **ICML 1997 and 1998** (owner decision of 2026-10-07, TASK-207): their official pages hold submission-time
   abstracts beside the authors' postal addresses, e-mail addresses and phone and fax numbers, and are used for the
   abstract text alone. The parsers keep the text after an `Abstract` heading up to the form's next field; one that
-  no field ends, or that still holds an e-mail address, a phone-shaped number, a contact label or a postal code is withheld whole and
+  no field ends, or that still holds an e-mail address, a phone-shaped number, a contact label or a postal code or
+  street address is withheld whole and
   counted (`site_withheld`), and none of those details reaches a record, the snapshot, the index, an export or a log
   line (tested). The abstract claim's evidence says it is a submission-time abstract from the official page, with
   the Internet Archive capture's timestamp.
@@ -74,7 +75,9 @@ The owner decided (2026-10-06): the corpus covers NeurIPS from 1987 and ICML fro
 - 1997 and 1998 have official pages with submission abstracts and authors' contact details. They were first left
   out as an owner question; on 2026-10-07 the owner decided to use their abstract text only (the Decision's 1997/1998
   bullet, TASK-207). A submission abstract can differ from the published paper's, and the claim's evidence says
-  which it is. The published titles can differ from the submitted ones too, so some of those years' abstracts find no
+  which it is. The pages, contact details included, stay whole only in the local crawl cache
+  (`data/cache/icml_sites`), which is never committed, shipped or mounted, and goes with the data directory. The
+  published titles can differ from the submitted ones too, so some of those years' abstracts find no
   exact title key and stay unattached (counted as `site_unmatched`), as in every other year.
 - 1989, 1991 and 1992 are exported under the ICML name (`International Conference on Machine Learning (ICML
   <year>)`), like every ICML year, though they were held as the International Workshop on Machine Learning: a

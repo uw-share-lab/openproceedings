@@ -239,14 +239,12 @@ class DblpReport(ListingReport):
     site_unmatched: int = 0  # page entries whose title key no record of the year has
     site_ambiguous: int = 0  # page entries whose title key two entries, or two records, share
     site_unjoined: int = 0  # 2007's halves: a paper number with a title but no abstract page, or the reverse
-    site_dropped: int = (
-        0  # page entries with no usable title or abstract (an empty page; a 1997/1998 submission
-    )
-    # with no `Abstract` heading)
-    site_withheld: int = (
-        0  # 1997/1998 submission abstracts withheld: a contact detail, or no field ends them (TASK-207)
-    )
-    abstracts_as_submitted: bool = False  # the pages are the submissions (1997, 1998): abstracts as submitted
+    # page entries with no usable title or abstract (an empty page; a 1997/1998 submission with no `Abstract` heading)
+    site_dropped: int = 0
+    # 1997/1998 submission abstracts withheld whole: a contact detail, or no field ends them (TASK-207)
+    site_withheld: int = 0
+    # the year's pages are the submissions (1997, 1998), so its abstracts are as submitted
+    abstracts_as_submitted: bool = False
 
     def to_manifest(self) -> dict[str, Any]:
         out = super().to_manifest()
@@ -355,7 +353,8 @@ def _match(
 ) -> dict[str, SiteAbstract]:
     """dblp key → the one page entry whose title key is that paper's alone (the dedup title key: the token
     contract over the NFC title, never a fuzzy match). A key two page entries or two papers share attaches
-    nothing (`site_ambiguous`); a page entry no paper's key matches is `site_unmatched`."""
+    nothing (`site_ambiguous`); a page entry no paper's key matches is `site_unmatched`. Entries the pages
+    dropped or withheld (`SiteYear.dropped`, `.withheld`) never reach here, so they take no part in either count."""
     if site is None:
         return {}
     report.sites = list(site.pages)

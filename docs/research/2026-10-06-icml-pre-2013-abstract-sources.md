@@ -37,7 +37,7 @@ the 0x80–0x9F range); 2009 is ASCII, 2012 is UTF-8, and so are five 2007 captu
 | 2001 | capture `20010708012312` of `http://www.ecn.purdue.edu:80/ICML2001/accepted-papers.html` (the site was at Purdue; icml.cc's 2007 "past conferences" page names it) | one CyberChair page, alphabetical by first author | 79 | `student-abstracts.html`, a separate page of student posters |
 | 2000 | none | — | 0 | `www-csli.stanford.edu/icml2k/` `schedule.html` and `posters.html`: titles only |
 | 1999 | none | — | 0 | icml.cc's `Conferences/1999/accepted.html` and the Bled site: titles only |
-| 1998 | 66 per-submission captures of `http://www.cs.wisc.edu:80/icml98/papers/paperN.html` (the earliest 200 capture of each, 1999–2000; five are under `/ICML98/`, which the site also answered with the same bytes); icml.cc's `Conferences/2007/pastconferences.html` names the site | per page `<H1>ICML-98 Submission #N</H1>`, then the form as filled in, free text in a `<PRE>` or in HTML: title (labelled or not), authors with postal addresses, e-mail and phone, abstract, keywords, contact author's e-mail and phone | 66 (65 with an `Abstract` heading) | everything but the abstract (TASK-207): titles, authors, addresses, e-mails, phone and fax numbers, keywords; the abstract is the one submitted, and some titles differ from the published papers', so those stay unattached |
+| 1998 | 66 per-submission captures of `http://www.cs.wisc.edu:80/icml98/papers/paperN.html` (the earliest capture of each that the archive answers with HTTP 200, 1999–2000; five are under `/ICML98/`, which the site also answered with the same bytes); icml.cc's `Conferences/2007/pastconferences.html` names the site | per page `<H1>ICML-98 Submission #N</H1>`, then the form as filled in, free text in a `<PRE>` or in HTML: title (labelled or not), authors with postal addresses, e-mail and phone, abstract, keywords, contact author's e-mail and phone | 66 (65 with an `Abstract` heading) | everything but the abstract (TASK-207): titles, authors, addresses, e-mails, phone and fax numbers, keywords; the abstract is the one submitted, and some titles differ from the published papers', so those stay unattached |
 | 1997 | capture `19970619200718` of `http://cswww.vuse.vanderbilt.edu:80/~icml97/program.html` (the ICML-97/COLT-97 site's joint schedule `~mlccolt/schedule.html`, capture `19980209071717`, links each ICML-97 paper here) | one page: a list `<li><a href="#N"> title</a>`, then per paper `<a name="N"></a>` and the form as filled in, free text in a `<pre>`, layout varying by paper | 49 (46 with an `Abstract` heading) | as 1998; the title is the list's |
 | 1996 | none | — | 0 | icml.cc's `Conferences/1996/Sched.html` and the di.unito.it site: titles only |
 | 1988–1995 | none | — | 0 | icml.cc has no pages for these years and both official "past ICMLs" lists give no website; other hosts were not guessed |
@@ -56,15 +56,20 @@ with the first words after it, sometimes underlined with dashes; then `Keywords`
 (`icml_sites.icml1997`, `icml1998_paper`) keep only the lines after the first `Abstract` heading, up to the first
 line that starts one of those later fields (a contact label with any words before its colon; `Topic`, `Area`,
 `Category`, `Track` only with the colon right after them, so an abstract line such as `Areas under the ROC curve: …`
-stays text); a line of dashes under the heading is dropped, and an abstract that no field ends is withheld, since
-whatever follows it is unknown. An entry with no
+stays text; an address, author or affiliation block ends it too); a line of dashes under the heading is dropped,
+and an abstract that no field ends is withheld, since whatever follows it is unknown. An entry with no
 `Abstract` heading (1997: 3; 1998: 1) gives no abstract: there the authors' block and the abstract run together.
 What is kept is checked once more (`icml_sites.contact_detail`): an abstract holding an e-mail address, a
 phone-shaped number (7 digits or more, in a row or in groups that are not all years, or a `+` country code), a contact label
-(`Phone:`, `Fax.`) or a US state and ZIP code is withheld whole and counted. Read against every 1997 and 1998 page on
-2026-10-07: no abstract was withheld, none ran into a later field, and none was cut short. The Internet Archive
+(`Phone:`, `Fax.`, `Address:`) or a postal code or street address (US, UK, Canadian, Dutch, `D-53754` forms) is
+withheld whole and counted. Read against every 1997 and 1998 page on
+2026-10-07: no abstract was withheld, none ran into a later field, and none was cut short. By the exact title
+key, 40 of 1997's 46 abstracts and 51 of 1998's 65 attach to a dblp record; the rest are retitled papers (the
+submitted title is not the published one) and stay unattached, counted. The fetched pages, contact details
+included, stay whole only in the local crawl cache (`data/cache/icml_sites`, gitignored), as every fetched page
+does: it is never committed, shipped or mounted by `deploy/` (`deploy/README.md`). The Internet Archive
 answered many requests that day with a dropped connection or a 503; a retry a few seconds later succeeded each time.
-26 of the 66 1998 pages and the 1997 page end without `</html>` (the archive serves the original bytes, with their
+27 of the 66 1998 pages and the 1997 page end without `</html>` (the archive serves the original bytes, with their
 `Content-Length`), so these captures are judged whole by that length, not by the closing tag the shared HTTP layer
 otherwise requires.
 

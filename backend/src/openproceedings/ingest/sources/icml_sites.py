@@ -127,16 +127,13 @@ class SiteYear:
     unjoined: int = (
         0  # halves (a number with only a title, or only an abstract) the year's pages don't complete
     )
-    dropped: int = (
-        0  # entries with a title and abstract text that leave no title or no usable abstract (empty; for 1997 and
-        # 1998 also a submission with no `Abstract` heading)
-    )
-    withheld: int = (
-        0  # 1997/1998 abstracts withheld whole: a contact detail, or no field ends them (TASK-207)
-    )
-    as_submitted: bool = (
-        False  # the year's pages are submissions (`SUBMISSION_PARSERS`): its abstracts are as submitted
-    )
+    # entries with a title and abstract text that leave no title or no usable abstract (empty; for 1997 and 1998
+    # also a submission with no `Abstract` heading)
+    dropped: int = 0
+    # 1997/1998 abstracts withheld whole: a contact detail, or no field ends them (TASK-207)
+    withheld: int = 0
+    # the year's pages are submissions (`SUBMISSION_PARSERS`): its abstracts are as submitted
+    as_submitted: bool = False
 
 
 # --- parsers: page text → entries ---------------------------------------------------------------------------------
@@ -305,12 +302,17 @@ _FIELD = re.compile(  # a line that starts a field the form puts after the abstr
     r"(?:key[ \t-]?words?\b"  # `Keywords`, `KEY WORDS:`
     # a contact field, whatever words follow its label: `Email address of contact author:`, `Phone number (X):`
     r"|(?:e-?mail|electronic mail|phone|telephone|tel\b|fax|voice|contact|corresponding author)[^:\n]{0,60}:"
-    # another field only with its colon right after the label, so `Areas under the ROC curve: …` stays text
-    r"|(?:topics?|areas?|category|paper (?:category|type)|track|submitted)[ \t]{0,9}:)",
+    # an address block, however it is labelled: `Mailing address`, `Contact author Alex Example`
+    r"|(?:mailing|postal|street) address(?:es)?\b|contact(?:ing)? author\b"
+    # another field only with its colon right after the label, so `Areas under the ROC curve: …` and `we address
+    # this: …` stay text: `Authors:`, `Address:`, `Affiliation:`, `Title:`, `Topic:`
+    r"|(?:topics?|areas?|category|paper (?:category|type)|track|submitted|authors?|author\(s\)|address(?:es)?"
+    r"|affiliations?|title)[ \t]{0,9}:)",
     re.I,
 )
-_EMAIL = re.compile(  # any `@`, or an address spelled out: `name at cs dot example dot edu`, `name (at) host.ac.uk`
-    r"@|\b[\w.+-]{1,64} ?(?:\(at\)|\[at\]| at ) ?(?:[\w-]{1,64}(?:\.| dot )){1,4}[a-z]{2,6}\b", re.I
+_EMAIL = re.compile(  # any `@`, or an address spelled out: `name at cs dot example dot edu`, `name {at} host.ac.uk`
+    r"@|\b[\w.+-]{1,64} ?(?:\(at\)|\[at\]|\{at\}| at ) ?(?:[\w-]{1,64}(?:\.| ?\(dot\) ?| ?\{dot\} ?| dot )){1,4}[a-z]{2,6}\b",
+    re.I,
 )
 _PHONE = re.compile(
     r"(?<![\w)+])\+\(?[0-9][0-9 ()./-]{5,40}[0-9]"  # +1 503 737 5552, +(34-1) 624 9418; never `t+1` or `a + b`
@@ -324,10 +326,15 @@ _DIGIT_GROUPS = re.compile(r"\b[0-9]{1,6}(?:[-./ ][0-9]{1,6}){1,5}\b")
 _YEAR = re.compile(r"(?:19|20)[0-9]{2}")
 _RUN = re.compile(r"[0-9]{7}")  # seven digits in a row, however long the run: 5550199, 6095550199
 _RULE = re.compile(r"[-=_*~ \t]{3,200}")  # a line of dashes under a heading
-_LABEL = re.compile(r"\b(?:e-?mail|phone|telephone|tel|fax|voice)\s{0,3}[:.]", re.I)
-_POSTAL = re.compile(
-    r"\b[A-Z]{2}[ \t]{1,3}[0-9]{5}(?:-[0-9]{4})?\b"
-)  # a US state and ZIP code: `NJ 08544-2087`
+_LABEL = re.compile(r"\b(?:e-?mail|phone|telephone|tel|fax|voice)\s{0,3}[:.]|\baddress(?:es)?\s{0,3}:", re.I)
+_POSTAL = re.compile(  # a postal code or a street address, in the forms an ICML author's address took
+    r"\b[A-Z]{2}[ \t]{1,3}[0-9]{5}(?:-[0-9]{4})?\b"  # a US state and ZIP code: `NJ 08544-2087`
+    r"|\b[A-Z]{1,2}[0-9][0-9A-Z]? [0-9][A-Z]{2}\b"  # a UK postcode: `EX1 2ZZ`
+    r"|\b[A-Z][0-9][A-Z] ?[0-9][A-Z][0-9]\b"  # a Canadian one: `K1A 0R6`
+    r"|\b[A-Z]{1,2}-[0-9]{4,5}\b"  # a European one with its country letter: `D-53754`, `NL-6500`
+    r"|\b[0-9]{4} ?[A-Z]{2}\b"  # a Dutch one: `6500 HB` (and `4096 MB`, which only withholds)
+    r"|\b[0-9]{1,5} [A-Z][a-z]+(?: [A-Z][a-z]+)? (?:Road|Street|Avenue|Ave|St|Rd|Drive|Blvd|Lane|Way|Strasse|Straße)\b"
+)
 
 
 def _phone(text: str) -> bool:
@@ -520,7 +527,7 @@ def _evidence(page: SitePage) -> str:
     if page.capture is not None:
         where += f", Internet Archive capture {page.capture}"
     if page.parser in SUBMISSION_PARSERS:
-        where += (": a submission-time abstract, as the authors submitted it (not the published paper's); "
+        where += (": a submission-time abstract, as the authors submitted it (not necessarily the published paper's); "
                   "the page's contact details are not kept")  # fmt: skip
     return where
 

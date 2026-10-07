@@ -451,7 +451,8 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
         as_submitted = (
             f" {sum(int(x['abstract_attached']) for x in submitted):,} of those abstracts (ICML "
             f"{', '.join(str(x['year']) for x in sorted(submitted, key=lambda x: int(x['year'])))}) are submission-time "
-            "abstracts from official pages that list the submissions, not the published papers' (TASK-207)."
+            "abstracts from official pages that list the submissions, which can differ from the published papers' "
+            "(TASK-207)."
             if submitted else ""
         )  # fmt: skip
         out.append(

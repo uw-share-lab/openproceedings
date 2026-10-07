@@ -116,7 +116,9 @@ def test_a_truncated_body_and_a_network_error_are_retried(tmp_path: Path) -> Non
     assert len(t.calls) == 3 and clock.sleeps == [5.0, 10.0]
 
 
-def test_a_capture_judged_by_length_is_whole_without_a_closing_html_tag(tmp_path: Path) -> None:
+def test_a_capture_judged_by_length_is_whole_without_a_closing_html_tag(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """A 1990s page that never had `</html>` (ICML 1997/1998 captures, TASK-207): with `by_length`, its stated
     `Content-Length` decides; a body shorter than stated is retried, and with no length the `</html>` rule holds."""
     old = "<body><pre>An old page.</pre>"
@@ -132,11 +134,16 @@ def test_a_capture_judged_by_length_is_whole_without_a_closing_html_tag(tmp_path
     assert f.get(URL, by_length=True).text == old
     assert len(t.calls) == 2 and clock.sleeps == [5.0]  # the short body was retried once
     # without `by_length`, or with no stated length, the same page is truncated: retried until given up
-    for by_length, length in ((False, len(old)), (True, None)):
+    for by_length, length, why in ((False, len(old), "truncated"), (True, None, "truncated_no_length")):
         t = FakeTransport({URL: sized(old, length)})
         f, _ = fetcher(tmp_path / f"{by_length}{length}", t, HOSTS, min_interval=0)
-        with pytest.raises(RetriesExhausted):
+        caplog.clear()
+        with caplog.at_level(logging.WARNING), pytest.raises(RetriesExhausted):
             f.get(URL, by_length=by_length)
+        # a capture that states no length is told apart from a short body in the retry lines
+        assert {getattr(r, "why", None) for r in caplog.records if r.getMessage() == "crawl_retry_wait"} == {
+            why
+        }
 
 
 def test_query_strings_and_fragments_are_dropped() -> None:
