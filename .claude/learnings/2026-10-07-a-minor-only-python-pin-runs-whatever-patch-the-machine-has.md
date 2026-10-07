@@ -70,13 +70,12 @@ input; every crawler parses pages with it), without changing the tokenizer, sche
   whose tail is markup without a `>`) would reverse it. Likewise raw text stays `script`/`style` only.
 - No `python_version` in the snapshot manifest: the exact pin plus the manifest's `openproceedings_version`
   (whose tag pins `.python-version`) already name the interpreter, and the field would make snapshot bytes
-  depend on the build host. Raised with the owner.
+  depend on the build host. The owner agreed (2026-10-07).
 
 ## Follow-ups
-- [ ] Owner (reported, not filed: task ids are created by the main session) — text between a bare `<` and a later
-  `>` is dropped on every release (`if a<b and c>d then` → `if ad then`): a pre-existing loss of abstract words,
-  found by the review-methodologist.
-- [ ] Owner — record the interpreter in the snapshot manifest after all? (Decision above.)
+- [ ] To be filed by the main session after merge (the owner's decision, 2026-10-07) — text between a bare `<`
+  and a later `>` is dropped on every release (`if a<b and c>d then` → `if ad then`): a pre-existing loss of
+  abstract words, found by the review-methodologist.
 - The remaining 3.12.12+ readings change no record today; a crawl that meets one shows up in `op snapshot diff`.
 
 ## Propagated to
