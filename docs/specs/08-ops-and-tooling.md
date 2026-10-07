@@ -55,9 +55,15 @@ crawler parses pages with; python/cpython#135462, fixed in 3.12.12, 3.13.6 and 3
 holds them together and fails on an interpreter without the fix; a patch upgrade moves `.python-version`, the
 image tag and digest together (Dependabot's `docker` entry proposes the image half; its PR fails that test until
 `.python-version` follows). The minor stays 3.12 (security fixes until 2028-10), so ruff's `py312` and mypy's
-`3.12` targets don't move; a new minor is a hand-made PR. The upgrade from the 3.12.9 the corpus was built with
-changed no ingest output: the whole crawl cache replays to byte-identical records under both, and an index built
-from the same snapshot has identical segment bytes and the same `index_version`.
+`3.12` targets don't move; a new minor is a hand-made PR. The fix also changed what `close` does with an
+unterminated construct at the end of the input: 3.12.9 kept it as text, 3.12.12+ drops it, which would cut
+`for all p<q we show` to `for all p` in a fragment. `ingest/sources/html.py` (`_feed_all`) keeps such a tail as
+text when it holds no `>`, so its output is the same on both releases (seeded fuzzing: identical to the old code
+on 3.12.9 over 200,000 seeded malformed strings). The rest is left to the parser, whose 3.12.12+ reading differs
+from 3.12.9's on malformed comment syntax: a tail with a `>` (an unterminated `<!--` before later markup) and an
+HTML5 empty comment `<!-->` are now comments, not text (about one string in five in that adversarial set). The upgrade from the 3.12.9 the corpus was built with changed no
+ingest output: the whole crawl cache replays to byte-identical records under both, and an index built from the
+same snapshot has identical segment bytes and the same `index_version`.
 
 ## CLI (`op`)
 

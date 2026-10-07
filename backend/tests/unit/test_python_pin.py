@@ -67,7 +67,7 @@ def test_requires_python_refuses_a_3_12_without_the_fix() -> None:
 
 def test_the_api_image_runs_the_pinned_release() -> None:
     """Both `FROM python:` lines name `.python-version`'s release, so a Dependabot patch bump of the image fails
-    here until `.python-version` moves with it (spec 08 §Deploy)."""
+    here until `.python-version` moves with it (spec 08 §Monorepo layout, "Python pin")."""
     dockerfile = (ROOT / "deploy" / "api.Dockerfile").read_text(encoding="utf-8")
     tags = re.findall(r"^FROM python:(\S+?)-slim-bookworm@sha256:[0-9a-f]{64}\b", dockerfile, re.MULTILINE)
     assert tags == [".".join(map(str, _pinned()))] * 2

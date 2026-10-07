@@ -25,9 +25,16 @@ input; every crawler parses pages with it), without changing the tokenizer, sche
   that 3.12.9 emitted as text: `text_of("for all p<q we show")` is `for all p<q we show` on 3.12.9 and
   `for all p` on 3.12.15 (`x <a` → `x`, `tail <!-- c` → `tail`). Within a whole page a later `>` always exists, so
   the difference can only reach `text_of` fragments (`icml_sites.py`) and page tails.
+- **Keeping a `>`-free tail as text makes the two releases agree there, and stays linear.** `feed` leaves the
+  unfinished end in `rawdata`; handing a tail with no `>` to `handle_data` before `close` (`html._feed_all`) gave
+  output identical to the old code on 3.12.9 over 200,000 seeded malformed strings (a seeded fuzz of `text_of`,
+  `parse`/`node_text` and `metas`, run under each interpreter from a copy of each `html.py`). Emitting *every*
+  tail as text was wrong: an unterminated `<!--` before later markup leaked the tags into the text. Emulating
+  3.12.9 exactly is impossible without its quadratic re-scan, which was the CVE. On 3.12.15 about a fifth of
+  that adversarial set still differs, all of it malformed comment syntax (`<!-->` is now an empty comment).
 - **It changed no record in today's corpus.** `crawl.replay_all` over an APFS clone of the cache (`cp -cR`,
-  instant, so the real `data/` is never opened for writing) under 3.12.9 and 3.12.15: 168,181 records each,
-  `cmp` identical. `tests.deploy.fixture_data` gives the same three `index_version`s, and `op index build` of one
+  instant, so the real `data/` is never opened for writing) under 3.12.9 (old code) and 3.12.15 (with and without `_feed_all`): 168,181
+  records each, `cmp` identical. `tests.deploy.fixture_data` gives the same three `index_version`s, and `op index build` of one
   fixture snapshot gives identical segment bytes; only Tantivy's random segment names and the build time differ.
 - **A timing test without a clock.** The regression test runs CPython's own pathological inputs (at n = 20,000)
   through `parse`, `text_of` and `metas`, after asserting the interpreter is a fixed release: a fixed parser takes
@@ -46,15 +53,18 @@ input; every crawler parses pages with it), without changing the tokenizer, sche
   we need from a newer minor would reverse it.
 - The api image's tag names the patch (`3.12.15-slim-bookworm`), so Dependabot's patch bumps arrive as PRs that
   fail `test_python_pin.py` until `.python-version` follows; minors are ignored there and done by hand.
-- The EOF behaviour change is accepted as is, since it changed no record. If a future crawl's fragment ends in
-  an unterminated `<x`, the text after it is dropped; whether `text_of` should keep it is an owner question.
+- A `>`-free tail stays text (`_feed_all`) rather than following 3.12.12+'s drop: the focused review found the
+  pre-2013 ICML pages are sliced into tag-free fragments (`icml_sites.py`) where `p<q` can end the input, and
+  dropping the words after it would be silent loss. A reason to follow the HTML5 reading instead (say, a page
+  whose tail is markup without a `>`) would reverse it.
 
 ## Follow-ups
-- [ ] Owner question: should `html.text_of` keep text after an unterminated `<x` at a fragment's end (3.12.9's
-  behaviour) rather than drop it (3.12.12+)? Today's corpus has none.
+- None filed. The remaining 3.12.12+ readings of malformed comments change no record today; a crawl that
+  meets one shows up as a snapshot diff (`op snapshot diff`).
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/python-standards/SKILL.md` (the exact pin and the floor);
   spec 08 §Monorepo layout ("Python pin") and §CI ("Dependabot"); `README.md` and `CONTRIBUTING.md` (uv 0.12.22+).
 - Test or hook added? — `backend/tests/unit/test_python_pin.py` (pins agree; the interpreter has the fix) and
-  `test_malformed_markup_parses_in_linear_time` in `backend/tests/unit/ingest/test_html.py`.
+  `test_malformed_markup_parses_in_linear_time` and `test_an_unterminated_tail_without_a_closing_bracket_stays_text`
+  in `backend/tests/unit/ingest/test_html.py`; spec 01 §Normalize and the `html.py` docstring.

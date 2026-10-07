@@ -7,7 +7,15 @@ from pathlib import Path
 
 import pytest
 from openproceedings.ingest.sources import html
-from openproceedings.ingest.sources.html import MAX_DEPTH, HTMLBudgetError, metas, node_text, parse, text_of
+from openproceedings.ingest.sources.html import (
+    MAX_DEPTH,
+    HTMLBudgetError,
+    collapse,
+    metas,
+    node_text,
+    parse,
+    text_of,
+)
 from openproceedings.ingest.sources.http import PageCache, SourceError
 
 from tests.unit.test_python_pin import html_parser_fixed
@@ -106,16 +114,20 @@ def test_attribute_values_are_decoded_by_htmlparser_not_the_reference_handlers()
 
 
 def test_malformed_markup_parses_in_linear_time() -> None:
-    """CVE-2025-6069 (TASK-208): before the fix, HTMLParser took quadratic time on an unterminated construct at
-    the end of its input, so one malformed cached page could stall a crawl or a snapshot replay. These are
-    CPython's own regression inputs (python/cpython#135462) at a sixth of its size: on a fixed release each
-    pass takes milliseconds; on 3.12.9 the same inputs at n = 2,000 already took 12 s, and n = 20,000 is about
-    a hundred times that. No wall clock is read (testing-standards §Rules 5): a vulnerable interpreter fails the
-    version check first, with the reason, instead of hanging the run."""
+    """CVE-2025-6069 (TASK-208): before the fix, HTMLParser's `close` took quadratic time on an unterminated
+    construct at the end of its input, so one malformed cached page could stall a crawl or a snapshot replay.
+
+    The first ten inputs are CPython's own regression inputs (python/cpython#135462) at a sixth of its size; their
+    tails hold no `>`, so `_feed_all` keeps them as text and never asks `close` to parse them. The last two end in
+    tails with a `>`, which `close` does parse: on 3.12.9 they cost 0.14 s at n = 3,000 and grow with the
+    square of n; a fixed release takes milliseconds at n = 20,000. No wall clock is read (testing-standards
+    §Rules 5): a vulnerable interpreter fails the version check first, with the reason, instead of hanging."""
     running = sys.version_info[:3]
-    assert html_parser_fixed(running), f"Python {running} has CVE-2025-6069: run the pinned .python-version"
+    assert html_parser_fixed(running), (
+        f"Python {'.'.join(map(str, running))} has CVE-2025-6069: run the release .python-version pins"
+    )
     n = 20_000
-    for page in (
+    kept = (
         "<a " * n,
         "<a a=" * n,
         "</a " * 14 * n,
@@ -126,7 +138,31 @@ def test_malformed_markup_parses_in_linear_time() -> None:
         "</$" * 15 * n,
         "<![CDATA[" * 9 * n,
         "<!doctype" * 35 * n,
-    ):
+    )
+    for page in kept:
         # every entry point the miners use: the tree, fragment text, and the meta/attribute reader
+        assert node_text(parse(page)) == text_of(page) == collapse(page)
+        assert metas(page, "citation_title") == []
+    for page in ("<!--x>" * n, "<!--a>b" * n):  # an unterminated comment: close() reads it to the end
         assert node_text(parse(page)) == text_of(page) == ""
         assert metas(page, "citation_title") == []
+
+
+@pytest.mark.parametrize(
+    ("markup", "text"),
+    [
+        ("for all p<q we show", "for all p<q we show"),  # an abstract's inequality, at a fragment's end
+        ("title <i>x</i> and p<q", "title x and p<q"),
+        ("x &amp; y <a", "x & y <a"),
+        ("tail <!-- c", "tail <!-- c"),
+        ("end </a", "end </a"),
+        ("<p>one</p><script>x<y", "one"),  # an unclosed script body stays out of the text
+        ("<p>bound n<k</p>", "bound n"),  # a later `>` makes it a tag, on every release
+        ("a <!-- b > c", "a"),  # a tail with a `>` is left to close(): an unterminated comment
+    ],
+)
+def test_an_unterminated_tail_without_a_closing_bracket_stays_text(markup: str, text: str) -> None:
+    """TASK-208: from 3.12.12 HTMLParser.close drops an unterminated construct at the end of its input, where
+    3.12.9 kept it as text; `_feed_all` keeps a tail with no `>`, so a fragment such as an ICML page's abstract
+    cell keeps its words on either release (the crawl cache replays to identical records under both)."""
+    assert text_of(markup) == node_text(parse(markup)) == text
