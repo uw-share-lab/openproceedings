@@ -221,8 +221,8 @@ added. Read the upstream release notes of every bumped package: a security relea
 yet. Check the supply chain: the lock's resolved URLs stay on the registry, the integrity hashes match it, no
 package or install script is new, and the publisher is the one that published the previous version. For a docker
 bump, the registry resolves the tag to the pinned index digest. For npm, every entry in `frontend/package.json`
-equals `packages["frontend"]` in `package-lock.json`: Dependabot has twice written a caret there, and `npm ci`
-accepts it. `npm audit --omit=dev` is run too, and an advisory that predates the bump is reported. A lockfile edit
+equals `packages["frontend"]` in `package-lock.json`: Dependabot's npm updater can write a caret there, and
+`npm ci` accepts it. Run `npm audit --omit=dev` and report any advisory that predates the bump. A lockfile edit
 runs under the `.nvmrc` Node, because an older npm drops the `libc` fields. Docs that state a bumped version move
 in the same PR.
 

@@ -90,7 +90,8 @@ with its manifest. PR #100 updates Next/eslint-config-next to 16.3.7 and Vitest 
 - **Next 16.3.8 is a security release.** Its notes list seven advisories, among them a server-side request
   forgery in Image Optimization (GHSA-cjq9-62q9-8jv4; `/_next/image` is on in the standalone build) and cache
   poisoning of SSG/ISR pages (GHSA-4jqv-mc3x-m676, GHSA-mcj8-r9mp-w47p). They were published as repository
-  advisories, and `npm audit` on 16.3.7 reported none of them. So read the release notes of each bumped
+  advisories, not yet in the GitHub Advisory Database that `npm audit` reads, so `npm audit` on 16.3.7
+  reported none of them. So read the release notes of each bumped
   package: the audit alone does not show what a bump fixes.
 - **The audit still finds what predates a bump.** `npm audit --omit=dev` on the Dependabot head reported two
   high advisories in production transitive packages the bump did not touch: `sharp` 0.35.4
