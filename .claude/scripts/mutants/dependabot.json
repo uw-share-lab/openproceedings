@@ -872,8 +872,8 @@
   {
     "label": "dependabot: npm: a missing workspace entry not reported",
     "file": ".claude/scripts/dependabot/npm_lock.py",
-    "old": "        if not isinstance(entry, dict):  # as npm_specs.check reports it: no entry to copy the manifest into\n",
-    "new": "        if False:\n"
+    "old": "        entry = packages.get(key)\n",
+    "new": "        entry = packages.get(key) or {}\n"
   },
   {
     "label": "dependabot: npm: a non-object workspace entry read as present",
