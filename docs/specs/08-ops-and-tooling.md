@@ -243,8 +243,9 @@ fields. Docs that state a bumped version move in the same PR.
 no access to the owner's machine) runs `/dependabot-review` (`.claude/commands/dependabot-review.md`) once a week.
 Its checks are scripted in `.claude/scripts/dependabot/` and run from `dev`'s copy, never the PR branch's.
 `prs.py check` gates each PR before anything of it runs: open, by Dependabot, into `dev`, its head still the sha
-fetched, every changed file one its ecosystem touches (computed by git), every commit Dependabot's with a
-signature GitHub verified. The checkers then run the checks above, and the shape of the change: `uv_lock.py`,
+fetched, its head branch a plain `dependabot/<ecosystem>/…` name, every changed file one its ecosystem touches
+(computed by git, and GitHub's file and commit lists equal to git's), every commit Dependabot's with a signature
+GitHub verified. The checkers then run the checks above, and the shape of the change: `uv_lock.py`,
 `npm_lock.py`, `docker_digest.py` and `actions_pins.py` allow no change in a file beyond its dependency versions
 and pins (no script, build requirement, `RUN` line or `permissions:` rides along). `restore_libc.py` repairs dropped
 `libc` fields; `prs.py` also checks the environment (`preflight`), lists the PRs, queues them and watches the queue. The routine then runs the tests the ecosystem

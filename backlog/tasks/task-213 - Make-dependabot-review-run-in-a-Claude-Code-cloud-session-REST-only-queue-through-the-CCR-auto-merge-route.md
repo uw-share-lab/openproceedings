@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-08 16:59'
-updated_date: '2026-10-08 17:00'
+updated_date: '2026-10-08 17:06'
 labels:
   - tooling
   - ci
@@ -39,6 +39,8 @@ Live test runs of the weekly /dependabot-review routine (decision-048, TASK-211)
 
 <!-- SECTION:NOTES:BEGIN -->
 Built on branch chore/dependabot-review-rest. Verified locally: make lint and make tooling green (dependabot 205/0, gates 882/0 after rebasing onto TASK-212). Mutants: each changed mutant run against its own case table only (prs/_common against test-dependabot.sh, record-review against test-openproceedings-gates.sh) because machine load was 90-150; all killed; make mutate-changed was not run in full. Reviews: focused security+QA, then four full-gate rounds (code, docs, review-methodologist, security, qa), last APPROVE; dispositions all fixed. Live REST reads (timeline queue events, queue refs, merge_group runs, advisories) checked from a local login; the CCR route returns 404 outside a session. AC #7 waits for the owner's cloud probe after merge: the CCR PUT/DELETE request shape (body/params undocumented; any non-2xx leaves the PR open), whether DELETE dequeues an entry, the job-log download host, and gh attestation verify's sigstore hosts. One process slip: a single sed edit to decision-048's body (later edits via the Edit tool).
+
+After the rebase onto TASK-212 (8e1b4319), make lint and make tooling are green again. c202eb9a answers an automated push security review's report that head-name validation, the queue-ref filter and URL quoting were removed (it saw an intermediate diff; all three are in the final prs.py at :115, :222, :436 and :441). It adds 15 rows (odd head names in check and list, and a crafted queue ref in watch; dependabot table 220/0), tightens HEAD_SHAPE to refuse '..', and adds 2 mutants. The dot-dot, head-shape and ref-filter mutants were run against test-dependabot.sh and killed. The URL-quoting mutant is marked equivalent, because the 40-hex ref filter runs first.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
