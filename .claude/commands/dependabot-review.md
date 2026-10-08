@@ -34,7 +34,8 @@ A PR that hits a **hard stop** is never merged by this command: it is left open 
   spec 08 §Monorepo layout "Python pin"). A new digest for the same `python` tag is fine.
 
 The four checkers in `.claude/scripts/dependabot/` (`uv_lock.py`, `npm_lock.py`, `docker_digest.py`,
-`actions_pins.py`) and `prs.py check` print `PROBLEM` for each of these, `FIX` for what this command repairs in
+`actions_pins.py`) and `prs.py check` print `PROBLEM` for each scripted stop above (all but a red check, a
+reviewer's Must and a failed `npm audit signatures`, which this command judges itself), `FIX` for what it repairs in
 the PR itself, and `ok` otherwise. Their exit status: 0 clean, 1 a PROBLEM (hard stop), 2 the check could not run
 (treat as a hard stop and say why), 3 only FIX lines (fix, commit, run the check again). No checker's exit is ever
 ignored. `prs.py list` and `restore_libc.py` are helpers; their output is described where they are used.

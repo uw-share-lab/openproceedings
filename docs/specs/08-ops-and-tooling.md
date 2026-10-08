@@ -268,7 +268,7 @@ at. The gates stay on for Dependabot PRs; exempting `dependabot[bot]` from `lear
 considered and rejected (decision-048). The routine's GitHub token is fine-grained: this repository only,
 `contents`, `pull requests`, `issues` and `actions` read and write, nothing else (no `administration`, no
 `workflows`), held in `GH_TOKEN`; it is the only credential the command uses. Without `workflows` the routine
-reviews and attests a github-actions PR but leaves the queueing to the owner (`gh pr merge <n> --auto`), named in
+reviews and attests a github-actions PR but leaves the queueing to the owner (`gh pr merge <n> --auto --match-head-commit <sha>`), named in
 its summary. The pre-push hook and the autofix hook run their tools without the token.
 
 ## Git and PR rules

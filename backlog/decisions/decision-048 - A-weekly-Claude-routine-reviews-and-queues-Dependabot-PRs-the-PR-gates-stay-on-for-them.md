@@ -68,7 +68,7 @@ The review gate of TASK-211 shaped three parts of this:
   else** (no `administration`, so it can't touch the rulesets; no `workflows`, because with it a leaked token
   could push a workflow that runs with the repository's secrets), held in `GH_TOKEN` only. So the routine
   reviews and attests a github-actions PR but doesn't queue it (queueing a change to `.github/workflows/` may
-  need `workflows`): its summary asks the owner to run `gh pr merge <n> --auto`. It also needs Node 22, npm,
+  need `workflows`): its summary asks the owner to run `gh pr merge <n> --auto --match-head-commit <sha>`. It also needs Node 22, npm,
   uv 0.12.22 or later, Python 3.11 or later, shellcheck; Playwright's Chromium and Docker when available. Where `make e2e` or
   `deploy/smoke-test.sh` can't run, the PR names the CI check that stands in (`playwright`, `web-image`). The
   tests, the reviewers' runs, the pre-push hook's `make lint` and `make tooling`, and the autofix hook's ruff,

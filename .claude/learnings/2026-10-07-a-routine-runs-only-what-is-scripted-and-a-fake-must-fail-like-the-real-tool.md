@@ -3,7 +3,7 @@
 **Key lesson:** Before handing a review to a scheduled routine, turn each judgement call into a script with an exit status (ok / FIX / PROBLEM / could-not-run) and test it against fakes that fail the way the real tool fails (npm and gh print a JSON error on stdout and exit non-zero), because a fake that only goes silent lets a "tool exit ignored" mutant survive.
 
 - **Date:** 2026-10-07 · **Task:** task-211 · **Area:** tooling
-- **Artifacts:** `.claude/commands/dependabot-review.md`, `.claude/scripts/dependabot/`, `.claude/scripts/tests/dependabot_cases.py`, `.claude/scripts/tests/dependabot_fake.py`, `.claude/scripts/mutants/dependabot.json`, `.github/dependabot.yml` (cooldown), `.githooks/pre-push`, decision-048, PRs #123–#125
+- **Artifacts:** `.claude/commands/dependabot-review.md`, `.claude/scripts/dependabot/`, `.claude/scripts/tests/dependabot_cases.py`, `.claude/scripts/tests/dependabot_fake.py`, `.claude/scripts/mutants/dependabot.json`, `.github/dependabot.yml` (cooldown), `.githooks/pre-push`, `.claude/hooks/autofix.sh`, decision-048, PRs #123–#125 (review rounds here are numbered from the focused review as round 1; the commits number from the full gate)
 
 ## What we set out to do
 Commit the procedure that merged Dependabot PRs #123–#125 as `/dependabot-review`, so a weekly cloud routine
@@ -66,5 +66,5 @@ with no context and no access to the owner's machine can run it, and script its 
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — spec 08 §CI "Dependabot", `.claude/agents/ci-engineer.md`, `.claude/skills/pr-workflow/SKILL.md`, `.claude/skills/python-standards/SKILL.md`, `.claude/skills/autolint/SKILL.md`
-- Config? — `.github/dependabot.yml` (7-day `cooldown`), `.githooks/pre-push` (lint and tooling run without the GitHub token)
-- Test or hook added? — `.claude/scripts/tests/test-dependabot.sh` (in `make tooling`), mutants in `.claude/scripts/mutants/dependabot.json`, `mypy --strict` on the scripts in `make lint`
+- Config? — `.github/dependabot.yml` (7-day `cooldown`), `.githooks/pre-push` and `.claude/hooks/autofix.sh` (their tools run without the GitHub token)
+- Test or hook added? — `.claude/scripts/tests/test-dependabot.sh` (in `make tooling`), mutants in `.claude/scripts/mutants/dependabot.json`, `mypy --strict` on the scripts in `make lint`; the token-stripping rows in `.claude/hooks/tests/test-openproceedings-gates.sh` with mutants in `.claude/scripts/mutants/gates.json`
