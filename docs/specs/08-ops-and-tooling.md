@@ -247,11 +247,11 @@ fetched, every changed file one its ecosystem touches (computed by git), every c
 signature GitHub verified. The checkers then run the checks above, and the shape of the change: `uv_lock.py`,
 `npm_lock.py`, `docker_digest.py` and `actions_pins.py` allow no change in a file beyond its dependency versions
 and pins (no script, build requirement, `RUN` line or `permissions:` rides along). `restore_libc.py` repairs dropped
-`libc` fields; `prs.py` also lists the PRs and watches the queue. The routine then runs the tests the ecosystem
+`libc` fields; `prs.py` also checks the environment (`preflight`), lists the PRs, queues them and watches the queue. The routine then runs the tests the ecosystem
 calls for (without the GitHub credential in their environment; `.githooks/pre-push` strips it from its `make lint`
 and `make tooling` as well), the reviewers, the dispositions, the review
-record and attestation, the `no-learning` label unless something was learned, and `gh pr merge <n> --auto
---match-head-commit <sha>`. It fixes what the PR itself can fix: a manifest/lock pin, dropped `libc` fields, a doc
+record and attestation (`record-review.py --attest --pr <n>`), the `no-learning` label unless something was
+learned, and `prs.py queue <n> --head <sha>`. It fixes what the PR itself can fix: a manifest/lock pin, dropped `libc` fields, a doc
 that states the old version, a review finding. It may merge, through the queue only, a PR that passes all of
 that. It never merges, and leaves open with a comment for the owner, a PR with:
 
@@ -276,9 +276,27 @@ ends with a summary for its log: merged, left open (with the reason), not review
 at. The gates stay on for Dependabot PRs; exempting `dependabot[bot]` from `learnings` and `review-attested` was
 considered and rejected (decision-048). The routine's GitHub token is fine-grained: this repository only,
 `contents`, `pull requests`, `issues` and `actions` read and write, nothing else (no `administration`, no
-`workflows`), held in `GH_TOKEN`; it is the only credential the command uses. Without `workflows` the routine
+`workflows`); it is the only credential the command uses. Without `workflows` the routine
 reviews and attests a github-actions PR but leaves the queueing to the owner (`gh pr merge <n> --auto --match-head-commit <sha>`), named in
 its summary. The pre-push hook and the autofix hook run their tools without the token.
+
+*Cloud and local* (TASK-213). A Claude Code cloud session refuses every GitHub GraphQL call with HTTP 403 ("GitHub
+GraphQL is not available from Claude Code sessions; …"), so `gh pr list`, `view`, `checks` and `merge` all fail
+there, and its token is a network secret: `GH_TOKEN` and `GITHUB_TOKEN` hold placeholders (`gh auth status` calls
+them invalid) and an egress proxy adds the real token to requests for api.github.com, so no process in the session
+holds it. The procedure therefore uses REST only (`gh api repos/<repo>/...`) and checks auth with a real call (`gh
+api user`). `prs.py preflight` tells the environment by asking GraphQL for the viewer: the session's 403 message
+is **cloud**, an answer is **local** (a maintainer's clone with a real `gh` login), anything else stops the run; in
+the cloud it also requires that `gh` has no stored login (a file dependency code could read). Turning auto-merge
+on is the one step that differs: `prs.py queue` uses the session's CCR route in the cloud (`PUT
+repos/<repo>/pulls/<n>/ccr/auto_merge`; `DELETE` turns it off) and `gh pr merge <n> --auto --match-head-commit
+<sha>` locally. The CCR route's request shape isn't documented, so any non-2xx leaves the PR open for the owner,
+and it has no `--match-head-commit`: `queue` reads the head before and after the PUT and turns auto-merge off
+again if it moved. A push between that second read and GitHub acting on the PUT is a residual race; the merge
+queue's `review-attested` check closes it, since the queue build requires each PR's body to attest the exact head
+it merges, and the routine attested only the head it reviewed (decision-048). `prs.py watch` polls REST: the PR's
+`merged` and `auto_merge`, the queue's `gh-readonly-queue/dev/pr-<n>-<sha>` build branch, and the check runs, and
+names a queue build run that hangs so the routine can cancel and rerun it through the Actions REST endpoints.
 
 ## Git and PR rules
 

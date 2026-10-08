@@ -35,11 +35,17 @@ class ToolError(Exception):
 
 
 def run(
-    cmd: list[str], *, ok_codes: tuple[int, ...] = (0,), cwd: str | None = None
+    cmd: list[str],
+    *,
+    ok_codes: tuple[int, ...] = (0,),
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command (never through a shell). Raises ToolError on a missing tool, a timeout or a bad exit."""
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT, check=False, cwd=cwd)
+        r = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=TIMEOUT, check=False, cwd=cwd, env=env
+        )
     except FileNotFoundError as e:
         raise ToolError(f"{cmd[0]} is not installed") from e
     except subprocess.TimeoutExpired as e:

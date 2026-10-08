@@ -77,7 +77,9 @@ tempted to bypass it.
   `npm audit --omit=dev`, lock edits under the `.nvmrc` Node). A weekly routine runs
   them as `/dependabot-review`, with the scripts in `.claude/scripts/dependabot/` (decision-048, TASK-211); a
   change to a check changes the script, its rows in `.claude/scripts/tests/dependabot_cases.py` and its
-  mutants in `.claude/scripts/mutants/dependabot.json` together. Its `uv` entry
+  mutants in `.claude/scripts/mutants/dependabot.json` together. The routine is a Claude Code cloud session,
+  which refuses GitHub GraphQL (so every `gh pr` command): the procedure and scripts call GitHub through REST
+  only, and queue through the session's CCR auto-merge route (TASK-213, decision-048's addendum). Its `uv` entry
   ignores `tantivy`, whose upgrade must bump `SCHEMA_VERSION` by hand (spec 08 §Release), and every image a
   `deploy/` build pulls stays digest-pinned (`check_digest_pins.py`, spec 08 §Deploy).
 - Secrets: CI never needs OpenReview credentials — tests use recorded HTTP fixtures. No `data/` in

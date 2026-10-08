@@ -584,7 +584,7 @@
   {
     "label": "dependabot: prs: head not compared with GitHub's",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "    if pr[\"headRefOid\"] != sha:\n",
+    "old": "    if pr[\"head\"][\"sha\"] != sha:\n",
     "new": "    if False:\n"
   },
   {
@@ -608,8 +608,8 @@
   {
     "label": "dependabot: prs: a merged PR counts as unqueued",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "            open_ = pr.get(\"state\") == \"OPEN\"\n",
-    "new": "            open_ = True\n"
+    "old": "unqueued.get(n, 0) + 1 if s.state == \"open\" and",
+    "new": "unqueued.get(n, 0) + 1 if True and"
   },
   {
     "label": "dependabot: common: first header block kept, not the last",
@@ -710,13 +710,13 @@
   {
     "label": "dependabot: prs: closed or non-dev PRs accepted",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "    if pr[\"state\"] != \"OPEN\" or pr[\"baseRefName\"] != \"dev\":\n",
+    "old": "    if pr[\"state\"] != \"open\" or pr[\"base\"][\"ref\"] != \"dev\":\n",
     "new": "    if False:\n"
   },
   {
     "label": "dependabot: prs: any PR author accepted",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "    if pr[\"author\"][\"login\"] not in (\"app/dependabot\", \"dependabot[bot]\"):\n",
+    "old": "    if (pr.get(\"user\") or {}).get(\"login\") != BOT_LOGIN:\n",
     "new": "    if False:\n"
   },
   {
@@ -880,5 +880,173 @@
     "file": ".claude/scripts/dependabot/npm_specs.py",
     "old": "            return [f\"no package.json or package-lock.json in {root}: nothing to compare (a wrong --root?)\"]\n",
     "new": "            return []\n"
+  },
+  {
+    "label": "dependabot: prs: renames hide a file's old path",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "\"--no-renames\", ",
+    "new": ""
+  },
+  {
+    "label": "dependabot: prs: GitHub's file list ignored",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        paths.add(f[\"filename\"])\n",
+    "new": "        pass\n"
+  },
+  {
+    "label": "dependabot: prs: a rename's old path on GitHub ignored",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if f.get(\"previous_filename\"):\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: prs: GitHub's and git's commits not compared",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if set(remote) != set(commits):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: GitHub's commit author not checked",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if (remote[c].get(\"author\") or {}).get(\"login\") != BOT_LOGIN:\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: prs: list shows anyone's PRs",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if (pr.get(\"user\") or {}).get(\"login\") == BOT_LOGIN\n",
+    "new": "        if True\n"
+  },
+  {
+    "label": "dependabot: prs: only the first page read",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if len(batch) < PER_PAGE:\n",
+    "new": "        if True:\n"
+  },
+  {
+    "label": "dependabot: prs: cloud never detected",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if GRAPHQL_BLOCKED in r.stdout + r.stderr:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: any GraphQL failure read as cloud",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if GRAPHQL_BLOCKED in r.stdout + r.stderr:\n",
+    "new": "    if True:\n"
+  },
+  {
+    "label": "dependabot: prs: token variables reach gh auth token",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": ", ok_codes=(0, 1), env=clean)",
+    "new": ", ok_codes=(0, 1))"
+  },
+  {
+    "label": "dependabot: prs: a stored login in the cloud accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if has_stored:\n            rep.problem(",
+    "new": "        if False:\n            rep.problem("
+  },
+  {
+    "label": "dependabot: prs: no head read after queueing",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    moved = after[\"state\"] != \"open\" or after[\"head\"][\"sha\"] != sha\n",
+    "new": "    moved = False\n"
+  },
+  {
+    "label": "dependabot: prs: only the state read after queueing",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": " or after[\"head\"][\"sha\"] != sha\n",
+    "new": "\n"
+  },
+  {
+    "label": "dependabot: prs: auto-merge never turned off again",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if moved or after.get(\"auto_merge\"):\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: prs: auto-merge turned off only on a move",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if moved or after.get(\"auto_merge\"):\n",
+    "new": "        if moved:\n"
+  },
+  {
+    "label": "dependabot: prs: a failed turn-off ignored",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "            if not off:\n",
+    "new": "            if False:\n"
+  },
+  {
+    "label": "dependabot: prs: github-actions PRs queued",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if ecosystem(pr[\"head\"][\"ref\"]) == \"github_actions\":\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: queue goes on past a problem",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if rep.problems:\n        rep.finish()\n    mode = detect_mode()",
+    "new": "    mode = detect_mode()"
+  },
+  {
+    "label": "dependabot: prs: local queue without --match-head-commit",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "\"--auto\", \"--match-head-commit\", sha]",
+    "new": "\"--auto\"]"
+  },
+  {
+    "label": "dependabot: prs: a failed PUT ignored",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if not enabled:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: turning off PUTs again",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "\"PUT\" if on else \"DELETE\"",
+    "new": "\"PUT\""
+  },
+  {
+    "label": "dependabot: prs: a queue branch not read as queued",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": " and not s.auto and not s.queue else 0",
+    "new": " and not s.auto else 0"
+  },
+  {
+    "label": "dependabot: prs: auto-merge not read as queued",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": " and not s.auto and not s.queue else 0",
+    "new": " and not s.queue else 0"
+  },
+  {
+    "label": "dependabot: prs: merged read from state alone",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "state = \"merged\" if pr.get(\"merged\") or pr.get(\"merged_at\") else pr[\"state\"]",
+    "new": "state = pr[\"state\"]"
+  },
+  {
+    "label": "dependabot: prs: every queue run is hung",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": " and age_days(r[\"created_at\"]) * 1440 >= hung_min:",
+    "new": ":"
+  },
+  {
+    "label": "dependabot: prs: a hung run named every poll",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "if r[\"id\"] not in told and ",
+    "new": "if "
+  },
+  {
+    "label": "dependabot: prs: failed checks read as green",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if any(r.get(\"conclusion\") in FAILED for r in runs):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: pending checks read as green",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if any(r.get(\"status\") != \"completed\" for r in runs):\n",
+    "new": "    if False:\n"
   }
 ]

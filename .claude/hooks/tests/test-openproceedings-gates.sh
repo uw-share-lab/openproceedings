@@ -234,6 +234,35 @@ check_cmd err "BOM + spaced [ MUST ], undispositioned" python3 "$RECORD" APPROVE
 : > "$TMP/empty.md"
 check_cmd err "empty dispositions file"               python3 "$RECORD" APPROVE "$TMP/empty.md"
 
+echo "== record-review.py --attest (a fake gh; --pr reads over REST, TASK-213)"
+mkdir -p "$TMP/ghbin"
+# the fake gh: logs each call; `api repos/o/r/pulls/5` prints $TMP/pr5.json; `pr view` fails as $GH_VIEW says
+cat > "$TMP/ghbin/gh" <<EOF
+#!/bin/sh
+printf '%s\n' "\$*" >> "$TMP/gh.log"
+case "\$1 \$2" in
+  "api repos/o/r/pulls/5") cat "$TMP/pr5.json"; exit 0 ;;
+  "api -X") exit 0 ;;
+  "pr view") echo "\$GH_VIEW" >&2; exit 1 ;;
+esac
+exit 3
+EOF
+chmod +x "$TMP/ghbin/gh"
+HEADSHA=$(g rev-parse HEAD)
+attest_case() {  # attest_case <want> <label> <pr state> <pr head> [record-review args...]
+  local want="$1" label="$2" state="$3" prhead="$4"; shift 4
+  printf '{"state":"%s","head":{"sha":"%s"},"body":"Summary"}' "$state" "$prhead" > "$TMP/pr5.json"; : > "$TMP/gh.log"
+  check_cmd "$want" "$label" env PATH="$TMP/ghbin:$PATH" GH_VIEW="${GH_VIEW-}" python3 "$RECORD" APPROVE "$TMP/none.md" --attest "$@"
+}
+attest_case ok  "--pr: an open PR at HEAD is attested" open "$HEADSHA" --pr 5 --repo o/r
+if grep -q "op-review: $HEADSHA APPROVE" "$TMP/gh.log" && grep -q '^api -X PATCH repos/o/r/pulls/5' "$TMP/gh.log"; then pass=$((pass+1)); echo "  ok   --pr: the PATCH carries the attestation for HEAD"
+else fail=$((fail+1)); echo "  FAIL --pr: no PATCH with the attestation: $(cat "$TMP/gh.log")"; fi
+attest_case err "--pr: a PR at another head is refused" open "$(printf 'f%.0s' $(seq 40))" --pr 5 --repo o/r
+if grep -q PATCH "$TMP/gh.log"; then fail=$((fail+1)); echo "  FAIL --pr: patched a PR at another head"; else pass=$((pass+1)); echo "  ok   --pr: nothing written to a PR at another head"; fi
+attest_case err "--pr: a closed PR is refused"         closed "$HEADSHA" --pr 5 --repo o/r
+GH_VIEW="no pull requests found for branch \"feat\"" attest_case ok "no PR yet: told to attest after gh pr create" open "$HEADSHA"
+GH_VIEW="GitHub GraphQL is not available from Claude Code sessions" attest_case err "gh pr view failing otherwise is an error" open "$HEADSHA"
+
 echo "== protect-data-dir.sh"
 P=protect-data-dir.sh
 check $P block "Write into data/indexes/"             "$(payload_file Write "$REPO/data/indexes/abc/meta.json")"

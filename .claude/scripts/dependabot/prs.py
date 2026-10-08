@@ -1,41 +1,76 @@
 #!/usr/bin/env python3
-"""List, check and watch the open Dependabot PRs into dev (/dependabot-review steps 1 and 9; TASK-211).
+"""Set up, list, check, queue and watch the open Dependabot PRs into dev (/dependabot-review; TASK-211, TASK-213).
 
+    python3 .claude/scripts/dependabot/prs.py preflight
     python3 .claude/scripts/dependabot/prs.py list
     python3 .claude/scripts/dependabot/prs.py check <n> --head <sha>
-    python3 .claude/scripts/dependabot/prs.py watch <n> [<n> ...] [--interval 45] [--timeout 120]
+    python3 .claude/scripts/dependabot/prs.py queue <n> --head <sha>
+    python3 .claude/scripts/dependabot/prs.py watch <n> [<n> ...] [--interval 45] [--timeout 120] [--hung 40]
 
-`list` prints one block per open PR by app/dependabot into `dev`: number, ecosystem, head branch and title. It
-exits 0 (a listing), or 2 when gh fails.
+Every GitHub call is REST (`gh api repos/...`), because a Claude Code cloud session refuses GraphQL with HTTP 403
+("GitHub GraphQL is not available from Claude Code sessions; …") and so every `gh pr` command that uses it
+(`gh pr list`, `gh pr view`, `gh pr merge`, `gh pr checks`). The one call that differs by environment is
+enabling auto-merge, which `queue` makes after detecting where it runs (`detect_mode`):
+
+- **cloud**: a Claude Code cloud session. GraphQL answers 403 with the message above. Auth is a network secret:
+  GH_TOKEN and GITHUB_TOKEN hold placeholders and an egress proxy adds the real credential to requests for
+  api.github.com, so no process in the session ever holds the token. Auto-merge goes through the session's CCR
+  route, `PUT repos/<repo>/pulls/<n>/ccr/auto_merge` (and `DELETE` to turn it off).
+- **local**: a maintainer's clone with a real `gh` login. GraphQL answers; auto-merge is `gh pr merge <n> --auto
+  --match-head-commit <sha>`.
+- anything else (GraphQL failing another way) is an error: the run stops rather than guess.
+
+`preflight` (step 0) checks `gh api user` answers, prints the mode, and checks the credential: in the cloud gh
+must have no stored login (one would be a file dependency code could read, which step 5 can't strip), and a real
+token in GH_TOKEN or GITHUB_TOKEN is reported (step 5 strips those). Locally a stored login is allowed: it is the
+maintainer's own machine, where `make test` runs with it every day. A checker: ok / PROBLEM; exit 0, 1 or 2.
+
+`list` prints one block per open PR by dependabot[bot] into `dev`: number, ecosystem, head branch and title
+(`GET repos/<repo>/pulls?state=open&base=dev`, every page). Exit 0, or 2 when gh fails.
 
 `check` is the hard gate before anything of the PR runs, and it is a checker (ok / PROBLEM; exit 0, 1 or 2). With
-the PR's head fetched locally as `<sha>`, it requires: the PR is open, by app/dependabot, into `dev`, and its head
-on GitHub is still `<sha>` (nothing pushed since the fetch); every file changed between the merge base with
-origin/dev and `<sha>`, computed by git rather than read from GitHub's file list, is one that PR's ecosystem may
-touch (uv: `uv.lock` and the two `pyproject.toml`s; npm: `package-lock.json` and the two `package.json`s; docker:
-a Dockerfile under `deploy/`; github-actions: a workflow or a composite action's `action.yml`); and every commit
-in that range is Dependabot's (author `dependabot[bot]`, committer GitHub) with a signature GitHub verified. A PR
-someone else pushed to (the routine itself on an earlier run included) is left for the owner. The identity is
-defence in depth only (a writer can set those names, and GitHub verifies web-flow commits it makes for anyone);
-what stops a hostile push is that every checker allows no change beyond versions and pins. A title naming
-`tantivy` is a PROBLEM too (hand-only, spec 08 §Release).
+the PR's head fetched locally as `<sha>`, it requires: the PR is open, by dependabot[bot], into `dev`, and its
+head on GitHub is still `<sha>` (nothing pushed since the fetch); every file changed between the merge base with
+origin/dev and `<sha>` (git, renames as two paths) and every file GitHub lists for the PR (a rename's old path
+too) is one that PR's ecosystem may touch (uv: `uv.lock` and the two `pyproject.toml`s; npm:
+`package-lock.json` and the two `package.json`s; docker: a Dockerfile under `deploy/`; github-actions: a workflow
+or a composite action's `action.yml`); git's commits in that range are exactly GitHub's commits for the PR; and
+every one is Dependabot's (git author `dependabot[bot]`, committer GitHub, GitHub's author login
+`dependabot[bot]`) with a signature GitHub verified. A PR someone else pushed to (the routine itself on an
+earlier run included) is left for the owner. The identity is defence in depth only (a writer can set those
+names, and GitHub verifies web-flow commits it makes for anyone); what stops a hostile push is that every
+checker allows no change beyond versions and pins. A title naming `tantivy` is a PROBLEM too (hand-only,
+spec 08 §Release).
 
-`watch` polls GitHub's GraphQL API every `--interval` seconds and prints a line whenever a PR's state,
-merge-queue entry or check rollup changes. While a PR waits in the merge queue its `autoMergeRequest` reads
-null and `mergeQueueEntry` holds its place, so an open PR with neither, two polls running, has dropped out of
-the queue. Exit 0 when every PR merged; 1 when one was closed unmerged or dropped out of the queue (the line
-says which: see its queue run, then re-queue it); 2 when gh fails; 4 at `--timeout` minutes.
+`queue` turns auto-merge on (on `dev` that puts the PR in the merge queue once its checks pass) only for an open
+Dependabot PR into `dev` whose head is still `<sha>`, and never for a github-actions PR (the routine's token has
+no `workflows` permission: the owner queues those). It reads the head again right after: if the head moved,
+the PR closed, or the PUT failed but left auto-merge on, it turns auto-merge off again and prints a PROBLEM. In
+the cloud there is no `--match-head-commit`: a push between the read after the PUT and the queue's build is the
+residual race, and the queue's `review-attested` check (the body must attest the head the queue merges) is what
+stops it (decision-048). Exit 0 queued; 1 not queued (leave the PR open for the owner); 2 a call failed, and the
+message says whether auto-merge may still be on.
+
+`watch` polls REST every `--interval` seconds and prints a line whenever a PR's state, auto-merge, queue
+presence or check rollup changes. A PR is in the queue while a `gh-readonly-queue/dev/pr-<n>-<sha>` branch
+exists for it (the queue's build branch); an open PR with neither auto-merge nor such a branch, two polls
+running, has dropped out of the queue. A queue build run still going after `--hung` minutes is printed once as
+`HUNG` with its run id (cancel and rerun it: step 9). Exit 0 when every PR merged; 1 when one was closed unmerged
+or dropped out of the queue (the line says which); 2 when gh fails; 4 at `--timeout` minutes.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 import sys
 import time
+from dataclasses import dataclass
 from typing import Any
 
-from _common import Report, ToolError, changed_files, main_guard, resolve_refs, run, run_json
+from _common import Report, ToolError, age_days, main_guard, resolve_refs, run, run_json
 
 REPO = "uw-share-lab/openproceedings"
 ALLOWED = {
@@ -47,12 +82,21 @@ ALLOWED = {
     ),
 }
 HAND_ONLY_WORDS = ("tantivy",)
+BOT_LOGIN = "dependabot[bot]"
 DEPENDABOT = (
     "dependabot[bot]",
     "49699333+dependabot[bot]@users.noreply.github.com",
     "GitHub",
     "noreply@github.com",
 )
+PER_PAGE = 100
+MAX_PAGES = 30
+# What a Claude Code cloud session answers for any GraphQL call (HTTP 403); its presence is how `cloud` is told.
+GRAPHQL_BLOCKED = "GitHub GraphQL is not available from Claude Code sessions"
+# A GitHub token's shape (classic, OAuth, app, refresh, fine-grained): a placeholder doesn't have it.
+TOKEN_SHAPE = re.compile(r"gh[opsur]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}")
+TOKEN_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
+FAILED = {"failure", "timed_out", "cancelled", "action_required", "startup_failure", "stale"}
 
 
 def ecosystem(head: str) -> str:
@@ -60,46 +104,134 @@ def ecosystem(head: str) -> str:
     return parts[1] if len(parts) > 2 and parts[0] == "dependabot" else "?"
 
 
+def api(path: str) -> Any:
+    """GET one REST resource (`gh api` prints the body; a non-2xx exits non-zero → ToolError)."""
+    return run_json(["gh", "api", path])
+
+
+def api_pages(path: str, key: str | None = None) -> list[Any]:
+    """Every page of a REST list (`key`: the list's field in an object answer, as check-runs has)."""
+    sep = "&" if "?" in path else "?"
+    items: list[Any] = []
+    for page in range(1, MAX_PAGES + 1):
+        got = api(f"{path}{sep}per_page={PER_PAGE}&page={page}")
+        batch = got.get(key) if key and isinstance(got, dict) else got
+        if not isinstance(batch, list):
+            raise ToolError(f"gh api {path}: not a list")
+        items += batch
+        if len(batch) < PER_PAGE:
+            return items
+    raise ToolError(f"gh api {path}: more than {MAX_PAGES} pages")
+
+
+def get_pr(number: int) -> dict[str, Any]:
+    pr = api(f"repos/{REPO}/pulls/{number}")
+    if not isinstance(pr, dict):
+        raise ToolError(f"gh api repos/{REPO}/pulls/{number}: not an object")
+    return pr
+
+
+def detect_mode() -> str:
+    """`cloud` when GraphQL is refused the way a Claude Code cloud session refuses it, `local` when it answers."""
+    r = run(["gh", "api", "graphql", "-f", "query={viewer{login}}"], ok_codes=(0, 1))
+    if r.returncode == 0:
+        try:
+            login = json.loads(r.stdout)["data"]["viewer"]["login"]
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            raise ToolError(f"GraphQL answered without a login: {r.stdout.strip()[:200]}") from e
+        if login:
+            return "local"
+        raise ToolError("GraphQL answered an empty login")
+    if GRAPHQL_BLOCKED in r.stdout + r.stderr:
+        return "cloud"
+    raise ToolError(
+        f"GraphQL failed, but not as a Claude Code session refuses it: {(r.stdout + r.stderr).strip()[:300]}"
+    )
+
+
+def preflight() -> None:
+    rep = Report("preflight")
+    login = run(["gh", "api", "user", "--jq", ".login"]).stdout.strip()
+    if not login:
+        raise ToolError("gh api user answered no login")
+    rep.ok(f"gh api user: {login}")
+    mode = detect_mode()
+    rep.ok(f"mode: {mode}")
+    held = [v for v in TOKEN_VARS if TOKEN_SHAPE.search(os.environ.get(v, ""))]
+    clean = {k: v for k, v in os.environ.items() if k not in TOKEN_VARS}
+    stored = run(["gh", "auth", "token"], ok_codes=(0, 1), env=clean)
+    has_stored = stored.returncode == 0 and bool(stored.stdout.strip())
+    if held:
+        rep.ok(f"credential: a token in {', '.join(held)}; step 5 strips it from what runs dependency code")
+    if mode == "cloud":
+        if has_stored:
+            rep.problem(
+                "gh has a stored login in this cloud session: a file dependency code could read, which step 5 "
+                "can't strip; remove it from the environment's setup (the token belongs in the network secret)"
+            )
+        elif not held:
+            rep.ok(
+                "credential: a network secret (the proxy adds it for api.github.com; no process here holds it, "
+                "and gh has no stored login)"
+            )
+    elif has_stored:
+        rep.ok("credential: gh's stored login (a maintainer's own machine; step 5 hides gh's config)")
+    rep.finish()
+
+
 def list_prs() -> None:
-    prs = run_json(
-        [
-            "gh", "pr", "list", "--repo", REPO, "--author", "app/dependabot", "--base", "dev",
-            "--state", "open", "--limit", "100", "--json", "number,title,headRefName,url",
-        ]
-    )  # fmt: skip
-    if not isinstance(prs, list):
-        raise ToolError("gh pr list did not return a list")
+    prs = [
+        pr
+        for pr in api_pages(f"repos/{REPO}/pulls?state=open&base=dev")
+        if (pr.get("user") or {}).get("login") == BOT_LOGIN
+    ]
     print(f"{len(prs)} open Dependabot PR(s) into dev")
     for pr in sorted(prs, key=lambda p: p["number"]):
-        print(f"#{pr['number']} [{ecosystem(pr['headRefName'])}] {pr['headRefName']}\n    {pr['title']}")
+        head = pr["head"]["ref"]
+        print(f"#{pr['number']} [{ecosystem(head)}] {head}\n    {pr['title']}")
+
+
+def pr_problems(rep: Report, pr: dict[str, Any], sha: str) -> None:
+    """What `check` and `queue` both require of the PR as GitHub has it now."""
+    if pr["state"] != "open" or pr["base"]["ref"] != "dev":
+        rep.problem(f"the PR is {pr['state']} into {pr['base']['ref']}, not an open PR into dev")
+    if (pr.get("user") or {}).get("login") != BOT_LOGIN:
+        rep.problem(f"the PR was opened by {(pr.get('user') or {}).get('login')}, not Dependabot")
+    if pr["head"]["sha"] != sha:
+        rep.problem(f"GitHub's head is {pr['head']['sha'][:12]}, not the fetched {sha[:12]}: fetch again")
+    if any(w in pr["title"].lower() for w in HAND_ONLY_WORDS):
+        rep.problem("the title names a hand-only dependency (tantivy, spec 08 §Release)")
 
 
 def check_pr(number: int, head: str) -> None:
     rep = Report(f"PR #{number}")
     sha = run(["git", "rev-parse", "--verify", f"{head}^{{commit}}"]).stdout.strip()
-    fields = "state,author,baseRefName,headRefName,headRefOid,title"
-    pr = run_json(["gh", "pr", "view", str(number), "--repo", REPO, "--json", fields])
-    if pr["state"] != "OPEN" or pr["baseRefName"] != "dev":
-        rep.problem(f"the PR is {pr['state']} into {pr['baseRefName']}, not an open PR into dev")
-    if pr["author"]["login"] not in ("app/dependabot", "dependabot[bot]"):
-        rep.problem(f"the PR was opened by {pr['author']['login']}, not Dependabot")
-    if pr["headRefOid"] != sha:
-        rep.problem(f"GitHub's head is {pr['headRefOid'][:12]}, not the fetched {sha[:12]}: fetch again")
-    if any(w in pr["title"].lower() for w in HAND_ONLY_WORDS):
-        rep.problem("the title names a hand-only dependency (tantivy, spec 08 §Release)")
-    eco = ecosystem(pr["headRefName"])
+    pr = get_pr(number)
+    pr_problems(rep, pr, sha)
+    eco = ecosystem(pr["head"]["ref"])
     allowed = ALLOWED.get(eco)
     base, _ = resolve_refs(None, sha)
-    paths = changed_files(base, sha)
+    diff = run(["git", "diff", "--name-only", "--no-renames", "-z", f"{base}..{sha}"]).stdout
+    paths = {p for p in diff.split("\0") if p}
+    for f in api_pages(f"repos/{REPO}/pulls/{number}/files"):
+        paths.add(f["filename"])
+        if f.get("previous_filename"):
+            paths.add(f["previous_filename"])
     if allowed is None:
         rep.problem(f"ecosystem {eco!r} is not one the routine reviews")
     else:
-        for path in paths:
+        for path in sorted(paths):
             if not allowed.fullmatch(path):
                 rep.problem(f"{path} is outside what a {eco} update touches")
     commits = run(["git", "rev-list", f"{base}..{sha}"]).stdout.split()
     if not commits:
         rep.problem("no commits between the merge base and the head")
+    remote = {c["sha"]: c for c in api_pages(f"repos/{REPO}/pulls/{number}/commits")}
+    if set(remote) != set(commits):
+        rep.problem(
+            f"GitHub lists {len(remote)} commit(s) for the PR and git {len(commits)} past the merge base, not the "
+            "same ones: fetch origin dev and the head again"
+        )
     for c in commits:
         who = tuple(
             run(["git", "log", "-1", "--format=%an%x00%ae%x00%cn%x00%ce", c]).stdout.strip().split("\0")
@@ -109,7 +241,11 @@ def check_pr(number: int, head: str) -> None:
                 f"commit {c[:12]} is by {who[0]} <{who[1]}>, committed by {who[2]}: not Dependabot's alone"
             )
             continue
-        verification = run_json(["gh", "api", f"repos/{REPO}/commits/{c}"])["commit"]["verification"]
+        if c not in remote:
+            continue  # the set comparison above already stopped the PR
+        if (remote[c].get("author") or {}).get("login") != BOT_LOGIN:
+            rep.problem(f"commit {c[:12]}: GitHub doesn't attribute it to {BOT_LOGIN}")
+        verification = remote[c]["commit"]["verification"]
         if verification.get("verified") is not True:
             rep.problem(
                 f"commit {c[:12]}: GitHub doesn't verify its signature ({verification.get('reason')})"
@@ -119,51 +255,113 @@ def check_pr(number: int, head: str) -> None:
     rep.finish()
 
 
-QUERY = """query{repository(owner:"%s",name:"%s"){%s}}"""
-FIELDS = (
-    "state mergeQueueEntry{state position} autoMergeRequest{enabledAt} "
-    "commits(last:1){nodes{commit{statusCheckRollup{state}}}}"
-)
+def auto_merge(mode: str, number: int, on: bool, sha: str) -> tuple[bool, str]:
+    """Turn auto-merge on (at `sha`) or off. (succeeded, what gh said)."""
+    if mode == "cloud":
+        path = f"repos/{REPO}/pulls/{number}/ccr/auto_merge"
+        cmd = ["gh", "api", "-X", "PUT" if on else "DELETE", path]
+    elif on:
+        cmd = ["gh", "pr", "merge", str(number), "--repo", REPO, "--auto", "--match-head-commit", sha]
+    else:
+        cmd = ["gh", "pr", "merge", str(number), "--repo", REPO, "--disable-auto"]
+    r = run(cmd, ok_codes=(0, 1))
+    return r.returncode == 0, (r.stderr.strip() or r.stdout.strip())[:300]
 
 
-def poll(numbers: list[int]) -> dict[int, dict[str, Any]]:
-    owner, name = REPO.split("/")
-    body = " ".join(f"p{n}:pullRequest(number:{n}){{{FIELDS}}}" for n in numbers)
-    data = run_json(["gh", "api", "graphql", "-f", f"query={QUERY % (owner, name, body)}"])
-    try:
-        repo = data["data"]["repository"]
-        return {n: repo[f"p{n}"] for n in numbers}
-    except (KeyError, TypeError) as e:
-        raise ToolError(f"unexpected GraphQL answer: {str(data)[:200]}") from e
+def queue_pr(number: int, head: str) -> None:
+    rep = Report(f"queue #{number}")
+    sha = run(["git", "rev-parse", "--verify", f"{head}^{{commit}}"]).stdout.strip()
+    pr = get_pr(number)
+    pr_problems(rep, pr, sha)
+    if ecosystem(pr["head"]["ref"]) == "github_actions":
+        rep.problem("a github-actions PR is queued by the owner (the token has no `workflows` permission)")
+    if rep.problems:
+        rep.finish()
+    mode = detect_mode()
+    rep.ok(f"mode: {mode}")
+    enabled, said = auto_merge(mode, number, True, sha)
+    after = get_pr(number)
+    moved = after["state"] != "open" or after["head"]["sha"] != sha
+    if not enabled:
+        rep.problem(f"turning auto-merge on failed: {said}")
+    if moved:
+        rep.problem(f"the PR changed while it was queued: {after['state']} at {after['head']['sha'][:12]}")
+    if rep.problems:
+        if moved or after.get("auto_merge"):
+            off, why = auto_merge(mode, number, False, sha)
+            if not off:
+                raise ToolError(
+                    f"auto-merge may still be on for #{number} and could not be turned off ({why}): the owner "
+                    "must turn it off by hand"
+                )
+            rep.ok("auto-merge turned off again")
+        rep.finish()
+    rep.ok(f"auto-merge on at {sha[:12]} ({mode}); the queue takes it once its checks pass")
+    rep.finish()
 
 
-def describe(pr: dict[str, Any]) -> str:
-    entry = pr.get("mergeQueueEntry") or {}
-    nodes = (pr.get("commits") or {}).get("nodes") or [{}]
-    rollup = ((nodes[-1].get("commit") or {}).get("statusCheckRollup") or {}).get("state")
-    queue = f"queue={entry.get('state')}#{entry.get('position')}" if entry else "queue=-"
-    auto = " auto-merge" if pr.get("autoMergeRequest") else ""
-    return f"{pr.get('state')} {queue}{auto} checks={rollup or '-'}"
+@dataclass
+class Snap:
+    state: str  # open | closed | merged
+    auto: bool
+    queue: list[str]  # the queue's build branches for this PR
+    checks: str
+    runs: list[dict[str, Any]]  # the queue's build runs still going
+
+    def line(self) -> str:
+        queue = "queue=building" if self.queue else "queue=-"
+        auto = " auto-merge" if self.auto else ""
+        return f"{self.state} {queue}{auto} checks={self.checks}"
 
 
-def watch(numbers: list[int], interval: float, timeout_min: float) -> None:
+def rollup(runs: list[dict[str, Any]]) -> str:
+    if not runs:
+        return "-"
+    if any(r.get("conclusion") in FAILED for r in runs):
+        return "failure"
+    if any(r.get("status") != "completed" for r in runs):
+        return "pending"
+    return "success"
+
+
+def snap(number: int) -> Snap:
+    pr = get_pr(number)
+    state = "merged" if pr.get("merged") or pr.get("merged_at") else pr["state"]
+    refs = api(f"repos/{REPO}/git/matching-refs/heads/gh-readonly-queue/dev/pr-{number}-")
+    if not isinstance(refs, list):
+        raise ToolError("gh api git/matching-refs: not a list")
+    branches = [r["ref"].removeprefix("refs/heads/") for r in refs]
+    sha = pr["head"]["sha"]
+    checks = rollup(api_pages(f"repos/{REPO}/commits/{sha}/check-runs", key="check_runs"))
+    going: list[dict[str, Any]] = []
+    for b in branches:
+        got = api(f"repos/{REPO}/actions/runs?event=merge_group&branch={b}&per_page={PER_PAGE}")
+        going += [r for r in got["workflow_runs"] if r.get("status") != "completed"]
+    return Snap(state, bool(pr.get("auto_merge")), branches, checks, going)
+
+
+def watch(numbers: list[int], interval: float, timeout_min: float, hung_min: float) -> None:
     deadline = time.monotonic() + timeout_min * 60
     last: dict[int, str] = {}
     unqueued: dict[int, int] = {}
+    told: set[int] = set()
     while True:
-        states = poll(numbers)
-        for n, pr in states.items():
-            line = describe(pr)
+        states = {n: snap(n) for n in numbers}
+        for n, s in states.items():
+            line = s.line()
             if last.get(n) != line:
                 print(f"#{n} {line}", flush=True)
                 last[n] = line
-            open_ = pr.get("state") == "OPEN"
-            unqueued[n] = (
-                unqueued.get(n, 0) + 1
-                if open_ and not pr.get("mergeQueueEntry") and not pr.get("autoMergeRequest")
-                else 0
-            )
-        closed = [n for n, pr in states.items() if pr.get("state") == "CLOSED"]
+            unqueued[n] = unqueued.get(n, 0) + 1 if s.state == "open" and not s.auto and not s.queue else 0
+            for r in s.runs:
+                if r["id"] not in told and age_days(r["created_at"]) * 1440 >= hung_min:
+                    told.add(r["id"])
+                    print(
+                        f"#{n} HUNG run {r['id']} ({r.get('name')}) still {r.get('status')} after {hung_min:g} min: "
+                        "cancel and rerun it (step 9)",
+                        flush=True,
+                    )
+        closed = [n for n, s in states.items() if s.state == "closed"]
         dropped = [n for n, c in unqueued.items() if c >= 2]
         if closed or dropped:
             for n in closed:
@@ -171,35 +369,41 @@ def watch(numbers: list[int], interval: float, timeout_min: float) -> None:
             for n in dropped:
                 print(f"#{n} is open but out of the merge queue: read its queue run, fix or rerun, re-queue")
             sys.exit(1)
-        if all(pr.get("state") == "MERGED" for pr in states.values()):
+        if all(s.state == "merged" for s in states.values()):
             print("all merged")
             sys.exit(0)
         if time.monotonic() >= deadline:
-            print(
-                f"timed out after {timeout_min:g} min; still waiting: {[n for n in numbers if states[n].get('state') != 'MERGED']}"
-            )
+            waiting = [n for n in numbers if states[n].state != "merged"]
+            print(f"timed out after {timeout_min:g} min; still waiting: {waiting}")
             sys.exit(4)
         time.sleep(interval)
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("preflight")
     sub.add_parser("list")
-    c = sub.add_parser("check")
-    c.add_argument("number", type=int)
-    c.add_argument("--head", required=True, help="the PR head as fetched (a sha or a ref)")
+    for name in ("check", "queue"):
+        c = sub.add_parser(name)
+        c.add_argument("number", type=int)
+        c.add_argument("--head", required=True, help="the PR head as fetched and reviewed (a sha or a ref)")
     w = sub.add_parser("watch")
     w.add_argument("numbers", type=int, nargs="+")
     w.add_argument("--interval", type=float, default=45)
     w.add_argument("--timeout", type=float, default=120, help="minutes")
+    w.add_argument("--hung", type=float, default=40, help="minutes a queue build may run before HUNG")
     a = ap.parse_args()
-    if a.cmd == "list":
+    if a.cmd == "preflight":
+        preflight()
+    elif a.cmd == "list":
         list_prs()
     elif a.cmd == "check":
         check_pr(a.number, a.head)
+    elif a.cmd == "queue":
+        queue_pr(a.number, a.head)
     else:
-        watch(a.numbers, a.interval, a.timeout)
+        watch(a.numbers, a.interval, a.timeout, a.hung)
 
 
 if __name__ == "__main__":
