@@ -250,7 +250,7 @@ and pins (no script, build requirement, `RUN` line or `permissions:` rides along
 `libc` fields; `prs.py` also checks the environment (`preflight`), lists the PRs, queues them and watches the queue. The routine then runs the tests the ecosystem
 calls for (without the GitHub credential in their environment; `.githooks/pre-push` strips it from its `make lint`
 and `make tooling` as well), the reviewers, the dispositions, the review
-record and attestation (`record-review.py --attest --pr <n>`), the `no-learning` label unless something was
+record and attestation (`record-review.py --attest --pr <n> --repo <owner>/<name>`), the `no-learning` label unless something was
 learned, and `prs.py queue <n> --head <sha>`. It fixes what the PR itself can fix: a manifest/lock pin, dropped `libc` fields, a doc
 that states the old version, a review finding. It may merge, through the queue only, a PR that passes all of
 that. It never merges, and leaves open with a comment for the owner, a PR with:
@@ -295,10 +295,13 @@ and it has no `--match-head-commit`: `queue` reads the head before and after the
 again if it moved (or if GitHub shows nothing set to merge, or a failed call left it set). A push between that
 second read and GitHub acting on the PUT is a residual race; the merge queue's `review-attested` check closes it
 against anyone who can't also rewrite the PR body, since the queue build requires each PR's body to attest the
-exact head it merges, and the routine attested only the head it reviewed (decision-048). Because dependency code
-left running in a cloud session could use the proxy to do both, the routine queues only when no process from the
-PR's dependencies is still running, and it runs `record-review.py` from `dev`'s copy, like the checkers. `prs.py watch` polls REST: the PR's
-`merged` and `auto_merge`, the timeline's latest merge-queue event, the queue's `gh-readonly-queue/dev/pr-<n>-<sha>` build branch, and the check runs, and
+exact head it merges, and the routine attested only the head it reviewed (decision-048). Dependency code left
+running in a cloud session could use the proxy to do both; the routine looks for leftover dependency processes
+before it queues, which catches accidents but not code that hides itself, so what bounds it is that only
+registry-verified versions run and the token's scope is narrow. The routine runs `record-review.py` from `dev`'s
+copy, like the checkers, because a PR branch based on an older `dev` carries an older recorder. `prs.py watch`
+polls REST: the PR's `merged` and `auto_merge`, the timeline's latest merge-queue event, the queue's
+`gh-readonly-queue/dev/pr-<n>-<sha>` build branch, and the check runs, and
 names a queue build run that hangs so the routine can cancel and rerun it through the Actions REST endpoints.
 
 ## Git and PR rules

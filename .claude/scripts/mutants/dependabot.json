@@ -1076,14 +1076,14 @@
   {
     "label": "dependabot: prs: a failed call after the PUT not undone",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        why = undo(mode, number, sha, since)\n        if why is None:\n            raise ToolError(f\"queueing",
-    "new": "        why = None\n        if why is None:\n            raise ToolError(f\"queueing"
+    "old": "        why = undo(mode, number, sha, since, settle)\n        if why is None:\n            raise ToolError(\n                f\"queueing",
+    "new": "        why = None\n        if why is None:\n            raise ToolError(\n                f\"queueing"
   },
   {
     "label": "dependabot: prs: a failed undo after a dead PUT read as done",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        if why is None:\n            raise ToolError(f\"queueing",
-    "new": "        if True:\n            raise ToolError(f\"queueing"
+    "old": "        if why is None:\n            raise ToolError(\n                f\"queueing",
+    "new": "        if True:\n            raise ToolError(\n                f\"queueing"
   },
   {
     "label": "dependabot: prs: a merge at another head read as done",
@@ -1148,7 +1148,31 @@
   {
     "label": "dependabot: prs: a placeholder stored login is a stop",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "    has_stored = stored.returncode == 0 and bool(TOKEN_SHAPE.search(stored.stdout))\n",
+    "old": "    has_stored = stored.returncode == 0 and bool(STORED_SHAPE.search(stored.stdout))\n",
     "new": "    has_stored = stored.returncode == 0 and bool(stored.stdout.strip())\n"
+  },
+  {
+    "label": "dependabot: prs: only a ToolError after the PUT undone",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    except Exception as e:  # a timeout, an odd exit, a failed or odd read: the PUT may have taken effect\n",
+    "new": "    except ToolError as e:\n"
+  },
+  {
+    "label": "dependabot: prs: the clock-skew window widened to a day",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    since = now() - dt.timedelta(minutes=2)",
+    "new": "    since = now() - dt.timedelta(days=1)"
+  },
+  {
+    "label": "dependabot: prs: a classic 40-hex stored login accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "STORED_SHAPE = re.compile(rf\"{TOKEN_SHAPE.pattern}|\\b[0-9a-f]{{40}}\\b\")",
+    "new": "STORED_SHAPE = TOKEN_SHAPE"
+  },
+  {
+    "label": "dependabot: prs: a bad settle time read as zero",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    except ValueError as e:\n        raise ToolError(f\"OP_DEPENDABOT_SETTLE",
+    "new": "    except ValueError:\n        return 0.0\n        raise ToolError(f\"OP_DEPENDABOT_SETTLE"
   }
 ]

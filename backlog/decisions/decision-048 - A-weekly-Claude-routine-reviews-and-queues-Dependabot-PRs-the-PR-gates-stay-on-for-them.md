@@ -108,7 +108,8 @@ We keep every safety property above and change only how it is reached:
   `prs.py list`, `check` (now also comparing GitHub's file and commit lists with git's), `watch` (the PR's
   `merged` and `auto_merge`, the timeline's latest merge-queue event, the queue's build branch, the check runs;
   a hung queue build is cancelled and rerun through the Actions REST endpoints), the advisory lookup, and
-  `record-review.py --attest --pr <n>`, which also refuses a PR whose head isn't the reviewed HEAD.
+  `record-review.py --attest --pr <n> --repo <owner>/<name>`, which also refuses a PR whose head isn't the
+  reviewed HEAD (and runs from `dev`'s copy, like the checkers: a PR branch may carry an older recorder).
 - **The environment is detected, not assumed.** `prs.py` asks GraphQL for the viewer: the session's 403
   message is **cloud**, an answer is **local** (a maintainer's clone with a real `gh` login), anything else
   stops the run. Step 0 checks auth with a real call (`gh api user`).
@@ -121,11 +122,13 @@ We keep every safety property above and change only how it is reached:
   machine, where `make test` already runs with it.
 - **Queueing.** Locally `prs.py queue` runs `gh pr merge <n> --auto --match-head-commit <sha>`, as before. In
   the cloud it uses `PUT …/ccr/auto_merge`, whose request shape isn't documented to us, so any non-2xx leaves
-  the PR open for the owner. There is no `--match-head-commit` there: `queue` reads the head immediately before
-  and after the PUT, and if it moved (or the PR closed, a failed PUT left auto-merge on, or GitHub shows
-  nothing set to merge) it sends `DELETE …/ccr/auto_merge` and leaves the PR open; a PUT that times out, or
-  a read after it that fails, is undone the same way; if the DELETE fails it says auto-merge may still be on,
-  for the owner.
+  the PR open for the owner. There is no `--match-head-commit` there: `queue` reads the PR immediately before
+  and after the PUT. A PR GitHub already shows set to merge is not touched (a re-queue). If the head moved, a
+  failed call left the PR set to merge, or GitHub shows nothing set to merge, it sends `DELETE
+  …/ccr/auto_merge`, reads the PR back and leaves it open; a PR that closed meanwhile is left alone; a PUT
+  that times out, or a read after it that fails, is undone the same way. If the DELETE fails, or GitHub still
+  shows the PR set to merge (turning auto-merge off doesn't take an entry out of the queue), it says auto-merge
+  may still be on or the PR may still be queued, for the owner.
 - **The residual race.** A push that lands after `queue`'s second read but before GitHub acts on the PUT is
   not caught by the script. The merge queue closes it: its build runs `review-attested` for each queued PR
   (`merge_group_gate.py`), which requires the PR's current body to attest the exact head the queue merges,
@@ -133,14 +136,19 @@ We keep every safety property above and change only how it is reached:
   The attestation is an honesty check (above), so someone holding a writer's token who also rewrites the
   body defeats it, as they could defeat `--match-head-commit` by enabling auto-merge themselves, and could
   then land code on `dev`; the owner's review of `main` promotions stays the access control for releases. In
-  the cloud, dependency code still running in the session could do both through the proxy, so the procedure
-  requires that no process from the PR's dependencies is left running before it queues (step 5).
+  the cloud, dependency code still running in the session could do both through the proxy. The procedure looks
+  for leftover processes from the PR's dependencies before it queues (step 5), which catches accidents such
+  as a dev server left running but can't rule out code that hides itself (a renamed process, a file it wrote
+  that runs later); what bounds that is the rule above that only registry-verified versions run, and the
+  token's narrow scope.
 - **Options.** The alternative to the CCR route was to attest in the cloud and leave every queueing to the
   owner, as for github-actions PRs: no undocumented route and no race, at the cost of a manual step each week
   for every PR, which is most of what decision-048 set out to remove. We take the CCR route, with every
   failure leaving the PR open; if it proves unreliable, that alternative is the fallback.
 - **Not yet exercised from a cloud session** (as of 2026-10-08): the CCR `PUT`/`DELETE`, the job-log download
   (a redirect to a storage host the egress proxy may not allow) and `gh attestation verify` (sigstore hosts).
-  Each fails closed; TASK-213 stays open until a cloud run confirms them.
+  The `PUT`, the log download and the attestation fail closed (the PR stays open). A failing `DELETE` does
+  not: auto-merge may stay on (`queue` exits 2 and says so, first in the run's "for the owner"), and then only
+  `review-attested` stops a moved head. TASK-213 stays open until a cloud run confirms them.
 - What would change this: a documented CCR request with an expected head sha (then pass it), or GraphQL
   returning to cloud sessions (then use `--match-head-commit` there too).

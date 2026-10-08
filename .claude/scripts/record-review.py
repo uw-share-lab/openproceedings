@@ -118,7 +118,7 @@ def main() -> None:
     ap.add_argument(
         "--repo",
         default="{owner}/{repo}",
-        help="owner/name for --attest (needed with --pr; default: gh's own, from a github.com remote)",
+        help="owner/name of --pr's repository (required with --pr, refused without it)",
     )
     a = ap.parse_args()
     if (a.pr is not None or a.repo != "{owner}/{repo}") and not a.attest:
@@ -126,6 +126,9 @@ def main() -> None:
     if a.pr is not None and a.repo == "{owner}/{repo}":
         # gh resolves {owner}/{repo} from a github.com remote, which a cloud clone (a proxy remote) may not have
         ap.error("--pr needs --repo <owner>/<name>")
+    if a.pr is None and a.repo != "{owner}/{repo}":
+        # without --pr, gh pr view reads this repository, so a PATCH to another would be wrong
+        ap.error("--repo only applies with --pr")
 
     global BASE
     BASE = os.environ.get("OP_REVIEW_BASE", BASE)
@@ -195,7 +198,9 @@ def main() -> None:
                     print("no open PR for this branch yet — re-run with --attest after `gh pr create`")
                     return
                 # any other failure (a cloud session refuses the GraphQL `gh pr view` uses) is not "no PR yet"
-                fail(f"could not find this branch's PR ({said}); name it with --pr <n> (REST)")
+                fail(
+                    f"could not find this branch's PR ({said}); name it with --pr <n> --repo <owner>/<name> (REST)"
+                )
             number, _, body = view.stdout.partition("\n")
         body = re.sub(r"\n?<!-- op-review: [0-9a-f]+ APPROVE -->", "", body.rstrip())
         body += f"\n\n<!-- op-review: {head} APPROVE -->"

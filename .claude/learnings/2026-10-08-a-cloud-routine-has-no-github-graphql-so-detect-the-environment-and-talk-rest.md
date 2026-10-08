@@ -16,7 +16,8 @@ runs on 2026-10-08 showed it couldn't, without losing any of decision-048's safe
   list`, `view`, `checks` and `merge` all fail there, and `record-review.py --attest` (which finds the PR with
   `gh pr view`) failed *silently*: it read any `gh pr view` failure as "no PR yet" and exited 0. Evidence: the
   owner's live runs of the routine in its cloud environment on 2026-10-08 (the 403 body, the placeholder token,
-  `gh api user` answering, REST answering 200 on pulls and rulesets); the CCR route is a 404 from a normal login (`gh api repos/uw-share-lab/openproceedings/pulls/1/ccr/review_threads`).
+  `gh api user` answering, REST answering 200 on pulls and rulesets); the CCR route is a 404 from a normal login
+  (`gh api repos/uw-share-lab/openproceedings/pulls/1/ccr/review_threads`).
 - The session's `GH_TOKEN`/`GITHUB_TOKEN` are placeholders and an egress proxy adds the real credential for
   api.github.com: `gh auth status` reports the token invalid while every `gh api` call succeeds. A check that the
   token "lives only in GH_TOKEN" can't pass, and the real property (no process can read the token) holds by
@@ -27,7 +28,8 @@ runs on 2026-10-08 showed it couldn't, without losing any of decision-048's safe
   PR waits in the queue; a `gh-readonly-queue/dev/pr-<n>-<sha>` branch exists only while it is being built, and
   only five entries build at once, so the branch alone would read a waiting sixth entry as dropped),
   check runs, merge-group runs, cancel/rerun, and the advisory database (`advisories?ecosystem=npm&affects=next`).
-  Evidence: each GET run against the repository on 2026-10-08 **from a local login**, not yet from a cloud
+  Evidence: each GET run against the repository on 2026-10-08 **from a local login** (pulls and rulesets excepted,
+  which the owner's cloud runs answered), not yet from a cloud
   session; the CCR `PUT`/`DELETE`, the job-log download (a redirect to a storage host) and `gh attestation
   verify` have not been run from one at all.
 - Detecting the environment by its behaviour (GraphQL's answer) beats guessing from variables: a wrong guess
@@ -51,8 +53,8 @@ runs on 2026-10-08 showed it couldn't, without losing any of decision-048's safe
   documented to us → a documented shape (or an expected-head parameter) would let the routine pass it.
 
 ## Follow-ups
-- [ ] task-213 stays open until a cloud run confirms the calls above that only a local login has run (the
-  owner's one-off probe, listed in the PR and the task).
+- [ ] task-213 — confirm from a cloud run the CCR `PUT`/`DELETE`, the job-log download and `gh attestation verify`
+  (the owner's one-off probe, listed in the PR and the task); the task stays open until then.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/commands/dependabot-review.md`, spec 08 §CI "Dependabot", decision-048 (addendum), `.claude/skills/pr-workflow/SKILL.md` (`--attest --pr`), `.claude/agents/ci-engineer.md`

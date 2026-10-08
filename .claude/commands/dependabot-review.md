@@ -16,6 +16,7 @@ A PR that hits a **hard stop** is never merged by this command: it is left open 
 
 - a commit on the branch that isn't Dependabot's (signed and verified), a file outside what its ecosystem's
   update touches, or any change in a file beyond its dependency versions and pins;
+- a head branch name that isn't a plain `dependabot/<ecosystem>/…` one;
 - an integrity, hash or tarball/URL mismatch, or a file off the registry (PyPI files.pythonhosted.org,
   registry.npmjs.org);
 - a new publisher, or provenance the previous version had and the new one lacks (or from another repository);
@@ -103,11 +104,11 @@ python3 <the scratch directory>/.claude/scripts/dependabot/prs.py preflight
 Shell variables don't survive from one Bash call to the next, so write the directory `mktemp -d` printed as a
 literal path wherever this file says `$RUN`; the checkers are then `$RUN/.claude/scripts/dependabot/<script>.py`,
 run from the repo root, and the recorder `$RUN/.claude/scripts/record-review.py` (dev's copy: a PR branch based on
-an older `dev` has an older one). `prs.py preflight` prints `gh api user`'s login, the mode (`cloud` or `local`, §Where it
-runs) and where the credential is: in the cloud, a network secret (no token in `GH_TOKEN` or `GITHUB_TOKEN`, and
-`gh auth token` with those unset finds no stored login); a real token in either variable is reported (step 5
-strips it); a stored `gh` login in the cloud is a PROBLEM; locally a stored login is allowed (a maintainer's own
-machine, which runs `make test` with it every day). Stop, and print the summary with every PR as "not reviewed:
+an older `dev` has an older one). `prs.py preflight` prints `gh api user`'s login, the mode (`cloud` or `local`,
+§Where it runs) and where the credential is: in the cloud, a network secret (no token in `GH_TOKEN` or
+`GITHUB_TOKEN`, and `gh auth token` with those unset finds no stored token); a real token in either variable is
+reported (step 5 strips it); a stored `gh` token in the cloud is a PROBLEM; locally a stored login is allowed (a
+maintainer's own machine, which runs `make test` with it every day). Stop, and print the summary with every PR as "not reviewed:
 <why>", if `gh api user` fails, `prs.py preflight` doesn't exit 0, a tool above is missing or too old, or the git
 identity is empty or names an AI (it matches `claude|anthropic|noreply@anthropic`): commits are authored by people.
 Note whether `docker info` works and whether `npx playwright install chromium` succeeds; step 5 uses them.
@@ -225,11 +226,19 @@ without Playwright's Chromium, CI's `playwright` check must be green before the 
 are platform-specific, so CI's `playwright` result is the authority for them. A red test that the bump caused and
 that a small, clear fix in this PR mends is fixed (commit, rerun); anything else is a hard stop.
 
-After the last command, nothing of the dependencies may still be running, since a process left behind could use
-the proxy's credential later (push to the PR after it is reviewed, say): `pgrep -af '<the repo root>/(node_modules|\.venv)/'`
-(the repo root written as a literal path) must print nothing, here and again just before step 8's `prs.py queue`
-(the reviewers run things too). Anything it prints is a hard stop for this PR:
-list the processes in the comment, and don't attest or queue it.
+After the last command, look for processes of the dependencies left running, since one could use the proxy's
+credential later (push to the PR after it is reviewed, say), with the repo root written as a literal path (the
+pattern doesn't match its own command):
+
+```bash
+ps -eo pid,args | grep -E '<the repo root>/(node_modules|\.venv)/'
+```
+
+It must print nothing, here and again just before step 8's `prs.py queue` (the reviewers run things too). Anything
+it prints is a hard stop for this PR: list the processes in the comment, and don't attest or queue it. This
+catches accidents, such as a dev server left running; it can't rule out code that hides itself (a renamed
+process, a file it wrote that runs later). What bounds that is §Rules: only registry-verified versions run, and
+the token's scope is narrow.
 
 ## 6. Reviewers
 
@@ -288,15 +297,16 @@ python3 $RUN/.claude/scripts/record-review.py APPROVE "$RUN/dispositions-<n>.md"
 python3 $RUN/.claude/scripts/dependabot/prs.py queue <n> --head <the head>
 ```
 
-`--attest --pr <n>` reads PR `<n>` over REST, refuses it unless it is open at HEAD, and adds `<!-- op-review: <sha>
-APPROVE -->` for the head to its body. `prs.py queue` turns auto-merge on, which on `dev` puts the PR in the merge
-queue once its checks are green. It first requires the PR to be open, Dependabot's, into `dev` and still at `<the
-head>` (a PR already set to merge is left as it is: exit 0); then turns auto-merge on (cloud: `PUT
+`--attest --pr <n> --repo …` reads PR `<n>` over REST, refuses it unless it is open at HEAD, and adds
+`<!-- op-review: <sha> APPROVE -->` for the head to its body. `prs.py queue` turns auto-merge on, which on `dev` puts the
+PR in the merge queue once its checks are green. It first requires the PR to be open, Dependabot's, into `dev` and
+still at `<the head>` (a PR already set to merge is left as it is: exit 0); then turns auto-merge on (cloud: `PUT
 …/pulls/<n>/ccr/auto_merge`; local: `gh pr merge <n> --auto --match-head-commit <the head>`); then reads the PR
-again and requires GitHub to show it set to merge (auto-merge on, or a merge-queue entry in its timeline newer than
-the request). If the head moved, the call failed although GitHub shows the PR set to merge, or GitHub accepted the
-call but shows nothing, it turns auto-merge off again (cloud: `DELETE …/ccr/auto_merge`; local: `gh pr merge
---disable-auto`) and reads the PR back; a PR that closed meanwhile is left alone. Exit 0 is queued (or merged
+again and requires GitHub to show it set to merge (auto-merge on, or a merge-queue entry in its timeline from the
+request, allowing two minutes of clock skew). If the head moved, the call failed although GitHub shows the PR set
+to merge, or GitHub accepted the call but shows nothing, it turns auto-merge off again (cloud: `DELETE
+…/ccr/auto_merge`; local: `gh pr merge --disable-auto`) and reads the PR back; a PR that closed meanwhile is left
+alone. Exit 0 is queued (or merged
 already at `<the head>`); 1 is a hard stop (leave the PR open, §10; any non-2xx answer from the CCR route lands
 here, since its request shape isn't documented); 2 is a call that failed, before the request (nothing to undo) or
 after it (the PUT timed out, or a read after it failed; it has tried to undo it). If the message says auto-merge
@@ -305,9 +315,11 @@ may still be on, or the PR may still be in the merge queue, put that first under
 The CCR route has no `--match-head-commit`: a push after the second read, before GitHub acts, is a race the
 script can't close. The queue's `review-attested` check closes it against anyone who can't also rewrite the PR
 body, because the queue build requires the body to attest the head it merges and this run attested only `<the
-head>` (decision-048). Dependency code still running in the session could do both through the proxy, which is
-why step 5 ends with no such process left. The CCR route, the job-log download and `gh attestation verify` have
-not yet been run from a cloud session; each fails closed (the PR stays open), and the run log says which failed.
+head>` (decision-048). Dependency code still running in the session could do both through the proxy; step 5's
+process check catches the accidental cases. The CCR route, the job-log download and `gh attestation verify` have
+not yet been run from a cloud session. The `PUT`, the log download and the attestation fail closed (the PR stays
+open, and the run log says which failed); a failing `DELETE` does not: auto-merge may stay on (`queue` exits 2 and
+says so), and then only `review-attested` stops a moved head.
 Don't rebase the PR because `dev` moved; the queue tests it on top of `dev`.
 
 A **github-actions PR is not queued**: the routine's token has no `workflows` permission (decision-048: with it,

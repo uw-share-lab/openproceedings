@@ -105,6 +105,8 @@ MAX_PAGES = 30
 GRAPHQL_BLOCKED = "GitHub GraphQL is not available from Claude Code sessions"
 # A GitHub token's shape (classic, OAuth, app, refresh, fine-grained): a placeholder doesn't have it.
 TOKEN_SHAPE = re.compile(r"gh[opsur]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}")
+# what gh may hold as a stored login: a token of today's shape, or a classic 40-hex one (still valid if old)
+STORED_SHAPE = re.compile(rf"{TOKEN_SHAPE.pattern}|\b[0-9a-f]{{40}}\b")
 TOKEN_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
 FAILED = {"failure", "timed_out", "cancelled", "action_required", "startup_failure", "stale"}
 QUEUE_EVENTS = ("added_to_merge_queue", "removed_from_merge_queue")
@@ -173,7 +175,7 @@ def preflight() -> None:
     held = [v for v in TOKEN_VARS if TOKEN_SHAPE.search(os.environ.get(v, ""))]
     clean = {k: v for k, v in os.environ.items() if k not in TOKEN_VARS}
     stored = run(["gh", "auth", "token"], ok_codes=(0, 1), env=clean)
-    has_stored = stored.returncode == 0 and bool(TOKEN_SHAPE.search(stored.stdout))
+    has_stored = stored.returncode == 0 and bool(STORED_SHAPE.search(stored.stdout))
     if held:
         rep.ok(f"credential: a token in {', '.join(held)}; step 5 strips it from what runs dependency code")
     if mode == "cloud":
@@ -318,17 +320,20 @@ def queue_pr(number: int, head: str) -> None:
         enabled, said = auto_merge(mode, number, True, sha)
         after = get_pr(number)
         visible = taken(number, after, since)
-        if enabled and not visible and not after.get("merged"):
+        if not visible and not after.get("merged"):  # a refused call can take effect late too
             time.sleep(settle)  # GitHub can take a moment to show what it accepted
             after = get_pr(number)
             visible = taken(number, after, since)
         state, after_sha, merged = after["state"], after["head"]["sha"], bool(after.get("merged"))
     except Exception as e:  # a timeout, an odd exit, a failed or odd read: the PUT may have taken effect
-        why = undo(mode, number, sha, since)
+        failure = e if isinstance(e, ToolError) else f"{type(e).__name__}: {e}"
+        why = undo(mode, number, sha, since, settle)
         if why is None:
-            raise ToolError(f"queueing #{number} failed partway ({e}); auto-merge turned off again") from e
+            raise ToolError(
+                f"queueing #{number} failed partway ({failure}); auto-merge turned off again"
+            ) from e
         raise ToolError(
-            f"queueing #{number} failed partway ({e}); auto-merge may still be on for #{number}, or it may "
+            f"queueing #{number} failed partway ({failure}); auto-merge may still be on for #{number}, or it may "
             f"still be in the merge queue ({why}): the owner must check it by hand"
         ) from e
     if merged:
@@ -347,7 +352,7 @@ def queue_pr(number: int, head: str) -> None:
     if rep.problems:
         # a closed PR can't merge, so there is nothing to undo; otherwise undo whatever may be on
         if state == "open" and (moved or enabled or visible):
-            why = undo(mode, number, sha, since)
+            why = undo(mode, number, sha, since, settle)
             if why is not None:
                 raise ToolError(
                     f"auto-merge may still be on for #{number}, or it may still be in the merge queue ({why}): "
@@ -359,13 +364,14 @@ def queue_pr(number: int, head: str) -> None:
     rep.finish()
 
 
-def undo(mode: str, number: int, sha: str, since: dt.datetime) -> str | None:
+def undo(mode: str, number: int, sha: str, since: dt.datetime, settle: float) -> str | None:
     """Turn auto-merge off, then read the PR back: None when GitHub no longer shows it set to merge, else why
     not (turning auto-merge off doesn't take an entry out of the merge queue)."""
     try:
         off, why = auto_merge(mode, number, False, sha)
         if not off:
             return why
+        time.sleep(settle)  # let GitHub catch up before reading it back
         pr = get_pr(number)
         if pr["state"] == "open" and taken(number, pr, since):
             return "GitHub still shows it set to merge after turning auto-merge off"

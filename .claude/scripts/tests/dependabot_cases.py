@@ -91,7 +91,7 @@ class Case:
         env = {k: v for k, v in ENV.items() if k not in TOKEN_VARS} | self.env
         env |= {"PATH": f"{self.bin}{os.pathsep}{ENV.get('PATH', '')}", "DEPBOT_FIX": str(self.fix)}
         env["OP_DEPENDABOT_NOW"] = CLOCK
-        env["OP_DEPENDABOT_SETTLE"] = "0"
+        env.setdefault("OP_DEPENDABOT_SETTLE", "0")
         r = subprocess.run(
             [sys.executable, str(SCRIPTS / script), *args],
             cwd=self.repo, capture_output=True, text=True, env=env, timeout=120,
@@ -1662,6 +1662,13 @@ def _(c: Case) -> None:
     c.expect("prs.py", ["preflight"], OK, r"^ok +credential: a network secret")
 
 
+@row("prs preflight: a stored classic 40-hex token in the cloud is a stop")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["stored login"] = "0123456789abcdef0123456789abcdef01234567"
+    c.expect("prs.py", ["preflight"], PROBLEM, r"^PROBLEM gh has a stored login in this cloud session")
+
+
 @row("prs preflight: a token in GH_TOKEN is not mistaken for a stored login")
 def _(c: Case) -> None:
     preflight_case(c)  # gh auth token would print GH_TOKEN if the variables reached it
@@ -1907,6 +1914,44 @@ def _(c: Case) -> None:
     c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {"__status": 500, "body": {"message": "boom"}}, first]}
     c.expect("prs.py", args, ERROR, r"^ERROR +queueing #7 failed partway .*auto-merge turned off again")
     assert called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: a read after the PUT of the wrong shape is undone too")
+def _(c: Case) -> None:
+    args = queue_case(c, {})
+    first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
+    c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {"state": "open"}, {"state": "open"}, first]}
+    c.expect(
+        "prs.py",
+        args,
+        ERROR,
+        r"^ERROR +queueing #7 failed partway \(KeyError: 'head'\); auto-merge turned off again",
+    )
+    assert called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: a settle time that isn't a number stops before any write")
+def _(c: Case) -> None:
+    args = queue_case(c, {})
+    c.env["OP_DEPENDABOT_SETTLE"] = "abc"
+    c.expect("prs.py", args, ERROR, r"^ERROR +OP_DEPENDABOT_SETTLE is 'abc', not a number of seconds")
+    assert not called(c, "PUT"), calls(c)
+
+
+@row("prs queue: a queue entry 1 minute before the request counts (clock skew)")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {})
+    added = {"event": "added_to_merge_queue", "created_at": "2026-10-07T11:59:00Z"}
+    c.gh[page1(f"{R}/issues/7/timeline")] = {"__seq": [[], [added]]}
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at")
+
+
+@row("prs queue: a queue entry 3 minutes before the request doesn't")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {})
+    added = {"event": "added_to_merge_queue", "created_at": "2026-10-07T11:57:00Z"}
+    c.gh[page1(f"{R}/issues/7/timeline")] = {"__seq": [[], [added]]}
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub accepted the request but shows neither")
 
 
 @row("prs queue: a dead PUT that can't be undone says auto-merge may still be on")
