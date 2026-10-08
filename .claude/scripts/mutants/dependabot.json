@@ -1234,5 +1234,11 @@
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "        elif not held:\n",
     "new": "        else:\n"
+  },
+  {
+    "label": "dependabot: prs: a non-finite settle time accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if not math.isfinite(seconds) or seconds < 0:",
+    "new": "    if seconds < 0:"
   }
 ]

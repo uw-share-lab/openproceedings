@@ -1818,6 +1818,14 @@ def _(c: Case) -> None:
     assert called(c, "DELETE"), calls(c)
 
 
+@row("prs queue: a settle time that is not finite stops before any write")
+def _(c: Case) -> None:
+    args = queue_case(c, {})
+    c.env["OP_DEPENDABOT_SETTLE"] = "nan"
+    c.expect("prs.py", args, ERROR, r"^ERROR +OP_DEPENDABOT_SETTLE is 'nan', not a number of seconds")
+    assert not called(c, "PUT"), calls(c)
+
+
 @row("prs queue: a negative settle time stops before any write")
 def _(c: Case) -> None:
     args = queue_case(c, {})
