@@ -1,11 +1,11 @@
 ---
 id: TASK-211
 title: Weekly routine reviews and merges Dependabot PRs with /dependabot-review
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-07 20:29'
-updated_date: '2026-10-07 22:23'
+updated_date: '2026-10-08 00:31'
 labels:
   - ops
   - tooling
@@ -43,3 +43,9 @@ Scripts verified against the real #123-#125 diffs: uv_lock.py passes #125's head
 
 Review gate round 1 (code, security, qa, docs/methodology): the routine runs untrusted PR code, so checkers run from dev's copy, prs.py check gates the PR first, every checker rejects changes beyond versions and pins, tests run without the GitHub token, queueing uses --match-head-commit; per-file PyPI provenance on both versions; 7-day cooldown in dependabot.yml plus a checker stop; any new Python release (patch too) is the owner's (crawl-cache replay needs data/).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Added /dependabot-review (.claude/commands/dependabot-review.md), the procedure a weekly cloud Claude routine runs on each open Dependabot PR into dev (decision-048; spec 08 §CI, The weekly routine). The checks are scripted in .claude/scripts/dependabot/ (stdlib, typed, mypy --strict in make lint) and run from dev's copy. prs.py check gates each PR (Dependabot-only verified commits, files by ecosystem, head unchanged). uv_lock.py, npm_lock.py, docker_digest.py and actions_pins.py verify the supply chain against PyPI, the npm registry, the image registry and tag refs, reject any change beyond versions and pins, and stop uv/npm releases younger than 7 days. restore_libc.py repairs dropped libc; prs.py also lists and watches the queue. dependabot.yml sets a 7-day cooldown; the pre-push and autofix hooks run their tools without the GitHub token. Hard stops are never merged; github-actions PRs are attested and queued by the owner (no workflows scope). Tests: test-dependabot.sh (136 rows, fakes for curl/npm/gh, fixed clock) in make tooling; 121 mutants in mutants/dependabot.json and 7 in gates.json. Verified live against PRs 123-125. Four review rounds; every Must and Should fixed.
+<!-- SECTION:FINAL_SUMMARY:END -->
