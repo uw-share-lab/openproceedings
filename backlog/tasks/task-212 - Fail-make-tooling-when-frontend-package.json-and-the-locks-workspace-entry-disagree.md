@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-08 03:31'
-updated_date: '2026-10-08 06:52'
+updated_date: '2026-10-08 07:49'
 labels:
   - tooling
   - ci
@@ -44,10 +44,12 @@ Verified: npm_specs.py passes on this branch (dev 3aa36eb1 plus the change). Wit
 Focused review (round 1): 1 Should (the two --root rows accepted any non-zero exit) and 3 Nits (malformed section reported as a FIX by npm_lock.py; WORKSPACES hard-coded with no check of the root workspaces list; an empty non-object lock section with no manifest passed); all fixed in 9d9bdf81. Mutants: the 20 new or moved ones (npm_specs.py, the two moved npm_lock comparisons, the malformed-section PROBLEM) all killed in a scratch loop against test-tooling-scripts.sh and test-dependabot.sh.
 
 Full gate round 1 (code, docs, security, qa, review-methodologist): fixed in b4a107e1 and the docs commit after it: JSON-type comparison, a root manifest alone with no lock, loop-skip mutants for each workspace, 'nothing compared' message and --root with neither file exits 1, workspaces null, a lock-side non-object section row, npm_lock reports a missing workspace entry as PROBLEM, docs (ci-engineer step 5, spec 08 wording and wrap, command step 3).
+
+Review round 3 (code-reviewer): ruff format on npm_specs.py; a non-object workspace entry row and mutant; the missing-entry mutant models the old fallback. Mutants: 64/64 npm_lock/npm_specs mutants killed at b4a107e1, and the 3 changed since.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-make tooling (and so CI claude-tooling) now runs .claude/scripts/dependabot/npm_specs.py: every spec in dependencies, devDependencies, optionalDependencies and peerDependencies of package.json and frontend/package.json must be written exactly as package-lock.json's packages[""] and packages["frontend"] hold it (same string, same JSON type), none missing and none extra. It also fails on a file it can't read, a manifest with no lock entry (or the reverse), a section that isn't an object, a root workspaces entry it doesn't know, and, under --root, a directory with neither file (without --root it prints 'nothing compared' and exits 0). npm_lock.py imports the same mismatches(); a malformed section or a workspace entry missing from the lock is a PROBLEM there, not a FIX. It passes on dev and fails on PR 124's Dependabot commit 34059c0f (eslint-config-next ^16.3.8) and PR 100's 1e73d7d0 (vitest ^5.0.3). /dependabot-review step 3 runs it with --root . (the routine runs dev's copy from a scratch directory). Rows in test-tooling-scripts.sh and dependabot_cases.py; 25 new mutants in mutants/dependabot.json (2 more moved from npm_lock.py). Spec 08, README, pr-workflow skill, ci-engineer and the learnings entry updated.
+make tooling (and so CI claude-tooling) now runs .claude/scripts/dependabot/npm_specs.py: every spec in dependencies, devDependencies, optionalDependencies and peerDependencies of package.json and frontend/package.json must be written exactly as package-lock.json's packages[""] and packages["frontend"] hold it (same string, same JSON type), none missing and none extra. It also fails on a file it can't read, a manifest with no lock entry (or the reverse), a section that isn't an object, a root workspaces entry it doesn't know, and, under --root, a directory with neither file (without --root it prints 'nothing compared' and exits 0). npm_lock.py imports the same mismatches(); a malformed section, or a workspace entry missing from the lock or not an object, is a PROBLEM there, not a FIX. It passes on dev and fails on PR 124's Dependabot commit 34059c0f (eslint-config-next ^16.3.8) and PR 100's 1e73d7d0 (vitest ^5.0.3). /dependabot-review step 3 runs it with --root . (the routine runs dev's copy from a scratch directory). Rows in test-tooling-scripts.sh and dependabot_cases.py; 26 new mutants in mutants/dependabot.json (2 more moved from npm_lock.py), all killed. Spec 08, README, pr-workflow skill, ci-engineer and the learnings entry updated.
 <!-- SECTION:FINAL_SUMMARY:END -->
