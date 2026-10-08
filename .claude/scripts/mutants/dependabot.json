@@ -283,15 +283,15 @@
   },
   {
     "label": "dependabot: npm: root manifest not compared",
-    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
     "old": "WORKSPACES = {\"\": \"package.json\", \"frontend\": \"frontend/package.json\"}",
     "new": "WORKSPACES = {\"frontend\": \"frontend/package.json\"}"
   },
   {
     "label": "dependabot: npm: manifest pins not compared",
-    "file": ".claude/scripts/dependabot/npm_lock.py",
-    "old": "                if want.get(dep) != got.get(dep):\n",
-    "new": "                if False:\n"
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "            if want.get(dep) != got.get(dep):\n",
+    "new": "            if False:\n"
   },
   {
     "label": "dependabot: docker: no index Accept header",
@@ -724,5 +724,101 @@
     "file": ".claude/scripts/dependabot/restore_libc.py",
     "old": "        repaired.append(key)\n",
     "new": "        repaired.append(key)\n        break\n"
+  },
+  {
+    "label": "npm specs: devDependencies not compared",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "MANIFEST_SECTIONS = (\"dependencies\", \"devDependencies\", \"optionalDependencies\", \"peerDependencies\")",
+    "new": "MANIFEST_SECTIONS = (\"dependencies\", \"optionalDependencies\", \"peerDependencies\")"
+  },
+  {
+    "label": "npm specs: optionalDependencies not compared",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "MANIFEST_SECTIONS = (\"dependencies\", \"devDependencies\", \"optionalDependencies\", \"peerDependencies\")",
+    "new": "MANIFEST_SECTIONS = (\"dependencies\", \"devDependencies\", \"peerDependencies\")"
+  },
+  {
+    "label": "npm specs: peerDependencies not compared",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "MANIFEST_SECTIONS = (\"dependencies\", \"devDependencies\", \"optionalDependencies\", \"peerDependencies\")",
+    "new": "MANIFEST_SECTIONS = (\"dependencies\", \"devDependencies\", \"optionalDependencies\")"
+  },
+  {
+    "label": "npm specs: dependencies not compared",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "MANIFEST_SECTIONS = (\"dependencies\", \"devDependencies\", \"optionalDependencies\", \"peerDependencies\")",
+    "new": "MANIFEST_SECTIONS = (\"devDependencies\", \"optionalDependencies\", \"peerDependencies\")"
+  },
+  {
+    "label": "npm specs: an extra lock entry missed",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "        for dep in sorted(set(want) | set(got)):\n",
+    "new": "        for dep in sorted(set(want)):\n"
+  },
+  {
+    "label": "npm specs: a missing lock entry missed",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "        for dep in sorted(set(want) | set(got)):\n",
+    "new": "        for dep in sorted(set(got)):\n"
+  },
+  {
+    "label": "npm specs: a null section read as empty",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "        want, got = manifest.get(section, {}), entry.get(section, {})\n",
+    "new": "        want, got = manifest.get(section) or {}, entry.get(section) or {}\n"
+  },
+  {
+    "label": "npm specs: a manifest with no lock passes",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "        if all(m is None for m in manifests.values()):\n",
+    "new": "        if True:\n"
+  },
+  {
+    "label": "npm specs: a lock without packages passes",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "    if not isinstance(packages, dict):\n        return [",
+    "new": "    if not isinstance(packages, dict):\n        return [] and ["
+  },
+  {
+    "label": "npm specs: a manifest with no lock entry passes",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "        elif entry is None:\n            out.append(",
+    "new": "        elif entry is None:\n            [].append("
+  },
+  {
+    "label": "npm specs: a lock entry with no manifest passes",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "            if entry and any(entry.get(s) for s in MANIFEST_SECTIONS):\n",
+    "new": "            if False:\n"
+  },
+  {
+    "label": "npm specs: a non-object lock entry passes",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "        if entry is not None and not isinstance(entry, dict):\n            out.append(",
+    "new": "        if entry is not None and not isinstance(entry, dict):\n            [].append("
+  },
+  {
+    "label": "npm specs: mismatches exit 0",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "    if problems:\n        print(",
+    "new": "    if False:\n        print("
+  },
+  {
+    "label": "npm specs: a non-object manifest accepted",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "    if not isinstance(data, dict):\n        raise",
+    "new": "    if False:\n        raise"
+  },
+  {
+    "label": "npm specs: --root ignored",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "        problems = check(a.root)\n",
+    "new": "        problems = check(ROOT)\n"
+  },
+  {
+    "label": "npm specs: a missing --root passes",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "    if not root.is_dir():\n        return [",
+    "new": "    if not root.is_dir():\n        return [] and ["
   }
 ]

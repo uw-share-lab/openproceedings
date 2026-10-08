@@ -71,7 +71,8 @@ tempted to bypass it.
   base-image digests in `deploy/` weekly, minor and patch grouped into one PR per ecosystem and semver-majors
   ignored (a major is a deliberate, hand-made PR; spec 08 §CI); review its PRs like any other, plus the
   Dependabot checks in spec 08 §CI (release notes, supply chain, the manifest against the lock's
-  `packages["frontend"]`, `npm audit --omit=dev`, lock edits under the `.nvmrc` Node). A weekly routine runs
+  `packages["frontend"]`, which `make tooling` also checks on every PR with `npm_specs.py` (TASK-212),
+  `npm audit --omit=dev`, lock edits under the `.nvmrc` Node). A weekly routine runs
   them as `/dependabot-review`, with the scripts in `.claude/scripts/dependabot/` (decision-048, TASK-211); a
   change to a check changes the script, its rows in `.claude/scripts/tests/dependabot_cases.py` and its
   mutants in `.claude/scripts/mutants/dependabot.json` together. Its `uv` entry

@@ -14,7 +14,8 @@ the npm provenance: present before means present now, from the same source repos
 `workflow.repository`, read from `dist.attestations.url`). Then it checks that every dependency in
 `package.json` and `frontend/package.json` at `head` is written exactly as the lock's `packages[""]` and
 `packages["frontend"]` entries hold it (Dependabot's npm updater can write a caret into the lock's workspace
-entry; `npm ci` accepts it). A version newer than `COOLDOWN_DAYS` (the registry's `time`) is held back.
+entry; `npm ci` accepts it), with `npm_specs.mismatches`, the comparison `make tooling` runs on every PR (TASK-212).
+A version newer than `COOLDOWN_DAYS` (the registry's `time`) is held back.
 
 The shape of the change is checked too: the lock's top-level fields stay the same; its non-`node_modules/`
 entries (the root and the workspace) and the two manifests change only dependency values, each of a package
@@ -49,13 +50,12 @@ from _common import (
     run_json,
     version_tuple,
 )
+from npm_specs import MANIFEST_SECTIONS, WORKSPACES, mismatches
 
 REGISTRY = "https://registry.npmjs.org/"
 DEP_FIELDS = ("dependencies", "optionalDependencies", "peerDependencies", "os", "cpu", "libc")
-MANIFEST_SECTIONS = ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
 GRAPH_FLAGS = {"dev", "optional", "devOptional", "peer"}  # set by where a package sits in the tree, not by it
 INSTALL_SCRIPTS = ("preinstall", "install", "postinstall")
-WORKSPACES = {"": "package.json", "frontend": "frontend/package.json"}
 SLSA = "https://slsa.dev/provenance/"
 
 Entry = dict[str, Any]
@@ -240,16 +240,8 @@ def check_manifests(
         manifest = load(text, f"{path} at {head}")
         before = git_show(base, path)
         check_dep_values(rep, path, load(before, f"{path} at {base}") if before else {}, manifest, moved)
-        entry = packages.get(key, {})
-        for section in MANIFEST_SECTIONS:
-            want, got = manifest.get(section) or {}, entry.get(section) or {}
-            for dep in sorted(set(want) | set(got)):
-                if want.get(dep) != got.get(dep):
-                    where = f'packages["{key}"]'
-                    rep.fix(
-                        f"{path} {section}.{dep} is {want.get(dep)!r}, the lock's {where} has {got.get(dep)!r}"
-                        " (edit the lock by hand to match the manifest)"
-                    )
+        for m in mismatches(path, key, manifest, packages.get(key, {})):
+            rep.fix(f"{m} (edit the lock by hand to match the manifest)")
     if len(rep.problems) + len(rep.fixes) == found:
         rep.ok("package.json and frontend/package.json match the lock's workspace entries")
 

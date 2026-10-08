@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016  # commands under test are single-quoted on purpose: $(…), $(( )) and backticks must reach the hooks unexpanded
-# Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, check_digest_pins.py,
+# Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, check_digest_pins.py, npm_specs.py,
 # lint_tooling.py and roster_index.py. Each case copies the real .claude/ (and CLAUDE.md / CONTRIBUTING.md) into a throwaway
 # tree, confirms the script passes on it, then breaks exactly one thing and confirms the script fails —
 # so a regression in a check can't hide behind the repo's own content being clean (review round 2).
@@ -231,6 +231,90 @@ deploy; printf 'FROM python:3.12-slim\n' > "$TMP/r/deploy/api.dockerfile"
 expect err "a lowercase .dockerfile name"                               check_digest_pins.py
 deploy; printf 'FROM python:3.12-slim\n' > "$TMP/r/deploy/Containerfile"
 expect err "a Containerfile (Dependabot reads those too)"               check_digest_pins.py
+
+echo "== dependabot/npm_specs.py (TASK-212)"
+S=dependabot/npm_specs.py
+# npmws <root manifest> <frontend manifest> <lock packages[""]> <lock packages["frontend"]>: each a JSON fragment
+# (`,"dependencies":{…}`) added to that object; writes package.json, frontend/package.json and package-lock.json
+npmws() {
+  fresh; mkdir -p "$TMP/r/frontend"
+  printf '{"name":"r","workspaces":["frontend"]%s}\n' "$1" > "$TMP/r/package.json"
+  printf '{"name":"f","engines":{"node":">=22"}%s}\n' "$2" > "$TMP/r/frontend/package.json"
+  printf '{"name":"r","lockfileVersion":3,"packages":{"":{"name":"r"%s},"frontend":{"name":"f"%s}}}\n' "$3" "$4" > "$TMP/r/package-lock.json"
+}
+# expect_spec <label> <ERE> — exits 1 AND prints an `npm specs: ` line matching <ERE> (an unrelated failure
+# can't pass the row)
+expect_spec() {
+  local label="$1" re="$2" out rc
+  out=$(python3 "$TMP/r/.claude/scripts/$S" 2>&1); rc=$?
+  if [ "$rc" = 1 ] && printf '%s\n' "$out" | grep -Eq "^npm specs: $re"; then
+    pass=$((pass+1)); printf '  ok   %-22s %-58s -> match\n' npm_specs.py "$label"
+  else fail=$((fail+1)); printf '  FAIL %-22s %-58s -> rc %s: %s (want: %s)\n' npm_specs.py "$label" "$rc" "$out" "$re"; fi
+}
+N=',"dependencies":{"next":"16.3.8","react":"19.3.0"}'
+DV=',"devDependencies":{"eslint-config-next":"16.3.8","eslint":"^9"}'
+OP=',"optionalDependencies":{"fsevents":"2.3.3"}'
+PR=',"peerDependencies":{"react":">=19"}'
+ALL="$N$DV$OP$PR"
+FE='packages\["frontend"\]'
+fresh; expect ok  "no package.json and no lock: nothing to check"      "$S"
+fresh; mkdir -p "$TMP/r/frontend"; cp "$SRC/package.json" "$SRC/package-lock.json" "$TMP/r/"; cp "$SRC/frontend/package.json" "$TMP/r/frontend/"
+expect ok  "the repo's own manifests and lock pass"                     "$S"
+npmws "$N" "$ALL" "$N" "$ALL"
+expect ok  "all four sections equal, in both entries"                   "$S"
+npmws '' '' '' ''
+expect ok  "no dependencies anywhere"                                   "$S"
+npmws '' "$N" '' ',"dependencies":{"react":"19.3.0","next":"16.3.8"}'
+expect ok  "key order does not matter"                                  "$S"
+npmws '' "$ALL" '' "$ALL"',"engines":{"node":">=20"},"version":"9.9.9"'
+expect ok  "fields outside the four sections are not compared"          "$S"
+npmws '' "$ALL" '' "$N"',"devDependencies":{"eslint-config-next":"^16.3.8","eslint":"^9"}'"$OP$PR"
+expect_spec "PR #124: a caret in the lock's devDependencies"            "frontend/package\.json devDependencies\.eslint-config-next is '16\.3\.8', the lock's $FE has '\^16\.3\.8'"
+npmws '' "$ALL" '' ',"dependencies":{"next":"^16.3.8","react":"19.3.0"}'"$DV$OP$PR"
+expect_spec "a caret in the lock's dependencies"                        "frontend/package\.json dependencies\.next is '16\.3\.8', the lock's $FE has '\^16\.3\.8'"
+npmws '' "$ALL" '' "$N$DV"',"optionalDependencies":{"fsevents":"~2.3.3"}'"$PR"
+expect_spec "a tilde in the lock's optionalDependencies"                "frontend/package\.json optionalDependencies\.fsevents is '2\.3\.3', the lock's $FE has '~2\.3\.3'"
+npmws '' "$ALL" '' "$N$DV$OP"',"peerDependencies":{"react":">=18"}'
+expect_spec "another range in the lock's peerDependencies"              "frontend/package\.json peerDependencies\.react is '>=19', the lock's $FE has '>=18'"
+npmws '' ',"dependencies":{"next":"^16.3.8"}' '' ',"dependencies":{"next":"16.3.8"}'
+expect_spec "a range in the manifest, an exact pin in the lock"         "frontend/package\.json dependencies\.next is '\^16\.3\.8', the lock's $FE has '16\.3\.8'"
+npmws '' ',"devDependencies":{"typescript":"^5"}' '' ',"devDependencies":{"typescript":"^5"}'
+expect ok  "the same range on both sides passes"                        "$S"
+npmws '' "$N" '' ',"dependencies":{"next":"16.3.8"}'
+expect_spec "a manifest dependency missing from the lock"               "frontend/package\.json dependencies\.react is '19\.3\.0', the lock's $FE has None"
+npmws '' ',"dependencies":{"next":"16.3.8"}' '' "$N"
+expect_spec "an extra dependency in the lock"                           "frontend/package\.json dependencies\.react is None, the lock's $FE has '19\.3\.0'"
+npmws '' ',"dependencies":{"next":"16.3.8"}' '' ',"devDependencies":{"next":"16.3.8"}'
+expect_spec "a dependency in another section of the lock"               "frontend/package\.json dependencies\.next is '16\.3\.8', the lock's $FE has None"
+npmws ',"devDependencies":{"prettier":"3.9.9"}' '' ',"devDependencies":{"prettier":"^3.9.9"}' ''
+expect_spec "the root entry is compared too"                            "package\.json devDependencies\.prettier is '3\.9\.9', the lock's packages\[\"\"\] has '\^3\.9\.9'"
+npmws '' "$N" '' "$N"; printf '{"name":"r","lockfileVersion":3,"packages":{"":{"name":"r"}}}\n' > "$TMP/r/package-lock.json"
+expect_spec "a manifest with no lock entry"                             "frontend/package\.json exists, but package-lock\.json has no $FE entry"
+npmws '' '' '' "$N"; rm "$TMP/r/frontend/package.json"
+expect_spec "a lock entry with dependencies and no manifest"            "package-lock\.json $FE lists dependencies, but frontend/package\.json does not exist"
+npmws '' '' '' ''; rm "$TMP/r/frontend/package.json"
+expect ok  "no manifest and a lock entry without dependencies"          "$S"
+npmws '' "$N" '' "$N"; rm "$TMP/r/package-lock.json"
+expect_spec "a manifest with no lock"                                   "package-lock\.json does not exist"
+npmws '' "$N" '' "$N"; printf '{"name":"r","lockfileVersion":3}\n' > "$TMP/r/package-lock.json"
+expect_spec "a lock with no packages object"                            "package-lock\.json has no .packages. object"
+npmws '' "$N" '' "$N"; printf '{"name":"r","lockfileVersion":3,"packages":{"":{},"frontend":["x"]}}\n' > "$TMP/r/package-lock.json"
+expect_spec "a lock entry that isn't an object"                         "package-lock\.json $FE is not an object"
+npmws '' "$N" '' "$N"; printf '{"name":"f",\n' > "$TMP/r/frontend/package.json"
+expect_spec "a manifest that isn't JSON"                                "frontend/package\.json can't be read as JSON"
+npmws '' "$N" '' "$N"; printf '["frontend"]\n' > "$TMP/r/package.json"
+expect_spec "a manifest that isn't a JSON object"                       "package\.json is not a JSON object"
+npmws '' ',"dependencies":["next"]' '' "$N"
+expect_spec "a section that isn't an object"                            "frontend/package\.json dependencies or the lock's $FE dependencies is not an object"
+npmws '' ',"dependencies":null' '' ''
+expect_spec "a null section is not read as empty"                       "frontend/package\.json dependencies or the lock's $FE dependencies is not an object"
+# --root: /dependabot-review runs dev's copy of the script on the PR branch's checkout
+npmws '' "$N" '' "$N"; mkdir -p "$TMP/pr/frontend"
+printf '{"name":"f","dependencies":{"next":"16.3.8"}}\n' > "$TMP/pr/frontend/package.json"
+printf '{"lockfileVersion":3,"packages":{"":{},"frontend":{"dependencies":{"next":"^16.3.8"}}}}\n' > "$TMP/pr/package-lock.json"
+expect ok  "the script's own checkout matches"                         "$S"
+expect err "--root reads the other checkout"                            "$S" --root "$TMP/pr"
+expect err "--root that is not a directory"                             "$S" --root "$TMP/pr/missing"
 
 echo "== lint_tooling.py"
 C="$TMP/r/.claude"
