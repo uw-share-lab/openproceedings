@@ -9,15 +9,15 @@ Four layers, each catching what the one before could not:
 
 | Layer | When | What | Mode |
 |---|---|---|---|
-| `.claude/hooks/autofix.sh` | after every Write/Edit by Claude | the edited file only | **fix** (format + safe autofixes), then report whatever remains |
+| `.claude/hooks/autofix.sh` | after every Write/Edit by Claude | the edited file only | **fix** (format + safe autofixes), then report whatever remains; its tools run without the GitHub token (decision-048) |
 | `make fmt` / `make lint` | whenever you like; `make lint` = CI | the whole repo | fmt fixes, lint checks |
-| `.githooks/pre-push` | every `git push` | `make lint` + `make tooling` | check: a push never surprises CI (`lint` and `claude-tooling`) |
+| `.githooks/pre-push` | every `git push` | `make lint` + `make tooling`, without the GitHub token (decision-048) | check: a push never surprises CI (`lint` and `claude-tooling`) |
 | CI `lint` job | every PR to dev/main | `make lint` | check (required status) |
 
 ## Tool per file type
 | Files | Fix (autofix hook, `make fmt`) | Check (`make lint`, CI) |
 |---|---|---|
-| `*.py` (backend, `.claude/`) | `ruff format`, `ruff check --fix` | `ruff format --check`, `ruff check`, then `mypy --strict` for `backend/src` |
+| `*.py` (backend, `.claude/`) | `ruff format`, `ruff check --fix` | `ruff format --check`, `ruff check`, then `mypy --strict` for `backend/src` and `.claude/scripts/dependabot/` (with its case table) |
 | `frontend/**/*.{ts,tsx,js,jsx,json,css,md}` | `prettier --write`, `eslint --fix` (ts/tsx/js/jsx) | `prettier --check`, `eslint`, `next typegen` + `tsc --noEmit` |
 | `*.sh`, `.githooks/*` | none; shellcheck cannot fix | `shellcheck` |
 | `*.yml` workflows | none | `actionlint` if installed (CI installs it) |

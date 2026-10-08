@@ -177,7 +177,7 @@ AREAS: dict[str, dict[str, list[str]]] = {
     "Ops (spec 08)": {
         "agents": ["ci-engineer", "release-manager"],
         "skills": [],
-        "commands": [],
+        "commands": ["dependabot-review"],
     },
 }
 

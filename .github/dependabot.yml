@@ -1,10 +1,13 @@
 version: 2
 # Every ecosystem: minor and patch updates arrive as one grouped PR per ecosystem, and semver-major updates
-# are ignored, so a major upgrade is a deliberate, hand-made change (spec 08 §CI, "Dependabot").
+# are ignored, so a major upgrade is a deliberate, hand-made change (spec 08 §CI, "Dependabot"). A version update
+# waits 7 days after its release (`cooldown`; security updates don't): a compromised release is most often pulled
+# within days, and the weekly /dependabot-review routine leaves a younger one for the owner (decision-048).
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
     commit-message: { prefix: "ci" }
     groups:
       github-actions-minor-patch:
@@ -15,6 +18,7 @@ updates:
   - package-ecosystem: uv
     directory: /
     schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
     commit-message: { prefix: "deps" }
     groups:
       uv-minor-patch:
@@ -30,6 +34,7 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
     commit-message: { prefix: "deps" }
     groups:
       npm-minor-patch:
@@ -48,6 +53,7 @@ updates:
   - package-ecosystem: docker
     directories: ["/deploy", "/deploy/**"]
     schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
     commit-message: { prefix: "build" }
     groups:
       docker-minor-patch:

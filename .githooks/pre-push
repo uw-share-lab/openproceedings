@@ -8,5 +8,9 @@ cd "$(git rev-parse --show-toplevel)"
 # stray branches). Clear every repo-local git variable before running anything.
 # shellcheck disable=SC2046  # word-splitting the variable names is intended
 unset $(git rev-parse --local-env-vars)
-echo "pre-push: make lint" && make --no-print-directory lint
-echo "pre-push: make tooling" && make --no-print-directory tooling
+# lint and tooling load the installed dependencies (eslint, prettier, tsc, ruff, mypy): run them without the
+# GitHub credential, which only the push itself (git, in the parent process) needs (decision-048, TASK-211)
+ghcfg=$(mktemp -d) && trap 'rm -rf "$ghcfg"' EXIT
+nocred=(env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN "GH_CONFIG_DIR=$ghcfg")
+echo "pre-push: make lint" && "${nocred[@]}" make --no-print-directory lint
+echo "pre-push: make tooling" && "${nocred[@]}" make --no-print-directory tooling

@@ -3760,5 +3760,47 @@
   "file": ".claude/hooks/block-ai-attribution.sh",
   "old": "            if script:\n                script = False  # sed still",
   "new": "            if False:\n                script = False  # sed still"
+ },
+ {
+  "label": "autofix: ruff format sees the GitHub token",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "(cd \"$root\" && \"${nocred[@]}\" \"$ruff\" format",
+  "new": "(cd \"$root\" && \"$ruff\" format"
+ },
+ {
+  "label": "autofix: ruff check sees the GitHub token",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "out=$(cd \"$root\" && \"${nocred[@]}\" \"$ruff\" check",
+  "new": "out=$(cd \"$root\" && \"$ruff\" check"
+ },
+ {
+  "label": "autofix: prettier sees the GitHub token",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "\"${nocred[@]}\" npx --no-install prettier",
+  "new": "npx --no-install prettier"
+ },
+ {
+  "label": "autofix: eslint sees the GitHub token",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "\"${nocred[@]}\" npx --no-install eslint",
+  "new": "npx --no-install eslint"
+ },
+ {
+  "label": "autofix: GITHUB_TOKEN kept",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "nocred=(env -u GH_TOKEN -u GITHUB_TOKEN ",
+  "new": "nocred=(env -u GH_TOKEN "
+ },
+ {
+  "label": "pre-push: make lint sees the GitHub token",
+  "file": ".githooks/pre-push",
+  "old": "\"${nocred[@]}\" make --no-print-directory lint",
+  "new": "make --no-print-directory lint"
+ },
+ {
+  "label": "pre-push: make tooling sees the GitHub token",
+  "file": ".githooks/pre-push",
+  "old": "\"${nocred[@]}\" make --no-print-directory tooling",
+  "new": "make --no-print-directory tooling"
  }
 ]

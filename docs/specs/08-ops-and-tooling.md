@@ -55,7 +55,8 @@ crawler parses pages with; CPython issue #135462, fixed in 3.12.12, 3.13.6 and 3
 image's `FROM python:3.12.15-slim-bookworm` names the same release (§Deploy).
 `backend/tests/unit/test_python_pin.py` holds them together and fails on an interpreter without the fix; a patch
 upgrade moves `.python-version`, the image tag and digest together (Dependabot's `docker` entry proposes the
-image half; its PR fails that test until `.python-version` follows). The minor stays 3.12 (security fixes until
+image half; its PR fails that test until `.python-version` follows, and the weekly routine leaves it for the
+owner, §CI "The weekly routine"). The minor stays 3.12 (security fixes until
 2028-10), so ruff's `py312` and mypy's `3.12` targets don't move; a new minor is a hand-made PR.
 
 The fix also changed how the parser reads malformed markup, so extracted text can depend on the release.
@@ -113,8 +114,8 @@ The CLI and the API call the same functions, so the CLI alone is enough to run a
 ## Testing
 
 - Every hook has a case table under `.claude/hooks/tests/`, and every tooling script one under
-  `.claude/scripts/tests/` (the CI scripts, the network guard, `changelog.py`); `make tooling` and CI
-  `claude-tooling` run them all.
+  `.claude/scripts/tests/` (the CI scripts, the network guard, `changelog.py`, the `/dependabot-review`
+  scripts); `make tooling` and CI `claude-tooling` run them all.
 - `make tooling` also runs the roster lint, the `.claude/README.md`, learnings-index and backlog checks, and
   the digest-pin check on `deploy/` (§Deploy).
 - CLI commands are covered by the suites of the spec they call (07); the CLI adds only argument-parsing
@@ -144,9 +145,9 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 
 | Workflow → required check(s) | Runs |
 |---|---|
-| `lint` → `lint` | `make lint` (ruff format/check, mypy --strict once `backend/src` exists, shellcheck, frontend prettier/eslint/tsc), then actionlint |
+| `lint` → `lint` | `make lint` (ruff format/check, mypy --strict on `backend/src` and on the `/dependabot-review` scripts and their case table, shellcheck, frontend prettier/eslint/tsc), then actionlint |
 | `test` → `test` | pytest under pytest-xdist at the `pr` Hypothesis profile (200 examples, 2 s deadline) (unit, golden, differential@200, contract; the 2,000-example `ci` profile runs nightly, TASK-127); vitest; `next build` (the standalone server must exist); OpenAPI snapshot and TS types freshness (`make openapi`, then `git diff --exit-code` on `backend/tests/contract/openapi.json` and `frontend/src/api/schema.ts`; unconditional, TASK-040) |
-| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`, no task or decision id used twice: §Merge queue), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`) |
+| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`, no task or decision id used twice: §Merge queue), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`, the `/dependabot-review` scripts) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha. In a merge-queue build, `merge_group_gate.py` runs the same three checks on every PR in the group (§Merge queue) |
 | `nightly` (scheduled daily, and `workflow_dispatch`; not a PR check) | Parallel jobs, each with its own time limit (TASK-057): the whole backend suite but the differential at the `ci` profile (2,000 examples) under pytest-xdist, synthetic-corpus parity (`test_parity.py`) included; every property at 50,000 examples as a 5-part `properties` matrix under pytest-xdist, split by measured time per test (the near-cap replay property alone, the other oracle-backed properties, `unit/engine`, `unit/ingest`, and the rest with the exhaustive tokenizer check, `OP_EXHAUSTIVE=1`); the year-edit property (`test_clauses.py`), which ran past 90 min unsplit, as 4 seeded `year-edits` jobs of 12,500 (`OP_YEAR_EDIT_SHARDS`); differential@50k as 8 independent jobs of 6,250 examples, each with its own `--hypothesis-seed`, which its log prints with a rerun command; `benchmarks`: the spec 03 benchmarks with their budgets, then the ~80k report into the run summary and a `bench-80k` artifact (a budget miss there is a warning annotation); and the mutation run (`mutate.py`, every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent) as a 12-job `mutate` matrix (TASK-171; 8 until 2026-10-06): job i of n runs `mutate.py --shard i/n`, every n-th mutant from the i-th, so every mutant is checked every night (n is the matrix size, so adding a shard is one edit). Estimated from run 37017691575 (188 mutants in 140 min on a 4-CPU runner), the 694 mutants at TASK-171 need ~8.5 h of one runner, past GitHub's 6 h job cap, or ~65 min a shard of its 140 at 8 shards (2026-10-06: 778 mutants took 77–123 min a shard at 8, so 12); shard 1's first step prints the night's count, and shards are added before one nears 140 min. Shard 1's first step checks every mutant's pattern still exists (seconds), so a stale mutant anywhere fails the run each night; it also fails its own shard. A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min, with an `::error::` giving about how many of its mutants it checked (the step runs with `shell: bash`, i.e. pipefail, so the pipe through `tee` keeps the status). Long pytest steps run verbose with `OP_EARLY_FAILURES=1` (a failure's report, Hypothesis blob included, is printed when the test fails) and are interrupted before their job's limit, so an overrun fails with an `::error::` and shows which test was still running. The run has 31 jobs, past GitHub's limit of 20 at once for a free organization, so 11 (and more while a PR's CI runs) queue until running jobs finish (the short ones, `suite-ci`, `benchmarks` and the `differential` shards, took under 25 min in run 37017691575); a job's time limit starts when it runs. Full-corpus parity stays local (decision-004) |
 | `bench` → `bench` (advisory: not a required check yet) | pytest-benchmark on the 5k fixture index (`backend/tests/bench`, task-031): the PR's base and head on one runner; a minimum time over 20% slower than the base fails, and each benchmark asserts its spec 03 budget (p95). It becomes required once it has run green on a few PRs without false failures (runner noise); a maintainer adds it to `dev`'s required checks |
@@ -206,7 +207,8 @@ created last, after rebasing onto `dev`, and on a clash the unmerged PR drops it
 again (skill `task-hygiene`, §Ids). The rows are in `.claude/scripts/tests/test-tooling-scripts.sh` and the
 mutants in `.claude/scripts/mutants/backlog.json`.
 
-**Dependabot** (`.github/dependabot.yml`, weekly) watches `github-actions` (prefix `ci`), `uv` and `npm` (prefix
+**Dependabot** (`.github/dependabot.yml`, weekly, each version update held back 7 days after its release by
+`cooldown`; security updates aren't) watches `github-actions` (prefix `ci`), `uv` and `npm` (prefix
 `deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch version updates are
 grouped into one PR per ecosystem (a docker digest bump is not a version change and comes as its own PR), and
 semver-major updates are ignored (`dependency-name: "*"`, `version-update:semver-major`), so a major upgrade is a
@@ -227,6 +229,47 @@ equals `packages["frontend"]` in `package-lock.json`: Dependabot's npm updater c
 `npm ci` accepts it. Run `npm audit --omit=dev` and report any advisory that predates the bump. A lockfile edit
 runs under the `.nvmrc` Node, because an older npm drops the `libc` fields. Docs that state a bumped version move
 in the same PR.
+
+**The weekly routine** (decision-048, TASK-211). A scheduled Claude Code routine (a cloud session on a fresh clone,
+no access to the owner's machine) runs `/dependabot-review` (`.claude/commands/dependabot-review.md`) once a week.
+Its checks are scripted in `.claude/scripts/dependabot/` and run from `dev`'s copy, never the PR branch's.
+`prs.py check` gates each PR before anything of it runs: open, by Dependabot, into `dev`, its head still the sha
+fetched, every changed file one its ecosystem touches (computed by git), every commit Dependabot's with a
+signature GitHub verified. The checkers then run the checks above, and the shape of the change: `uv_lock.py`,
+`npm_lock.py`, `docker_digest.py` and `actions_pins.py` allow no change in a file beyond its dependency versions
+and pins (no script, build requirement, `RUN` line or `permissions:` rides along). `restore_libc.py` repairs dropped
+`libc` fields; `prs.py` also lists the PRs and watches the queue. The routine then runs the tests the ecosystem
+calls for (without the GitHub credential in their environment; `.githooks/pre-push` strips it from its `make lint`
+and `make tooling` as well), the reviewers, the dispositions, the review
+record and attestation, the `no-learning` label unless something was learned, and `gh pr merge <n> --auto
+--match-head-commit <sha>`. It fixes what the PR itself can fix: a manifest/lock pin, dropped `libc` fields, a doc
+that states the old version, a review finding. It may merge, through the queue only, a PR that passes all of
+that. It never merges, and leaves open with a comment for the owner, a PR with:
+
+- a commit that isn't Dependabot's, a file outside its ecosystem, or a change beyond versions and pins;
+- an integrity, hash or URL mismatch, or a file off the registry;
+- a new publisher, or provenance the previous version had and the new one lacks;
+- a new install script, or a new or removed package;
+- a uv or npm release younger than 7 days (the `cooldown` every ecosystem sets holds version updates back that
+  long, so this is a security update, which ignores it; for actions and docker images the hold is the `cooldown`
+  alone);
+- a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
+- a red required check it can't fix, or a Must it can't fix;
+- any semver-major, anything touching `tantivy`, or a new Python release, patch or minor: a patch changes how the
+  crawlers parse pages (§Monorepo layout, "Python pin"), and the crawl-cache replay that shows records unchanged
+  needs the owner's `data/`. A new digest for the same `python` tag is merged like any other.
+
+The checkers (and `prs.py check`) print `ok`, `FIX` (the routine repairs it) or `PROBLEM` (a hard stop) per
+finding, and exit 0, 3 (only FIX lines), 1 (a PROBLEM) or 2 (the check couldn't run, also a hard stop). Every
+outside call goes through `git`, `curl`, `npm` or `gh`, so the case table `.claude/scripts/tests/test-dependabot.sh`
+(in `make tooling`) runs them against fakes; the mutants are in `.claude/scripts/mutants/dependabot.json`. The run
+ends with a summary for its log: merged, left open (with the reason), not reviewed, and what the owner should look
+at. The gates stay on for Dependabot PRs; exempting `dependabot[bot]` from `learnings` and `review-attested` was
+considered and rejected (decision-048). The routine's GitHub token is fine-grained: this repository only,
+`contents`, `pull requests`, `issues` and `actions` read and write, nothing else (no `administration`, no
+`workflows`), held in `GH_TOKEN`; it is the only credential the command uses. Without `workflows` the routine
+reviews and attests a github-actions PR but leaves the queueing to the owner (`gh pr merge <n> --auto --match-head-commit <sha>`), named in
+its summary. The pre-push hook and the autofix hook run their tools without the token.
 
 ## Git and PR rules
 
@@ -711,8 +754,8 @@ Kreate splits `.claude/` per project. Our parts share one query contract, so thi
 
 **The authoritative list is [`.claude/README.md`](../../.claude/README.md).** It is generated from the
 files' frontmatter by `.claude/scripts/roster_index.py`, and CI fails if it is stale. This spec deliberately
-does not repeat the list, because a hand-kept copy is how counts drift. As of M0 there are **49 agents,
-53 skills and 17 commands** (target range 25–150 of each), across these areas:
+does not repeat the list, because a hand-kept copy is how counts drift. At TASK-211 (2026-10-07) there are
+**49 agents, 53 skills and 18 commands** (target range 25–150 of each), across these areas:
 - global roles and process (including `learning-recorder` and the review gate);
 - engineering standards (including `autolint`, `logging-standards`, `observability-reviewer`);
 - ingestion;
@@ -724,7 +767,7 @@ does not repeat the list, because a hand-kept copy is how counts drift. As of M0
   auditor, data-viz designer);
 - semantic layer;
 - evaluation and research;
-- ops.
+- ops (including `/dependabot-review`, the weekly Dependabot routine, §CI).
 
 New agents and skills are added when a milestone brings a new recurring task, never speculatively. Each
 needs an area in `roster_index.py` and a path reference from something that uses it (the lint rejects
