@@ -233,11 +233,11 @@ it on every PR (`make tooling`, CI `claude-tooling`; TASK-212): each spec in the
 each mismatch, and also on a file it can't read, a manifest with no lock entry (or the reverse), a section that
 isn't an object, a root `workspaces` entry other than `frontend` (add it to the script's `WORKSPACES`), a
 `--root` that isn't a directory, and a checkout with neither file (so a routine that forgets `--root .` fails on
-dev's copy's scratch directory instead of reading it as a match); case rows in `test-tooling-scripts.sh`. `npm_lock.py` reports the same mismatches, from
-the same function, as FIX lines (a section that isn't an object, or a workspace entry missing from the lock, is a
-PROBLEM). Run `npm audit --omit=dev` and report any advisory that predates the bump. A lockfile edit runs under
-the `.nvmrc` Node, because an older npm drops the `libc` fields. Docs that state a bumped version move in the same
-PR.
+dev's copy's scratch directory instead of reading it as a match); case rows in `test-tooling-scripts.sh`.
+`npm_lock.py` reports the same mismatches, from the same function, as FIX lines (a section that isn't an object,
+or a workspace entry missing from the lock, is a PROBLEM). Run `npm audit --omit=dev` and report any advisory
+that predates the bump. A lockfile edit runs under the `.nvmrc` Node, because an older npm drops the `libc`
+fields. Docs that state a bumped version move in the same PR.
 
 **The weekly routine** (decision-048, TASK-211). A scheduled Claude Code routine (a cloud session on a fresh clone,
 no access to the owner's machine) runs `/dependabot-review` (`.claude/commands/dependabot-review.md`) once a week.
