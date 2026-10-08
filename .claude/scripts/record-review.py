@@ -21,7 +21,8 @@ Refuses to record unless:
 `review-attested` check compares against the PR head sha. It finds the branch's PR with `gh pr view`, which uses
 GraphQL; `--pr <n> --repo <owner>/<name>` reads PR <n> over REST instead (a Claude Code cloud session refuses
 GraphQL; TASK-213) and refuses a PR that isn't open or whose head isn't HEAD. A `gh pr view` failure other than
-"no pull requests found" is an error, never a silent skip.
+"no pull requests found" is an error, never a silent skip. The record is written before any of that, so a refused
+attestation still leaves the record (which is about the commit, not the PR); fix the cause and run it again.
 """
 
 from __future__ import annotations

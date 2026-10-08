@@ -249,23 +249,30 @@ exit 3
 EOF
 chmod +x "$TMP/ghbin/gh"
 HEADSHA=$(g rev-parse HEAD)
-attest_case() {  # attest_case <want> <label> <pr state> <pr head> [record-review args...]
-  local want="$1" label="$2" state="$3" prhead="$4"; shift 4
-  printf '{"state":"%s","head":{"sha":"%s"},"body":"Summary"}' "$state" "$prhead" > "$TMP/pr5.json"; : > "$TMP/gh.log"
-  check_cmd "$want" "$label" env PATH="$TMP/ghbin:$PATH" GH_VIEW="${GH_VIEW-}" python3 "$RECORD" APPROVE "$TMP/none.md" --attest "$@"
+OTHERSHA=$(printf 'f%.0s' $(seq 40))
+# attest_case <want: ok|err> <PATCH sent: yes|no> <message (grep -E)> <label> <pr state|garbage> <pr head> [args...]
+attest_case() {
+  local want="$1" patch="$2" msg="$3" label="$4" state="$5" prhead="$6" got sent; shift 6
+  if [ "$state" = garbage ]; then printf 'not json' > "$TMP/pr5.json"
+  else printf '{"state":"%s","head":{"sha":"%s"},"body":"Summary"}' "$state" "$prhead" > "$TMP/pr5.json"; fi
+  : > "$TMP/gh.log"
+  if (cd "$REPO" && env PATH="$TMP/ghbin:$PATH" GH_VIEW="${GH_VIEW-}" python3 "$RECORD" APPROVE "$TMP/none.md" "$@" >"$TMP/attest.out" 2>&1); then got=ok; else got=err; fi
+  if grep -q '^api -X PATCH' "$TMP/gh.log"; then sent=yes; else sent=no; fi
+  if [ "$got" = "$want" ] && [ "$sent" = "$patch" ] && grep -Eq -- "$msg" "$TMP/attest.out"; then
+    pass=$((pass+1)); printf '  ok   %-24s %-60s -> %s\n' "script" "$label" "$got"
+  else fail=$((fail+1)); printf '  FAIL %-24s %-60s -> %s, PATCH %s: %s\n' "script" "$label" "$got" "$sent" "$(cat "$TMP/attest.out")"; fi
 }
-attest_case ok  "--pr: an open PR at HEAD is attested" open "$HEADSHA" --pr 5 --repo o/r
+attest_case ok  yes "PR #5 body attested"              "--pr: an open PR at HEAD is attested"     open "$HEADSHA" --attest --pr 5 --repo o/r
 if grep -q "op-review: $HEADSHA APPROVE" "$TMP/gh.log" && grep -q '^api -X PATCH repos/o/r/pulls/5' "$TMP/gh.log"; then pass=$((pass+1)); echo "  ok   --pr: the PATCH carries the attestation for HEAD"
 else fail=$((fail+1)); echo "  FAIL --pr: no PATCH with the attestation: $(cat "$TMP/gh.log")"; fi
-attest_case err "--pr: a PR at another head is refused" open "$(printf 'f%.0s' $(seq 40))" --pr 5 --repo o/r
-if grep -q PATCH "$TMP/gh.log"; then fail=$((fail+1)); echo "  FAIL --pr: patched a PR at another head"; else pass=$((pass+1)); echo "  ok   --pr: nothing written to a PR at another head"; fi
-attest_case err "--pr: a closed PR is refused"         closed "$HEADSHA" --pr 5 --repo o/r
-GH_VIEW="no pull requests found for branch \"feat\"" attest_case ok "no PR yet: told to attest after gh pr create" open "$HEADSHA"
-GH_VIEW="GitHub GraphQL is not available from Claude Code sessions" attest_case err "gh pr view failing otherwise is an error" open "$HEADSHA"
-attest_case err "--pr without --repo is refused"      open "$HEADSHA" --pr 5
-if grep -q PATCH "$TMP/gh.log"; then fail=$((fail+1)); echo "  FAIL --pr without --repo patched a PR"; else pass=$((pass+1)); echo "  ok   --pr without --repo writes nothing"; fi
-check_cmd err "--pr without --attest is refused"      python3 "$RECORD" APPROVE "$TMP/none.md" --pr 5 --repo o/r
-attest_case err "--repo without --pr is refused"      open "$HEADSHA" --repo o/r
+attest_case err no  "head is f{10}, not HEAD"         "--pr: a PR at another head is refused"   open "$OTHERSHA" --attest --pr 5 --repo o/r
+attest_case err no  "is closed, not open"             "--pr: a closed PR is refused"            closed "$HEADSHA" --attest --pr 5 --repo o/r
+attest_case err no  "isn't a pull request"            "--pr: an answer that isn't a PR is refused" garbage "$HEADSHA" --attest --pr 5 --repo o/r
+GH_VIEW="no pull requests found for branch \"feat\"" attest_case ok no "no open PR for this branch yet" "no PR yet: told to attest after gh pr create" open "$HEADSHA" --attest
+GH_VIEW="GitHub GraphQL is not available from Claude Code sessions" attest_case err no "could not find this branch's PR .*--pr <n> --repo" "gh pr view failing otherwise is an error" open "$HEADSHA" --attest
+attest_case err no  "--pr needs --repo"               "--pr without --repo is refused"          open "$HEADSHA" --attest --pr 5
+attest_case err no  "only apply with --attest"        "--pr without --attest is refused"        open "$HEADSHA" --pr 5 --repo o/r
+attest_case err no  "--repo only applies with --pr"   "--repo without --pr is refused"          open "$HEADSHA" --attest --repo o/r
 
 echo "== protect-data-dir.sh"
 P=protect-data-dir.sh

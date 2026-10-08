@@ -184,11 +184,15 @@ def gh_api(fx: dict[str, Any], args: list[str]) -> int:
     ans = answer(fx, key)
     if ans is None:
         return not_found(key)
-    if (
-        isinstance(ans, dict) and "__exit" in ans
-    ):  # gh dying another way (a signal, a timeout): no answer at all
+    # gh cancelled (exit 2), with no answer at all; a real timeout is run()'s TimeoutExpired, the same path
+    if isinstance(ans, dict) and "__exit" in ans:
         print("fake gh: died", file=sys.stderr)
         return int(ans["__exit"])
+    if (
+        isinstance(ans, dict) and "__conn" in ans
+    ):  # as gh does when the connection fails: exit 1, no HTTP status
+        print("error connecting to api.github.com", file=sys.stderr)
+        return 1
     if isinstance(ans, dict) and "__status" in ans:
         if ans["__status"] >= 300:
             body = ans.get("body", {"message": "error"})

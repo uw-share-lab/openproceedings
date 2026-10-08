@@ -231,7 +231,7 @@ credential later (push to the PR after it is reviewed, say), with the repo root 
 pattern doesn't match its own command):
 
 ```bash
-ps -eo pid,args | grep -E '<the repo root>/(node_modules|\.venv)/'
+ps -ww -eo pid,args | grep -E '<the repo root>/(node_modules|\.venv)/'
 ```
 
 It must print nothing, here and again just before step 8's `prs.py queue` (the reviewers run things too). Anything

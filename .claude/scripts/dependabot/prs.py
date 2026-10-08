@@ -72,6 +72,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 import os
 import re
 import sys
@@ -172,7 +173,7 @@ def preflight() -> None:
     rep.ok(f"gh api user: {login}")
     mode = detect_mode()
     rep.ok(f"mode: {mode}")
-    held = [v for v in TOKEN_VARS if TOKEN_SHAPE.search(os.environ.get(v, ""))]
+    held = [v for v in TOKEN_VARS if STORED_SHAPE.search(os.environ.get(v, ""))]
     clean = {k: v for k, v in os.environ.items() if k not in TOKEN_VARS}
     stored = run(["gh", "auth", "token"], ok_codes=(0, 1), env=clean)
     has_stored = stored.returncode == 0 and bool(STORED_SHAPE.search(stored.stdout))
@@ -293,9 +294,12 @@ def settle_seconds() -> float:
     """How long `queue` waits before reading once more when GitHub doesn't yet show what it accepted."""
     raw = os.environ.get("OP_DEPENDABOT_SETTLE", "5")
     try:
-        return float(raw)
+        seconds = float(raw)
     except ValueError as e:
         raise ToolError(f"OP_DEPENDABOT_SETTLE is {raw!r}, not a number of seconds") from e
+    if not math.isfinite(seconds) or seconds < 0:  # time.sleep refuses these, after the PUT
+        raise ToolError(f"OP_DEPENDABOT_SETTLE is {raw!r}, not a number of seconds")
+    return seconds
 
 
 def queue_pr(number: int, head: str) -> None:
@@ -376,7 +380,7 @@ def undo(mode: str, number: int, sha: str, since: dt.datetime, settle: float) ->
         if pr["state"] == "open" and taken(number, pr, since):
             return "GitHub still shows it set to merge after turning auto-merge off"
     except Exception as e:  # any failure here leaves the state unknown, which the caller reports
-        return str(e)
+        return str(e) if isinstance(e, ToolError) else f"{type(e).__name__}: {e}"
     return None
 
 

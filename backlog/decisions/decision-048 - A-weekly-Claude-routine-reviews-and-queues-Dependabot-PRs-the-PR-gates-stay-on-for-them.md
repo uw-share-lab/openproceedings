@@ -124,9 +124,9 @@ We keep every safety property above and change only how it is reached:
   the cloud it uses `PUT …/ccr/auto_merge`, whose request shape isn't documented to us, so any non-2xx leaves
   the PR open for the owner. There is no `--match-head-commit` there: `queue` reads the PR immediately before
   and after the PUT. A PR GitHub already shows set to merge is not touched (a re-queue). If the head moved, a
-  failed call left the PR set to merge, or GitHub shows nothing set to merge, it sends `DELETE
-  …/ccr/auto_merge`, reads the PR back and leaves it open; a PR that closed meanwhile is left alone; a PUT
-  that times out, or a read after it that fails, is undone the same way. If the DELETE fails, or GitHub still
+  failed call left the PR set to merge, or GitHub accepted the call but shows nothing set to merge, it
+  sends `DELETE …/ccr/auto_merge`, reads the PR back and leaves it open; a PR that closed meanwhile is left
+  alone; a PUT that times out, or a read after it that fails, is undone the same way. If the DELETE fails, or GitHub still
   shows the PR set to merge (turning auto-merge off doesn't take an entry out of the queue), it says auto-merge
   may still be on or the PR may still be queued, for the owner.
 - **The residual race.** A push that lands after `queue`'s second read but before GitHub acts on the PUT is

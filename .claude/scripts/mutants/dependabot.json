@@ -1174,5 +1174,65 @@
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "    except ValueError as e:\n        raise ToolError(f\"OP_DEPENDABOT_SETTLE",
     "new": "    except ValueError:\n        return 0.0\n        raise ToolError(f\"OP_DEPENDABOT_SETTLE"
+  },
+  {
+    "label": "dependabot: prs: a refused call never read again",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if not visible and not after.get(\"merged\"):  # a refused call can take effect late too\n",
+    "new": "        if enabled and not visible and not after.get(\"merged\"):\n"
+  },
+  {
+    "label": "dependabot: prs: a classic 40-hex token variable called a network secret",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    held = [v for v in TOKEN_VARS if STORED_SHAPE.search(os.environ.get(v, \"\"))]\n",
+    "new": "    held = [v for v in TOKEN_VARS if TOKEN_SHAPE.search(os.environ.get(v, \"\"))]\n"
+  },
+  {
+    "label": "dependabot: prs: a negative settle time accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if not math.isfinite(seconds) or seconds < 0:",
+    "new": "    if False:"
+  },
+  {
+    "label": "dependabot: prs: two unqueued polls not enough",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "c >= 2]",
+    "new": "c >= 3]"
+  },
+  {
+    "label": "dependabot: prs: a run at exactly --hung not HUNG",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": ") * 1440 >= hung_min",
+    "new": ") * 1440 > hung_min"
+  },
+  {
+    "label": "dependabot: prs: completed queue runs counted as going",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "[r for r in got[\"workflow_runs\"] if r.get(\"status\") != \"completed\"]",
+    "new": "got[\"workflow_runs\"]"
+  },
+  {
+    "label": "dependabot: prs: the timeline's other events not filtered out",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": " if e.get(\"event\") in QUEUE_EVENTS",
+    "new": ""
+  },
+  {
+    "label": "dependabot: prs: an unverified-by-omission commit passed",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if verification.get(\"verified\") is not True:\n",
+    "new": "        if verification.get(\"verified\") is False:\n"
+  },
+  {
+    "label": "dependabot: prs: an empty gh api user login accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if not login:\n        raise ToolError",
+    "new": "    if False:\n        raise ToolError"
+  },
+  {
+    "label": "dependabot: prs: the network-secret line printed with a token held",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        elif not held:\n",
+    "new": "        else:\n"
   }
 ]

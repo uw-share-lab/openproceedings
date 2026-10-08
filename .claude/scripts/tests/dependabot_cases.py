@@ -1676,6 +1676,14 @@ def _(c: Case) -> None:
     c.expect("prs.py", ["preflight"], OK, r"^ok +credential: a token in GH_TOKEN; step 5 strips it")
 
 
+@row("prs preflight: a classic 40-hex token in GH_TOKEN is reported, not called a network secret")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.env = {"GH_TOKEN": "0123456789abcdef0123456789abcdef01234567"}
+    got, out = c.run("prs.py", "preflight")
+    assert got == OK and "a token in GH_TOKEN" in out and "network secret" not in out, out
+
+
 @row("prs preflight: a local clone with a gh login")
 def _(c: Case) -> None:
     preflight_case(c, cloud=False, stored=True)
@@ -1796,6 +1804,28 @@ def _(c: Case) -> None:
     assert called(c, "DELETE"), calls(c)
 
 
+@row("prs queue: a refused PUT that takes effect late is seen on the second read and undone")
+def _(c: Case) -> None:
+    args = queue_case(
+        c, {}, {}, {"auto": True}, {}, put={"__status": 502, "body": {"message": "bad gateway"}}
+    )
+    c.expect(
+        "prs.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM turning auto-merge on failed(?s:.*)^ok +auto-merge turned off again",
+    )
+    assert called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: a negative settle time stops before any write")
+def _(c: Case) -> None:
+    args = queue_case(c, {})
+    c.env["OP_DEPENDABOT_SETTLE"] = "-1"
+    c.expect("prs.py", args, ERROR, r"^ERROR +OP_DEPENDABOT_SETTLE is '-1', not a number of seconds")
+    assert not called(c, "PUT"), calls(c)
+
+
 @row("prs queue: a refused PUT that GitHub queued anyway is taken out again")
 def _(c: Case) -> None:
     args = queue_case(c, {}, {}, put={"__status": 502, "body": {"message": "bad gateway"}})
@@ -1900,7 +1930,23 @@ def _(c: Case) -> None:
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub accepted the request but shows neither")
 
 
-@row("prs queue: a PUT that dies (a timeout) is undone and is an error")
+@row("prs queue: a PUT whose connection drops, though GitHub queued the PR, is undone")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {}, put={"__conn": True})
+    added = {"event": "added_to_merge_queue", "created_at": CLOCK}
+    c.gh[page1(f"{R}/issues/7/timeline")] = {
+        "__seq": [[], [added], [added, {"event": "removed_from_merge_queue"}]]
+    }
+    c.expect(
+        "prs.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM turning auto-merge on failed: error connecting(?s:.*)^ok +auto-merge turned off again",
+    )
+    assert called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: a PUT that is cancelled (gh exits 2) is undone and is an error")
 def _(c: Case) -> None:
     args = queue_case(c, {}, {}, put={"__exit": 2})
     c.expect("prs.py", args, ERROR, r"^ERROR +queueing #7 failed partway .*auto-merge turned off again")
@@ -2127,6 +2173,75 @@ def _(c: Case) -> None:
     ]}  # fmt: skip
     got, out = c.run("prs.py", "watch", "1", *W, "--hung", "40")
     assert got == 0 and out.count("HUNG run 99 (test) still in_progress") == 1 and "run 98" not in out, out
+
+
+@row("prs queue: auto-merge shown only on the settle re-read is queued")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {}, {"auto": True})
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(cloud\)")
+    assert not called(c, "DELETE"), calls(c)
+
+
+@row("prs watch: out of the queue for exactly two polls, then merged, is still a drop")
+def _(c: Case) -> None:
+    poll_case(
+        c, 1, ("open", False, True), ("open", False, False), ("open", False, False), ("merged", False, False)
+    )
+    c.expect("prs.py", ["watch", "1", *W], 1, r"^#1 is open but out of the merge queue")
+
+
+@row("prs watch: a non-queue event after added_to_merge_queue still reads as waiting")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", False, False, True), ("open", False, False, True), ("merged", False, False))
+    seq = c.gh[page1(f"{R}/issues/1/timeline")]["__seq"]
+    c.gh[page1(f"{R}/issues/1/timeline")] = {"__seq": [[*t, {"event": "labeled"}] for t in seq]}
+    c.expect("prs.py", ["watch", "1", *W], 0, r"^#1 open queue=waiting checks=-(?s:.*)^all merged")
+
+
+@row("prs watch: the timeline's second page decides")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", False, False, True), ("open", False, False, True), ("merged", False, False))
+    c.gh[page1(f"{R}/issues/1/timeline")] = [{"event": "removed_from_merge_queue"}] + [
+        {"event": "labeled"}
+    ] * 99
+    c.gh[f"api {R}/issues/1/timeline?per_page=100&page=2"] = [{"event": "added_to_merge_queue"}]
+    c.expect("prs.py", ["watch", "1", *W], 0, r"^#1 open queue=waiting checks=-(?s:.*)^all merged")
+
+
+@row("prs watch: a completed old queue run is not HUNG; one at exactly --hung is")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", False, True), ("merged", False, False))
+    branch = QREF.removeprefix("refs/heads/")
+    c.gh[f"api {R}/actions/runs?event=merge_group&branch={branch}&per_page=100"] = {"workflow_runs": [
+        {"id": 97, "name": "done", "status": "completed", "created_at": "2026-10-07T09:00:00Z"},
+        {"id": 96, "name": "edge", "status": "queued", "created_at": "2026-10-07T11:20:00Z"},
+    ]}  # fmt: skip
+    got, out = c.run("prs.py", "watch", "1", *W, "--hung", "40")
+    assert got == 0 and "run 97" not in out and out.count("HUNG run 96 (edge)") == 1, out
+
+
+@row("prs preflight: a github_pat_ token in GITHUB_TOKEN is reported, and no network-secret line")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.env = {"GH_TOKEN": "placeholder", "GITHUB_TOKEN": "github_pat_" + "A1b2C3d4_" * 5}
+    got, out = c.run("prs.py", "preflight")
+    assert got == OK and "a token in GITHUB_TOKEN" in out and "network secret" not in out, out
+
+
+@row("prs preflight: gh api user answering an empty login stops the run")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api user"] = {"login": ""}
+    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR +gh api user answered no login")
+
+
+@row("prs check: a commit with no verification verdict is not verified")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    c.gh[page1(f"{R}/pulls/7/commits")] = [
+        {"sha": args[3], "author": {"login": "dependabot[bot]"}, "commit": {"verification": {}}}
+    ]
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM commit .*doesn't verify its signature")
 
 
 def one(label: str, fn: Callable[[Case], None]) -> str | None:
