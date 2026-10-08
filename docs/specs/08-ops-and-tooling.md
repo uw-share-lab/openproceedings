@@ -295,7 +295,7 @@ and it has no `--match-head-commit`: `queue` reads the head before and after the
 again if it moved. A push between that second read and GitHub acting on the PUT is a residual race; the merge
 queue's `review-attested` check closes it, since the queue build requires each PR's body to attest the exact head
 it merges, and the routine attested only the head it reviewed (decision-048). `prs.py watch` polls REST: the PR's
-`merged` and `auto_merge`, the queue's `gh-readonly-queue/dev/pr-<n>-<sha>` build branch, and the check runs, and
+`merged` and `auto_merge`, the timeline's latest merge-queue event, the queue's `gh-readonly-queue/dev/pr-<n>-<sha>` build branch, and the check runs, and
 names a queue build run that hangs so the routine can cancel and rerun it through the Actions REST endpoints.
 
 ## Git and PR rules

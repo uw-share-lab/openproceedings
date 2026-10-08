@@ -282,11 +282,13 @@ python3 $RUN/.claude/scripts/dependabot/prs.py queue <n> --head <the head>
 APPROVE -->` for the head to its body. `prs.py queue` turns auto-merge on, which on `dev` puts the PR in the merge
 queue once its checks are green. It first requires the PR to be open, Dependabot's, into `dev` and still at `<the
 head>`; then turns auto-merge on (cloud: `PUT …/pulls/<n>/ccr/auto_merge`; local: `gh pr merge <n> --auto
---match-head-commit <the head>`); then reads the PR again, and if the head moved, the PR closed, or the call failed
-but left auto-merge on, turns it off again (cloud: `DELETE …/ccr/auto_merge`; local: `gh pr merge --disable-auto`).
-Exit 0 is queued; 1 is a hard stop (leave the PR open, §10; any non-2xx answer from the CCR route lands here, since
-its request shape isn't documented); 2 is a failed call, and if its message says auto-merge may still be on, put
-that first under "for the owner". The CCR route has no `--match-head-commit`: a push after the second read, before
+--match-head-commit <the head>`); then reads the PR again and requires GitHub to show it set to merge (auto-merge on,
+or a merge-queue entry in its timeline). If the head moved, the PR closed, the call failed but left auto-merge on,
+or GitHub accepted the call but shows nothing, it turns auto-merge off again (cloud: `DELETE …/ccr/auto_merge`;
+local: `gh pr merge --disable-auto`). Exit 0 is queued (or merged already at `<the head>`); 1 is a hard stop
+(leave the PR open, §10; any non-2xx answer from the CCR route lands here, since its request shape isn't
+documented); 2 is a call that failed partway (the PUT timed out, or the read after it failed): it has tried to turn
+auto-merge off, and if its message says auto-merge may still be on, put that first under "for the owner". The CCR route has no `--match-head-commit`: a push after the second read, before
 GitHub acts, is a race the script can't close. The queue's `review-attested` check closes it, because the queue
 build requires the body to attest the head it merges and this run attested only `<the head>` (decision-048).
 Don't rebase the PR because `dev` moved; the queue tests it on top of `dev`.
@@ -305,11 +307,13 @@ Then, before the next PR: `git switch --detach origin/dev` and `npm ci --ignore-
 python3 $RUN/.claude/scripts/dependabot/prs.py watch <n> [<n> ...]
 ```
 
-It polls REST: the PR (`merged`, `state`, `auto_merge`), the queue's build branch
-(`git/matching-refs/heads/gh-readonly-queue/dev/pr-<n>-`: while it exists the PR is in a queue build), the check
-runs on the PR's head (`commits/<sha>/check-runs`) and the queue build's runs (`actions/runs?event=merge_group`).
-While a PR waits in the queue `auto_merge` can read null; an open PR with neither auto-merge nor a build branch,
-two polls running, has dropped out. The script prints each change, and a `HUNG run <id>` line once for a queue
+It polls REST: the PR (`merged`, `state`, `auto_merge`), its timeline's latest merge-queue event
+(`issues/<n>/timeline`: `added_to_merge_queue` means it waits in the queue, `queue=waiting`), the queue's build
+branch (`git/matching-refs/heads/gh-readonly-queue/dev/pr-<n>-`: while it exists the PR is in a queue build,
+`queue=building`; only the first five entries are built at once), the check runs on the PR's head
+(`commits/<sha>/check-runs`) and the queue build's runs (`actions/runs?event=merge_group`). While a PR waits in the
+queue `auto_merge` can read null; an open PR with none of auto-merge, a queue entry or a build branch, two polls
+running, has dropped out. The script prints each change, and a `HUNG run <id>` line once for a queue
 build run still going after 40 min (`--hung`; the queue itself gives up at 60). It exits 0 when all merged, 1 when
 one closed or dropped out of the queue, 2 when GitHub couldn't be asked (run it again), 4 at its timeout (120 min;
 `--timeout` sets it). To fix a queued PR, switch back to its `<head>` branch and run `npm ci --ignore-scripts`.

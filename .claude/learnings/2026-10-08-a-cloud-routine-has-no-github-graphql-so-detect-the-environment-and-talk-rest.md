@@ -22,7 +22,9 @@ runs on 2026-10-08 showed it couldn't, without losing any of decision-048's safe
   construction; what is still checkable is that gh has no stored login and no variable holds a token-shaped value.
 - REST covers everything the routine needs: open PRs (`pulls?state=open&base=dev`, filtered to
   `dependabot[bot]`), files and commits with `verification` (`pulls/<n>/files`, `pulls/<n>/commits`), the queue
-  (a `gh-readonly-queue/dev/pr-<n>-<sha>` branch exists while the PR is in a queue build: `git/matching-refs`),
+  (the timeline's latest `added_to_merge_queue` / `removed_from_merge_queue` event, seen on #127, says whether a
+  PR waits in the queue; a `gh-readonly-queue/dev/pr-<n>-<sha>` branch exists only while it is being built, and
+  only five entries build at once, so the branch alone would read a waiting sixth entry as dropped),
   check runs, merge-group runs, cancel/rerun, and the advisory database (`advisories?ecosystem=npm&affects=next`).
   Evidence: each call run against the repository on 2026-10-08.
 - Detecting the environment by its behaviour (GraphQL's answer) beats guessing from variables: a wrong guess

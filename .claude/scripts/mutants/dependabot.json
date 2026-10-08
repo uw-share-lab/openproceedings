@@ -962,13 +962,13 @@
   {
     "label": "dependabot: prs: auto-merge never turned off again",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        if moved or after.get(\"auto_merge\"):\n",
+    "old": "        if moved or enabled or after.get(\"auto_merge\"):\n",
     "new": "        if False:\n"
   },
   {
     "label": "dependabot: prs: auto-merge turned off only on a move",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        if moved or after.get(\"auto_merge\"):\n",
+    "old": "        if moved or enabled or after.get(\"auto_merge\"):\n",
     "new": "        if moved:\n"
   },
   {
@@ -1010,14 +1010,14 @@
   {
     "label": "dependabot: prs: a queue branch not read as queued",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": " and not s.auto and not s.queue else 0",
-    "new": " and not s.auto else 0"
+    "old": "    waiting = s.auto or s.queue or s.listed\n",
+    "new": "    waiting = s.auto or s.listed\n"
   },
   {
     "label": "dependabot: prs: auto-merge not read as queued",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": " and not s.auto and not s.queue else 0",
-    "new": " and not s.queue else 0"
+    "old": "    waiting = s.auto or s.queue or s.listed\n",
+    "new": "    waiting = s.queue or s.listed\n"
   },
   {
     "label": "dependabot: prs: merged read from state alone",
@@ -1048,5 +1048,59 @@
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "    if any(r.get(\"status\") != \"completed\" for r in runs):\n",
     "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: a timeline queue entry not read as queued",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    waiting = s.auto or s.queue or s.listed\n",
+    "new": "    waiting = s.auto or s.queue\n"
+  },
+  {
+    "label": "dependabot: prs: the timeline's first queue event read, not its last",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "return bool(events) and events[-1] == \"added_to_merge_queue\"",
+    "new": "return bool(events) and events[0] == \"added_to_merge_queue\""
+  },
+  {
+    "label": "dependabot: prs: an accepted PUT not checked for effect",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    elif not visible:\n",
+    "new": "    elif False:\n"
+  },
+  {
+    "label": "dependabot: prs: auto-merge taken from the timeline only",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "return bool(pr.get(\"auto_merge\")) or in_queue(number)",
+    "new": "return in_queue(number)"
+  },
+  {
+    "label": "dependabot: prs: a failed call after the PUT not undone",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        off, why = turn_off(mode, number, sha)\n        if off:\n",
+    "new": "        off, why = True, ''\n        if off:\n"
+  },
+  {
+    "label": "dependabot: prs: a failed undo after a dead PUT read as done",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if off:\n            raise ToolError(f\"queueing",
+    "new": "        if True:\n            raise ToolError(f\"queueing"
+  },
+  {
+    "label": "dependabot: prs: a merge at another head read as done",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if after[\"head\"][\"sha\"] == sha:\n",
+    "new": "        if True:\n"
+  },
+  {
+    "label": "dependabot: prs: an empty GraphQL login read as local",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if login:\n",
+    "new": "        if True:\n"
+  },
+  {
+    "label": "dependabot: prs: turned off again on a refused PUT that turned nothing on",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if moved or enabled or after.get(\"auto_merge\"):\n",
+    "new": "        if True:\n"
   }
 ]

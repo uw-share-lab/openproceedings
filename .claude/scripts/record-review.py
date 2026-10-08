@@ -117,6 +117,8 @@ def main() -> None:
     ap.add_argument("--pr", type=int, help="attest this PR, read over REST (no GraphQL; a cloud session)")
     ap.add_argument("--repo", default="{owner}/{repo}", help="owner/name for --attest (default: gh's own)")
     a = ap.parse_args()
+    if (a.pr is not None or a.repo != "{owner}/{repo}") and not a.attest:
+        ap.error("--pr and --repo only apply with --attest")
 
     global BASE
     BASE = os.environ.get("OP_REVIEW_BASE", BASE)

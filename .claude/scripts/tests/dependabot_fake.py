@@ -124,8 +124,8 @@ def not_found(what: str) -> int:
 
 
 def graphql_blocked() -> int:
-    print(GRAPHQL_403)
-    print(f"gh: HTTP 403: {GRAPHQL_403}", file=sys.stderr)
+    print(json.dumps({"message": GRAPHQL_403}))
+    print(f"gh: {GRAPHQL_403} (HTTP 403)", file=sys.stderr)
     return 1
 
 
@@ -184,6 +184,11 @@ def gh_api(fx: dict[str, Any], args: list[str]) -> int:
     ans = answer(fx, key)
     if ans is None:
         return not_found(key)
+    if (
+        isinstance(ans, dict) and "__exit" in ans
+    ):  # gh dying another way (a signal, a timeout): no answer at all
+        print("fake gh: died", file=sys.stderr)
+        return int(ans["__exit"])
     if isinstance(ans, dict) and "__status" in ans:
         if ans["__status"] >= 300:
             body = ans.get("body", {"message": "error"})

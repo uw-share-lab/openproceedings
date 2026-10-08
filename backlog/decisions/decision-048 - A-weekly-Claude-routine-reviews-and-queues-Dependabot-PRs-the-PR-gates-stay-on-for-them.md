@@ -106,7 +106,7 @@ We keep every safety property above and change only how it is reached:
 
 - Everything the procedure asks GitHub goes through REST (`gh api repos/<repo>/...`), in both environments:
   `prs.py list`, `check` (now also comparing GitHub's file and commit lists with git's), `watch` (the PR's
-  `merged` and `auto_merge`, the queue's `gh-readonly-queue/dev/pr-<n>-<sha>` build branch, the check runs;
+  `merged` and `auto_merge`, the timeline's latest merge-queue event, the queue's build branch, the check runs;
   a hung queue build is cancelled and rerun through the Actions REST endpoints), the advisory lookup, and
   `record-review.py --attest --pr <n>`, which also refuses a PR whose head isn't the reviewed HEAD.
 - **The environment is detected, not assumed.** `prs.py` asks GraphQL for the viewer: the session's 403
@@ -122,9 +122,10 @@ We keep every safety property above and change only how it is reached:
 - **Queueing.** Locally `prs.py queue` runs `gh pr merge <n> --auto --match-head-commit <sha>`, as before. In
   the cloud it uses `PUT …/ccr/auto_merge`, whose request shape isn't documented to us, so any non-2xx leaves
   the PR open for the owner. There is no `--match-head-commit` there: `queue` reads the head immediately before
-  and after the PUT, and if it moved (or the PR closed, or a failed PUT left auto-merge on) it sends `DELETE
-  …/ccr/auto_merge` and leaves the PR open; if that DELETE fails it says auto-merge may still be on, for the
-  owner.
+  and after the PUT, and if it moved (or the PR closed, a failed PUT left auto-merge on, or GitHub shows
+  nothing set to merge) it sends `DELETE …/ccr/auto_merge` and leaves the PR open; a PUT that times out, or
+  a read after it that fails, is undone the same way; if the DELETE fails it says auto-merge may still be on,
+  for the owner.
 - **The residual race.** A push that lands after `queue`'s second read but before GitHub acts on the PUT is
   not caught by the script. The merge queue closes it: its build runs `review-attested` for each queued PR
   (`merge_group_gate.py`), which requires the PR's current body to attest the exact head the queue merges,

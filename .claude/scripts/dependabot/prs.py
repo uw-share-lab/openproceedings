@@ -44,17 +44,21 @@ spec 08 §Release).
 
 `queue` turns auto-merge on (on `dev` that puts the PR in the merge queue once its checks pass) only for an open
 Dependabot PR into `dev` whose head is still `<sha>`, and never for a github-actions PR (the routine's token has
-no `workflows` permission: the owner queues those). It reads the head again right after: if the head moved,
-the PR closed, or the PUT failed but left auto-merge on, it turns auto-merge off again and prints a PROBLEM. In
-the cloud there is no `--match-head-commit`: a push between the read after the PUT and the queue's build is the
-residual race, and the queue's `review-attested` check (the body must attest the head the queue merges) is what
-stops it (decision-048). Exit 0 queued; 1 not queued (leave the PR open for the owner); 2 a call failed, and the
-message says whether auto-merge may still be on.
+no `workflows` permission: the owner queues those). It reads the PR again right after, and requires GitHub to
+show it set to merge (auto-merge on, or a merge-queue entry; read once more after OP_DEPENDABOT_SETTLE seconds,
+default 5): if the head moved, the PR closed, the call failed but left auto-merge on, or GitHub accepted the call
+but shows nothing, it turns auto-merge off again and prints a PROBLEM. If the call or the read after it fails
+outright (a timeout), it turns auto-merge off too and exits 2, saying whether that worked. In the cloud there is
+no `--match-head-commit`: a push between the read after the PUT and the queue's build is the residual race, and
+the queue's `review-attested` check (the body must attest the head the queue merges) is what stops it
+(decision-048). Exit 0 queued (or already merged at `<sha>`); 1 not queued (leave the PR open for the owner);
+2 a call failed, and the message says whether auto-merge may still be on.
 
 `watch` polls REST every `--interval` seconds and prints a line whenever a PR's state, auto-merge, queue
-presence or check rollup changes. A PR is in the queue while a `gh-readonly-queue/dev/pr-<n>-<sha>` branch
-exists for it (the queue's build branch); an open PR with neither auto-merge nor such a branch, two polls
-running, has dropped out of the queue. A queue build run still going after `--hung` minutes is printed once as
+presence or check rollup changes. A PR is in the queue while its timeline's latest merge-queue event is
+`added_to_merge_queue` (`queue=waiting`) or a `gh-readonly-queue/dev/pr-<n>-<sha>` build branch exists for it
+(`queue=building`); an open PR with none of those nor auto-merge, two polls running, has dropped out of the
+queue. A queue build run still going after `--hung` minutes is printed once as
 `HUNG` with its run id (cancel and rerun it: step 9). Exit 0 when every PR merged; 1 when one was closed unmerged
 or dropped out of the queue (the line says which); 2 when gh fails; 4 at `--timeout` minutes.
 """
@@ -97,6 +101,9 @@ GRAPHQL_BLOCKED = "GitHub GraphQL is not available from Claude Code sessions"
 TOKEN_SHAPE = re.compile(r"gh[opsur]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}")
 TOKEN_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
 FAILED = {"failure", "timed_out", "cancelled", "action_required", "startup_failure", "stale"}
+QUEUE_EVENTS = ("added_to_merge_queue", "removed_from_merge_queue")
+# seconds `queue` waits before reading once more when GitHub doesn't yet show what it accepted (tests set 0)
+SETTLE = float(os.environ.get("OP_DEPENDABOT_SETTLE", "5"))
 
 
 def ecosystem(head: str) -> str:
@@ -279,16 +286,41 @@ def queue_pr(number: int, head: str) -> None:
         rep.finish()
     mode = detect_mode()
     rep.ok(f"mode: {mode}")
-    enabled, said = auto_merge(mode, number, True, sha)
-    after = get_pr(number)
+    try:
+        enabled, said = auto_merge(mode, number, True, sha)
+        after = get_pr(number)
+        visible = taken(number, after)
+        if enabled and not visible and not after.get("merged"):
+            time.sleep(SETTLE)  # GitHub can take a moment to show what it accepted
+            after = get_pr(number)
+            visible = taken(number, after)
+    except ToolError as e:
+        # the PUT may have taken effect (a timeout, an odd exit) or the read after it failed: undo, and say so
+        off, why = turn_off(mode, number, sha)
+        if off:
+            raise ToolError(f"queueing #{number} failed partway ({e}); auto-merge turned off again") from e
+        raise ToolError(
+            f"queueing #{number} failed partway ({e}); auto-merge may still be on for #{number} and could not "
+            f"be turned off ({why}): the owner must turn it off by hand"
+        ) from e
+    if after.get("merged"):
+        if after["head"]["sha"] == sha:
+            rep.ok(f"#{number} merged already, at {sha[:12]}")
+        else:
+            rep.problem(
+                f"#{number} merged at {after['head']['sha'][:12]}, not the reviewed {sha[:12]}: tell the owner"
+            )
+        rep.finish()
     moved = after["state"] != "open" or after["head"]["sha"] != sha
     if not enabled:
         rep.problem(f"turning auto-merge on failed: {said}")
+    elif not visible:
+        rep.problem("GitHub accepted the request but shows neither auto-merge nor a merge-queue entry")
     if moved:
         rep.problem(f"the PR changed while it was queued: {after['state']} at {after['head']['sha'][:12]}")
     if rep.problems:
-        if moved or after.get("auto_merge"):
-            off, why = auto_merge(mode, number, False, sha)
+        if moved or enabled or after.get("auto_merge"):
+            off, why = turn_off(mode, number, sha)
             if not off:
                 raise ToolError(
                     f"auto-merge may still be on for #{number} and could not be turned off ({why}): the owner "
@@ -300,16 +332,40 @@ def queue_pr(number: int, head: str) -> None:
     rep.finish()
 
 
+def turn_off(mode: str, number: int, sha: str) -> tuple[bool, str]:
+    try:
+        return auto_merge(mode, number, False, sha)
+    except ToolError as e:
+        return False, str(e)
+
+
+def in_queue(number: int) -> bool:
+    """The PR's latest merge-queue event in its timeline is `added_to_merge_queue` (an entry waiting behind
+    others has no build branch yet, and `auto_merge` can read null while it waits)."""
+    events = [
+        e["event"]
+        for e in api_pages(f"repos/{REPO}/issues/{number}/timeline")
+        if e.get("event") in QUEUE_EVENTS
+    ]
+    return bool(events) and events[-1] == "added_to_merge_queue"
+
+
+def taken(number: int, pr: dict[str, Any]) -> bool:
+    """GitHub shows the PR set to merge: auto-merge on, or an entry in the merge queue."""
+    return bool(pr.get("auto_merge")) or in_queue(number)
+
+
 @dataclass
 class Snap:
     state: str  # open | closed | merged
     auto: bool
     queue: list[str]  # the queue's build branches for this PR
+    listed: bool  # the timeline's latest merge-queue event is `added_to_merge_queue`
     checks: str
     runs: list[dict[str, Any]]  # the queue's build runs still going
 
     def line(self) -> str:
-        queue = "queue=building" if self.queue else "queue=-"
+        queue = "queue=building" if self.queue else "queue=waiting" if self.listed else "queue=-"
         auto = " auto-merge" if self.auto else ""
         return f"{self.state} {queue}{auto} checks={self.checks}"
 
@@ -337,7 +393,8 @@ def snap(number: int) -> Snap:
     for b in branches:
         got = api(f"repos/{REPO}/actions/runs?event=merge_group&branch={b}&per_page={PER_PAGE}")
         going += [r for r in got["workflow_runs"] if r.get("status") != "completed"]
-    return Snap(state, bool(pr.get("auto_merge")), branches, checks, going)
+    listed = state == "open" and in_queue(number)
+    return Snap(state, bool(pr.get("auto_merge")), branches, listed, checks, going)
 
 
 def watch(numbers: list[int], interval: float, timeout_min: float, hung_min: float) -> None:
@@ -352,7 +409,8 @@ def watch(numbers: list[int], interval: float, timeout_min: float, hung_min: flo
             if last.get(n) != line:
                 print(f"#{n} {line}", flush=True)
                 last[n] = line
-            unqueued[n] = unqueued.get(n, 0) + 1 if s.state == "open" and not s.auto and not s.queue else 0
+            waiting = s.auto or s.queue or s.listed
+            unqueued[n] = unqueued.get(n, 0) + 1 if s.state == "open" and not waiting else 0
             for r in s.runs:
                 if r["id"] not in told and age_days(r["created_at"]) * 1440 >= hung_min:
                     told.add(r["id"])
@@ -373,8 +431,8 @@ def watch(numbers: list[int], interval: float, timeout_min: float, hung_min: flo
             print("all merged")
             sys.exit(0)
         if time.monotonic() >= deadline:
-            waiting = [n for n in numbers if states[n].state != "merged"]
-            print(f"timed out after {timeout_min:g} min; still waiting: {waiting}")
+            left = [n for n in numbers if states[n].state != "merged"]
+            print(f"timed out after {timeout_min:g} min; still waiting: {left}")
             sys.exit(4)
         time.sleep(interval)
 
