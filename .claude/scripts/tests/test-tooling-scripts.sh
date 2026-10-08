@@ -244,9 +244,9 @@ npmws() {
 }
 # expect_spec <label> <ERE> — exits 1 AND prints an `npm specs: ` line matching <ERE> (an unrelated failure
 # can't pass the row)
-expect_spec() {
-  local label="$1" re="$2" out rc
-  out=$(python3 "$TMP/r/.claude/scripts/$S" 2>&1); rc=$?
+expect_spec() {  # expect_spec <label> <ERE> [args...]
+  local label="$1" re="$2" out rc; shift 2
+  out=$(python3 "$TMP/r/.claude/scripts/$S" "$@" 2>&1); rc=$?
   if [ "$rc" = 1 ] && printf '%s\n' "$out" | grep -Eq "^npm specs: $re"; then
     pass=$((pass+1)); printf '  ok   %-22s %-58s -> match\n' npm_specs.py "$label"
   else fail=$((fail+1)); printf '  FAIL %-22s %-58s -> rc %s: %s (want: %s)\n' npm_specs.py "$label" "$rc" "$out" "$re"; fi
@@ -313,8 +313,12 @@ npmws '' "$N" '' "$N"; mkdir -p "$TMP/pr/frontend"
 printf '{"name":"f","dependencies":{"next":"16.3.8"}}\n' > "$TMP/pr/frontend/package.json"
 printf '{"lockfileVersion":3,"packages":{"":{},"frontend":{"dependencies":{"next":"^16.3.8"}}}}\n' > "$TMP/pr/package-lock.json"
 expect ok  "the script's own checkout matches"                         "$S"
-expect err "--root reads the other checkout"                            "$S" --root "$TMP/pr"
-expect err "--root that is not a directory"                             "$S" --root "$TMP/pr/missing"
+expect_spec "--root reads the other checkout"                          "frontend/package\.json dependencies\.next is '16\.3\.8', the lock's $FE has '\^16\.3\.8'" --root "$TMP/pr"
+expect_spec "--root that is not a directory"                           ".*/pr/missing is not a directory" --root "$TMP/pr/missing"
+npmws '' "$N" '' "$N"; printf '{"name":"r","workspaces":["frontend","docs"]}\n' > "$TMP/r/package.json"
+expect_spec "a workspace the check doesn't know"                       "package\.json workspaces .*'docs'.*: this check compares only"
+npmws '' '' '' ''; rm "$TMP/r/frontend/package.json"; printf '{"lockfileVersion":3,"packages":{"":{},"frontend":{"dependencies":[]}}}\n' > "$TMP/r/package-lock.json"
+expect_spec "an empty non-object lock section with no manifest"        "package-lock\.json $FE lists dependencies, but frontend/package\.json does not exist"
 
 echo "== lint_tooling.py"
 C="$TMP/r/.claude"

@@ -788,7 +788,7 @@
   {
     "label": "npm specs: a lock entry with no manifest passes",
     "file": ".claude/scripts/dependabot/npm_specs.py",
-    "old": "            if entry and any(entry.get(s) for s in MANIFEST_SECTIONS):\n",
+    "old": "            if entry and any(entry.get(s, {}) != {} for s in MANIFEST_SECTIONS):\n",
     "new": "            if False:\n"
   },
   {
@@ -820,5 +820,17 @@
     "file": ".claude/scripts/dependabot/npm_specs.py",
     "old": "    if not root.is_dir():\n        return [",
     "new": "    if not root.is_dir():\n        return [] and ["
+  },
+  {
+    "label": "npm specs: an unknown workspace passes",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "    if not isinstance(listed, list) or set(map(str, listed)) - set(WORKSPACES):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: npm: a malformed workspace section is only a FIX",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "            if m.endswith(NOT_AN_OBJECT):  # a malformed manifest or entry: nothing to copy across\n",
+    "new": "            if False:\n"
   }
 ]

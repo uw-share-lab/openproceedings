@@ -25,7 +25,8 @@ within the tree (npm dedupes) is checked against the registry like a changed one
 A PROBLEM, the PR stays open: an added or removed package, an entry that changes its package name (an alias)
 or turns into or out of a `link`, a mismatch with the registry, a field dropped from an entry whose version
 didn't move, a new install script, a new publisher, provenance the previous version had and this one lacks or
-that comes from another repository, a semver-major bump. A FIX, repaired in the PR: a manifest/lock pin that
+that comes from another repository, a semver-major bump, a dependency section of a manifest or of a
+workspace entry that isn't an object. A FIX, repaired in the PR: a manifest/lock pin that
 differs, a dropped `libc`.
 """
 
@@ -50,7 +51,7 @@ from _common import (
     run_json,
     version_tuple,
 )
-from npm_specs import MANIFEST_SECTIONS, WORKSPACES, mismatches
+from npm_specs import MANIFEST_SECTIONS, NOT_AN_OBJECT, WORKSPACES, mismatches
 
 REGISTRY = "https://registry.npmjs.org/"
 DEP_FIELDS = ("dependencies", "optionalDependencies", "peerDependencies", "os", "cpu", "libc")
@@ -241,7 +242,10 @@ def check_manifests(
         before = git_show(base, path)
         check_dep_values(rep, path, load(before, f"{path} at {base}") if before else {}, manifest, moved)
         for m in mismatches(path, key, manifest, packages.get(key, {})):
-            rep.fix(f"{m} (edit the lock by hand to match the manifest)")
+            if m.endswith(NOT_AN_OBJECT):  # a malformed manifest or entry: nothing to copy across
+                rep.problem(m)
+            else:
+                rep.fix(f"{m} (edit the lock by hand to match the manifest)")
     if len(rep.problems) + len(rep.fixes) == found:
         rep.ok("package.json and frontend/package.json match the lock's workspace entries")
 

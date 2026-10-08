@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[3]
 # the lock's key for each workspace's manifest: "" is the npm workspace root
 WORKSPACES = {"": "package.json", "frontend": "frontend/package.json"}
 MANIFEST_SECTIONS = ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
+NOT_AN_OBJECT = "is not an object"
 
 
 def mismatches(path: str, key: str, manifest: Mapping[str, Any], entry: Mapping[str, Any]) -> list[str]:
@@ -42,7 +43,7 @@ def mismatches(path: str, key: str, manifest: Mapping[str, Any], entry: Mapping[
     for section in MANIFEST_SECTIONS:
         want, got = manifest.get(section, {}), entry.get(section, {})
         if not isinstance(want, dict) or not isinstance(got, dict):
-            out.append(f"{path} {section} or the lock's {where} {section} is not an object")
+            out.append(f"{path} {section} or the lock's {where} {section} {NOT_AN_OBJECT}")
             continue
         for dep in sorted(set(want) | set(got)):
             if want.get(dep) != got.get(dep):
@@ -76,6 +77,12 @@ def check(root: Path) -> list[str]:
         if all(m is None for m in manifests.values()):
             return []
         return ["package-lock.json does not exist, but a package.json does"]
+    listed = (manifests[""] or {}).get("workspaces", [])
+    if not isinstance(listed, list) or set(map(str, listed)) - set(WORKSPACES):
+        known = sorted(set(WORKSPACES) - {""})
+        return [
+            f"package.json workspaces {listed!r}: this check compares only {known} (add it to WORKSPACES)"
+        ]
     packages = lock.get("packages")
     if not isinstance(packages, dict):
         return ["package-lock.json has no `packages` object (lockfileVersion 3 is expected)"]
@@ -85,7 +92,7 @@ def check(root: Path) -> list[str]:
         if entry is not None and not isinstance(entry, dict):
             out.append(f'package-lock.json packages["{key}"] is not an object')
         elif manifest is None:
-            if entry and any(entry.get(s) for s in MANIFEST_SECTIONS):
+            if entry and any(entry.get(s, {}) != {} for s in MANIFEST_SECTIONS):
                 out.append(
                     f'package-lock.json packages["{key}"] lists dependencies, but {path} does not exist'
                 )
