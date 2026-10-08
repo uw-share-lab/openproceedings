@@ -541,6 +541,20 @@ if grep -q prettier "$TMP/npx.log"; then fail=$((fail+1)); echo "  FAIL prettier
 rm -f "$REPO/frontend/.prettierrc.json"; : > "$TMP/npx.log"
 payload_file Edit "$REPO/frontend/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
 if grep -q prettier "$TMP/npx.log"; then pass=$((pass+1)); echo "  ok   prettier runs when its config is unchanged"; else fail=$((fail+1)); echo "  FAIL prettier did not run with a clean config"; fi
+# the tools autofix and pre-push run load installed dependencies: none sees the GitHub token (decision-048, TASK-211)
+mkdir -p "$TMP/bin2" "$REPO/.venv/bin"
+printf '#!/bin/sh\necho "${GH_TOKEN-unset} ${GITHUB_TOKEN-unset} ${GH_CONFIG_DIR-none} $1" >> "%s/cred.log"\n' "$TMP" > "$TMP/bin2/npx"
+chmod +x "$TMP/bin2/npx"; cp "$TMP/bin2/npx" "$REPO/.venv/bin/ruff"; cp "$TMP/bin2/npx" "$TMP/bin2/make"
+printf 'x=1\n' > "$REPO/cred.py"; : > "$TMP/cred.log"
+payload_file Edit "$REPO/frontend/a.ts" | GH_TOKEN=probe-token GITHUB_TOKEN=probe-token PATH="$TMP/bin2:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+payload_file Edit "$REPO/cred.py" | GH_TOKEN=probe-token GITHUB_TOKEN=probe-token PATH="$TMP/bin2:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+if [ "$(grep -c '^unset unset /' "$TMP/cred.log")" = 4 ] && ! grep -q probe-token "$TMP/cred.log"; then pass=$((pass+1)); echo "  ok   autofix runs ruff, prettier and eslint without the GitHub token"
+else fail=$((fail+1)); echo "  FAIL autofix tools saw the token: $(cat "$TMP/cred.log")"; fi
+: > "$TMP/cred.log"
+( cd "$REPO" && GH_TOKEN=probe-token GITHUB_TOKEN=probe-token PATH="$TMP/bin2:$PATH" bash "$HOOKS/../../.githooks/pre-push" >/dev/null 2>&1 )
+if [ "$(grep -c '^unset unset /' "$TMP/cred.log")" = 2 ] && ! grep -q probe-token "$TMP/cred.log"; then pass=$((pass+1)); echo "  ok   pre-push runs make lint and make tooling without the GitHub token"
+else fail=$((fail+1)); echo "  FAIL pre-push's make saw the token: $(cat "$TMP/cred.log")"; fi
+rm -rf "$REPO/.venv" "$REPO/cred.py" "$REPO/__pycache__"   # py_compile writes __pycache__/cred.*.pyc
 rm -rf "$REPO/node_modules" "$REPO/frontend/eslint.config.js" "$REPO/frontend/a.ts"
 
 echo "== round-4 rows (git clean precision, arithmetic, heredoc edges)"

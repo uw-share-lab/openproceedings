@@ -40,6 +40,11 @@ with no context and no access to the owner's machine can run it, and script its 
   only `dev`: run the checkers from `dev`'s copy, gate the PR (`prs.py check`: Dependabot-only verified commits,
   files by ecosystem from git, the head unchanged) before anything of it runs, reject any change beyond
   versions and pins, keep the token out of the tests' environment, and queue with `--match-head-commit`.
+- "Run the dependencies without the token" has to cover every path that loads them, not just the commands the
+  procedure names: rounds 3 and 4 found the pre-push hook's `make lint` and the autofix hook's ruff, prettier and
+  eslint (both run after the PR's lock is installed). Both now strip the token, and a gates row with a recording
+  fake pins it. A token scope is part of the same budget: `workflows` was dropped, so the owner queues
+  github-actions PRs.
 - A legitimate pipeline can publish a bad release that passes every provenance check; Dependabot's `cooldown`
   (7 days) plus a checker stop on a younger release is the cheap defence, and leaves security updates (which
   ignore cooldown) to the owner.
