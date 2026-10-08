@@ -950,32 +950,32 @@
   {
     "label": "dependabot: prs: no head read after queueing",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "    moved = after[\"state\"] != \"open\" or after[\"head\"][\"sha\"] != sha\n",
+    "old": "    moved = state != \"open\" or after_sha != sha\n",
     "new": "    moved = False\n"
   },
   {
     "label": "dependabot: prs: only the state read after queueing",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": " or after[\"head\"][\"sha\"] != sha\n",
-    "new": "\n"
+    "old": "    moved = state != \"open\" or after_sha != sha\n",
+    "new": "    moved = state != \"open\"\n"
   },
   {
     "label": "dependabot: prs: auto-merge never turned off again",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        if moved or enabled or after.get(\"auto_merge\"):\n",
+    "old": "        if state == \"open\" and (moved or enabled or visible):\n",
     "new": "        if False:\n"
   },
   {
     "label": "dependabot: prs: auto-merge turned off only on a move",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        if moved or enabled or after.get(\"auto_merge\"):\n",
-    "new": "        if moved:\n"
+    "old": "        if state == \"open\" and (moved or enabled or visible):\n",
+    "new": "        if state == \"open\" and moved:\n"
   },
   {
     "label": "dependabot: prs: a failed turn-off ignored",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "            if not off:\n",
-    "new": "            if False:\n"
+    "old": "            if why is not None:\n                raise ToolError(\n                    f\"auto-merge may",
+    "new": "            if False:\n                raise ToolError(\n                    f\"auto-merge may"
   },
   {
     "label": "dependabot: prs: github-actions PRs queued",
@@ -986,8 +986,8 @@
   {
     "label": "dependabot: prs: queue goes on past a problem",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "    if rep.problems:\n        rep.finish()\n    mode = detect_mode()",
-    "new": "    mode = detect_mode()"
+    "old": "    if rep.problems:\n        rep.finish()\n    if taken(number, pr):",
+    "new": "    if taken(number, pr):"
   },
   {
     "label": "dependabot: prs: local queue without --match-head-commit",
@@ -1058,8 +1058,8 @@
   {
     "label": "dependabot: prs: the timeline's first queue event read, not its last",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "return bool(events) and events[-1] == \"added_to_merge_queue\"",
-    "new": "return bool(events) and events[0] == \"added_to_merge_queue\""
+    "old": "    if not events or events[-1][\"event\"] != \"added_to_merge_queue\":\n",
+    "new": "    if not events or events[0][\"event\"] != \"added_to_merge_queue\":\n"
   },
   {
     "label": "dependabot: prs: an accepted PUT not checked for effect",
@@ -1070,25 +1070,25 @@
   {
     "label": "dependabot: prs: auto-merge taken from the timeline only",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "return bool(pr.get(\"auto_merge\")) or in_queue(number)",
-    "new": "return in_queue(number)"
+    "old": "    return bool(pr.get(\"auto_merge\")) or in_queue(number, since)\n",
+    "new": "    return in_queue(number, since)\n"
   },
   {
     "label": "dependabot: prs: a failed call after the PUT not undone",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        off, why = turn_off(mode, number, sha)\n        if off:\n",
-    "new": "        off, why = True, ''\n        if off:\n"
+    "old": "        why = undo(mode, number, sha, since)\n        if why is None:\n            raise ToolError(f\"queueing",
+    "new": "        why = None\n        if why is None:\n            raise ToolError(f\"queueing"
   },
   {
     "label": "dependabot: prs: a failed undo after a dead PUT read as done",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        if off:\n            raise ToolError(f\"queueing",
+    "old": "        if why is None:\n            raise ToolError(f\"queueing",
     "new": "        if True:\n            raise ToolError(f\"queueing"
   },
   {
     "label": "dependabot: prs: a merge at another head read as done",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        if after[\"head\"][\"sha\"] == sha:\n",
+    "old": "        if after_sha == sha:\n",
     "new": "        if True:\n"
   },
   {
@@ -1100,7 +1100,55 @@
   {
     "label": "dependabot: prs: turned off again on a refused PUT that turned nothing on",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        if moved or enabled or after.get(\"auto_merge\"):\n",
-    "new": "        if True:\n"
+    "old": "        if state == \"open\" and (moved or enabled or visible):\n",
+    "new": "        if state == \"open\":\n"
+  },
+  {
+    "label": "dependabot: prs: a PR already set to merge PUT again",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if taken(number, pr):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: a queue event from before the request counts",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    return since is None or parse_time(events[-1][\"created_at\"]) >= since\n",
+    "new": "    return True\n"
+  },
+  {
+    "label": "dependabot: prs: a closed PR undone",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if state == \"open\" and (moved or enabled or visible):\n",
+    "new": "        if moved or enabled or visible:\n"
+  },
+  {
+    "label": "dependabot: prs: an undo not read back",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if pr[\"state\"] == \"open\" and taken(number, pr, since):\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: prs: a failed PUT that GitHub queued not undone",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if state == \"open\" and (moved or enabled or visible):\n",
+    "new": "        if state == \"open\" and (moved or enabled):\n"
+  },
+  {
+    "label": "dependabot: prs: a head branch of any shape accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if not HEAD_SHAPE.fullmatch(pr[\"head\"][\"ref\"]):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: any matching ref counts as the queue's",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": " for r in refs if own.fullmatch(r[\"ref\"])]",
+    "new": " for r in refs]"
+  },
+  {
+    "label": "dependabot: prs: a placeholder stored login is a stop",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    has_stored = stored.returncode == 0 and bool(TOKEN_SHAPE.search(stored.stdout))\n",
+    "new": "    has_stored = stored.returncode == 0 and bool(stored.stdout.strip())\n"
   }
 ]

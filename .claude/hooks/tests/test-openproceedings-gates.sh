@@ -262,6 +262,9 @@ if grep -q PATCH "$TMP/gh.log"; then fail=$((fail+1)); echo "  FAIL --pr: patche
 attest_case err "--pr: a closed PR is refused"         closed "$HEADSHA" --pr 5 --repo o/r
 GH_VIEW="no pull requests found for branch \"feat\"" attest_case ok "no PR yet: told to attest after gh pr create" open "$HEADSHA"
 GH_VIEW="GitHub GraphQL is not available from Claude Code sessions" attest_case err "gh pr view failing otherwise is an error" open "$HEADSHA"
+attest_case err "--pr without --repo is refused"      open "$HEADSHA" --pr 5
+if grep -q PATCH "$TMP/gh.log"; then fail=$((fail+1)); echo "  FAIL --pr without --repo patched a PR"; else pass=$((pass+1)); echo "  ok   --pr without --repo writes nothing"; fi
+check_cmd err "--pr without --attest is refused"      python3 "$RECORD" APPROVE "$TMP/none.md" --pr 5 --repo o/r
 
 echo "== protect-data-dir.sh"
 P=protect-data-dir.sh

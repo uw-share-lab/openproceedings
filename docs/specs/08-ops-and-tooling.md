@@ -292,9 +292,12 @@ on is the one step that differs: `prs.py queue` uses the session's CCR route in 
 repos/<repo>/pulls/<n>/ccr/auto_merge`; `DELETE` turns it off) and `gh pr merge <n> --auto --match-head-commit
 <sha>` locally. The CCR route's request shape isn't documented, so any non-2xx leaves the PR open for the owner,
 and it has no `--match-head-commit`: `queue` reads the head before and after the PUT and turns auto-merge off
-again if it moved. A push between that second read and GitHub acting on the PUT is a residual race; the merge
-queue's `review-attested` check closes it, since the queue build requires each PR's body to attest the exact head
-it merges, and the routine attested only the head it reviewed (decision-048). `prs.py watch` polls REST: the PR's
+again if it moved (or if GitHub shows nothing set to merge, or a failed call left it set). A push between that
+second read and GitHub acting on the PUT is a residual race; the merge queue's `review-attested` check closes it
+against anyone who can't also rewrite the PR body, since the queue build requires each PR's body to attest the
+exact head it merges, and the routine attested only the head it reviewed (decision-048). Because dependency code
+left running in a cloud session could use the proxy to do both, the routine queues only when no process from the
+PR's dependencies is still running, and it runs `record-review.py` from `dev`'s copy, like the checkers. `prs.py watch` polls REST: the PR's
 `merged` and `auto_merge`, the timeline's latest merge-queue event, the queue's `gh-readonly-queue/dev/pr-<n>-<sha>` build branch, and the check runs, and
 names a queue build run that hangs so the routine can cancel and rerun it through the Actions REST endpoints.
 

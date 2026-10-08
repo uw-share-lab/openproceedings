@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Record the outcome of a /review-gate round for the current HEAD. The ONLY writer of review records.
 
-    python3 .claude/scripts/record-review.py APPROVE|REQUEST_CHANGES <dispositions.md> [--attest [--pr <n> [--repo <o/r>]]]
+    python3 .claude/scripts/record-review.py APPROVE|REQUEST_CHANGES <dispositions.md> [--attest [--pr <n> --repo <o/r>]]
 
 The record lives at  <git-common-dir>/op-reviews/<HEAD sha>  (inside .git, never committed), and is what
 .claude/hooks/require-review.sh checks before a push or `gh pr create`.
@@ -19,7 +19,7 @@ Refuses to record unless:
 
 --attest also writes `<!-- op-review: <sha> APPROVE -->` into the open PR's body, which CI's
 `review-attested` check compares against the PR head sha. It finds the branch's PR with `gh pr view`, which uses
-GraphQL; `--pr <n> [--repo <owner>/<name>]` reads PR <n> over REST instead (a Claude Code cloud session refuses
+GraphQL; `--pr <n> --repo <owner>/<name>` reads PR <n> over REST instead (a Claude Code cloud session refuses
 GraphQL; TASK-213) and refuses a PR that isn't open or whose head isn't HEAD. A `gh pr view` failure other than
 "no pull requests found" is an error, never a silent skip.
 """
@@ -115,10 +115,17 @@ def main() -> None:
     ap.add_argument("dispositions", type=Path)
     ap.add_argument("--attest", action="store_true")
     ap.add_argument("--pr", type=int, help="attest this PR, read over REST (no GraphQL; a cloud session)")
-    ap.add_argument("--repo", default="{owner}/{repo}", help="owner/name for --attest (default: gh's own)")
+    ap.add_argument(
+        "--repo",
+        default="{owner}/{repo}",
+        help="owner/name for --attest (needed with --pr; default: gh's own, from a github.com remote)",
+    )
     a = ap.parse_args()
     if (a.pr is not None or a.repo != "{owner}/{repo}") and not a.attest:
         ap.error("--pr and --repo only apply with --attest")
+    if a.pr is not None and a.repo == "{owner}/{repo}":
+        # gh resolves {owner}/{repo} from a github.com remote, which a cloud clone (a proxy remote) may not have
+        ap.error("--pr needs --repo <owner>/<name>")
 
     global BASE
     BASE = os.environ.get("OP_REVIEW_BASE", BASE)

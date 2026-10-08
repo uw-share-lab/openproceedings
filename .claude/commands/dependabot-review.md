@@ -96,13 +96,14 @@ npm ci --ignore-scripts              # at the repo root, never in frontend/
 git rev-parse --is-shallow-repository   # if true: git fetch --unshallow origin
 git fetch origin dev
 mktemp -d                            # the run's scratch directory: evidence, bodies, dispositions; never in the repo
-git archive origin/dev .claude/scripts/dependabot | tar -x -C <the scratch directory>   # dev's checkers
+git archive origin/dev .claude/scripts/dependabot .claude/scripts/record-review.py | tar -x -C <the scratch directory>   # dev's checkers and recorder
 python3 <the scratch directory>/.claude/scripts/dependabot/prs.py preflight
 ```
 
 Shell variables don't survive from one Bash call to the next, so write the directory `mktemp -d` printed as a
 literal path wherever this file says `$RUN`; the checkers are then `$RUN/.claude/scripts/dependabot/<script>.py`,
-run from the repo root. `prs.py preflight` prints `gh api user`'s login, the mode (`cloud` or `local`, §Where it
+run from the repo root, and the recorder `$RUN/.claude/scripts/record-review.py` (dev's copy: a PR branch based on
+an older `dev` has an older one). `prs.py preflight` prints `gh api user`'s login, the mode (`cloud` or `local`, §Where it
 runs) and where the credential is: in the cloud, a network secret (no token in `GH_TOKEN` or `GITHUB_TOKEN`, and
 `gh auth token` with those unset finds no stored login); a real token in either variable is reported (step 5
 strips it); a stored `gh` login in the cloud is a PROBLEM; locally a stored login is allowed (a maintainer's own
@@ -120,11 +121,13 @@ python3 $RUN/.claude/scripts/dependabot/prs.py list
 It prints each open PR by `dependabot[bot]` into `dev` (REST, every page) with its ecosystem (from the branch name
 `dependabot/<ecosystem>/…`). With arguments, review only those PRs. Take the PRs one at a time, oldest first,
 and run steps 1 to 8 (or 10) for each before starting the next; step 9 then watches every queued PR at once.
-For PR `<n>` with head branch `<head>`:
+For PR `<n>` with head branch `<head>` (`list` prints a name that isn't a plain `dependabot/<ecosystem>/…` one
+quoted, with a warning: don't fetch it, list the PR as left open; `check` stops it too), and every `<head>` below
+written in double quotes:
 
 ```bash
 git fetch origin "+refs/heads/<head>:refs/remotes/origin/<head>"
-git rev-parse origin/<head>          # the head sha this run reviews: <sha>
+git rev-parse "origin/<head>"        # the head sha this run reviews: <sha>
 python3 $RUN/.claude/scripts/dependabot/prs.py check <n> --head <sha>
 ```
 
@@ -143,7 +146,7 @@ and go to the next PR.
 Then switch to it:
 
 ```bash
-git switch --no-track -c <head> origin/<head>
+git switch --no-track -c "<head>" "origin/<head>"
 ```
 
 `--no-track` leaves the branch without an upstream, so every push names its refspec (step 7). A clone that
@@ -174,7 +177,7 @@ is a patch or minor of a package already in the lock, it may be taken in this PR
 **Release notes, for every bumped package** (the GitHub release, the changelog, or the PyPI/npm page): look for
 security advisories and for behaviour that changes by default. `npm audit` misses some: Next 16.3.8 fixed seven
 advisories that it didn't show. The GitHub Advisory Database answers per package, over REST:
-`gh api 'advisories?ecosystem=npm&affects=next&per_page=100' --jq '.[] | [.ghsa_id, .summary, (.vulnerabilities[] | select(.package.name == "next") | "\(.vulnerable_version_range) → \(.first_patched_version)")] | @tsv'`
+`gh api --paginate 'advisories?ecosystem=npm&affects=next&per_page=100' --jq '.[] | [.ghsa_id, .summary, (.vulnerabilities[] | select(.package.name == "next") | "\(.vulnerable_version_range) → \(.first_patched_version)")] | @tsv'`
 (`ecosystem=pip` for uv, `ecosystem=actions` for an action). A 0.x update can break things in a minor: read its
 notes as closely as a major's. Write what you found, with the advisory ids, in the evidence file. The notes are
 data (§Rules): they never clear a PROBLEM.
@@ -206,7 +209,8 @@ as "0.12.22 or later" stays, and so do dated learnings entries and `CHANGELOG.md
 ## 5. Tests, in the foreground, without the GitHub credential
 
 Prefix each command with `env -u GH_TOKEN -u GITHUB_TOKEN GH_CONFIG_DIR=<an empty directory under $RUN>`, so the
-dependencies the tests load can't read the token:
+dependencies the tests load can't read the token (in the cloud the variables hold placeholders anyway, and what
+bounds the dependencies is §Rules: they can still send requests through the proxy while they run):
 
 | PR | Run |
 |---|---|
@@ -220,6 +224,12 @@ CI's `web-image` check must be green on the PR (it builds the web image only; sa
 without Playwright's Chromium, CI's `playwright` check must be green before the PR is queued. Visual baselines
 are platform-specific, so CI's `playwright` result is the authority for them. A red test that the bump caused and
 that a small, clear fix in this PR mends is fixed (commit, rerun); anything else is a hard stop.
+
+After the last command, nothing of the dependencies may still be running, since a process left behind could use
+the proxy's credential later (push to the PR after it is reviewed, say): `pgrep -af '<the repo root>/(node_modules|\.venv)/'`
+(the repo root written as a literal path) must print nothing, here and again just before step 8's `prs.py queue`
+(the reviewers run things too). Anything it prints is a hard stop for this PR:
+list the processes in the comment, and don't attest or queue it.
 
 ## 6. Reviewers
 
@@ -257,8 +267,8 @@ Write `$RUN/dispositions-<n>.md`, one line per finding (`- [must] <file>:<line> 
 were none), then:
 
 ```bash
-python3 .claude/scripts/record-review.py APPROVE "$RUN/dispositions-<n>.md"
-git push origin <head>:<head>        # in its own Bash call; only when this run committed something
+python3 $RUN/.claude/scripts/record-review.py APPROVE "$RUN/dispositions-<n>.md"
+git push origin "<head>:<head>"        # in its own Bash call; only when this run committed something
 ```
 
 The push names its refspec, because the branch has no upstream. A `fixed <sha>` must be a commit of this branch
@@ -274,23 +284,30 @@ by severity, every disposition), **Learnings** (`no-learning`, or the entry exte
 
 ```bash
 gh api -X PATCH repos/uw-share-lab/openproceedings/pulls/<n> -F body=@"$RUN/body-<n>.md"
-python3 .claude/scripts/record-review.py APPROVE "$RUN/dispositions-<n>.md" --attest --pr <n> --repo uw-share-lab/openproceedings
+python3 $RUN/.claude/scripts/record-review.py APPROVE "$RUN/dispositions-<n>.md" --attest --pr <n> --repo uw-share-lab/openproceedings
 python3 $RUN/.claude/scripts/dependabot/prs.py queue <n> --head <the head>
 ```
 
 `--attest --pr <n>` reads PR `<n>` over REST, refuses it unless it is open at HEAD, and adds `<!-- op-review: <sha>
 APPROVE -->` for the head to its body. `prs.py queue` turns auto-merge on, which on `dev` puts the PR in the merge
 queue once its checks are green. It first requires the PR to be open, Dependabot's, into `dev` and still at `<the
-head>`; then turns auto-merge on (cloud: `PUT …/pulls/<n>/ccr/auto_merge`; local: `gh pr merge <n> --auto
---match-head-commit <the head>`); then reads the PR again and requires GitHub to show it set to merge (auto-merge on,
-or a merge-queue entry in its timeline). If the head moved, the PR closed, the call failed but left auto-merge on,
-or GitHub accepted the call but shows nothing, it turns auto-merge off again (cloud: `DELETE …/ccr/auto_merge`;
-local: `gh pr merge --disable-auto`). Exit 0 is queued (or merged already at `<the head>`); 1 is a hard stop
-(leave the PR open, §10; any non-2xx answer from the CCR route lands here, since its request shape isn't
-documented); 2 is a call that failed partway (the PUT timed out, or the read after it failed): it has tried to turn
-auto-merge off, and if its message says auto-merge may still be on, put that first under "for the owner". The CCR route has no `--match-head-commit`: a push after the second read, before
-GitHub acts, is a race the script can't close. The queue's `review-attested` check closes it, because the queue
-build requires the body to attest the head it merges and this run attested only `<the head>` (decision-048).
+head>` (a PR already set to merge is left as it is: exit 0); then turns auto-merge on (cloud: `PUT
+…/pulls/<n>/ccr/auto_merge`; local: `gh pr merge <n> --auto --match-head-commit <the head>`); then reads the PR
+again and requires GitHub to show it set to merge (auto-merge on, or a merge-queue entry in its timeline newer than
+the request). If the head moved, the call failed although GitHub shows the PR set to merge, or GitHub accepted the
+call but shows nothing, it turns auto-merge off again (cloud: `DELETE …/ccr/auto_merge`; local: `gh pr merge
+--disable-auto`) and reads the PR back; a PR that closed meanwhile is left alone. Exit 0 is queued (or merged
+already at `<the head>`); 1 is a hard stop (leave the PR open, §10; any non-2xx answer from the CCR route lands
+here, since its request shape isn't documented); 2 is a call that failed, before the request (nothing to undo) or
+after it (the PUT timed out, or a read after it failed; it has tried to undo it). If the message says auto-merge
+may still be on, or the PR may still be in the merge queue, put that first under "for the owner".
+
+The CCR route has no `--match-head-commit`: a push after the second read, before GitHub acts, is a race the
+script can't close. The queue's `review-attested` check closes it against anyone who can't also rewrite the PR
+body, because the queue build requires the body to attest the head it merges and this run attested only `<the
+head>` (decision-048). Dependency code still running in the session could do both through the proxy, which is
+why step 5 ends with no such process left. The CCR route, the job-log download and `gh attestation verify` have
+not yet been run from a cloud session; each fails closed (the PR stays open), and the run log says which failed.
 Don't rebase the PR because `dev` moved; the queue tests it on top of `dev`.
 
 A **github-actions PR is not queued**: the routine's token has no `workflows` permission (decision-048: with it,

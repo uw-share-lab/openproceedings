@@ -131,7 +131,16 @@ We keep every safety property above and change only how it is reached:
   (`merge_group_gate.py`), which requires the PR's current body to attest the exact head the queue merges,
   and the routine attested only the head it reviewed, so a moved head fails the build and nothing merges.
   The attestation is an honesty check (above), so someone holding a writer's token who also rewrites the
-  body defeats it, as they could defeat `--match-head-commit` by enabling auto-merge themselves; the owner's
-  review of `main` promotions stays the access control. What would change this: a documented CCR request with
-  an expected head sha (then pass it), or GraphQL returning to cloud sessions (then use
-  `--match-head-commit` there too).
+  body defeats it, as they could defeat `--match-head-commit` by enabling auto-merge themselves, and could
+  then land code on `dev`; the owner's review of `main` promotions stays the access control for releases. In
+  the cloud, dependency code still running in the session could do both through the proxy, so the procedure
+  requires that no process from the PR's dependencies is left running before it queues (step 5).
+- **Options.** The alternative to the CCR route was to attest in the cloud and leave every queueing to the
+  owner, as for github-actions PRs: no undocumented route and no race, at the cost of a manual step each week
+  for every PR, which is most of what decision-048 set out to remove. We take the CCR route, with every
+  failure leaving the PR open; if it proves unreliable, that alternative is the fallback.
+- **Not yet exercised from a cloud session** (as of 2026-10-08): the CCR `PUT`/`DELETE`, the job-log download
+  (a redirect to a storage host the egress proxy may not allow) and `gh attestation verify` (sigstore hosts).
+  Each fails closed; TASK-213 stays open until a cloud run confirms them.
+- What would change this: a documented CCR request with an expected head sha (then pass it), or GraphQL
+  returning to cloud sessions (then use `--match-head-commit` there too).

@@ -186,11 +186,15 @@ def parse_time(timestamp: str) -> dt.datetime:
     return t if t.tzinfo else t.replace(tzinfo=dt.UTC)
 
 
-def age_days(timestamp: str) -> float:
-    """Days from `timestamp` to now (`OP_DEPENDABOT_NOW`, when set, is now: the case table's fixed clock)."""
+def now() -> dt.datetime:
+    """Now, in UTC (`OP_DEPENDABOT_NOW`, when set, is now: the case table's fixed clock)."""
     fixed = os.environ.get("OP_DEPENDABOT_NOW")
-    now = parse_time(fixed) if fixed else dt.datetime.now(dt.UTC)
-    return (now - parse_time(timestamp)).total_seconds() / 86400
+    return parse_time(fixed) if fixed else dt.datetime.now(dt.UTC)
+
+
+def age_days(timestamp: str) -> float:
+    """Days from `timestamp` to now."""
+    return (now() - parse_time(timestamp)).total_seconds() / 86400
 
 
 def main_guard(fn: Callable[[], object]) -> NoReturn:

@@ -25,7 +25,8 @@ must have no stored login (one would be a file dependency code could read, which
 token in GH_TOKEN or GITHUB_TOKEN is reported (step 5 strips those). Locally a stored login is allowed: it is the
 maintainer's own machine, where `make test` runs with it every day. A checker: ok / PROBLEM; exit 0, 1 or 2.
 
-`list` prints one block per open PR by dependabot[bot] into `dev`: number, ecosystem, head branch and title
+`list` prints one block per open PR by dependabot[bot] into `dev`: number, ecosystem, head branch (quoted, with a
+warning, when it is not a plain `dependabot/<ecosystem>/…` name) and title
 (`GET repos/<repo>/pulls?state=open&base=dev`, every page). Exit 0, or 2 when gh fails.
 
 `check` is the hard gate before anything of the PR runs, and it is a checker (ok / PROBLEM; exit 0, 1 or 2). With
@@ -39,20 +40,23 @@ every one is Dependabot's (git author `dependabot[bot]`, committer GitHub, GitHu
 `dependabot[bot]`) with a signature GitHub verified. A PR someone else pushed to (the routine itself on an
 earlier run included) is left for the owner. The identity is defence in depth only (a writer can set those
 names, and GitHub verifies web-flow commits it makes for anyone); what stops a hostile push is that every
-checker allows no change beyond versions and pins. A title naming `tantivy` is a PROBLEM too (hand-only,
-spec 08 §Release).
+checker allows no change beyond versions and pins. A title naming `tantivy` (hand-only,
+spec 08 §Release), or a head branch name that isn't plain, is a PROBLEM too.
 
 `queue` turns auto-merge on (on `dev` that puts the PR in the merge queue once its checks pass) only for an open
-Dependabot PR into `dev` whose head is still `<sha>`, and never for a github-actions PR (the routine's token has
-no `workflows` permission: the owner queues those). It reads the PR again right after, and requires GitHub to
-show it set to merge (auto-merge on, or a merge-queue entry; read once more after OP_DEPENDABOT_SETTLE seconds,
-default 5): if the head moved, the PR closed, the call failed but left auto-merge on, or GitHub accepted the call
-but shows nothing, it turns auto-merge off again and prints a PROBLEM. If the call or the read after it fails
-outright (a timeout), it turns auto-merge off too and exits 2, saying whether that worked. In the cloud there is
-no `--match-head-commit`: a push between the read after the PUT and the queue's build is the residual race, and
-the queue's `review-attested` check (the body must attest the head the queue merges) is what stops it
-(decision-048). Exit 0 queued (or already merged at `<sha>`); 1 not queued (leave the PR open for the owner);
-2 a call failed, and the message says whether auto-merge may still be on.
+Dependabot PR into `dev` whose head is still `<sha>` and whose branch name is plain, and never for a github-actions
+PR (the routine's token has no `workflows` permission: the owner queues those). A PR GitHub already shows set to
+merge is left as it is (a re-queue in step 9). Otherwise it makes the call, reads the PR again, and requires GitHub
+to show it set to merge (auto-merge on, or a merge-queue entry in the timeline newer than the request; read once
+more after OP_DEPENDABOT_SETTLE seconds, default 5). If the head moved, the call failed although GitHub shows the
+PR set to merge, or GitHub accepted the call but shows nothing, it turns auto-merge off again, reads the PR back
+and prints a PROBLEM; a PR that closed meanwhile is left alone. If the call or a read after it fails outright (a
+timeout), it undoes it the same way and exits 2, saying whether that worked. In the cloud there is no
+`--match-head-commit`: a push between the read after the PUT and the queue's build is the residual race, and the
+queue's `review-attested` check (the body must attest the head the queue merges) stops it against anyone who
+can't also rewrite the body (decision-048). Exit 0 queued (already set, or merged at `<sha>`); 1 not queued (leave
+the PR open for the owner); 2 a call failed, and the message says whether auto-merge may still be on or the PR
+may still be in the queue.
 
 `watch` polls REST every `--interval` seconds and prints a line whenever a PR's state, auto-merge, queue
 presence or check rollup changes. A PR is in the queue while its timeline's latest merge-queue event is
@@ -66,15 +70,17 @@ or dropped out of the queue (the line says which); 2 when gh fails; 4 at `--time
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
 import sys
 import time
+import urllib.parse
 from dataclasses import dataclass
 from typing import Any
 
-from _common import Report, ToolError, age_days, main_guard, resolve_refs, run, run_json
+from _common import Report, ToolError, age_days, main_guard, now, parse_time, resolve_refs, run, run_json
 
 REPO = "uw-share-lab/openproceedings"
 ALLOWED = {
@@ -102,8 +108,8 @@ TOKEN_SHAPE = re.compile(r"gh[opsur]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30
 TOKEN_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
 FAILED = {"failure", "timed_out", "cancelled", "action_required", "startup_failure", "stale"}
 QUEUE_EVENTS = ("added_to_merge_queue", "removed_from_merge_queue")
-# seconds `queue` waits before reading once more when GitHub doesn't yet show what it accepted (tests set 0)
-SETTLE = float(os.environ.get("OP_DEPENDABOT_SETTLE", "5"))
+# A Dependabot head branch: the PR's text reaches git commands the procedure writes, so its name must be plain.
+HEAD_SHAPE = re.compile(r"dependabot/[a-z_]+/[A-Za-z0-9._/@+-]+")
 
 
 def ecosystem(head: str) -> str:
@@ -167,7 +173,7 @@ def preflight() -> None:
     held = [v for v in TOKEN_VARS if TOKEN_SHAPE.search(os.environ.get(v, ""))]
     clean = {k: v for k, v in os.environ.items() if k not in TOKEN_VARS}
     stored = run(["gh", "auth", "token"], ok_codes=(0, 1), env=clean)
-    has_stored = stored.returncode == 0 and bool(stored.stdout.strip())
+    has_stored = stored.returncode == 0 and bool(TOKEN_SHAPE.search(stored.stdout))
     if held:
         rep.ok(f"credential: a token in {', '.join(held)}; step 5 strips it from what runs dependency code")
     if mode == "cloud":
@@ -195,7 +201,11 @@ def list_prs() -> None:
     print(f"{len(prs)} open Dependabot PR(s) into dev")
     for pr in sorted(prs, key=lambda p: p["number"]):
         head = pr["head"]["ref"]
-        print(f"#{pr['number']} [{ecosystem(head)}] {head}\n    {pr['title']}")
+        if HEAD_SHAPE.fullmatch(head):
+            shown = head
+        else:  # printed quoted, never pasted into a command: `check` stops it
+            shown = f"{head!r} (not a plain Dependabot branch name: don't fetch it; `check` stops it)"
+        print(f"#{pr['number']} [{ecosystem(head)}] {shown}\n    {pr['title']}")
 
 
 def pr_problems(rep: Report, pr: dict[str, Any], sha: str) -> None:
@@ -206,6 +216,8 @@ def pr_problems(rep: Report, pr: dict[str, Any], sha: str) -> None:
         rep.problem(f"the PR was opened by {(pr.get('user') or {}).get('login')}, not Dependabot")
     if pr["head"]["sha"] != sha:
         rep.problem(f"GitHub's head is {pr['head']['sha'][:12]}, not the fetched {sha[:12]}: fetch again")
+    if not HEAD_SHAPE.fullmatch(pr["head"]["ref"]):
+        rep.problem(f"the head branch {pr['head']['ref']!r} is not a plain Dependabot branch name")
     if any(w in pr["title"].lower() for w in HAND_ONLY_WORDS):
         rep.problem("the title names a hand-only dependency (tantivy, spec 08 §Release)")
 
@@ -275,8 +287,18 @@ def auto_merge(mode: str, number: int, on: bool, sha: str) -> tuple[bool, str]:
     return r.returncode == 0, (r.stderr.strip() or r.stdout.strip())[:300]
 
 
+def settle_seconds() -> float:
+    """How long `queue` waits before reading once more when GitHub doesn't yet show what it accepted."""
+    raw = os.environ.get("OP_DEPENDABOT_SETTLE", "5")
+    try:
+        return float(raw)
+    except ValueError as e:
+        raise ToolError(f"OP_DEPENDABOT_SETTLE is {raw!r}, not a number of seconds") from e
+
+
 def queue_pr(number: int, head: str) -> None:
     rep = Report(f"queue #{number}")
+    settle = settle_seconds()
     sha = run(["git", "rev-parse", "--verify", f"{head}^{{commit}}"]).stdout.strip()
     pr = get_pr(number)
     pr_problems(rep, pr, sha)
@@ -284,47 +306,52 @@ def queue_pr(number: int, head: str) -> None:
         rep.problem("a github-actions PR is queued by the owner (the token has no `workflows` permission)")
     if rep.problems:
         rep.finish()
+    if taken(number, pr):
+        # a re-queue (step 9) of a PR that is still set to merge: a second PUT could fail, and its undo would
+        # take a reviewed PR out of the queue
+        rep.ok(f"#{number} is already set to merge at {sha[:12]}: nothing to do")
+        rep.finish()
     mode = detect_mode()
     rep.ok(f"mode: {mode}")
+    since = now() - dt.timedelta(minutes=2)  # a queue event older than this predates the request (clock skew)
     try:
         enabled, said = auto_merge(mode, number, True, sha)
         after = get_pr(number)
-        visible = taken(number, after)
+        visible = taken(number, after, since)
         if enabled and not visible and not after.get("merged"):
-            time.sleep(SETTLE)  # GitHub can take a moment to show what it accepted
+            time.sleep(settle)  # GitHub can take a moment to show what it accepted
             after = get_pr(number)
-            visible = taken(number, after)
-    except ToolError as e:
-        # the PUT may have taken effect (a timeout, an odd exit) or the read after it failed: undo, and say so
-        off, why = turn_off(mode, number, sha)
-        if off:
+            visible = taken(number, after, since)
+        state, after_sha, merged = after["state"], after["head"]["sha"], bool(after.get("merged"))
+    except Exception as e:  # a timeout, an odd exit, a failed or odd read: the PUT may have taken effect
+        why = undo(mode, number, sha, since)
+        if why is None:
             raise ToolError(f"queueing #{number} failed partway ({e}); auto-merge turned off again") from e
         raise ToolError(
-            f"queueing #{number} failed partway ({e}); auto-merge may still be on for #{number} and could not "
-            f"be turned off ({why}): the owner must turn it off by hand"
+            f"queueing #{number} failed partway ({e}); auto-merge may still be on for #{number}, or it may "
+            f"still be in the merge queue ({why}): the owner must check it by hand"
         ) from e
-    if after.get("merged"):
-        if after["head"]["sha"] == sha:
+    if merged:
+        if after_sha == sha:
             rep.ok(f"#{number} merged already, at {sha[:12]}")
         else:
-            rep.problem(
-                f"#{number} merged at {after['head']['sha'][:12]}, not the reviewed {sha[:12]}: tell the owner"
-            )
+            rep.problem(f"#{number} merged at {after_sha[:12]}, not the reviewed {sha[:12]}: tell the owner")
         rep.finish()
-    moved = after["state"] != "open" or after["head"]["sha"] != sha
+    moved = state != "open" or after_sha != sha
     if not enabled:
         rep.problem(f"turning auto-merge on failed: {said}")
     elif not visible:
         rep.problem("GitHub accepted the request but shows neither auto-merge nor a merge-queue entry")
     if moved:
-        rep.problem(f"the PR changed while it was queued: {after['state']} at {after['head']['sha'][:12]}")
+        rep.problem(f"the PR changed while it was queued: {state} at {after_sha[:12]}")
     if rep.problems:
-        if moved or enabled or after.get("auto_merge"):
-            off, why = turn_off(mode, number, sha)
-            if not off:
+        # a closed PR can't merge, so there is nothing to undo; otherwise undo whatever may be on
+        if state == "open" and (moved or enabled or visible):
+            why = undo(mode, number, sha, since)
+            if why is not None:
                 raise ToolError(
-                    f"auto-merge may still be on for #{number} and could not be turned off ({why}): the owner "
-                    "must turn it off by hand"
+                    f"auto-merge may still be on for #{number}, or it may still be in the merge queue ({why}): "
+                    "the owner must check it by hand"
                 )
             rep.ok("auto-merge turned off again")
         rep.finish()
@@ -332,27 +359,36 @@ def queue_pr(number: int, head: str) -> None:
     rep.finish()
 
 
-def turn_off(mode: str, number: int, sha: str) -> tuple[bool, str]:
+def undo(mode: str, number: int, sha: str, since: dt.datetime) -> str | None:
+    """Turn auto-merge off, then read the PR back: None when GitHub no longer shows it set to merge, else why
+    not (turning auto-merge off doesn't take an entry out of the merge queue)."""
     try:
-        return auto_merge(mode, number, False, sha)
-    except ToolError as e:
-        return False, str(e)
+        off, why = auto_merge(mode, number, False, sha)
+        if not off:
+            return why
+        pr = get_pr(number)
+        if pr["state"] == "open" and taken(number, pr, since):
+            return "GitHub still shows it set to merge after turning auto-merge off"
+    except Exception as e:  # any failure here leaves the state unknown, which the caller reports
+        return str(e)
+    return None
 
 
-def in_queue(number: int) -> bool:
+def in_queue(number: int, since: dt.datetime | None = None) -> bool:
     """The PR's latest merge-queue event in its timeline is `added_to_merge_queue` (an entry waiting behind
-    others has no build branch yet, and `auto_merge` can read null while it waits)."""
+    others has no build branch yet, and `auto_merge` can read null while it waits), and, with `since`, no older
+    than that (an event from before a request is not the request's)."""
     events = [
-        e["event"]
-        for e in api_pages(f"repos/{REPO}/issues/{number}/timeline")
-        if e.get("event") in QUEUE_EVENTS
+        e for e in api_pages(f"repos/{REPO}/issues/{number}/timeline") if e.get("event") in QUEUE_EVENTS
     ]
-    return bool(events) and events[-1] == "added_to_merge_queue"
+    if not events or events[-1]["event"] != "added_to_merge_queue":
+        return False
+    return since is None or parse_time(events[-1]["created_at"]) >= since
 
 
-def taken(number: int, pr: dict[str, Any]) -> bool:
+def taken(number: int, pr: dict[str, Any], since: dt.datetime | None = None) -> bool:
     """GitHub shows the PR set to merge: auto-merge on, or an entry in the merge queue."""
-    return bool(pr.get("auto_merge")) or in_queue(number)
+    return bool(pr.get("auto_merge")) or in_queue(number, since)
 
 
 @dataclass
@@ -386,12 +422,14 @@ def snap(number: int) -> Snap:
     refs = api(f"repos/{REPO}/git/matching-refs/heads/gh-readonly-queue/dev/pr-{number}-")
     if not isinstance(refs, list):
         raise ToolError("gh api git/matching-refs: not a list")
-    branches = [r["ref"].removeprefix("refs/heads/") for r in refs]
+    own = re.compile(rf"refs/heads/gh-readonly-queue/dev/pr-{number}-[0-9a-f]{{40}}")
+    branches = [r["ref"].removeprefix("refs/heads/") for r in refs if own.fullmatch(r["ref"])]
     sha = pr["head"]["sha"]
     checks = rollup(api_pages(f"repos/{REPO}/commits/{sha}/check-runs", key="check_runs"))
     going: list[dict[str, Any]] = []
     for b in branches:
-        got = api(f"repos/{REPO}/actions/runs?event=merge_group&branch={b}&per_page={PER_PAGE}")
+        branch = urllib.parse.quote(b, safe="/")
+        got = api(f"repos/{REPO}/actions/runs?event=merge_group&branch={branch}&per_page={PER_PAGE}")
         going += [r for r in got["workflow_runs"] if r.get("status") != "completed"]
     listed = state == "open" and in_queue(number)
     return Snap(state, bool(pr.get("auto_merge")), branches, listed, checks, going)
