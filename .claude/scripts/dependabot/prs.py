@@ -112,7 +112,7 @@ TOKEN_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPR
 FAILED = {"failure", "timed_out", "cancelled", "action_required", "startup_failure", "stale"}
 QUEUE_EVENTS = ("added_to_merge_queue", "removed_from_merge_queue")
 # A Dependabot head branch: the PR's text reaches git commands the procedure writes, so its name must be plain.
-HEAD_SHAPE = re.compile(r"dependabot/[a-z_]+/[A-Za-z0-9._/@+-]+")
+HEAD_SHAPE = re.compile(r"dependabot/[a-z_]+/(?!.*\.\.)[A-Za-z0-9._/@+-]+")  # git forbids ".." too
 
 
 def ecosystem(head: str) -> str:

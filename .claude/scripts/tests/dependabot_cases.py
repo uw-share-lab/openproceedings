@@ -1523,6 +1523,37 @@ def _(c: Case) -> None:
     )
 
 
+ODD_HEADS = {
+    "a question mark": "dependabot/uv/a?b=c",
+    "an ampersand": "dependabot/uv/a&event=push",
+    "a space": "dependabot/uv/a b",
+    "a dot-dot": "dependabot/uv/a..b",
+    "a leading dash": "-dependabot/uv/x",
+    "a command substitution": "dependabot/uv/$(id)",
+    "a newline": "dependabot/uv/a\nb",
+}
+
+
+def odd_head_row(what: str, head: str) -> None:
+    @row(f"prs check: a head branch name with {what} is stopped")
+    def _(c: Case) -> None:
+        args = check_case(c, head, {"uv.lock": "b\n"})
+        c.expect(
+            "prs.py", args, PROBLEM, r"^PROBLEM the head branch .* is not a plain Dependabot branch name"
+        )
+
+    @row(f"prs list: a head branch name with {what} is printed quoted, with a warning")
+    def _(c: Case) -> None:
+        c.gh["cloud"] = True
+        c.gh[page1(f"{R}/pulls?state=open&base=dev")] = [listed(3, head=head)]
+        got, out = c.run("prs.py", "list")
+        assert got == OK and f"{head!r} (not a plain Dependabot branch name" in out, out
+
+
+for _what, _head in ODD_HEADS.items():
+    odd_head_row(_what, _head)
+
+
 @row("prs check: an ecosystem the routine doesn't review")
 def _(c: Case) -> None:
     args = check_case(c, "dependabot/cargo/g", {"Cargo.lock": "x\n"})
@@ -2138,6 +2169,18 @@ def _(c: Case) -> None:
     planted = [{"ref": "refs/heads/gh-readonly-queue/dev/pr-1-x&event=push"}]
     c.gh[f"api {R}/git/matching-refs/heads/gh-readonly-queue/dev/pr-1-"] = planted
     c.expect("prs.py", ["watch", "1", *W], 1, r"^#1 is open but out of the merge queue")
+
+
+@row("prs watch: a crafted ref can't add query parameters to the runs lookup")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", False, True), ("merged", False, False))
+    crafted = {"ref": "refs/heads/gh-readonly-queue/dev/pr-1-" + "a" * 40 + "?event=push&branch=x"}
+    c.gh[f"api {R}/git/matching-refs/heads/gh-readonly-queue/dev/pr-1-"] = {
+        "__seq": [[{"ref": QREF}, crafted], []]
+    }
+    c.expect("prs.py", ["watch", "1", *W], 0, r"^all merged")
+    runs = [call for call in calls(c) if any("actions/runs" in a for a in call)]
+    assert runs and all("event=push" not in a and "branch=x" not in a for call in runs for a in call), runs
 
 
 @row("prs watch: gh failing is an error")

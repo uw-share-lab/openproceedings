@@ -1240,5 +1240,18 @@
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "    if not math.isfinite(seconds) or seconds < 0:",
     "new": "    if seconds < 0:"
+  },
+  {
+    "label": "dependabot: prs: a dot-dot head branch accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "/(?!.*\\.\\.)[A-Za-z0-9._/@+-]+",
+    "new": "/[A-Za-z0-9._/@+-]+"
+  },
+  {
+    "label": "dependabot: prs: the queue branch unquoted in the runs query (equivalent: the ref filter admits only 40-hex names, so quoting is defence in depth)",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        branch = urllib.parse.quote(b, safe=\"/\")\n",
+    "new": "        branch = b\n",
+    "equivalent": true
   }
 ]
