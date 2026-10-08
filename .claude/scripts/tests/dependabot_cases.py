@@ -24,7 +24,7 @@ import urllib.parse
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 HERE = Path(__file__).resolve().parent
 SCRIPTS = HERE.parent / "dependabot"
@@ -766,6 +766,46 @@ def _(c: Case) -> None:
         ["--base", base, "--head", head],
         FIX,
         r"""^FIX .*frontend/package\.json dependencies\.next is '16\.3\.8'.*'\^16\.3\.8'""",
+    )
+
+
+@row("npm: a workspace entry missing from the lock is a PROBLEM")
+def _(c: Case) -> None:
+    base = c.commit({**MANIFESTS, "package-lock.json": lock({})})
+    doc = json.loads(lock({}))
+    del doc["packages"]["frontend"]
+    head = c.commit({"package-lock.json": json.dumps(doc, indent=2)})
+    c.expect(
+        "npm_lock.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"""^PROBLEM frontend/package\.json exists, but package-lock\.json packages\["frontend"\] is missing""",
+    )
+
+
+@row("npm: a workspace entry that isn't an object is a PROBLEM")
+def _(c: Case) -> None:
+    base = c.commit({**MANIFESTS, "package-lock.json": lock({})})
+    doc = json.loads(lock({}))
+    doc["packages"]["frontend"] = []
+    head = c.commit({"package-lock.json": json.dumps(doc, indent=2)})
+    c.expect(
+        "npm_lock.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"""^PROBLEM frontend/package\.json exists, but package-lock\.json packages\["frontend"\] is missing or not""",
+    )
+
+
+@row("npm: a workspace entry's section that isn't an object is a PROBLEM, not a FIX")
+def _(c: Case) -> None:
+    base = c.commit({**MANIFESTS, "package-lock.json": lock({})})
+    head = c.commit({"package-lock.json": lock({}, cast(dict[str, str], []))})
+    c.expect(
+        "npm_lock.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"""^PROBLEM frontend/package\.json dependencies or the lock's packages\["frontend"\] dependencies is not an""",
     )
 
 

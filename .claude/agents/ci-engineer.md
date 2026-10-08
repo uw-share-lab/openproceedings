@@ -48,7 +48,9 @@ tempted to bypass it.
    fixture manifest, `TOKENIZER_VERSION` and `SCHEMA_VERSION`.
 5. **claude-tooling:** `make tooling` — roster lint, `.claude/README.md` and learnings `INDEX.md`
    freshness (`--check`), `check_backlog.py` (no Done task left in `backlog/tasks/`, no task or decision
-   id used twice), and every hook case table.
+   id used twice), digest pins in `deploy/` (`check_digest_pins.py`), the npm manifests against the lock's
+   workspace entries (`dependabot/npm_specs.py`, TASK-212), `lint_probes.py`, and every case table under
+   `.claude/hooks/tests/` and `.claude/scripts/tests/`.
 6. **pr-gates** (three jobs): `attribution` scans every commit message in `base..head` and the PR
    title/body; `learnings` needs an added or extended `YYYY-MM-DD-<slug>.md` entry directly in
    `.claude/learnings/` unless labelled `no-learning`; `review-attested` compares `<!-- op-review: <sha>
@@ -71,7 +73,8 @@ tempted to bypass it.
   base-image digests in `deploy/` weekly, minor and patch grouped into one PR per ecosystem and semver-majors
   ignored (a major is a deliberate, hand-made PR; spec 08 §CI); review its PRs like any other, plus the
   Dependabot checks in spec 08 §CI (release notes, supply chain, the manifest against the lock's
-  `packages["frontend"]`, `npm audit --omit=dev`, lock edits under the `.nvmrc` Node). A weekly routine runs
+  `packages["frontend"]`, which `make tooling` also checks on every PR with `npm_specs.py` (TASK-212),
+  `npm audit --omit=dev`, lock edits under the `.nvmrc` Node). A weekly routine runs
   them as `/dependabot-review`, with the scripts in `.claude/scripts/dependabot/` (decision-048, TASK-211); a
   change to a check changes the script, its rows in `.claude/scripts/tests/dependabot_cases.py` and its
   mutants in `.claude/scripts/mutants/dependabot.json` together. Its `uv` entry

@@ -116,8 +116,8 @@ The CLI and the API call the same functions, so the CLI alone is enough to run a
 - Every hook has a case table under `.claude/hooks/tests/`, and every tooling script one under
   `.claude/scripts/tests/` (the CI scripts, the network guard, `changelog.py`, the `/dependabot-review`
   scripts); `make tooling` and CI `claude-tooling` run them all.
-- `make tooling` also runs the roster lint, the `.claude/README.md`, learnings-index and backlog checks, and
-  the digest-pin check on `deploy/` (§Deploy).
+- `make tooling` also runs the roster lint, the `.claude/README.md`, learnings-index and backlog checks, the
+  digest-pin check on `deploy/` (§Deploy), and the npm manifest/lock check (`npm_specs.py`, §CI "Dependabot").
 - CLI commands are covered by the suites of the spec they call (07); the CLI adds only argument-parsing
   and exit-code tests.
 
@@ -147,7 +147,7 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 |---|---|
 | `lint` → `lint` | `make lint` (ruff format/check, mypy --strict on `backend/src` and on the `/dependabot-review` scripts and their case table, shellcheck, frontend prettier/eslint/tsc), then actionlint |
 | `test` → `test` | pytest under pytest-xdist at the `pr` Hypothesis profile (200 examples, 2 s deadline) (unit, golden, differential@200, contract; the 2,000-example `ci` profile runs nightly, TASK-127); vitest; `next build` (the standalone server must exist); OpenAPI snapshot and TS types freshness (`make openapi`, then `git diff --exit-code` on `backend/tests/contract/openapi.json` and `frontend/src/api/schema.ts`; unconditional, TASK-040) |
-| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`, no task or decision id used twice: §Merge queue), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`, the `/dependabot-review` scripts) |
+| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`, no task or decision id used twice: §Merge queue), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), the npm manifests' dependency specs equal to the lock's workspace entries (`npm_specs.py`, §CI "Dependabot"), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`, the `/dependabot-review` scripts) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha. In a merge-queue build, `merge_group_gate.py` runs the same three checks on every PR in the group (§Merge queue) |
 | `nightly` (scheduled daily, and `workflow_dispatch`; not a PR check) | Parallel jobs, each with its own time limit (TASK-057): the whole backend suite but the differential at the `ci` profile (2,000 examples) under pytest-xdist, synthetic-corpus parity (`test_parity.py`) included; every property at 50,000 examples as a 5-part `properties` matrix under pytest-xdist, split by measured time per test (the near-cap replay property alone, the other oracle-backed properties, `unit/engine`, `unit/ingest`, and the rest with the exhaustive tokenizer check, `OP_EXHAUSTIVE=1`); the year-edit property (`test_clauses.py`), which ran past 90 min unsplit, as 4 seeded `year-edits` jobs of 12,500 (`OP_YEAR_EDIT_SHARDS`); differential@50k as 8 independent jobs of 6,250 examples, each with its own `--hypothesis-seed`, which its log prints with a rerun command; `benchmarks`: the spec 03 benchmarks with their budgets, then the ~80k report into the run summary and a `bench-80k` artifact (a budget miss there is a warning annotation); and the mutation run (`mutate.py`, every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent) as a 12-job `mutate` matrix (TASK-171; 8 until 2026-10-06): job i of n runs `mutate.py --shard i/n`, every n-th mutant from the i-th, so every mutant is checked every night (n is the matrix size, so adding a shard is one edit). Estimated from run 37017691575 (188 mutants in 140 min on a 4-CPU runner), the 694 mutants at TASK-171 need ~8.5 h of one runner, past GitHub's 6 h job cap, or ~65 min a shard of its 140 at 8 shards (2026-10-06: 778 mutants took 77–123 min a shard at 8, so 12); shard 1's first step prints the night's count, and shards are added before one nears 140 min. Shard 1's first step checks every mutant's pattern still exists (seconds), so a stale mutant anywhere fails the run each night; it also fails its own shard. A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min, with an `::error::` giving about how many of its mutants it checked (the step runs with `shell: bash`, i.e. pipefail, so the pipe through `tee` keeps the status). Long pytest steps run verbose with `OP_EARLY_FAILURES=1` (a failure's report, Hypothesis blob included, is printed when the test fails) and are interrupted before their job's limit, so an overrun fails with an `::error::` and shows which test was still running. The run has 31 jobs, past GitHub's limit of 20 at once for a free organization, so 11 (and more while a PR's CI runs) queue until running jobs finish (the short ones, `suite-ci`, `benchmarks` and the `differential` shards, took under 25 min in run 37017691575); a job's time limit starts when it runs. Full-corpus parity stays local (decision-004) |
 | `bench` → `bench` (advisory: not a required check yet) | pytest-benchmark on the 5k fixture index (`backend/tests/bench`, task-031): the PR's base and head on one runner; a minimum time over 20% slower than the base fails, and each benchmark asserts its spec 03 budget (p95). It becomes required once it has run green on a few PRs without false failures (runner noise); a maintainer adds it to `dev`'s required checks |
@@ -225,10 +225,19 @@ added. Read the upstream release notes of every bumped package: a security relea
 yet. Check the supply chain: the lock's resolved URLs stay on the registry, the integrity hashes match it, no
 package or install script is new, and the publisher is the one that published the previous version. For a docker
 bump, the registry resolves the tag to the pinned index digest. For npm, every entry in `frontend/package.json`
-equals `packages["frontend"]` in `package-lock.json`: Dependabot's npm updater can write a caret there, and
-`npm ci` accepts it. Run `npm audit --omit=dev` and report any advisory that predates the bump. A lockfile edit
-runs under the `.nvmrc` Node, because an older npm drops the `libc` fields. Docs that state a bumped version move
-in the same PR.
+equals `packages["frontend"]` in `package-lock.json`: Dependabot's npm updater can write a caret there (PR #124's
+`eslint-config-next`, PR #100's Vitest), and `npm ci` accepts it. `.claude/scripts/dependabot/npm_specs.py` checks
+it on every PR (`make tooling`, CI `claude-tooling`; TASK-212): each spec in the four dependency sections of
+`package.json` and `frontend/package.json` must be written exactly as the lock's `packages[""]` and
+`packages["frontend"]` hold it (same string, same JSON type), none missing and none extra; it exits 1 naming
+each mismatch, and also on a file it can't read, a manifest with no lock entry (or the reverse), a section that
+isn't an object, a root `workspaces` entry other than `frontend` (add it to the script's `WORKSPACES`), a
+`--root` that isn't a directory, and a checkout with neither file (so a routine that forgets `--root .` fails on
+dev's copy's scratch directory instead of reading it as a match); case rows in `test-tooling-scripts.sh`.
+`npm_lock.py` reports the same mismatches, from the same function, as FIX lines (a section that isn't an object,
+or a workspace entry missing from the lock, is a PROBLEM). Run `npm audit --omit=dev` and report any advisory
+that predates the bump. A lockfile edit runs under the `.nvmrc` Node, because an older npm drops the `libc`
+fields. Docs that state a bumped version move in the same PR.
 
 **The weekly routine** (decision-048, TASK-211). A scheduled Claude Code routine (a cloud session on a fresh clone,
 no access to the owner's machine) runs `/dependabot-review` (`.claude/commands/dependabot-review.md`) once a week.
