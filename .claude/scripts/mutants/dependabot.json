@@ -812,8 +812,8 @@
   {
     "label": "npm specs: --root ignored",
     "file": ".claude/scripts/dependabot/npm_specs.py",
-    "old": "        found = check(a.root or ROOT, required=a.root is not None)\n",
-    "new": "        found = check(ROOT, required=a.root is not None)\n"
+    "old": "        problems = check(a.root)\n",
+    "new": "        problems = check(ROOT)\n"
   },
   {
     "label": "npm specs: a missing --root passes",
@@ -858,12 +858,6 @@
     "new": "    for key, path in [w for w in WORKSPACES.items() if not w[0]]:\n        manifest, entry"
   },
   {
-    "label": "npm specs: a --root with neither file passes",
-    "file": ".claude/scripts/dependabot/npm_specs.py",
-    "old": "] if required else None\n",
-    "new": "] if False else None\n"
-  },
-  {
     "label": "npm specs: a workspaces value that isn't a list passes the type check",
     "file": ".claude/scripts/dependabot/npm_specs.py",
     "old": "    if not isinstance(listed, list) or set(map(str, listed))",
@@ -880,5 +874,11 @@
     "file": ".claude/scripts/dependabot/npm_lock.py",
     "old": "        if not isinstance(entry, dict):  # as npm_specs.check reports it: no entry to copy the manifest into\n",
     "new": "        if entry is None:\n"
+  },
+  {
+    "label": "npm specs: neither file passes",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "            return [f\"no package.json or package-lock.json in {root}: nothing to compare (a wrong --root?)\"]\n",
+    "new": "            return []\n"
   }
 ]

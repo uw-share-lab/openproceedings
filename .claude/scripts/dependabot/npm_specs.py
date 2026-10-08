@@ -16,10 +16,10 @@ checkout it sits in, or `--root` (/dependabot-review runs dev's copy with `--roo
 
 Prints one line per mismatch and exits 1; exits 1 too when a manifest or the lock can't be read, or a manifest has
 no lock entry (or the lock an entry with dependencies and no manifest), a section isn't an object, or the root
-`workspaces` names a workspace other than those in `WORKSPACES` (add it there). With neither `package.json` nor
-`package-lock.json` there is nothing to check: it says so and exits 0, or 1 under `--root` (the routine's copy
-sits in a directory with neither, so a forgotten `--root .` must not read as a match). Standard library only:
-`make tooling` runs it with the system python3.
+`workspaces` names a workspace other than those in `WORKSPACES` (add it there), or the checkout holds neither
+`package.json` nor `package-lock.json`: the routine's copy sits in a scratch directory with neither, so a
+forgotten `--root .` fails rather than reading as a match. Standard library only: `make tooling` runs it with the
+system python3.
 """
 
 from __future__ import annotations
@@ -72,17 +72,15 @@ def read(root: Path, name: str) -> dict[str, Any] | None:
     return data
 
 
-def check(root: Path, *, required: bool = False) -> list[str] | None:
-    """The problems found, or None when `root` holds no manifest and no lock (a problem itself when `required`)."""
+def check(root: Path) -> list[str]:
+    """The problems found in the checkout at `root` (none: the specs agree)."""
     if not root.is_dir():
         return [f"{root} is not a directory"]
     lock = read(root, "package-lock.json")
     manifests = {key: read(root, path) for key, path in WORKSPACES.items()}
     if lock is None:
         if all(m is None for m in manifests.values()):
-            return (
-                [f"no package.json or package-lock.json in {root}: nothing to compare"] if required else None
-            )
+            return [f"no package.json or package-lock.json in {root}: nothing to compare (a wrong --root?)"]
         return ["package-lock.json does not exist, but a package.json does"]
     listed = (manifests[""] or {}).get("workspaces", [])
     if not isinstance(listed, list) or set(map(str, listed)) - set(WORKSPACES):
@@ -113,25 +111,19 @@ def check(root: Path, *, required: bool = False) -> list[str] | None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     ap.add_argument(
-        "--root",
-        type=Path,
-        help="the checkout to read, which must hold the npm files (default: this script's own)",
+        "--root", type=Path, default=ROOT, help="the checkout to read (default: this script's own)"
     )
     a = ap.parse_args()
     try:
-        found = check(a.root or ROOT, required=a.root is not None)
+        problems = check(a.root)
     except ValueError as e:
-        found = [str(e)]
-    if found is None:
-        print(f"npm specs: no package.json or package-lock.json in {ROOT}: nothing compared")
-        return 0
-    problems = found
+        problems = [str(e)]
     for p in problems:
         print(f"npm specs: {p}", file=sys.stderr)
     if problems:
         print(
-            f"npm specs: {len(problems)} mismatch(es); edit package-lock.json's workspace entry to the manifest's"
-            " exact string (under the .nvmrc Node), spec 08 §CI",
+            f"npm specs: {len(problems)} problem(s); for a spec that differs, edit package-lock.json's workspace"
+            " entry to the manifest's exact string (under the .nvmrc Node), spec 08 §CI",
             file=sys.stderr,
         )
         return 1

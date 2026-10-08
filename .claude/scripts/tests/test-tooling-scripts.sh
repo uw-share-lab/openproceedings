@@ -257,12 +257,9 @@ OP=',"optionalDependencies":{"fsevents":"2.3.3"}'
 PR=',"peerDependencies":{"react":">=19"}'
 ALL="$N$DV$OP$PR"
 FE='packages\["frontend"\]'
-fresh; out=$(python3 "$TMP/r/.claude/scripts/$S" 2>&1); rc=$?
-case "$rc:$out" in
-  "0:npm specs: no package.json or package-lock.json in "*": nothing compared") pass=$((pass+1)); echo "  ok   npm_specs.py           no package.json and no lock: says nothing was compared" ;;
-  *) fail=$((fail+1)); echo "  FAIL npm_specs.py           no package.json and no lock: rc $rc: $out" ;;
-esac
-fresh; mkdir -p "$TMP/empty"
+fresh
+expect_spec "no package.json and no lock is a failure, not a match"    "no package\.json or package-lock\.json in .*/r: nothing to compare"
+mkdir -p "$TMP/empty"
 expect_spec "--root with neither file is a failure, not a match"       "no package\.json or package-lock\.json in .*/empty: nothing to compare" --root "$TMP/empty"
 fresh; mkdir -p "$TMP/r/frontend"; cp "$SRC/package.json" "$SRC/package-lock.json" "$TMP/r/"; cp "$SRC/frontend/package.json" "$TMP/r/frontend/"
 expect ok  "the repo's own manifests and lock pass"                     "$S"
