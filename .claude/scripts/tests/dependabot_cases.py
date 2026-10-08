@@ -1450,6 +1450,13 @@ def _(c: Case) -> None:
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub's head is ffffffffffff, not the fetched")
 
 
+@row("prs check: a head with no commits past the merge base")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\\n"})
+    c.git("update-ref", "refs/remotes/origin/dev", args[3])
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM no commits between the merge base and the head")
+
+
 @row("prs check: a closed PR")
 def _(c: Case) -> None:
     args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, state="CLOSED")

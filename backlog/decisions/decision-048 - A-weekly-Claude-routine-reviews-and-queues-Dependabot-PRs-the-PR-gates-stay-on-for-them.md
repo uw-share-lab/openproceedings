@@ -10,8 +10,8 @@ status: accepted
 
 Dependabot (`.github/dependabot.yml`, weekly; spec 08 §CI "Dependabot") opens about one grouped PR a week
 per ecosystem into `dev` (github-actions, uv, npm, docker), plus one PR per docker digest bump. Every PR into
-`dev` must pass the six required checks, two of which a bot's PR can't pass alone: `learnings` (an entry or the `no-learning` label)
-and `review-attested` (the body attests an APPROVE record for the head, which only `record-review.py` writes
+`dev` must pass the six required checks, two of which a bot's PR can't pass alone: `learnings` (an entry or the
+`no-learning` label) and `review-attested` (the body attests an APPROVE record for the head, which only `record-review.py` writes
 after a review). Until 2026-10-07 the owner's session reviewed each PR by hand. The run that merged #123–#125
 on 2026-10-07 found real work in them: a caret Dependabot wrote into the lock's workspace entry (#124), `libc`
 fields an older local npm dropped, seven Next.js advisories `npm audit` didn't show, two older high advisories
@@ -38,8 +38,8 @@ merge, through the merge queue only, a Dependabot PR that passes the supply-chai
 review, the tests, the reviewers and every required check. It never merges, and leaves open with a comment
 for the owner, a PR with a commit that isn't Dependabot's (signed and verified), a file outside its
 ecosystem or a change beyond dependency versions and pins, an integrity or URL mismatch, a new publisher or lost
-provenance, a new install script, a new package, a uv or npm release younger than 7 days, a digest that doesn't resolve
-or a failed attestation, a red required check it can't fix, a Must it can't fix, any semver-major, anything
+provenance, a new install script, a new package, a uv or npm release younger than 7 days, a digest that
+doesn't resolve or a failed attestation, a red required check it can't fix, a Must it can't fix, any semver-major, anything
 touching `tantivy`, or a new Python release (patch or minor). The gates stay on for Dependabot PRs.
 
 The review gate of TASK-211 shaped three parts of this:
@@ -64,13 +64,15 @@ The review gate of TASK-211 shaped three parts of this:
   (`.claude/scripts/tests/test-dependabot.sh`, in `make tooling`) and mutants
   (`.claude/scripts/mutants/dependabot.json`), so a regression in a check fails CI.
 - The routine needs, in its cloud environment: `gh` authenticated with a **fine-grained token for this
-  repository only, with `contents`, `pull requests`, `issues` and `actions` read and write, and `workflows`
-  (to queue an actions PR, whose diff touches `.github/workflows/`), and nothing else** (no `administration`,
-  so it can't touch the rulesets), held in `GH_TOKEN` only; Node 22, npm, uv 0.12.22 or later, Python 3.11 or
-  later, shellcheck; Playwright's Chromium and Docker when available. Where `make e2e` or
+  repository only, with `contents`, `pull requests`, `issues` and `actions` read and write, and nothing
+  else** (no `administration`, so it can't touch the rulesets; no `workflows`, because with it a leaked token
+  could push a workflow that runs with the repository's secrets), held in `GH_TOKEN` only. So the routine
+  reviews and attests a github-actions PR but doesn't queue it (queueing a change to `.github/workflows/` may
+  need `workflows`): its summary asks the owner to run `gh pr merge <n> --auto`. It also needs Node 22, npm,
+  uv 0.12.22 or later, Python 3.11 or later, shellcheck; Playwright's Chromium and Docker when available. Where `make e2e` or
   `deploy/smoke-test.sh` can't run, the PR names the CI check that stands in (`playwright`, `web-image`). The
-  tests, the reviewers' runs and the pre-push hook's `make lint` and `make tooling` run without the token in
-  their environment. What the cloud environment gives every process (a git credential helper, a proxy) stays
+  tests, the reviewers' runs, the pre-push hook's `make lint` and `make tooling`, and the autofix hook's ruff,
+  prettier and eslint run without the token in their environment. What the cloud environment gives every process (a git credential helper, a proxy) stays
   reachable by dependency code; the shape checks (only registry-verified versions run) are what bound that.
   Its commits carry the git identity the environment
   configures, which must name a person (the command stops on an empty one or one naming an AI), and no AI
