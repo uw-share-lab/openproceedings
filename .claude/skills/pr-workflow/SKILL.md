@@ -83,7 +83,9 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
   `op-reviews/`); fix what the script names.
 - Records are **per-sha**: an approval covers exactly one commit.
 - `--attest` adds `<!-- op-review: <sha> APPROVE -->` to the PR body; CI's `review-attested` step compares
-  it to the PR head sha. After pushing a fix to an open PR, re-run the gate and `--attest` again.
+  it to the PR head sha. After pushing a fix to an open PR, re-run the gate and `--attest` again. It finds the
+  branch's PR with `gh pr view` (GraphQL); `--attest --pr <n> --repo <owner>/<name>` reads it over REST instead,
+  for a Claude Code cloud session, which refuses GraphQL, and refuses a PR that isn't open at HEAD (TASK-213).
 
 ## Required CI checks (six)
 | Check (workflow) | Covers |

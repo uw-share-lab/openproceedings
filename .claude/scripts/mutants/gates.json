@@ -3802,5 +3802,23 @@
   "file": ".githooks/pre-push",
   "old": "\"${nocred[@]}\" make --no-print-directory tooling",
   "new": "make --no-print-directory tooling"
+ },
+ {
+  "label": "record: --pr attests a PR at another head",
+  "file": ".claude/scripts/record-review.py",
+  "old": "    if pr_head != head:\n",
+  "new": "    if False:\n"
+ },
+ {
+  "label": "record: --pr attests a closed PR",
+  "file": ".claude/scripts/record-review.py",
+  "old": "    if state != \"open\":\n",
+  "new": "    if False:\n"
+ },
+ {
+  "label": "record: any gh pr view failure read as no PR yet",
+  "file": ".claude/scripts/record-review.py",
+  "old": "                if \"no pull requests found\" in said.lower():\n",
+  "new": "                if True:\n"
  }
 ]

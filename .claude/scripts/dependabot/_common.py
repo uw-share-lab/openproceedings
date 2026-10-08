@@ -35,11 +35,17 @@ class ToolError(Exception):
 
 
 def run(
-    cmd: list[str], *, ok_codes: tuple[int, ...] = (0,), cwd: str | None = None
+    cmd: list[str],
+    *,
+    ok_codes: tuple[int, ...] = (0,),
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command (never through a shell). Raises ToolError on a missing tool, a timeout or a bad exit."""
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT, check=False, cwd=cwd)
+        r = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=TIMEOUT, check=False, cwd=cwd, env=env
+        )
     except FileNotFoundError as e:
         raise ToolError(f"{cmd[0]} is not installed") from e
     except subprocess.TimeoutExpired as e:
@@ -180,11 +186,15 @@ def parse_time(timestamp: str) -> dt.datetime:
     return t if t.tzinfo else t.replace(tzinfo=dt.UTC)
 
 
-def age_days(timestamp: str) -> float:
-    """Days from `timestamp` to now (`OP_DEPENDABOT_NOW`, when set, is now: the case table's fixed clock)."""
+def now() -> dt.datetime:
+    """Now, in UTC (`OP_DEPENDABOT_NOW`, when set, is now: the case table's fixed clock)."""
     fixed = os.environ.get("OP_DEPENDABOT_NOW")
-    now = parse_time(fixed) if fixed else dt.datetime.now(dt.UTC)
-    return (now - parse_time(timestamp)).total_seconds() / 86400
+    return parse_time(fixed) if fixed else dt.datetime.now(dt.UTC)
+
+
+def age_days(timestamp: str) -> float:
+    """Days from `timestamp` to now."""
+    return (now() - parse_time(timestamp)).total_seconds() / 86400
 
 
 def main_guard(fn: Callable[[], object]) -> NoReturn:

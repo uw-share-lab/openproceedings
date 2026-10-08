@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Record the outcome of a /review-gate round for the current HEAD. The ONLY writer of review records.
 
-    python3 .claude/scripts/record-review.py APPROVE|REQUEST_CHANGES <dispositions.md> [--attest]
+    python3 .claude/scripts/record-review.py APPROVE|REQUEST_CHANGES <dispositions.md> [--attest [--pr <n> --repo <o/r>]]
 
 The record lives at  <git-common-dir>/op-reviews/<HEAD sha>  (inside .git, never committed), and is what
 .claude/hooks/require-review.sh checks before a push or `gh pr create`.
@@ -18,18 +18,24 @@ Refuses to record unless:
   * APPROVE is not recorded while any [must] finding is anything other than fixed.
 
 --attest also writes `<!-- op-review: <sha> APPROVE -->` into the open PR's body, which CI's
-`review-attested` check compares against the PR head sha.
+`review-attested` check compares against the PR head sha. It finds the branch's PR with `gh pr view`, which uses
+GraphQL; `--pr <n> --repo <owner>/<name>` reads PR <n> over REST instead (a Claude Code cloud session refuses
+GraphQL; TASK-213) and refuses a PR that isn't open or whose head isn't HEAD. A `gh pr view` failure other than
+"no pull requests found" is an error, never a silent skip. The record is written before any of that, so a refused
+attestation still leaves the record (which is about the commit, not the PR); fix the cause and run it again.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 # A finding line: optional indent, a `-` or `*` bullet, a [must|should|nit] tag in any case. The
 # disposition is whatever follows the LAST arrow, so a summary may itself contain "->".
@@ -45,7 +51,7 @@ def git(*args: str) -> str:
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout.strip()
 
 
-def fail(msg: str) -> None:
+def fail(msg: str) -> NoReturn:
     print(f"record-review: {msg}", file=sys.stderr)
     sys.exit(1)
 
@@ -86,12 +92,44 @@ def check_disposition(level: str, disp: str, root: Path, head: str) -> str | Non
     return f"unrecognised disposition '{disp}' (use: fixed <sha> | task-NNN | rejected: <reason of at least three words>)"
 
 
+def pr_body_rest(repo: str, number: int, head: str) -> str:
+    """PR `number`'s body over REST, refusing a PR that is not open or whose head is not `head`: an attestation
+    names the sha it covers, so writing it into a PR at another head would attest nothing (TASK-213)."""
+    got = subprocess.run(["gh", "api", f"repos/{repo}/pulls/{number}"], capture_output=True, text=True)
+    if got.returncode != 0:
+        fail(f"could not read PR #{number}: {(got.stderr.strip() or got.stdout.strip())[:300]}")
+    try:
+        pr = json.loads(got.stdout)
+        state, pr_head, body = pr["state"], pr["head"]["sha"], pr.get("body") or ""
+    except (json.JSONDecodeError, KeyError, TypeError):
+        fail(f"PR #{number}: gh api answered something that isn't a pull request")
+    if state != "open":
+        fail(f"PR #{number} is {state}, not open")
+    if pr_head != head:
+        fail(f"PR #{number}'s head is {pr_head[:10]}, not HEAD {head[:10]}: push first, or name the right PR")
+    return str(body)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("verdict", choices=["APPROVE", "REQUEST_CHANGES"])
     ap.add_argument("dispositions", type=Path)
     ap.add_argument("--attest", action="store_true")
+    ap.add_argument("--pr", type=int, help="attest this PR, read over REST (no GraphQL; a cloud session)")
+    ap.add_argument(
+        "--repo",
+        default="{owner}/{repo}",
+        help="owner/name of --pr's repository (required with --pr, refused without it)",
+    )
     a = ap.parse_args()
+    if (a.pr is not None or a.repo != "{owner}/{repo}") and not a.attest:
+        ap.error("--pr and --repo only apply with --attest")
+    if a.pr is not None and a.repo == "{owner}/{repo}":
+        # gh resolves {owner}/{repo} from a github.com remote, which a cloud clone (a proxy remote) may not have
+        ap.error("--pr needs --repo <owner>/<name>")
+    if a.pr is None and a.repo != "{owner}/{repo}":
+        # without --pr, gh pr view reads this repository, so a PATCH to another would be wrong
+        ap.error("--repo only applies with --pr")
 
     global BASE
     BASE = os.environ.get("OP_REVIEW_BASE", BASE)
@@ -147,15 +185,24 @@ def main() -> None:
     print(f"recorded {a.verdict} for {head[:10]} ({len(findings)} findings) → {store / head}")
 
     if a.attest and a.verdict == "APPROVE":
-        view = subprocess.run(
-            ["gh", "pr", "view", "--json", "number,body", "-q", '"\\(.number)\\n\\(.body)"'],
-            capture_output=True,
-            text=True,
-        )
-        if view.returncode != 0:
-            print("no open PR for this branch yet — re-run with --attest after `gh pr create`")
-            return
-        number, _, body = view.stdout.partition("\n")
+        if a.pr is not None:
+            number, body = str(a.pr), pr_body_rest(a.repo, a.pr, head)
+        else:
+            view = subprocess.run(
+                ["gh", "pr", "view", "--json", "number,body", "-q", '"\\(.number)\\n\\(.body)"'],
+                capture_output=True,
+                text=True,
+            )
+            if view.returncode != 0:
+                said = (view.stderr.strip() or view.stdout.strip())[:300]
+                if "no pull requests found" in said.lower():
+                    print("no open PR for this branch yet — re-run with --attest after `gh pr create`")
+                    return
+                # any other failure (a cloud session refuses the GraphQL `gh pr view` uses) is not "no PR yet"
+                fail(
+                    f"could not find this branch's PR ({said}); name it with --pr <n> --repo <owner>/<name> (REST)"
+                )
+            number, _, body = view.stdout.partition("\n")
         body = re.sub(r"\n?<!-- op-review: [0-9a-f]+ APPROVE -->", "", body.rstrip())
         body += f"\n\n<!-- op-review: {head} APPROVE -->"
         # REST, not `gh pr edit`: gh pr edit queries the retired Projects (classic) API and fails
@@ -166,7 +213,7 @@ def main() -> None:
                 "api",
                 "-X",
                 "PATCH",
-                f"repos/{{owner}}/{{repo}}/pulls/{number.strip()}",
+                f"repos/{a.repo}/pulls/{number.strip()}",
                 "-f",
                 f"body={body}",
             ],

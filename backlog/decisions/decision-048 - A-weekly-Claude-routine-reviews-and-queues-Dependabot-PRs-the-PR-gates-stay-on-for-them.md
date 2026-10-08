@@ -88,3 +88,67 @@ The review gate of TASK-211 shaped three parts of this:
 - The routine changes no rule about matching, `index_version` or search records. A dependency it merges can
   change behaviour exactly as a hand-merged one could; CI's golden, contract and differential suites guard
   that, and the Python release, the one bump known to change ingest output, stays with the owner.
+
+## Addendum (2026-10-08, TASK-213: the cloud session has no GraphQL, and its token is a network secret)
+
+Test runs of the routine in its real cloud environment on 2026-10-08 found two assumptions above wrong:
+
+- **GraphQL is refused.** A Claude Code cloud session answers every GitHub GraphQL call with HTTP 403 ("GitHub
+  GraphQL is not available from Claude Code sessions; use the REST API …"), so `gh pr list`, `view`, `checks`
+  and `merge` fail, and with them `prs.py list`, `check` and `watch`, `gh pr merge --auto --match-head-commit`
+  and `record-review.py --attest`. REST works, and the session offers CCR routes for what only GraphQL did,
+  among them `PUT` and `DELETE repos/<repo>/pulls/<n>/ccr/auto_merge`.
+- **The token is not in `GH_TOKEN`.** `GH_TOKEN` and `GITHUB_TOKEN` hold placeholders (`gh auth status` calls
+  the token invalid) and an egress proxy adds the real credential to requests for api.github.com. The
+  "held in `GH_TOKEN` only" rule above, and step 0's `gh auth status` check, can't be met there.
+
+We keep every safety property above and change only how it is reached:
+
+- Everything the procedure asks GitHub goes through REST (`gh api repos/<repo>/...`), in both environments:
+  `prs.py list`, `check` (now also comparing GitHub's file and commit lists with git's), `watch` (the PR's
+  `merged` and `auto_merge`, the timeline's latest merge-queue event, the queue's build branch, the check runs;
+  a hung queue build is cancelled and rerun through the Actions REST endpoints), the advisory lookup, and
+  `record-review.py --attest --pr <n> --repo <owner>/<name>`, which also refuses a PR whose head isn't the
+  reviewed HEAD (and runs from `dev`'s copy, like the checkers: a PR branch may carry an older recorder).
+- **The environment is detected, not assumed.** `prs.py` asks GraphQL for the viewer: the session's 403
+  message is **cloud**, an answer is **local** (a maintainer's clone with a real `gh` login), anything else
+  stops the run. Step 0 checks auth with a real call (`gh api user`).
+- **What "the token can't leak to dependency code" means now.** In the cloud no process holds the token, so
+  none can read or send it elsewhere; `prs.py preflight` checks what is checkable: no real token in `GH_TOKEN`
+  or `GITHUB_TOKEN` (one there is reported; step 5 strips it), and no stored `gh` login (a file dependency code
+  could read, which step 5 can't strip: a stop). Any process can still make requests through the proxy while
+  the session lives, the same class as the git credential helper this record already names; the token's
+  narrow scope and the shape checks bound it. Locally a maintainer's stored login is accepted: it is their own
+  machine, where `make test` already runs with it.
+- **Queueing.** Locally `prs.py queue` runs `gh pr merge <n> --auto --match-head-commit <sha>`, as before. In
+  the cloud it uses `PUT …/ccr/auto_merge`, whose request shape isn't documented to us, so any non-2xx leaves
+  the PR open for the owner. There is no `--match-head-commit` there: `queue` reads the PR immediately before
+  and after the PUT. A PR GitHub already shows set to merge is not touched (a re-queue). If the head moved, a
+  failed call left the PR set to merge, or GitHub accepted the call but shows nothing set to merge, it
+  sends `DELETE …/ccr/auto_merge`, reads the PR back and leaves it open; a PR that closed meanwhile is left
+  alone; a PUT that times out, or a read after it that fails, is undone the same way. If the DELETE fails, or GitHub still
+  shows the PR set to merge (turning auto-merge off doesn't take an entry out of the queue), it says auto-merge
+  may still be on or the PR may still be queued, for the owner.
+- **The residual race.** A push that lands after `queue`'s second read but before GitHub acts on the PUT is
+  not caught by the script. The merge queue closes it: its build runs `review-attested` for each queued PR
+  (`merge_group_gate.py`), which requires the PR's current body to attest the exact head the queue merges,
+  and the routine attested only the head it reviewed, so a moved head fails the build and nothing merges.
+  The attestation is an honesty check (above), so someone holding a writer's token who also rewrites the
+  body defeats it, as they could defeat `--match-head-commit` by enabling auto-merge themselves, and could
+  then land code on `dev`; the owner's review of `main` promotions stays the access control for releases. In
+  the cloud, dependency code still running in the session could do both through the proxy. The procedure looks
+  for leftover processes from the PR's dependencies before it queues (step 5), which catches accidents such
+  as a dev server left running but can't rule out code that hides itself (a renamed process, a file it wrote
+  that runs later); what bounds that is the rule above that only registry-verified versions run, and the
+  token's narrow scope.
+- **Options.** The alternative to the CCR route was to attest in the cloud and leave every queueing to the
+  owner, as for github-actions PRs: no undocumented route and no race, at the cost of a manual step each week
+  for every PR, which is most of what decision-048 set out to remove. We take the CCR route, with every
+  failure leaving the PR open; if it proves unreliable, that alternative is the fallback.
+- **Not yet exercised from a cloud session** (as of 2026-10-08): the CCR `PUT`/`DELETE`, the job-log download
+  (a redirect to a storage host the egress proxy may not allow) and `gh attestation verify` (sigstore hosts).
+  The `PUT`, the log download and the attestation fail closed (the PR stays open). A failing `DELETE` does
+  not: auto-merge may stay on (`queue` exits 2 and says so, first in the run's "for the owner"), and then only
+  `review-attested` stops a moved head. TASK-213 stays open until a cloud run confirms them.
+- What would change this: a documented CCR request with an expected head sha (then pass it), or GraphQL
+  returning to cloud sessions (then use `--match-head-commit` there too).

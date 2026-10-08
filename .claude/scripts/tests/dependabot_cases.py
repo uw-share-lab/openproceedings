@@ -30,6 +30,7 @@ HERE = Path(__file__).resolve().parent
 SCRIPTS = HERE.parent / "dependabot"
 FAKE = HERE / "dependabot_fake.py"
 ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+TOKEN_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
 ROWS: list[tuple[str, Callable[[Case], None]]] = []
 
 OK, PROBLEM, ERROR, FIX = 0, 1, 2, 3
@@ -59,6 +60,8 @@ class Case:
         self.curl: dict[str, Any] = {}
         self.npm: dict[str, Any] = {}
         self.gh: dict[str, Any] = {}
+        # what a cloud session's token variables hold (TASK-213); the caller's real ones never reach a row
+        self.env: dict[str, str] = {"GH_TOKEN": "placeholder", "GITHUB_TOKEN": "placeholder"}
         self.git("init", "-q", "-b", "work")
         self.files: dict[str, str] = {}
 
@@ -85,8 +88,10 @@ class Case:
     def run(self, script: str, *args: str) -> tuple[int, str]:
         for name, data in (("curl.json", self.curl), ("npm.json", self.npm), ("gh.json", self.gh)):
             (self.fix / name).write_text(json.dumps(data))
-        env = {**ENV, "PATH": f"{self.bin}{os.pathsep}{ENV.get('PATH', '')}", "DEPBOT_FIX": str(self.fix)}
+        env = {k: v for k, v in ENV.items() if k not in TOKEN_VARS} | self.env
+        env |= {"PATH": f"{self.bin}{os.pathsep}{ENV.get('PATH', '')}", "DEPBOT_FIX": str(self.fix)}
         env["OP_DEPENDABOT_NOW"] = CLOCK
+        env.setdefault("OP_DEPENDABOT_SETTLE", "0")
         r = subprocess.run(
             [sys.executable, str(SCRIPTS / script), *args],
             cwd=self.repo, capture_output=True, text=True, env=env, timeout=120,
@@ -1400,29 +1405,51 @@ def _(c: Case) -> None:
 
 
 # --- prs.py --------------------------------------------------------------------------------------------
+# Every prs.py row runs as a Claude Code cloud session (`"cloud": true`: GraphQL and `gh pr` fail with the
+# session's 403) unless it says local, so a GraphQL call creeping back into list, check or watch fails a row.
 
 
+R = "repos/uw-share-lab/openproceedings"
 BOT = {
     "GIT_AUTHOR_NAME": "dependabot[bot]", "GIT_AUTHOR_EMAIL": "49699333+dependabot[bot]@users.noreply.github.com",
     "GIT_COMMITTER_NAME": "GitHub", "GIT_COMMITTER_EMAIL": "noreply@github.com",
 }  # fmt: skip
+REAL_LOOKING = "ghp_" + "A1b2C3d4" * 5  # a token's shape (not a token)
+
+
+def page1(path: str) -> str:
+    return f"api {path}{'&' if '?' in path else '?'}per_page=100&page=1"
+
+
+def rest_pr(sha_: str, head: str = "dependabot/uv/g", *, state: str = "open", base: str = "dev",
+            login: str = "dependabot[bot]", title: str = "deps: bump x", auto: bool = False,
+            merged: bool = False) -> dict[str, Any]:  # fmt: skip
+    return {"number": 7, "state": state, "merged": merged, "merged_at": "2026-10-07T11:00:00Z" if merged else None,
+            "user": {"login": login}, "base": {"ref": base}, "head": {"ref": head, "sha": sha_}, "title": title,
+            "auto_merge": {"merge_method": "merge"} if auto else None}  # fmt: skip
+
+
+def gh_commit(sha_: str, *, verified: bool = True, login: str = "dependabot[bot]") -> dict[str, Any]:
+    return {"sha": sha_, "author": {"login": login},
+            "commit": {"verification": {"verified": verified, "reason": "valid" if verified else "unsigned"}}}  # fmt: skip
 
 
 def check_case(c: Case, head: str, files: dict[str, str | None], *, who: dict[str, str] | None = None,
-               title: str = "deps: bump x", verified: bool = True, gh_head: str | None = None,
-               **pr: Any) -> list[str]:  # fmt: skip
+               verified: bool = True, gh_head: str | None = None, gh_files: list[dict[str, Any]] | None = None,
+               gh_commits: list[dict[str, Any]] | None = None, **pr: Any) -> list[str]:  # fmt: skip
     base = c.commit({"uv.lock": "a\n", "README.md": "r\n"})
     c.git("update-ref", "refs/remotes/origin/dev", base)
     sha_ = c.commit(files, who=BOT if who is None else who)
-    c.gh["pr view 7"] = {"state": "OPEN", "author": {"login": "app/dependabot"}, "baseRefName": "dev",
-                         "headRefName": head, "headRefOid": gh_head or sha_, "title": title, **pr}  # fmt: skip
-    c.gh[f"api repos/uw-share-lab/openproceedings/commits/{sha_}"] = {
-        "commit": {"verification": {"verified": verified, "reason": "valid" if verified else "unsigned"}}
-    }
+    c.gh["cloud"] = True
+    c.gh[f"api {R}/pulls/7"] = rest_pr(gh_head or sha_, head, **pr)
+    c.gh[page1(f"{R}/pulls/7/files")] = gh_files if gh_files is not None else [{"filename": p} for p in files]
+    c.gh[page1(f"{R}/pulls/7/commits")] = (
+        gh_commits if gh_commits is not None else [gh_commit(sha_, verified=verified)]
+    )
     return ["check", "7", "--head", sha_]
 
 
-@row("prs check: a Dependabot-only uv PR passes")
+@row("prs check: a Dependabot-only uv PR passes, REST only (cloud)")
 def _(c: Case) -> None:
     args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n", "backend/pyproject.toml": "x\n"})
     c.expect("prs.py", args, OK, r"^ok +uv: 2 file\(s\) and 1 commit\(s\), all Dependabot's")
@@ -1466,6 +1493,67 @@ def _(c: Case) -> None:
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM \.npmrc is outside")
 
 
+@row("prs check: a file git renamed counts at its old path too")
+def _(c: Case) -> None:
+    # README.md moves to pyproject.toml unchanged: git's rename detection would list only the new path
+    args = check_case(c, "dependabot/uv/g", {"README.md": None, "pyproject.toml": "r\n"},
+                      gh_files=[{"filename": "pyproject.toml"}])  # fmt: skip
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM README\.md is outside")
+
+
+@row("prs check: a file only GitHub lists for the PR")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"},
+                      gh_files=[{"filename": "uv.lock"}, {"filename": ".github/workflows/x.yml"}])  # fmt: skip
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM \.github/workflows/x\.yml is outside")
+
+
+@row("prs check: the old path of a rename GitHub lists")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"},
+                      gh_files=[{"filename": "uv.lock", "previous_filename": "Makefile"}])  # fmt: skip
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM Makefile is outside")
+
+
+@row("prs check: a head branch name that isn't plain")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/x;touch${IFS}y", {"uv.lock": "b\n"})
+    c.expect(
+        "prs.py", args, PROBLEM, r"^PROBLEM the head branch 'dependabot/uv/x;touch\$\{IFS\}y' is not a plain"
+    )
+
+
+ODD_HEADS = {
+    "a question mark": "dependabot/uv/a?b=c",
+    "an ampersand": "dependabot/uv/a&event=push",
+    "a space": "dependabot/uv/a b",
+    "a dot-dot": "dependabot/uv/a..b",
+    "a leading dash": "-dependabot/uv/x",
+    "a command substitution": "dependabot/uv/$(id)",
+    "a newline": "dependabot/uv/a\nb",
+}
+
+
+def odd_head_row(what: str, head: str) -> None:
+    @row(f"prs check: a head branch name with {what} is stopped")
+    def _(c: Case) -> None:
+        args = check_case(c, head, {"uv.lock": "b\n"})
+        c.expect(
+            "prs.py", args, PROBLEM, r"^PROBLEM the head branch .* is not a plain Dependabot branch name"
+        )
+
+    @row(f"prs list: a head branch name with {what} is printed quoted, with a warning")
+    def _(c: Case) -> None:
+        c.gh["cloud"] = True
+        c.gh[page1(f"{R}/pulls?state=open&base=dev")] = [listed(3, head=head)]
+        got, out = c.run("prs.py", "list")
+        assert got == OK and f"{head!r} (not a plain Dependabot branch name" in out, out
+
+
+for _what, _head in ODD_HEADS.items():
+    odd_head_row(_what, _head)
+
+
 @row("prs check: an ecosystem the routine doesn't review")
 def _(c: Case) -> None:
     args = check_case(c, "dependabot/cargo/g", {"Cargo.lock": "x\n"})
@@ -1484,6 +1572,21 @@ def _(c: Case) -> None:
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM commit .*doesn't verify its signature \(unsigned\)")
 
 
+@row("prs check: a commit GitHub attributes to someone else")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    sha_ = args[3]
+    c.gh[page1(f"{R}/pulls/7/commits")] = [gh_commit(sha_, login="mallory")]
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM commit .*GitHub doesn't attribute it to dependabot\[bot\]")
+
+
+@row("prs check: GitHub's commits are not git's")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    c.gh[page1(f"{R}/pulls/7/commits")] = [gh_commit(args[3]), gh_commit("e" * 40)]
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub lists 2 commit\(s\) for the PR and git 1")
+
+
 @row("prs check: the head moved on GitHub since the fetch")
 def _(c: Case) -> None:
     args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, gh_head="f" * 40)
@@ -1492,26 +1595,26 @@ def _(c: Case) -> None:
 
 @row("prs check: a head with no commits past the merge base")
 def _(c: Case) -> None:
-    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\\n"})
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\\n"}, gh_commits=[])
     c.git("update-ref", "refs/remotes/origin/dev", args[3])
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM no commits between the merge base and the head")
 
 
 @row("prs check: a closed PR")
 def _(c: Case) -> None:
-    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, state="CLOSED")
-    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR is CLOSED into dev")
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, state="closed")
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR is closed into dev")
 
 
 @row("prs check: a PR into main")
 def _(c: Case) -> None:
-    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, baseRefName="main")
-    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR is OPEN into main")
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, base="main")
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR is open into main")
 
 
 @row("prs check: a PR someone else opened with Dependabot's commits")
 def _(c: Case) -> None:
-    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, author={"login": "mallory"})
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"}, login="mallory")
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR was opened by mallory")
 
 
@@ -1523,74 +1626,673 @@ def _(c: Case) -> None:
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM the title names a hand-only dependency")
 
 
-@row("prs list: prints each PR with its ecosystem")
+def listed(n: int, login: str = "dependabot[bot]", head: str = "dependabot/uv/g") -> dict[str, Any]:
+    return {"number": n, "title": "deps: bump x", "head": {"ref": head}, "user": {"login": login}}
+
+
+@row("prs list: prints each Dependabot PR with its ecosystem, and no one else's")
 def _(c: Case) -> None:
-    c.gh["pr list"] = [{"number": 3, "title": "deps: bump x", "headRefName": "dependabot/uv/g", "url": "u"}]
-    c.expect("prs.py", ["list"], OK, r"^#3 \[uv\] dependabot/uv/g$")
+    c.gh["cloud"] = True
+    c.gh[page1(f"{R}/pulls?state=open&base=dev")] = [listed(4, login="mallory"), listed(3)]
+    c.expect("prs.py", ["list"], OK, r"\A1 open Dependabot PR\(s\) into dev\n#3 \[uv\] dependabot/uv/g\n")
+
+
+@row("prs list: a head branch name that isn't plain is printed quoted, with a warning")
+def _(c: Case) -> None:
+    c.gh["cloud"] = True
+    c.gh[page1(f"{R}/pulls?state=open&base=dev")] = [listed(3, head="dependabot/uv/a`b`")]
+    c.expect("prs.py", ["list"], OK, r"^#3 \[uv\] 'dependabot/uv/a`b`' \(not a plain Dependabot branch name")
+
+
+@row("prs list: reads every page")
+def _(c: Case) -> None:
+    c.gh["cloud"] = True
+    c.gh[page1(f"{R}/pulls?state=open&base=dev")] = [listed(n, login="mallory") for n in range(100)]
+    c.gh[f"api {R}/pulls?state=open&base=dev&per_page=100&page=2"] = [listed(500)]
+    c.expect("prs.py", ["list"], OK, r"^#500 \[uv\]")
 
 
 @row("prs list: a PR of the wrong shape is an error, not a crash")
 def _(c: Case) -> None:
-    c.gh["pr list"] = [{"number": 1, "title": "t"}]
+    c.gh["cloud"] = True
+    c.gh[page1(f"{R}/pulls?state=open&base=dev")] = [
+        {"number": 1, "title": "t", "user": {"login": "dependabot[bot]"}}
+    ]
     c.expect("prs.py", ["list"], ERROR, r"^ERROR +KeyError")
 
 
-def gql(*states: tuple[str, dict[str, Any] | None, dict[str, Any] | None]) -> dict[str, Any]:
-    prs: dict[str, Any] = {
-        f"p{n}": {"state": s, "mergeQueueEntry": q, "autoMergeRequest": a, "commits": {"nodes": []}}
-        for n, (s, q, a) in enumerate(states, start=1)
+# preflight
+
+
+def preflight_case(c: Case, *, cloud: bool = True, stored: bool = False) -> None:
+    c.gh["api user"] = {"login": "maintainer"}
+    if cloud:
+        c.gh["cloud"] = True
+    else:
+        c.gh["graphql"] = {"data": {"viewer": {"login": "maintainer"}}}
+    if stored:
+        c.gh["stored login"] = REAL_LOOKING
+
+
+@row("prs preflight: a cloud session with a network secret")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.expect("prs.py", ["preflight"], OK, r"^ok +mode: cloud\n(?s:.*)^ok +credential: a network secret")
+
+
+@row("prs preflight: a stored gh login in the cloud is a stop")
+def _(c: Case) -> None:
+    preflight_case(c, stored=True)
+    c.expect("prs.py", ["preflight"], PROBLEM, r"^PROBLEM gh has a stored login in this cloud session")
+
+
+@row("prs preflight: a stored gh login holding only a placeholder is no stop")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["stored login"] = "placeholder"
+    c.expect("prs.py", ["preflight"], OK, r"^ok +credential: a network secret")
+
+
+@row("prs preflight: a stored classic 40-hex token in the cloud is a stop")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["stored login"] = "0123456789abcdef0123456789abcdef01234567"
+    c.expect("prs.py", ["preflight"], PROBLEM, r"^PROBLEM gh has a stored login in this cloud session")
+
+
+@row("prs preflight: a token in GH_TOKEN is not mistaken for a stored login")
+def _(c: Case) -> None:
+    preflight_case(c)  # gh auth token would print GH_TOKEN if the variables reached it
+    c.env = {"GH_TOKEN": REAL_LOOKING}
+    c.expect("prs.py", ["preflight"], OK, r"^ok +credential: a token in GH_TOKEN; step 5 strips it")
+
+
+@row("prs preflight: a classic 40-hex token in GH_TOKEN is reported, not called a network secret")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.env = {"GH_TOKEN": "0123456789abcdef0123456789abcdef01234567"}
+    got, out = c.run("prs.py", "preflight")
+    assert got == OK and "a token in GH_TOKEN" in out and "network secret" not in out, out
+
+
+@row("prs preflight: a local clone with a gh login")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.expect("prs.py", ["preflight"], OK, r"^ok +mode: local\n(?s:.*)^ok +credential: gh's stored login")
+
+
+@row("prs preflight: GraphQL failing some other way stops the run")
+def _(c: Case) -> None:
+    c.gh["api user"] = {"login": "maintainer"}  # no graphql fixture: a 404 without the session's message
+    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*not as a Claude Code session refuses it")
+
+
+@row("prs preflight: GraphQL answering an empty login stops the run")
+def _(c: Case) -> None:
+    c.gh["api user"] = {"login": "maintainer"}
+    c.gh["graphql"] = {"data": {"viewer": {"login": ""}}}
+    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR +GraphQL answered an empty login")
+
+
+@row("prs preflight: gh api user failing stops the run")
+def _(c: Case) -> None:
+    c.gh["cloud"] = True
+    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*gh api user")
+
+
+# queue
+
+PUT = f"api PUT {R}/pulls/7/ccr/auto_merge"
+DELETE = f"api DELETE {R}/pulls/7/ccr/auto_merge"
+
+
+def queue_case(c: Case, *before_after: dict[str, Any], head: str = "dependabot/uv/g", cloud: bool = True,
+               put: dict[str, Any] | None = None, delete: dict[str, Any] | None = None) -> list[str]:  # fmt: skip
+    sha_ = c.commit({"uv.lock": "b\n"}, who=BOT)
+    reads = [rest_pr(sha_, head, **kw) for kw in before_after] or [rest_pr(sha_, head)]
+    c.gh[f"api {R}/pulls/7"] = {"__seq": reads}
+    if cloud:
+        c.gh["cloud"] = True
+        c.gh[PUT] = put if put is not None else {"__status": 200, "body": {}}
+        c.gh[DELETE] = delete if delete is not None else {"__status": 204, "body": ""}
+    else:
+        c.gh["graphql"] = {"data": {"viewer": {"login": "maintainer"}}}
+    c.gh[page1(f"{R}/issues/7/timeline")] = []  # no merge-queue event unless a row adds one
+    return ["queue", "7", "--head", sha_]
+
+
+def calls(c: Case) -> list[list[str]]:
+    log = c.fix / "calls.log"
+    return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+
+def called(c: Case, *words: str) -> bool:
+    return any(all(w in call for w in words) for call in calls(c))
+
+
+@row("prs queue: cloud turns auto-merge on through the CCR route, then finds the head unmoved")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {"auto": True})
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(cloud\)")
+    assert called(c, "PUT", f"{R}/pulls/7/ccr/auto_merge") and not called(c, "DELETE"), calls(c)
+    assert calls(c).count(["gh", "api", f"{R}/pulls/7"]) == 2, calls(c)  # the head is read before and after
+
+
+@row("prs queue: a head that moved before the PUT is never queued")
+def _(c: Case) -> None:
+    args = queue_case(c, {})
+    c.gh[f"api {R}/pulls/7"] = rest_pr("f" * 40)
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub's head is ffffffffffff")
+    assert not called(c, "PUT") and not called(c, "graphql"), calls(c)
+
+
+@row("prs queue: a head that moved after the PUT turns auto-merge off again")
+def _(c: Case) -> None:
+    args = queue_case(c, {})
+    first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
+    c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {**first, "head": {**first["head"], "sha": "f" * 40}}]}
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR changed while it was queued: open at ffffffffffff")
+    assert called(c, "PUT") and called(c, "DELETE", f"{R}/pulls/7/ccr/auto_merge"), calls(c)
+
+
+@row("prs queue: a PR closed after the PUT is left as it is (a closed PR can't merge)")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {"state": "closed"})
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR changed while it was queued: closed")
+    assert called(c, "PUT") and not called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: auto-merge that can't be turned off again is an error naming the danger")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {}, delete={"__status": 500, "body": {"message": "boom"}})
+    first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
+    c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {**first, "head": {**first["head"], "sha": "f" * 40}}]}
+    c.expect(
+        "prs.py",
+        args,
+        ERROR,
+        r"^ERROR +auto-merge may still be on for #7, or it may still be in the merge queue",
+    )
+
+
+@row("prs queue: a refused PUT leaves the PR open (no DELETE when nothing was turned on)")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {}, put={"__status": 422, "body": {"message": "merge_method is required"}})
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM turning auto-merge on failed: .*merge_method is required")
+    assert not called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: a refused PUT that left auto-merge on turns it off")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {"auto": True}, {}, put={"__status": 502, "body": {"message": "bad gateway"}})
+    c.expect(
+        "prs.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM turning auto-merge on failed(?s:.*)^ok +auto-merge turned off again",
+    )
+    assert called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: a refused PUT that takes effect late is seen on the second read and undone")
+def _(c: Case) -> None:
+    args = queue_case(
+        c, {}, {}, {"auto": True}, {}, put={"__status": 502, "body": {"message": "bad gateway"}}
+    )
+    c.expect(
+        "prs.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM turning auto-merge on failed(?s:.*)^ok +auto-merge turned off again",
+    )
+    assert called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: a settle time that is not finite stops before any write")
+def _(c: Case) -> None:
+    args = queue_case(c, {})
+    c.env["OP_DEPENDABOT_SETTLE"] = "nan"
+    c.expect("prs.py", args, ERROR, r"^ERROR +OP_DEPENDABOT_SETTLE is 'nan', not a number of seconds")
+    assert not called(c, "PUT"), calls(c)
+
+
+@row("prs queue: a negative settle time stops before any write")
+def _(c: Case) -> None:
+    args = queue_case(c, {})
+    c.env["OP_DEPENDABOT_SETTLE"] = "-1"
+    c.expect("prs.py", args, ERROR, r"^ERROR +OP_DEPENDABOT_SETTLE is '-1', not a number of seconds")
+    assert not called(c, "PUT"), calls(c)
+
+
+@row("prs queue: a refused PUT that GitHub queued anyway is taken out again")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {}, put={"__status": 502, "body": {"message": "bad gateway"}})
+    added = {"event": "added_to_merge_queue", "created_at": CLOCK}
+    c.gh[page1(f"{R}/issues/7/timeline")] = {
+        "__seq": [[], [added], [added, {"event": "removed_from_merge_queue"}]]
     }
-    return {"data": {"repository": prs}}
+    c.expect(
+        "prs.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM turning auto-merge on failed(?s:.*)^ok +auto-merge turned off again",
+    )
+    assert called(c, "DELETE"), calls(c)
 
 
-QUEUED = {"state": "AWAITING_CHECKS", "position": 1}
+@row("prs queue: a queue entry still there after turning auto-merge off is for the owner")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {}, put={"__status": 502, "body": {"message": "bad gateway"}})
+    added = {"event": "added_to_merge_queue", "created_at": CLOCK}
+    c.gh[page1(f"{R}/issues/7/timeline")] = {"__seq": [[], [added]]}
+    c.expect(
+        "prs.py",
+        args,
+        ERROR,
+        r"^ERROR +auto-merge may still be on for #7, or it may still be in the merge queue \(GitHub still shows",
+    )
+
+
+@row("prs queue: a PR already set to merge is left alone (no PUT, no DELETE)")
+def _(c: Case) -> None:
+    args = queue_case(c, {"auto": True})
+    c.expect("prs.py", args, OK, r"^ok +#7 is already set to merge at [0-9a-f]{12}: nothing to do")
+    assert not called(c, "PUT") and not called(c, "DELETE") and not called(c, "graphql"), calls(c)
+
+
+@row("prs queue: a github-actions PR is the owner's to queue")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, head="dependabot/github_actions/g")
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM a github-actions PR is queued by the owner")
+    assert not called(c, "PUT"), calls(c)
+
+
+@row("prs queue: someone else's PR is never queued")
+def _(c: Case) -> None:
+    args = queue_case(c, {"login": "mallory"})
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR was opened by mallory")
+    assert not called(c, "PUT"), calls(c)
+
+
+@row("prs queue: local uses gh pr merge --auto --match-head-commit, never the CCR route")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {"auto": True}, cloud=False)
+    c.gh["pr merge"] = 0
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(local\)")
+    want = ["gh", "pr", "merge", "7", "--repo", "uw-share-lab/openproceedings", "--auto",
+            "--match-head-commit", args[3]]  # fmt: skip
+    assert want in calls(c) and not called(c, "PUT"), calls(c)
+
+
+@row("prs queue: local, gh pr merge refused")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {}, cloud=False)
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM turning auto-merge on failed: fake gh: merge refused")
+
+
+@row("prs queue: a PUT GitHub accepted but doesn't show is undone, after one more read")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {})
+    c.expect(
+        "prs.py", args, PROBLEM, r"^PROBLEM GitHub accepted the request but shows neither auto-merge nor"
+    )
+    assert called(c, "DELETE") and calls(c).count(["gh", "api", f"{R}/pulls/7"]) == 4, calls(
+        c
+    )  # +settle, +undo
+
+
+@row("prs queue: a merge-queue entry in the timeline counts as queued")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {})
+    added = {"event": "added_to_merge_queue", "created_at": CLOCK}
+    c.gh[page1(f"{R}/issues/7/timeline")] = {"__seq": [[], [{"event": "commented"}, added]]}
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(cloud\)")
+    assert not called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: a queue entry from before the request doesn't count")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {})
+    old = {"event": "added_to_merge_queue", "created_at": "2026-10-01T00:00:00Z"}
+    c.gh[page1(f"{R}/issues/7/timeline")] = {"__seq": [[], [old]]}
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub accepted the request but shows neither")
+
+
+@row("prs queue: an entry the timeline shows removed again doesn't count")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {})
+    c.gh[page1(f"{R}/issues/7/timeline")] = [
+        {"event": "added_to_merge_queue"},
+        {"event": "removed_from_merge_queue"},
+    ]
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub accepted the request but shows neither")
+
+
+@row("prs queue: a PUT whose connection drops, though GitHub queued the PR, is undone")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {}, put={"__conn": True})
+    added = {"event": "added_to_merge_queue", "created_at": CLOCK}
+    c.gh[page1(f"{R}/issues/7/timeline")] = {
+        "__seq": [[], [added], [added, {"event": "removed_from_merge_queue"}]]
+    }
+    c.expect(
+        "prs.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM turning auto-merge on failed: error connecting(?s:.*)^ok +auto-merge turned off again",
+    )
+    assert called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: a PUT that is cancelled (gh exits 2) is undone and is an error")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {}, put={"__exit": 2})
+    c.expect("prs.py", args, ERROR, r"^ERROR +queueing #7 failed partway .*auto-merge turned off again")
+    assert called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: the read after the PUT failing is undone and is an error")
+def _(c: Case) -> None:
+    args = queue_case(c, {})
+    first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
+    c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {"__status": 500, "body": {"message": "boom"}}, first]}
+    c.expect("prs.py", args, ERROR, r"^ERROR +queueing #7 failed partway .*auto-merge turned off again")
+    assert called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: a read after the PUT of the wrong shape is undone too")
+def _(c: Case) -> None:
+    args = queue_case(c, {})
+    first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
+    c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {"state": "open"}, {"state": "open"}, first]}
+    c.expect(
+        "prs.py",
+        args,
+        ERROR,
+        r"^ERROR +queueing #7 failed partway \(KeyError: 'head'\); auto-merge turned off again",
+    )
+    assert called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: a settle time that isn't a number stops before any write")
+def _(c: Case) -> None:
+    args = queue_case(c, {})
+    c.env["OP_DEPENDABOT_SETTLE"] = "abc"
+    c.expect("prs.py", args, ERROR, r"^ERROR +OP_DEPENDABOT_SETTLE is 'abc', not a number of seconds")
+    assert not called(c, "PUT"), calls(c)
+
+
+@row("prs queue: a queue entry 1 minute before the request counts (clock skew)")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {})
+    added = {"event": "added_to_merge_queue", "created_at": "2026-10-07T11:59:00Z"}
+    c.gh[page1(f"{R}/issues/7/timeline")] = {"__seq": [[], [added]]}
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at")
+
+
+@row("prs queue: a queue entry 3 minutes before the request doesn't")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {})
+    added = {"event": "added_to_merge_queue", "created_at": "2026-10-07T11:57:00Z"}
+    c.gh[page1(f"{R}/issues/7/timeline")] = {"__seq": [[], [added]]}
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub accepted the request but shows neither")
+
+
+@row("prs queue: a dead PUT that can't be undone says auto-merge may still be on")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, put={"__exit": 2}, delete={"__status": 500, "body": {"message": "boom"}})
+    c.expect("prs.py", args, ERROR, r"^ERROR +queueing #7 failed partway .*auto-merge may still be on for #7")
+
+
+@row("prs queue: a PR that merged at the reviewed head before the second read is done")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {"state": "closed", "merged": True})
+    c.expect("prs.py", args, OK, r"^ok +#7 merged already, at [0-9a-f]{12}")
+    assert not called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: a PR that merged at another head is the owner's")
+def _(c: Case) -> None:
+    args = queue_case(c, {})
+    first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
+    gone = {**first, "state": "closed", "merged": True, "head": {**first["head"], "sha": "f" * 40}}
+    c.gh[f"api {R}/pulls/7"] = {"__seq": [first, gone]}
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM #7 merged at ffffffffffff, not the reviewed")
+    assert not called(c, "DELETE"), calls(c)
+
+
+@row("prs queue: local, a head that moved after is turned off with --disable-auto")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, cloud=False)
+    c.gh["pr merge"] = 0
+    first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
+    c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {**first, "head": {**first["head"], "sha": "f" * 40}}]}
+    c.expect("prs.py", args, PROBLEM, r"^ok +auto-merge turned off again")
+    assert called(c, "--disable-auto"), calls(c)
+
+
+@row("prs queue: a mode it can't tell stops before any write")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, cloud=False)
+    del c.gh["graphql"]
+    c.expect("prs.py", args, ERROR, r"^ERROR .*not as a Claude Code session refuses it")
+    assert not called(c, "PUT") and not called(c, "pr", "merge"), calls(c)
+
+
+# watch
+
+QREF = "refs/heads/gh-readonly-queue/dev/pr-1-" + "a" * 40
+
+
+def poll_case(c: Case, n: int, *polls: tuple[Any, ...], checks: list[dict[str, Any]] | None = None) -> None:
+    """One (state, auto-merge, queue branch[, timeline queue entry]) per poll for PR `n`; the last repeats.
+    The timeline entry defaults to the branch's; without one the timeline shows the PR added, then removed."""
+    c.gh["cloud"] = True
+    prs: list[dict[str, Any]] = []
+    refs: list[list[dict[str, str]]] = []
+    timeline: list[list[dict[str, str]]] = []
+    for state, auto, queued, *listed in polls:
+        added = [{"event": "added_to_merge_queue"}]
+        timeline.append(
+            added if (listed[0] if listed else queued) else [*added, {"event": "removed_from_merge_queue"}]
+        )
+        pr = rest_pr(
+            "b" * 40, auto=auto, merged=state == "merged", state="closed" if state != "open" else "open"
+        )
+        prs.append({**pr, "number": n})
+        refs.append([{"ref": QREF.replace("pr-1-", f"pr-{n}-")}] if queued else [])
+    c.gh[f"api {R}/pulls/{n}"] = {"__seq": prs}
+    c.gh[f"api {R}/git/matching-refs/heads/gh-readonly-queue/dev/pr-{n}-"] = {"__seq": refs}
+    c.gh[page1(f"{R}/issues/{n}/timeline")] = {"__seq": timeline}
+    c.gh[page1(f"{R}/commits/{'b' * 40}/check-runs")] = {"total_count": 0, "check_runs": checks or []}
+    branch = QREF.removeprefix("refs/heads/").replace("pr-1-", f"pr-{n}-")
+    c.gh[f"api {R}/actions/runs?event=merge_group&branch={branch}&per_page=100"] = {"workflow_runs": []}
+
+
+W = ["--interval", "0"]
 
 
 @row("prs watch: exits 0 once every PR merged")
 def _(c: Case) -> None:
-    c.gh["graphql"] = [gql(("OPEN", QUEUED, None), ("OPEN", None, {"enabledAt": "t"})),
-                       gql(("MERGED", None, None), ("MERGED", None, None))]  # fmt: skip
-    c.expect("prs.py", ["watch", "1", "2", "--interval", "0"], 0, r"^all merged")
+    poll_case(c, 1, ("open", False, True), ("merged", False, False))
+    poll_case(c, 2, ("open", True, False), ("merged", False, False))
+    c.expect("prs.py", ["watch", "1", "2", *W], 0, r"^all merged")
 
 
 @row("prs watch: a PR out of the queue two polls running exits 1")
 def _(c: Case) -> None:
-    c.gh["graphql"] = [gql(("OPEN", QUEUED, None)), gql(("OPEN", None, None))]
-    c.expect("prs.py", ["watch", "1", "--interval", "0"], 1, r"^#1 is open but out of the merge queue")
+    poll_case(c, 1, ("open", False, True), ("open", False, False))
+    c.expect("prs.py", ["watch", "1", *W], 1, r"^#1 is open but out of the merge queue")
 
 
 @row("prs watch: one poll between queue states is not a drop")
 def _(c: Case) -> None:
-    c.gh["graphql"] = [gql(("OPEN", None, None)), gql(("OPEN", QUEUED, None)), gql(("MERGED", None, None))]
-    c.expect("prs.py", ["watch", "1", "--interval", "0"], 0, r"^all merged")
+    poll_case(c, 1, ("open", False, False), ("open", False, True), ("merged", False, False))
+    c.expect("prs.py", ["watch", "1", *W], 0, r"^all merged")
+
+
+@row("prs watch: auto-merge on while its checks run counts as queued")
+def _(c: Case) -> None:
+    poll_case(
+        c, 1, ("open", True, False), ("open", True, False), ("open", True, False), ("merged", False, False)
+    )
+    c.expect("prs.py", ["watch", "1", *W], 0, r"^#1 open queue=- auto-merge checks=-")
 
 
 @row("prs watch: one PR merged while another still waits is not a drop")
 def _(c: Case) -> None:
-    c.gh["graphql"] = [
-        gql(("OPEN", QUEUED, None), ("OPEN", QUEUED, None)),
-        gql(("MERGED", None, None), ("OPEN", QUEUED, None)),
-        gql(("MERGED", None, None), ("OPEN", QUEUED, None)),
-        gql(("MERGED", None, None), ("MERGED", None, None)),
-    ]
-    c.expect("prs.py", ["watch", "1", "2", "--interval", "0"], 0, r"^all merged")
+    poll_case(c, 1, ("open", False, True), ("merged", False, False))
+    poll_case(
+        c, 2, ("open", False, True), ("open", False, True), ("open", False, True), ("merged", False, False)
+    )
+    c.expect("prs.py", ["watch", "1", "2", *W], 0, r"^all merged")
+
+
+@row("prs watch: an entry waiting behind others (no build branch, no auto-merge) is not a drop")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", False, False, True), ("open", False, False, True), ("open", False, False, True),
+              ("merged", False, False))  # fmt: skip
+    c.expect("prs.py", ["watch", "1", *W], 0, r"^#1 open queue=waiting checks=-(?s:.*)^all merged")
+
+
+@row("prs watch: a build branch counts as queued even before the timeline shows the entry")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", False, True, False), ("open", False, True, False), ("open", False, True, False),
+              ("merged", False, False))  # fmt: skip
+    c.expect("prs.py", ["watch", "1", *W], 0, r"^#1 open queue=building checks=-(?s:.*)^all merged")
+
+
+@row("prs watch: a branch that only looks like the queue's doesn't count")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", False, True, False), ("open", False, True, False))
+    planted = [{"ref": "refs/heads/gh-readonly-queue/dev/pr-1-x&event=push"}]
+    c.gh[f"api {R}/git/matching-refs/heads/gh-readonly-queue/dev/pr-1-"] = planted
+    c.expect("prs.py", ["watch", "1", *W], 1, r"^#1 is open but out of the merge queue")
+
+
+@row("prs watch: a crafted ref can't add query parameters to the runs lookup")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", False, True), ("merged", False, False))
+    crafted = {"ref": "refs/heads/gh-readonly-queue/dev/pr-1-" + "a" * 40 + "?event=push&branch=x"}
+    c.gh[f"api {R}/git/matching-refs/heads/gh-readonly-queue/dev/pr-1-"] = {
+        "__seq": [[{"ref": QREF}, crafted], []]
+    }
+    c.expect("prs.py", ["watch", "1", *W], 0, r"^all merged")
+    runs = [call for call in calls(c) if any("actions/runs" in a for a in call)]
+    assert runs and all("event=push" not in a and "branch=x" not in a for call in runs for a in call), runs
 
 
 @row("prs watch: gh failing is an error")
 def _(c: Case) -> None:
-    c.expect("prs.py", ["watch", "1", "--interval", "0"], ERROR, r"^ERROR .*gh api graphql")
+    c.expect("prs.py", ["watch", "1", *W], ERROR, r"^ERROR .*gh api")
 
 
 @row("prs watch: a PR closed unmerged exits 1")
 def _(c: Case) -> None:
-    c.gh["graphql"] = [gql(("CLOSED", None, None))]
-    c.expect("prs.py", ["watch", "1", "--interval", "0"], 1, r"^#1 was closed without merging")
+    poll_case(c, 1, ("closed", False, False))
+    c.expect("prs.py", ["watch", "1", *W], 1, r"^#1 was closed without merging")
 
 
 @row("prs watch: the timeout exits 4")
 def _(c: Case) -> None:
-    c.gh["graphql"] = [gql(("OPEN", QUEUED, None))]
-    c.expect("prs.py", ["watch", "1", "--interval", "0", "--timeout", "0"], 4, r"^timed out")
+    poll_case(c, 1, ("open", False, True))
+    c.expect("prs.py", ["watch", "1", *W, "--timeout", "0"], 4, r"^timed out")
+
+
+@row("prs watch: a red check run shows in the line")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", True, False), ("merged", False, False),
+              checks=[{"status": "completed", "conclusion": "success"}, {"status": "completed", "conclusion": "failure"}])  # fmt: skip
+    c.expect("prs.py", ["watch", "1", *W], 0, r"^#1 open queue=- auto-merge checks=failure")
+
+
+@row("prs watch: a pending check run shows in the line")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", True, False), ("merged", False, False),
+              checks=[{"status": "completed", "conclusion": "success"}, {"status": "in_progress", "conclusion": None}])  # fmt: skip
+    c.expect("prs.py", ["watch", "1", *W], 0, r"^#1 open queue=- auto-merge checks=pending")
+
+
+@row("prs watch: a queue build running past --hung is named once, with its run id")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", False, True), ("open", False, True), ("merged", False, False))
+    branch = QREF.removeprefix("refs/heads/")
+    c.gh[f"api {R}/actions/runs?event=merge_group&branch={branch}&per_page=100"] = {"workflow_runs": [
+        {"id": 99, "name": "test", "status": "in_progress", "created_at": "2026-10-07T11:00:00Z"},
+        {"id": 98, "name": "lint", "status": "in_progress", "created_at": "2026-10-07T11:50:00Z"},
+    ]}  # fmt: skip
+    got, out = c.run("prs.py", "watch", "1", *W, "--hung", "40")
+    assert got == 0 and out.count("HUNG run 99 (test) still in_progress") == 1 and "run 98" not in out, out
+
+
+@row("prs queue: auto-merge shown only on the settle re-read is queued")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {}, {"auto": True})
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(cloud\)")
+    assert not called(c, "DELETE"), calls(c)
+
+
+@row("prs watch: out of the queue for exactly two polls, then merged, is still a drop")
+def _(c: Case) -> None:
+    poll_case(
+        c, 1, ("open", False, True), ("open", False, False), ("open", False, False), ("merged", False, False)
+    )
+    c.expect("prs.py", ["watch", "1", *W], 1, r"^#1 is open but out of the merge queue")
+
+
+@row("prs watch: a non-queue event after added_to_merge_queue still reads as waiting")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", False, False, True), ("open", False, False, True), ("merged", False, False))
+    seq = c.gh[page1(f"{R}/issues/1/timeline")]["__seq"]
+    c.gh[page1(f"{R}/issues/1/timeline")] = {"__seq": [[*t, {"event": "labeled"}] for t in seq]}
+    c.expect("prs.py", ["watch", "1", *W], 0, r"^#1 open queue=waiting checks=-(?s:.*)^all merged")
+
+
+@row("prs watch: the timeline's second page decides")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", False, False, True), ("open", False, False, True), ("merged", False, False))
+    c.gh[page1(f"{R}/issues/1/timeline")] = [{"event": "removed_from_merge_queue"}] + [
+        {"event": "labeled"}
+    ] * 99
+    c.gh[f"api {R}/issues/1/timeline?per_page=100&page=2"] = [{"event": "added_to_merge_queue"}]
+    c.expect("prs.py", ["watch", "1", *W], 0, r"^#1 open queue=waiting checks=-(?s:.*)^all merged")
+
+
+@row("prs watch: a completed old queue run is not HUNG; one at exactly --hung is")
+def _(c: Case) -> None:
+    poll_case(c, 1, ("open", False, True), ("merged", False, False))
+    branch = QREF.removeprefix("refs/heads/")
+    c.gh[f"api {R}/actions/runs?event=merge_group&branch={branch}&per_page=100"] = {"workflow_runs": [
+        {"id": 97, "name": "done", "status": "completed", "created_at": "2026-10-07T09:00:00Z"},
+        {"id": 96, "name": "edge", "status": "queued", "created_at": "2026-10-07T11:20:00Z"},
+    ]}  # fmt: skip
+    got, out = c.run("prs.py", "watch", "1", *W, "--hung", "40")
+    assert got == 0 and "run 97" not in out and out.count("HUNG run 96 (edge)") == 1, out
+
+
+@row("prs preflight: a github_pat_ token in GITHUB_TOKEN is reported, and no network-secret line")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.env = {"GH_TOKEN": "placeholder", "GITHUB_TOKEN": "github_pat_" + "A1b2C3d4_" * 5}
+    got, out = c.run("prs.py", "preflight")
+    assert got == OK and "a token in GITHUB_TOKEN" in out and "network secret" not in out, out
+
+
+@row("prs preflight: gh api user answering an empty login stops the run")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api user"] = {"login": ""}
+    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR +gh api user answered no login")
+
+
+@row("prs check: a commit with no verification verdict is not verified")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    c.gh[page1(f"{R}/pulls/7/commits")] = [
+        {"sha": args[3], "author": {"login": "dependabot[bot]"}, "commit": {"verification": {}}}
+    ]
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM commit .*doesn't verify its signature")
 
 
 def one(label: str, fn: Callable[[Case], None]) -> str | None:

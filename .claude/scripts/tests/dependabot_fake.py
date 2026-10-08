@@ -5,11 +5,14 @@
 
 Answers from the JSON fixtures in $DEPBOT_FIX (`curl.json`, `npm.json`, `gh.json`) and appends each call to
 `$DEPBOT_FIX/calls.log`, so no case reaches a live service. A request with no fixture fails the way the real
-tool would (HTTP 404, `npm error 404`, a non-zero `gh`).
+tool would (HTTP 404, `npm error 404`, a non-zero `gh`). With `"cloud": true` in `gh.json` the fake `gh` is a
+Claude Code cloud session (TASK-213): every GraphQL call, so every `gh pr` command, fails with the session's
+HTTP 403 body, and the `/ccr/` routes answer (outside a session they are a 404, as on api.github.com).
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -102,49 +105,140 @@ def npm(args: list[str]) -> int:
     return 0
 
 
-def gh(args: list[str]) -> int:
-    fx = fixtures("gh.json")
-    if args[:2] == ["api", "graphql"]:
-        seq = fx.get("graphql", [])
-        counter = FIX / "graphql.count"
+# What a Claude Code cloud session answers for every GraphQL call (HTTP 403; the routine's live runs, 2026-10-08).
+GRAPHQL_403 = (
+    "GitHub GraphQL is not available from Claude Code sessions; use the REST API (gh api "
+    "repos/{owner}/{repo}/...). For review threads, auto-merge, and draft/ready-for-review use the CCR routes on "
+    "api.github.com: GET /repos/{owner}/{repo}/pulls/{n}/ccr/review_threads, POST "
+    "/repos/{owner}/{repo}/pulls/{n}/ccr/comments/{comment_id}/resolve (or /unresolve), PUT or DELETE "
+    "/repos/{owner}/{repo}/pulls/{n}/ccr/auto_merge, POST /repos/{owner}/{repo}/pulls/{n}/ccr/ready_for_review, "
+    "POST /repos/{owner}/{repo}/pulls/{n}/ccr/convert_to_draft."
+)
+
+
+def not_found(what: str) -> int:
+    """As gh does on an API error: the error body on stdout, a message on stderr, exit 1."""
+    print(json.dumps({"message": "Not Found", "status": "404"}))
+    print(f"gh: Not Found (HTTP 404) ({what})", file=sys.stderr)
+    return 1
+
+
+def graphql_blocked() -> int:
+    print(json.dumps({"message": GRAPHQL_403}))
+    print(f"gh: {GRAPHQL_403} (HTTP 403)", file=sys.stderr)
+    return 1
+
+
+def answer(fx: dict[str, Any], key: str) -> Any:
+    """The fixture for `key`; a `{"__seq": [...]}` fixture answers its items in turn, then repeats the last."""
+    ans = fx.get(key)
+    if isinstance(ans, dict) and "__seq" in ans:
+        counter = FIX / f"count-{hashlib.sha256(key.encode()).hexdigest()[:16]}"
         n = int(counter.read_text()) if counter.exists() else 0
         counter.write_text(str(n + 1))
-        if not seq:  # as gh does on an API error: the error body on stdout, a non-zero exit
-            print(json.dumps({"message": "Not Found", "status": "404"}))
-            print("gh: Not Found (HTTP 404)", file=sys.stderr)
-            return 1
-        print(json.dumps(seq[min(n, len(seq) - 1)]))
+        seq = ans["__seq"]
+        return seq[min(n, len(seq) - 1)]
+    return ans
+
+
+def gh_api(fx: dict[str, Any], args: list[str]) -> int:
+    method, path, jq = "GET", None, None
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in ("-X", "--method"):
+            method = args[i + 1]
+            i += 2
+        elif a in ("-f", "-F", "--raw-field", "--field", "-H", "--header"):
+            i += 2
+        elif a in ("--jq", "-q"):
+            jq = args[i + 1]
+            i += 2
+        elif a.startswith("-"):
+            print(f"fake gh: unexpected flag {a}", file=sys.stderr)
+            return 2
+        elif path is None:
+            path = a
+            i += 1
+        else:
+            print(f"fake gh: a second path {a}", file=sys.stderr)
+            return 2
+    if path is None:
+        print("fake gh: api without a path", file=sys.stderr)
+        return 2
+    if "{" in path:  # a `{owner}/{repo}` placeholder needs a github.com remote a cloud clone may not have
+        print(f"fake gh: a placeholder in {path}", file=sys.stderr)
+        return 2
+    if path == "graphql":
+        if fx.get("cloud"):
+            return graphql_blocked()
+        ans = fx.get("graphql")
+        if ans is None:
+            return not_found("graphql")
+        print(json.dumps(ans))
         return 0
+    # the CCR routes exist only behind a Claude Code session's proxy (api.github.com answers 404 for them)
+    if "/ccr/" in path and not fx.get("cloud"):
+        return not_found(path)
+    key = f"api {path}" if method == "GET" else f"api {method} {path}"
+    ans = answer(fx, key)
+    if ans is None:
+        return not_found(key)
+    # gh cancelled (exit 2), with no answer at all; a real timeout is run()'s TimeoutExpired, the same path
+    if isinstance(ans, dict) and "__exit" in ans:
+        print("fake gh: died", file=sys.stderr)
+        return int(ans["__exit"])
+    if (
+        isinstance(ans, dict) and "__conn" in ans
+    ):  # as gh does when the connection fails: exit 1, no HTTP status
+        print("error connecting to api.github.com", file=sys.stderr)
+        return 1
+    if isinstance(ans, dict) and "__status" in ans:
+        if ans["__status"] >= 300:
+            body = ans.get("body", {"message": "error"})
+            print(json.dumps(body))
+            print(f"gh: {body.get('message', 'error')} (HTTP {ans['__status']})", file=sys.stderr)
+            return 1
+        ans = ans.get("body", "")
+    if jq is not None:
+        if jq != ".login":
+            print(f"fake gh: unsupported --jq {jq}", file=sys.stderr)
+            return 2
+        print(ans["login"])
+        return 0
+    print(json.dumps(ans) if ans != "" else "")
+    return 0
+
+
+def gh(args: list[str]) -> int:
+    fx = fixtures("gh.json")
+    if args[:2] == ["auth", "token"]:
+        # as gh does: a token variable first, then the stored login
+        tok = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or fx.get("stored login")
+        if tok:
+            print(tok)
+            return 0
+        print("no oauth token found for github.com", file=sys.stderr)
+        return 1
     if args[:1] == ["api"]:
-        key = f"api {args[1]}"
-    elif args[:2] == ["attestation", "verify"]:
+        return gh_api(fx, args[1:])
+    if args[:2] == ["attestation", "verify"]:
         key = f"attestation {args[2]} {args[args.index('--owner') + 1]}"
         code = fx.get(key)
         if code is None or code:
             print("fake gh: attestation verification failed", file=sys.stderr)
             return 1
         return 0
-    elif args[:2] == ["pr", "list"]:
-        joined = " ".join(args)
-        if (
-            "--author app/dependabot" not in joined
-            or "--base dev" not in joined
-            or "--state open" not in joined
-        ):
-            print("fake gh: pr list without the Dependabot/dev/open filter", file=sys.stderr)
-            return 2
-        key = "pr list"
-    elif args[:2] == ["pr", "view"]:
-        key = f"pr view {args[2]}"
-    else:
-        print(f"fake gh: unexpected call {args}", file=sys.stderr)
-        return 2
-    if key not in fx:
-        print(json.dumps({"message": "Not Found", "status": "404"}))
-        print(f"gh: Not Found (HTTP 404) ({key})", file=sys.stderr)
-        return 1
-    print(json.dumps(fx[key]))
-    return 0
+    if args[:1] == ["pr"]:  # every `gh pr` command reads or writes through GraphQL
+        if fx.get("cloud"):
+            return graphql_blocked()
+        if args[1:2] == ["merge"]:
+            code = int(fx.get("pr merge", 1))
+            if code:
+                print("fake gh: merge refused", file=sys.stderr)
+            return code
+    print(f"fake gh: unexpected call {args}", file=sys.stderr)
+    return 2
 
 
 def main() -> int:
