@@ -163,8 +163,8 @@ accepts it. The comparison is scripted: `python3 $RUN/.claude/scripts/dependabot
 from the PR branch's root, prints each mismatch and exits 1 if there is any, 0 when they agree (without
 `--root` it reads the scratch directory, which has no `package.json`, and fails: nothing to compare).
 `npm_lock.py`'s FIX lines come from the same function, and `make tooling` runs it, so CI's `claude-tooling` fails
-on the PR until it is fixed (TASK-212). Fix the lock's entry by hand to the manifest's exact string. Edit `package-lock.json` only
-under Node 22; if a lock edit dropped `libc` fields anyway,
+on the PR until it is fixed (TASK-212). Fix the lock's entry by hand to the manifest's exact string. Edit
+`package-lock.json` only under Node 22; if a lock edit dropped `libc` fields anyway,
 `python3 $RUN/.claude/scripts/dependabot/restore_libc.py` puts them back in place (it prints each entry it
 repaired). Commit (`deps: keep <pkg> exact in the lock's workspace entry`), then run
 `npm_specs.py --root .` (exit 0) and `npm_lock.py` again until it exits 0, and `npm ci --ignore-scripts`.
