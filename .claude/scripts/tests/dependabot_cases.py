@@ -769,6 +769,20 @@ def _(c: Case) -> None:
     )
 
 
+@row("npm: a workspace entry missing from the lock is a PROBLEM")
+def _(c: Case) -> None:
+    base = c.commit({**MANIFESTS, "package-lock.json": lock({})})
+    doc = json.loads(lock({}))
+    del doc["packages"]["frontend"]
+    head = c.commit({"package-lock.json": json.dumps(doc, indent=2)})
+    c.expect(
+        "npm_lock.py",
+        ["--base", base, "--head", head],
+        PROBLEM,
+        r"""^PROBLEM frontend/package\.json exists, but package-lock\.json packages\["frontend"\] is missing""",
+    )
+
+
 @row("npm: a workspace entry's section that isn't an object is a PROBLEM, not a FIX")
 def _(c: Case) -> None:
     base = c.commit({**MANIFESTS, "package-lock.json": lock({})})

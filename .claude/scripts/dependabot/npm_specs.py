@@ -5,17 +5,20 @@
 
 Every entry in `package.json`'s and `frontend/package.json`'s `dependencies`, `devDependencies`,
 `optionalDependencies` and `peerDependencies` must be written exactly as `package-lock.json`'s `packages[""]` and
-`packages["frontend"]` hold it, with nothing missing and nothing extra. Dependabot's npm updater can write a caret
+`packages["frontend"]` hold it (the same string; a value of another JSON type differs too), with nothing missing
+and nothing extra. Dependabot's npm updater can write a caret
 into the lock's workspace entry while the manifest pins the version (PR #124: `eslint-config-next` `^16.3.8`; PR
 #100: Vitest), and `npm ci` accepts the difference, so nothing else fails on it. `make tooling` (CI
 `claude-tooling`) runs this on every PR; `npm_lock.py` (/dependabot-review) reports the same mismatches, from the
-same `mismatches()`, as FIX lines. Fix one by editing the lock's entry to the manifest's string, under the `.nvmrc`
+same `mismatches()`, as FIX lines (a section that isn't an object as a PROBLEM). Fix one by editing the lock's entry to the manifest's string, under the `.nvmrc`
 Node (spec 08 §CI, "Dependabot"). It reads the checkout it sits in, or `--root` (/dependabot-review runs dev's copy
 with `--root .` on the PR branch).
 
 Prints one line per mismatch and exits 1; exits 1 too when a manifest or the lock can't be read, or a manifest has
-no lock entry (or the lock an entry with dependencies and no manifest). With neither `package.json` nor
-`package-lock.json` there is nothing to check (exit 0). Standard library only: `make tooling` runs it with the
+no lock entry (or the lock an entry with dependencies and no manifest), a section isn't an object, or the root
+`workspaces` names a workspace other than those in `WORKSPACES` (add it there). With neither `package.json` nor
+`package-lock.json` there is nothing to check: it says so and exits 0, or 1 under `--root` (the routine's copy
+sits in a directory with neither, so a forgotten `--root .` must not read as a match). Standard library only: `make tooling` runs it with the
 system python3.
 """
 
@@ -46,7 +49,8 @@ def mismatches(path: str, key: str, manifest: Mapping[str, Any], entry: Mapping[
             out.append(f"{path} {section} or the lock's {where} {section} {NOT_AN_OBJECT}")
             continue
         for dep in sorted(set(want) | set(got)):
-            if want.get(dep) != got.get(dep):
+            a, b = want.get(dep), got.get(dep)
+            if a != b or type(a) is not type(b):  # 1 == 1.0 == true in Python, not in the lock
                 out.append(
                     f"{path} {section}.{dep} is {want.get(dep)!r}, the lock's {where} has {got.get(dep)!r}"
                 )
@@ -68,14 +72,15 @@ def read(root: Path, name: str) -> dict[str, Any] | None:
     return data
 
 
-def check(root: Path) -> list[str]:
+def check(root: Path, *, required: bool = False) -> list[str] | None:
+    """The problems found, or None when `root` holds no manifest and no lock (a problem itself when `required`)."""
     if not root.is_dir():
         return [f"{root} is not a directory"]
     lock = read(root, "package-lock.json")
     manifests = {key: read(root, path) for key, path in WORKSPACES.items()}
     if lock is None:
         if all(m is None for m in manifests.values()):
-            return []
+            return [f"no package.json or package-lock.json in {root}: nothing to compare"] if required else None
         return ["package-lock.json does not exist, but a package.json does"]
     listed = (manifests[""] or {}).get("workspaces", [])
     if not isinstance(listed, list) or set(map(str, listed)) - set(WORKSPACES):
@@ -106,13 +111,17 @@ def check(root: Path) -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     ap.add_argument(
-        "--root", type=Path, default=ROOT, help="the checkout to read (default: this script's own)"
+        "--root", type=Path, help="the checkout to read, which must hold the npm files (default: this script's own)"
     )
     a = ap.parse_args()
     try:
-        problems = check(a.root)
+        found = check(a.root or ROOT, required=a.root is not None)
     except ValueError as e:
-        problems = [str(e)]
+        found = [str(e)]
+    if found is None:
+        print(f"npm specs: no package.json or package-lock.json in {ROOT}: nothing compared")
+        return 0
+    problems = found
     for p in problems:
         print(f"npm specs: {p}", file=sys.stderr)
     if problems:

@@ -241,7 +241,11 @@ def check_manifests(
         manifest = load(text, f"{path} at {head}")
         before = git_show(base, path)
         check_dep_values(rep, path, load(before, f"{path} at {base}") if before else {}, manifest, moved)
-        for m in mismatches(path, key, manifest, packages.get(key, {})):
+        entry = packages.get(key)
+        if not isinstance(entry, dict):  # as npm_specs.check reports it: no entry to copy the manifest into
+            rep.problem(f'{path} exists, but package-lock.json packages["{key}"] is missing or not an object')
+            continue
+        for m in mismatches(path, key, manifest, entry):
             if m.endswith(NOT_AN_OBJECT):  # a malformed manifest or entry: nothing to copy across
                 rep.problem(m)
             else:

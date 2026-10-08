@@ -257,7 +257,13 @@ OP=',"optionalDependencies":{"fsevents":"2.3.3"}'
 PR=',"peerDependencies":{"react":">=19"}'
 ALL="$N$DV$OP$PR"
 FE='packages\["frontend"\]'
-fresh; expect ok  "no package.json and no lock: nothing to check"      "$S"
+fresh; out=$(python3 "$TMP/r/.claude/scripts/$S" 2>&1); rc=$?
+case "$rc:$out" in
+  "0:npm specs: no package.json or package-lock.json in "*": nothing compared") pass=$((pass+1)); echo "  ok   npm_specs.py           no package.json and no lock: says nothing was compared" ;;
+  *) fail=$((fail+1)); echo "  FAIL npm_specs.py           no package.json and no lock: rc $rc: $out" ;;
+esac
+fresh; mkdir -p "$TMP/empty"
+expect_spec "--root with neither file is a failure, not a match"       "no package\.json or package-lock\.json in .*/empty: nothing to compare" --root "$TMP/empty"
 fresh; mkdir -p "$TMP/r/frontend"; cp "$SRC/package.json" "$SRC/package-lock.json" "$TMP/r/"; cp "$SRC/frontend/package.json" "$TMP/r/frontend/"
 expect ok  "the repo's own manifests and lock pass"                     "$S"
 npmws "$N" "$ALL" "$N" "$ALL"
@@ -280,6 +286,8 @@ npmws '' ',"dependencies":{"next":"^16.3.8"}' '' ',"dependencies":{"next":"16.3.
 expect_spec "a range in the manifest, an exact pin in the lock"         "frontend/package\.json dependencies\.next is '\^16\.3\.8', the lock's $FE has '16\.3\.8'"
 npmws '' ',"devDependencies":{"typescript":"^5"}' '' ',"devDependencies":{"typescript":"^5"}'
 expect ok  "the same range on both sides passes"                        "$S"
+npmws '' ',"dependencies":{"a":1}' '' ',"dependencies":{"a":true}'
+expect_spec "values of another JSON type differ (1 vs true)"            "frontend/package\.json dependencies\.a is 1, the lock's $FE has True"
 npmws '' "$N" '' ',"dependencies":{"next":"16.3.8"}'
 expect_spec "a manifest dependency missing from the lock"               "frontend/package\.json dependencies\.react is '19\.3\.0', the lock's $FE has None"
 npmws '' ',"dependencies":{"next":"16.3.8"}' '' "$N"
@@ -296,6 +304,8 @@ npmws '' '' '' ''; rm "$TMP/r/frontend/package.json"
 expect ok  "no manifest and a lock entry without dependencies"          "$S"
 npmws '' "$N" '' "$N"; rm "$TMP/r/package-lock.json"
 expect_spec "a manifest with no lock"                                   "package-lock\.json does not exist"
+npmws '' "$N" '' "$N"; rm "$TMP/r/package-lock.json" "$TMP/r/frontend/package.json"
+expect_spec "the root manifest alone with no lock"                     "package-lock\.json does not exist"
 npmws '' "$N" '' "$N"; printf '{"name":"r","lockfileVersion":3}\n' > "$TMP/r/package-lock.json"
 expect_spec "a lock with no packages object"                            "package-lock\.json has no .packages. object"
 npmws '' "$N" '' "$N"; printf '{"name":"r","lockfileVersion":3,"packages":{"":{},"frontend":["x"]}}\n' > "$TMP/r/package-lock.json"
@@ -306,6 +316,8 @@ npmws '' "$N" '' "$N"; printf '["frontend"]\n' > "$TMP/r/package.json"
 expect_spec "a manifest that isn't a JSON object"                       "package\.json is not a JSON object"
 npmws '' ',"dependencies":["next"]' '' "$N"
 expect_spec "a section that isn't an object"                            "frontend/package\.json dependencies or the lock's $FE dependencies is not an object"
+npmws '' "$N" '' ',"dependencies":["next"]'
+expect_spec "a lock section that isn't an object"                       "frontend/package\.json dependencies or the lock's $FE dependencies is not an object"
 npmws '' ',"dependencies":null' '' ''
 expect_spec "a null section is not read as empty"                       "frontend/package\.json dependencies or the lock's $FE dependencies is not an object"
 # --root: /dependabot-review runs dev's copy of the script on the PR branch's checkout
@@ -317,6 +329,8 @@ expect_spec "--root reads the other checkout"                          "frontend
 expect_spec "--root that is not a directory"                           ".*/pr/missing is not a directory" --root "$TMP/pr/missing"
 npmws '' "$N" '' "$N"; printf '{"name":"r","workspaces":["frontend","docs"]}\n' > "$TMP/r/package.json"
 expect_spec "a workspace the check doesn't know"                       "package\.json workspaces .*'docs'.*: this check compares only"
+npmws '' "$N" '' "$N"; printf '{"name":"r","workspaces":null}\n' > "$TMP/r/package.json"
+expect_spec "a workspaces value that isn't a list"                     "package\.json workspaces None: this check compares only"
 npmws '' '' '' ''; rm "$TMP/r/frontend/package.json"; printf '{"lockfileVersion":3,"packages":{"":{},"frontend":{"dependencies":[]}}}\n' > "$TMP/r/package-lock.json"
 expect_spec "an empty non-object lock section with no manifest"        "package-lock\.json $FE lists dependencies, but frontend/package\.json does not exist"
 

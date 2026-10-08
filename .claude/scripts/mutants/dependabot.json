@@ -290,7 +290,7 @@
   {
     "label": "dependabot: npm: manifest pins not compared",
     "file": ".claude/scripts/dependabot/npm_specs.py",
-    "old": "            if want.get(dep) != got.get(dep):\n",
+    "old": "            if a != b or type(a) is not type(b):  # 1 == 1.0 == true in Python, not in the lock\n",
     "new": "            if False:\n"
   },
   {
@@ -812,8 +812,8 @@
   {
     "label": "npm specs: --root ignored",
     "file": ".claude/scripts/dependabot/npm_specs.py",
-    "old": "        problems = check(a.root)\n",
-    "new": "        problems = check(ROOT)\n"
+    "old": "        found = check(a.root or ROOT, required=a.root is not None)\n",
+    "new": "        found = check(ROOT, required=a.root is not None)\n"
   },
   {
     "label": "npm specs: a missing --root passes",
@@ -832,5 +832,47 @@
     "file": ".claude/scripts/dependabot/npm_lock.py",
     "old": "            if m.endswith(NOT_AN_OBJECT):  # a malformed manifest or entry: nothing to copy across\n",
     "new": "            if False:\n"
+  },
+  {
+    "label": "npm specs: JSON types not compared",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "            if a != b or type(a) is not type(b):  # 1 == 1.0 == true in Python, not in the lock\n",
+    "new": "            if a != b:\n"
+  },
+  {
+    "label": "npm specs: a manifest alone with no lock passes",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "        if all(m is None for m in manifests.values()):\n",
+    "new": "        if any(m is None for m in manifests.values()):\n"
+  },
+  {
+    "label": "npm specs: the root entry skipped",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "    for key, path in WORKSPACES.items():\n        manifest, entry",
+    "new": "    for key, path in [w for w in WORKSPACES.items() if w[0]]:\n        manifest, entry"
+  },
+  {
+    "label": "npm specs: the frontend entry skipped",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "    for key, path in WORKSPACES.items():\n        manifest, entry",
+    "new": "    for key, path in [w for w in WORKSPACES.items() if not w[0]]:\n        manifest, entry"
+  },
+  {
+    "label": "npm specs: a --root with neither file passes",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "] if required else None\n",
+    "new": "] if False else None\n"
+  },
+  {
+    "label": "npm specs: a workspaces value that isn't a list passes the type check",
+    "file": ".claude/scripts/dependabot/npm_specs.py",
+    "old": "    if not isinstance(listed, list) or set(map(str, listed))",
+    "new": "    if set(map(str, listed or []))"
+  },
+  {
+    "label": "dependabot: npm: a missing workspace entry not reported",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "        if not isinstance(entry, dict):  # as npm_specs.check reports it: no entry to copy the manifest into\n",
+    "new": "        if False:\n"
   }
 ]

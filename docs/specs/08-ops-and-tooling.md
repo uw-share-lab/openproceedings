@@ -229,10 +229,13 @@ equals `packages["frontend"]` in `package-lock.json`: Dependabot's npm updater c
 `eslint-config-next`, PR #100's Vitest), and `npm ci` accepts it. `.claude/scripts/dependabot/npm_specs.py` checks
 it on every PR (`make tooling`, CI `claude-tooling`; TASK-212): each spec in the four dependency sections of
 `package.json` and `frontend/package.json` must be written exactly as the lock's `packages[""]` and
-`packages["frontend"]` hold it, none missing and none extra; it exits 1 naming each mismatch (case rows in
-`test-tooling-scripts.sh`). `npm_lock.py` reports the same mismatches, from the same function, as FIX lines. Run `npm audit --omit=dev` and report any advisory that predates the bump. A lockfile edit
-runs under the `.nvmrc` Node, because an older npm drops the `libc` fields. Docs that state a bumped version move
-in the same PR.
+`packages["frontend"]` hold it (same string, same JSON type), none missing and none extra; it exits 1 naming
+each mismatch, and also on a file it can't read, a manifest with no lock entry (or the reverse), a section that
+isn't an object, and a root `workspaces` entry other than `frontend` (add it to the script's `WORKSPACES`); case
+rows in `test-tooling-scripts.sh`. `npm_lock.py` reports the same mismatches, from the same function, as FIX
+lines (a section that isn't an object is a PROBLEM). Run `npm audit --omit=dev` and report any advisory that
+predates the bump. A lockfile edit runs under the `.nvmrc` Node, because an older npm drops the `libc` fields.
+Docs that state a bumped version move in the same PR.
 
 **The weekly routine** (decision-048, TASK-211). A scheduled Claude Code routine (a cloud session on a fresh clone,
 no access to the owner's machine) runs `/dependabot-review` (`.claude/commands/dependabot-review.md`) once a week.
