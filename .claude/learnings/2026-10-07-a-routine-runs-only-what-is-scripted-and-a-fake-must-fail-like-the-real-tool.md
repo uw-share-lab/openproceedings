@@ -68,3 +68,28 @@ with no context and no access to the owner's machine can run it, and script its 
 - Skill / agent / CLAUDE.md updated? — spec 08 §CI "Dependabot", `.claude/agents/ci-engineer.md`, `.claude/skills/pr-workflow/SKILL.md`, `.claude/skills/python-standards/SKILL.md`, `.claude/skills/autolint/SKILL.md`
 - Config? — `.github/dependabot.yml` (7-day `cooldown`), `.githooks/pre-push` and `.claude/hooks/autofix.sh` (their tools run without the GitHub token)
 - Test or hook added? — `.claude/scripts/tests/test-dependabot.sh` (in `make tooling`), mutants in `.claude/scripts/mutants/dependabot.json`, `mypy --strict` on the scripts in `make lint`; the token-stripping rows in `.claude/hooks/tests/test-openproceedings-gates.sh` with mutants in `.claude/scripts/mutants/gates.json`
+
+## Addendum — 2026-10-08 (TASK-212: the manifest/lock check moved into `make tooling`)
+
+- **A check that only the weekly routine runs catches a defect a week late, and only on Dependabot's PRs.** The
+  caret Dependabot writes into the lock's `packages["frontend"]` (#124 `eslint-config-next`, #100 `vitest`) is a
+  plain invariant of the checkout, so it now lives in `make tooling` (CI `claude-tooling`) as
+  `.claude/scripts/dependabot/npm_specs.py`, and `npm_lock.py` imports its `mismatches()` instead of keeping a
+  copy (evidence: `npm_specs.py --root` on detached checkouts of 34059c0f and 1e73d7d0 exits 1 naming the
+  caret; on this branch it exits 0).
+- **A script the routine runs from dev's copy needs `--root`.** The routine extracts dev's
+  `.claude/scripts/dependabot/` into its scratch directory, so a script that finds the repo from `__file__`
+  reads dev's files, not the PR's: it would pass every PR. `--root .` reads the PR checkout, and a `--root`
+  that isn't a directory fails rather than reading as "nothing to check".
+- **A row that expects only "non-zero" doesn't test what its label says** (focused review): an argparse error
+  or a traceback passes it. Every failing row of the new check matches its own message (`expect_spec`).
+- **Malformed is not fixable.** A section that isn't an object has nothing to copy across, so `npm_lock.py` now
+  reports it as a PROBLEM, not a FIX; and a root `workspaces` naming a directory the check doesn't know fails,
+  so a new workspace can't go unchecked.
+- Dead end, again: `make mutate-changed` at the default jobs, beside other sessions, took the load past 200 and
+  starved `make tooling` for over ten minutes. The new family's 20 mutants ran first in a scratch loop against
+  only the two tables that exercise them (4 at a time), then `mutate.py --changed --jobs 4`.
+- Propagated to: spec 08 §Testing, §CI (`claude-tooling` row, "Dependabot"), `.claude/commands/dependabot-review.md`
+  step 3, README §Tests and checks, `.claude/skills/pr-workflow/SKILL.md`, `.claude/agents/ci-engineer.md`; rows in
+  `.claude/scripts/tests/test-tooling-scripts.sh` and `dependabot_cases.py`; mutants in
+  `.claude/scripts/mutants/dependabot.json`.
