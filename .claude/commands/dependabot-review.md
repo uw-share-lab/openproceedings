@@ -38,7 +38,8 @@ The four checkers in `.claude/scripts/dependabot/` (`uv_lock.py`, `npm_lock.py`,
 reviewer's Must and a failed `npm audit signatures`, which this command judges itself), `FIX` for what it repairs in
 the PR itself, and `ok` otherwise. Their exit status: 0 clean, 1 a PROBLEM (hard stop), 2 the check could not run
 (treat as a hard stop and say why), 3 only FIX lines (fix, commit, run the check again). No checker's exit is ever
-ignored. `prs.py list` and `restore_libc.py` are helpers; their output is described where they are used.
+ignored. `prs.py list`, `restore_libc.py` and `npm_specs.py` (exit 0 or 1 only) are helpers; their output is
+described where they are used (step 3 for `npm_specs.py`).
 
 ## Rules for the whole run
 
@@ -162,8 +163,8 @@ Every entry in `frontend/package.json` (and the root `package.json`) must equal 
 accepts it. The comparison is scripted: `python3 $RUN/.claude/scripts/dependabot/npm_specs.py --root .`, run
 from the PR branch's root, prints each mismatch and exits 1 if there is any, 0 when they agree (without
 `--root` it reads the scratch directory, which has no `package.json`, and fails: nothing to compare).
-`npm_lock.py`'s FIX lines come from the same function, and `make tooling` runs it, so CI's `claude-tooling` fails
-on the PR until it is fixed (TASK-212). Fix the lock's entry by hand to the manifest's exact string. Edit
+`npm_lock.py`'s FIX lines come from the same function, and `make tooling` runs `npm_specs.py`, so CI's
+`claude-tooling` fails on the PR until it is fixed (TASK-212). Fix the lock's entry by hand to the manifest's exact string. Edit
 `package-lock.json` only under Node 22; if a lock edit dropped `libc` fields anyway,
 `python3 $RUN/.claude/scripts/dependabot/restore_libc.py` puts them back in place (it prints each entry it
 repaired). Commit (`deps: keep <pkg> exact in the lock's workspace entry`), then run

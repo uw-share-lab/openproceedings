@@ -91,8 +91,11 @@ with no context and no access to the owner's machine can run it, and script its 
   reports it as a PROBLEM, not a FIX; and a root `workspaces` naming a directory the check doesn't know fails,
   so a new workspace can't go unchecked.
 - Dead end, again: `make mutate-changed` at the default jobs, beside other sessions, took the load past 200 and
-  starved `make tooling` for over ten minutes. The new family's 20 mutants ran first in a scratch loop against
-  only the two tables that exercise them (4 at a time), then `mutate.py --changed --jobs 4`.
+  starved `make tooling` for over ten minutes; `mutate.py --changed --jobs 4` was then started and abandoned
+  (about 12 mutants in 45 minutes at load 100-200). A scratch loop ran every mutant of the changed files (65)
+  against only the two tables that exercise them, 4 at a time; `mutate.py` fails a mutant on any table, so its
+  kills carry over. Such a loop must first check that the unmutated copy passes those tables, or every "killed"
+  may be vacuous: this one didn't, and the pr-reviewer verified the baseline afterwards.
 - Propagated to: spec 08 §Testing, §CI (`claude-tooling` row, "Dependabot"), `.claude/commands/dependabot-review.md`
   step 3, README §Tests and checks, `.claude/skills/pr-workflow/SKILL.md`, `.claude/agents/ci-engineer.md`; rows in
   `.claude/scripts/tests/test-tooling-scripts.sh` and `dependabot_cases.py`; mutants in

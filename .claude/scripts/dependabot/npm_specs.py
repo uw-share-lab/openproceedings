@@ -16,10 +16,10 @@ checkout it sits in, or `--root` (/dependabot-review runs dev's copy with `--roo
 
 Prints one line per mismatch and exits 1; exits 1 too when a manifest or the lock can't be read, or a manifest has
 no lock entry (or the lock an entry with dependencies and no manifest), a section isn't an object, or the root
-`workspaces` names a workspace other than those in `WORKSPACES` (add it there), or the checkout holds neither
-`package.json` nor `package-lock.json`: the routine's copy sits in a scratch directory with neither, so a
-forgotten `--root .` fails rather than reading as a match. Standard library only: `make tooling` runs it with the
-system python3.
+`workspaces` names a workspace other than those in `WORKSPACES` (add it there), `--root` isn't a directory, or
+the checkout holds neither `package.json` nor `package-lock.json`: the routine's copy sits in a scratch directory
+with neither, so a forgotten `--root .` fails rather than reading as a match. Standard library only: `make
+tooling` runs it with the system python3.
 """
 
 from __future__ import annotations
