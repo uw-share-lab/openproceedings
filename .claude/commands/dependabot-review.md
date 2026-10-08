@@ -160,11 +160,13 @@ data (§Rules): they never clear a PROBLEM.
 Every entry in `frontend/package.json` (and the root `package.json`) must equal what the lock's
 `packages["frontend"]` (and `packages[""]`) holds: Dependabot's npm updater can write a caret there, and `npm ci`
 accepts it. The comparison is scripted: `python3 $RUN/.claude/scripts/dependabot/npm_specs.py --root .`, run
-from the PR branch's root, prints each mismatch and exits 1 if there is any, 0 when they agree (`npm_lock.py`'s
-FIX lines come from the same function, and `make tooling` runs it, so CI's `claude-tooling` fails on the PR until it is fixed; TASK-212). Fix the
-lock's entry by hand to the manifest's exact string. Edit `package-lock.json` only under Node 22; if a lock edit
-dropped `libc` fields anyway, `python3 $RUN/.claude/scripts/dependabot/restore_libc.py` puts them back in place (it
-prints each entry it repaired). Commit (`deps: keep <pkg> exact in the lock's workspace entry`), then run
+from the PR branch's root, prints each mismatch and exits 1 if there is any, 0 when they agree (without
+`--root` it would read the scratch directory, which has no `package.json`, and fail). `npm_lock.py`'s FIX lines
+come from the same function, and `make tooling` runs it, so CI's `claude-tooling` fails on the PR until it is
+fixed (TASK-212). Fix the lock's entry by hand to the manifest's exact string. Edit `package-lock.json` only
+under Node 22; if a lock edit dropped `libc` fields anyway,
+`python3 $RUN/.claude/scripts/dependabot/restore_libc.py` puts them back in place (it prints each entry it
+repaired). Commit (`deps: keep <pkg> exact in the lock's workspace entry`), then run
 `npm_specs.py --root .` (exit 0) and `npm_lock.py` again until it exits 0, and `npm ci --ignore-scripts`.
 
 ## 4. Docs that state the version

@@ -26,8 +26,8 @@ A PROBLEM, the PR stays open: an added or removed package, an entry that changes
 or turns into or out of a `link`, a mismatch with the registry, a field dropped from an entry whose version
 didn't move, a new install script, a new publisher, provenance the previous version had and this one lacks or
 that comes from another repository, a semver-major bump, a dependency section of a manifest or of a
-workspace entry that isn't an object. A FIX, repaired in the PR: a manifest/lock pin that
-differs, a dropped `libc`.
+workspace entry that isn't an object, a workspace entry missing from the lock (or not an object). A FIX,
+repaired in the PR: a manifest/lock pin that differs, a dropped `libc`.
 """
 
 from __future__ import annotations

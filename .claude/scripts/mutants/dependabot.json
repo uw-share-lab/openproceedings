@@ -874,5 +874,11 @@
     "file": ".claude/scripts/dependabot/npm_lock.py",
     "old": "        if not isinstance(entry, dict):  # as npm_specs.check reports it: no entry to copy the manifest into\n",
     "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: npm: a non-object workspace entry read as present",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "        if not isinstance(entry, dict):  # as npm_specs.check reports it: no entry to copy the manifest into\n",
+    "new": "        if entry is None:\n"
   }
 ]

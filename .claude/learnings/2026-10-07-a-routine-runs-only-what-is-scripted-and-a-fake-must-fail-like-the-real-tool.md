@@ -79,8 +79,12 @@ with no context and no access to the owner's machine can run it, and script its 
   caret; on this branch it exits 0).
 - **A script the routine runs from dev's copy needs `--root`.** The routine extracts dev's
   `.claude/scripts/dependabot/` into its scratch directory, so a script that finds the repo from `__file__`
-  reads dev's files, not the PR's: it would pass every PR. `--root .` reads the PR checkout, and a `--root`
-  that isn't a directory fails rather than reading as "nothing to check".
+  reads the scratch directory, which holds no `package.json`: "nothing to check" would pass every PR. `--root .`
+  reads the PR checkout, and under `--root` a directory with neither file, or no directory, fails (QA review: a
+  silent "match" on nothing compared is the failure to design out; the plain `make tooling` run says "nothing
+  compared" instead of "match").
+- **Compare JSON values with their type** (security review): in Python `1 == 1.0 == True`, so a spec of `1`
+  matched a lock's `true`.
 - **A row that expects only "non-zero" doesn't test what its label says** (focused review): an argparse error
   or a traceback passes it. Every failing row of the new check matches its own message (`expect_spec`).
 - **Malformed is not fixable.** A section that isn't an object has nothing to copy across, so `npm_lock.py` now
