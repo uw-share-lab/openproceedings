@@ -12,8 +12,11 @@ milestone A)
    IASEAI from its first edition with papers (2026; IASEAI '25 published none).
 3. **Abstracts are searched for every paper that has one.** Precedence: the official source's abstract, else
    OpenAlex's (new venues only), else `null`. The abstract's origin is labelled, filterable and counted.
-4. **Everything is indexed with its real track**; the existing default (`NOT track:workshop`, `status:accepted`)
-   is unchanged, so only workshops leave the default result set.
+4. **Everything is indexed with its real track**; the existing default (`track:(datasets_benchmarks OR main OR
+   position)`, `status:accepted`; `query/defaults.py`) is unchanged (owner, 2026-10-09, after the design first
+   misstated it as `NOT track:workshop`). The new non-main tracks are excluded by default and counted in the
+   exclusion buckets, as `competition` and `tiny_papers` are; one `track:` clause brings them back. Saved
+   searches' canonical strings are unaffected.
 5. IAAI and EAAI, printed in the AAAI volumes, are `venue:AAAI` with tracks `iaai` and `eaai`.
 6. Approach: one source module per official host plus an OpenAlex abstract-fill step (approach 1 of 3; dblp
    for everything and OpenAlex for everything were rejected: the dblp release lags new years and has no AAAI
@@ -66,6 +69,9 @@ cross-source dedup is needed. The existing dedup still runs over the whole snaps
 | `iaai` / `eaai` | IAAI and EAAI sections | — | — | — |
 | `other` | Senior Member Presentations, New Faculty Highlights, Emerging Trends, any recognised section not above (label kept in evidence) | — | — | — |
 | `workshop` | dblp workshop keys (`2015ethics`, `2017w`, `2021safeai`, …) | — | — | — |
+
+Only `main` of these is in the default track filter; every other row is indexed, excluded by default and
+counted (owner decision 4).
 
 `not_paper` entries (front matter, prefaces, keynotes, tutorials, CRAFT sessions) are counted, never records.
 
