@@ -1,0 +1,43 @@
+# ojs.aaai.org table (spec 01 §Sources, OJS row; decision-049). Data, not code: `ingest/ojs_table.py` loads and
+# checks it, and no other module holds a journal code, a volume or an OAI set.
+#
+# [[journal]] columns
+#   code         the OJS path: https://ojs.aaai.org/index.php/<code>/oai
+#   venue        AAAI | AIES | IASEAI (a spec 01 venue)
+#   year_offset  year = volume + year_offset
+#   verified     the date the row was checked live
+#   source       where the check is recorded
+#
+# [[section]] columns (one per journal, volume and OAI set)
+#   journal      a journal code above
+#   volume       the OJS volume
+#   set_spec     the OAI setSpec of the section (names change by year, so every row names its volume)
+#   kind         papers | front_matter (front matter is counted, never a record)
+#   track        a spec 01 track (papers only); the table's value is the record's track, never inferred
+#   label        the section's title on ojs.aaai.org, kept in the track claim's evidence
+#   papers       the records in this section of this volume when verified
+#   verified     the date the row was checked live
+#   source       where the check is recorded
+#
+# A volume or section missing from this table stops the crawl. Section rows arrive with the live census.
+
+[[journal]]
+code = "AAAI"
+venue = "AAAI"
+year_offset = 1986
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[journal]]
+code = "AIES"
+venue = "AIES"
+year_offset = 2017
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[journal]]
+code = "IASEAI"
+venue = "IASEAI"
+year_offset = 2024
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
