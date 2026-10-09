@@ -607,9 +607,10 @@ def test_ojs_native_id_is_valid_for_its_venues(venue: str, year: int) -> None:
     assert _ojs(venue, year).native == "ojs-28000"
 
 
-def test_ojs_native_id_is_refused_for_another_venue() -> None:
+@pytest.mark.parametrize(("venue", "year"), [("ICML", 2024), ("FAccT", 2024)])
+def test_ojs_native_id_is_refused_for_another_venue(venue: str, year: int) -> None:
     with pytest.raises(ValidationError, match="not a valid"):
-        _ojs("ICML", 2024)
+        _ojs(venue, year)
 
 
 @pytest.mark.parametrize("native", ["ojs-", "ojs-12a", "ojs-1-2"])
