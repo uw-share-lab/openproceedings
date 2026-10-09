@@ -1,7 +1,7 @@
 import pytest
-
 from openproceedings.ingest.sources import ojs
 from openproceedings.ingest.sources.common import CrawlError
+
 from tests.unit.ingest.ojs import oai
 
 
@@ -18,7 +18,9 @@ def test_a_record_and_the_next_token() -> None:
 
 def test_last_page_has_no_token_and_an_empty_token_is_the_end() -> None:
     assert ojs.parse_page(oai.page(oai.record(1)))[1] is None
-    assert ojs.parse_page(oai.page(oai.record(1), token=""))[1] is None  # OAI-PMH: empty token = list complete
+    assert (
+        ojs.parse_page(oai.page(oai.record(1), token=""))[1] is None
+    )  # OAI-PMH: empty token = list complete
 
 
 def test_deleted_header_has_no_metadata() -> None:
@@ -73,8 +75,13 @@ def test_a_doctype_is_refused_wherever_it_sits(prolog: str) -> None:  # no entit
 
 @pytest.mark.parametrize(
     ("raw", "shown"),
-    [("Doe, Jane", "Jane Doe"), ("van der Berg, Anna-Lena", "Anna-Lena van der Berg"),
-     ("Smith, Jr., John", "Smith, Jr., John"), ("Aristotle", "Aristotle"), ("  Doe ,  Jane ", "Jane Doe")],
+    [
+        ("Doe, Jane", "Jane Doe"),
+        ("van der Berg, Anna-Lena", "Anna-Lena van der Berg"),
+        ("Smith, Jr., John", "Smith, Jr., John"),
+        ("Aristotle", "Aristotle"),
+        ("  Doe ,  Jane ", "Jane Doe"),
+    ],
 )
 def test_display_name(raw: str, shown: str) -> None:
     assert ojs.display_name(raw) == shown

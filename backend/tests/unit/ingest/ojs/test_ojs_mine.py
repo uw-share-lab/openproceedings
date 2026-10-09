@@ -1,0 +1,179 @@
+import pytest
+from openproceedings.ingest import ojs_table
+from openproceedings.ingest.sources import ojs
+from openproceedings.ingest.sources.common import CrawlError
+from openproceedings.ingest.sources.http import Fetcher, PageCache
+
+from tests.unit.ingest.ojs import oai
+from tests.unit.ingest.proceedings_helpers import seed
+
+TABLE = ojs_table.load("""
+[[journal]]
+code = "AAAI"
+venue = "AAAI"
+year_offset = 1986
+verified = 2026-10-09
+source = "test"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:AISI"
+kind = "papers"
+track = "main"
+label = "Special Track on AI for Social Impact"
+papers = 2
+verified = 2026-10-09
+source = "test"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:IAAI"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Emerging Applications of AI"
+papers = 1
+verified = 2026-10-09
+source = "test"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:FMT"
+kind = "front_matter"
+label = "Front Matter"
+papers = 1
+verified = 2026-10-09
+source = "test"
+""")
+
+
+def _offline(tmp_path) -> Fetcher:
+    return Fetcher(PageCache(tmp_path / "ojs"), None, hosts=ojs.HOSTS, expect="xml", keep_query=True)
+
+
+def _seed(tmp_path, *pages: str) -> None:
+    """Seed a token chain: page i links to page i+1 by token `t<i+1>`."""
+    for i, text in enumerate(pages):
+        seed(tmp_path, "ojs", ojs.oai_url("AAAI", None if i == 0 else f"t{i}"), text, keep_query=True)
+
+
+def test_two_pages_become_records_with_claims(tmp_path) -> None:
+    _seed(
+        tmp_path,
+        oai.page(oai.record(28000, title="First"), oai.deleted(27999), token="t1"),
+        oai.page(
+            oai.record(28001, title="Second"),
+            oai.record(28002, "AAAI:IAAI", title="Third"),
+            oai.record(28003, "AAAI:FMT", title="Preface"),
+        ),
+    )
+    result = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    ids = sorted(r.id for r in result.records)
+    assert ids == ["op:aaai:2020:ojs-28000", "op:aaai:2020:ojs-28001", "op:aaai:2020:ojs-28002"]
+    first = next(r for r in result.records if r.native == "ojs-28000")
+    assert (first.track, first.status, first.authors, first.abstract) == (
+        "main",
+        "accepted",
+        ("Jane Doe",),
+        "An abstract.",
+    )
+    assert first.urls.doi == "10.1609/aaai.v34i01.28000"
+    assert first.urls.proceedings == "https://ojs.aaai.org/index.php/AAAI/article/view/28000"
+    assert {c.source for c in first.provenance} == {"ojs"}
+    track = next(c for c in first.provenance if c.field == "track")
+    assert "Special Track on AI for Social Impact" in (track.evidence or "") and "AAAI:AISI" in (
+        track.evidence or ""
+    )
+    third = next(r for r in result.records if r.native == "ojs-28002")
+    assert third.track == "iaai"
+    assert (result.deleted, result.front_matter, result.pages) == (1, 1, 2)
+    (report,) = result.reports
+    assert (report.venue, report.year, report.volume, report.stated, report.listed, report.records) == (
+        "AAAI",
+        2020,
+        34,
+        3,
+        3,
+        3,
+    )
+    assert report.count_ok and report.tracks == {"main": 2, "iaai": 1}
+
+
+def test_unlisted_section_stops(tmp_path) -> None:
+    _seed(tmp_path, oai.page(oai.record(1, "AAAI:NEW")))
+    with pytest.raises(CrawlError, match=r"AAAI v34 section AAAI:NEW") as e:
+        ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    assert e.value.reason == "unlisted_section"
+
+
+def test_unlisted_volume_stops(tmp_path) -> None:
+    _seed(tmp_path, oai.page(oai.record(1, volume="Vol. 41 No. 1: AAAI-27")))
+    with pytest.raises(CrawlError, match=r"AAAI v41") as e:
+        ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    assert e.value.reason == "unlisted_volume"
+
+
+def test_record_without_a_volume_stops(tmp_path) -> None:
+    _seed(tmp_path, oai.page(oai.record(1, volume="no volume here")))
+    with pytest.raises(CrawlError, match="no volume") as e:
+        ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    assert e.value.reason == "oai_unreadable"
+
+
+def test_count_mismatch_is_reported_not_hidden(tmp_path) -> None:
+    _seed(tmp_path, oai.page(oai.record(1), oai.record(2, "AAAI:IAAI")))  # AISI has 1 of its 2
+    (report,) = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE).reports
+    assert not report.count_ok and (report.stated, report.listed) == (3, 2)
+
+
+def test_a_record_without_title_is_skipped_and_counted(tmp_path) -> None:
+    rec = oai.record(1).replace('<dc:title xml:lang="en-US">A Paper</dc:title>', "")
+    _seed(tmp_path, oai.page(rec, oai.record(2), oai.record(3, "AAAI:IAAI")))
+    result = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    assert result.reports[0].skipped == {"no_title": 1}
+    assert len(result.records) == 2
+
+
+def test_an_empty_creator_is_skipped(tmp_path) -> None:
+    _seed(
+        tmp_path,
+        oai.page(oai.record(1, creators=("Doe, Jane", " ")), oai.record(2), oai.record(3, "AAAI:IAAI")),
+    )
+    rec = next(
+        r for r in ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE).records if r.native == "ojs-1"
+    )
+    assert rec.authors == ("Jane Doe",)
+
+
+def test_a_snippet_abstract_is_dropped(tmp_path) -> None:
+    _seed(
+        tmp_path, oai.page(oai.record(1, description="…a snippet"), oai.record(2), oai.record(3, "AAAI:IAAI"))
+    )
+    rec = next(
+        r for r in ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE).records if r.native == "ojs-1"
+    )
+    assert rec.abstract is None
+
+
+def test_the_same_article_twice_is_counted_once(tmp_path) -> None:
+    _seed(
+        tmp_path,
+        oai.page(oai.record(1), token="t1"),
+        oai.page(oai.record(1), oai.record(2), oai.record(3, "AAAI:IAAI")),
+    )
+    result = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    assert len(result.records) == 3 and result.reports[0].skipped == {"duplicate": 1}
+
+
+def test_a_journal_without_a_row_is_refused(tmp_path) -> None:
+    with pytest.raises(CrawlError, match=r"not in ojs_sections\.toml"):
+        ojs.mine_journal("XYZ", _offline(tmp_path), table=TABLE)
+
+
+def test_an_expired_token_stops_with_what_to_do(tmp_path) -> None:
+    _seed(tmp_path, oai.page(oai.record(1), token="t1"), oai.error("badResumptionToken"))
+    with pytest.raises(CrawlError, match="--refresh") as e:
+        ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    assert e.value.reason == "oai_error"

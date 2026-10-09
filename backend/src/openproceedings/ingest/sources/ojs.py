@@ -18,16 +18,41 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from datetime import datetime
 from urllib.parse import quote
 from xml.parsers import expat
 
-from openproceedings.ingest.sources.common import CrawlError
+from pydantic import ValidationError
+
+from openproceedings.ingest.ojs_table import TABLE, Table
+from openproceedings.ingest.record import (
+    Claim,
+    ClaimField,
+    ClaimValue,
+    PaperRecord,
+    Source,
+    controls_evidence,
+    is_url,
+    title_evidence,
+    title_text,
+)
+from openproceedings.ingest.sources.common import (
+    Cleaned,
+    CrawlError,
+    ListingReport,
+    clean_abstract,
+    pdf_codes_evidence,
+    record_from_claims,
+)
+from openproceedings.ingest.sources.http import Fetcher, Page
+from openproceedings.logs import elapsed_ms
 
 log = logging.getLogger(__name__)
 
-SOURCE = "ojs"
+SOURCE: Source = "ojs"
 CACHE_DIR = "ojs"  # <data>/cache/ojs
 HOST = "ojs.aaai.org"
 HOSTS = frozenset({HOST})
@@ -63,8 +88,9 @@ class OaiRecord:
 
 
 def _refuse_doctype(*_args: object) -> None:
-    raise CrawlError("an OAI-PMH page declared a DOCTYPE; refused (no entities from a response)",
-                     reason="oai_unreadable")
+    raise CrawlError(
+        "an OAI-PMH page declared a DOCTYPE; refused (no entities from a response)", reason="oai_unreadable"
+    )
 
 
 def _root(text: str) -> ET.Element:
@@ -109,7 +135,9 @@ def parse_page(text: str) -> tuple[list[OaiRecord], str | None]:
         code = err.get("code", "")
         if code == _EMPTY_LIST:
             return [], None
-        hint = " (the resumption token expired: re-run with --refresh)" if code == "badResumptionToken" else ""
+        hint = (
+            " (the resumption token expired: re-run with --refresh)" if code == "badResumptionToken" else ""
+        )
         raise CrawlError(f"ojs.aaai.org answered OAI-PMH error {code}{hint}", reason="oai_error")
     listing = root.find(f"{_OAI}ListRecords")
     if listing is None:
@@ -154,3 +182,164 @@ def display_name(creator: str) -> str:
     if len(parts) == 2 and all(parts):
         return f"{parts[1]} {parts[0]}"
     return " ".join(creator.split())
+
+
+@dataclass
+class JournalResult:
+    records: list[PaperRecord]
+    reports: list[ListingReport]
+    deleted: int = 0  # deleted headers: counted, never records
+    front_matter: int = 0
+    pages: int = 0
+
+
+def mine_journal(
+    journal: str, fetcher: Fetcher, *, refresh: bool = False, table: Table | None = None
+) -> JournalResult:
+    """Every record of one journal, harvested page by page (`refresh`: start the token chain again, fetching the
+    first page anew; the next pages' tokens are new, so they are fetched too). `table` is the shipped one unless a
+    test passes its own (read when called, so a test may also monkeypatch `ojs.TABLE`)."""
+    table = table or TABLE
+    if journal not in table.journals:
+        raise CrawlError(f"OJS journal {journal} is not in ojs_sections.toml", reason="unlisted_journal")
+    venue = table.journals[journal].venue
+    base = f"https://{HOST}/index.php/{journal}/oai"
+    reports: dict[int, ListingReport] = {}
+    records: list[PaperRecord] = []
+    seen: set[int] = set()
+    result = JournalResult(records, [])
+    token: str | None = None
+    started = last = time.monotonic()
+    while True:
+        page = fetcher.get(oai_url(journal, token), refresh=refresh and token is None)
+        if not page.ok:
+            raise CrawlError(f"{base} answered HTTP {page.status}", reason="no_listing")
+        result.pages += 1
+        entries, token = parse_page(page.text)
+        for e in entries:
+            if e.deleted:
+                result.deleted += 1
+                continue
+            if e.volume is None:
+                raise CrawlError(
+                    f"OJS {journal} article {e.article}: dc:source names no volume", reason="oai_unreadable"
+                )
+            if e.volume not in table.volumes(journal):
+                raise CrawlError(
+                    f"OJS {journal} v{e.volume} is not in ojs_sections.toml: add its sections "
+                    f"(article {e.article}, set {e.set_spec})",
+                    reason="unlisted_volume",
+                )
+            section = table.sections.get((journal, e.volume, e.set_spec))
+            if section is None:
+                raise CrawlError(
+                    f"OJS {journal} v{e.volume} section {e.set_spec} is not in ojs_sections.toml: add "
+                    f"its row (article {e.article})",
+                    reason="unlisted_section",
+                )
+            if section.kind == "front_matter":
+                result.front_matter += 1
+                continue
+            year = table.year(journal, e.volume)
+            report = reports.get(e.volume)
+            if report is None:
+                report = reports[e.volume] = ListingReport(
+                    SOURCE, venue, year, base, "primary", table.expected(journal, e.volume), volume=e.volume
+                )
+                report.fetched.append(page.fetched_at)
+            elif page.fetched_at not in report.fetched:
+                report.fetched.append(page.fetched_at)
+            report.listed += 1
+            if e.article in seen:
+                report.skipped["duplicate"] += 1
+                continue
+            seen.add(e.article)
+            if not e.title:
+                report.skipped["no_title"] += 1
+                continue
+            try:
+                record, cleaned = _record(journal, venue, year, section.track or "", section.label, e, page)
+            except (ValidationError, ValueError) as exc:
+                report.skipped["invalid"] += 1
+                log.debug(
+                    "ojs_record_invalid",
+                    extra={"journal": journal, "article": e.article, "error": type(exc).__name__},
+                )
+                continue
+            records.append(record)
+            report.count(
+                record, None if record.abstract else "no_abstract", cleaned.spaced, cleaned.pdf_codes
+            )
+        if time.monotonic() - last >= PROGRESS_SECONDS:
+            last = time.monotonic()
+            log.info(
+                "ojs_journal_progress",
+                extra={"journal": journal, "pages": result.pages, "records": len(records)},
+            )
+        if token is None:
+            break
+    result.reports = [reports[v] for v in sorted(reports)]
+    for r in result.reports:
+        if not r.count_ok:
+            log.warning(
+                "listing_count_mismatch",
+                extra={"journal": journal, "volume": r.volume, "listed": r.listed, "stated": r.stated},
+            )
+        if r.skipped:
+            log.warning(
+                "listing_attention",
+                extra={"journal": journal, "volume": r.volume, "skipped": dict(r.skipped)},
+            )
+    log.info(
+        "ojs_journal_mined",
+        extra={
+            "journal": journal,
+            "pages": result.pages,
+            "records": len(records),
+            "deleted": result.deleted,
+            "front_matter": result.front_matter,
+            "ms": elapsed_ms(started, time.monotonic),
+        },
+    )
+    return result
+
+
+def _record(
+    journal: str, venue: str, year: int, track: str, label: str, e: OaiRecord, page: Page
+) -> tuple[PaperRecord, Cleaned]:
+    """The record and what cleaning its abstract changed. Claims carry the OAI page's URL and fetch time."""
+    assert e.title is not None
+    title, replaced = title_text(e.title)
+    claims: list[Claim] = []
+    at: datetime = page.fetched_at
+
+    def claim(fld: ClaimField, value: ClaimValue, evidence: str) -> None:
+        claims.append(
+            Claim(field=fld, value=value, source=SOURCE, url=page.url, fetched_at=at, evidence=evidence)
+        )
+
+    row = f"ojs_sections.toml {journal} v{e.volume} {e.set_spec} ({label})"
+    listed = f"OAI-PMH record oai:ojs.aaai.org:article/{e.article}"
+    claim("venue", venue, f"ojs_sections.toml journal {journal}")
+    claim("year", year, f"ojs_sections.toml {journal} v{e.volume}")
+    claim("track", track, row)
+    claim("status", "accepted", f"published in {journal} v{e.volume}")
+    claim("title", title, title_evidence(listed, replaced))
+    if authors := tuple(display_name(c) for c in e.creators):
+        claim("authors", authors, f"{listed} dc:creator (Last, First shown First Last)")
+    cleaned = clean_abstract(e.description)
+    if cleaned.text is not None:
+        claim(
+            "abstract",
+            cleaned.text,
+            pdf_codes_evidence(
+                controls_evidence(f"{listed} dc:description", cleaned.spaced), cleaned.pdf_codes
+            ),
+        )
+    if e.doi:
+        claim("urls.doi", e.doi, f"{listed} dc:identifier")
+    if e.article_url and is_url(e.article_url):
+        claim("urls.proceedings", e.article_url, f"{listed} dc:identifier")
+    if e.pdf_url and is_url(e.pdf_url):
+        claim("urls.pdf", e.pdf_url, f"{listed} dc:relation (the article's galley)")
+    return record_from_claims(f"op:{venue.lower()}:{year}:ojs-{e.article}", claims), cleaned

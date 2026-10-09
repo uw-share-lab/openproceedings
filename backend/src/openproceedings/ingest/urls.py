@@ -104,15 +104,30 @@ def names_native(url: str, native_id: str) -> bool:
 
 
 def native(url: str) -> str | None:
-    """The proceedings native id a URL names (`proceedings_native`, `pmlr-v<N>-<key>` for an ICML volume, or
-    `dblp-<key>` for an ICML record's dblp page), or None."""
+    """The proceedings native id a URL names (`proceedings_native`, `pmlr-v<N>-<key>` for an ICML volume,
+    `dblp-<key>` for an ICML record's dblp page, or `ojs-<id>` for an ojs.aaai.org article), or None."""
     if proceedings(url) is not None:
         return proceedings_native(url)
     if (q := pmlr(url)) is not None and q[0] in ICML_PMLR_VOLUMES:
         return f"pmlr-v{q[0]}-{q[1]}"
     if (key := dblp_icml(url)) is not None:
         return f"dblp-{key}"
+    if (article := ojs_article(url)) is not None:
+        return f"ojs-{article}"
     return None
+
+
+_OJS_HOST = "ojs.aaai.org"
+_OJS_PATH = re.compile(r"/index\.php/(?:AAAI|AIES|IASEAI)/article/view/([0-9]+)(?:/[0-9]+)?/?")
+
+
+def ojs_article(url: str) -> int | None:
+    """The article id of an ojs.aaai.org article or galley URL (AAAI, AIES, IASEAI; decision-049), or None."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.netloc.lower() != _OJS_HOST:
+        return None
+    m = _OJS_PATH.fullmatch(parsed.path)
+    return int(m.group(1)) if m else None
 
 
 _DBLP_REC = re.compile(r"/rec/conf/icml/([A-Za-z0-9_-]+)(?:\.html)?")
