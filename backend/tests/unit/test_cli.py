@@ -196,3 +196,59 @@ def test_record_actions_take_their_options() -> None:
     ns = parser.parse_args(["record", "replay", "AAAAAAAAAAAA"])
     assert (ns.record_id, ns.index, ns.json, ns.action) == ("AAAAAAAAAAAA", None, False, "replay")
     assert cli.EXIT_MISMATCH not in (0, 1, 2)  # a mismatch is told apart from drift, refusal and usage
+
+
+def test_ingest_ojs_dispatches_the_journals_and_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    seen: dict[str, object] = {}
+
+    def fake(journals: object, cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(journals=journals, cache=cache, **kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(crawl, "ingest_ojs", fake)
+    argv = ["--data-dir", str(tmp_path), "ingest", "ojs", "--journal", "AAAI", "--offline"]
+    assert cli.main(argv) == 0
+    assert json.loads(capsys.readouterr().out) == {"ok": True}
+    assert seen["journals"] == ["AAAI"]
+    assert (seen["offline"], seen["dry_run"], seen["refresh"]) == (True, False, False)
+    assert seen["cache"] == tmp_path / "cache"
+
+
+def test_ingest_ojs_rejects_an_unknown_journal() -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["ingest", "ojs", "--journal", "AAAJ"])
+    assert exc.value.code == 2
+
+
+@pytest.mark.parametrize(
+    ("flags", "message"),
+    [
+        (["--dry-run", "--offline"], "don't combine"),
+        (["--delay", "0.1"], "--delay must be finite and at least"),
+        (["--delay", "nan"], "--delay must be finite and at least"),
+    ],
+)
+def test_ingest_ojs_usage_refusals(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], flags: list[str], message: str
+) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "ojs", *flags]) == 1
+    assert message in capsys.readouterr().err
+
+
+def test_ingest_ojs_oai_error_exits_nonzero_with_the_refresh_hint(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest.sources import ojs
+
+    from tests.unit.ingest.ojs import oai
+    from tests.unit.ingest.ojs.test_ojs_mine import TABLE, _seed
+
+    monkeypatch.setattr(ojs, "TABLE", TABLE)
+    _seed(tmp_path / "cache", oai.error("badResumptionToken"))
+    argv = ["--data-dir", str(tmp_path), "ingest", "ojs", "--journal", "AAAI", "--offline"]
+    assert cli.main(argv) != 0
+    assert "--refresh" in capsys.readouterr().err
