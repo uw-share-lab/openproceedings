@@ -12,7 +12,8 @@ ICLR archive, NeurIPS proceedings and PMLR) fetches through `HttpClient`, and on
 - **Politeness.** At least `min_interval` seconds between requests. 429 and 5xx wait for `Retry-After`
   (seconds or an HTTP date), else `ratelimit-reset` (seconds from now; never `x-ratelimit-reset`, an epoch),
   else an exponential back-off (`backoff[0] · 2^n`, capped at `backoff[1]`, plus jitter); so do a network
-  error and a truncated 200 (an HTML page without `</html>`, or JSON that doesn't parse; a page the caller asks to
+  error and a truncated 200 (an HTML page without `</html>`, an XML document not ending in its root's closing
+  tag, or JSON that doesn't parse; a page the caller asks to
   judge by length, an Internet Archive capture whose original may never have had `</html>`, is truncated when its
   body is not the `Content-Length` the response states, or, when it states none, by the closing-tag rule, logged
   as `truncated_no_length`; TASK-207). A spent budget
@@ -267,7 +268,7 @@ class Policy:
 
     hosts: frozenset[str]
     accept: str = "text/html"
-    expect: Literal["html", "json"] = "html"  # how a truncated 200 is recognised (and retried)
+    expect: Literal["html", "json", "xml"] = "html"  # how a truncated 200 is recognised (and retried)
     keep_query: bool = False  # does the query string name the resource (and the cache entry)?
     min_interval: float = 1.0
     attempts: int = 5
@@ -459,6 +460,11 @@ class HttpClient[T]:
             if b"</html>" in response.body[-4096:].lower():
                 return None
             return "truncated_no_length" if by_length else "truncated"
+        if self.policy.expect == "xml":
+            # whole when the body ends with its root element's closing tag (`</OAI-PMH>`); a cut-off body never does
+            root = _XML_ROOT.match(response.body.lstrip()[:4096])
+            tail = response.body.rstrip()[-256:]
+            return None if root and tail.endswith(b"</" + root.group(1) + b">") else "truncated"
         if not is_json(response):
             return None  # not JSON at all (a challenge page): the source judges it
         try:
@@ -572,6 +578,9 @@ def PageCache(root: Path) -> ResponseCache[Page]:
 
 PROCEEDINGS = Policy(hosts=frozenset())
 
+# an XML document's root element, after the declaration, processing instructions and comments before it
+_XML_ROOT = re.compile(rb"(?:(?:<\?.*?\?>|<!--.*?-->)\s*)*<([A-Za-z_][\w.:-]*)[\s>/]", re.DOTALL)
+
 
 class Fetcher(HttpClient[Page]):
     """The proceedings crawlers' page fetcher: `HttpClient` with the proceedings' policy, keeping 200s (and,
@@ -580,10 +589,12 @@ class Fetcher(HttpClient[Page]):
     def __init__(
         self, cache: ResponseCache[Page], transport: Transport | None, *, hosts: frozenset[str],
         min_interval: float = 1.0, attempts: int = 5, max_wait: float = 3600.0, timeout: float = 30.0,
-        clock: Clock | None = None,
+        clock: Clock | None = None, accept: str = "text/html",
+        expect: Literal["html", "json", "xml"] = "html", keep_query: bool = False,
     ) -> None:  # fmt: skip
         policy = replace(PROCEEDINGS, hosts=hosts, min_interval=min_interval, attempts=attempts,
-                         max_wait=max_wait, timeout=timeout)  # fmt: skip
+                         max_wait=max_wait, timeout=timeout, accept=accept, expect=expect,
+                         keep_query=keep_query)  # fmt: skip
         super().__init__(cache, transport, policy, clock)
 
     def get(

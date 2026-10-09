@@ -23,6 +23,7 @@ from openproceedings.ingest.sources.http import (
     Response,
     RetriesExhausted,
     SourceError,
+    canonical,
 )
 from openproceedings.ingest.sources.openreview_client import (
     Credentials,
@@ -32,7 +33,7 @@ from openproceedings.ingest.sources.openreview_client import (
 from scholarmend.cache import Cache
 
 from tests.unit.ingest.openreview_fakes import PASSWORD, USERNAME, FakeClock, json_response
-from tests.unit.ingest.proceedings_helpers import fetcher
+from tests.unit.ingest.proceedings_helpers import FakeTransport, fetcher, response
 
 HTML = b"<html><body>ok</body></html>"
 
@@ -173,3 +174,58 @@ def test_an_openreview_cache_written_by_scholarmends_cache_still_replays(tmp_pat
     assert client.get("/notes", {"id": "x"}) == entry and client.cached == 1
     [path] = tmp_path.rglob("*.json")
     assert json.loads(path.read_text()) == {"key": url, "payload": entry}
+
+
+OAI = "https://ojs.aaai.org/index.php/AAAI/oai?verb=ListRecords&metadataPrefix=oai_dc"
+OAI_BODY = '<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><ListRecords/></OAI-PMH>'
+WHOLE = f'<?xml version="1.0"?>{OAI_BODY}\n'
+CUT = WHOLE[:60]
+XML_HEADERS = {"content-type": "text/xml; charset=utf-8"}
+
+
+def _xml_fetcher(tmp_path: Path, body: str) -> tuple[Any, FakeTransport]:
+    t = FakeTransport({})
+    t.script[canonical(OAI, keep_query=True)] = [response(body, headers=XML_HEADERS)]  # the query names it
+    f, _ = fetcher(tmp_path, t, frozenset({"ojs.aaai.org"}), min_interval=0.0, attempts=2,
+                   accept="application/xml", expect="xml", keep_query=True)  # fmt: skip
+    return f, t
+
+
+def test_xml_page_is_kept_with_its_query(tmp_path: Path) -> None:
+    f, t = _xml_fetcher(tmp_path, WHOLE)
+    page = f.get(OAI)
+    assert page.ok and page.url == OAI  # the query names the resource: kept in the URL and the cache key
+    assert t.calls == [OAI]
+
+
+def test_truncated_xml_is_retried_then_refused(tmp_path: Path) -> None:
+    f, t = _xml_fetcher(tmp_path, CUT)
+    with pytest.raises(RetriesExhausted):
+        f.get(OAI)
+    assert len(t.calls) == 2
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        f'<?xml version="1.0"?><!-- c -->{OAI_BODY}',
+        f'<?xml version="1.0"?>\n<?xml-stylesheet href="x.xsl"?>\n{OAI_BODY}  \n',
+        f"  {OAI_BODY}",
+    ],
+)
+def test_xml_prolog_is_skipped_to_find_the_root(tmp_path: Path, body: str) -> None:
+    f, _ = _xml_fetcher(tmp_path, body)
+    assert f.get(OAI).ok
+
+
+def test_xml_with_another_closing_tag_is_not_whole(tmp_path: Path) -> None:
+    f, _ = _xml_fetcher(tmp_path, '<?xml version="1.0"?><OAI-PMH><ListRecords></ListRecords>')
+    with pytest.raises(RetriesExhausted):
+        f.get(OAI)
+
+
+def test_html_rule_unchanged_for_the_default_fetcher(tmp_path: Path) -> None:
+    url = "https://ojs.aaai.org/index.php/AAAI/issue/archive"
+    t = FakeTransport({url: response("<html><body>ok</body></html>")})
+    f, _ = fetcher(tmp_path, t, frozenset({"ojs.aaai.org"}), min_interval=0.0)
+    assert f.get(url).ok
