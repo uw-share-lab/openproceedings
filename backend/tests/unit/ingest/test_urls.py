@@ -95,6 +95,8 @@ def test_a_dblp_record_page_names_its_icml_key(url: str, key: str | None) -> Non
         ("https://ojs.aaai.org/index.php/AAAI/article/view/28000", 28000),
         ("https://OJS.aaai.org/index.php/AIES/article/view/31600/33767", 31600),
         ("http://ojs.aaai.org/index.php/IASEAI/article/view/43010?x=1", 43010),
+        ("https://ojs.aaai.org/index.php/AAAI/article/view/28000/", 28000),
+        ("https://ojs.aaai.org/index.php/AAAI/article/view/28000/35000/", 28000),
         ("https://ojs.aaai.org/index.php/AAAI/issue/view/741", None),
         ("https://example.org/index.php/AAAI/article/view/1", None),
     ],

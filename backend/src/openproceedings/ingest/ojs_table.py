@@ -71,13 +71,15 @@ def _check(raw: Mapping[str, Any], columns: set[str], required: set[str], where:
         raise ValueError(f"{where}: unknown columns {sorted(unknown)}")
     if missing := required - set(raw):
         raise ValueError(f"{where}: missing columns {sorted(missing)}")
-    if not isinstance(raw["verified"], date) or not isinstance(raw["source"], str) or not raw["source"]:
+    if type(raw["verified"]) is not date or not isinstance(raw["source"], str) or not raw["source"]:
         raise ValueError(f"{where}: every row needs a verified date and a source")
 
 
 def _journal(raw: Mapping[str, Any]) -> Journal:
     where = f"ojs_sections.toml journal {raw.get('code')!r}"
     _check(raw, _JOURNAL_COLUMNS, _JOURNAL_COLUMNS, where)
+    if not isinstance(raw["code"], str) or not raw["code"]:
+        raise ValueError(f"{where}: code must be a non-empty string")
     if raw["venue"] not in VENUES.values():
         raise ValueError(f"{where}: venue {raw['venue']!r} is not one of {sorted(VENUES.values())}")
     if type(raw["year_offset"]) is not int:
@@ -88,6 +90,9 @@ def _journal(raw: Mapping[str, Any]) -> Journal:
 def _section(raw: Mapping[str, Any], journals: Mapping[str, Journal]) -> Section:
     where = f"ojs_sections.toml section {raw.get('journal')!r} v{raw.get('volume')!r} {raw.get('set_spec')!r}"
     _check(raw, _SECTION_COLUMNS, _SECTION_COLUMNS - {"track"}, where)
+    for column in ("journal", "set_spec", "label"):
+        if not isinstance(raw[column], str) or not raw[column]:
+            raise ValueError(f"{where}: {column} must be a non-empty string")
     journal = journals.get(raw["journal"])
     if journal is None:
         raise ValueError(f"{where}: no journal row for {raw['journal']!r}")
@@ -101,13 +106,11 @@ def _section(raw: Mapping[str, Any], journals: Mapping[str, Journal]) -> Section
     if kind == "front_matter" and track is not None:
         raise ValueError(f"{where}: front matter has no track (it is counted, never a record)")
     if kind == "papers":
-        if track not in TRACKS:
+        if not isinstance(track, str) or track not in TRACKS:
             raise ValueError(f"{where}: track {track!r} is not a spec 01 track")
         if (only := VENUE_ONLY_TRACKS.get(track)) is not None and only != journal.venue:
             raise ValueError(f"{where}: {track!r} is only an {only} track")
     venue_name(journal.venue, volume + journal.year_offset)  # a year the venue wasn't held is refused
-    if not isinstance(raw["label"], str) or not raw["label"]:
-        raise ValueError(f"{where}: label must be the section's title")
     return Section(raw["journal"], volume, raw["set_spec"], kind, track, raw["label"], papers, raw["verified"],
                    raw["source"])  # fmt: skip
 

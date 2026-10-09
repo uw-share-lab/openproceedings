@@ -207,6 +207,7 @@ def mine_journal(
     reports: dict[int, ListingReport] = {}
     records: list[PaperRecord] = []
     seen: set[int] = set()
+    listed_volumes = frozenset(table.volumes(journal))
     result = JournalResult(records, [])
     token: str | None = None
     started = last = time.monotonic()
@@ -224,7 +225,7 @@ def mine_journal(
                 raise CrawlError(
                     f"OJS {journal} article {e.article}: dc:source names no volume", reason="oai_unreadable"
                 )
-            if e.volume not in table.volumes(journal):
+            if e.volume not in listed_volumes:
                 raise CrawlError(
                     f"OJS {journal} v{e.volume} is not in ojs_sections.toml: add its sections "
                     f"(article {e.article}, set {e.set_spec})",
@@ -278,6 +279,12 @@ def mine_journal(
             )
         if token is None:
             break
+    for v in sorted(
+        listed_volumes - reports.keys()
+    ):  # a listed volume the harvest never showed: reported, not hidden
+        reports[v] = ListingReport(
+            SOURCE, venue, table.year(journal, v), base, "primary", table.expected(journal, v), volume=v
+        )
     result.reports = [reports[v] for v in sorted(reports)]
     for r in result.reports:
         if not r.count_ok:
@@ -326,7 +333,9 @@ def _record(
     claim("status", "accepted", f"published in {journal} v{e.volume}")
     claim("title", title, title_evidence(listed, replaced))
     if authors := tuple(display_name(c) for c in e.creators):
-        claim("authors", authors, f"{listed} dc:creator (Last, First shown First Last)")
+        flipped = any(a != " ".join(c.split()) for a, c in zip(authors, e.creators, strict=True))
+        how = "(Last, First shown First Last)" if flipped else "as published"
+        claim("authors", authors, f"{listed} dc:creator {how}")
     cleaned = clean_abstract(e.description)
     if cleaned.text is not None:
         claim(

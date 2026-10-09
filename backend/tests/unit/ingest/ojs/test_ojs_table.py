@@ -46,6 +46,26 @@ def test_loads_and_derives_year_and_expected_count() -> None:
 @pytest.mark.parametrize(
     ("edit", "message"),
     [
+        (lambda s: s.replace("verified = 2026-10-09", "verified = 2026-10-09T10:00:00", 1), "verified date"),
+        (lambda s: s.replace('code = "AAAI"', 'code = ""'), "code must be"),
+        (lambda s: s.replace('set_spec = "AAAI:AISI"', 'set_spec = ""'), "set_spec must be"),
+        (lambda s: s.replace('set_spec = "AAAI:AISI"', "set_spec = 7"), "set_spec must be"),
+        (
+            lambda s: s.replace('label = "Special Track on AI for Social Impact"', 'label = ""'),
+            "label must be",
+        ),
+        (lambda s: s.replace('journal = "AAAI"\nvolume', "journal = [1]\nvolume"), "journal must be"),
+        (lambda s: s.replace('track = "main"', "track = [1]"), "not a spec 01 track"),
+    ],
+)
+def test_loader_type_checks(edit, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        ojs_table.load(edit(GOOD))
+
+
+@pytest.mark.parametrize(
+    ("edit", "message"),
+    [
         (lambda s: s.replace('track = "main"', 'track = "mainn"'), "not a spec 01 track"),
         (lambda s: s.replace('venue = "AAAI"', 'venue = "AAAJ"'), "not one of"),
         (lambda s: s.replace('kind = "papers"', 'kind = "paper"'), "kind"),

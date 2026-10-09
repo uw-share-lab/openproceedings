@@ -1,13 +1,15 @@
+from datetime import UTC, datetime
+
 import pytest
 from openproceedings.ingest import ojs_table
 from openproceedings.ingest.sources import ojs
 from openproceedings.ingest.sources.common import CrawlError
-from openproceedings.ingest.sources.http import Fetcher, PageCache
+from openproceedings.ingest.sources.http import Fetcher, PageCache, canonical
 
 from tests.unit.ingest.ojs import oai
-from tests.unit.ingest.proceedings_helpers import seed
+from tests.unit.ingest.proceedings_helpers import T0, FakeTransport, response, seed
 
-TABLE = ojs_table.load("""
+TABLE_TEXT = """
 [[journal]]
 code = "AAAI"
 venue = "AAAI"
@@ -46,17 +48,19 @@ label = "Front Matter"
 papers = 1
 verified = 2026-10-09
 source = "test"
-""")
+"""
+TABLE = ojs_table.load(TABLE_TEXT)
 
 
 def _offline(tmp_path) -> Fetcher:
     return Fetcher(PageCache(tmp_path / "ojs"), None, hosts=ojs.HOSTS, expect="xml", keep_query=True)
 
 
-def _seed(tmp_path, *pages: str) -> None:
+def _seed(tmp_path, *pages: str, times: tuple[datetime, ...] = ()) -> None:
     """Seed a token chain: page i links to page i+1 by token `t<i+1>`."""
     for i, text in enumerate(pages):
-        seed(tmp_path, "ojs", ojs.oai_url("AAAI", None if i == 0 else f"t{i}"), text, keep_query=True)
+        at = times[i] if times else T0
+        seed(tmp_path, "ojs", ojs.oai_url("AAAI", None if i == 0 else f"t{i}"), text, at=at, keep_query=True)
 
 
 def test_two_pages_become_records_with_claims(tmp_path) -> None:
@@ -110,7 +114,7 @@ def test_unlisted_section_stops(tmp_path) -> None:
 
 def test_unlisted_volume_stops(tmp_path) -> None:
     _seed(tmp_path, oai.page(oai.record(1, volume="Vol. 41 No. 1: AAAI-27")))
-    with pytest.raises(CrawlError, match=r"AAAI v41") as e:
+    with pytest.raises(CrawlError, match=r"AAAI v41.*set AAAI:AISI") as e:
         ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
     assert e.value.reason == "unlisted_volume"
 
@@ -177,3 +181,74 @@ def test_an_expired_token_stops_with_what_to_do(tmp_path) -> None:
     with pytest.raises(CrawlError, match="--refresh") as e:
         ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
     assert e.value.reason == "oai_error"
+
+
+T2 = datetime(2026, 10, 1, 8, 30, tzinfo=UTC)
+
+
+def test_claims_carry_their_own_page_url_and_time(tmp_path) -> None:
+    _seed(
+        tmp_path,
+        oai.page(oai.record(1), oai.record(2, "AAAI:IAAI"), token="t1"),
+        oai.page(oai.record(3)),
+        times=(T0, T2),
+    )
+    result = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    one = next(r for r in result.records if r.native == "ojs-1")
+    three = next(r for r in result.records if r.native == "ojs-3")
+    assert {(c.url, c.fetched_at) for c in one.provenance} == {(ojs.oai_url("AAAI"), T0)}
+    assert {(c.url, c.fetched_at) for c in three.provenance} == {(ojs.oai_url("AAAI", "t1"), T2)}
+    assert three.urls.pdf == "https://ojs.aaai.org/index.php/AAAI/article/view/3/7003"
+    assert result.reports[0].fetched == [T0, T2]  # one volume over two pages: both times
+
+
+def test_refresh_fetches_only_the_first_page_again(tmp_path) -> None:
+    _seed(tmp_path, oai.page(oai.record(1), token="t1"), oai.page(oai.record(2), oai.record(3, "AAAI:IAAI")))
+    first = ojs.oai_url("AAAI")
+    transport = FakeTransport({})
+    headers = {"content-type": "text/xml; charset=utf-8"}
+    transport.script = {
+        canonical(first, keep_query=True): [response(oai.page(oai.record(1), token="t1"), headers=headers)]
+    }
+    fetcher = Fetcher(
+        PageCache(tmp_path / "ojs"), transport, hosts=ojs.HOSTS, min_interval=0, expect="xml", keep_query=True
+    )
+    result = ojs.mine_journal("AAAI", fetcher, refresh=True, table=TABLE)
+    assert transport.calls == [canonical(first, keep_query=True)]
+    assert len(result.records) == 3
+
+
+def test_a_listed_volume_the_harvest_never_showed_is_reported(tmp_path) -> None:
+    two = ojs_table.load(
+        str(TABLE_TEXT)
+        + """
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:AISI"
+kind = "papers"
+track = "main"
+label = "Special Track on AI for Social Impact"
+papers = 4
+verified = 2026-10-09
+source = "test"
+"""
+    )
+    _seed(tmp_path, oai.page(oai.record(1), oai.record(2), oai.record(3, "AAAI:IAAI")))
+    reports = ojs.mine_journal("AAAI", _offline(tmp_path), table=two).reports
+    assert [r.volume for r in reports] == [34, 35]
+    assert reports[0].count_ok
+    assert (reports[1].year, reports[1].listed, reports[1].stated, reports[1].count_ok) == (2021, 0, 4, False)
+
+
+def test_authors_evidence_says_what_was_done(tmp_path) -> None:
+    _seed(
+        tmp_path, oai.page(oai.record(1), oai.record(2, creators=("Aristotle",)), oai.record(3, "AAAI:IAAI"))
+    )
+    records = {r.native: r for r in ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE).records}
+
+    def evidence(native: str) -> str:
+        return next(c.evidence or "" for c in records[native].provenance if c.field == "authors")
+
+    assert "shown First Last" in evidence("ojs-1")
+    assert "as published" in evidence("ojs-2") and "shown First Last" not in evidence("ojs-2")

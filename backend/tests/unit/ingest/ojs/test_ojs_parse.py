@@ -85,3 +85,11 @@ def test_a_doctype_is_refused_wherever_it_sits(prolog: str) -> None:  # no entit
 )
 def test_display_name(raw: str, shown: str) -> None:
     assert ojs.display_name(raw) == shown
+
+
+def test_english_description_wins_over_other_locales() -> None:
+    french = '<dc:description xml:lang="fr-FR">Un resume.</dc:description>'
+    rec = oai.record(5).replace("<dc:description", french + "<dc:description", 1)
+    assert rec.index("Un resume") < rec.index("An abstract")
+    (r,), _ = ojs.parse_page(oai.page(rec))
+    assert r.description == "An abstract."
