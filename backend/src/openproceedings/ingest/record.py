@@ -57,7 +57,7 @@ ClaimField = Literal[
     "twin", "invitation",
 ]  # fmt: skip
 
-_ID = re.compile(r"op:(neurips|iclr|icml):([0-9]{4}):(\S+)")
+_ID = re.compile(r"op:(neurips|iclr|icml|aaai|aies|facct|iaseai):([0-9]{4}):(\S+)")
 # Native ids (record-schema skill): an OpenReview forum id, or a proceedings form tied to its venue.
 PROCEEDINGS_NATIVE = {
     "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), "ICML"),

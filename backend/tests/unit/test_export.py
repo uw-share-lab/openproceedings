@@ -246,8 +246,8 @@ def test_a_year_the_venue_was_not_held_is_refused(venue: str, year: int) -> None
 
 
 def test_an_unknown_venue_has_its_own_message() -> None:
-    with pytest.raises(ValueError, match="no conference table for venue 'AAAI'"):
-        export.venue_name("AAAI", 2024)
+    with pytest.raises(ValueError, match="no conference table for venue 'AISTATS'"):
+        export.venue_name("AISTATS", 2024)
 
 
 def test_conference_eras_must_be_sorted() -> None:

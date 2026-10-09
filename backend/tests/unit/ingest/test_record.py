@@ -423,12 +423,21 @@ VENUE_NAMES: dict[tuple[str, int], str] = {
     ("ICML", 2024): "International Conference on Machine Learning (ICML 2024)",
     ("ICML", 2025): "International Conference on Machine Learning (ICML 2025)",
     ("ICML", 2026): "International Conference on Machine Learning (ICML 2026)",
+    ("AAAI", 1980): "AAAI Conference on Artificial Intelligence (AAAI 1980)",
+    ("AAAI", 2026): "AAAI Conference on Artificial Intelligence (AAAI 2026)",
+    ("AIES", 2018): "AAAI/ACM Conference on AI, Ethics, and Society (AIES 2018)",
+    ("FAccT", 2018): "ACM Conference on Fairness, Accountability, and Transparency (FAT* 2018)",
+    ("FAccT", 2020): "ACM Conference on Fairness, Accountability, and Transparency (FAT* 2020)",
+    ("FAccT", 2021): "ACM Conference on Fairness, Accountability, and Transparency (FAccT 2021)",
+    ("IASEAI", 2026): "International Association for Safe and Ethical AI Conference (IASEAI 2026)",
 }
 
 
 @pytest.mark.parametrize(("venue", "year"), sorted(VENUE_NAMES))
 def test_venue_name_per_venue_year(venue: str, year: int) -> None:
-    native = {"NeurIPS": "nips-" + "a" * 32, "ICML": "pmlr-v1-x", "ICLR": "iilhN2MycO"}[venue]
+    native = {"NeurIPS": "nips-" + "a" * 32, "ICML": "pmlr-v1-x", "ICLR": "iilhN2MycO"}.get(
+        venue, "ojs-28000"
+    )
     r = record(id=f"op:{venue.lower()}:{year}:{native}", venue=venue, year=year)
     assert r.venue_name == VENUE_NAMES[venue, year]
     assert r.model_dump(mode="json")["venue_name"] == VENUE_NAMES[venue, year]  # sent with the record

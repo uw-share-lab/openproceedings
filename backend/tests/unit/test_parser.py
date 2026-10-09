@@ -323,7 +323,7 @@ QUOTED: list[tuple[str, DiagnosticCode, tuple[int, int], str]] = [
         "venue:IC\x07LR",
         DiagnosticCode.FIELD_UNKNOWN_VALUE,
         (6, 11),
-        "`IC\\x07LR` is not a venue (values take no wildcards or quotes) — use one of `NeurIPS`, `ICLR`, `ICML`.",
+        "`IC\\x07LR` is not a venue (values take no wildcards or quotes) — use one of `NeurIPS`, `ICLR`, `ICML`, `AAAI`, `AIES`, `FAccT`, `IASEAI`.",
     ),
     (
         "trust NEAR/x`y b",
@@ -698,7 +698,7 @@ def test_messages_quote_at_most_40_characters_of_input() -> None:
         for mode in ("native", "scholar"):
             result = parse(q[:2000], mode)  # type: ignore[arg-type]
             for d in result.errors + result.warnings + result.translations:
-                assert len(d.message) < 500, (
+                assert len(d.message) < 600, (
                     q[:20],
                     d.code,
                     len(d.message),

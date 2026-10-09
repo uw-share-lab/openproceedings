@@ -75,6 +75,10 @@ def attributed(r: Rec) -> PaperRecord:
             "ICML": f"https://proceedings.mlr.press/v{paper.year - 1800}/{paper.native.lower()}.html",
             "ICLR": f"https://proceedings.iclr.cc/paper_files/paper/{paper.year}/hash/{digest}-Abstract-Conference.html",
             "NeurIPS": f"https://proceedings.neurips.cc/paper_files/paper/{paper.year}/hash/{digest}-Abstract-Conference.html",
+            "AAAI": f"https://ojs.aaai.org/index.php/AAAI/article/view/{n}",
+            "AIES": f"https://ojs.aaai.org/index.php/AIES/article/view/{n}",
+            "FAccT": f"https://dl.acm.org/doi/10.1145/{n}",
+            "IASEAI": f"https://ojs.aaai.org/index.php/IASEAI/article/view/{n}",
         }[paper.venue]
         if n % 7 == 0:
             by_api = paper.venue == "ICLR" and n % 2 == 0

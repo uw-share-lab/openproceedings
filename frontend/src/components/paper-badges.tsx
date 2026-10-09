@@ -7,6 +7,9 @@
 /** Track values shown by another name, with the full name for assistive technology (RH-11). */
 const TRACK_SHORT: Readonly<Record<string, { short: string; long: string }>> = {
   datasets_benchmarks: { short: "D&B", long: "datasets and benchmarks" },
+  student_abstract: { short: "student abstract", long: "student abstract" },
+  iaai: { short: "IAAI", long: "Innovative Applications of AI" },
+  eaai: { short: "EAAI", long: "Educational Advances in AI" },
 };
 
 /** A track as the sidebar and badges show it: its short form, and its accessible name. */

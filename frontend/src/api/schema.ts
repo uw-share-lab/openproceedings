@@ -587,7 +587,7 @@ export interface components {
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "other" | "unknown";
+            track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "student_abstract" | "consortium" | "demo" | "iaai" | "eaai" | "other" | "unknown";
         };
         /** CoverageResponse */
         CoverageResponse: {
@@ -864,7 +864,7 @@ export interface components {
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "other" | "unknown";
+            track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "student_abstract" | "consortium" | "demo" | "iaai" | "eaai" | "other" | "unknown";
             /**
              * Twins
              * @description The ids of this paper's twins (decision-029): another record of the same paper that the index keeps separate, never merged, such as an ICLR 2017 workshop-listing copy and its conference submission. Each is a paper on this same index (`GET /papers/{id}`), and each record keeps matching on its own text, so both can be hits. Usually empty; one or two ids otherwise, sorted.
@@ -876,7 +876,7 @@ export interface components {
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            venue: "NeurIPS" | "ICLR" | "ICML";
+            venue: "NeurIPS" | "ICLR" | "ICML" | "AAAI" | "AIES" | "FAccT" | "IASEAI";
             /** Year */
             year: number;
         };
@@ -1056,7 +1056,7 @@ export interface components {
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "other" | "unknown";
+            track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "student_abstract" | "consortium" | "demo" | "iaai" | "eaai" | "other" | "unknown";
             /** @default {} */
             urls: components["schemas"]["Urls"];
             /**
@@ -1064,7 +1064,7 @@ export interface components {
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            venue: "NeurIPS" | "ICLR" | "ICML";
+            venue: "NeurIPS" | "ICLR" | "ICML" | "AAAI" | "AIES" | "FAccT" | "IASEAI";
             /** Venue Id Raw */
             venue_id_raw: string | null;
             /**
@@ -1759,7 +1759,7 @@ export interface components {
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "other" | "unknown";
+            track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "student_abstract" | "consortium" | "demo" | "iaai" | "eaai" | "other" | "unknown";
             /**
              * Within Gate
              * @description For a gated cell, whether |`delta`| is at most 1% of `official_accepted`; null otherwise.
@@ -1816,7 +1816,7 @@ export interface components {
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            venue: "NeurIPS" | "ICLR" | "ICML";
+            venue: "NeurIPS" | "ICLR" | "ICML" | "AAAI" | "AIES" | "FAccT" | "IASEAI";
             /** Year */
             year: number;
         };
@@ -1825,9 +1825,9 @@ export interface components {
             /** Status */
             status: ("accepted" | "rejected" | "withdrawn" | "desk_rejected" | "unknown")[];
             /** Track */
-            track: ("main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "other" | "unknown")[];
+            track: ("main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "student_abstract" | "consortium" | "demo" | "iaai" | "eaai" | "other" | "unknown")[];
             /** Venue */
-            venue: ("NeurIPS" | "ICLR" | "ICML")[];
+            venue: ("NeurIPS" | "ICLR" | "ICML" | "AAAI" | "AIES" | "FAccT" | "IASEAI")[];
         };
         /**
          * Wildcard

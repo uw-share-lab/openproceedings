@@ -28,6 +28,13 @@ SOURCE_ALIASES = {
     "international conference on machine learning": "ICML",
     "pmlr": "ICML",
     "proceedings of machine learning research": "ICML",
+    "aaai": "AAAI",
+    "association for the advancement of artificial intelligence": "AAAI",
+    "aies": "AIES",
+    "facct": "FAccT",
+    # no "fat*": the token contract reads `FAT*` as the wildcard stem `fat` (`normalize` gives ["fat"]), so a
+    # key `fat*` can never match; a bare `source:FAT` is not claimed either
+    "iaseai": "IASEAI",
 }
 PARTIAL_SOURCES = frozenset({"pmlr", "proceedings of machine learning research"})
 

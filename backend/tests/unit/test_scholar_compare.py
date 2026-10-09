@@ -278,7 +278,7 @@ def test_scope_limits_venues() -> None:
     scope = Scope(venues=frozenset({"ICLR"}))
     assert scope.holds("ICLR", 1999) and not scope.holds("NeurIPS", 2024) and not scope.holds(None, 2024)
     assert not Scope(years=(2020, 2026)).holds("ICLR", None)
-    assert Scope(years=(2020, 2026)).describe() == "ICLR, ICML, NeurIPS; 2020–2026"
+    assert Scope(years=(2020, 2026)).describe() == "AAAI, AIES, FAccT, IASEAI, ICLR, ICML, NeurIPS; 2020–2026"
 
 
 # --- the classes -------------------------------------------------------------------------------------------

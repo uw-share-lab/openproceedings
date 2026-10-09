@@ -748,6 +748,11 @@
               "competition",
               "tiny_papers",
               "blogpost",
+              "student_abstract",
+              "consortium",
+              "demo",
+              "iaai",
+              "eaai",
               "other",
               "unknown"
             ],
@@ -1498,6 +1503,11 @@
               "competition",
               "tiny_papers",
               "blogpost",
+              "student_abstract",
+              "consortium",
+              "demo",
+              "iaai",
+              "eaai",
               "other",
               "unknown"
             ],
@@ -1520,7 +1530,11 @@
             "enum": [
               "NeurIPS",
               "ICLR",
-              "ICML"
+              "ICML",
+              "AAAI",
+              "AIES",
+              "FAccT",
+              "IASEAI"
             ],
             "title": "Venue",
             "type": "string"
@@ -2037,6 +2051,11 @@
               "competition",
               "tiny_papers",
               "blogpost",
+              "student_abstract",
+              "consortium",
+              "demo",
+              "iaai",
+              "eaai",
               "other",
               "unknown"
             ],
@@ -2052,7 +2071,11 @@
             "enum": [
               "NeurIPS",
               "ICLR",
-              "ICML"
+              "ICML",
+              "AAAI",
+              "AIES",
+              "FAccT",
+              "IASEAI"
             ],
             "title": "Venue",
             "type": "string"
@@ -3928,6 +3951,11 @@
               "competition",
               "tiny_papers",
               "blogpost",
+              "student_abstract",
+              "consortium",
+              "demo",
+              "iaai",
+              "eaai",
               "other",
               "unknown"
             ],
@@ -4083,7 +4111,11 @@
             "enum": [
               "NeurIPS",
               "ICLR",
-              "ICML"
+              "ICML",
+              "AAAI",
+              "AIES",
+              "FAccT",
+              "IASEAI"
             ],
             "title": "Venue",
             "type": "string"
@@ -4136,6 +4168,11 @@
                 "competition",
                 "tiny_papers",
                 "blogpost",
+                "student_abstract",
+                "consortium",
+                "demo",
+                "iaai",
+                "eaai",
                 "other",
                 "unknown"
               ],
@@ -4150,7 +4187,11 @@
               "enum": [
                 "NeurIPS",
                 "ICLR",
-                "ICML"
+                "ICML",
+                "AAAI",
+                "AIES",
+                "FAccT",
+                "IASEAI"
               ],
               "type": "string"
             },

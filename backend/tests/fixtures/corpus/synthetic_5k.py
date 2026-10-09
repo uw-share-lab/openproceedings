@@ -22,12 +22,16 @@ from collections import Counter
 from functools import cache
 
 from openproceedings.query.normalize import normalize
-from openproceedings.vocab import STATUSES, TRACKS
+from openproceedings.vocab import STATUSES
 from tests.corpus import Rec
 from tests.strategies import NGRAMS, VOCABULARY, Vocab
 
 SIZE = 5_000
 VENUES = ("NeurIPS", "ICLR", "ICML")
+# pinned to the vocabulary before decision-049 added tracks: `product(VENUES, YEARS, TRACKS, STATUSES)` assigns
+# every record, so reading vocab.TRACKS would reshuffle the whole corpus and every fixture and bench built on it
+TRACKS = ("main", "datasets_benchmarks", "position", "workshop", "competition", "tiny_papers", "blogpost",
+          "other", "unknown")  # fmt: skip
 YEARS = tuple(range(2019, 2027))
 ODDITIES = (
     "vision-language", "GPT-4o", "state-of-the-art", "LLMs'", "trust/reliance", "e.g.", "U.S.",

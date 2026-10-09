@@ -17,7 +17,7 @@
   },
   "text_fields": ["title", "abstract"],
   "values": {
-    "venue": ["NeurIPS", "ICLR", "ICML"],
+    "venue": ["NeurIPS", "ICLR", "ICML", "AAAI", "AIES", "FAccT", "IASEAI"],
     "track": [
       "main",
       "datasets_benchmarks",
@@ -26,6 +26,11 @@
       "competition",
       "tiny_papers",
       "blogpost",
+      "student_abstract",
+      "consortium",
+      "demo",
+      "iaai",
+      "eaai",
       "other",
       "unknown"
     ],
@@ -357,7 +362,7 @@
       "mode": "native",
       "example": "trust source:PMLR",
       "display": null,
-      "message": "`source:` is Google Scholar syntax — write `venue:NeurIPS`, `venue:ICLR` or `venue:ICML` (Scholar-mode input translates it automatically).",
+      "message": "`source:` is Google Scholar syntax — write `venue:NeurIPS`, `venue:ICLR`, `venue:ICML`, `venue:AAAI`, `venue:AIES`, `venue:FAccT` or `venue:IASEAI` (Scholar-mode input translates it automatically).",
       "fix": "trust venue:ICML",
       "note": null
     },
@@ -397,7 +402,7 @@
       "mode": "native",
       "example": "trust track:poster",
       "display": null,
-      "message": "`poster` is not a track (values take no wildcards or quotes) — use one of `main`, `datasets_benchmarks`, `position`, `workshop`, `competition`, `tiny_papers`, `blogpost`, `other`, `unknown`.",
+      "message": "`poster` is not a track (values take no wildcards or quotes) — use one of `main`, `datasets_benchmarks`, `position`, `workshop`, `competition`, `tiny_papers`, `blogpost`, `student_abstract`, `consortium`, `demo`, `iaai`, `eaai`, `other`, `unknown`.",
       "fix": "trust track:main",
       "note": null
     },
