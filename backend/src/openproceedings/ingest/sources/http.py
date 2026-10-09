@@ -462,9 +462,9 @@ class HttpClient[T]:
             return "truncated_no_length" if by_length else "truncated"
         if self.policy.expect == "xml":
             # whole when the body ends with its root element's closing tag (`</OAI-PMH>`); a cut-off body never does
-            root = _XML_ROOT.match(response.body.lstrip()[:4096])
+            root = _xml_root(response.body)
             tail = response.body.rstrip()[-256:]
-            return None if root and tail.endswith(b"</" + root.group(1) + b">") else "truncated"
+            return None if root and tail.endswith(b"</" + root + b">") else "truncated"
         if not is_json(response):
             return None  # not JSON at all (a challenge page): the source judges it
         try:
@@ -578,8 +578,28 @@ def PageCache(root: Path) -> ResponseCache[Page]:
 
 PROCEEDINGS = Policy(hosts=frozenset())
 
-# an XML document's root element, after the declaration, processing instructions and comments before it
-_XML_ROOT = re.compile(rb"(?:(?:<\?.*?\?>|<!--.*?-->)\s*)*<([A-Za-z_][\w.:-]*)[\s>/]", re.DOTALL)
+_XML_ROOT = re.compile(rb"<([A-Za-z_][\w.:-]*)[\s>/]")
+
+
+def _xml_root(body: bytes) -> bytes | None:
+    """The name of an XML document's root element, after a BOM, the declaration, processing instructions and
+    comments before it (a linear scan over the first 4096 bytes, never a backtracking pattern: the body is
+    untrusted server output), or None when there is none."""
+    rest = body[:4096].removeprefix(b"\xef\xbb\xbf").lstrip()
+    while True:
+        if rest.startswith(b"<?"):
+            end = rest.find(b"?>", 2)
+            cut = end + 2
+        elif rest.startswith(b"<!--"):
+            end = rest.find(b"-->", 4)
+            cut = end + 3
+        else:
+            break
+        if end < 0:
+            return None
+        rest = rest[cut:].lstrip()
+    m = _XML_ROOT.match(rest)
+    return m.group(1) if m else None
 
 
 class Fetcher(HttpClient[Page]):

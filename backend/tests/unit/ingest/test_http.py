@@ -6,6 +6,7 @@ back-off, what is cached and how) stays in `test_fetch.py` and `test_openreview_
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ from openproceedings.ingest.sources.http import (
     Response,
     RetriesExhausted,
     SourceError,
+    _xml_root,
     canonical,
 )
 from openproceedings.ingest.sources.openreview_client import (
@@ -229,3 +231,30 @@ def test_html_rule_unchanged_for_the_default_fetcher(tmp_path: Path) -> None:
     t = FakeTransport({url: response("<html><body>ok</body></html>")})
     f, _ = fetcher(tmp_path, t, frozenset({"ojs.aaai.org"}), min_interval=0.0)
     assert f.get(url).ok
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "\ufeff" + WHOLE,
+        '<oai:OAI-PMH xmlns:oai="urn:x"><oai:ListRecords/></oai:OAI-PMH>',
+        '<?xml version="1.0"?>' + "<?a b?>" * 50 + "<!-- c -->" * 50 + OAI_BODY,
+    ],
+)
+def test_xml_bom_prefixed_and_namespaced_and_long_prolog_are_whole(tmp_path: Path, body: str) -> None:
+    f, _ = _xml_fetcher(tmp_path, body)
+    assert f.get(OAI).ok
+
+
+@pytest.mark.parametrize("prolog", ["<?xml version='1.0'", "<!-- never closed"])
+def test_xml_unterminated_prolog_is_truncated(tmp_path: Path, prolog: str) -> None:
+    f, _ = _xml_fetcher(tmp_path, prolog + OAI_BODY)
+    with pytest.raises(RetriesExhausted):
+        f.get(OAI)
+
+
+@pytest.mark.parametrize("body", [b"<?a?>" * 800 + b"x", b"<!--a-->" * 500 + b"x", b"<?" + b"?" * 4000])
+def test_xml_root_scan_is_linear_on_adversarial_prologs(body: bytes) -> None:
+    start = time.perf_counter()
+    assert _xml_root(body) is None
+    assert time.perf_counter() - start < 0.5
