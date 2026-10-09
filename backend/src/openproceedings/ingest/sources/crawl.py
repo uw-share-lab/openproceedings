@@ -5,7 +5,7 @@
 time per source: an exclusive lock on `<cache>/<source>/.lock`) and, when the whole listing is cached, writes
 its crawl marker. A dry run reads only the index pages (through the cache) and reports what a crawl would
 fetch; it writes no marker. `--offline` crawls from the cache alone. `replay_all` re-runs every marked crawl of every source
-(OpenReview API v2, then v1, then ICLR, NeurIPS, PMLR and dblp; `common.Crawls`) with no transport at all, so a snapshot
+(OpenReview API v2, then v1, then ICLR, NeurIPS, PMLR, dblp and OJS; `common.Crawls`) with no transport at all, so a snapshot
 never fetches.
 """
 
@@ -238,12 +238,16 @@ def ingest_ojs(
     if dry_run:
         plans = []
         for j in wanted:
-            first = f.get(ojs.oai_url(j))
-            _records, token = ojs.parse_page(first.text) if first.ok else ([], None)
+            url = ojs.oai_url(j)
+            cached = f.is_cached(url)  # before the get, which caches the page
+            first = f.get(url)
+            if not first.ok:
+                raise MinerError(f"{url} answered HTTP {first.status}", reason="no_listing")
+            _records, token = ojs.parse_page(first.text)
             plans.append(
                 {
                     "journal": j,
-                    "first_page_cached": f.is_cached(ojs.oai_url(j)),
+                    "first_page_cached": cached,
                     "more_pages": token is not None,
                 }
             )
