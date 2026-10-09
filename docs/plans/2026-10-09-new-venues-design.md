@@ -78,11 +78,21 @@ counted (owner decision 4).
 **Status:** `accepted` for every record of these sources (none publishes rejected submissions); evidence names
 the source and table row.
 
-**Abstract precedence and `abstract_source`:**
+**Abstract precedence and `abstract_kind`:** (named `abstract_kind`, not `abstract_source`: the API's `Hit`, the CSV
+column and JSONL key `abstract_source` and the RIS `N1 - Abstract source:` line already name each abstract's claim
+source, e.g. `pmlr`; once `openalex` is a claim source and an `ORIGIN_NAMES` entry, exports name it with no new
+column.)
 - An official abstract (OJS, PMLR, facctconference.org, OpenReview) always wins; OpenAlex fills only a record
   whose abstract is still `null`, and only for AAAI, AIES and FAccT. NeurIPS, ICLR and ICML keep spec 01's rule.
-- `abstract_source` (`official` | `openalex` | `none`) is a **derived** field like `venue_name`: computed from the
-  abstract's claim, never stored in `records.jsonl`, so snapshot hashes and `content_hash` don't depend on it.
+- `abstract_kind` (`official` | `openalex` | `none`) is a **derived** field like `venue_name`: computed from the
+  abstract's claims (`dedup.abstract_claim`: `none` without an abstract; `openalex` only when at least one claim
+  holds the abstract and every such claim is `openalex`; else `official`, so a fixture without provenance is
+  `official`), never stored in `records.jsonl`, so snapshot hashes and `content_hash` don't depend on it.
+  `op snapshot diff` compares it on both sides, since a same-text change of source changes no hash.
+- The `abstract_kind:` filter needs index schema 4 (a `SchemaForm` flag, a per-engine facet set; a query naming
+  it on a schema-3 index is a 422, never a 500; schema 2 retired unless a search record pins it, per the
+  index-versioning skill), so it ships in milestone C with OpenAlex: before then every value is `official` or
+  `none`.
 - OpenAlex abstracts pass the same hygiene as every abstract: control characters replaced, the leading/trailing
   `…` rejection, the 20,000-character and combining-mark caps.
 - `RECORD_SCHEMA_VERSION` 5 → 6 (new enum values).
@@ -152,11 +162,11 @@ pinned by tests against recorded pages; an unlisted unit (section, key, volume, 
 ## Query, API, exports, frontend
 
 - **Spec 02:** `venue:` accepts the four venues (vocabulary from `vocab`); `track:` accepts the five new values;
-  a new filter field `abstract_source:` (`official` | `openalex` | `none`) filters and never matches text
+  a new filter field `abstract_kind:` (`official` | `openalex` | `none`) filters and never matches text
   (guarantee 2), has no default, and is a fast field in the index with the same rule in the reference matcher.
-- **Spec 04:** `abstract_source` on paper and search-hit payloads; OpenAPI, frontend types and fixtures
-  regenerated. RIS: `N1  - Abstract source: OpenAlex (W…)` on OpenAlex abstracts only. CSV: an
-  `abstract_source` column. BibTeX unchanged. `venue_name` covers the new venues through `CONFERENCES`.
+- **Spec 04:** `abstract_kind` on paper and search-hit payloads; OpenAPI, frontend types and fixtures
+  regenerated. RIS: the existing `N1  - Abstract source:` line names OpenAlex and the work's URL; CSV and JSONL: the
+  existing `abstract_source` column says `openalex`, and a new `abstract_kind` column follows the last one. BibTeX unchanged. `venue_name` covers the new venues through `CONFERENCES`.
 - **Spec 05:** seven venue chips; the coverage page counts official / OpenAlex / missing abstracts per
   venue-year, with copy on what OpenAlex is and why it is a fallback; an "abstract via OpenAlex" label on the
   paper page; CV-7's venue-span note updated.
@@ -186,7 +196,7 @@ Tests never reach a live service (recorded fixtures under `backend/tests/fixture
 - OpenAlex: inverted-index rebuild (repeats, gaps); DOI and title rules; ambiguous refused; never overwrites an
   official abstract; never touches NeurIPS/ICLR/ICML; hygiene.
 - A property test: the official abstract wins over OpenAlex whatever the claim order.
-- Query: golden cases for `abstract_source:` and the new `venue:`/`track:` values; reference matcher and Tantivy
+- Query: golden cases for `abstract_kind:` and the new `venue:`/`track:` values; reference matcher and Tantivy
   agree; differential and property generators include the new field and values.
 - API/exports: regenerated OpenAPI and fixtures; the RIS `N1` note; the CSV column; `venue_name` per era.
 - Frontend: coverage-page and paper-label component tests; e2e for the chips; visual baselines refreshed.
@@ -196,12 +206,13 @@ Tests never reach a live service (recorded fixtures under `backend/tests/fixture
 
 ## Milestones (one PR each, focused reviewer per task, full review gate per milestone)
 
-- **A** — decision-049, schema 6, vocab and tracks, `abstract_source` (derived field, filter, API, exports,
-  coverage, frontend), `sources/ojs.py` with `ojs_sections.toml`, the research note. Brings AAAI 2010+,
-  AIES 2024+ and IASEAI 2026 (~25.5k papers).
+- **A** — decision-049, record schema 6, vocab, tracks and native ids, the `ojs` claim source, the HTTP
+  layer's XML responses, `sources/ojs.py` with `ojs_sections.toml`, `op ingest ojs`, the research note, docs.
+  Brings AAAI 2010+, AIES 2024+ and IASEAI 2026 (~25.5k papers). The synthetic test corpus is pinned to the
+  pre-change venue and track tuples so contract fixtures and benchmarks don't reshuffle.
 - **B** — dblp AAAI 1980–2008 (`dblp_aaai.toml`), `sources/crossref.py` with `acm_proceedings.toml`, PMLR v81,
   `sources/facct_site.py`.
-- **C** — `sources/openalex.py`, the OpenAlex audit, snapshot and index build, coverage, benchmarks, TASK-202
+- **C** — `abstract_kind` (derived field, index schema 4, the `abstract_kind:` filter, API, coverage, frontend), `sources/openalex.py`, the OpenAlex audit, snapshot and index build, coverage, benchmarks, TASK-202
   update, the IASEAI 2027 follow-up task, every spec and README brought to as-built.
 
 ## Risks
