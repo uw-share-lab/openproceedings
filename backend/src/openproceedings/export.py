@@ -101,6 +101,7 @@ ORIGIN_NAMES = {
     "pmlr": "PMLR",
     "iclr_archive": "ICLR archive",
     "icml_site": "ICML conference site",
+    "ojs": "AAAI Digital Library",
 }
 _SOURCE = "abstract_source"  # the key `entries` adds to each record it hands a writer
 _WITHHELD = "abstract_withheld"  # likewise: True when the record's abstract is withheld

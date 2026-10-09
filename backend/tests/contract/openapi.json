@@ -13,7 +13,8 @@
                   "iclr_proceedings",
                   "pmlr",
                   "iclr_archive",
-                  "icml_site"
+                  "icml_site",
+                  "ojs"
                 ],
                 "type": "string"
               },
@@ -34,6 +35,7 @@
               "pmlr",
               "dblp",
               "icml_site",
+              "ojs",
               "ris"
             ],
             "title": "Source",
@@ -226,6 +228,7 @@
               "pmlr",
               "dblp",
               "icml_site",
+              "ojs",
               "ris"
             ],
             "title": "Source",
@@ -3934,6 +3937,7 @@
                 "pmlr",
                 "dblp",
                 "icml_site",
+                "ojs",
                 "ris"
               ],
               "type": "string"

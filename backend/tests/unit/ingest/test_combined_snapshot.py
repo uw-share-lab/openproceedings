@@ -49,7 +49,9 @@ BUILT = datetime(2026, 9, 28, tzinfo=UTC)
 # id, decision-047) changed the manifest's record_schema_version, from e0caaefc…, and each proceedings listing's
 # report gained `abstract_short` (abstracts under 5 words: the scrubbed fixtures' synthetic ones); no record changed.
 SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bdd"
-FILES_HASH = "964d2bd73eb5960bb000925f0eed2aa18a50ec198d87e67ee2c40f640ff3a887"
+# Task 2 of the new-venues milestone changed FILES_HASH: record schema v6 (the `ojs` source, decision-049) changed the
+# manifest's record_schema_version, from 964d2bd7…; with it set back to "5" the files hash to that (checked 2026-10-09).
+FILES_HASH = "7d722589b19c3a79c4ca2b49e1f29e362e9bb95051e8d0f3a1498f873a27d100"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:

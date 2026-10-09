@@ -39,6 +39,8 @@ SOURCE_STATUSES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     # ICML 1988-2012: published papers only (decision-047), and an official ICML page's abstract of one (TASK-206)
     "dblp": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "icml_site": (ACCEPTED_ONLY, ACCEPTED_ONLY),
+    # AAAI 2010+, AIES 2024+, IASEAI 2026+ from ojs.aaai.org: published papers only (decision-049)
+    "ojs": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "ris": (EVERY_STATUS, ACCEPTED_ONLY),
 }
 if set(SOURCE_STATUSES) != set(get_args(Source)):  # a new claim source needs a row before it can build
