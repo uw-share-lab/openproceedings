@@ -1,0 +1,211 @@
+# AAAI, AIES, FAccT and IASEAI — design
+
+Status: **approved in conversation, written spec for owner review** · 2026-10-09 · Decision: decision-049 (to
+be written in milestone A) · Supersedes: spec 00 §Scope's venue list and the "later extension" line · Sources
+checked live on 2026-10-09 (facts recorded in `docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md`,
+milestone A)
+
+## Owner decisions (2026-10-09)
+
+1. AAAI, AIES, FAccT and IASEAI join the corpus scope.
+2. **Every paper of every year** (decision-047's full-history rule): AAAI from 1980, AIES and FAccT from 2018,
+   IASEAI from its first edition with papers (2026; IASEAI '25 published none).
+3. **Abstracts are searched for every paper that has one.** Precedence: the official source's abstract, else
+   OpenAlex's (new venues only), else `null`. The abstract's origin is labelled, filterable and counted.
+4. **Everything is indexed with its real track**; the existing default (`NOT track:workshop`, `status:accepted`)
+   is unchanged, so only workshops leave the default result set.
+5. IAAI and EAAI, printed in the AAAI volumes, are `venue:AAAI` with tracks `iaai` and `eaai`.
+6. Approach: one source module per official host plus an OpenAlex abstract-fill step (approach 1 of 3; dblp
+   for everything and OpenAlex for everything were rejected: the dblp release lags new years and has no AAAI
+   sections, and OpenAlex has truncated and duplicate DOIs and no tracks).
+7. TASK-202 (the scheduled crawl) covers every source in scope; all docs are updated as built.
+
+## Where each venue-year comes from
+
+| Venue | Years | Paper list | Abstract | Papers (live, 2026-10-09) |
+|---|---|---|---|---|
+| AAAI | 1980–2008 (none held 1981, 1985, 1989, 2001, 2003, 2009) | pinned dblp release, `conf/aaai/<year>` main keys | OpenAlex, else `null` (aaai.org has none and sets `Crawl-delay: 43200`) | ~3.7k (dblp main keys 28,802 over 1980–2026, minus 2010+) |
+| AAAI | 2010–2026 (Vol. 24–40) | ojs.aaai.org OAI-PMH, journal `AAAI` | official (`dc:description`) | 25,135 on the issue pages (IAAI and EAAI included) |
+| AIES | 2018–2023 | Crossref, ACM proceedings DOIs 10.1145/3278721, 3306618, 3375627, 3461702, 3514094, 3600211 | OpenAlex, else `null` (Crossref holds none; ACM DL is Cloudflare-challenged and excluded) | 78, 91, 76, 114, 115, 101 |
+| AIES | 2024–2025 (Vol. 7–8) | ojs.aaai.org OAI-PMH, journal `AIES` | official | 170, 279 (excl. front matter) |
+| AIES | 2026 | not yet published (Malmö, 12–14 Oct 2026) | — | — |
+| FAccT | 2018 (FAT*) | PMLR v81 | official (PMLR page) | 17 (preface and two keynotes excluded) |
+| FAccT | 2019–2026 | Crossref, ACM proceedings DOIs 10.1145/3287560, 3351095, 3442188, 3531146, 3593013, 3630106, 3715275, 3805689 | official from facctconference.org for 2022, 2025, 2026; else OpenAlex; else `null` | 41, 95 (≈27 tutorial/CRAFT entries to exclude), 82, 181, 153, 167, 206, 314 |
+| IASEAI | 2026 (Vol. 2) | ojs.aaai.org OAI-PMH, journal `IASEAI` | official | 57 archival (35 non-archival have no findable listing) |
+| IASEAI | 2027 | OpenReview `IASEAI.org/2027/Conference` once decisions (20 Nov 2026) are public | official (OpenReview) | — (follow-up task) |
+
+About 31k new records; the corpus grows from ~141k to ~172k.
+
+## Data model
+
+**Venues** (`vocab.CONFERENCES`, which gives `venue_name`, export strings and year floors):
+
+| `venue` | Name | Acronym eras | Floor |
+|---|---|---|---|
+| `AAAI` | AAAI Conference on Artificial Intelligence | 1980 `AAAI` | 1980 |
+| `AIES` | AAAI/ACM Conference on AI, Ethics, and Society | 2018 `AIES` | 2018 |
+| `FAccT` | ACM Conference on Fairness, Accountability, and Transparency | 2018 `FAT*`, 2021 `FAccT` | 2018 |
+| `IASEAI` | International Association for Safe and Ethical AI Conference | 2025 `IASEAI` | 2025 |
+
+**Native ids** in `op:<venue>:<year>:<native>`: `ojs-<article id>` (ojs.aaai.org article ids are unique across
+its journals), `doi-<suffix>` for ACM (`doi-3593013.3594011`), `dblp-<key>` (AAAI 1980–2008, the key after
+`conf/aaai/`), `pmlr-v81-<key>`. `urls.proceedings_native` gains the OJS and DOI rules.
+
+**No overlap between sources:** each venue-year has exactly one paper-list source (table above), so no new
+cross-source dedup is needed. The existing dedup still runs over the whole snapshot.
+
+**Tracks:** new `Track` values `student_abstract`, `consortium` (doctoral and undergraduate consortia),
+`demo`, `iaai`, `eaai` (the last two valid only for AAAI; the record refuses them on another venue). Mapping:
+
+| `track` | AAAI | AIES | FAccT | IASEAI |
+|---|---|---|---|---|
+| `main` | technical tracks; special tracks (AI for Social Impact, Safe/Robust/Responsible AI, AI Alignment, focus areas); Journal Track; dblp main keys | full papers (OJS `FUL`, `A25-1..3`); all ACM papers but `not_paper` | all papers but `not_paper` | Main Track |
+| `student_abstract` | Student Abstract and Poster Program | student abstracts (`STU`, `A25-SA*`) | — | — |
+| `consortium` | Doctoral Consortium, Undergraduate Consortium | — | — | — |
+| `demo` | Demonstration Track | — | — | — |
+| `iaai` / `eaai` | IAAI and EAAI sections | — | — | — |
+| `other` | Senior Member Presentations, New Faculty Highlights, Emerging Trends, any recognised section not above (label kept in evidence) | — | — | — |
+| `workshop` | dblp workshop keys (`2015ethics`, `2017w`, `2021safeai`, …) | — | — | — |
+
+`not_paper` entries (front matter, prefaces, keynotes, tutorials, CRAFT sessions) are counted, never records.
+
+**Status:** `accepted` for every record of these sources (none publishes rejected submissions); evidence names
+the source and table row.
+
+**Abstract precedence and `abstract_source`:**
+- An official abstract (OJS, PMLR, facctconference.org, OpenReview) always wins; OpenAlex fills only a record
+  whose abstract is still `null`, and only for AAAI, AIES and FAccT. NeurIPS, ICLR and ICML keep spec 01's rule.
+- `abstract_source` (`official` | `openalex` | `none`) is a **derived** field like `venue_name`: computed from the
+  abstract's claim, never stored in `records.jsonl`, so snapshot hashes and `content_hash` don't depend on it.
+- OpenAlex abstracts pass the same hygiene as every abstract: control characters replaced, the leading/trailing
+  `…` rejection, the 20,000-character and combining-mark caps.
+- `RECORD_SCHEMA_VERSION` 5 → 6 (new enum values).
+
+## Sources
+
+All sources use the shared HTTP layer (`ingest/sources/http.py`): polite pacing, cache, robots respected.
+Every claim records source, URL, fetch time and evidence. Every table is data loaded and validated by code and
+pinned by tests against recorded pages; an unlisted unit (section, key, volume, DOI prefix) stops the crawl.
+
+### 1. `sources/ojs.py` — ojs.aaai.org (AAAI 2010+, AIES 2024+, IASEAI 2026+)
+- OAI-PMH `ListRecords`, `metadataPrefix=oai_dc`, per journal (`/index.php/{AAAI,AIES,IASEAI}/oai`), following
+  `resumptionToken`. robots.txt disallows only `/cache/`; the server is slow (2–3 s a page), so pacing is
+  conservative.
+- Fields: `dc:title`; `dc:creator` in order; `dc:description` → abstract; the 10.1609 DOI → `urls.doi`; the
+  article and PDF links; `dc:source` → volume and issue. Year from the volume (AAAI: volume − 1986; AIES:
+  volume + 2017; IASEAI: volume + 2024), checked against the table.
+- Track from the record's `setSpec` (one section each) through `ingest/ojs_sections.toml`: per journal,
+  volume and section, the track, a verified count and the verification date. An unlisted section stops the
+  crawl. Front-matter sections (`FMT`) and deleted headers are counted, never records.
+- Each volume's record count must equal the table's verified count. The ~1,050-record gap between
+  `completeListSize` (26,185) and the issue pages (25,135) is reconciled while the table is built (deleted
+  headers, front matter, or a documented cause); none ships unexplained.
+- An article page is fetched only if a record lacks a required field.
+
+### 2. dblp release, widened — AAAI 1980–2008
+- `sources/dblp_xml.py`'s one streaming pass also extracts `conf/aaai/` from the already-pinned release
+  (`10.4230/dblp.xml.2026-10-03`); no new download. dblp.org is still never fetched.
+- `ingest/dblp_aaai.toml`: per year the main-conference keys (split years 1986, 1991, 1994, 1996 have `-1`/`-2`
+  keys) with verified counts; workshop keys → `workshop`; `[[not_paper]]` rows (invited talks and similar)
+  → counted. An unlisted key in 1980–2008 stops the ingest. dblp's AAAI 2010+ keys are never read (OJS owns
+  those years), nor `conf/iaai`/`conf/eaai` (separate proceedings before 2010).
+- Fields as for ICML: title (closing period dropped), authors (homonym numbers dropped), DOI where dblp has
+  one, `urls.proceedings` the dblp record page (linked, never fetched). No abstracts.
+
+### 3. `sources/crossref.py` — ACM proceedings (FAccT 2019–2026, AIES 2018–2023)
+- Reads the proceedings record `api.crossref.org/works/10.1145/<toc>` (title, ISBN, date), then pages
+  `/works?filter=prefix:10.1145,from-pub-date:…,until-pub-date:…&cursor=*`, keeping DOIs that extend
+  `10.1145/<toc>.`. Sequential, with a `mailto` in the User-Agent (parallel requests get HTTP 429).
+- `ingest/acm_proceedings.toml`: per venue and year the proceedings DOI, the date window, the verified count and
+  `[[not_paper]]` rows (FAccT 2020's tutorials and CRAFT sessions, listed by DOI). A count mismatch stops it.
+- Fields: title, authors in order, DOI, `urls.proceedings` the DOI link. No abstracts (Crossref holds none for
+  these venues; checked on all 1,341 FAccT DOIs and 18 sampled AIES DOIs).
+
+### 4. PMLR v81 — FAccT 2018
+- A row in `ingest/pmlr_volumes.toml` (venue `FAccT`, year 2018, track `main`, 17 papers; preface and two
+  keynotes excluded as `not_paper`). The existing crawler supplies abstracts.
+
+### 5. `sources/facct_site.py` — official FAccT abstracts (2022, 2025, 2026)
+- `ingest/facct_site.toml` names each page with its verified row count: `2022/acceptedpapers.html`,
+  `static/docs/facct2025-final.csv` (TYPE, ID, ABSTRACT, AUTHOR, TITLE, URL), `static/docs/facct2026-final.csv`
+  (Paper ID, Title, Authors, Abstract). robots.txt allows everything.
+- Attached by DOI where the page has one (2025), else by exact title key with exactly one entry and one record
+  sharing it (the `icml_sites` rule). Unmatched (2026's non-archival rows) and ambiguous entries are counted
+  (`site_unmatched`, `site_ambiguous`), never forced.
+
+### 6. `sources/openalex.py` — abstract fill (AAAI, AIES, FAccT)
+- Only records still with `abstract = null` after every official source.
+- Lookup by DOI in batches (`filter=doi:a|b|…`, ≤ 50); a dblp AAAI record without a DOI by exact title key +
+  year + venue, attached only when exactly one OpenAlex work matches. A match whose DOI disagrees with the
+  record's is refused and counted.
+- Text rebuilt from `abstract_inverted_index` in position order. The crawl writes an extract (work id, DOI,
+  abstract, fetch time) that a snapshot build replays without refetching, as the dblp extract is replayed.
+- Claim: source `openalex`, url the work's API URL, evidence naming the work id and the match rule.
+- Credentials (`mailto` or API key) from `.env` if OpenAlex requires them; none in code or logs.
+
+## Query, API, exports, frontend
+
+- **Spec 02:** `venue:` accepts the four venues (vocabulary from `vocab`); `track:` accepts the five new values;
+  a new filter field `abstract_source:` (`official` | `openalex` | `none`) filters and never matches text
+  (guarantee 2), has no default, and is a fast field in the index with the same rule in the reference matcher.
+- **Spec 04:** `abstract_source` on paper and search-hit payloads; OpenAPI, frontend types and fixtures
+  regenerated. RIS: `N1  - Abstract source: OpenAlex (W…)` on OpenAlex abstracts only. CSV: an
+  `abstract_source` column. BibTeX unchanged. `venue_name` covers the new venues through `CONFERENCES`.
+- **Spec 05:** seven venue chips; the coverage page counts official / OpenAlex / missing abstracts per
+  venue-year, with copy on what OpenAlex is and why it is a fallback; an "abstract via OpenAlex" label on the
+  paper page; CV-7's venue-span note updated.
+
+## Evaluation and ops
+
+- **Spec 07:** `op eval coverage --check` gains every new venue-year at its table count; the gate checks each
+  count. An audit compares OpenAlex abstracts with official ones where both exist (FAccT 2022/2025/2026, AIES
+  2024–2025, AAAI 2010+ sample) and reports the exact and near-exact match rates in `docs/results/`.
+- **Spec 08:** `op crawl` targets `ojs`, `crossref`, `facct-site`, `openalex`; a full run orders the existing
+  sources, then `ojs`, `crossref`, `facct-site`, and `openalex` last.
+- **TASK-202:** the schedule runs every source in the tables; a venue's first appearance is not a per-venue-year
+  drop; a new venue-year at an existing source (AIES 2026 on OJS) needs a table row, not code.
+- **Follow-up task:** IASEAI 2027 via OpenReview after 20 Nov 2026, if accepted papers are public.
+
+## Testing
+
+Tests never reach a live service (recorded fixtures under `backend/tests/fixtures/`).
+- OJS: recorded OAI-PMH pages for 2010 (three issues), 2019 (one issue), 2026 (many sections), AIES and IASEAI;
+  unmapped section and count mismatch stop; resumption token followed; deleted and front-matter records
+  counted; a missing `dc:description` gives `null`.
+- Tables (`ojs_sections`, `dblp_aaai`, `acm_proceedings`, `facct_site`, the PMLR v81 row) loaded, validated and
+  pinned against recorded pages.
+- dblp: a synthetic XML with main, split-year, workshop, `not_paper` and an unlisted key.
+- Crossref: recorded cursor pages; foreign DOIs dropped; `not_paper` excluded; count mismatch stops.
+- FAccT site: DOI join, title-key join, ambiguous and unmatched counted.
+- OpenAlex: inverted-index rebuild (repeats, gaps); DOI and title rules; ambiguous refused; never overwrites an
+  official abstract; never touches NeurIPS/ICLR/ICML; hygiene.
+- A property test: the official abstract wins over OpenAlex whatever the claim order.
+- Query: golden cases for `abstract_source:` and the new `venue:`/`track:` values; reference matcher and Tantivy
+  agree; differential and property generators include the new field and values.
+- API/exports: regenerated OpenAPI and fixtures; the RIS `N1` note; the CSV column; `venue_name` per era.
+- Frontend: coverage-page and paper-label component tests; e2e for the chips; visual baselines refreshed.
+- Real data (local): a live crawl; snapshot build; `op snapshot diff` (additions only, no existing record
+  changed); index build; full-corpus `op index parity`; `op eval coverage --check`; the OpenAlex audit; spec 03
+  benchmarks at ~172k records (a budget miss becomes its own task).
+
+## Milestones (one PR each, focused reviewer per task, full review gate per milestone)
+
+- **A** — decision-049, schema 6, vocab and tracks, `abstract_source` (derived field, filter, API, exports,
+  coverage, frontend), `sources/ojs.py` with `ojs_sections.toml`, the research note. Brings AAAI 2010+,
+  AIES 2024+ and IASEAI 2026 (~25.5k papers).
+- **B** — dblp AAAI 1980–2008 (`dblp_aaai.toml`), `sources/crossref.py` with `acm_proceedings.toml`, PMLR v81,
+  `sources/facct_site.py`.
+- **C** — `sources/openalex.py`, the OpenAlex audit, snapshot and index build, coverage, benchmarks, TASK-202
+  update, the IASEAI 2027 follow-up task, every spec and README brought to as-built.
+
+## Risks
+
+- The OJS count gap (above) must be explained before counts are pinned.
+- AAAI section names change by year (386 sets; `AI24-n` and `AI26-n` mean different tracks), so the section
+  table is hand-built and the largest review surface.
+- OpenAlex abstracts are aggregated, not publisher-deposited; the audit measures their fidelity, and the label
+  and filter let a review exclude them.
+- Performance at ~172k records against spec 03's budgets (TASK-196's p95 history).
+- Licence: OJS pages state AAAI copyright; ACM papers carry mixed CC and ACM licences; OpenAlex data is CC0.
+  Indexing titles and abstracts with links back is the posture already used for PMLR and NeurIPS; the
+  takedown process (spec 08) covers all venues.
