@@ -914,12 +914,17 @@ def test_the_scope_names_each_dblp_venue_by_its_own_listings() -> None:
     doi = "https://doi.org/10.4230/dblp.xml.2026-10-03"
     manifest = {"sources": {"dblp": {"listings": [
         {"venue": "ICML", "year": 1990, "listing": doi, "records": 49},
-        {"venue": "AAAI", "year": 1986, "listing": doi, "records": 7},
+        {"venue": "AAAI", "year": 1986, "listing": doi, "records": 7, "skipped": {"not_paper": 11}},
     ]}}}  # fmt: skip
     text = "\n".join(_scope(cov, manifest))
     assert "- ICML 1990–1990: from the pinned dblp snapshot release" in text and "ICML 1986" not in text
     assert "- AAAI 1986–1986: from the pinned dblp snapshot release" in text and "decision-049" in text
     assert "Its 7 records have no abstract (dblp holds none)." in text and "of its 49 records" in text
+    assert "student abstracts, the doctoral consortium, demonstrations, IAAI papers" in text
+    assert (
+        "11 entries the proceedings print that are not papers (invited talks and panels) are counted, not indexed."
+        in text
+    )
 
 
 def test_the_scope_says_what_the_crossref_years_rest_on_and_that_aies_has_no_sections() -> None:
@@ -927,17 +932,23 @@ def test_the_scope_says_what_the_crossref_years_rest_on_and_that_aies_has_no_sec
 
     cov = {"venue_years": [{"venue": "FAccT", "year": 2022, "records": 1, "tracks": [{"track": "main"}]}]}
     manifest = {"sources": {"crossref": {"listings": [
-        {"venue": "AIES", "year": 2018, "records": 78},
+        {"venue": "AIES", "year": 2018, "records": 78, "skipped": {"not_paper": 2}},
         {"venue": "AIES", "year": 2019, "records": 93},
         {"venue": "FAccT", "year": 2022, "records": 181, "abstract_attached": 169},
         {"venue": "FAccT", "year": 2023, "records": 153},
     ]}}}  # fmt: skip
     text = "\n".join(_scope(cov, manifest))
     assert (
-        "- AIES 2018–2019: from Crossref's records of the ACM proceedings (decision-049): 171 records, no abstracts (title-only);"
+        "- AIES 2018–2019: from Crossref's records of the ACM proceedings (decision-049): 171 records, no abstracts (title-only)."
         in text
     )
-    assert "Crossref carries no section data, so student abstracts and keynotes are in `main`" in text
+    assert (
+        "Crossref carries no section data, so each paper's track comes from its page position in the "
+        "proceedings: student abstracts are `student_abstract`, which a default search leaves out, and the rest "
+        "`main`. 2 entries the proceedings print that are not papers (keynotes) are counted, not indexed."
+        in text
+    )
+    assert "TASK-" not in text and "not-paper rows" not in text
     assert (
         "- FAccT 2022–2023: from Crossref's records of the ACM proceedings (decision-049): 334 records, 169 with"
         in text

@@ -323,8 +323,9 @@ warnings, the save's index check), the design doc says so; its open questions li
    report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>."*
    The coverage report this text cites states each venue's indexed years (AAAI from 1980, with a "none in" list of the years it was not held; AIES from 2018
    and FAccT from 2018; IASEAI 2026; milestone B, decision-049), where the dblp, Crossref and FAccT years come from
-   (AAAI 1980–2008 has no abstracts; AIES 2018–2023 sits in one `main` track because Crossref carries no section data, so its
-   student abstracts and keynotes are in `main`; FAccT's abstracts come from the official pages of 2022, 2025 and 2026
+   (AAAI 1980–2008 has no abstracts, and its records' tracks come from the sections of the official contents pages;
+   Crossref carries no section data, so each AIES 2018–2023 paper's track comes from its page position, student
+   abstracts being `student_abstract`; each venue's entries that are not papers are counted, not indexed; FAccT's abstracts come from the official pages of 2022, 2025 and 2026
    only), and the [new-venues design](../plans/2026-10-09-new-venues-design.md) plans the OpenAlex abstract label and the
    `abstract_kind:` facet (milestone C; neither is built) and, for ICML 1988–2012, that the
    records reflect the pinned dblp release (its DOI) and archived official pages, not a crawl on the window's

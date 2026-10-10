@@ -479,7 +479,10 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
         out.append(
             f"- AAAI {held[0]}–{held[-1]}: from the pinned dblp snapshot release {', '.join(releases)} (a "
             "bibliography read from one pinned file; decision-049). "
-            f"Its {sum(int(x['records']) for x in aaai):,} records have no abstract (dblp holds none)."
+            f"Its {sum(int(x['records']) for x in aaai):,} records have no abstract (dblp holds none). Each "
+            "record's track comes from the section the official AAAI contents page prints it in: student "
+            "abstracts, the doctoral consortium, demonstrations, IAAI papers and the other non-technical "
+            f"sections have their own tracks, which a default search leaves out.{_not_indexed(aaai, 'invited talks and panels')}"
         )
     crossref = manifest.get("sources", {}).get("crossref", {}).get("listings", [])
     for venue in sorted({str(x["venue"]) for x in crossref}):
@@ -491,14 +494,27 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
             f"{attached:,} with an abstract, each from an official FAccT page (only 2022, 2025 and 2026 have "
             "one); the rest are title-only"
             if venue == "FAccT"
-            else "no abstracts (title-only); Crossref carries no section data, so student "
-            "abstracts and keynotes are in `main` (OJS labels student abstracts from 2024)"
+            else "no abstracts (title-only). Crossref carries no section data, so each paper's track comes from "
+            "its page position in the proceedings: student abstracts are `student_abstract`, which a default "
+            "search leaves out, and the rest `main`"
         )
+        kinds = "tutorials and CRAFT sessions" if venue == "FAccT" else "keynotes"
         out.append(
             f"- {venue} {held[0]}–{held[-1]}: from Crossref's records of the ACM proceedings (decision-049): "
-            f"{records:,} records, {what}."
+            f"{records:,} records, {what}.{_not_indexed(mine, kinds)}"
         )
     return out
+
+
+def _not_indexed(listings: list[Mapping[str, Any]], kinds: str) -> str:
+    """The entries the listings counted as no papers (the tables' not-paper rows): printed in the proceedings,
+    counted, never indexed, so a reviewer can account for them."""
+    n = sum(int(x.get("skipped", {}).get("not_paper", 0)) for x in listings)
+    return (
+        f" {n:,} entries the proceedings print that are not papers ({kinds}) are counted, not indexed."
+        if n
+        else ""
+    )
 
 
 def _own_count_note(cov: Mapping[str, Any], official: OfficialTable) -> str:

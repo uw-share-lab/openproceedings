@@ -178,7 +178,10 @@ safe direction.
   listings; 59 merge on the 2026-09-29 crawl, `docs/results/2026-09-30-creative-ai-merge.md`), which the taxonomy
   files under `other`. `other` also holds OpenReview forms no proceedings host (NeurIPS 2025
   `Education_Program`: 54 notes; `High_School_Projects_Track`, `Competition/LMC`, forms outside their year
-  window, …), so `other` is **not** in `PROCEEDINGS_TRACKS` and reconcile never judges it. Instead a record is
+  window, …), so `other` is **not** in `PROCEEDINGS_TRACKS` and reconcile never judges it. Nor are the AAAI 1993–2008
+  and AIES 2018–2023 section tracks (`student_abstract`, `consortium`, `demo`, `iaai`, `other`; decision-050): a future
+  imported (RIS) record of such a paper would get `track_not_merged` against its dblp or Crossref record, a duplicate,
+  never an over-merge; no AAAI or AIES import exists today. Instead a record is
   `creative_ai` (`dedup.is_creative_ai`) when it is NeurIPS, track `other`, and every source with a track claim
   claims `other` and backs it with Creative AI evidence of the record's year, all agreeing: a `venue_id_raw`
   claim that is `NeurIPS.cc/<Y>/Creative_AI_Track` bare or with a status suffix

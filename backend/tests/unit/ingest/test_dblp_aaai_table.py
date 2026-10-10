@@ -102,3 +102,108 @@ def test_the_shipped_table_covers_every_year_1980_to_2009() -> None:
                                2002, *range(2004, 2009)]  # fmt: skip
     assert all(len(t.years[y].proceedings) == 2 for y in (1986, 1991, 1994, 1996))
     assert sum(y.papers for y in t.years.values()) == CENSUS_MAIN  # the census total, written in as a literal
+
+
+SECTIONS = """
+[[section]]
+year = 2006
+pages = [1853, 1903]
+track = "student_abstract"
+label = "Student Abstracts"
+verified = 2026-10-10
+source = "test contents page"
+
+[[section]]
+year = 2006
+pages = [1904, 1930]
+track = "consortium"
+label = "Doctoral Consortium"
+verified = 2026-10-10
+source = "test contents page"
+
+[[track]]
+key = "conf/aaai/Typo06"
+year = 2006
+track = "student_abstract"
+reason = "listed under Student Abstracts, p. 1855; dblp's pages are a typo"
+verified = 2026-10-10
+source = "test contents page"
+"""
+
+
+@pytest.mark.parametrize(
+    ("pages", "start"),
+    [("1425-1426", 1425), ("856", 856), ("1853-", 1853), ("855-1856", 855), (None, None), ("", None),
+     ("I-XV", None), ("12-13, 15", None), ("-5", None), ("1" * 5000, None), ("12-" + "3" * 5000, None),
+     ("123456789-123456790", 123456789), ("1234567890", None), ("12-1234567890", None)],
+)  # fmt: skip
+def test_start_page_reads_dblps_page_field(pages, start) -> None:
+    assert dblp_aaai_table.start_page(pages) == start
+
+
+def test_a_main_entry_takes_its_track_row_then_its_section_then_main() -> None:
+    t = dblp_aaai_table.load(GOOD + SECTIONS)
+    assert [(s.year, s.first, s.last, s.track) for s in t.sections] == [
+        (2006, 1853, 1903, "student_abstract"), (2006, 1904, 1930, "consortium")]  # fmt: skip
+    assert t.main_track("conf/aaai/A06", 2006, "1853-1854") == ("student_abstract", t.sections[0])
+    assert t.main_track("conf/aaai/A06", 2006, "1903") == ("student_abstract", t.sections[0])  # inclusive
+    assert t.main_track("conf/aaai/A06", 2006, "1904-1905")[0] == "consortium"
+    assert t.main_track("conf/aaai/A06", 2006, "1931-1932") == ("main", None)
+    assert t.main_track("conf/aaai/A06", 2006, "1852-1853") == ("main", None)  # the start page decides
+    assert t.main_track("conf/aaai/A06", 2006, None) == ("main", None)  # no pages: no section
+    assert t.main_track("conf/aaai/A06", 1986, "1853-1854") == ("main", None)  # another year's range
+    assert t.main_track("conf/aaai/Typo06", 2006, "855-1856") == (
+        "student_abstract",
+        t.tracks["conf/aaai/Typo06"],
+    )
+    # a track row beats a range of another track, and is read only in its own year
+    assert t.main_track("conf/aaai/Typo06", 2006, "1905-1906") == (
+        "student_abstract",
+        t.tracks["conf/aaai/Typo06"],
+    )
+    assert t.main_track("conf/aaai/Typo06", 2005, "855-1856") == ("main", None)
+    assert dblp_aaai_table.load(GOOD).main_track("conf/aaai/A06", 2006, "1853") == ("main", None)
+
+
+_TRACK_ROW = 'key = "conf/aaai/Typo06"\nyear = 2006\ntrack = "student_abstract"'
+
+
+@pytest.mark.parametrize(
+    ("edit", "message"),
+    [
+        (lambda s: s.replace("pages = [1904, 1930]", "pages = [1900, 1930]"), "overlaps"),
+        (lambda s: s.replace("pages = [1904, 1930]", "pages = [1903, 1930]"), "overlaps"),  # touching at one page
+        (lambda s: s.replace("pages = [1904, 1930]", "pages = [1930, 1904]"), r"first <= last"),
+        (lambda s: s.replace("pages = [1904, 1930]", "pages = [0, 1930]"), "positive"),
+        (lambda s: s.replace("pages = [1904, 1930]", "pages = [1904]"), r"\[first, last\]"),
+        (lambda s: s.replace("pages = [1904, 1930]", 'pages = ["1904", "1930"]'), r"\[first, last\]"),
+        (lambda s: s.replace('track = "consortium"', 'track = "main"'), "track must be one of"),
+        (lambda s: s.replace('track = "consortium"', 'track = "eaai"'), "track must be one of"),
+        (lambda s: s.replace("year = 2006\npages = [1904", "year = 2005\npages = [1904"), "a year the table holds"),
+        (lambda s: s.replace('label = "Doctoral Consortium"', 'label = ""'), "a label"),
+        (lambda s: s.replace('label = "Doctoral Consortium"\nverified = 2026-10-10',
+                             'label = "Doctoral Consortium"\nverified = "2026-10-10"'), "verified date"),
+        (lambda s: s.replace('label = "Doctoral Consortium"\nverified = 2026-10-10\nsource = "test contents page"',
+                             'label = "Doctoral Consortium"\nverified = 2026-10-10\nsource = ""'), "a source"),
+        (lambda s: s.replace('label = "Doctoral Consortium"\n', ""), "missing columns"),
+        (lambda s: s.replace(_TRACK_ROW, _TRACK_ROW.replace("student_abstract", "workshop")), "track must be one of"),
+        (lambda s: s.replace(_TRACK_ROW, _TRACK_ROW.replace("2006", "1985")), "a year the table holds"),
+        (lambda s: s.replace(_TRACK_ROW, _TRACK_ROW.replace("Typo06", "Invited86")), "listed twice"),
+        (lambda s: s.replace(_TRACK_ROW, _TRACK_ROW.replace("conf/aaai/Typo06", "conf/icml/Typo06")), "conf/aaai/"),
+        (lambda s: s.replace("reason = \"listed under", "reason = \"\"\nnote = \"listed under"), "unknown columns"),
+        (lambda s: s + SECTIONS[SECTIONS.index("[[track]]"):], "listed twice"),
+    ],
+)  # fmt: skip
+def test_bad_section_and_track_rows_are_refused(edit, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        dblp_aaai_table.load(edit(GOOD + SECTIONS))
+
+
+def test_the_shipped_sections_never_give_main_and_never_overlap() -> None:
+    t = dblp_aaai_table.TABLE
+    assert {s.track for s in t.sections} | {
+        r.track for r in t.tracks.values()
+    } <= dblp_aaai_table.SECTION_TRACKS
+    for a, b in zip(t.sections, t.sections[1:], strict=False):
+        assert a.year != b.year or a.last < b.first
+    assert not set(t.tracks) & set(t.not_papers)

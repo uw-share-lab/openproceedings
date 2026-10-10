@@ -281,3 +281,112 @@ def test_an_offline_run_without_the_chain_is_refused(tmp_path: Path) -> None:
     with pytest.raises(CrawlError) as e:
         crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE)
     assert e.value.reason == "not_cached"
+
+
+# TASK-224: a section row gives the works whose Crossref start page it holds its track; a not-paper row beats it
+_SECTION = """
+[[section]]
+venue = "FAccT"
+year = 2023
+pages = [900, 950]
+track = "student_abstract"
+label = "Student abstracts"
+verified = 2026-10-10
+source = "test position"
+"""
+
+
+def test_a_section_row_gives_its_track_and_a_not_paper_row_beats_it(tmp_path: Path, monkeypatch) -> None:
+    table = acm_table.load(api.TABLE_TEXT + _SECTION)
+    monkeypatch.setattr(acm_table, "TABLE", table)
+    _whole(
+        tmp_path,
+        api.work(D1, page="899-900"),
+        api.work(D2, page="900-901"),
+        api.work(NP, page="902"),
+        total=3,
+    )
+    by = {
+        r.native: r for r in crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=table).records
+    }
+    assert {n: r.track for n, r in by.items()} == {"doi-3593013.3594011": "main",
+                                                   "doi-3593013.3594012": "student_abstract"}  # fmt: skip
+    claim = next(c for c in by["doi-3593013.3594012"].provenance if c.field == "track")
+    assert claim.evidence == (
+        f'Crossref work {D2} in proceedings {ROW.doi} (acm_proceedings.toml FAccT 2023): page 900-901 is in "Student '
+        'abstracts", pp. 900-950 (acm_proceedings.toml [[section]], verified 2026-10-10; test position)'
+    )  # fmt: skip
+    main = next(c for c in by["doi-3593013.3594011"].provenance if c.field == "track")
+    assert main.evidence.endswith(
+        ": page 899-900 is in no acm_proceedings.toml [[section]] of the proceedings, so main (decision-049, decision-050)"
+    )  # a proceedings with no section row keeps "every paper of the proceedings is main"
+
+
+def test_a_section_row_that_holds_no_work_stops(tmp_path: Path, monkeypatch) -> None:
+    table = acm_table.load(api.TABLE_TEXT + _SECTION)
+    monkeypatch.setattr(acm_table, "TABLE", table)
+    _whole(
+        tmp_path, api.work(D1, page="1-10"), api.work(D2, page="951-952"), api.work(NP, page="902"), total=3
+    )
+    with pytest.raises(CrawlError, match="Student abstracts") as e:
+        crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=table)
+    assert e.value.reason == "stale_section"
+
+
+def test_a_proceedings_with_no_section_row_keeps_its_main_claim(tmp_path: Path) -> None:
+    _whole(tmp_path, api.work(D1, page="900-901"), api.work(D2), api.work(NP), total=3)
+    (r, _) = crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE).records
+    claim = next(c for c in r.provenance if c.field == "track")
+    assert (r.track, claim.evidence) == (
+        "main",
+        f"Crossref work {D1} in proceedings {ROW.doi} (acm_proceedings.toml FAccT 2023): every paper of the "
+        "proceedings is main (decision-049)",
+    )
+
+
+@pytest.mark.parametrize("page", [None, "354\u2013355", "e12", "1" * 5000])
+def test_a_work_a_sectioned_proceedings_cannot_place_stops(
+    tmp_path: Path, monkeypatch, page: str | None
+) -> None:
+    table = acm_table.load(api.TABLE_TEXT + _SECTION)
+    monkeypatch.setattr(acm_table, "TABLE", table)
+    _whole(tmp_path, api.work(D1, page=page), api.work(D2, page="900-901"), api.work(NP, page="902"), total=3)
+    with pytest.raises(CrawlError, match=D1) as e:
+        crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=table)
+    assert e.value.reason == "unplaced_page"
+
+
+def test_an_unreadable_page_in_an_unsectioned_proceedings_is_main(tmp_path: Path) -> None:
+    _whole(tmp_path, api.work(D1, page="1" * 5000), api.work(D2, page=None), api.work(NP), total=3)
+    records = crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE).records
+    assert [r.track for r in records] == ["main", "main"]
+
+
+def _other_proceedings(venue: str, year: int) -> str:
+    """A proceedings row for (venue, year) with one section row on it: sections that are not FAccT 2023's."""
+    return f"""
+[[proceedings]]
+venue = "{venue}"
+year = {year}
+doi = "10.1145/9{year}{len(venue)}"
+title = "Proceedings of {venue} {year}"
+window_from = {year}-12-20
+window_until = {year + 1}-01-03
+dois = 3
+verified = 2026-10-10
+source = "test"
+""" + _SECTION.replace('venue = "FAccT"\nyear = 2023', f'venue = "{venue}"\nyear = {year}')
+
+
+# another venue and year; the same year, another venue; the same venue, another year: so a check on the year
+# alone or the venue alone (instead of the pair) fails too
+@pytest.mark.parametrize("venue, year", [("AIES", 2018), ("AIES", 2023), ("FAccT", 2022)])
+def test_only_a_proceedings_with_its_own_section_rows_refuses_an_unreadable_page(
+    tmp_path: Path, monkeypatch, venue: str, year: int
+) -> None:
+    table = acm_table.load(api.TABLE_TEXT + _other_proceedings(venue, year))
+    assert [(s.venue, s.year) for s in table.sections] == [(venue, year)]
+    monkeypatch.setattr(acm_table, "TABLE", table)
+    _whole(tmp_path, api.work(D1, page=None), api.work(D2, page="1" * 5000), api.work(NP), total=3)
+    records = crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=table).records
+    assert [r.track for r in records] == ["main", "main"]

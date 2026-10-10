@@ -355,10 +355,20 @@ def mine_proceedings(
         report.site_unmatched, report.site_ambiguous = matched.unmatched, matched.ambiguous
         report.fetched += site.fetched
     records: list[PaperRecord] = []
+    used: set[acm_table.Section] = set()
+    sectioned = any((s.venue, s.year) == (venue, year) for s in table.sections)
     for doi, w, page in kept:
         found = matched.by_doi.get(doi) if matched is not None else None
+        section = table.section(venue, year, w.page)
+        if section is not None:
+            used.add(section)
+        elif sectioned and acm_table.start_page(w.page) is None:
+            raise CrawlError(f"Crossref {venue} {year}: {doi} has no readable start page ({(w.page or '')[:40]!r}), so "
+                             "no acm_proceedings.toml section can place it: check Crossref, or name it in "
+                             "[[not_paper]]", reason="unplaced_page")  # fmt: skip
         try:
-            record = _record(row, w, page, found, site.join if site is not None else None)
+            record = _record(row, w, page, found, site.join if site is not None else None, section,
+                             sectioned=sectioned)  # fmt: skip
         except (ValidationError, ValueError) as e:
             raise CrawlError(f"Crossref {venue} {year}: {doi} makes no valid record ({type(e).__name__})",
                              reason="invalid_record") from e  # fmt: skip
@@ -367,10 +377,15 @@ def mine_proceedings(
         records.append(record)
         report.count(record, None if record.abstract else "no_abstract", found.spaced if found else 0,
                      found.pdf_codes if found else 0)  # fmt: skip
+    if empty := [s for s in table.sections if (s.venue, s.year) == (venue, year) and s not in used]:
+        raise CrawlError(f"Crossref {venue} {year}: acm_proceedings.toml's section {empty[0].label!r} pp. "
+                         f"{empty[0].first}-{empty[0].last} holds no work of the harvest: check the table",
+                         reason="stale_section")  # fmt: skip
     report.abstract_attached = sum(r.abstract is not None for r in records)
     log.info("crossref_proceedings_mined", extra={"venue": venue, "year": year, "listed": report.listed,
                                                   "records": report.records, "window_works": report.window_works,
                                                   "pages": report.pages, "abstract_attached": report.abstract_attached,
+                                                  "tracks": dict(sorted(report.tracks.items())),
                                                   "site_entries": report.site_entries,
                                                   "site_unmatched": report.site_unmatched,
                                                   "site_ambiguous": report.site_ambiguous,
@@ -384,9 +399,12 @@ def mine_proceedings(
 
 
 def _record(row: Proceedings, w: Work, page: Page, found: facct_site.SiteAbstract | None = None,
-            join: str | None = None) -> PaperRecord:  # fmt: skip
+            join: str | None = None, section: acm_table.Section | None = None,
+            sectioned: bool = False) -> PaperRecord:  # fmt: skip
     """The record of one Crossref work: every claim at the work's own API URL (never a cursor page), and the
-    official page's abstract when `found` (its claim at the page as fetched; `join` says how it was joined)."""
+    official page's abstract when `found` (its claim at the page as fetched; `join` says how it was joined).
+    Track `main`, or the track of the `section` row its Crossref start page falls in; `sectioned` says the
+    proceedings has section rows, so a `main` claim names the pages it falls outside."""
     where = f"Crossref work {w.doi} in proceedings {row.doi} (acm_proceedings.toml {row.venue} {row.year})"
     claims: list[Claim] = []
 
@@ -397,7 +415,15 @@ def _record(row: Proceedings, w: Work, page: Page, found: facct_site.SiteAbstrac
     title, replaced = title_text(w.title or "")
     claim("venue", row.venue, where)
     claim("year", row.year, where)
-    claim("track", "main", f"{where}: every paper of the proceedings is main (decision-049)")
+    if section is None and sectioned:
+        claim("track", "main", f"{where}: page {w.page} is in no acm_proceedings.toml [[section]] of the "
+                               "proceedings, so main (decision-049, decision-050)")  # fmt: skip
+    elif section is None:
+        claim("track", "main", f"{where}: every paper of the proceedings is main (decision-049)")
+    else:
+        claim("track", section.track, f"{where}: page {w.page} is in \"{section.label}\", pp. {section.first}-"
+                                      f"{section.last} (acm_proceedings.toml [[section]], verified "
+                                      f"{section.verified.isoformat()}; {section.source})")  # fmt: skip
     claim("status", "accepted", f"published in {row.doi}")
     claim("title", title, title_evidence(f"{where}: title", replaced))
     if w.authors:

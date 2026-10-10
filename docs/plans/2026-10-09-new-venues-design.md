@@ -30,9 +30,9 @@ below about milestone C (OpenAlex, `abstract_kind`) is the plan, not built.
 
 | Venue | Years | Paper list | Abstract | Papers (live, 2026-10-09) |
 |---|---|---|---|---|
-| AAAI | 1980–2008 (none held 1981, 1985, 1989, **1995**, 2001, 2003, 2009: 23 held years) | pinned dblp release, `conf/aaai/<year>` main keys (built) | OpenAlex, else `null` (aaai.org has none and sets `Crawl-delay: 43200`); none yet (milestone C) | **4,730 as built** (4,689 main-volume entries, minus 12 not-paper rows, plus 53 workshop entries); estimated ~3.7k on 2026-10-09 |
+| AAAI | 1980–2008 (none held 1981, 1985, 1989, **1995**, 2001, 2003, 2009: 23 held years) | pinned dblp release, `conf/aaai/<year>` main keys (built) | OpenAlex, else `null` (aaai.org has none and sets `Crawl-delay: 43200`); none yet (milestone C) | **4,730 as built** (4,689 main-volume entries, minus 12 not-paper rows, plus 53 workshop entries); 4,709 since TASK-225/226 (33 not-paper rows; 1,089 entries in the official contents' non-technical sections take their tracks); estimated ~3.7k on 2026-10-09 |
 | AAAI | 2010–2026 (Vol. 24–40) | ojs.aaai.org OAI-PMH, journal `AAAI` | official (`dc:description`) | 25,135 on the issue pages (IAAI and EAAI included) |
-| AIES | 2018–2023 | Crossref, ACM proceedings DOIs 10.1145/3278721, 3306618, 3375627, 3461702, 3514094, 3600211 (built) | OpenAlex, else `null` (Crossref holds none; ACM DL is Cloudflare-challenged and excluded); none yet (milestone C) | 78, 91, 76, 114, 115, 101 = **575 as built**, all `main` (no section data: student abstracts and keynotes inside) |
+| AIES | 2018–2023 | Crossref, ACM proceedings DOIs 10.1145/3278721, 3306618, 3375627, 3461702, 3514094, 3600211 (built) | OpenAlex, else `null` (Crossref holds none; ACM DL is Cloudflare-challenged and excluded); none yet (milestone C) | 78, 91, 76, 114, 115, 101 = **575 as built**, all `main` (no section data: student abstracts and keynotes inside); 557 since TASK-224 (18 keynote not-paper rows; 108 `student_abstract` by page position) |
 | AIES | 2024–2025 (Vol. 7–8) | ojs.aaai.org OAI-PMH, journal `AIES` | official | 170, 279 (excl. front matter) |
 | AIES | 2026 | not yet published (Malmö, 12–14 Oct 2026) | — | — |
 | FAccT | 2018 (FAT*) | PMLR v81 (built) | official (PMLR page) | **17 as built** (preface and two keynotes excluded) |
@@ -265,7 +265,9 @@ decisions of that plan, and these are where the build departs from, or settles, 
   instead (research note §The ACM census). FAccT 2020's 26 tutorial and CRAFT rows are `[[not_paper]]`.
 - **AIES 2018–2023 are all `main`**, as the design says: Crossref carries no section data, so student abstracts and
   keynotes (141 entries of two pages or fewer, listed in the research note for the owner) sit inside `main`, unlike
-  2024+, where OJS labels student abstracts. The coverage page's database scope says so.
+  2024+, where OJS labels student abstracts. The coverage page's database scope says so. *Superseded by decision-050:*
+  108 AIES 2018–2023 records are `student_abstract` by their page position and 18 keynotes are counted, not indexed
+  (557 records, 449 `main`).
 - **FAccT site:** the pages are read by `op ingest crossref` (there is no `op ingest facct-site`; spec 08's design
   target is folded into `crossref`). 2025 joins by DOI and 2022 and 2026 by exact title key, one to one, never fuzzy:
   169 of 181, 206 of 206 and 298 of 314 attach. The 2022 page's DOI links are never read (entry 295 links entry 314's).

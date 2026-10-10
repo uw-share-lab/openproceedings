@@ -15,7 +15,8 @@ from openproceedings.ingest.sources import crawl, dblp, dblp_aaai
 from openproceedings.ingest.sources.common import CrawlError
 from openproceedings.ingest.statuses import statuses_indexed
 
-from tests.unit.ingest.test_dblp_aaai_table import GOOD
+from tests.unit.ingest import test_dblp_slices
+from tests.unit.ingest.test_dblp_aaai_table import GOOD, SECTIONS
 from tests.unit.ingest.test_dblp_slices import on_disk
 
 
@@ -173,3 +174,85 @@ def test_a_2024_key_is_never_a_record_and_never_a_counted_paper(tmp_path: Path) 
     with pytest.raises(CrawlError) as e:
         dblp_aaai.mine_year(2024, extract, table=aaai)
     assert e.value.reason == "no_year"
+
+
+# TASK-226: the official contents' sections as dblp start-page ranges, and a key row for a page typo
+_PAGED = "".join(
+    f'<inproceedings mdate="2020-01-01" key="conf/aaai/{key}"><author>Synthetic Author 9</author>'
+    f"<title>Synthetic {key}.</title>{f'<pages>{pages}</pages>' if pages else ''}<year>2006</year>"
+    "<crossref>conf/aaai/2006</crossref></inproceedings>\n"
+    for key, pages in [("Stud06", "1853-1854"), ("Cons06", "1904-1905"), ("Typo06", "855-1856"),
+                       ("Late06", "1931-1932")]
+)  # fmt: skip
+
+
+def paged(tmp_path: Path, text: str, main06_pages: str | None = "10-15"):
+    body = test_dblp_slices.FULL.replace("</dblp>\n", _PAGED + "</dblp>\n")
+    if main06_pages is not None:  # the synthetic release gives Main06 no pages; a sectioned year needs one
+        body = body.replace("<title>Synthetic main paper.</title>",
+                            f"<title>Synthetic main paper.</title><pages>{main06_pages}</pages>")  # fmt: skip
+    gz = test_dblp_slices.gzip.compress((test_dblp_slices.HEAD + body).encode("latin-1"), mtime=0)
+    table, rel, dtd = on_disk(tmp_path, gz)
+    aaai = dblp_aaai_table.load(text.replace("papers = 1\ntitle = \"Synthetic AAAI 2006\"",
+                                             "papers = 5\ntitle = \"Synthetic AAAI 2006\""), pins=table)  # fmt: skip
+    return aaai, dblp.write_extracts(tmp_path, rel, dtd, table, dblp.SLICES)["AAAI"]
+
+
+def test_a_section_range_or_a_track_row_gives_a_main_key_entry_its_track(tmp_path: Path) -> None:
+    aaai, extract = paged(tmp_path, GOOD + SECTIONS)
+    dblp_aaai.check_extract(extract, aaai)
+    records = {r.native: r for r in dblp_aaai.mine_year(2006, extract, table=aaai).records}
+    assert {n: r.track for n, r in records.items()} == {
+        "dblp-Main06": "main", "dblp-Late06": "main", "dblp-Stud06": "student_abstract",
+        "dblp-Cons06": "consortium", "dblp-Typo06": "student_abstract", "dblp-Workshop06": "workshop"}  # fmt: skip
+    claim = next(c for c in records["dblp-Stud06"].provenance if c.field == "track")
+    assert claim.evidence == (
+        'crossref conf/aaai/2006, dblp pages 1853-1854 (start page 1853): in AAAI 2006\'s official contents section '
+        '"Student Abstracts", pp. 1853-1903 (dblp_aaai.toml [[section]], verified 2026-10-10; test contents page)'
+    )  # fmt: skip
+    typo = next(c for c in records["dblp-Typo06"].provenance if c.field == "track")
+    assert "dblp_aaai.toml [[track]]" in typo.evidence and "a typo" in typo.evidence
+    main = next(c for c in records["dblp-Late06"].provenance if c.field == "track")
+    assert main.evidence == "crossref conf/aaai/2006: AAAI 2006 main conference (dblp_aaai.toml)"  # unchanged
+
+
+def test_a_section_that_holds_no_paper_stops_the_year(tmp_path: Path) -> None:
+    aaai, extract = paged(tmp_path, GOOD + SECTIONS.replace("pages = [1904, 1930]", "pages = [1990, 1999]"))
+    with pytest.raises(CrawlError, match="Doctoral Consortium") as e:
+        dblp_aaai.mine_year(2006, extract, table=aaai)
+    assert e.value.reason == "stale_section"
+
+
+@pytest.mark.parametrize("key", ["conf/aaai/Nowhere06", "conf/aaai/Workshop06", "conf/aaai/Synthetic86a"])
+def test_a_track_row_must_name_a_main_entry_of_its_year(tmp_path: Path, key: str) -> None:
+    aaai, extract = paged(tmp_path, GOOD + SECTIONS.replace('key = "conf/aaai/Typo06"', f'key = "{key}"'))
+    with pytest.raises(CrawlError, match="track row") as e:
+        dblp_aaai.check_extract(extract, aaai)
+    assert e.value.reason == "table_mismatch"
+
+
+@pytest.mark.parametrize("pages", [None, "I-IV", "1" * 5000])
+def test_an_entry_a_sectioned_year_cannot_place_stops_the_year(tmp_path: Path, pages: str | None) -> None:
+    aaai, extract = paged(tmp_path, GOOD + SECTIONS, main06_pages=pages)
+    with pytest.raises(CrawlError, match="Main06") as e:
+        dblp_aaai.mine_year(2006, extract, table=aaai)
+    assert e.value.reason == "unplaced_page"
+    # a key row places it, and a year with no section rows reads it as main
+    row = '\n[[track]]\nkey = "conf/aaai/Main06"\nyear = 2006\ntrack = "other"\nreason = "r"\nverified = 2026-10-10\nsource = "s"\n'
+    aaai, extract = paged(tmp_path / "b", GOOD + SECTIONS + row, main06_pages=pages)
+    assert {r.native: r.track for r in dblp_aaai.mine_year(2006, extract, table=aaai).records}[
+        "dblp-Main06"
+    ] == "other"
+    aaai, extract = paged(tmp_path / "c", GOOD, main06_pages=pages)
+    assert {r.native: r.track for r in dblp_aaai.mine_year(2006, extract, table=aaai).records}[
+        "dblp-Main06"
+    ] == "main"
+
+
+def test_a_pageless_entry_of_a_year_without_its_own_section_rows_is_main(tmp_path: Path) -> None:
+    """Only a year with its own section rows refuses a pageless entry: here only 1986 has one."""
+    other_year = SECTIONS.split("[[section]]")[1].replace("year = 2006", "year = 1986", 1)
+    aaai, extract = paged(tmp_path, GOOD + "[[section]]" + other_year, main06_pages=None)
+    assert [s.year for s in aaai.sections] == [1986]
+    tracks = {r.native: r.track for r in dblp_aaai.mine_year(2006, extract, table=aaai).records}
+    assert tracks["dblp-Main06"] == "main"

@@ -17,6 +17,15 @@
 #   doi           `10.1145/<toc>.<n>`, whose proceedings is a row above
 #   kind          tutorial | craft session | keynote | panel | front matter
 #   reason        what the entry is, for the reader
+#
+# [[section]] columns (a page range whose works take `track`, not main; a not_paper row beats it)
+#   venue, year   a proceedings row above
+#   pages         [first, last]: a work whose Crossref start page is in it takes the row's track; a proceedings'
+#                 ranges never overlap, and a range that holds no work stops the crawl
+#   track         student_abstract | consortium | demo | other
+#   label         the section, for the reader
+#   verified      the date the range was checked
+#   source        the evidence, saying how strong it is
 
 # --- FAccT 2019-2026 (2018 is PMLR v81) ------------------------------------------------------------
 
@@ -308,3 +317,148 @@ reason = "one page (706-706) in the tutorial block, pages 696-707; 'The meaning 
 doi = "10.1145/3351095.3375663"
 kind = "tutorial"
 reason = "one page (707-707) in the tutorial block, pages 696-707; 'Two computer scientists and a cultural scientist get hit by a drive...' is a tutorial on the 2020 accepted tutorials page or program schedule"
+
+
+# --- AIES 2018-2023: the keynotes, single-author abstracts in front of every paper (pp. 1-6; TASK-224). Inferred from
+# page position like the sections above. 2020's p. 7 (.3375839) and 2021's p. 2 (.3462443, five authors) look like
+# papers and stay main.
+
+[[not_paper]]
+doi = "10.1145/3278721.3278805"
+kind = "keynote"
+reason = "AIES 2018 keynote: pages 1-1, in front of the first paper; 'The Great AI/Robot Jobs Scare: Reality or ... Not Reality of Automa...' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3278721.3278806"
+kind = "keynote"
+reason = "AIES 2018 keynote: pages 2-2, in front of the first paper; 'AI Decisions, Risk, and Ethics: Beyond Value Alignment' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3306618.3314225"
+kind = "keynote"
+reason = "AIES 2019 keynote: pages 1-1, in front of the first paper; 'How We Talk About AI (and Why It Matters)' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3306618.3314261"
+kind = "keynote"
+reason = "AIES 2019 keynote: pages 3-4, in front of the first paper; 'Rightful Machines and Dilemmas' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3375627.3377142"
+kind = "keynote"
+reason = "AIES 2020 keynote: pages 1-2, in front of the first paper; 'How to Put the Data Subject's Sovereignty into Practice. Ethical Co...' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3375627.3377139"
+kind = "keynote"
+reason = "AIES 2020 keynote: pages 3-3, in front of the first paper; 'The AI-development Connection - A View from the South' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3375627.3377140"
+kind = "keynote"
+reason = "AIES 2020 keynote: pages 4-4, in front of the first paper; 'Computerize the Race Problem?: Why We Must Plan for a Just AI Future' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3375627.3377141"
+kind = "keynote"
+reason = "AIES 2020 keynote: pages 5-6, in front of the first paper; 'From Bad Users and Failed Uses to Responsible Technologies: A Call ...' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3461702.3462643"
+kind = "keynote"
+reason = "AIES 2021 keynote: pages 1-1, in front of the first paper; 'The Ethics of Datasets: Moving Forward Requires Stepping Back' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3514094.3539571"
+kind = "keynote"
+reason = "AIES 2022 keynote: pages 1-1, in front of the first paper; 'Robots that Need to Mislead: Biologically-inspired Machine Deception' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3514094.3539568"
+kind = "keynote"
+reason = "AIES 2022 keynote: pages 2-2, in front of the first paper; 'The Limits of Fairness' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3514094.3539569"
+kind = "keynote"
+reason = "AIES 2022 keynote: pages 3-3, in front of the first paper; 'RoboTruckers: The Double Threat of AI for Low-Wage Work' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3514094.3539570"
+kind = "keynote"
+reason = "AIES 2022 keynote: pages 4-4, in front of the first paper; 'Beyond Fairness and Explanation: Foundations of Trustworthiness of ...' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3514094.3539566"
+kind = "keynote"
+reason = "AIES 2022 keynote: pages 5-5, in front of the first paper; 'From Algorithmic Audits to Actual Accountability: Overcoming Practi...' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3514094.3539567"
+kind = "keynote"
+reason = "AIES 2022 keynote: pages 6-6, in front of the first paper; 'The AI Mirror: Reclaiming our Humanity in an Age of Machine Thinking' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3600211.3607545"
+kind = "keynote"
+reason = "AIES 2023 keynote: pages 1-1, in front of the first paper; 'The Generative AI Deployment Rush: How to Democratize the Politics ...' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3600211.3607543"
+kind = "keynote"
+reason = "AIES 2023 keynote: pages 2-2, in front of the first paper; 'Changing distributions and preferences in learning systems' (TASK-224, inferred from position)"
+
+[[not_paper]]
+doi = "10.1145/3600211.3607544"
+kind = "keynote"
+reason = "AIES 2023 keynote: pages 3-4, in front of the first paper; 'AI for/by the majority world: From technologies of dispossession to...' (TASK-224, inferred from position)"
+
+
+# --- AIES 2018-2023: the student abstracts (OJS labels the same kind student_abstract from 2024). No official
+# table of contents was reachable, so the ranges are the contiguous blocks of single-author short works at the end
+# of each volume (2021: before the last papers); AIES 2020 has no such block.
+
+[[section]]
+venue = "AIES"
+year = 2018
+pages = [354, 391]
+track = "student_abstract"
+label = "Student abstracts: the trailing 2-page single-author block after the last paper (pp. 354-391)"
+verified = 2026-10-10
+source = "inferred from page position: Crossref has no sections and the ACM DL blocks bots (TASK-224); docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §AIES"
+
+[[section]]
+venue = "AIES"
+year = 2019
+pages = [521, 560]
+track = "student_abstract"
+label = "Student abstracts: the trailing 1-2-page single-author block after the last paper (pp. 521-560)"
+verified = 2026-10-10
+source = "inferred from page position: Crossref has no sections and the ACM DL blocks bots (TASK-224); docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §AIES"
+
+[[section]]
+venue = "AIES"
+year = 2021
+pages = [267, 280]
+track = "student_abstract"
+label = "Student abstracts: the 2-page single-author block between pp. 266 and 287 (pp. 267-280)"
+verified = 2026-10-10
+source = "inferred from page position: Crossref has no sections and the ACM DL blocks bots (TASK-224); docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §AIES"
+
+[[section]]
+venue = "AIES"
+year = 2022
+pages = [890, 920]
+track = "student_abstract"
+label = "Student abstracts: the trailing 1-page single-author block after the last paper (pp. 890-920)"
+verified = 2026-10-10
+source = "inferred from page position: Crossref has no sections and the ACM DL blocks bots (TASK-224); docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §AIES"
+
+[[section]]
+venue = "AIES"
+year = 2023
+pages = [939, 1012]
+track = "student_abstract"
+label = "Student abstracts: the trailing single-author block after the last paper (pp. 939-1012), 1 to 6 pages"
+verified = 2026-10-10
+source = "inferred from page position: Crossref has no sections and the ACM DL blocks bots (TASK-224); docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §AIES"
