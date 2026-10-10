@@ -6,7 +6,7 @@ title: >-
 status: Done
 assignee: []
 created_date: '2026-10-10 14:28'
-updated_date: '2026-10-10 16:16'
+updated_date: '2026-10-10 16:34'
 labels:
   - data
   - aaai
@@ -41,5 +41,5 @@ Built: 57 [[section]] rows (report-226's 40; 11 IAAI ranges for 1996-2000, 2002,
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-dblp_aaai.toml gained [[section]] (57) and [[track]] (19) tables plus 12 invited-talk not_paper rows (dblp_aaai_table.py, dblp_aaai.py; page_ranges.py shared with the ACM table): each of the 767 has an official-contents track or is listed unresolved (Sultanik05, Thornton05), and the review added the IAAI 1996-1999, NECTAR/Senior Member and AAAI Member Abstract rows. AAAI 1980-2008: 3,567 main, 399 student_abstract, 158 consortium, 127 demo, 232 iaai, 173 other, 53 workshop. Verified by unit tests, test_track_rules_replay.py over the pinned release, and op snapshot diff (2026-10-10-9efa49481112 vs 21779e017036): only track changes, the expected removals and the AIES evidence correction. Decision-050.
+dblp_aaai.toml gained [[section]] (57) and [[track]] (19) tables plus 12 invited-talk not_paper rows (dblp_aaai_table.py, dblp_aaai.py; page_ranges.py shared with the ACM table): each of the 767 has an official-contents track or is listed unresolved (Sultanik05, Thornton05, WangL05), and the review added the IAAI 1996-1999, NECTAR/Senior Member and AAAI Member Abstract rows. AAAI 1980-2008: 3,567 main, 399 student_abstract, 158 consortium, 127 demo, 232 iaai, 173 other, 53 workshop. Verified by unit tests, test_track_rules_replay.py over the pinned release, and op snapshot diff (2026-10-10-9efa49481112 vs 21779e017036): only track changes, the expected removals and the AIES evidence correction. Decision-050.
 <!-- SECTION:FINAL_SUMMARY:END -->
