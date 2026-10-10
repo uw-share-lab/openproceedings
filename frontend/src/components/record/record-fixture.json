@@ -3126,5 +3126,464 @@
         "word_forms_skipped": []
       }
     }
+  },
+  "drift": {
+    "q": "trust",
+    "mode": "native",
+    "created": {
+      "index_version": "ade4a09a41f2",
+      "tokenizer_version": "3",
+      "query_version": "2",
+      "record_id": "RecDrift0001",
+      "page": "/record/RecDrift0001"
+    },
+    "stored": {
+      "index_version": "e38788009504",
+      "tokenizer_version": "3",
+      "query_version": "2",
+      "record": {
+        "body_version": 2,
+        "record_id": "RecDrift0001",
+        "input": "trust",
+        "mode": "native",
+        "canonical": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+        "canonical_hash": "8d22ca9e97f0895e2fae66a74344dbbaade5b8cbd66d3f604e2e6bb425da8bbe",
+        "identification_query": "trust",
+        "index_version": "ade4a09a41f2",
+        "tokenizer_version": "3",
+        "query_version": "2",
+        "schema_version": "4",
+        "ranking_params": {
+          "bm25": {
+            "b": 0.75,
+            "k1": 1.2
+          },
+          "field_weights": {
+            "abstract": 1.0,
+            "title": 2.0
+          },
+          "sorts": {
+            "relevance": "-score,id",
+            "title": "casefold(nfkc(display title)),id",
+            "year_asc": "year,id",
+            "year_desc": "-year,id"
+          }
+        },
+        "snapshot_hash": "fd5c23a4b694af789f6e483d79c47f047592cb9088077a20e21dadb72e47e43f",
+        "crawl_dates": {
+          "*": {
+            "from": "2026-09-26T00:00:00Z",
+            "to": "2026-09-26T00:00:00Z"
+          },
+          "ris": {
+            "from": "2026-09-26T00:00:00Z",
+            "to": "2026-09-26T00:00:00Z"
+          }
+        },
+        "searched_at": "2026-09-25T14:03:11Z",
+        "total": 4,
+        "excluded": {
+          "total": 0,
+          "track": {
+            "unknown": 0
+          },
+          "status": {
+            "unknown": 0
+          }
+        },
+        "expansions": {},
+        "translations": [],
+        "warnings": [],
+        "ids": null,
+        "ids_hash": "7b4865ca1d82dea23bb77ab1f8887245979fac36c401153ff41da3f4f702bf88",
+        "dedup": {
+          "merged": 0,
+          "ambiguous_not_merged": 0,
+          "track_not_merged": 0,
+          "venue_year_not_merged": 0
+        },
+        "semantic_version": null,
+        "sources": ["ris"],
+        "identification_citable": false,
+        "crawl_dates_kind": {
+          "*": "scholar_query_dates",
+          "ris": "scholar_query_dates"
+        },
+        "identified_total": 4,
+        "unclassified_total": 0
+      },
+      "replay": null
+    },
+    "replayed": {
+      "index_version": "e38788009504",
+      "tokenizer_version": "3",
+      "query_version": "2",
+      "record": {
+        "body_version": 2,
+        "record_id": "RecDrift0001",
+        "input": "trust",
+        "mode": "native",
+        "canonical": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+        "canonical_hash": "8d22ca9e97f0895e2fae66a74344dbbaade5b8cbd66d3f604e2e6bb425da8bbe",
+        "identification_query": "trust",
+        "index_version": "ade4a09a41f2",
+        "tokenizer_version": "3",
+        "query_version": "2",
+        "schema_version": "4",
+        "ranking_params": {
+          "bm25": {
+            "b": 0.75,
+            "k1": 1.2
+          },
+          "field_weights": {
+            "abstract": 1.0,
+            "title": 2.0
+          },
+          "sorts": {
+            "relevance": "-score,id",
+            "title": "casefold(nfkc(display title)),id",
+            "year_asc": "year,id",
+            "year_desc": "-year,id"
+          }
+        },
+        "snapshot_hash": "fd5c23a4b694af789f6e483d79c47f047592cb9088077a20e21dadb72e47e43f",
+        "crawl_dates": {
+          "*": {
+            "from": "2026-09-26T00:00:00Z",
+            "to": "2026-09-26T00:00:00Z"
+          },
+          "ris": {
+            "from": "2026-09-26T00:00:00Z",
+            "to": "2026-09-26T00:00:00Z"
+          }
+        },
+        "searched_at": "2026-09-25T14:03:11Z",
+        "total": 4,
+        "excluded": {
+          "total": 0,
+          "track": {
+            "unknown": 0
+          },
+          "status": {
+            "unknown": 0
+          }
+        },
+        "expansions": {},
+        "translations": [],
+        "warnings": [],
+        "ids": null,
+        "ids_hash": "7b4865ca1d82dea23bb77ab1f8887245979fac36c401153ff41da3f4f702bf88",
+        "dedup": {
+          "merged": 0,
+          "ambiguous_not_merged": 0,
+          "track_not_merged": 0,
+          "venue_year_not_merged": 0
+        },
+        "semantic_version": null,
+        "sources": ["ris"],
+        "identification_citable": false,
+        "crawl_dates_kind": {
+          "*": "scholar_query_dates",
+          "ris": "scholar_query_dates"
+        },
+        "identified_total": 4,
+        "unclassified_total": 0
+      },
+      "replay": {
+        "status": "drifted",
+        "index_version": "e38788009504",
+        "query_version": "2",
+        "total": 1,
+        "excluded": {
+          "total": 1,
+          "track": {
+            "iaai": 1,
+            "unknown": 0
+          },
+          "status": {
+            "unknown": 0
+          }
+        },
+        "ids_hash": "02c467504d98065c44d52a2043444d172821f7fa9f3bd08cc1902bc7c1719043",
+        "ids_match": false,
+        "excluded_match": false,
+        "refused": null,
+        "verified_clauses": 0,
+        "changed": [
+          {
+            "input": "snapshot_hash",
+            "kind": "corpus",
+            "recorded": "fd5c23a4b694af789f6e483d79c47f047592cb9088077a20e21dadb72e47e43f",
+            "current": "637260cf503b25f65ec02e04b40d4a8d3635063b96e1328affe2914c68920dca"
+          }
+        ],
+        "added_total": 0,
+        "removed_total": 3,
+        "membership_identical": false,
+        "identified_total": 2,
+        "unclassified_total": 0
+      }
+    },
+    "parse_canonical": {
+      "index_version": "e38788009504",
+      "tokenizer_version": "3",
+      "query_version": "2",
+      "mode": "native",
+      "ast": {
+        "span": [0, 79],
+        "kind": "and",
+        "children": [
+          {
+            "span": [1, 6],
+            "kind": "term",
+            "token": "trust",
+            "field": null
+          },
+          {
+            "span": [11, 58],
+            "kind": "filter",
+            "field": "track",
+            "values": ["datasets_benchmarks", "main", "position"]
+          },
+          {
+            "span": [63, 78],
+            "kind": "filter",
+            "field": "status",
+            "values": ["accepted"]
+          }
+        ]
+      },
+      "effective_ast": {
+        "span": [1, 78],
+        "kind": "and",
+        "children": [
+          {
+            "span": [1, 6],
+            "kind": "term",
+            "token": "trust",
+            "field": null
+          },
+          {
+            "span": [11, 58],
+            "kind": "filter",
+            "field": "track",
+            "values": ["datasets_benchmarks", "main", "position"]
+          },
+          {
+            "span": [63, 78],
+            "kind": "filter",
+            "field": "status",
+            "values": ["accepted"]
+          }
+        ]
+      },
+      "canonical": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+      "canonical_hash": "8d22ca9e97f0895e2fae66a74344dbbaade5b8cbd66d3f604e2e6bb425da8bbe",
+      "identification_query": "trust",
+      "defaults": ["track", "status"],
+      "warnings": [],
+      "errors": [],
+      "translations": [],
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [79, 79],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["AAAI", "AIES", "FAccT", "IASEAI", "ICLR", "ICML", "NeurIPS"]
+        },
+        "year": {
+          "field": "year",
+          "negated": false,
+          "span": [79, 79],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "ranges": [
+            {
+              "lo": 1000,
+              "hi": 9999
+            }
+          ]
+        },
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [11, 58],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["datasets_benchmarks", "main", "position"]
+        },
+        "status": {
+          "field": "status",
+          "negated": false,
+          "span": [63, 78],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["accepted"]
+        },
+        "abstract_kind": {
+          "field": "abstract_kind",
+          "negated": false,
+          "span": [79, 79],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["none", "official", "openalex"]
+        }
+      },
+      "word_forms": [],
+      "word_forms_skipped": []
+    },
+    "parse_identification": {
+      "index_version": "e38788009504",
+      "tokenizer_version": "3",
+      "query_version": "2",
+      "mode": "native",
+      "ast": {
+        "span": [0, 5],
+        "kind": "term",
+        "token": "trust",
+        "field": null
+      },
+      "effective_ast": {
+        "span": [0, 5],
+        "kind": "and",
+        "children": [
+          {
+            "span": [0, 5],
+            "kind": "term",
+            "token": "trust",
+            "field": null
+          },
+          {
+            "span": [5, 5],
+            "kind": "filter",
+            "field": "track",
+            "values": ["datasets_benchmarks", "main", "position"]
+          },
+          {
+            "span": [5, 5],
+            "kind": "filter",
+            "field": "status",
+            "values": ["accepted"]
+          }
+        ]
+      },
+      "canonical": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+      "canonical_hash": "8d22ca9e97f0895e2fae66a74344dbbaade5b8cbd66d3f604e2e6bb425da8bbe",
+      "identification_query": "trust",
+      "defaults": ["track", "status"],
+      "warnings": [],
+      "errors": [],
+      "translations": [],
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["AAAI", "AIES", "FAccT", "IASEAI", "ICLR", "ICML", "NeurIPS"]
+        },
+        "year": {
+          "field": "year",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "ranges": [
+            {
+              "lo": 1000,
+              "hi": 9999
+            }
+          ]
+        },
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["datasets_benchmarks", "main", "position"]
+        },
+        "status": {
+          "field": "status",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["accepted"]
+        },
+        "abstract_kind": {
+          "field": "abstract_kind",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["none", "official", "openalex"]
+        }
+      },
+      "word_forms": [],
+      "word_forms_skipped": []
+    },
+    "diff": {
+      "index_version": "e38788009504",
+      "tokenizer_version": "3",
+      "query_version": "2",
+      "record_id": "RecDrift0001",
+      "status": "drifted",
+      "recorded_index_version": "ade4a09a41f2",
+      "refused": null,
+      "verified_clauses": 0,
+      "changed": [
+        {
+          "input": "snapshot_hash",
+          "kind": "corpus",
+          "recorded": "fd5c23a4b694af789f6e483d79c47f047592cb9088077a20e21dadb72e47e43f",
+          "current": "637260cf503b25f65ec02e04b40d4a8d3635063b96e1328affe2914c68920dca"
+        }
+      ],
+      "offset": 0,
+      "limit": 50,
+      "added_total": 0,
+      "removed_total": 3,
+      "added": [],
+      "removed": [
+        {
+          "id": "op:aaai:2024:Fx0001",
+          "title": "Trust in deployed models",
+          "track": "iaai",
+          "cause": "track_changed"
+        },
+        {
+          "id": "op:aaai:2024:Fx0002",
+          "title": null,
+          "track": null,
+          "cause": "not_in_index"
+        },
+        {
+          "id": "op:aaai:2024:Fx0003",
+          "title": "Reliance in teams",
+          "track": "main",
+          "cause": "still_eligible"
+        }
+      ],
+      "membership_identical": false,
+      "removed_causes": {
+        "track_changed": 1,
+        "not_in_index": 1,
+        "still_eligible": 1
+      }
+    }
   }
 }

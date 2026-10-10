@@ -3,16 +3,43 @@
 /**
  * A drifted record's diff (design R2; copy RC-14): `GET /records/{id}/diff`, 50 per page, two lists, "Added"
  * and "Removed", each paper a link to its page or, when the index the replay ran on doesn't hold it, its id.
- * Opened on request (the diff re-runs the query: the export weight).
+ * Opened on request (the diff re-runs the query: the export weight). Each removed paper says why the re-run
+ * no longer finds it, and a line tallies the causes over the whole removed list (TASK-227; copy RC-14a).
  */
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useId, useState } from "react";
 import { outcomeOf } from "@/api/outcome";
+import type { components } from "@/api/schema";
+import { trackDisplay } from "@/components/paper-badges";
 import { useApi } from "@/components/providers";
 import { button, FailureNotice } from "../export/export-notice";
 
 export const DIFF_PAGE = 50;
+
+type Entry = components["schemas"]["DiffEntry"];
+type Causes = components["schemas"]["RemovalCauses"];
+
+/** Why the re-run no longer finds a removed paper that the index still holds (RC-14a). An unknown cause gets no words. */
+function causeWords(e: Entry): string | null {
+  switch (e.cause) {
+    case "track_changed":
+      return `moved to the ${trackDisplay(e.track ?? "unknown").short} track (not in this search's tracks)`;
+    case "still_eligible":
+      return "no longer matches the query (its title, abstract or details changed)";
+    default:
+      return null;
+  }
+}
+
+/** The removed list's causes in one line, counted over the whole list (RC-14a). */
+function causesLine(total: number, t: Causes): string {
+  const n = (k: number) => k.toLocaleString("en-US");
+  return (
+    `Of the ${n(total)} removed: ${n(t.track_changed)} moved to a track this search doesn't include · ` +
+    `${n(t.not_in_index)} no longer in the index · ${n(t.still_eligible)} no longer matching the query.`
+  );
+}
 
 export function RecordDiff({ id, added, removed }: { id: string; added: number; removed: number }) {
   const [open, setOpen] = useState(false);
@@ -61,35 +88,54 @@ export function RecordDiff({ id, added, removed }: { id: string; added: number; 
             <>
               {(
                 [
-                  ["Added", answer.data.added_total ?? added, answer.data.added],
-                  ["Removed", answer.data.removed_total ?? removed, answer.data.removed],
+                  ["Added", answer.data.added_total ?? added, answer.data.added, null],
+                  [
+                    "Removed",
+                    answer.data.removed_total ?? removed,
+                    answer.data.removed,
+                    answer.data.removed_causes,
+                  ],
                 ] as const
-              ).map(([label, n, entries]) => (
-                <section key={label} className="space-y-1">
-                  <h3 className="font-semibold">
+              ).map(([label, n, entries, causes]) => (
+                <section key={label} aria-labelledby={`${panelId}-${label}`} className="space-y-1">
+                  <h3 id={`${panelId}-${label}`} className="font-semibold">
                     {label} ({n.toLocaleString("en-US")})
                   </h3>
+                  {causes !== null && n > 0 && <p>{causesLine(n, causes)}</p>}
                   {entries.length === 0 ? (
                     <p className="text-muted-foreground">None on this page.</p>
                   ) : (
                     <ul className="list-disc space-y-1 pl-5">
-                      {entries.map((e) => (
-                        <li key={e.id} className="break-words">
-                          {e.title === null ? (
-                            <>
-                              <code className="font-mono break-all">{e.id}</code> (not in index{" "}
-                              <code className="font-mono break-all">{answer.data.index_version}</code>)
-                            </>
-                          ) : (
-                            <Link
-                              href={`/paper/${encodeURIComponent(e.id)}`}
-                              className="underline underline-offset-4"
-                            >
-                              {e.title}
-                            </Link>
-                          )}
-                        </li>
-                      ))}
+                      {entries.map((e) => {
+                        if (e.cause === "not_in_index") {
+                          return (
+                            <li key={e.id} className="break-words">
+                              <code className="font-mono break-all">{e.id}</code> — no longer in index{" "}
+                              <code className="font-mono break-all">{answer.data.index_version}</code> (left
+                              the corpus, or now counted as not a paper)
+                            </li>
+                          );
+                        }
+                        const why = causeWords(e);
+                        return (
+                          <li key={e.id} className="break-words">
+                            {e.title === null ? (
+                              <>
+                                <code className="font-mono break-all">{e.id}</code> (not in index{" "}
+                                <code className="font-mono break-all">{answer.data.index_version}</code>)
+                              </>
+                            ) : (
+                              <Link
+                                href={`/paper/${encodeURIComponent(e.id)}`}
+                                className="underline underline-offset-4"
+                              >
+                                {e.title}
+                              </Link>
+                            )}
+                            {why !== null && ` — ${why}`}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </section>

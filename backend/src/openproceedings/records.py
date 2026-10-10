@@ -22,6 +22,9 @@ PRISMA identification numbers (not on a bootstrap corpus), `total`, `excluded`, 
   has it (a loader's engine must *be* that version), else on the served one; `reproduced` / `mismatch`
   when the query version is also the record's, `drifted` otherwise. A mismatch breaks guarantee 4: ERROR
   `API_REPLAY_MISMATCH`, once per record per process (DEBUG after that).
+- `removals` says why each id a replay removed is gone, on the index it ran on (TASK-227): `not_in_index`,
+  `track_changed` (held on a track the search's `track:` clauses don't admit) or `still_eligible`. It reads the
+  ids' stored tracks and changes nothing a replay compares.
 
 Nothing here logs query text: the record stores it, the logs never do.
 """
@@ -43,7 +46,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import (
     BaseModel,
@@ -60,9 +63,10 @@ from openproceedings.engine.exclusions import identified_total, unclassified_tot
 from openproceedings.engine.index import VERSION_NAME
 from openproceedings.engine.index import index_version as index_version_of
 from openproceedings.engine.protocol import EngineInputError
-from openproceedings.engine.tantivy_engine import TantivyEngine
+from openproceedings.engine.tantivy_engine import TantivyEngine, passes
 from openproceedings.ingest.snapshot import SnapshotError, indexed_snapshot, utc_query_sources
 from openproceedings.query import QUERY_VERSION
+from openproceedings.query.ast import And, Filter, Node, Not
 from openproceedings.query.parser import Mode, ParseResult, parse
 from openproceedings.search import expansions_json, run
 from openproceedings.timestamps import CrawlWindow, Timestamp
@@ -838,3 +842,57 @@ def replay(
         ids_match=ids_match,
         excluded_match=excluded_match,
     )
+
+
+# --- a drifted record's removed papers (TASK-227) -----------------------------------------------------------
+# why the replay no longer matches a paper the record holds, judged on the index the replay ran on:
+# `not_in_index` (the index doesn't hold it: left the corpus, or became a not-paper row), `track_changed` (it is
+# held on a track the search's track clauses don't admit: moved, e.g. to `iaai`, decision-050), `still_eligible`
+# (held on a track the search admits, so its title, abstract or another field no longer matches)
+RemovalCause = Literal["track_changed", "not_in_index", "still_eligible"]
+REMOVAL_CAUSES: tuple[RemovalCause, ...] = get_args(RemovalCause)
+
+
+@dataclass(frozen=True, slots=True)
+class Removal:
+    track: str | None  # its track on the replaying index; None when that index doesn't hold it
+    cause: RemovalCause
+
+
+def track_clauses(parsed: ParseResult) -> tuple[Node, ...]:
+    """The effective query's top-level `track:` clauses (a filter or `NOT` of one, the default included): the
+    tracks the search admits. A nested track clause decides nothing alone (the default still applies on top)."""
+    ast = parsed.effective_ast
+    if ast is None:
+        return ()
+    conjuncts = ast.children if isinstance(ast, And) else (ast,)
+    return tuple(
+        c for c in conjuncts if isinstance(inner := c.child if isinstance(c, Not) else c, Filter)
+        and inner.field == "track"
+    )  # fmt: skip
+
+
+def removal_cause(track: str | None, clauses: Sequence[Node]) -> RemovalCause:
+    """A removed paper's cause from its track on the replaying index (None: not held) and the search's
+    `track_clauses`, decided as the compiled query decides a filter (`passes`)."""
+    if track is None:
+        return "not_in_index"
+    return "still_eligible" if all(passes(c, track) for c in clauses) else "track_changed"
+
+
+def removals(result: Replay) -> dict[str, Removal] | None:
+    """Each id the replay removed, with its track and cause on the index it ran on (a stored-field read of the
+    ids, `TantivyEngine.tracks`; no index field). None when the replay compared nothing (`refused`)."""
+    if result.removed is None:
+        return None
+    tracks = result.engine.tracks(list(result.removed))
+    clauses = track_clauses(result.parsed)
+    return {i: Removal(tracks.get(i), removal_cause(tracks.get(i), clauses)) for i in result.removed}
+
+
+def removal_tally(found: Mapping[str, Removal]) -> dict[RemovalCause, int]:
+    """How many removed ids have each cause, every cause present (0 included), in `REMOVAL_CAUSES` order."""
+    out = dict.fromkeys(REMOVAL_CAUSES, 0)
+    for r in found.values():
+        out[r.cause] += 1
+    return out

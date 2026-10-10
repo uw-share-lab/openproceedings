@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { json, renderWithApi, type Call, type Handler } from "@/test/api-stub";
-import { copy, RECORDS, type RecordCase } from "@/test/record-fixture";
+import { copy, DRIFT, RECORDS, type RecordCase } from "@/test/record-fixture";
 import { methodsText, type RecordResponse } from "@/lib/methods-text";
 import { RecordView, windowRow } from "./record-view";
 
@@ -63,11 +63,12 @@ function api(c: RecordCase, replay: Response | ((call: Call) => Response) = json
         added_total: 2,
         removed_total: 1,
         added: [
-          { id: "op:iclr:2024:new1", title: "A new paper" },
-          { id: "op:iclr:2024:new2", title: null },
+          { id: "op:iclr:2024:new1", title: "A new paper", track: "main", cause: null },
+          { id: "op:iclr:2024:new2", title: null, track: null, cause: null },
         ],
-        removed: [{ id: "op:iclr:2023:old1", title: "An old paper" }],
+        removed: [{ id: "op:iclr:2023:old1", title: "An old paper", track: "main", cause: "still_eligible" }],
         membership_identical: false,
+        removed_causes: { track_changed: 0, not_in_index: 0, still_eligible: 1 },
         verified_clauses: 0,
       });
     }
@@ -263,6 +264,55 @@ describe("drifted (design R2, R5)", () => {
     expect(screen.getByText(/\(not in index/)).toBeTruthy();
     const diff = calls.find((x) => x.path.endsWith("/diff"));
     expect(diff?.query.get("limit")).toBe("50");
+  });
+
+  it("says why each removed paper left, and tallies the causes over the whole list (TASK-227)", async () => {
+    const c = copy(DRIFT);
+    const handler = api(c);
+    renderWithApi(<RecordView id={c.stored.record.record_id} />, (call) =>
+      call.path.endsWith("/diff") ? json(c.diff) : handler(call),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /See the 0 added and 3 removed papers/ }));
+    const removed = await screen.findByRole("region", { name: "Removed (3)" });
+    const t = c.diff.removed_causes;
+    if (t === null) throw new Error("the fixture's diff has no causes");
+    expect(within(removed).getByText(/^Of the 3 removed:/).textContent).toBe(
+      `Of the 3 removed: ${t.track_changed} moved to a track this search doesn't include · ${t.not_in_index} ` +
+        `no longer in the index · ${t.still_eligible} no longer matching the query.`,
+    );
+    const items = within(removed).getAllByRole("listitem");
+    const byId = (cause: string) => {
+      const e = c.diff.removed.find((x) => x.cause === cause);
+      if (e === undefined) throw new Error(`no ${cause} paper in the fixture`);
+      const item = items[c.diff.removed.indexOf(e)];
+      if (item === undefined) throw new Error(`no list item for the ${cause} paper`);
+      return item;
+    };
+    const moved = byId("track_changed");
+    expect(within(moved).getByRole("link").getAttribute("href")).toMatch(/^\/paper\//);
+    expect(moved.textContent).toMatch(/ — moved to the IAAI track \(not in this search's tracks\)$/);
+    const gone = byId("not_in_index");
+    expect(within(gone).queryByRole("link")).toBeNull();
+    expect(gone.textContent).toBe(
+      `${c.diff.removed.find((x) => x.cause === "not_in_index")?.id} — no longer in index ${c.diff.index_version} ` +
+        "(left the corpus, or now counted as not a paper)",
+    );
+    expect(byId("still_eligible").textContent).toMatch(
+      / — no longer matches the query \(its title, abstract or details changed\)$/,
+    );
+  });
+
+  it("names a track by the value the reader types when it has no short form", async () => {
+    const c = copy(DRIFT);
+    const moved = c.diff.removed.find((x) => x.cause === "track_changed");
+    if (moved === undefined) throw new Error("no track_changed paper in the fixture");
+    Object.assign(moved, { track: "student_abstract" });
+    const handler = api(c);
+    renderWithApi(<RecordView id={c.stored.record.record_id} />, (call) =>
+      call.path.endsWith("/diff") ? json(c.diff) : handler(call),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /See the 0 added and 3 removed papers/ }));
+    expect(await screen.findByText(/moved to the student_abstract track/)).toBeTruthy();
   });
 
   it("says membership-identical on +0 / −0", async () => {

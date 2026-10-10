@@ -213,8 +213,10 @@ export interface paths {
          * Get Record Diff
          * @description The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each
          *     list is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A
-         *     title comes from the index the replay ran on, null if it doesn't hold the paper. A refused replay
-         *     compared nothing: empty lists, null totals.
+         *     title comes from the index the replay ran on, null if it doesn't hold the paper. Each removed paper also
+         *     has its track there and its cause, and `removed_causes` counts the causes over the whole list (TASK-227;
+         *     the counts go on the access line too, never a title). A refused replay compared nothing: empty lists,
+         *     null totals and `removed_causes`.
          */
         get: operations["get_record_diff"];
         put?: never;
@@ -693,10 +695,20 @@ export interface components {
         DiagnosticCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "FIELD_NOT_INDEXED" | "WARN_LOWERCASE_OPERATOR" | "WARN_MIXED_AND_OR" | "WARN_NESTED_FILTER" | "WARN_FILTER_SCOPE" | "WARN_LOOKALIKE_OPERATOR" | "WARN_SYMBOLS_DROPPED" | "WARN_SOURCE_PARTIAL" | "WARN_CJK_RUN" | "WARN_SPELLED_GREEK" | "COMPAT_SOURCE_ALIAS" | "COMPAT_POP_DOLLAR" | "COMPAT_POP_PHRASE" | "COMPAT_NO_STEMMING" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_REPLAY_MISMATCH" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY" | "API_TOO_MANY_VERIFIED_CLAUSES" | "API_QUERY_TOO_COSTLY" | "API_COMPARE_DISABLED" | "API_UNSUPPORTED_MEDIA_TYPE" | "API_UPLOAD_TIMEOUT" | "API_RIS_INVALID" | "API_RIS_TOO_LARGE" | "API_COMPARE_TOO_COSTLY";
         /** DiffEntry */
         DiffEntry: {
+            /**
+             * Cause
+             * @description Why the replay no longer matches a removed paper (null on an added one), judged on the index the replay ran on. `track_changed`: that index holds it on a track the search's `track:` clauses (the default included) don't admit, e.g. moved to `iaai`. `not_in_index`: that index doesn't hold it (it left the corpus, or is counted as not a paper). `still_eligible`: held on a track the search admits, so its title, abstract or another field no longer matches.
+             */
+            cause: ("track_changed" | "not_in_index" | "still_eligible") | null;
             /** Id */
             id: string;
             /** Title */
             title: string | null;
+            /**
+             * Track
+             * @description Its track on the index the replay ran on; null when that index doesn't hold it.
+             */
+            track: ("main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "student_abstract" | "consortium" | "demo" | "iaai" | "eaai" | "other" | "unknown") | null;
         };
         /** ErrorBody */
         ErrorBody: {
@@ -1412,6 +1424,8 @@ export interface components {
             refused: components["schemas"]["DiagnosticCode"] | null;
             /** Removed */
             removed: components["schemas"]["DiffEntry"][];
+            /** @description The removed list's causes, counted over the whole list (TASK-227). Null when `refused`. */
+            removed_causes: components["schemas"]["RemovalCauses"] | null;
             /** Removed Total */
             removed_total: number | null;
             /**
@@ -1459,6 +1473,18 @@ export interface components {
             replay: components["schemas"]["ReplayInfo"] | null;
             /** Tokenizer Version */
             tokenizer_version: string;
+        };
+        /**
+         * RemovalCauses
+         * @description How many of the whole removed list (not just the page) have each cause; every cause, 0 included.
+         */
+        RemovalCauses: {
+            /** Not In Index */
+            not_in_index: number;
+            /** Still Eligible */
+            still_eligible: number;
+            /** Track Changed */
+            track_changed: number;
         };
         /** ReplayInfo */
         ReplayInfo: {

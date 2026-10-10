@@ -28,7 +28,7 @@ from openproceedings.query.clauses import ParsedFilters
 from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode
 from openproceedings.query.wordforms import SkippedTerm, WordForm
 from openproceedings.records import Excluded as Excluded  # one schema for the exclusion accounting
-from openproceedings.records import SearchRecord
+from openproceedings.records import RemovalCause, SearchRecord
 from openproceedings.search import NotCounted
 from openproceedings.timestamps import CrawlWindow, Timestamp
 from openproceedings.vocab import AbstractKind, Status, Track, Venue
@@ -576,6 +576,24 @@ class RecordResponse(Versioned):
 class DiffEntry(Model):
     id: str
     title: str | None  # null when no index on this instance still holds the paper
+    track: Track | None = Field(  # TASK-227: additive
+        description="Its track on the index the replay ran on; null when that index doesn't hold it."
+    )
+    cause: RemovalCause | None = Field(  # TASK-227: additive
+        description="Why the replay no longer matches a removed paper (null on an added one), judged on the "
+        "index the replay ran on. `track_changed`: that index holds it on a track the search's `track:` clauses (the "
+        "default included) don't admit, e.g. moved to `iaai`. `not_in_index`: that index doesn't hold it (it "
+        "left the corpus, or is counted as not a paper). `still_eligible`: held on a track the search admits, "
+        "so its title, abstract or another field no longer matches."
+    )
+
+
+class RemovalCauses(Model):
+    """How many of the whole removed list (not just the page) have each cause; every cause, 0 included."""
+
+    track_changed: int
+    not_in_index: int
+    still_eligible: int
 
 
 class RecordDiff(Versioned):
@@ -590,8 +608,11 @@ class RecordDiff(Versioned):
     added_total: int | None
     removed_total: int | None
     added: list[DiffEntry]  # sorted by id
-    removed: list[DiffEntry]
+    removed: list[DiffEntry]  # each with its track and cause (TASK-227)
     membership_identical: bool | None
+    removed_causes: RemovalCauses | None = Field(
+        description="The removed list's causes, counted over the whole list (TASK-227). Null when `refused`."
+    )
 
 
 # --- /meta -------------------------------------------------------------------------------------------

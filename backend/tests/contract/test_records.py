@@ -446,6 +446,7 @@ def test_a_canonical_that_no_longer_runs_is_refused_with_null_counts(
             None,
             None,
         )
+        assert diff["removed_causes"] is None  # no comparison: no causes, never a tally of zeros
     lines = mismatch_lines(logs)
     assert len(lines) == 1 and lines[0]["refused"] == "PARSE_UNBALANCED_PAREN"
 
@@ -524,13 +525,22 @@ def test_a_changed_snapshot_with_the_pinned_index_gone_is_drifted_with_exact_cou
 
     assert diff["status"] == "drifted" and diff["recorded_index_version"] == drift.before
     assert diff["changed"] == replay_["changed"] and diff["refused"] is None
-    titles = {as_paper(r).id: as_paper(r).title for r in drift.added}
-    assert diff["added"] == [{"id": i, "title": titles[i]} for i in added]
+    papers = {as_paper(r).id: as_paper(r) for r in drift.added}
+    assert diff["added"] == [
+        {"id": i, "title": papers[i].title, "track": papers[i].track, "cause": None} for i in added
+    ]  # an added paper has its track on the replaying index, and no cause
     # the removed papers are in no index this instance holds (the pinned one is gone): titles are null
-    assert diff["removed"] == [{"id": i, "title": None} for i in removed]
+    assert diff["removed"] == [
+        {"id": i, "title": None, "track": None, "cause": "not_in_index"} for i in removed
+    ]
+    assert diff["removed_causes"] == {"track_changed": 0, "not_in_index": len(removed), "still_eligible": 0}
     assert (diff["added_total"], diff["removed_total"]) == (len(added), len(removed))
     # a page: at most `limit` of each list from `offset`, the totals always in full
-    assert page["removed"] == [{"id": i, "title": None} for i in removed[1:2]] and page["added"] == []
+    assert (
+        page["removed"]
+        == [{"id": i, "title": None, "track": None, "cause": "not_in_index"} for i in removed[1:2]]
+        and page["added"] == []
+    )
     assert (page["added_total"], page["removed_total"]) == (len(added), len(removed))
     assert mismatch_lines(logs) == []
     assert any(x["event"] == "pinned_index_unavailable" and x["reason"] == "absent" for x in logs())
@@ -554,6 +564,57 @@ def test_a_changed_query_version_replays_on_the_pinned_index_when_it_is_here(
     assert body["replay"]["status"] == "drifted" and body["replay"]["index_version"] == drift.before
     assert [c["input"] for c in diff["changed"]] == ["query_version"]
     assert diff["membership_identical"] is True and diff["removed"] == []
+
+
+def test_a_drifted_diff_gives_each_removed_papers_cause_and_the_tally(tmp_path: Path, logs: Logs) -> None:
+    """TASK-227: replayed on a second index where one paper moved to the IAAI track (decision-050's kind of
+    drift), one left the index and one no longer matches, each removed paper says why, with its track on the
+    replaying index, and the tally counts every cause (0 included) over the whole list, not the page."""
+    aaai = {"venue": "AAAI", "year": 2024}
+    before = [
+        Rec("fx:0001", "trust moved", None, **aaai),
+        Rec("fx:0002", "trust gone", None, **aaai),
+        Rec("fx:0003", "trust reworded", None, **aaai),
+        Rec("fx:0004", "trust kept", None, **aaai),
+    ]
+    after = [
+        Rec("fx:0001", "trust moved", None, track="iaai", **aaai),
+        Rec("fx:0003", "reliance reworded", None, **aaai),
+        Rec("fx:0004", "trust kept", None, **aaai),
+    ]
+    first, second = tmp_path / "first", tmp_path / "second"
+    for root, corpus, name in ((first, before, "before"), (second, after, "after")):
+        point_current(root, build(corpus, root / "snapshots", name, root / "indexes"))
+    with TestClient(make_app(first)) as client:
+        record_id = save(client, "trust")
+    shutil.copytree(first / RECORDS_DIR, second / RECORDS_DIR)  # the record moves; its index doesn't
+    moved, gone, reworded = (as_paper(r).id for r in before[:3])
+    with TestClient(make_app(second)) as client:
+        assert replayed(client, record_id)["replay"]["removed_total"] == 3
+        diff = diffed(client, record_id)
+        page = diffed(client, record_id, offset=2, limit=1)
+    assert diff["status"] == "drifted" and diff["added"] == []
+    assert diff["removed"] == [
+        {"id": moved, "title": "trust moved", "track": "iaai", "cause": "track_changed"},
+        {"id": gone, "title": None, "track": None, "cause": "not_in_index"},
+        {"id": reworded, "title": "reliance reworded", "track": "main", "cause": "still_eligible"},
+    ]
+    tally = {"track_changed": 1, "not_in_index": 1, "still_eligible": 1}
+    assert diff["removed_causes"] == tally
+    assert page["removed_causes"] == tally and [x["id"] for x in page["removed"]] == [reworded]
+    # counts only on the access line: no title or query text
+    access = [x for x in logs() if x["event"] == "request" and x["route"].endswith("/diff")]
+    assert access and all("trust" not in json.dumps(x) for x in logs())
+    assert {k: access[0][f"removed_{k}"] for k in tally} == tally
+
+
+def test_a_reproduced_diff_tallies_no_causes(client: TestClient) -> None:
+    diff = diffed(client, save(client, "trust"))
+    assert diff["removed"] == [] and diff["removed_causes"] == {
+        "track_changed": 0,
+        "not_in_index": 0,
+        "still_eligible": 0,
+    }
 
 
 def test_diff_of_a_reproduced_record_is_empty(client: TestClient) -> None:

@@ -812,3 +812,36 @@ def test_the_cli_says_the_scholar_dates_zone(store: RecordStore, kind: str, line
 
     saved = store.insert(fields(crawl_dates_kind={"*": kind}), IDS)
     assert _record_lines(saved)[1] == f"{line} · sources openreview_v2"
+
+
+# --- a drifted record's removed papers: each one's cause (TASK-227) --------------------------------------
+@pytest.mark.parametrize(
+    ("q", "track", "cause"),
+    [
+        ("trust", None, "not_in_index"),  # absent from the replaying index, whatever the query
+        ("trust", "iaai", "track_changed"),  # the default track filter doesn't admit it
+        ("trust", "student_abstract", "track_changed"),
+        ("trust", "main", "still_eligible"),  # on a default track: its text or abstract changed
+        ("trust", "position", "still_eligible"),
+        ("trust AND track:(main OR iaai)", "iaai", "still_eligible"),  # the reader's own tracks decide
+        ("trust AND track:(main OR iaai)", "demo", "track_changed"),
+        ("trust NOT track:workshop", "demo", "still_eligible"),  # a negated track clause
+        ("trust NOT track:workshop", "workshop", "track_changed"),
+        ("trust AND track:main AND track:(main OR demo)", "demo", "track_changed"),  # every clause applies
+        ("trust OR track:demo", "demo", "track_changed"),  # nested only: the default still applies on top
+        ("trust OR track:demo", "main", "still_eligible"),
+    ],
+)
+def test_removal_cause(q: str, track: str | None, cause: str) -> None:
+    parsed = parse(q, "native", TOKENIZER_VERSION)
+    assert records.removal_cause(track, records.track_clauses(parsed)) == cause
+
+
+def test_removal_tally_counts_every_cause_zero_included() -> None:
+    found = {
+        "a": records.Removal("iaai", "track_changed"),
+        "b": records.Removal(None, "not_in_index"),
+        "c": records.Removal("demo", "track_changed"),
+    }
+    assert records.removal_tally(found) == {"track_changed": 2, "not_in_index": 1, "still_eligible": 0}
+    assert list(records.removal_tally({})) == list(records.REMOVAL_CAUSES)

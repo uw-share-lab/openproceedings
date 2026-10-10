@@ -99,6 +99,11 @@ ANNOTATIONS = (
     "compare_ms",  # wall time the request held a comparison slot (its file arriving, then the work)
     "compare_cost_ms",  # what of it is debited: the file's arrival (wall) plus the work's CPU time
     "compare_tokens",  # that, in tokens (RateLimit.debit_comparison)
+    # a record's diff (`GET /records/{id}/diff`, api/records.py; TASK-227): its removed papers' causes, counted
+    # over the whole list; never an id or a title
+    "removed_track_changed",
+    "removed_not_in_index",
+    "removed_still_eligible",
 )
 
 type Network = ipaddress.IPv4Network | ipaddress.IPv6Network

@@ -381,6 +381,18 @@ class TantivyEngine:
         query = tantivy.Query.term_set_query(self.index.schema, "id", ids)
         return {r["id"]: r for r in map(self._display, self.hits(query))}
 
+    def tracks(self, ids: list[str]) -> dict[str, str]:
+        """The track of each of `ids` the index holds, by id (an id it doesn't hold is left out): a stored-field
+        read, nothing else of the document is decoded (a drifted record's removed papers, TASK-227)."""
+        if not ids:
+            return {}
+        query = tantivy.Query.term_set_query(self.index.schema, "id", ids)
+        out: dict[str, str] = {}
+        for address in self.hits(query):
+            doc = self.searcher.doc(address)
+            out[str(doc.get_first("id"))] = str(doc.get_first("track"))
+        return out
+
     def _display(self, address: tantivy.DocAddress) -> dict[str, Any]:
         doc = self.searcher.doc(address).to_dict()
         shown = record_of(doc["record"][0])
@@ -443,7 +455,7 @@ class TantivyEngine:
         # per field, whether each value that occurs passes every set-aside filter on that field
         ok = [
             {
-                v: all(_passes(c, v) for c in filters if _filter_field(c) == g)
+                v: all(passes(c, v) for c in filters if _filter_field(c) == g)
                 for v in {c[i] for c, _n in combos}
             }
             for i, g in enumerate(over)
@@ -518,7 +530,7 @@ class TantivyEngine:
             self.expansions(ast)  # the cap applies, as for every tree an engine is given
             filters = [(self.combo.index(f), c) for c in tops if (f := _filter_field(c)) is not None]
             combos = self.combos(base, scope, parts=parts)
-            out.append(sum(n for combo, n in combos if all(_passes(c, combo[at]) for at, c in filters)))
+            out.append(sum(n for combo, n in combos if all(passes(c, combo[at]) for at, c in filters)))
         return out
 
     def combos(
@@ -914,7 +926,7 @@ def _walk(result: dict[str, Any], over: tuple[str, ...], prefix: Combo, out: lis
             _walk(bucket, over, key, out)
 
 
-def _passes(n: Node, value: str | int) -> bool:
+def passes(n: Node, value: str | int) -> bool:
     """Whether a document whose value in `n`'s field is `value` passes the top-level filter `n` (a `Filter` or
     `NOT` of one), as the compiled query decides it (compile.py `filter`): years in any range, inclusive;
     other fields equal to one of the values."""

@@ -34,7 +34,7 @@ import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, FastAPI, Query, Request, Response
 from fastapi import Path as PathParam
@@ -65,6 +65,7 @@ from openproceedings.api.models import (
     RecordDiff,
     RecordRequest,
     RecordResponse,
+    RemovalCauses,
     ReplayInfo,
     versions,
 )
@@ -78,9 +79,12 @@ from openproceedings.records import (
     RECORDS_DIR,
     PinnedLoader,
     RecordStore,
+    RemovalCause,
     Replay,
     SearchRecord,
     freeze,
+    removal_tally,
+    removals,
     replay,
     valid_record_id,
 )
@@ -329,14 +333,25 @@ def get_record_diff(
 ) -> RecordDiff:
     """The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each
     list is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A
-    title comes from the index the replay ran on, null if it doesn't hold the paper. A refused replay
-    compared nothing: empty lists, null totals."""
+    title comes from the index the replay ran on, null if it doesn't hold the paper. Each removed paper also
+    has its track there and its cause, and `removed_causes` counts the causes over the whole list (TASK-227;
+    the counts go on the access line too, never a title). A refused replay compared nothing: empty lists,
+    null totals and `removed_causes`."""
     record = stored_record(request, id)
     result, clauses = _replayed(request, engine, record)
     added = list(result.added[offset : offset + limit]) if result.added is not None else []
     removed = list(result.removed[offset : offset + limit]) if result.removed is not None else []
     wanted = [*added, *removed]
-    titles = {i: str(r["title"]) for i, r in result.engine.display(wanted).items()} if wanted else {}
+    shown = result.engine.display(wanted) if wanted else {}
+    why = removals(result)  # None exactly when `result.removed` is (refused), and then `removed` is empty
+    tally = removal_tally(why) if why is not None else None
+    if tally is not None:
+        annotate(
+            request,
+            removed_track_changed=tally["track_changed"],
+            removed_not_in_index=tally["not_in_index"],
+            removed_still_eligible=tally["still_eligible"],
+        )
     return RecordDiff(
         **versions(result.engine.index_version, result.engine.tokenizer_version),
         record_id=record.record_id,
@@ -349,9 +364,21 @@ def get_record_diff(
         limit=limit,
         added_total=len(result.added) if result.added is not None else None,
         removed_total=len(result.removed) if result.removed is not None else None,
-        added=[DiffEntry(id=i, title=titles.get(i)) for i in added],
-        removed=[DiffEntry(id=i, title=titles.get(i)) for i in removed],
+        added=[_entry(i, shown, None) for i in added],
+        removed=[_entry(i, shown, why[i].cause) for i in removed if why is not None],
         membership_identical=result.membership_identical,
+        removed_causes=RemovalCauses(**tally) if tally is not None else None,
+    )
+
+
+def _entry(i: str, shown: dict[str, dict[str, Any]], cause: RemovalCause | None) -> DiffEntry:
+    """One diff entry: its title and track from the replaying index's display record (null when not held)."""
+    r = shown.get(i)
+    return DiffEntry(
+        id=i,
+        title=str(r["title"]) if r is not None else None,
+        track=r["track"] if r is not None else None,
+        cause=cause,
     )
 
 
