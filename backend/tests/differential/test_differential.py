@@ -193,9 +193,10 @@ def test_the_cap_stems_sit_at_the_cap(engines: tuple[ReferenceEngine, TantivyEng
 
 
 def test_the_corpus_covers_every_filter_combination() -> None:
-    from openproceedings.vocab import STATUSES, TRACKS
+    from openproceedings.vocab import STATUSES
 
-    from tests.fixtures.corpus.synthetic_5k import VENUES, YEARS
+    # the corpus's own pinned track tuple, not vocab.TRACKS (which has grown since the corpus was pinned)
+    from tests.fixtures.corpus.synthetic_5k import TRACKS, VENUES, YEARS
 
     corpus_5k = records()
     seen = {(r.venue, r.year, r.track, r.status) for r in corpus_5k}
