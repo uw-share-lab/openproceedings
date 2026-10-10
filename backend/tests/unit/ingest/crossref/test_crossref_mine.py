@@ -317,7 +317,9 @@ def test_a_section_row_gives_its_track_and_a_not_paper_row_beats_it(tmp_path: Pa
         'abstracts", pp. 900-950 (acm_proceedings.toml [[section]], verified 2026-10-10; test position)'
     )  # fmt: skip
     main = next(c for c in by["doi-3593013.3594011"].provenance if c.field == "track")
-    assert main.evidence.endswith("every paper of the proceedings is main (decision-049)")  # unchanged
+    assert main.evidence.endswith(
+        ": page 899-900 is in no acm_proceedings.toml [[section]] of the proceedings, so main (decision-049, decision-050)"
+    )  # a proceedings with no section row keeps "every paper of the proceedings is main"
 
 
 def test_a_section_row_that_holds_no_work_stops(tmp_path: Path, monkeypatch) -> None:
@@ -329,3 +331,14 @@ def test_a_section_row_that_holds_no_work_stops(tmp_path: Path, monkeypatch) -> 
     with pytest.raises(CrawlError, match="Student abstracts") as e:
         crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=table)
     assert e.value.reason == "stale_section"
+
+
+def test_a_proceedings_with_no_section_row_keeps_its_main_claim(tmp_path: Path) -> None:
+    _whole(tmp_path, api.work(D1, page="900-901"), api.work(D2), api.work(NP), total=3)
+    (r, _) = crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE).records
+    claim = next(c for c in r.provenance if c.field == "track")
+    assert (r.track, claim.evidence) == (
+        "main",
+        f"Crossref work {D1} in proceedings {ROW.doi} (acm_proceedings.toml FAccT 2023): every paper of the "
+        "proceedings is main (decision-049)",
+    )

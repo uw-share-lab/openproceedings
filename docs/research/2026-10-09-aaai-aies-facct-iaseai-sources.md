@@ -408,7 +408,7 @@ contents' sections; `conf/aaai/1991w` stays excluded; `ChangN94`, which TASK-225
 year**: no record keyed outside `conf/aaai/` (`conf/iaai/…`) crossrefs an AAAI volume before 2009. The volumes from
 1996 on name IAAI in their titles, but this release crossrefs no `conf/iaai/` paper to them (the design's §Sources 2: IAAI
 has its own proceedings before 2010; `conf/iaai/` was not read here). The IAAI papers printed *in* the AAAI volumes
-are keyed `conf/aaai/` and were read as AAAI `main`; since TASK-226 those of 2000–2008 are track `iaai` (§AAAI
+are keyed `conf/aaai/` and were read as AAAI `main`; since TASK-226 those of 1996–2008 are track `iaai` (§AAAI
 1993–2008 sections).
 
 **Other counts** (over the 4,758 inproceedings under keys dated 1980–2009):
@@ -645,7 +645,7 @@ TASK-225's evidence found 767 AAAI main-track entries of 1993–2008 of two page
 blocks. The official source for their sections is the AAAI Digital Library contents page
 `http://www.aaai.org/Library/AAAI/aaai<yy>contents.php`, read from Wayback copies of January 2013 (the live site no
 longer serves it), which gives each section heading and each paper's start page; the IAAI contents pages
-`.../Library/IAAI/iaai<yy>contents.php` give the IAAI papers 2000, 2004 and 2005 print in the AAAI volumes. Every
+`.../Library/IAAI/iaai<yy>contents.php` give the IAAI papers 1996–2000, 2004 and 2005 print in the AAAI volumes (Wayback copies of 2012–2013). Every
 dblp entry was joined to the contents by start page and title (762 of the 767 matched; the other five are named
 below), and each section became a `[[section]]` row of `dblp_aaai.toml`: a page range from the lowest dblp start
 page to the highest dblp end page of the entries the contents list in it.
@@ -655,7 +655,7 @@ page to the highest dblp end page of the entries the contents list in it.
 | Student Abstracts | `student_abstract` | 1994, 1996–2000, 2002, 2004–2008 | 399 |
 | (SIGART/AAAI) Doctoral Consortium | `consortium` | 1996–2000, 2002, 2004–2008 | 158 |
 | Video Abstracts (1993), Video Program (1994), Intelligent Systems Demonstrations | `demo` | 1993, 1994, 1999, 2000, 2002, 2004–2008 | 127 |
-| IAAI Deployed and Emerging Applications | `iaai` | 2000, 2002, 2004–2008 | 143 |
+| IAAI Case Studies (1996), Deployed and Emerging Applications | `iaai` | 1996–2000, 2002, 2004–2008 | 231 |
 | Robot Competition and Exhibition (Abstracts) | `other` | 1996, 1997, 1999, 2000, 2005–2007 | 64 |
 | Invited Talks, two pages or fewer | `[[not_paper]]`, kind `invited talk` | 1993, 1996–1998, 2000 | 12 removed |
 
@@ -675,19 +675,26 @@ ArkinF97 at p. 748, dblp at 755). 2006 Student Abstracts starts at 1853 (AhmadiS
   gives it `student_abstract`. `LimCKO00` (`1020-1015`) and `HanF08` (`1802-1893`) start inside their ranges and
   need no row; `AhmadiS06a` (`1853-`) reads as start page 1853.
 - **Range-covered entries the contents don't list:** `BraunlKLM96` (p. 1351, robot abstracts), `Taylor96` (p. 1411,
-  student abstracts), `BarishKCMPS00` (pp. 980–987, IAAI 2000; the IAAI page skips from 973 to 988); `Murphy96`
+  student abstracts); `Murphy96`
   is listed under a shorter title; `Hoz-WeissKWS02` is listed with a misprinted page (1174). The ranges also move
   six entries of three pages or more that the contents list in the same sections (`NumaoTN02a`, `ZhouH02`,
   `TaylorS06`, `ValenteJV06`, `Wang06`, `HanF08`).
 - **Unresolved.** `Sultanik05` (pp. 1628–1629) and `Thornton05` (pp. 1630–1631) sit between the last listed
   student abstract and the Doctoral Consortium but are on no aaai.org page (Wayback holds `sa05-001`…`022` only);
-  they stay `main`. So does `WangL05` (pp. 1632–1635), four pages, in the same gap. The IAAI papers in the
-  1996–1999 volumes (blocks of 17–32 entries the AAAI contents pages don't list) stay `main`: their IAAI contents
-  pages were not read.
+  they stay `main`. So does `WangL05` (pp. 1632–1635), four pages, in the same gap, and `BarishKCMPS00` (pp. 980–987),
+  between two IAAI 2000 papers but on no IAAI page (it skips from p. 973 to 988): the 2000 IAAI range is split
+  around it (937–978, 988–1059).
+- **IAAI 1996–1999 (round 2).** The AAAI contents pages of these years leave out the IAAI papers printed in the
+  volume (blocks of 18, 32, 22 and 17 entries no AAAI heading lists). The IAAI contents pages (`iaai96contents.php`
+  … `iaai99contents.php`, Wayback captures of 2012-06-05) list exactly those entries: every dblp entry in each
+  range matched an IAAI entry by start page and title (title ratio ≥ 0.8 for all), and each IAAI entry matched one
+  dblp entry. The one page difference: 1997's `DevA97` starts at p. 853 in dblp, p. 852 on the IAAI page (same
+  title); the range starts at dblp's 853. Ranges: 1996 pp. 1421–1587 (Case Studies), 1997 pp. 853–1085, 1998
+  pp. 1013–1166, 1999 pp. 778–896. Every IAAI year of 1996–2008 is resolved.
 
 **Result** (the replay test `backend/tests/unit/ingest/test_track_rules_replay.py` pins these counts over the
-pinned release): of the 4,689 main-volume entries, 33 are not-paper rows and 891 take a section's track, so AAAI
-1980–2008 is 4,709 records: 3,765 `main`, 399 `student_abstract`, 158 `consortium`, 127 `demo`, 143 `iaai`, 64
+pinned release): of the 4,689 main-volume entries, 33 are not-paper rows and 979 take a section's track, so AAAI
+1980–2008 is 4,709 records: 3,677 `main`, 399 `student_abstract`, 158 `consortium`, 127 `demo`, 231 `iaai`, 64
 `other`, 53 `workshop`. Per year:
 
 | Year | student_abstract | consortium | demo | iaai | other | not-paper rows added |
@@ -695,11 +702,11 @@ pinned release): of the 4,689 main-volume entries, 33 are not-paper rows and 891
 | 1990 | | | | | | 8 |
 | 1993 | | | 7 | | | 2 |
 | 1994 | 77 | | 6 | | | |
-| 1996 | 43 | 15 | | | 9 | 5 |
-| 1997 | 30 | 13 | | | 16 | 3 |
-| 1998 | 24 | 16 | | | | 1 |
-| 1999 | 29 | 16 | 17 | | 4 | |
-| 2000 | 38 | 12 | 12 | 18 | 2 | 2 |
+| 1996 | 43 | 15 | | 18 | 9 | 5 |
+| 1997 | 30 | 13 | | 32 | 16 | 3 |
+| 1998 | 24 | 16 | | 22 | | 1 |
+| 1999 | 29 | 16 | 17 | 17 | 4 | |
+| 2000 | 38 | 12 | 12 | 17 | 2 | 2 |
 | 2002 | 17 | 13 | 10 | 18 | | |
 | 2004 | 17 | 12 | 21 | 24 | | |
 | 2005 | 22 | 16 | 22 | 18 | 15 | |
@@ -719,5 +726,5 @@ The join is exact and one to one (`sources/facct_site.py`): 2022 and 2026 by exa
 
 Totals as built: FAccT 1,230 records (1,239 ACM DOIs, minus 26 FAccT 2020 tutorial and CRAFT rows, plus 17 from PMLR
 v81); AIES 2018–2023 575 records; AAAI 1980–2008 4,730 records in 23 held years. Since TASK-224/225/226: AIES
-2018–2023 557 records (449 `main`, 108 `student_abstract`), AAAI 1980–2008 4,709 records (3,765 `main`; §AAAI
+2018–2023 557 records (449 `main`, 108 `student_abstract`), AAAI 1980–2008 4,709 records (3,677 `main`; §AAAI
 1993–2008 sections).

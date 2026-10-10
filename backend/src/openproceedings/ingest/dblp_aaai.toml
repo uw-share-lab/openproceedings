@@ -567,11 +567,21 @@ label = "Student Abstracts"
 verified = 2026-10-10
 source = "https://web.archive.org/web/20130118002324/http://www.aaai.org/Library/AAAI/aaai99contents.php"
 
+# IAAI 2000 in two ranges: BarishKCMPS00 (pp. 980-987) is on no IAAI page (it skips from p. 973 to 988), so it stays
+# main (round 2 ruling)
 [[section]]
 year = 2000
-pages = [937, 1059]
+pages = [937, 978]
 track = "iaai"
 label = "IAAI-2000 Deployed and Emerging Applications"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20131004120945/http://www.aaai.org/Library/IAAI/iaai00contents.php"
+
+[[section]]
+year = 2000
+pages = [988, 1059]
+track = "iaai"
+label = "IAAI-2000 Emerging Applications"
 verified = 2026-10-10
 source = "https://web.archive.org/web/20131004120945/http://www.aaai.org/Library/IAAI/iaai00contents.php"
 
@@ -826,6 +836,42 @@ track = "demo"
 label = "Intelligent Systems Demonstrations"
 verified = 2026-10-10
 source = "https://web.archive.org/web/20130118002504/http://www.aaai.org/Library/AAAI/aaai08contents.php"
+
+# IAAI 1996-1999 (round 2): the IAAI papers printed in the AAAI volumes, which the AAAI contents pages leave out;
+# placed by the IAAI contents pages (every dblp entry in each range matched an entry there by start page and title;
+# 1997's DevA97 starts at p. 853 in dblp, p. 852 on the page)
+
+[[section]]
+year = 1996
+pages = [1421, 1587]
+track = "iaai"
+label = "IAAI-96 Case Studies"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20120605045614/http://www.aaai.org/Library/IAAI/iaai96contents.php"
+
+[[section]]
+year = 1997
+pages = [853, 1085]
+track = "iaai"
+label = "IAAI-97 Deployed and Emerging Applications"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20120605040048/http://www.aaai.org/Library/IAAI/iaai97contents.php"
+
+[[section]]
+year = 1998
+pages = [1013, 1166]
+track = "iaai"
+label = "IAAI-98 Deployed and Emerging Applications"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20120605045432/http://www.aaai.org/Library/IAAI/iaai98contents.php"
+
+[[section]]
+year = 1999
+pages = [778, 896]
+track = "iaai"
+label = "IAAI-99 Deployed and Emerging Applications"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20120605045227/http://www.aaai.org/Library/IAAI/iaai99contents.php"
 
 # --- AAAI 1993-2008: entries dblp's pages can't place in their section
 

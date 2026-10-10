@@ -17,11 +17,11 @@ PINNED = Path(__file__).parents[2] / "fixtures" / "pinned"
 AAAI_MOVED = {
     1993: {"demo": 7},
     1994: {"demo": 6, "student_abstract": 77},
-    1996: {"consortium": 15, "other": 9, "student_abstract": 43},
-    1997: {"consortium": 13, "other": 16, "student_abstract": 30},
-    1998: {"consortium": 16, "student_abstract": 24},
-    1999: {"consortium": 16, "demo": 17, "other": 4, "student_abstract": 29},
-    2000: {"consortium": 12, "demo": 12, "iaai": 18, "other": 2, "student_abstract": 38},
+    1996: {"consortium": 15, "iaai": 18, "other": 9, "student_abstract": 43},
+    1997: {"consortium": 13, "iaai": 32, "other": 16, "student_abstract": 30},
+    1998: {"consortium": 16, "iaai": 22, "student_abstract": 24},
+    1999: {"consortium": 16, "demo": 17, "iaai": 17, "other": 4, "student_abstract": 29},
+    2000: {"consortium": 12, "demo": 12, "iaai": 17, "other": 2, "student_abstract": 38},
     2002: {"consortium": 13, "demo": 10, "iaai": 18, "student_abstract": 17},
     2004: {"consortium": 12, "demo": 21, "iaai": 24, "student_abstract": 17},
     2005: {"consortium": 16, "demo": 22, "iaai": 18, "other": 15, "student_abstract": 22},
@@ -74,8 +74,8 @@ def test_the_aaai_rules_move_and_drop_exactly_the_counted_entries() -> None:
             moved.setdefault(year, Counter())[track] += 1
     assert {y: dict(c) for y, c in moved.items()} == AAAI_MOVED
     assert removed == AAAI_NOT_PAPER_BEFORE | AAAI_REMOVED
-    assert len(AAAI_REMOVED) == 21 and sum(sum(c.values()) for c in moved.values()) == 891
-    assert kept == 4689 - 33 - 891  # the census less every not-paper row and every moved entry
+    assert len(AAAI_REMOVED) == 21 and sum(sum(c.values()) for c in moved.values()) == 979
+    assert kept == 4689 - 33 - 979  # the census less every not-paper row and every moved entry
 
 
 def test_the_aaai_rows_the_rulings_name() -> None:
@@ -99,9 +99,20 @@ def test_the_aaai_rows_the_rulings_name() -> None:
         entries["AhmadiS06a"][1] == "1853-"
         and track("AhmadiS06a", *entries["AhmadiS06a"]) == "student_abstract"
     )
+    # round 2: the IAAI 1996-1999 ranges; 1997's DevA97 starts at p. 853 in dblp, p. 852 on the IAAI page
+    assert track("DevA97", *entries["DevA97"]) == "iaai" and entries["DevA97"][1] == "853-860"
     assert entries["LimCKO00"][1] == "1020-1015" and track("LimCKO00", *entries["LimCKO00"]) == "iaai"
     # the full-length invited papers, the 2008 Short Papers and 2005's two unlisted entries stay main
-    for key in ("Kambhampati96a", "Hinton00", "GaurJH97", "AllenPZ08", "Sultanik05", "Thornton05"):
+    for key in (
+        "Kambhampati96a",
+        "Hinton00",
+        "GaurJH97",
+        "AllenPZ08",
+        "Sultanik05",
+        "Thornton05",
+        "WangL05",
+        "BarishKCMPS00",
+    ):
         assert track(key, *entries[key]) == "main", key
 
 
