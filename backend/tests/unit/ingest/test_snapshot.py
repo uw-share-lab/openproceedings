@@ -668,6 +668,25 @@ def test_diff_names_every_kind_of_change(cache: Path, tmp_path: Path) -> None:
     assert (same["added"], same["removed"], same["rekeyed"], same["changed"]) == ([], [], {}, {})
 
 
+def test_diff_never_reads_an_aaai_dblp_key_and_an_icml_one_as_a_rekey(cache: Path, tmp_path: Path) -> None:
+    """A dblp key is unique within its venue's stream only: an AAAI `dblp-X` removed and an ICML `dblp-X` added
+    are two papers (removed and added), never one paper rekeyed."""
+    a0 = build(cache, tmp_path / "snapshots", BUILT).path
+    aaai, icml = "op:aaai:1990:dblp-Synthetic90a", "op:icml:1990:dblp-Synthetic90a"
+
+    def to_aaai(rs: dict[str, PaperRecord]) -> None:
+        r = rs.pop(REJECTED)
+        rs[aaai] = r.model_copy(update={"id": aaai, "venue": "AAAI", "year": 1990})
+
+    def to_icml(rs: dict[str, PaperRecord]) -> None:
+        r = rs.pop(aaai)
+        rs[icml] = r.model_copy(update={"id": icml, "venue": "ICML"})
+
+    a = rewrite(a0, tmp_path / "a", to_aaai)
+    result = diff(a, rewrite(a, tmp_path / "b", to_icml))
+    assert (result["added"], result["removed"], result["rekeyed"]) == ([icml], [aaai], {})
+
+
 def test_diff_never_reads_a_proceedings_hash_in_another_year_as_a_rekey(cache: Path, tmp_path: Path) -> None:
     """TASK-067 review: a NeurIPS hash is md5 of a per-year paper number, so the same hash in another year is
     another paper: one removed and one added are reported as such, never as one paper rekeyed."""
