@@ -184,6 +184,21 @@ index_title = "Proceedings of ICML 2025"
 verified = 2026-09-27
 source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (= OpenReview 3,257 main + 73 position)"
 
+# --- FAccT 2018 (FAT*), primary (decision-049; FAccT 2019 on is in acm_proceedings.toml) --------------------
+
+[[volume]]
+number = 81
+venue = "FAccT"
+year = 2018
+track = "main"
+role = "primary"
+papers = 20
+not_papers = ["friedler18a", "sweeney18a", "hellman18a"]  # the preface, Keynote 1, Keynote 2
+heading = "Conference on Fairness, Accountability and Transparency"
+index_title = "FAT* 2018 Proceedings"
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §FAccT; backend/tests/fixtures/http/pmlr/v81/volume-index.json"
+
 # --- NeurIPS competition volumes: classified, not ingested (spec 01 lists PMLR for ICML only, and a
 # --- `pmlr-` native id is ICML-only in the record schema) ------------------------------------------------
 

@@ -130,13 +130,13 @@ def test_native_reads_an_aaai_dblp_page() -> None:
     assert urls.native("https://dblp.org/rec/conf/aaai/Smith90") == "dblp-Smith90"
 
 
-def test_native_names_a_facct_v81_paper_only_once_the_table_has_the_volume(monkeypatch) -> None:
+def test_native_names_a_facct_v81_paper_only_while_the_table_has_the_volume(monkeypatch) -> None:
     url = "https://proceedings.mlr.press/v81/one18a.html"
-    assert urls.native(url) is None  # the shipped table lacks v81 until the live census
+    assert urls.native(url) == "pmlr-v81-one18a"  # the shipped table has v81 (census of 2026-10-10)
     monkeypatch.setattr(
-        volumes, "PMLR_NATIVE_VOLUMES", {**volumes.PMLR_NATIVE_VOLUMES, 81: ("FAccT", 2018, "main")}
+        volumes, "PMLR_NATIVE_VOLUMES", {k: v for k, v in volumes.PMLR_NATIVE_VOLUMES.items() if k != 81}
     )
-    assert urls.native(url) == "pmlr-v81-one18a"
+    assert urls.native(url) is None
 
 
 @pytest.fixture

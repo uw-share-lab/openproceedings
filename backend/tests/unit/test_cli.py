@@ -259,7 +259,7 @@ def test_ingest_crossref_dispatches_the_keys_and_flags(
 
     monkeypatch.setattr(
         acm_table, "TABLE", acm_table.load(api.TABLE_TEXT)
-    )  # the shipped table has no rows yet
+    )  # a small fixed table, independent of the shipped one
     seen: dict[str, object] = {}
 
     def fake(keys: object, cache: Path, **kwargs: object) -> dict[str, object]:

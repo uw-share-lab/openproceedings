@@ -1,5 +1,6 @@
 # ACM proceedings table (FAccT 2019+, AIES 2018-2023; decision-049). Data, not code: `ingest/acm_table.py` loads and
-# checks it, and no other module holds an ACM proceedings DOI. Rows arrive with the live census (Task 9).
+# checks it, and no other module holds an ACM proceedings DOI. Rows from the live census of 2026-10-10
+# (`scripts/acm_census.py`; docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §FAccT, §AIES).
 #
 # [[proceedings]] columns (one per venue and year)
 #   venue         FAccT | AIES
@@ -16,3 +17,294 @@
 #   doi           `10.1145/<toc>.<n>`, whose proceedings is a row above
 #   kind          tutorial | craft session | keynote | panel | front matter
 #   reason        what the entry is, for the reader
+
+# --- FAccT 2019-2026 (2018 is PMLR v81) ------------------------------------------------------------
+
+[[proceedings]]
+venue = "FAccT"
+year = 2019
+doi = "10.1145/3287560"
+title = "Proceedings of the Conference on Fairness, Accountability, and Transparency"
+window_from = 2019-01-22
+window_until = 2019-02-05
+dois = 41
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §FAccT (scripts/acm_census.py); backend/tests/fixtures/http/crossref/facct-2019-works-1.json"
+
+[[proceedings]]
+venue = "FAccT"
+year = 2020
+doi = "10.1145/3351095"
+title = "Proceedings of the 2020 Conference on Fairness, Accountability, and Transparency"
+window_from = 2020-01-20
+window_until = 2020-02-03
+dois = 95
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §FAccT (scripts/acm_census.py)"
+
+[[proceedings]]
+venue = "FAccT"
+year = 2021
+doi = "10.1145/3442188"
+title = "Proceedings of the 2021 ACM Conference on Fairness, Accountability, and Transparency"
+window_from = 2021-02-22
+window_until = 2021-03-08
+dois = 82
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §FAccT (scripts/acm_census.py)"
+
+[[proceedings]]
+venue = "FAccT"
+year = 2022
+doi = "10.1145/3531146"
+title = "2022 ACM Conference on Fairness Accountability and Transparency"
+window_from = 2022-06-13
+window_until = 2022-06-27
+dois = 181
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §FAccT (scripts/acm_census.py)"
+
+[[proceedings]]
+venue = "FAccT"
+year = 2023
+doi = "10.1145/3593013"
+title = "2023 ACM Conference on Fairness Accountability and Transparency"
+window_from = 2023-06-05
+window_until = 2023-06-19
+dois = 153
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §FAccT (scripts/acm_census.py)"
+
+[[proceedings]]
+venue = "FAccT"
+year = 2024
+doi = "10.1145/3630106"
+title = "The 2024 ACM Conference on Fairness Accountability and Transparency"
+window_from = 2024-05-27
+window_until = 2024-06-10
+dois = 167
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §FAccT (scripts/acm_census.py)"
+
+[[proceedings]]
+venue = "FAccT"
+year = 2025
+doi = "10.1145/3715275"
+title = "Proceedings of the 2025 ACM Conference on Fairness, Accountability, and Transparency"
+window_from = 2025-06-16
+window_until = 2025-06-30
+dois = 206
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §FAccT (scripts/acm_census.py)"
+
+[[proceedings]]
+venue = "FAccT"
+year = 2026
+doi = "10.1145/3805689"
+title = "Proceedings of the 2026 ACM Conference on Fairness, Accountability, and Transparency"
+window_from = 2026-06-18
+window_until = 2026-07-02
+dois = 314
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §FAccT (scripts/acm_census.py)"
+
+# --- AIES 2018-2023 (OJS from 2024) ------------------------------------------------------------
+
+[[proceedings]]
+venue = "AIES"
+year = 2018
+doi = "10.1145/3278721"
+title = "Proceedings of the 2018 AAAI/ACM Conference on AI, Ethics, and Society"
+window_from = 2018-12-20
+window_until = 2019-01-03
+dois = 78
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §AIES (scripts/acm_census.py)"
+
+[[proceedings]]
+venue = "AIES"
+year = 2019
+doi = "10.1145/3306618"
+title = "Proceedings of the 2019 AAAI/ACM Conference on AI, Ethics, and Society"
+window_from = 2019-01-20
+window_until = 2019-02-03
+dois = 91
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §AIES (scripts/acm_census.py)"
+
+[[proceedings]]
+venue = "AIES"
+year = 2020
+doi = "10.1145/3375627"
+title = "Proceedings of the AAAI/ACM Conference on AI, Ethics, and Society"
+window_from = 2020-01-31
+window_until = 2020-02-14
+dois = 76
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §AIES (scripts/acm_census.py)"
+
+[[proceedings]]
+venue = "AIES"
+year = 2021
+doi = "10.1145/3461702"
+title = "Proceedings of the 2021 AAAI/ACM Conference on AI, Ethics, and Society"
+window_from = 2021-07-14
+window_until = 2021-07-28
+dois = 114
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §AIES (scripts/acm_census.py)"
+
+[[proceedings]]
+venue = "AIES"
+year = 2022
+doi = "10.1145/3514094"
+title = "Proceedings of the 2022 AAAI/ACM Conference on AI, Ethics, and Society"
+window_from = 2022-07-19
+window_until = 2022-08-02
+dois = 115
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §AIES (scripts/acm_census.py)"
+
+[[proceedings]]
+venue = "AIES"
+year = 2023
+doi = "10.1145/3600211"
+title = "Proceedings of the 2023 AAAI/ACM Conference on AI, Ethics, and Society"
+window_from = 2023-08-01
+window_until = 2023-08-15
+dois = 101
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §AIES (scripts/acm_census.py)"
+
+# --- FAccT 2020: the tutorial and CRAFT entries (one page each, pages 681-707 after the last paper's 680; every one
+# named on facctconference.org/2020's accepted tutorials page or program schedule as a tutorial or CRAFT session)
+
+[[not_paper]]
+doi = "10.1145/3351095.3375687"
+kind = "craft session"
+reason = "one page (681-681) in the CRAFT block, pages 681-695, alphabetical by title; 'Algorithmically encoded identities: reframing human classification' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375680"
+kind = "craft session"
+reason = "one page (682-682) in the CRAFT block, pages 681-695, alphabetical by title; 'Bridging the gap from AI ethics research to practice' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375697"
+kind = "craft session"
+reason = "one page (683-683) in the CRAFT block, pages 681-695, alphabetical by title; 'Burn, dream and reboot!: speculating backwards for the missing arch...' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375686"
+kind = "craft session"
+reason = "one page (684-684) in the CRAFT block, pages 681-695, alphabetical by title; 'Centering disability perspectives in algorithmic fairness, accounta...' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375689"
+kind = "craft session"
+reason = "one page (685-685) in the CRAFT block, pages 681-695, alphabetical by title; 'Creating community-based tech policy: case studies, lessons learned...' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375692"
+kind = "craft session"
+reason = "one page (686-686) in the CRAFT block, pages 681-695, alphabetical by title; 'CtrlZ.AI zine fair: critical perspectives' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375688"
+kind = "craft session"
+reason = "one page (687-687) in the CRAFT block, pages 681-695, alphabetical by title; 'Deconstructing FAT: using memories to collectively explore implicit...' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375684"
+kind = "craft session"
+reason = "one page (688-688) in the CRAFT block, pages 681-695, alphabetical by title; 'Ethics on the ground: from principles to practice' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375683"
+kind = "craft session"
+reason = "one page (689-689) in the CRAFT block, pages 681-695, alphabetical by title; 'Where do algorithmic accountability and explainability frameworks t...' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375690"
+kind = "craft session"
+reason = "one page (690-690) in the CRAFT block, pages 681-695, alphabetical by title; 'Fairness, accountability, transparency in AI at scale: lessons from...' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375695"
+kind = "craft session"
+reason = "one page (691-691) in the CRAFT block, pages 681-695, alphabetical by title; 'Hardwiring discriminatory police practices: the implications of dat...' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375685"
+kind = "craft session"
+reason = "one page (692-692) in the CRAFT block, pages 681-695, alphabetical by title; 'Lost in translation: an interactive workshop mapping interdisciplin...' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375682"
+kind = "craft session"
+reason = "one page (693-693) in the CRAFT block, pages 681-695, alphabetical by title; 'Manifesting the sociotechnical: experimenting with methods for soci...' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375691"
+kind = "craft session"
+reason = "one page (695-695) in the CRAFT block, pages 681-695, alphabetical by title; 'When not to design, build, or deploy' is a CRAFT session in the 2020 program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375667"
+kind = "tutorial"
+reason = "one page (696-696) in the tutorial block, pages 696-707, alphabetical by title; 'AI explainability 360: hands-on tutorial' is a tutorial on the 2020 accepted tutorials page or program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375672"
+kind = "tutorial"
+reason = "one page (697-697) in the tutorial block, pages 696-707, alphabetical by title; 'Assessing the intersection of organizational structure and FAT* eff...' is a tutorial on the 2020 accepted tutorials page or program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375673"
+kind = "tutorial"
+reason = "one page (698-698) in the tutorial block, pages 696-707, alphabetical by title; 'Can an algorithmic system be a 'friend' to a police officer's discr...' is a tutorial on the 2020 accepted tutorials page or program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375664"
+kind = "tutorial"
+reason = "one page (699-699) in the tutorial block, pages 696-707, alphabetical by title; 'Explainable AI in industry: practical challenges and lessons learne...' is a tutorial on the 2020 accepted tutorials page or program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375670"
+kind = "tutorial"
+reason = "one page (700-700) in the tutorial block, pages 696-707, alphabetical by title; 'Experimentation with fairness-aware recommendation using librec-aut...' is a tutorial on the 2020 accepted tutorials page or program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375669"
+kind = "tutorial"
+reason = "one page (701-701) in the tutorial block, pages 696-707, alphabetical by title; 'From the total survey error framework to an error framework for dig...' is a tutorial on the 2020 accepted tutorials page or program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375665"
+kind = "tutorial"
+reason = "one page (702-702) in the tutorial block, pages 696-707, alphabetical by title; 'Leap of FATE: human rights as a complementary framework for AI poli...' is a tutorial on the 2020 accepted tutorials page or program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375668"
+kind = "tutorial"
+reason = "one page (703-703) in the tutorial block, pages 696-707, alphabetical by title; 'Policy 101: an introduction to public policymaking in the EU and US' is a tutorial on the 2020 accepted tutorials page or program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375666"
+kind = "tutorial"
+reason = "one page (704-704) in the tutorial block, pages 696-707, alphabetical by title; 'Positionality-aware machine learning: translation tutorial' is a tutorial on the 2020 accepted tutorials page or program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375662"
+kind = "tutorial"
+reason = "one page (705-705) in the tutorial block, pages 696-707, alphabetical by title; 'Probing ML models for fairness with the what-if tool and SHAP: hand...' is a tutorial on the 2020 accepted tutorials page or program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375671"
+kind = "tutorial"
+reason = "one page (706-706) in the tutorial block, pages 696-707, alphabetical by title; 'The meaning and measurement of bias: lessons from natural language...' is a tutorial on the 2020 accepted tutorials page or program schedule"
+
+[[not_paper]]
+doi = "10.1145/3351095.3375663"
+kind = "tutorial"
+reason = "one page (707-707) in the tutorial block, pages 696-707, alphabetical by title; 'Two computer scientists and a cultural scientist get hit by a drive...' is a tutorial on the 2020 accepted tutorials page or program schedule"

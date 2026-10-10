@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from openproceedings.ingest import volumes
+from openproceedings.ingest import urls, volumes
 from openproceedings.ingest.dedup import dedup
 from openproceedings.ingest.sources import pmlr
 from openproceedings.ingest.sources.common import MinerError
@@ -42,8 +42,10 @@ V235_KEYS = ("abad-rocamora24a", "abe24a", "abhyankar24a")
 
 
 def test_every_row_has_a_source_and_a_verified_date() -> None:
-    for v in VOLUMES.values():
-        assert v.source and v.verified == date(2026, 9, 27), v.number
+    for v in VOLUMES.values():  # the 2026-09-27 table, and v81 (FAccT 2018) from the census of 2026-10-10
+        assert v.source and v.verified == (date(2026, 10, 10) if v.number == 81 else date(2026, 9, 27)), (
+            v.number
+        )
 
 
 def test_the_icml_volumes_2013_on() -> None:
@@ -84,13 +86,25 @@ def test_the_table_agrees_with_the_recorded_pmlr_index() -> None:
 
 @pytest.mark.parametrize(
     ("rel", "number"),
-    [(V28, 28), (V202, 202), (V235, 235), (V267, 267), ("pmlr/v220/volume-index.json", 220)],
-)
+    [(V28, 28), (V202, 202), (V235, 235), (V267, 267), ("pmlr/v220/volume-index.json", 220),
+     ("pmlr/v81/volume-index.json", 81)],
+)  # fmt: skip
 def test_the_table_agrees_with_the_recorded_volume_headings(rel: str, number: int) -> None:
     found = pmlr.heading(fixture_text(rel))
     heading = VOLUMES[number].heading
     assert found is not None and heading is not None
     assert found[0] == number and found[1].startswith(heading)
+
+
+def test_the_recorded_v81_index_lists_every_not_paper_key() -> None:
+    """The shipped v81 row's preface and two keynotes are on the recorded index (2026-10-10), so the live crawl's
+    `stale_not_paper` check passes on the same page."""
+    rel = "pmlr/v81/volume-index.json"
+    entries, _ = pmlr.parse_volume_index(fixture_text(rel), fixture_url(rel))
+    keys = {p[1] for e in entries if (p := urls.pmlr(e.url)) is not None and p[0] == 81}
+    row = VOLUMES[81]
+    assert (row.venue, row.year, row.papers, len(row.not_papers)) == ("FAccT", 2018, 20, 3)
+    assert set(row.not_papers) <= keys
 
 
 ROW = 'number = 1\nvenue = "ICML"\nyear = 2019\ntrack = "main"\nrole = "primary"\npapers = 3\nheading = "ICML"\nverified = 2026-09-27\nsource = "x"\n'

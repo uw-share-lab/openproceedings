@@ -166,3 +166,42 @@ def test_a_self_closing_oai_element_is_left_alone_and_the_next_one_scrubbed() ->
     page = "<dc:title/><dc:subject>x</dc:subject><dc:title>Real title</dc:title>"
     out = scrub.scrub_oai(page)
     assert out.startswith("<dc:title/>") and "Real title" not in out and out.count("</dc:title>") == 1
+
+
+def test_a_crossref_work_list_loses_titles_and_names_and_is_trimmed_to_its_toc() -> None:
+    item = {"DOI": "10.1145/1.2", "title": ["Real Title"], "subtitle": ["Real sub"], "type": "proceedings-article",
+            "page": "1-9", "author": [{"given": "Real", "family": "Person", "ORCID": "x", "sequence": "first"}]}  # fmt: skip
+    foreign = [{**item, "DOI": f"10.1145/9.{n}"} for n in range(5)]
+    body = {"status": "ok", "message-type": "work-list",
+            "message": {"items": [foreign[0], item, *foreign[1:]], "total-results": 6, "next-cursor": "AoJ"}}  # fmt: skip
+    out, trimmed = scrub.scrub_crossref("https://api.crossref.org/works?x", body, "10.1145/1")
+    items = out["message"]["items"]
+    assert [i["DOI"] for i in items] == ["10.1145/9.0", "10.1145/1.2", "10.1145/9.1", "10.1145/9.2"]
+    assert (out["message"]["total-results"], out["message"]["next-cursor"]) == (6, "AoJ")
+    assert (
+        "Real" not in json.dumps(out)
+        and items[1]["page"] == "1-9"
+        and items[1]["author"][0]["sequence"] == "first"
+    )
+    assert trimmed is not None and "from 6 to 4" in trimmed
+
+
+def test_a_crossref_proceedings_record_keeps_its_title_and_loses_its_editors() -> None:
+    body = {"status": "ok", "message-type": "work",
+            "message": {"type": "proceedings", "DOI": "10.1145/1", "title": ["Proceedings of X"], "ISBN": ["9"],
+                        "editor": [{"given": "Real", "family": "Editor"}]}}  # fmt: skip
+    out, _ = scrub.scrub_crossref("https://api.crossref.org/works/10.1145/1", body)
+    assert out["message"]["title"] == ["Proceedings of X"] and out["message"]["ISBN"] == ["9"]
+    assert "Real" not in json.dumps(out)
+
+
+def test_a_csv_keeps_ids_types_and_urls_and_its_line_shape() -> None:
+    text = '﻿TYPE,ID,TITLE,AUTHOR,ABSTRACT,URL\r\narchival,8,Real title,"A, B and C, D",Real abstract,https://doi.org/10.1145/1.2\r\nnonarchival,9,T,E; F; G,Abs,\r\n'
+    out, note = scrub.scrub_csv(text, per_type={"archival": 1, "nonarchival": 1})
+    assert out.startswith("﻿TYPE,ID,TITLE,AUTHOR,ABSTRACT,URL\r\n") and note is None
+    assert (
+        "archival,8,Synthetic title 1,Synthetic Author 2 and Synthetic Author 3,Synthetic abstract text 4.,https://doi.org/10.1145/1.2"
+        in out
+    )
+    assert "Synthetic Author 6; Synthetic Author 7; Synthetic Author 8" in out and "Real" not in out
+    assert scrub.scrub_csv(text, keep=1)[1] == "1 of 2 rows kept (order kept)"
