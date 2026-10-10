@@ -1,0 +1,14 @@
+# The dblp AAAI table (spec 01 §Sources, dblp row; decision-049, milestone B). Data, not code:
+# `ingest/dblp_aaai_table.py` loads and checks it, and `ingest/sources/dblp_aaai.py` reads AAAI 1980-2008 through
+# it. The release is the one `dblp_icml.toml` pins (one file, read once for both venues): this table names no pin.
+#
+# not_held      the years 1980-2009 with no AAAI conference; a conf/aaai/ proceedings key dblp dates to one stops
+#               the ingest
+# [[year]]      one AAAI year: its main conference's proceedings key(s) (1986, 1991, 1994 and 1996 have two), the
+#               inproceedings the pinned release lists under them when verified, dblp's proceedings title
+# [[workshop]]  a conf/aaai/ workshop proceedings key of 1980-2008: its papers are track `workshop`
+# [[excluded]]  any other conf/aaai/ proceedings key dated 1980-2009, with why it is not read
+# [[not_paper]] an entry under a main or workshop key that is no paper (an invited talk, a panel): counted in its
+#               year's listing, never a record
+# dblp's conf/aaai/ keys dated 2010 or later are never read: ojs.aaai.org holds those years (ojs_sections.toml).
+not_held = [1981, 1985, 1989, 2001, 2003, 2009]

@@ -2,7 +2,7 @@
 
 The release (`dblp-<date>.xml.gz`, about 1.1 GB compressed and several GB of XML) is never loaded whole. It is
 read line by line through gzip, and only the records whose `key` starts with the wanted prefix
-(`conf/icml/`) are handed to expat, one record at a time, with the release's DTD supplying its character
+(`conf/icml/`, or several at once: `read_streams`) are handed to expat, one record at a time, with the release's DTD supplying its character
 entities (`&uuml;` and the rest). A record runs from its start tag
 (`<inproceedings mdate="…" key="conf/icml/…">`, anywhere in a line: dblp writes `</incollection><inproceedings …>`
 on one line) to its end tag. That framing is checked rather than trusted: every `key="conf/icml/` in the file must
@@ -60,9 +60,10 @@ class DblpEntry:
                    lists={str(k): [str(x) for x in v] for k, v in raw["lists"].items()})  # fmt: skip
 
 
-def _start_tag(prefix: str) -> re.Pattern[bytes]:
+def _start_tag(prefixes: tuple[str, ...]) -> re.Pattern[bytes]:
     types = "|".join(sorted(RECORD_TYPES)).encode()
-    return re.compile(rb"<(" + types + rb')\s[^<>]*?\bkey="' + re.escape(prefix.encode()) + rb'[^"]*"[^<>]*>')
+    keys = b"|".join(re.escape(p.encode()) for p in prefixes)
+    return re.compile(rb"<(" + types + rb')\s[^<>]*?\bkey="(?:' + keys + rb')[^"]*"[^<>]*>')
 
 
 def doctype_system_id(path: Path) -> str:
@@ -84,13 +85,19 @@ def doctype_system_id(path: Path) -> str:
 PROGRESS_LINES = 1_000_000  # how often `_records` reports its progress (the caller rate-limits the lines)
 
 
-def _records(path: Path, prefix: str, progress: Callable[[int, int], None] | None = None) -> Iterator[bytes]:
+def _records(
+    path: Path, prefixes: tuple[str, ...], progress: Callable[[int, int], None] | None = None
+) -> Iterator[bytes]:
     """Each wanted record's bytes, from its start tag through its end tag, in file order. dblp writes a record's
     end tag and the next record's start tag on one line (`</incollection><incollection …>`), so a record is found
     by its start tag anywhere in a line, and every occurrence of `key="<prefix>` must be inside one."""
-    marker = prefix.encode()  # cheap prefilter: every wanted record's line names the prefix
-    wanted = re.compile(rb"\bkey\s*=\s*[\"']" + re.escape(marker))  # any spelling of the attribute
-    start = _start_tag(prefix)
+    markers = tuple(
+        p.encode() for p in prefixes
+    )  # cheap prefilter: every wanted record's line names a prefix
+    # any spelling of the attribute
+    wanted = re.compile(rb"\bkey\s*=\s*[\"'](?:" + b"|".join(re.escape(m) for m in markers) + b")")
+    start = _start_tag(prefixes)
+    names = ", ".join(prefixes)
     block: list[bytes] = []
     end: bytes | None = None
     with gzip.open(path, "rb") as fh:
@@ -98,7 +105,7 @@ def _records(path: Path, prefix: str, progress: Callable[[int, int], None] | Non
         for n, line in enumerate(fh, 1):
             if progress is not None and n % PROGRESS_LINES == 0:
                 progress(n, kept)
-            if end is None and marker not in line:
+            if end is None and not any(m in line for m in markers):
                 continue
             pos = 0
             while True:
@@ -106,7 +113,7 @@ def _records(path: Path, prefix: str, progress: Callable[[int, int], None] | Non
                     m = start.search(line, pos)
                     rest = line[pos:] if m is None else line[pos : m.start()]
                     if wanted.search(rest):
-                        raise DblpFormatError(f"line {n}: a {prefix} key outside a record start tag")
+                        raise DblpFormatError(f"line {n}: a {names} key outside a record start tag")
                     if m is None:
                         break
                     end, pos = b"</" + m.group(1) + b">", m.start()
@@ -114,7 +121,7 @@ def _records(path: Path, prefix: str, progress: Callable[[int, int], None] | Non
                 stop = line.find(end, pos)
                 inside = line[pos:] if stop < 0 else line[pos : stop + len(end)]
                 if start.search(inside, 0 if block else 1):  # a second wanted start tag before this one ends
-                    raise DblpFormatError(f"line {n}: a {prefix} record inside another")
+                    raise DblpFormatError(f"line {n}: a {names} record inside another")
                 block.append(inside)
                 if stop < 0:
                     break
@@ -122,7 +129,7 @@ def _records(path: Path, prefix: str, progress: Callable[[int, int], None] | Non
                 yield b"".join(block)
                 pos, end = stop + len(end), None
     if end is not None:
-        raise DblpFormatError(f"the file ends inside a {prefix} record")
+        raise DblpFormatError(f"the file ends inside a {names} record")
 
 
 def _parse(record: bytes, dtd: bytes, dtd_name: str) -> DblpEntry:
@@ -188,15 +195,29 @@ def _parse(record: bytes, dtd: bytes, dtd_name: str) -> DblpEntry:
     return entry
 
 
-def read_stream(
-    path: Path, dtd: bytes, dtd_name: str, prefix: str, progress: Callable[[int, int], None] | None = None
-) -> list[DblpEntry]:
-    """Every record of the release at `path` whose key starts with `prefix`, in file order. The release must
-    name `dtd_name` as its DTD (the pinned one); `dtd` is that file's bytes."""
+def read_streams(
+    path: Path, dtd: bytes, dtd_name: str, prefixes: tuple[str, ...],
+    progress: Callable[[int, int], None] | None = None,
+) -> dict[str, list[DblpEntry]]:  # fmt: skip
+    """Every record of the release at `path` whose key starts with one of `prefixes`, per prefix, in file order:
+    one streaming read for all of them (decision-049: ICML and AAAI from one pass). No prefix may start another."""
+    if len(set(prefixes)) != len(prefixes) or any(
+        a != b and a.startswith(b) for a in prefixes for b in prefixes
+    ):
+        raise ValueError(f"prefixes must be distinct and none may start another: {prefixes}")
     if (named := doctype_system_id(path)) != dtd_name:
         raise DblpFormatError(f"the release names DTD {named!r}, not the pinned {dtd_name!r}")
-    entries = [_parse(block, dtd, dtd_name) for block in _records(path, prefix, progress)]
-    for e in entries:
-        if not e.key.startswith(prefix):
-            raise DblpFormatError(f"record {e.key!r} isn't in {prefix}")
-    return entries
+    out: dict[str, list[DblpEntry]] = {p: [] for p in prefixes}
+    for block in _records(path, prefixes, progress):
+        e = _parse(block, dtd, dtd_name)
+        owner = next((p for p in prefixes if e.key.startswith(p)), None)
+        if owner is None:
+            raise DblpFormatError(f"record {e.key!r} isn't in {', '.join(prefixes)}")
+        out[owner].append(e)
+    return out
+
+
+def read_stream(path: Path, dtd: bytes, dtd_name: str, prefix: str,
+                progress: Callable[[int, int], None] | None = None) -> list[DblpEntry]:  # fmt: skip
+    """One prefix's records (`read_streams` with one prefix)."""
+    return read_streams(path, dtd, dtd_name, (prefix,), progress)[prefix]
