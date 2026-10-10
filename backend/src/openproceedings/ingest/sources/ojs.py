@@ -46,7 +46,7 @@ import logging
 import re
 import time
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from urllib.parse import quote
 from xml.parsers import expat
@@ -251,13 +251,27 @@ def parse_identifiers(text: str) -> tuple[list[OaiRecord], str | None]:
     return [_header(h) for h in listing.findall(f"{_OAI}header")], _token(listing)
 
 
-def parse_record(text: str) -> OaiRecord:
-    """The one record of a GetRecord response."""
+def parse_record(text: str, article: int | None = None) -> OaiRecord:
+    """The one record of a GetRecord response. With `article` (the id requested), the answer must be that
+    article and live: another id is `oai_unreadable`, a deleted header `deleted_on_get_record`."""
     listing = _listing(text, "GetRecord", frozenset())
     rec = listing.find(f"{_OAI}record") if listing is not None else None
     if rec is None:
         raise CrawlError("an OAI-PMH GetRecord response has no record", reason="oai_unreadable")
-    return _oai_record(rec)
+    out = _oai_record(rec)
+    if article is not None and out.article != article:
+        raise CrawlError(
+            f"GetRecord for article {article} answered with article {out.article}: the server returned "
+            "another record, so nothing from it is kept",
+            reason="oai_unreadable",
+        )
+    if article is not None and out.deleted:
+        raise CrawlError(
+            f"GetRecord for article {article} answered with a deleted record, though the inventory lists it "
+            "as live: the journal changed during the harvest; run it again with --refresh",
+            reason="deleted_on_get_record",
+        )
+    return out
 
 
 def sets_url(journal: str, token: str | None = None) -> str:
@@ -287,7 +301,7 @@ def list_sets(journal: str, fetcher: Fetcher, *, refresh: bool = False) -> dict[
     while True:
         page = fetcher.get(sets_url(journal, token), refresh=refresh and token is None)
         if not page.ok:
-            raise CrawlError(f"{sets_url(journal)} answered HTTP {page.status}", reason="no_listing")
+            raise CrawlError(f"{page.url} answered HTTP {page.status}", reason="no_listing")
         found, token = parse_sets(page.text)
         for spec, name in found.items():  # a spec two sections share (AAAI's EAAI-POS): both names, kept
             sets[spec] = name if sets.get(spec, name) == name else f"{sets[spec]} | {name}"
@@ -319,6 +333,7 @@ class JournalResult:
     unavailable: int = 0  # articles named in the table's [[unavailable]] rows: listed, never records
     duplicates: int = 0  # extra identical copies of an article that two set requests returned: counted once
     recovered: int = 0  # live inventory articles no set returned, read by GetRecord
+    fallback_sets: list[str] = field(default_factory=list)  # sets read by ListIdentifiers + GetRecord (5xx), sorted
 
 
 def mine_journal(
@@ -402,6 +417,7 @@ def mine_journal(
     h = harvest_journal(journal, fetcher, refresh=refresh)
     result.pages, result.deleted = h.pages, h.deleted
     result.duplicates, result.recovered = h.duplicates, h.recovered
+    result.fallback_sets = sorted(h.fallback_sets)
     for page, e in h.live:
         take(page, e)
         if time.monotonic() - last >= PROGRESS_SECONDS:

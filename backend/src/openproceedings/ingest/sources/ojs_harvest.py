@@ -105,7 +105,7 @@ def _fallback(
             if not got.ok:
                 raise CrawlError(f"{got.url} answered HTTP {got.status}", reason="no_listing")
             h.pages += 1
-            h.live.append((got, parse_record(got.text)))
+            h.live.append((got, parse_record(got.text, e.article)))
         if token is None:
             break
 
@@ -196,5 +196,5 @@ def harvest_journal(journal: str, fetcher: Fetcher, *, refresh: bool = False) ->
             raise CrawlError(f"{page.url} answered HTTP {page.status}", reason="no_listing")
         out.pages += 1
         out.recovered += 1
-        out.live.append((page, parse_record(page.text)))
+        out.live.append((page, parse_record(page.text, article)))
     return out

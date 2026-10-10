@@ -185,13 +185,15 @@ def build_parser() -> argparse.ArgumentParser:
             else f"seconds between requests (default 1, at least {MIN_DELAY})",
         )  # fmt: skip
         crawl.set_defaults(run=_ingest_crawl)
+    from openproceedings.ingest import ojs_table  # the journals the table names are the --journal choices
+
     ojs_parser = sources.add_parser(
         "ojs",
         help="harvest ojs.aaai.org journals (AAAI 2010+, AIES 2024+, IASEAI 2026+; ingest/ojs_sections.toml) "
         "through OAI-PMH into <data-dir>/cache/ojs",
     )
     ojs_parser.add_argument(
-        "--journal", dest="journals", action="append", default=[], choices=("AAAI", "AIES", "IASEAI"),
+        "--journal", dest="journals", action="append", default=[], choices=sorted(ojs_table.TABLE.journals),
         help="repeatable; default every journal",
     )  # fmt: skip
     ojs_parser.add_argument(
@@ -201,7 +203,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ojs_parser.add_argument("--offline", action="store_true", help="use the page cache only (no network)")
     ojs_parser.add_argument(
-        "--refresh", action="store_true", help="re-fetch every harvest page (a changed or expired chain)"
+        "--refresh", action="store_true", help="re-fetch each chain's first page, every GetRecord, and any cached failure"
     )
     ojs_parser.add_argument(
         "--delay", type=float, default=1.0,

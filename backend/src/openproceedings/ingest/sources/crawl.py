@@ -266,7 +266,8 @@ def ingest_ojs(
                                     "recovered": sum(m.recovered for m in mined)})  # fmt: skip
     out = _output(reports, f, False)
     out["journals"] = [{"journal": j, "pages": m.pages, "deleted": m.deleted, "front_matter": m.front_matter,
-                        "unavailable": m.unavailable, "duplicates": m.duplicates, "recovered": m.recovered}
+                        "unavailable": m.unavailable, "duplicates": m.duplicates, "recovered": m.recovered,
+                        "fallback_sets": m.fallback_sets}
                        for j, m in zip(wanted, mined, strict=True)]  # fmt: skip
     return out
 

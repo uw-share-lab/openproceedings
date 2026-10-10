@@ -132,6 +132,7 @@ def test_a_named_unavailable_article_is_listed_and_reported(tmp_path) -> None:
     assert (report.stated, report.listed, report.records) == (8, 8, 7)
     assert report.count_ok and report.skipped == {"unavailable": 1}
     assert (result.unavailable, result.front_matter) == (1, 1)
+    assert result.fallback_sets == ["AAAI:APP"]  # the set whose ListRecords page answered 5xx
     title = next(r for r in result.records if r.native == "ojs-102").title
     assert title == "Recovered"
 
@@ -192,7 +193,7 @@ def test_the_offline_replay_takes_the_same_fallback_and_gives_the_same_result(tm
     replayed = ojs.mine_journal("AAAI", _offline(tmp_path), table=FULL)  # no transport: a miss would raise
     assert [r.model_dump() for r in replayed.records] == [r.model_dump() for r in live.records]
     assert [r.to_manifest() for r in replayed.reports] == [r.to_manifest() for r in live.reports]
-    fields = ("deleted", "unavailable", "pages", "duplicates", "recovered", "front_matter")
+    fields = ("deleted", "unavailable", "pages", "duplicates", "recovered", "front_matter", "fallback_sets")
     assert [getattr(replayed, k) for k in fields] == [getattr(live, k) for k in fields]
 
 
@@ -233,3 +234,14 @@ def test_a_served_article_named_in_an_unavailable_row_stops_the_crawl(tmp_path) 
         ojs.mine_journal("AAAI", f, table=table)
     assert e.value.reason == "stale_unavailable_row"
     assert "set AAAI:AISI v34" in str(e.value)
+
+
+def test_a_failing_later_listsets_page_is_named_by_its_own_url(tmp_path) -> None:
+    script = {
+        _key(ojs.sets_url("AAAI")): [response(oai.sets_page("AAAI:AISI", token="t1"), headers=XML)],
+        _key(ojs.sets_url("AAAI", "t1")): [response("", status=404, headers=XML)],
+    }
+    f, _t = _live(tmp_path, script)
+    with pytest.raises(CrawlError, match=r"resumptionToken=t1 answered HTTP 404") as e:
+        ojs.list_sets("AAAI", f)
+    assert e.value.reason == "no_listing"

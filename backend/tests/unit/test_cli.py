@@ -224,6 +224,16 @@ def test_ingest_ojs_rejects_an_unknown_journal() -> None:
     assert exc.value.code == 2
 
 
+def test_ingest_ojs_journal_choices_come_from_the_table(capsys: pytest.CaptureFixture[str]) -> None:
+    from openproceedings.ingest import ojs_table
+
+    with pytest.raises(SystemExit):
+        cli.main(["ingest", "ojs", "--help"])
+    out = " ".join(capsys.readouterr().out.split())
+    assert "{" + ",".join(sorted(ojs_table.TABLE.journals)) + "}" in out
+    assert "first page, every GetRecord, and any cached failure" in out
+
+
 @pytest.mark.parametrize(
     ("flags", "message"),
     [

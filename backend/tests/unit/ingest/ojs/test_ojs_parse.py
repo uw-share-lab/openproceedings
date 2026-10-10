@@ -166,3 +166,18 @@ def test_a_set_spec_two_sections_share_keeps_both_names() -> None:
     )
     sets, _ = ojs.parse_sets(page)
     assert sets == {"AAAI:EAAI-POS": "EAAI Poster Papers | EAAI Symposium Poster Paper", "AAAI:X": "AAAI:X"}
+
+
+def test_get_record_answering_another_article_stops() -> None:
+    text = oai.get_record(oai.record(28001))
+    assert ojs.parse_record(text, 28001).article == 28001
+    with pytest.raises(CrawlError, match=r"article 28000 answered with article 28001") as e:
+        ojs.parse_record(text, 28000)
+    assert e.value.reason == "oai_unreadable"
+
+
+def test_get_record_answering_a_deleted_header_stops() -> None:
+    text = oai.get_record(oai.deleted(28000))
+    with pytest.raises(CrawlError, match=r"article 28000 answered with a deleted record") as e:
+        ojs.parse_record(text, 28000)
+    assert e.value.reason == "deleted_on_get_record"

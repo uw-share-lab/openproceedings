@@ -19,6 +19,7 @@ def test_offline_ingest_writes_a_marker_and_replay_rebuilds_the_same_records(tmp
     _seed(cache, oai.page(oai.record(1), oai.record(2), oai.record(3, "AAAI:IAAI")))
     out = crawl.ingest_ojs(["AAAI"], cache, offline=True, table=TABLE)
     assert out["listings"][0]["records"] == 3
+    assert out["journals"][0]["fallback_sets"] == []
     marker = json.loads((cache / "ojs" / "crawls" / "AAAI.json").read_text())
     assert marker == {"source": "ojs", "journal": "AAAI"}
     (replayed,) = crawl.OJS.replay(cache)
