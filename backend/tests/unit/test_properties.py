@@ -9,7 +9,7 @@ from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode, clip
 from openproceedings.engine.reference import ReferenceEngine
-from openproceedings.query.ast import And, Filter, Node, Not, Or, structure
+from openproceedings.query.ast import FILTER_FIELDS, And, Filter, Node, Not, Or, structure
 from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.lexer import Kind, lex
 from openproceedings.query.parser import MAX_PER_CODE, MAX_QUERY_LENGTH, parse
@@ -73,7 +73,7 @@ def test_scholar_mode_reads_a_canonical_string_the_same_way(tree: Node) -> None:
     assert parse(text, "scholar").canonical == parse(text).canonical
 
 
-@given(asts(), st.sampled_from(["venue", "year", "track", "status"]))
+@given(asts(), st.sampled_from(FILTER_FIELDS))  # the oracle holds every filter field, abstract_kind included
 def test_a_facet_of_a_field_the_query_never_filters_counts_its_matches(tree: Node, field: str) -> None:
     """Independent of how the oracle picks conjuncts: with no filter on F anywhere in the tree, F's facet
     partitions exactly the query's matches."""

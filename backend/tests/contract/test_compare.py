@@ -1942,3 +1942,9 @@ def test_a_web_of_science_record_is_matched_by_its_doi(tmp_path: Path) -> None:
         body = compared(client, file)
     assert [(r["id"], r["matched_by"]) for r in body["kept"]] == [(p.id, "doi")]
     assert body["not_compared_total"] == 0
+
+
+def test_abstract_kind_on_a_schema_3_index_is_a_422(shared: TestClient) -> None:
+    """decision-049: the compared query runs on the served index, which (schema 3) holds no `abstract_kind`."""
+    e = error(post(shared, the_file(), f"{Q} abstract_kind:openalex"), 422, "FIELD_NOT_INDEXED")
+    assert "schema 4" in e["message"]

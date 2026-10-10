@@ -116,10 +116,12 @@ class ReferenceEngine:
         ids = sorted(self.match_ids(ast))
         return SearchResult(total=len(ids), ids=tuple(ids[offset : offset + limit]))
 
-    def facets(self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS) -> dict[str, dict[str, int]]:
+    def facets(self, ast: Node, fields: tuple[str, ...] | None = None) -> dict[str, dict[str, int]]:
         """Disjunctive facets (spec 04, decision-001 rule 6): field F is counted over the matches of the query
         without F's own top-level conjuncts (a filter or NOT of one; nested ones stay). Top-level is judged
-        after flattening nested ANDs, as on the canonical tree."""
+        after flattening nested ANDs, as on the canonical tree. `fields` None is the oracle's own: every filter
+        field (FACET_FIELDS), since its records carry them all."""
+        fields = FACET_FIELDS if fields is None else fields
         unknown = [f for f in fields if f not in FACET_FIELDS]
         if unknown:
             raise EngineInputError(DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {FACET_FIELDS}")

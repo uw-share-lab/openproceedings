@@ -364,7 +364,9 @@ def highlight(engine: TantivyEngine, parsed: ParseResult, shown: Mapping[str, An
 def _runnable(engine: TantivyEngine, parsed: ParseResult) -> Node:
     """`parsed`'s effective tree, if it can run on `engine`: it parsed (a query with errors never reaches an
     engine, spec 03 §Error handling), and with the tokenizer `engine`'s index was built with (its terms are
-    that tokenizer's; a caller that parsed with another one is a bug, never the client's)."""
+    that tokenizer's; a caller that parsed with another one is a bug, never the client's), and naming only filter
+    fields `engine`'s schema holds (`TantivyEngine.admit`: a 422 on every route, `/papers/{id}?q=` included,
+    whose highlights never compile)."""
     ast = parsed.effective_ast
     if ast is None:
         raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "a search needs a query that parses.")
@@ -374,6 +376,7 @@ def _runnable(engine: TantivyEngine, parsed: ParseResult) -> Node:
             f"a query parsed with tokenizer {parsed.tokenizer_version} can't run on an index built with "
             f"tokenizer {engine.tokenizer_version}",
         )
+    engine.admit(ast)
     return ast
 
 

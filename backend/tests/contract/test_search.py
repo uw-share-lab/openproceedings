@@ -312,7 +312,7 @@ def error(r: Any, status: int, code: str) -> dict[str, Any]:
     return body["error"]  # type: ignore[no-any-return]
 
 
-@pytest.mark.parametrize("route", ["search", "records", "export"])
+@pytest.mark.parametrize("route", ["search", "records", "export", "papers"])
 def test_abstract_kind_on_a_schema_3_index_is_a_422_never_a_500(client: TestClient, route: str) -> None:
     """decision-049: a schema-3 index holds no `abstract_kind`, so a query naming it is the client's error on
     every route that runs a query, refused before anything is compiled."""
@@ -323,6 +323,8 @@ def test_abstract_kind_on_a_schema_3_index_is_a_422_never_a_500(client: TestClie
         "search": lambda: client.get(SEARCH, params={"q": q}),
         "records": lambda: client.post("/api/v1/records", json={"q": q}),
         "export": lambda: client.get("/api/v1/export", params={"q": q, "format": "ris"}),
+        # a paper's highlights for `q`: no collection runs, so the refusal can't come from a compile
+        "papers": lambda: client.get(f"/api/v1/papers/{engine.ids[0]}", params={"q": q}),
     }[route]()
     e = error(r, 422, "FIELD_NOT_INDEXED")
     assert "schema 4" in e["message"] and engine.index_version in e["message"]

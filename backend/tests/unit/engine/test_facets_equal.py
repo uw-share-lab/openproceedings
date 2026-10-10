@@ -46,8 +46,8 @@ class Before:
     def __getattr__(self, name: str) -> Any:
         return getattr(self.engine, name)
 
-    def facets(self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS) -> dict[str, dict[str, int]]:
-        return facets_before(self.engine, ast, fields)
+    def facets(self, ast: Node, fields: tuple[str, ...] | None = None) -> dict[str, dict[str, int]]:
+        return facets_before(self.engine, ast, self.engine.filter_fields if fields is None else fields)
 
 
 @st.composite

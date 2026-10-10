@@ -71,9 +71,8 @@ def test_existing_canonicals_are_unchanged() -> None:  # no QUERY_VERSION bump (
     )
 
 
-def test_scholar_s_source_alias_is_untouched() -> (
-    None
-):  # `source:` still means venue; abstract_kind follows it
+# `source:` still means venue; abstract_kind follows it
+def test_scholar_s_source_alias_is_untouched() -> None:
     assert parse("trust source:ICLR", "scholar").canonical == (
         "(trust AND venue:ICLR AND track:(datasets_benchmarks OR main OR position) AND status:accepted)"
     )
