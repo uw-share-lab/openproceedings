@@ -610,6 +610,16 @@ export interface components {
              */
             abstract_missing: number;
             /**
+             * Abstract Official
+             * @description Of `records`, those whose abstract came from an official source (the venue's own proceedings, OpenReview or another publisher or index listed in `sources`).
+             */
+            abstract_official: number;
+            /**
+             * Abstract Openalex
+             * @description Of `records`, those whose abstract came from OpenAlex's fallback (decision-049), filled only where no official source gives one. Together with `abstract_official`, `abstract_missing` and `abstract_withheld` these add up to `records`.
+             */
+            abstract_openalex: number;
+            /**
              * Abstract Withheld
              * @description Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.
              */
@@ -1720,6 +1730,16 @@ export interface components {
              */
             abstract_missing: number;
             /**
+             * Abstract Official
+             * @description Of `records`, those whose abstract came from an official source (the venue's own proceedings, OpenReview or another publisher or index listed in `sources`).
+             */
+            abstract_official: number;
+            /**
+             * Abstract Openalex
+             * @description Of `records`, those whose abstract came from OpenAlex's fallback (decision-049), filled only where no official source gives one. Together with `abstract_official`, `abstract_missing` and `abstract_withheld` these add up to `records`.
+             */
+            abstract_openalex: number;
+            /**
              * Abstract Withheld
              * @description Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.
              */
@@ -1808,6 +1828,16 @@ export interface components {
              * @description Of `records`, those without an abstract because their sources gave none (title-only). Abstracts withheld at a rights holder's request are counted in `abstract_withheld` instead (decision-022), including ids the takedown list names since the snapshot was built, so this can drop after a reload of the same `index_version`; `op eval coverage` reports the snapshot's own counts.
              */
             abstract_missing: number;
+            /**
+             * Abstract Official
+             * @description Of `records`, those whose abstract came from an official source (the venue's own proceedings, OpenReview or another publisher or index listed in `sources`).
+             */
+            abstract_official: number;
+            /**
+             * Abstract Openalex
+             * @description Of `records`, those whose abstract came from OpenAlex's fallback (decision-049), filled only where no official source gives one. Together with `abstract_official`, `abstract_missing` and `abstract_withheld` these add up to `records`.
+             */
+            abstract_openalex: number;
             /**
              * Abstract Withheld
              * @description Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.

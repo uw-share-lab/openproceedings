@@ -16,8 +16,8 @@ from typing import Any
 import pytest
 from openproceedings import cli, storage
 from openproceedings.ingest import snapshot as snap
-from openproceedings.ingest.dedup import DedupResult, attribution, dedup
-from openproceedings.ingest.record import PaperRecord
+from openproceedings.ingest.dedup import DedupResult, attribution, dedup, resolve
+from openproceedings.ingest.record import Claim, PaperRecord
 from openproceedings.ingest.snapshot import (
     DISPLAY,
     HASHED,
@@ -663,6 +663,8 @@ def test_diff_names_every_kind_of_change(cache: Path, tmp_path: Path) -> None:
         "display_only": 1,
         "provenance_only": 1,
         "abstract_withheld": {"added": [], "lifted": []},  # TASK-136
+        "abstract_kind": {},  # decision-049
+        "abstract_kind_transitions": {},
     }
     same = diff(a, a)
     assert (same["added"], same["removed"], same["rekeyed"], same["changed"]) == ([], [], {}, {})
@@ -992,3 +994,63 @@ def test_build_fills_a_null_abstract_from_the_pinned_openalex_extract_before_tak
     gone = load_records(withheld.path)[rid]
     assert m["withheld"] == [rid] and gone.abstract is None and gone.abstract_kind == "none"
     assert "OpenAlex abstract" not in (withheld.path / "records.jsonl").read_text(encoding="utf-8")
+
+
+# --- abstract_kind (decision-049) ----------------------------------------------------------------------------
+
+
+def _aaai(
+    native: str, abstract: str | None = None, source: str = "ojs", year: int = 2020, **kw: Any
+) -> PaperRecord:
+    """An AAAI 2020 record whose other fields are OJS's; its abstract claim is `source`'s."""
+    base = paper(native, venue="AAAI", year=year, source="ojs", **kw)
+    if abstract is None:
+        return base
+    claim = Claim(field="abstract", value=abstract, source=source, fetched_at=base.provenance[0].fetched_at)  # type: ignore[arg-type]
+    record, _ = resolve(base.id, [*base.provenance, claim])
+    return record
+
+
+def _written(root: Path, name: str, records: list[PaperRecord]) -> Path:
+    out = root / name
+    out.mkdir(parents=True)
+    for fname, data in render(DedupResult(tuple(records), (), ()), [], BUILT).items():
+        (out / fname).write_bytes(data)
+    return out
+
+
+def test_diff_names_a_kind_change_even_when_no_hash_changes(tmp_path: Path) -> None:
+    """Same text, another source (OpenAlex's text, then the same text from OJS): content_hash is unchanged, so
+    `changed` can't see it; `abstract_kind` must."""
+    text = "Exactly the same abstract text."
+    a, b = (_written(tmp_path, src, [_aaai("ojs-1", text, src)]) for src in ("openalex", "ojs"))
+    out = diff(a, b)
+    assert out["changed"] == {} and out["abstract_kind"] == {"op:aaai:2020:ojs-1": ["openalex", "official"]}
+    assert out["abstract_kind_transitions"] == {"openalex->official": 1}
+    assert diff(a, a)["abstract_kind"] == {} and diff(a, a)["abstract_kind_transitions"] == {}
+
+
+def test_the_manifest_counts_openalex_abstracts_only_when_there_are_any() -> None:
+    plain = render(DedupResult((_aaai("ojs-1"),), (), ()), [], BUILT)
+    manifest = json.loads(plain["manifest.json"])
+    assert "abstract_openalex" not in manifest and "abstract_openalex_by_track" not in manifest
+    filled = render(
+        DedupResult((_aaai("dblp-A90", "Text.", "openalex", 1990),), (), ()),
+        [],
+        BUILT,
+    )
+    manifest = json.loads(filled["manifest.json"])
+    assert manifest["abstract_openalex"] == {"AAAI": {"1990": 1}}
+    assert manifest["abstract_openalex_by_track"] == {"AAAI": {"1990": {"main": 1}}}
+
+
+def test_a_record_file_counts_openalex_abstracts_from_the_claims(tmp_path: Path) -> None:
+    records = [
+        _aaai("ojs-1", "Official text."),
+        _aaai("ojs-2", "Filled text.", "openalex", title="Other"),
+        _aaai("ojs-3", title="Third"),
+    ]
+    file = RecordFile(_written(tmp_path, "s", records))
+    assert file.abstract_openalex == {("AAAI", 2020): 1} and file.track_openalex == {
+        ("AAAI", 2020, "main"): 1
+    }

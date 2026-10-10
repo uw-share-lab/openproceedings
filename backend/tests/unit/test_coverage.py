@@ -58,6 +58,8 @@ def _track(track: str, records: int, accepted: int, missing: int, sources: list[
         "indexed_accepted": accepted,
         "abstract_missing": missing,
         "abstract_withheld": 0,  # TASK-136: a manifest without takedown keys withheld nothing
+        "abstract_official": records - missing,  # decision-049: no OpenAlex keys, so none is OpenAlex's
+        "abstract_openalex": 0,
         "sources": sources,
         "official_accepted": None,
         "official_counts": None,
@@ -92,6 +94,8 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
             "records": 12,
             "abstract_missing": 3,
             "abstract_withheld": 0,
+            "abstract_official": 9,
+            "abstract_openalex": 0,
             "unknown_track": 1,
             "unknown_status": 2,
         },
@@ -102,6 +106,8 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
                 "records": 5,
                 "abstract_missing": 1,
                 "abstract_withheld": 0,
+                "abstract_official": 4,
+                "abstract_openalex": 0,
                 "unknown_track": 0,
                 "unknown_status": 0,
                 "cells": [
@@ -120,6 +126,8 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
                 "records": 1,
                 "abstract_missing": 0,
                 "abstract_withheld": 0,
+                "abstract_official": 1,
+                "abstract_openalex": 0,
                 "unknown_track": 0,
                 "unknown_status": 0,
                 "cells": [{"track": "workshop", "status": "accepted", "count": 1}],
@@ -132,6 +140,8 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
                 "records": 6,
                 "abstract_missing": 2,
                 "abstract_withheld": 0,
+                "abstract_official": 4,
+                "abstract_openalex": 0,
                 "unknown_track": 1,
                 "unknown_status": 2,
                 "cells": [
@@ -354,3 +364,50 @@ def test_a_format_1_manifest_takes_its_per_track_facts_from_the_records() -> Non
     assert held == {("ICLR", 2024): EVERY, ("ICLR", 2025): ["accepted"], ("NeurIPS", 2024): EVERY}
     new = breakdown(MANIFEST, "s", facts)  # format 2: the manifest's own, never the facts
     assert new["venue_years"] == breakdown(MANIFEST, "s")["venue_years"]
+
+
+def _with_openalex() -> dict[str, Any]:
+    """The hand-counted manifest where ICLR 2024 main (4 records, 1 missing) has one abstract from OpenAlex."""
+    m = copy.deepcopy(MANIFEST)
+    m["abstract_openalex"] = {"ICLR": {"2024": 1}}
+    m["abstract_openalex_by_track"] = {"ICLR": {"2024": {"main": 1}}}
+    return m
+
+
+def test_official_openalex_missing_and_withheld_add_up_to_the_records_everywhere() -> None:
+    data = breakdown(_with_openalex(), "s", official={})
+    [iclr24] = [vy for vy in data["venue_years"] if (vy["venue"], vy["year"]) == ("ICLR", 2024)]
+    [main] = [t for t in iclr24["tracks"] if t["track"] == "main"]
+    for row in (main, iclr24, data["totals"]):
+        assert row["abstract_openalex"] == 1
+        assert (
+            row["abstract_official"]
+            + row["abstract_openalex"]
+            + row["abstract_missing"]
+            + row["abstract_withheld"]
+            == row["records"]
+        )
+    assert (main["abstract_official"], iclr24["abstract_official"], data["totals"]["abstract_official"]) == (
+        2,
+        3,
+        8,
+    )
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        _drop(("abstract_openalex_by_track",)),  # one key without the other
+        _set(("abstract_openalex", "ICLR", "2024"), 2),  # the venue-year disagrees with its tracks
+        _set(
+            ("abstract_openalex_by_track", "ICLR", "2024", "main"), 4
+        ),  # more than the records minus missing
+        _set(("abstract_openalex", "ICML"), {"2024": 1}),  # where it holds no records
+        _set(("abstract_openalex", "ICLR", "2024"), True),
+    ],
+)
+def test_an_inconsistent_openalex_count_is_refused(edit: Callable[[dict[str, Any]], None]) -> None:
+    manifest = _with_openalex()
+    edit(manifest)
+    with pytest.raises(SnapshotError):
+        breakdown(manifest, "s")

@@ -292,7 +292,9 @@ def build_parser() -> argparse.ArgumentParser:
         "when it doesn't exist, until a snapshot has withheld an abstract: then it is required)",
     )
     b.set_defaults(run=_snapshot_build)
-    d = actions.add_parser("diff", help="ids added, removed and changed between two snapshots")
+    d = actions.add_parser(
+        "diff", help="ids added, removed and changed between two snapshots, and whose abstract_kind changed"
+    )
     d.add_argument("a", type=Path)
     d.add_argument("b", type=Path)
     d.set_defaults(run=_snapshot_diff)

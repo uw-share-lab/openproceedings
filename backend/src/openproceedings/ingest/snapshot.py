@@ -49,7 +49,7 @@ from openproceedings import __version__, storage
 from openproceedings.ingest.caps import cap_records, is_trimmed
 from openproceedings.ingest.dedup import Attribution, Conflict, DedupResult, Merge, attribution, dedup
 from openproceedings.ingest.reconcile import crawled, reconcile
-from openproceedings.ingest.record import DERIVED, RECORD_SCHEMA_VERSION, PaperRecord
+from openproceedings.ingest.record import DERIVED, RECORD_SCHEMA_VERSION, PaperRecord, abstract_kind_of
 from openproceedings.ingest.ris import ImportReport, import_ris
 from openproceedings.ingest.sources.common import Report, sources_manifest
 from openproceedings.ingest.status_check import UnexpectedStatus, unexpected_statuses
@@ -571,6 +571,11 @@ def render(
     # any: a snapshot trimming nothing has the manifest it had before. Additive, like WITHHELD_KEYS
     if trimmed := [r.id for r in records if is_trimmed(r)]:
         manifest["trimmed"] = trimmed
+    # the records whose abstract OpenAlex filled (decision-049), per venue-year and per track, written only when
+    # there are any (additive): a snapshot with none has the manifest it had before
+    if any(r.abstract_kind == "openalex" for r in records):
+        manifest["abstract_openalex"] = _nested(records, lambda r: r.abstract_kind == "openalex")
+        manifest["abstract_openalex_by_track"] = _by_track(records, lambda r: r.abstract_kind == "openalex")
     if withheld:
         manifest["withheld"] = sorted(withheld)
         manifest["abstract_withheld"] = _nested(records, lambda r: r.id in withheld)
@@ -874,6 +879,9 @@ class RecordFile:
         # the abstracts a takedown withheld (TASK-136): (venue, year) and (venue, year, track) → withheld
         self.abstract_withheld: Counter[tuple[str, int]] = Counter()
         self.track_withheld: Counter[tuple[str, int, str]] = Counter()
+        # the abstracts OpenAlex filled (decision-049), counted from the claims by `abstract_kind_of`
+        self.abstract_openalex: Counter[tuple[str, int]] = Counter()
+        self.track_openalex: Counter[tuple[str, int, str]] = Counter()
         # id → the ids its `twin` claims name (decision-029; TASK-162, TASK-163), only for a record that has one
         self.twins: dict[str, tuple[str, ...]] = {}
         try:
@@ -911,6 +919,7 @@ class RecordFile:
                         elif c["field"] == "twin":
                             linked.update(_id_list(c["value"]))
                     twins = sorted(linked - {rid})
+                    from_openalex = abstract_kind_of(line["abstract"], about) == "openalex"
                     urls = line["urls"]
                     credit = attribution(
                         line["abstract"],
@@ -941,6 +950,9 @@ class RecordFile:
                 self.cells[cell] += 1
                 track = (line["venue"], line["year"], line["track"])
                 self.track_missing[track] += no_abstract
+                if from_openalex:
+                    self.abstract_openalex[(line["venue"], line["year"])] += 1
+                    self.track_openalex[track] += 1
                 self.track_sources.setdefault(track, set()).update(claimed)
                 if no_abstract:
                     self.abstract_missing[(line["venue"], line["year"])] += 1
@@ -999,7 +1011,9 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
     paper, its venue or year corrected so its id changed), with the fields that differ; `changed` ids
     naming the hashed fields that differ; counts of display-only and provenance-only changes; and
     `abstract_withheld`, the ids whose abstract a takedown withheld in `b` but not `a` (`added`) and the reverse
-    (`lifted`), from the manifests' `withheld` (TASK-136)."""
+    (`lifted`), from the manifests' `withheld` (TASK-136); `abstract_kind`, each id in both whose derived
+    `abstract_kind` differs, as `[old, new]` (it is derived and never hashed, so a same-text change of source
+    shows nowhere else), and `abstract_kind_transitions`, those changes counted by `"old->new"`."""
     old, new = load_records(a), load_records(b)  # each verified against its manifest's snapshot_hash
     was, now = _withheld(a), _withheld(b)
     added, removed = new.keys() - old.keys(), old.keys() - new.keys()
@@ -1033,6 +1047,11 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
             display_only += 1
         elif x.provenance != y.provenance:
             provenance_only += 1
+    kinds = {
+        rid: [old[rid].abstract_kind, new[rid].abstract_kind]
+        for rid in sorted(old.keys() & new.keys())
+        if old[rid].abstract_kind != new[rid].abstract_kind
+    }
     return {
         "from": a.name,
         "to": b.name,
@@ -1043,6 +1062,8 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
         "display_only": display_only,
         "provenance_only": provenance_only,
         "abstract_withheld": {"added": sorted(now - was), "lifted": sorted(was - now)},
+        "abstract_kind": kinds,
+        "abstract_kind_transitions": dict(sorted(Counter(f"{x}->{y}" for x, y in kinds.values()).items())),
     }
 
 

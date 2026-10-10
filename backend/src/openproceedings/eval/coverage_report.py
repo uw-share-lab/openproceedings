@@ -329,7 +329,7 @@ def _row(
     if cell is None:  # a gated official cell the snapshot holds nothing for
         assert row is not None
         return (f"| {year} | {track} | 0 | {row.accepted:,} | {_signed(-row.accepted)} | {_pct(-100.0)} "
-                f"| ✗ gap | 0 | {unknown} | {statuses} |")  # fmt: skip
+                f"| ✗ gap | 0 | 0 | 0 | {unknown} | {statuses} |")  # fmt: skip
     indexed = cell["indexed_accepted"]
     if cell["official_accepted"] is None:
         verdict, off, delta, pct = (
@@ -344,7 +344,8 @@ def _row(
         if accepted:  # outside ±1% by exactly the owner-accepted counts: passes, and says why
             verdict = "✓ accepted exception"
     return (f"| {year} | {track} | {indexed:,} | {off} | {delta} | {pct} | {verdict} | "
-            f"{cell['abstract_missing']:,} | {unknown} | {statuses} |")  # fmt: skip
+            f"{cell['abstract_missing']:,} | {cell['abstract_official']:,} | {cell['abstract_openalex']:,} "
+            f"| {unknown} | {statuses} |")  # fmt: skip
 
 
 def _listing_rows(manifest: Mapping[str, Any]) -> tuple[list[str], list[str]]:
@@ -503,6 +504,14 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
             f"- {venue} {held[0]}–{held[-1]}: from Crossref's records of the ACM proceedings (decision-049): "
             f"{records:,} records, {what}.{_not_indexed(mine, kinds)}"
         )
+    filled = sorted({vy["venue"] for vy in cov["venue_years"] if vy.get("abstract_openalex")})
+    if filled:  # additive: a snapshot OpenAlex filled nothing in reads as before
+        n = sum(vy["abstract_openalex"] for vy in cov["venue_years"])
+        names = f"{', '.join(filled[:-1])} and {filled[-1]}" if len(filled) > 1 else filled[0]
+        out.append(
+            f"- {n:,} abstracts ({names}) are OpenAlex's, filled where no official source gives one, and "
+            "labelled `abstract_kind:openalex`."
+        )
     return out
 
 
@@ -592,8 +601,9 @@ def render(
             f"## {venue}",
             "",
             "| year | track | indexed accepted | official | Δ | Δ% | gate | missing abstracts "
+            "| Official abstract | OpenAlex abstract "
             "| unknown track (venue-year) | unknown status (venue-year) | statuses indexed |",
-            "|---|---|---|---|---|---|---|---|---|---|---|",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         mine = sorted((k for k in keys if k[0] == venue), key=lambda k: (k[1], TRACK_ORDER[k[2]]))
         lines += [

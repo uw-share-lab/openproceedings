@@ -212,6 +212,15 @@ WITHHELD_COUNT_DOC = (
     "Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, "
     "decision-022): counted here, not in `abstract_missing`."
 )
+OFFICIAL_COUNT_DOC = (
+    "Of `records`, those whose abstract came from an official source (the venue's own proceedings, OpenReview "
+    "or another publisher or index listed in `sources`)."
+)
+OPENALEX_COUNT_DOC = (
+    "Of `records`, those whose abstract came from OpenAlex's fallback (decision-049), filled only where no "
+    "official source gives one. Together with `abstract_official`, `abstract_missing` and `abstract_withheld` "
+    "these add up to `records`."
+)
 
 
 class AbstractSource(Model):
@@ -703,6 +712,8 @@ class TrackCoverage(Model):
     indexed_accepted: int = Field(description="Of `records`, those with status `accepted`.")
     abstract_missing: int = Field(description=MISSING_COUNT_DOC)
     abstract_withheld: int = Field(description=WITHHELD_COUNT_DOC)  # TASK-136: additive
+    abstract_official: int = Field(description=OFFICIAL_COUNT_DOC)  # decision-049: additive
+    abstract_openalex: int = Field(description=OPENALEX_COUNT_DOC)  # decision-049: additive
     sources: list[Source] = Field(description="The sources the track's records came from (claim sources).")
     official_accepted: int | None = Field(
         description="The official accepted count for this venue, year and track; null where none is sourced."
@@ -735,6 +746,8 @@ class VenueYearCoverage(Model):
     records: int
     abstract_missing: int = Field(description=MISSING_COUNT_DOC)
     abstract_withheld: int = Field(description=WITHHELD_COUNT_DOC)  # TASK-136: additive
+    abstract_official: int = Field(description=OFFICIAL_COUNT_DOC)  # decision-049: additive
+    abstract_openalex: int = Field(description=OPENALEX_COUNT_DOC)  # decision-049: additive
     unknown_track: int
     unknown_status: int
     cells: list[CoverageCell]
@@ -752,6 +765,8 @@ class CoverageTotals(Model):
     records: int  # = the index's document count
     abstract_missing: int = Field(description=MISSING_COUNT_DOC)
     abstract_withheld: int = Field(description=WITHHELD_COUNT_DOC)  # TASK-136: additive
+    abstract_official: int = Field(description=OFFICIAL_COUNT_DOC)  # decision-049: additive
+    abstract_openalex: int = Field(description=OPENALEX_COUNT_DOC)  # decision-049: additive
     unknown_track: int
     unknown_status: int
 

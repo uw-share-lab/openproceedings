@@ -148,8 +148,8 @@ def test_the_header_names_everything_the_numbers_depend_on() -> None:
 def test_per_cell_columns_missing_abstracts_and_statuses_indexed() -> None:
     line = row(report(), "ICLR", 2013, "main")
     # one title-only record, no unknown track; ICLR on OpenReview holds every status (decision-012)
-    assert [c.strip() for c in line.strip("|").split("|")][-4:] == [
-        "1", "0", "0", "accepted, rejected, withdrawn, desk_rejected, unknown"]  # fmt: skip
+    assert [c.strip() for c in line.strip("|").split("|")][-6:] == [
+        "1", "23", "0", "0", "0", "accepted, rejected, withdrawn, desk_rejected, unknown"]  # fmt: skip
 
 
 def test_listings_that_skipped_entries_are_listed_with_their_reasons() -> None:
@@ -955,3 +955,16 @@ def test_the_scope_says_what_the_crossref_years_rest_on_and_that_aies_has_no_sec
     )
     assert "only 2022, 2025 and 2026 have one" in text
     assert "Crossref" not in "\n".join(_scope(cov, {"sources": {}}))
+
+
+def test_the_scope_says_how_many_abstracts_are_openalex_s_only_when_there_are_any() -> None:
+    assert "OpenAlex" not in report().split("## ", 1)[0]
+    manifest = manifest_of(corpus())
+    manifest["abstract_openalex"] = {"ICLR": {"2013": 2}}
+    manifest["abstract_openalex_by_track"] = {"ICLR": {"2013": {"main": 2}}}
+    text = render(breakdown(manifest, "x", official=TABLE), manifest, META, official=TABLE, causes={})
+    assert (
+        "- 2 abstracts (ICLR) are OpenAlex's, filled where no official source gives one, and labelled "
+        "`abstract_kind:openalex`." in text
+    )
+    assert "| 1 | 21 | 2 |" in row(text, "ICLR", 2013, "main")  # missing, official, OpenAlex

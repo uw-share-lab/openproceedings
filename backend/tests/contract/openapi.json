@@ -826,6 +826,16 @@
             "title": "Abstract Missing",
             "type": "integer"
           },
+          "abstract_official": {
+            "description": "Of `records`, those whose abstract came from an official source (the venue's own proceedings, OpenReview or another publisher or index listed in `sources`).",
+            "title": "Abstract Official",
+            "type": "integer"
+          },
+          "abstract_openalex": {
+            "description": "Of `records`, those whose abstract came from OpenAlex's fallback (decision-049), filled only where no official source gives one. Together with `abstract_official`, `abstract_missing` and `abstract_withheld` these add up to `records`.",
+            "title": "Abstract Openalex",
+            "type": "integer"
+          },
           "abstract_withheld": {
             "description": "Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.",
             "title": "Abstract Withheld",
@@ -848,6 +858,8 @@
           "records",
           "abstract_missing",
           "abstract_withheld",
+          "abstract_official",
+          "abstract_openalex",
           "unknown_track",
           "unknown_status"
         ],
@@ -3891,6 +3903,16 @@
             "title": "Abstract Missing",
             "type": "integer"
           },
+          "abstract_official": {
+            "description": "Of `records`, those whose abstract came from an official source (the venue's own proceedings, OpenReview or another publisher or index listed in `sources`).",
+            "title": "Abstract Official",
+            "type": "integer"
+          },
+          "abstract_openalex": {
+            "description": "Of `records`, those whose abstract came from OpenAlex's fallback (decision-049), filled only where no official source gives one. Together with `abstract_official`, `abstract_missing` and `abstract_withheld` these add up to `records`.",
+            "title": "Abstract Openalex",
+            "type": "integer"
+          },
           "abstract_withheld": {
             "description": "Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.",
             "title": "Abstract Withheld",
@@ -4047,6 +4069,8 @@
           "indexed_accepted",
           "abstract_missing",
           "abstract_withheld",
+          "abstract_official",
+          "abstract_openalex",
           "sources",
           "official_accepted",
           "official_counts",
@@ -4124,6 +4148,16 @@
             "title": "Abstract Missing",
             "type": "integer"
           },
+          "abstract_official": {
+            "description": "Of `records`, those whose abstract came from an official source (the venue's own proceedings, OpenReview or another publisher or index listed in `sources`).",
+            "title": "Abstract Official",
+            "type": "integer"
+          },
+          "abstract_openalex": {
+            "description": "Of `records`, those whose abstract came from OpenAlex's fallback (decision-049), filled only where no official source gives one. Together with `abstract_official`, `abstract_missing` and `abstract_withheld` these add up to `records`.",
+            "title": "Abstract Openalex",
+            "type": "integer"
+          },
           "abstract_withheld": {
             "description": "Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.",
             "title": "Abstract Withheld",
@@ -4197,6 +4231,8 @@
           "records",
           "abstract_missing",
           "abstract_withheld",
+          "abstract_official",
+          "abstract_openalex",
           "unknown_track",
           "unknown_status",
           "cells",
