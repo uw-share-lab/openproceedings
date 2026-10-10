@@ -1,9 +1,10 @@
 ---
 id: TASK-221
 title: 'Re-check two OJS section labels live (AAAI v38 AI24-43, AIES v8 A25-SA)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-10 05:14'
+updated_date: '2026-10-10 05:15'
 labels:
   - ingest
   - new-venues
@@ -20,5 +21,11 @@ Raised by the milestone A review gate: the labels of AAAI Vol. 38 set AI24-43 an
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Both labels confirmed against the live issue pages, rows fixed if needed
+- [x] #1 Both labels confirmed against the live issue pages, rows fixed if needed
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Checked live 2026-10-10: article 30381 (AAAI v38, set AI24-43) shows Section 'EAAI: Mentored Undergraduate Research Challenge: AI for Accessibility in Comm' = the table label, track eaai correct; article 36764 (AIES v8, set A25-SA) shows Section 'Student Abstracts 25' = the table label, track student_abstract correct. No change needed.
+<!-- SECTION:NOTES:END -->
