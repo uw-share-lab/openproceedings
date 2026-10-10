@@ -133,7 +133,7 @@ uv run op ingest iclr --year 2014-2016                     # the ICLR archive ye
 uv run op ingest neurips --year 1987-2012                  # NeurIPS before 2013 (decision-047; 4,847 pages, at least 1.4 h)
 uv run op ingest dblp --year 1988-2012                     # ICML before 2013: the pinned dblp release (1.1 GB, once) + 226 ICML pages, at least 11 minutes
 uv run op ingest openreview --venue ICLR --years 2013-2025 # also NeurIPS 2021-2025, ICML 2023-2025
-uv run op ingest ojs                                       # AAAI 2010+, AIES 2024+, IASEAI 2026 (decision-049; about 600 OAI pages, at least 3 s each; --journal AAAI|AIES|IASEAI for one)
+uv run op ingest ojs                                       # AAAI 2010+, AIES 2024+, IASEAI 2026 (decision-049; about 590 OAI pages for AAAI (589 in the first full harvest) and fewer for AIES and IASEAI, at least 3 s each; --journal AAAI|AIES|IASEAI for one)
 ```
 #### Import an existing Google Scholar RIS collection
 

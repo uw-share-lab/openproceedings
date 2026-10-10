@@ -203,7 +203,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ojs_parser.add_argument("--offline", action="store_true", help="use the page cache only (no network)")
     ojs_parser.add_argument(
-        "--refresh", action="store_true", help="re-fetch each chain's first page, every GetRecord, and any cached failure"
+        "--refresh",
+        action="store_true",
+        help="re-fetch each chain's first page, every GetRecord, and any cached failure",
     )
     ojs_parser.add_argument(
         "--delay", type=float, default=1.0,

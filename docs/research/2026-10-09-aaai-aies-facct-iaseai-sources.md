@@ -221,8 +221,8 @@ volume, set), so a set used in several years has one row per year.
 | `demo` | 13 | Demonstrations, including "Virtual Agent Demonstrations" (2015) |
 | `iaai` | 53 | IAAI sections |
 | `eaai` | 52 | EAAI sections |
-| `other` | 41 | Senior Member papers and presentations; "Senior Track" (2018); New Faculty Highlights; Emerging Trends; the owner-review rows below |
-| `front_matter` | 3 | AAAI 2013 "Frontmatter"; AIES 2024 and IASEAI 2026 "Frontmatter" |
+| `other` | 40 | Senior Member papers and presentations; "Senior Track" (2018); New Faculty Highlights; Emerging Trends; the owner-review rows below |
+| `front_matter` | 4 | AAAI 2013 "Frontmatter"; AAAI 2023 "Errata" (errata notices, not papers; the owner ruled front matter); AIES 2024 and IASEAI 2026 "Frontmatter" |
 
 The `main` and `student_abstract` rows include AIES (4 main, 3 student-abstract rows) and IASEAI (1 main row).
 
@@ -242,6 +242,8 @@ count check.
 
 ### For owner review (mapped to `other` because the design's mapping doesn't name them)
 
+`AAAI:Errata` (2023, 2 notices) was in this table; the owner ruled it front matter, so it is no longer a record.
+
 | Section | Years (rows) | Papers | Why it is not obviously a mapped track |
 |---|---|---|---|
 | `AAAI:NECTAR` "New Scientific and Technical Advances in Research" | 2010, 2011 | 12 + 12 | digests of papers published at other conferences |
@@ -250,9 +252,8 @@ count check.
 | `AAAI:SPOT` "Spotlight" | 2012 | 17 | unclear what the section held |
 | `AAAI:HOT` "What's Hot Abstracts" | 2015–2017 | 8 + 9 + 7 | short abstracts summarising hot topics at other venues |
 | `AAAI:SIS` "Sister Conference Track" | 2020 | 15 | digests of papers from sister conferences |
-| `AAAI:Errata` "Errata" | 2023 | 2 | errata notices, not papers (front matter is the other choice) |
 
-Each row carries an "owner review" comment in `ojs_sections.toml`. Moving one to another track is a one-line table
+Each row (10 rows, 6 sections) carries an "owner review" comment in `ojs_sections.toml`. Moving one to another track is a one-line table
 edit, with no code change.
 
 ## Official counts (spec 07 §C)

@@ -4493,13 +4493,11 @@ papers = 6
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
 
-# owner review: 'Errata' → other (errata notices, not papers)
 [[section]]
 journal = "AAAI"
 volume = 37
 set_spec = "AAAI:Errata"
-kind = "papers"
-track = "other"
+kind = "front_matter"
 label = "Errata"
 papers = 2
 verified = 2026-10-09

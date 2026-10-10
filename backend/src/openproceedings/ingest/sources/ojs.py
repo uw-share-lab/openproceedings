@@ -333,7 +333,9 @@ class JournalResult:
     unavailable: int = 0  # articles named in the table's [[unavailable]] rows: listed, never records
     duplicates: int = 0  # extra identical copies of an article that two set requests returned: counted once
     recovered: int = 0  # live inventory articles no set returned, read by GetRecord
-    fallback_sets: list[str] = field(default_factory=list)  # sets read by ListIdentifiers + GetRecord (5xx), sorted
+    fallback_sets: list[str] = field(
+        default_factory=list
+    )  # sets read by ListIdentifiers + GetRecord (5xx), sorted
 
 
 def mine_journal(
@@ -456,7 +458,9 @@ def mine_journal(
                 "listing_attention",
                 extra={"journal": journal, "volume": r.volume, "skipped": dict(r.skipped)},
             )
-    if mismatched:  # the stated count is the proceedings' own: a difference means the harvest or the table is wrong
+    if (
+        mismatched
+    ):  # the stated count is the proceedings' own: a difference means the harvest or the table is wrong
         said = "; ".join(f"v{r.volume} listed {r.listed}, stated {r.stated}" for r in mismatched)
         raise CrawlError(
             f"OJS {journal}: {len(mismatched)} volume(s) do not match the table's stated counts ({said}): "
