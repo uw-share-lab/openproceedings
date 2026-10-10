@@ -649,6 +649,7 @@ def scrub_csv(text: str, keep: int = 20, per_type: dict[str, int] | None = None)
 
 
 _FACCT_ENTRY = re.compile(r"<h4\b.*?(?=<h4\b|</div>)", re.S)
+_FACCT_AUTHOR_SPLIT = re.compile(r"(,\s*and\s+|,\s*|\s+and\s+)")
 
 
 def _facct_2022(page: str, keep_ids: list[str] | None, keep: int) -> tuple[str, str]:
@@ -670,15 +671,22 @@ def _facct_2022(page: str, keep_ids: list[str] | None, keep: int) -> tuple[str, 
     kept = []
     for i in sorted(chosen):
         b = blocks[i].group(0)
-        b = re.sub(
-            r"(<h4\b[^>]*><b>)(.*?)(</b></h4>)",
-            lambda m: f"{m.group(1)}Synthetic title {c.next()}{m.group(3)}",
+        b = re.sub(  # the whole heading, so a title outside `<b>` can't survive
+            r"(<h4\b[^>]*>)(.*?)(</h4>)",
+            lambda m: f"{m.group(1)}<b>Synthetic title {c.next()}</b>{m.group(3)}",
             b,
             flags=re.S,
         )
-        b = re.sub(
+        b = re.sub(  # the author list keeps its shape: `A, B and C`
             r"(<p><i>)(.*?)(</i></p>)",
-            lambda m: f"{m.group(1)}Synthetic Author {c.next()} and Synthetic Author {c.next()}{m.group(3)}",
+            lambda m: (
+                m.group(1)
+                + "".join(
+                    p if i % 2 else f"Synthetic Author {c.next()}"
+                    for i, p in enumerate(_FACCT_AUTHOR_SPLIT.split(m.group(2)))
+                )
+                + m.group(3)
+            ),
             b,
             flags=re.S,
         )

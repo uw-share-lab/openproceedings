@@ -98,11 +98,11 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
     .3377141 (pp. 5–6), .3375839 (p. 7, in the paper DOI series, so perhaps a paper); 2021 3461702.3462643
     (p. 1), .3462443 (p. 2, five authors, so perhaps a paper); 2022 3514094.3539566–.3539571 (pp. 1–6, six
     single-author entries); 2023 3600211.3607543 (p. 2), .3607544 (pp. 3–4), .3607545 (p. 1).
-  - *Student abstracts* (two-page entries in a block after the papers, single author): 2018 pp. 354–391 (19
+  - *Student abstracts* (two-page or one-page entries in a block after the papers, nearly all single-author; 2023 .3604760 has three authors): 2018 pp. 354–391 (19
     entries, 3278721.3278783–.3278802); 2019 pp. 521–560 (20 entries, 3306618.3314228 and .3314306–.3314325,
     among them .3314318, whose title is the placeholder "AIES 2019 Student Submission"); 2021 pp. 267–280 (7
     entries, 3461702.3462467–.3462474); 2022 pp. 890–920 (31 one-page entries, 3514094.3539514–.3539564); 2023
-    pp. 939–1009 (17 of the entries in that range, 3600211.3604724–.3604764, with longer student entries between
+    pp. 939–1009 (19 of the entries in that range, 3600211.3604724–.3604764, with longer student entries between
     them).
   - *One-page entries in the paper sequence* (non-archival paper abstracts): 2018 3278721.3278722, .3278723,
     .3278727, .3278746; 2019 3306618.3314227, .3314274; 2020 3375627.3375805, .3375809, .3375816, .3375818,
@@ -174,7 +174,7 @@ days, 21–34 cursor pages of 1,000 works each), kept every DOI extending `10.11
 |---|---|---|---|---|---|---|---|
 | FAccT 2019 | 10.1145/3287560 | 2019-01-29 | 20,822 | 41 | 0 | 41 | 2019-01-22 – 02-05 |
 | FAccT 2020 | 10.1145/3351095 | 2020-01-27 | 19,506 | 95 | 26 | 69 | 2020-01-20 – 02-03 |
-| FAccT 2021 | 10.1145/3442188 | 2021-03-01 | 20,719 | 82 | 0 | 82 | 2021-02-22 – 03-08 |
+| FAccT 2021 | 10.1145/3442188 | 2021-03 (month only) | 20,719 | 82 | 0 | 82 | 2021-02-22 – 03-08 |
 | FAccT 2022 | 10.1145/3531146 | 2022-06-20 | 23,233 | 181 | 0 | 181 | 2022-06-13 – 06-27 |
 | FAccT 2023 | 10.1145/3593013 | 2023-06-12 | 23,164 | 153 | 0 | 153 | 2023-06-05 – 06-19 |
 | FAccT 2024 | 10.1145/3630106 | 2024-06-03 | 27,998 | 167 | 0 | 167 | 2024-05-27 – 06-10 |
@@ -193,7 +193,7 @@ days, 21–34 cursor pages of 1,000 works each), kept every DOI extending `10.11
   were most likely another route's duplicates (OpenAlex's truncated or repeated DOIs); the session did not record
   them.
 - **The windows.** Every DOI of a proceedings carries the proceedings' own `published` date (one date per
-  proceedings, all 14), so the rule `min(published) − 7 days … max(published) + 7 days` gives a 15-day window
+  proceedings, all 14; FAccT 2021's is month precision only, `[2021, 3]`, read as 2021-03-01), so the rule `min(published) − 7 days … max(published) + 7 days` gives a 15-day window
   centred on that date. `op ingest crossref` over those windows (2–5 cursor pages each) found exactly the DOIs the
   wide windows found: 14 listings, each `count_ok: true`.
 - **No DOI lacks a field the miner needs.** Every work is a `proceedings-article`, every one has a title, at least
@@ -216,7 +216,7 @@ days, 21–34 cursor pages of 1,000 works each), kept every DOI extending `10.11
 
 FAccT 2020 (FAT\* 2020) has 95 DOIs. Pages 1–680 are the papers (a few of them one-page non-archival abstracts in the
 paper sequence, such as page 680, "Measuring justice in machine learning", which the 2020 accepted-papers page
-lists). After them come two alphabetical blocks of one-page entries:
+lists). After them come two blocks of one-page entries, each roughly alphabetical by title:
 - **pages 681–695, 14 CRAFT sessions** (DOIs 3375680–3375697; there is no page 694 entry). Every title is a CRAFT
   session in https://facctconference.org/2020/programschedule.html (a `craft` cell or a link to
   `acceptedcraftsessions.html`).
@@ -292,7 +292,7 @@ and recorded (scrubbed, trimmed) under `backend/tests/fixtures/http/facct_site/`
   Stereotypes" (`id="314"`); its own DOI, 3531146.3534636, is linked nowhere. A DOI join would mis-attach that
   abstract, which is why the 2022 join is by title. An exact title join leaves 11 of the 181 unmatched (wording
   differences). The recorded fixture keeps 20 entries, among them ids 295 and 314, an `<h5>` entry and the spaced id
-  forms.
+  form `id = "17"`.
 
 ## AAAI 1980–2008 (dblp)
 
