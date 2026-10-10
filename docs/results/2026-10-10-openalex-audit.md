@@ -1,14 +1,14 @@
 # OpenAlex fidelity audit (2026-10-10)
 
 - Snapshot: `2026-10-10-9efa49481112`
-- Code: commit `78b7a6bd53ea`
-- Sample: seed 49; every record with an official abstract and a DOI of FAccT 2022, 2025, 2026; AIES 2024, 2025; and 1,000 of 25,124 such AAAI 2010+ records, drawn in id order. Title-route check: 50 attaches.
+- Code: commit `2fc4cf8a1756`
+- Sample: seed 49; every record with an official abstract and a DOI of FAccT 2022, 2025, 2026; AIES 2024, 2025; and 1,000 of 25,124 such AAAI 2010+ records, drawn in id order. Title-route check: 1,061 attaches.
 - Date: 2026-10-10
 
 Reproduce (from the OpenAlex cache, no network):
 
 ```
-uv run op eval openalex --offline --snapshot 2026-10-10-9efa49481112 --seed 49 --aaai-sample 1000 --date 2026-10-10
+uv run op eval openalex --offline --snapshot 2026-10-10-9efa49481112 --seed 49 --aaai-sample 1000 --title-sample 1061 --date 2026-10-10
 ```
 
 ## Method
@@ -65,16 +65,39 @@ Works returned for a DOI the batch didn't ask for (not compared): 1.
 
 Of 2,122 records compared, OpenAlex's abstract is exact for 1,544 (72.8%) and near-exact for 219 (10.3%): together 1,763 (83.1%) would match every search exactly as the official abstract does.
 
+**A note on FAccT.** FAccT agrees far less often than AAAI or AIES, whose official abstracts come from ojs.aaai.org.
+FAccT's official abstracts come from the conference's own pages (`facct_site`). Most of FAccT's `similar` and
+`differs` cases are about the same length as the official text and mostly open with the same words, so they look
+like another version of the same abstract rather than noise: OpenAlex likely carries ACM's published version, not
+the conference site's text. A few are entirely different texts. An abstract the fill takes from OpenAlex is labelled
+`abstract_kind: openalex`, never `official`, so the label already tells a reader the text is OpenAlex's, which may be
+ACM's version rather than the site's.
+
 ## The title route (AAAI 1980–2008): wrong-attach check
 
 AAAI 1980–2008 records have no DOI. The fill matches each one by exact title key in the year's OpenAlex listing (`openalex_sources.toml`), attaching only when one listed work and one DOI-less record share the key. The listing source also holds proceedings volumes, other venues' papers and OCR-garbled titles, so an exact title could still name another paper. The fill was replayed over the cached listings (no new listing fetch). A seeded sample of its title-route attaches was then checked against OpenAlex's authors for each work (seed 49; one request per 50 works, `select=id,authorships,biblio`).
 
 - DOI-less AAAI 1980–2008 records with no abstract: 4,709; title-route attaches: 1,061; the fill's refusals: `inverted_gap` 50, `inverted_unreadable` 101, `no_abstract` 119, `title_ambiguous` 21, `title_unmatched` 3,357.
-- Sampled: 50 of 1,061 attaches.
-- Year: OpenAlex's `publication_year` equals ours in 50 of 50. The listing is filtered by year and the fill requires the year, so this holds by construction.
-- Authors: OpenAlex lists authors for 50 of 50; the first-author surname matches ours in 50; the lists share at least one surname in 50.
-- Pages: OpenAlex holds a first page for 50 of 50. Our records carry no page field, so pages can't be compared.
+- Sampled: 1,061 of 1,061 attaches.
+- Year: OpenAlex's `publication_year` equals ours in 1,061 of 1,061. The listing is filtered by year and the fill requires the year, so this holds by construction.
+- Authors: OpenAlex lists authors for 1,061 of 1,061; the first-author surname matches ours in 1,044; the lists share at least one surname in 1,052.
+- Pages: OpenAlex holds a first page for 1,054 of 1,061. Our records carry no page field, so pages can't be compared.
 
-**Verdict:** 50 agree (100.0%), 0 look wrong (0.0%), 0 can't be checked (no authors on one side) (0.0%). `agree`: the years match and the author lists share a surname (surnames compared without marks or case, dblp's homonym numbers dropped). `wrong`: OpenAlex lists authors and none of their surnames is any of ours.
+**Verdict:** 1,052 agree (99.2%), 9 look wrong (0.8%), 0 can't be checked (no authors on one side) (0.0%). `agree`: the years match and the author lists share a surname (surnames compared without marks or case, dblp's homonym numbers dropped). `wrong`: OpenAlex lists authors and none of their surnames is any of ours.
 
-No sampled attach looks wrong, so no rule change is indicated by this sample.
+| Record | OpenAlex work | Our first-author surname | OpenAlex's first-author surname |
+|---|---|---|---|
+| `op:aaai:1982:dblp-Kender82` | `W147023952` | kender | render |
+| `op:aaai:1982:dblp-Witkin82` | `W164237969` | witkin | within |
+| `op:aaai:1988:dblp-Pentland88` | `W131553806` | pentland | pentlaud |
+| `op:aaai:1992:dblp-Vempaty92` | `W41953994` | vempaty | rao |
+| `op:aaai:1994:dblp-Elliot94` | `W2097837865` | elliot | elliott |
+| `op:aaai:1996:dblp-Sandholm96` | `W21597398` | sandholm | sandholrn |
+| `op:aaai:1997:dblp-Nournai97` | `W2523563690` | nournai | nourani |
+| `op:aaai:1998:dblp-Pedersen98a` | `W2164604466` | pedersen | pederson |
+| `op:aaai:1998:dblp-TorreT98` | `W1838373937` | torre | toor |
+
+Rules that would exclude them (the fill rule is unchanged here; the choice is the controller's):
+
+- **Require at least one shared author surname:** excludes all 9 that look wrong, and also the 0 that can't be checked.
+- **Require a matching first-author surname:** excludes all 9 that look wrong, and also 8 that agree on another author and the 0 that can't be checked.
