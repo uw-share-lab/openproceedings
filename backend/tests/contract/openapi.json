@@ -997,6 +997,7 @@
           "FIELD_RANGE_INVERTED",
           "FIELD_FILTER_SYNTAX",
           "FIELD_COMPAT_ONLY",
+          "FIELD_NOT_INDEXED",
           "WARN_LOWERCASE_OPERATOR",
           "WARN_MIXED_AND_OR",
           "WARN_NESTED_FILTER",
@@ -1111,6 +1112,7 @@
           "FIELD_RANGE_INVERTED",
           "FIELD_FILTER_SYNTAX",
           "FIELD_COMPAT_ONLY",
+          "FIELD_NOT_INDEXED",
           "API_BAD_PARAM",
           "API_PAPER_NOT_FOUND",
           "API_RECORD_NOT_FOUND",
@@ -1228,7 +1230,8 @@
               "venue",
               "year",
               "track",
-              "status"
+              "status",
+              "abstract_kind"
             ],
             "title": "Field",
             "type": "string"
@@ -1651,7 +1654,8 @@
                 "venue",
                 "year",
                 "track",
-                "status"
+                "status",
+                "abstract_kind"
               ],
               "type": "string"
             },
@@ -2334,7 +2338,8 @@
                 "venue",
                 "year",
                 "track",
-                "status"
+                "status",
+                "abstract_kind"
               ],
               "type": "string"
             },
@@ -2506,7 +2511,7 @@
         "type": "object"
       },
       "ParsedClause": {
-        "description": "A `venue`, `track` or `status` clause.",
+        "description": "A `venue`, `track`, `status` or `abstract_kind` clause.",
         "properties": {
           "blocking_spans": {
             "description": "For `reason` `multiple_clauses`, `nested` or `mixed_fields`: the clauses behind it, as half-open code-point ranges in `q`, in order: each top-level conjunct (AND groups flattened) that holds a filter of this field, so the UI can point at them. Empty for any other clause (TASK-091).",
@@ -2532,7 +2537,8 @@
               "venue",
               "year",
               "track",
-              "status"
+              "status",
+              "abstract_kind"
             ],
             "title": "Field",
             "type": "string"
@@ -2622,6 +2628,9 @@
       "ParsedFilters": {
         "description": "Every filter field's clause (`POST /parse` `filters`).",
         "properties": {
+          "abstract_kind": {
+            "$ref": "#/components/schemas/ParsedClause"
+          },
           "status": {
             "$ref": "#/components/schemas/ParsedClause"
           },
@@ -2639,7 +2648,8 @@
           "venue",
           "year",
           "track",
-          "status"
+          "status",
+          "abstract_kind"
         ],
         "title": "ParsedFilters",
         "type": "object"
@@ -2671,7 +2681,8 @@
               "venue",
               "year",
               "track",
-              "status"
+              "status",
+              "abstract_kind"
             ],
             "title": "Field",
             "type": "string"

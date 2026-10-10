@@ -31,7 +31,7 @@ from openproceedings.query.parser import parse
 
 from tests.fixtures.corpus.synthetic_5k import records, vocab
 from tests.golden.test_trust_evals import STRINGS
-from tests.strategies import SPAN, engine_asts, filters
+from tests.strategies import SCHEMA_3_FIELDS, SPAN, engine_asts, filters
 from tests.unit.engine.test_exclusions import tantivy_of
 
 RECORDS = list(records())
@@ -153,9 +153,11 @@ def test_a_group_alone_is_the_query_without_the_other_groups() -> None:
 @st.composite
 def grouped_asts(draw: st.DrawFn) -> Node:
     """An AND of several trees (each a group, a leave-out, or a filter clause) and extra top-level filters."""
-    parts: list[Node] = draw(st.lists(engine_asts(vocab()), min_size=1, max_size=4))
+    # the fields a schema-3 index holds (it refuses `abstract_kind:`, test_abstract_kind_filter.py)
+    parts: list[Node] = draw(st.lists(engine_asts(vocab(), SCHEMA_3_FIELDS), min_size=1, max_size=4))
     parts += [
-        Not(span=SPAN, child=f) if draw(st.booleans()) else f for f in draw(st.lists(filters(), max_size=3))
+        Not(span=SPAN, child=f) if draw(st.booleans()) else f
+        for f in draw(st.lists(filters(SCHEMA_3_FIELDS), max_size=3))
     ]
     if len(parts) == 1:
         return parts[0]

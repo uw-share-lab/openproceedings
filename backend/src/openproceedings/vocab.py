@@ -43,6 +43,7 @@ QUERY_FILTER_FIELDS = (  # every filter field a query may name, incl. Scholar's 
     "year",
     "track",
     "status",
+    "abstract_kind",
     "source",
 )
 

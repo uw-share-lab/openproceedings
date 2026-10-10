@@ -24,7 +24,7 @@ from openproceedings.query.parser import parse
 from tests.bench.test_bench import trust_evals
 from tests.fixtures.corpus.synthetic_5k import records, vocab
 from tests.golden.test_trust_evals import STRINGS
-from tests.strategies import SPAN, engine_asts, filters
+from tests.strategies import SCHEMA_3_FIELDS, SPAN, engine_asts, filters
 from tests.unit.engine.facets_before import facets_before
 from tests.unit.engine.test_exclusions import tantivy_of
 
@@ -52,9 +52,11 @@ class Before:
 
 @st.composite
 def filtered_asts(draw: st.DrawFn) -> Node:
-    tree = draw(engine_asts(vocab()))
+    # the fields a schema-3 index holds (it refuses `abstract_kind:`, test_abstract_kind_filter.py)
+    tree = draw(engine_asts(vocab(), SCHEMA_3_FIELDS))
     extra = [
-        Not(span=SPAN, child=f) if draw(st.booleans()) else f for f in draw(st.lists(filters(), max_size=4))
+        Not(span=SPAN, child=f) if draw(st.booleans()) else f
+        for f in draw(st.lists(filters(SCHEMA_3_FIELDS), max_size=4))
     ]
     if not extra:
         return tree
@@ -77,17 +79,18 @@ def test_facets_equal_the_per_kept_set_collections_and_the_oracle(engines: Engin
     tantivy.faceted.clear()  # a fresh base as often as a memoised one: both paths are checked
     got = outcome(tantivy.facets, ast)
     q = render(ast)
-    assert got == outcome(facets_before, tantivy, ast), q
-    assert got == outcome(reference.facets, ast), q
+    fields = tantivy.filter_fields  # every field the index holds: what its facets count by default
+    assert got == outcome(facets_before, tantivy, ast, fields), q
+    assert got == outcome(reference.facets, ast, fields), q
     if isinstance(got, dict):
         assert got == tantivy.facets(ast), q  # from the memo, the same
-        for f in FACET_FIELDS:  # one field alone is the same field of the whole
+        for f in fields:  # one field alone is the same field of the whole
             assert tantivy.facets(ast, (f,)) == {f: got[f]}, q
         # aggregated over the default fields only (TASK-166), their counts are the same; the other fields'
         # filters are then in the collected query, not evaluated per combo
         narrow = tantivy.facets(ast, ORDER, over=ORDER)
         assert narrow == {f: got[f] for f in ORDER}, q
-        for f in FACET_FIELDS:  # any one field aggregated alone, too
+        for f in fields:  # any one field aggregated alone, too
             assert tantivy.facets(ast, (f,), over=(f,)) == {f: got[f]}, q
 
 
@@ -146,8 +149,9 @@ def test_a_counted_field_must_be_aggregated(engines: Engines) -> None:
     assert tantivy.combos([], over=("status", "track")) == tantivy.combos([], over=ORDER)
 
 
-def test_the_combo_fields_are_the_facet_fields() -> None:
-    assert sorted(COMBO) == sorted(FACET_FIELDS)
+def test_the_combo_fields_are_the_facet_fields(engines: Engines) -> None:
+    # a schema-3 index holds every facet field but `abstract_kind`, and aggregates exactly the fields it holds
+    assert sorted(COMBO) == sorted(set(FACET_FIELDS) - {"abstract_kind"}) == sorted(engines[1].filter_fields)
 
 
 def test_combos_cover_every_document_of_the_base(engines: Engines) -> None:

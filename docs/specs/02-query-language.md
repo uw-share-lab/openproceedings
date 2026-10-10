@@ -363,9 +363,9 @@ toggleable if the edited `q` does not end with exactly that one top-level clause
 and not the value clicked. Every field with no clause is checked by one parse that writes them all out at
 once, and each alone only when that edit can't be made (the answer is the per-field one; a property test
 compares them); a typed clause costs one parse of its own. So `/parse` adds one parse for a query with no
-typed clause, and at most five (`test_clauses.py` counts them), so the worst case, short words near the
-cap where the combined wrap is too long to write at once and each field is checked alone, is about six
-parses of `q`.
+typed clause, and at most six, one more than the five filter fields (`test_clauses.py` counts them), so the
+worst case, short words near the cap where the combined wrap is too long to write at once and each field is
+checked alone, is about seven parses of `q`.
 
 **Year edits** (TASK-092). The year control's actions (set a range, clear, add a range, remove a range) write
 the whole year clause from the reported `ranges`: sorted, with overlapping or adjacent ranges joined as the

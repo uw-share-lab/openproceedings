@@ -64,7 +64,7 @@ from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.exact import dollar_places, exact_leaves, exact_name
 from openproceedings.query.lexer import FIELDS, OPERATOR_WORDS, Kind, Lexeme, lex
 from openproceedings.query.normalize import SERVED_TOKENIZERS, TOKENIZER_VERSION, tokenize
-from openproceedings.vocab import STATUSES, TEXT_FIELDS, TRACKS, VENUES
+from openproceedings.vocab import ABSTRACT_KINDS, STATUSES, TEXT_FIELDS, TRACKS, VENUES
 
 Mode = Literal["native", "scholar"]
 MAX_QUERY_LENGTH = 2000  # code points (spec 02 §Error handling); longer is PARSE_TOO_LONG, before lexing
@@ -77,6 +77,7 @@ _EXAMPLES = {
     "year": "year:2020..2026",
     "track": "track:main",
     "status": "status:accepted",
+    "abstract_kind": "abstract_kind:official",
 }
 # FIELD_FILTER_SYNTAX's example: real values of the field, never placeholders
 _OR_EXAMPLES = {
@@ -84,8 +85,14 @@ _OR_EXAMPLES = {
     "year": "2020 OR 2024..2026",
     "track": "main OR position",
     "status": "accepted OR withdrawn",
+    "abstract_kind": "official OR none",
 }
-_VALID: dict[str, tuple[str, ...]] = {"venue": tuple(VENUES.values()), "track": TRACKS, "status": STATUSES}
+_VALID: dict[str, tuple[str, ...]] = {
+    "venue": tuple(VENUES.values()),
+    "track": TRACKS,
+    "status": STATUSES,
+    "abstract_kind": ABSTRACT_KINDS,
+}
 
 
 class ParseResult(BaseModel):

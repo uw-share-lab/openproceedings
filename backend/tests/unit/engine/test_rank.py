@@ -235,7 +235,7 @@ def test_an_index_from_other_versions_is_refused(tmp_path: Path, monkeypatch: py
         with monkeypatch.context() as m:
             m.setattr(idx, name, value)
             # an old code that built schema 1
-            m.setattr(idx, "SERVED_SCHEMAS", {**idx.SERVED_SCHEMAS, "1": idx.SchemaForm()})
+            m.setattr(idx, "SERVED_SCHEMAS", {**idx.SERVED_SCHEMAS, "1": idx.SchemaForm(abstract_kind=False)})
             # a tokenizer this code doesn't serve (only while building it: served, it would be refused)
             m.setitem(SERVED_TOKENIZERS, "1", TokenizerForm(nfkc_first=True))
             path = build_index(snapshot_of(CORPUS, tmp_path / name), tmp_path / f"i-{name}", BUILT).path

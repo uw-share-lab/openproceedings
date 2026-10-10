@@ -377,6 +377,16 @@
       "note": null
     },
     {
+      "code": "FIELD_NOT_INDEXED",
+      "kind": "error",
+      "mode": "native",
+      "example": "trust abstract_kind:openalex",
+      "display": null,
+      "message": "`abstract_kind:` needs index schema 4, and index 0123456789ab is schema 3: search the current index, or remove the `abstract_kind:` filter.",
+      "fix": "trust",
+      "note": "The message names the index the search ran on; this one names an example index. Only an older index, pinned by a saved search, lacks the field."
+    },
+    {
       "code": "FIELD_RANGE_INVERTED",
       "kind": "error",
       "mode": "native",
@@ -392,7 +402,7 @@
       "mode": "native",
       "example": "author:smith",
       "display": null,
-      "message": "`author:` is not a field — use one of `title:`, `abstract:`, `venue:`, `year:`, `track:`, `status:`, `source:`, or quote the text to search for it.",
+      "message": "`author:` is not a field — use one of `title:`, `abstract:`, `venue:`, `year:`, `track:`, `status:`, `abstract_kind:`, `source:`, or quote the text to search for it.",
       "fix": "\"author smith\"",
       "note": null
     },

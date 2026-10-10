@@ -680,7 +680,7 @@ export interface components {
          * @description Open set: new values may be added within /api/v1; handle a value you don't know.
          * @enum {string}
          */
-        DiagnosticCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "WARN_LOWERCASE_OPERATOR" | "WARN_MIXED_AND_OR" | "WARN_NESTED_FILTER" | "WARN_FILTER_SCOPE" | "WARN_LOOKALIKE_OPERATOR" | "WARN_SYMBOLS_DROPPED" | "WARN_SOURCE_PARTIAL" | "WARN_CJK_RUN" | "WARN_SPELLED_GREEK" | "COMPAT_SOURCE_ALIAS" | "COMPAT_POP_DOLLAR" | "COMPAT_POP_PHRASE" | "COMPAT_NO_STEMMING" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_REPLAY_MISMATCH" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY" | "API_TOO_MANY_VERIFIED_CLAUSES" | "API_QUERY_TOO_COSTLY" | "API_COMPARE_DISABLED" | "API_UNSUPPORTED_MEDIA_TYPE" | "API_UPLOAD_TIMEOUT" | "API_RIS_INVALID" | "API_RIS_TOO_LARGE" | "API_COMPARE_TOO_COSTLY";
+        DiagnosticCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "FIELD_NOT_INDEXED" | "WARN_LOWERCASE_OPERATOR" | "WARN_MIXED_AND_OR" | "WARN_NESTED_FILTER" | "WARN_FILTER_SCOPE" | "WARN_LOOKALIKE_OPERATOR" | "WARN_SYMBOLS_DROPPED" | "WARN_SOURCE_PARTIAL" | "WARN_CJK_RUN" | "WARN_SPELLED_GREEK" | "COMPAT_SOURCE_ALIAS" | "COMPAT_POP_DOLLAR" | "COMPAT_POP_PHRASE" | "COMPAT_NO_STEMMING" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_REPLAY_MISMATCH" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY" | "API_TOO_MANY_VERIFIED_CLAUSES" | "API_QUERY_TOO_COSTLY" | "API_COMPARE_DISABLED" | "API_UNSUPPORTED_MEDIA_TYPE" | "API_UPLOAD_TIMEOUT" | "API_RIS_INVALID" | "API_RIS_TOO_LARGE" | "API_COMPARE_TOO_COSTLY";
         /** DiffEntry */
         DiffEntry: {
             /** Id */
@@ -701,7 +701,7 @@ export interface components {
          * @description An error envelope's code (spec 04 §Error handling). Open set: new values may be added within /api/v1; handle a value you don't know.
          * @enum {string}
          */
-        ErrorCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY" | "API_TOO_MANY_VERIFIED_CLAUSES" | "API_QUERY_TOO_COSTLY" | "API_COMPARE_DISABLED" | "API_UNSUPPORTED_MEDIA_TYPE" | "API_UPLOAD_TIMEOUT" | "API_RIS_INVALID" | "API_RIS_TOO_LARGE" | "API_COMPARE_TOO_COSTLY";
+        ErrorCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "FIELD_NOT_INDEXED" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY" | "API_TOO_MANY_VERIFIED_CLAUSES" | "API_QUERY_TOO_COSTLY" | "API_COMPARE_DISABLED" | "API_UNSUPPORTED_MEDIA_TYPE" | "API_UPLOAD_TIMEOUT" | "API_RIS_INVALID" | "API_RIS_TOO_LARGE" | "API_COMPARE_TOO_COSTLY";
         /** ErrorEnvelope */
         ErrorEnvelope: {
             error: components["schemas"]["ErrorBody"];
@@ -756,7 +756,7 @@ export interface components {
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            field: "venue" | "year" | "track" | "status";
+            field: "venue" | "year" | "track" | "status" | "abstract_kind";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -929,7 +929,7 @@ export interface components {
         /** MetaResponse */
         MetaResponse: {
             /** Filter Fields */
-            filter_fields: ("venue" | "year" | "track" | "status")[];
+            filter_fields: ("venue" | "year" | "track" | "status" | "abstract_kind")[];
             /** Index Version */
             index_version: string;
             /**
@@ -1144,7 +1144,7 @@ export interface components {
             /** Canonical Hash */
             canonical_hash: string | null;
             /** Defaults */
-            defaults: ("venue" | "year" | "track" | "status")[];
+            defaults: ("venue" | "year" | "track" | "status" | "abstract_kind")[];
             /** Effective Ast */
             effective_ast: (components["schemas"]["Term"] | components["schemas"]["Wildcard"] | components["schemas"]["Phrase"] | components["schemas"]["Near"] | components["schemas"]["Filter"] | components["schemas"]["Not"] | components["schemas"]["And"] | components["schemas"]["Or"]) | null;
             /** Errors */
@@ -1181,7 +1181,7 @@ export interface components {
         };
         /**
          * ParsedClause
-         * @description A `venue`, `track` or `status` clause.
+         * @description A `venue`, `track`, `status` or `abstract_kind` clause.
          */
         ParsedClause: {
             /**
@@ -1197,7 +1197,7 @@ export interface components {
              * @description The filter field: always equal to this clause's key in `filters`. Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            field: "venue" | "year" | "track" | "status";
+            field: "venue" | "year" | "track" | "status" | "abstract_kind";
             /**
              * Negated
              * @description The clause is `NOT field:…`. A negated clause is never toggleable.
@@ -1232,6 +1232,7 @@ export interface components {
          * @description Every filter field's clause (`POST /parse` `filters`).
          */
         ParsedFilters: {
+            abstract_kind: components["schemas"]["ParsedClause"];
             status: components["schemas"]["ParsedClause"];
             track: components["schemas"]["ParsedClause"];
             venue: components["schemas"]["ParsedClause"];
@@ -1255,7 +1256,7 @@ export interface components {
              * @description The filter field: always equal to this clause's key in `filters`. Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            field: "venue" | "year" | "track" | "status";
+            field: "venue" | "year" | "track" | "status" | "abstract_kind";
             /**
              * Negated
              * @description The clause is `NOT field:…`. A negated clause is never toggleable.

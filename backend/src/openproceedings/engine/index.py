@@ -62,8 +62,10 @@ SCHEMA_VERSION = "3"  # 3: `ord` indexed too, so a verified clause's ids are a u
 class SchemaForm:
     """What differs between the served schemas, read per index from its manifest's `schema_version`."""
 
+    abstract_kind: bool  # a stored fast `abstract_kind` (schema 4)
 
-SERVED_SCHEMAS: Mapping[str, SchemaForm] = MappingProxyType({SCHEMA_VERSION: SchemaForm()})
+
+SERVED_SCHEMAS: Mapping[str, SchemaForm] = MappingProxyType({SCHEMA_VERSION: SchemaForm(abstract_kind=False)})
 ANALYZER = "exact_v1"
 TEXT: tuple[str, ...] = TEXT_FIELDS  # the searched fields (vocab), as the schema's field names
 FACETS = ("venue", "track", "status")

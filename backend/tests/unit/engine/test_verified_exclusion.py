@@ -23,7 +23,7 @@ from openproceedings.query.parser import parse
 from tests.corpus import Rec
 from tests.fixtures.corpus.synthetic_5k import records, vocab
 from tests.golden.test_tantivy_200 import as_paper
-from tests.strategies import engine_asts
+from tests.strategies import SCHEMA_3_FIELDS, engine_asts
 from tests.unit.engine.test_exclusions import tantivy_of
 
 TEXTS = {
@@ -129,7 +129,7 @@ def collected(engine: TantivyEngine, ast: Node, *, members: bool) -> list[tuple[
 
 # every tree the differential suite draws, on the 5k corpus: the same ids and the same float scores either way
 @settings(deadline=None)
-@given(engine_asts(vocab()))
+@given(engine_asts(vocab(), SCHEMA_3_FIELDS))  # a schema-3 index refuses `abstract_kind:`
 def test_generated_trees_match_and_score_the_same_either_way(synthetic: TantivyEngine, ast: Node) -> None:
     try:
         expected = collected(synthetic, ast, members=False)

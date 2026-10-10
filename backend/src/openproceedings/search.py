@@ -101,10 +101,17 @@ class Shown:
     year: int
     track: str
     status: str
+    abstract_kind: str
 
     @classmethod
     def of(cls, record: Mapping[str, Any]) -> Shown:
-        return cls(**{f: record[f] for f in ("id", "title", "abstract", "venue", "year", "track", "status")})
+        # a schema-3 display record has no `abstract_kind`: derived from its abstract, which is exact (no schema-3
+        # index holds an OpenAlex abstract; decision-049)
+        kind = record.get("abstract_kind") or ("none" if record["abstract"] is None else "official")
+        return cls(
+            **{f: record[f] for f in ("id", "title", "abstract", "venue", "year", "track", "status")},
+            abstract_kind=kind,
+        )
 
 
 @dataclass(frozen=True, slots=True)

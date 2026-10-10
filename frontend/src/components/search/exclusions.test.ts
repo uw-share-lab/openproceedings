@@ -4,7 +4,7 @@ import { HOSTILE, quotedSafely } from "@/test/hostile";
 import { bannerOf, clauseText, defaultsText, includedText, limitsOf } from "./exclusions";
 
 const clause = (
-  field: "venue" | "track" | "status",
+  field: "venue" | "track" | "status" | "abstract_kind",
   span: [number, number] | null,
   values: string[] | null,
 ) => ({
@@ -31,6 +31,7 @@ const TRUST: ParsedFilters = {
   },
   track: clause("track", [5, 5], ["datasets_benchmarks", "main", "position"]),
   status: clause("status", [5, 5], ["accepted"]),
+  abstract_kind: clause("abstract_kind", [5, 5], ["none", "official", "openalex"]),
 };
 
 const EXCLUDED = {

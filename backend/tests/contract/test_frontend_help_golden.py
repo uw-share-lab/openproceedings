@@ -13,7 +13,7 @@ import json
 
 from fastapi.testclient import TestClient
 
-from tests.contract.help_golden import OUT, build, reader_facing, render
+from tests.contract.help_golden import ENGINE_CODES, EXAMPLE_INDEX, OUT, build, reader_facing, render
 
 COMMITTED = json.loads(OUT.read_text(encoding="utf-8"))
 
@@ -40,16 +40,26 @@ def test_messages_are_a_to_z_with_a_message_and_an_example_or_display() -> None:
 
 
 def test_parse_serves_each_examples_message(client: TestClient) -> None:
-    """The page quotes what `POST /parse` answers for the example (the wildcard cap needs an index: its
-    message comes from the engine, and its count is the index's own)."""
+    """The page quotes what `POST /parse` answers for the example (the wildcard cap and an unindexed field need
+    an index: their messages come from the engine, and name the index's own count or version)."""
     for m in COMMITTED["messages"]:
-        if m["example"] is None or m["code"] == "WILDCARD_TOO_MANY_EXPANSIONS":
+        if m["example"] is None or m["code"] in ENGINE_CODES:
             continue
         body = client.post("/api/v1/parse", json={"q": m["example"], "mode": m["mode"]}).json()
         said = [
             (d["code"], d["message"]) for d in (*body["errors"], *body["warnings"], *body["translations"])
         ]
         assert (m["code"], m["message"]) in said, m["code"]
+
+
+def test_search_serves_the_unindexed_field_message_with_its_own_index(client: TestClient) -> None:
+    """The example's 422 from a schema-3 index (the served fixture's) is the page's message, naming that index."""
+    engine = client.app.state.index.engine  # type: ignore[attr-defined]
+    for m in COMMITTED["messages"]:
+        if m["code"] == "FIELD_NOT_INDEXED":
+            r = client.get("/api/v1/search", params={"q": m["example"]})
+            assert r.status_code == 422 and r.json()["error"]["code"] == "FIELD_NOT_INDEXED", r.text
+            assert r.json()["error"]["message"] == m["message"].replace(EXAMPLE_INDEX, engine.index_version)
 
 
 def test_the_limits_are_the_served_defaults(client: TestClient) -> None:

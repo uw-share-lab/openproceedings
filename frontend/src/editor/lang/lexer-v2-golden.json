@@ -4415,6 +4415,96 @@
    ]
   },
   {
+   "q": "abstract_kind:openalex",
+   "tokens": [
+    [
+     "FIELD",
+     0,
+     14
+    ],
+    [
+     "WORD",
+     14,
+     22
+    ]
+   ]
+  },
+  {
+   "q": "Abstract_Kind:OFFICIAL",
+   "tokens": [
+    [
+     "FIELD",
+     0,
+     14
+    ],
+    [
+     "WORD",
+     14,
+     22
+    ]
+   ]
+  },
+  {
+   "q": "abstract_kind:(official OR none)",
+   "tokens": [
+    [
+     "FIELD",
+     0,
+     14
+    ],
+    [
+     "LPAREN",
+     14,
+     15
+    ],
+    [
+     "WORD",
+     15,
+     23
+    ],
+    [
+     "OR",
+     24,
+     26
+    ],
+    [
+     "WORD",
+     27,
+     31
+    ],
+    [
+     "RPAREN",
+     31,
+     32
+    ]
+   ]
+  },
+  {
+   "q": "trust NOT abstract_kind:none",
+   "tokens": [
+    [
+     "WORD",
+     0,
+     5
+    ],
+    [
+     "NOT",
+     6,
+     9
+    ],
+    [
+     "FIELD",
+     10,
+     24
+    ],
+    [
+     "WORD",
+     24,
+     28
+    ]
+   ]
+  },
+  {
    "q": "NOT NOT a",
    "tokens": [
     [
@@ -4966,6 +5056,76 @@
      "WORD",
      6,
      9
+    ]
+   ]
+  },
+  {
+   "q": "abstract_kind:crossref",
+   "tokens": [
+    [
+     "FIELD",
+     0,
+     14
+    ],
+    [
+     "WORD",
+     14,
+     22
+    ]
+   ]
+  },
+  {
+   "q": "abstract_kind:(none AND official)",
+   "tokens": [
+    [
+     "FIELD",
+     0,
+     14
+    ],
+    [
+     "LPAREN",
+     14,
+     15
+    ],
+    [
+     "WORD",
+     15,
+     19
+    ],
+    [
+     "AND",
+     20,
+     23
+    ],
+    [
+     "WORD",
+     24,
+     32
+    ],
+    [
+     "RPAREN",
+     32,
+     33
+    ]
+   ]
+  },
+  {
+   "q": "NOT abstract_kind:none",
+   "tokens": [
+    [
+     "NOT",
+     0,
+     3
+    ],
+    [
+     "FIELD",
+     4,
+     18
+    ],
+    [
+     "WORD",
+     18,
+     22
     ]
    ]
   },

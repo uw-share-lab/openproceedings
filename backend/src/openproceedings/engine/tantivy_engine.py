@@ -36,19 +36,20 @@ from openproceedings.engine.compile import (
 )
 from openproceedings.engine.index import IDS, SERVED_SCHEMAS, SchemaForm, open_index, record_of, verify_index
 from openproceedings.engine.protocol import (
-    FACET_FIELDS,
     MAX_EXPANSIONS,
     Engine,
     EngineInputError,
     EngineInternalError,
     SearchResult,
 )
-from openproceedings.query.ast import And, Filter, Near, Node, Not, Phrase, TextField, Wildcard, YearRange
+from openproceedings.query.ast import And, Filter, Near, Node, Not, Or, Phrase, TextField, Wildcard, YearRange
 from openproceedings.query.normalize import SERVED_TOKENIZERS
 
 SORTS = ("relevance", "year_desc", "year_asc", "title")
+# every served schema's filter fields; an engine's own (`filter_fields`) add what its schema holds beyond them
+BASE_COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
 # a document's facet values, in this order: what every filter and facet depends on (task-086)
-COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
+COMBO: tuple[str, ...] = BASE_COMBO
 # a document's values of the aggregated fields (`facets`' `over`; all of COMBO unless narrowed), in COMBO order:
 # each a str, but `year`, an int; as many values as `over` has fields
 type Combo = tuple[str | int, ...]
@@ -213,7 +214,13 @@ class TantivyEngine:
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
         # what this index's schema differs in (`SERVED_SCHEMAS`); every served schema indexes `ord`, so a verified
         # clause names its ids as a u64 term set (TASK-167, `id_set`)
-        self.form: SchemaForm = SERVED_SCHEMAS[manifest["schema_version"]]
+        self.schema_version: str = manifest["schema_version"]
+        self.form: SchemaForm = SERVED_SCHEMAS[self.schema_version]
+        # the filter fields this index holds, in the canonical filter order: a query naming another is refused
+        # (`admit`), and these are the fields `facets` counts by default
+        self.filter_fields: tuple[str, ...] = BASE_COMBO + (
+            ("abstract_kind",) if self.form.abstract_kind else ()
+        )
         if not _indexes_ord(self.index.schema, self.searcher):
             # a manifest that names a schema its files don't have: refused here, not query by query
             raise IndexUnservable(
@@ -277,6 +284,19 @@ class TantivyEngine:
 
     def match_ids(self, ast: Node) -> frozenset[str]:
         return self.ids_of(self.compile(ast).query)
+
+    def admit(self, ast: Node) -> None:
+        """Refuse, as the client's error (422), a query naming a filter field this index's schema doesn't hold:
+        `abstract_kind:` on a schema-3 index (one a search record pins), never a 500 from Tantivy. Every entry
+        point that reads a tree calls it first (`compile`, and so `match_ids`, `page`, `documents`; `facets`,
+        `counts`, `candidates`)."""
+        missing = sorted({f.field for f in _filters_in(ast)} - set(self.filter_fields))
+        if missing:
+            raise EngineInputError(
+                DiagnosticCode.FIELD_NOT_INDEXED,
+                f"`{missing[0]}:` needs index schema 4, and index {self.index_version} is schema "
+                f"{self.schema_version}: search the current index, or remove the `{missing[0]}:` filter.",
+            )
 
     def search(self, ast: Node, *, sort: str = "relevance", offset: int = 0, limit: int = 50) -> SearchResult:
         """One page of the fully ordered match set (field-weighted-bm25 skill), so pages are stable and
@@ -366,7 +386,7 @@ class TantivyEngine:
     def facets(
         self,
         ast: Node,
-        fields: tuple[str, ...] = FACET_FIELDS,
+        fields: tuple[str, ...] | None = None,
         *,
         scope: Scope | None = None,
         over: tuple[str, ...] = COMBO,
@@ -387,10 +407,16 @@ class TantivyEngine:
         top-level filters are set aside, and every other field's stay in the collected query, so the combos
         are fewer. Exclusion accounting without facets passes the two default fields (`exclusions.ORDER`,
         `search.run`): a few combos to read instead of hundreds, and the base it collects is no wider than the
-        query's (TASK-166). The counts are the same either way (`test_facets_equal.py`)."""
-        unknown = [f for f in fields if f not in FACET_FIELDS]
+        query's (TASK-166). The counts are the same either way (`test_facets_equal.py`).
+
+        `fields` defaults to every filter field this index holds (`filter_fields`)."""
+        self.admit(ast)
+        fields = self.filter_fields if fields is None else fields
+        unknown = [f for f in fields if f not in self.filter_fields]
         if unknown:
-            raise EngineInputError(DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {FACET_FIELDS}")
+            raise EngineInputError(
+                DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {self.filter_fields}"
+            )
         over = _aggregated(over)
         if not set(fields) <= set(over):
             raise EngineInternalError(
@@ -461,6 +487,8 @@ class TantivyEngine:
         `check` is called before each tree and before each conjunct's collection: a caller that no longer
         wants the counts raises from it, so the work stops within one collection (what is already collected
         stays memoised)."""
+        for ast in trees:  # every tree before any is counted: a refused call counts nothing
+            self.admit(ast)
         parts = _Parts(self, scope, check, compiled)
         split = [conjuncts(ast) for ast in trees]
         bases = [[c for c in tops if _filter_field(c) is None] for tops in split]
@@ -600,6 +628,7 @@ class TantivyEngine:
         running it (decision-010): that work is proportional to these counts, not to the clause count.
         Counts every clause, cached or not, so whether a query is refused never depends on the memos.
         Wildcards are expanded first (the 200 cap applies)."""
+        self.admit(ast)
         compiler = Compiler(self.index.schema, self.expansions(ast), self.read)
         return [
             (n, f, self._count(compiler.candidates(n, f)))
@@ -624,6 +653,7 @@ class TantivyEngine:
         """The compiled query, memoised per tree: the index is immutable, so a tree compiles the same way every
         time, and a search, its pages and its facets needn't build the Boolean again (task-076 headroom).
         `scope`: the request's own verified clauses, read first and added to (the class docstring)."""
+        self.admit(ast)  # before the memo: a refused tree is never compiled, so never in it
         # spans included: ` trust` and `trust` compile apart (a miss, never wrong)
         key = ast.model_dump_json()
         hit = self.compiled.get(key)  # one read: the memo may be cleared by another thread at any time
@@ -896,6 +926,17 @@ def _drop_spans(value: Any) -> Any:
     if isinstance(value, list):
         return [_drop_spans(v) for v in value]
     return value
+
+
+def _filters_in(n: Node) -> Iterator[Filter]:
+    """Every `Filter` in the tree, at any depth (a filter sits only under AND, OR and NOT)."""
+    if isinstance(n, Filter):
+        yield n
+    elif isinstance(n, Not):
+        yield from _filters_in(n.child)
+    elif isinstance(n, And | Or):
+        for c in n.children:
+            yield from _filters_in(c)
 
 
 def _filter_field(n: Node) -> str | None:

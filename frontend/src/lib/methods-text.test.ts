@@ -78,6 +78,12 @@ describe("spec 05 §Components 8, verbatim (AC#1)", () => {
           values: ["datasets_benchmarks", "main", "position"],
         },
         status: { ...none, field: "status", span: at(clauses.status), values: ["accepted"] },
+        abstract_kind: {
+          ...none,
+          field: "abstract_kind",
+          span: [end, end],
+          values: ["none", "official", "openalex"],
+        },
       },
     };
   }

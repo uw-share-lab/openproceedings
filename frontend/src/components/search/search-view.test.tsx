@@ -35,7 +35,7 @@ type Body = Schemas["SearchResponse"];
 type Hit = Schemas["Hit"];
 
 const clause = (
-  field: "venue" | "track" | "status",
+  field: "venue" | "track" | "status" | "abstract_kind",
   span: [number, number] | null,
   values: string[] | null,
 ) => ({
@@ -65,6 +65,7 @@ function unrestricted(q: string): ParsedFilters {
     year: year([end, end]),
     track: clause("track", [end, end], ["datasets_benchmarks", "main", "position"]),
     status: clause("status", [end, end], ["accepted"]),
+    abstract_kind: clause("abstract_kind", [end, end], ["none", "official", "openalex"]),
   };
 }
 

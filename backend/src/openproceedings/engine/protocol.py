@@ -14,7 +14,8 @@ from openproceedings.query.ast import FILTER_FIELDS, Node, Wildcard
 
 
 class Searchable(Protocol):
-    """The fields of a snapshot record (spec 01) that search reads: two text fields and four filters."""
+    """The fields of a snapshot record (spec 01) that search reads: two text fields and five filters
+    (`abstract_kind` is derived from the abstract's claims, decision-049)."""
 
     @property
     def id(self) -> str: ...
@@ -30,6 +31,8 @@ class Searchable(Protocol):
     def track(self) -> str: ...
     @property
     def status(self) -> str: ...
+    @property
+    def abstract_kind(self) -> str: ...
 
 
 class EngineError(OpenProceedingsError):
