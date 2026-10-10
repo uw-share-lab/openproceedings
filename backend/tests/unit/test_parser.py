@@ -1124,3 +1124,28 @@ def test_an_open_year_range_value_is_refused_without_a_text_warning() -> None:
         assert result.warnings == [], q
     assert [w.code for w in parse("..2022").warnings] == [DiagnosticCode.WARN_SYMBOLS_DROPPED]
     assert [w.code for w in parse("title:..2022").warnings] == [DiagnosticCode.WARN_SYMBOLS_DROPPED]
+
+
+# --- the decision-049 venues and tracks (spec 02 §Default filters) -------------------------------------------
+@pytest.mark.parametrize(
+    ("q", "canonical"),
+    [
+        # a new venue keeps the default track and status, written out: the non-main tracks are excluded visibly
+        ("venue:AAAI", "(venue:AAAI AND track:(datasets_benchmarks OR main OR position) AND status:accepted)"),
+        ("venue:facct", "(venue:FAccT AND track:(datasets_benchmarks OR main OR position) AND status:accepted)"),
+        # a track clause replaces the track default; values are canonical and sorted
+        ("track:iaai", "(track:iaai AND status:accepted)"),
+        ("track:(main OR iaai)", "(track:(iaai OR main) AND status:accepted)"),
+        ("track:Student_Abstract", "(track:student_abstract AND status:accepted)"),
+        # valid and empty: IAAI is AAAI-only, so no ICML record holds it
+        ("venue:ICML track:eaai", "(venue:ICML AND track:eaai AND status:accepted)"),
+    ],
+)
+def test_new_venue_and_track_values_canonicalize_with_the_defaults_shown(q: str, canonical: str) -> None:
+    result = parse(q)
+    assert result.errors == [] and result.canonical == canonical
+
+
+@pytest.mark.parametrize("q", ["venue:FAT*", "venue:FAT", "venue:AAAI*"])
+def test_a_former_or_wildcard_venue_name_is_an_unknown_value(q: str) -> None:
+    assert [e.code for e in parse(q).errors] == [DiagnosticCode.FIELD_UNKNOWN_VALUE]

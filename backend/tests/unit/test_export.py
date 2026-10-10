@@ -309,6 +309,31 @@ def test_bibtex_cites_only_accepted_papers_as_inproceedings() -> None:
         assert e.fields["keywords"] == f"main, status:{status}"
 
 
+@pytest.mark.parametrize(
+    ("venue", "year", "track", "name"),
+    [
+        ("AAAI", 2012, "student_abstract", "AAAI Conference on Artificial Intelligence (AAAI 2012)"),
+        ("AAAI", 2010, "iaai", "AAAI Conference on Artificial Intelligence (AAAI 2010)"),
+        ("AIES", 2024, "main", "AAAI/ACM Conference on AI, Ethics, and Society (AIES 2024)"),
+        ("IASEAI", 2026, "main", "International Association for Safe and Ethical AI Conference (IASEAI 2026)"),
+        ("FAccT", 2019, "main", "ACM Conference on Fairness, Accountability, and Transparency (FAT* 2019)"),
+        ("FAccT", 2021, "main", "ACM Conference on Fairness, Accountability, and Transparency (FAccT 2021)"),
+    ],
+)
+def test_the_new_venues_export_their_venue_string_and_only_the_track_tells_a_section_apart(
+    venue: str, year: int, track: str, name: str
+) -> None:
+    """decision-049, spec 04 §Venue string: one string per venue-year (FAccT's FAT* era included), so an AAAI
+    student abstract or IAAI paper reads like a main-track one but for its track keyword."""
+    record = {"id": f"op:{venue.lower()}:{year}:ojs-1", "title": "t", "authors": ["A B"], "venue": venue,
+              "year": year, "track": track, "status": "accepted"}  # fmt: skip
+    ris = "".join(export._ris([record], PROVENANCE))
+    (entry,) = parse_string("".join(export._bibtex([record], PROVENANCE)))
+    assert f"T2  - {name}\n" in ris and entry.fields["booktitle"] == name
+    assert entry.entry_type == "inproceedings"
+    assert f"KW  - {track}\n" in ris and entry.fields["keywords"] == f"{track}, status:accepted"
+
+
 def test_ris_t2_and_bibtex_booktitle_are_the_same_string() -> None:
     record = {"id": "op:neurips:2017:nips-ab", "title": "t", "authors": ["A B"], "venue": "NeurIPS", "year": 2017,
               "track": "main", "status": "accepted"}  # fmt: skip

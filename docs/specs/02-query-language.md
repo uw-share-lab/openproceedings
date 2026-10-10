@@ -264,7 +264,13 @@ The UI toggles edit these same clauses; they are not a separate state.
   not in a default result: each is indexed with its real track, and the exclusion accounting counts it in its
   `track` bucket, as it counts `workshop`, `competition` and `tiny_papers`. One `track:` clause brings them back
   (`track:(main OR iaai)`), and saved searches' canonical strings are unaffected. AAAI's special tracks, Journal
-  Track and AIES's and IASEAI's main papers are `main`, so a default search includes them.
+  Track and AIES's and IASEAI's main papers are `main`, so a default search includes them. For these venues `main`
+  is the section mapping of `ingest/ojs_sections.toml` (technical, special and Journal tracks), not a track the
+  venue itself names, and five AAAI sections (8 rows) are `other` pending the owner's review (TASK-218): a report
+  of a default AAAI search lists the excluded tracks with their counts (the `track` buckets are the records
+  removed before screening by automation, 03) and names the snapshot hash, which fixes that mapping. `track:iaai`
+  or `track:eaai` with any venue but AAAI (`venue:ICML track:eaai`) is valid and matches nothing: the two tracks
+  are AAAI-only, and the exclusion counts show 0.
 
 - **A default is recognised by its content, not by where it came from.** A top-level AND conjunct that
   exactly equals a default clause is treated as the automated default, whether the parser inserted it,

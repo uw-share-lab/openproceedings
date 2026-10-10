@@ -510,7 +510,10 @@ route execution.
   `backend/tests/unit/test_covidence_fixture.py`.
 - **Venue string** (`T2`, and BibTeX `booktitle`; task-004): `<conference name> (<acronym that year> <year>)`,
   one string per venue and year whatever the track or status, so every copy of a venue-year reads alike and
-  `PY` equals the year it names. It is the conference's name, not a proceedings title ("Advances in Neural
+  `PY` equals the year it names. So an AAAI `student_abstract`, `consortium`, `demo`, `iaai`, `eaai` or `other`
+  record exports with the same `T2`/`booktitle` (and, accepted, `@inproceedings`) as a main-track paper: only its
+  track, `KW` in RIS and `keywords` in BibTeX (a CSV and JSONL column), tells them apart, which a screener who
+  includes those tracks should know. It is the conference's name, not a proceedings title ("Advances in Neural
   Information Processing Systems 36", "Proceedings of the 40th International Conference on Machine
   Learning"): an export also holds workshop, rejected and withdrawn papers, and all of ICLR, which no
   proceedings volume contains. The table is `CONFERENCES` in `vocab.py`, read by `venue_name()` (both also
