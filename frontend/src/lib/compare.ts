@@ -158,8 +158,8 @@ export function reasonText(list: ListName, reason: string | null): string {
 }
 
 const NOT_COMPARED: Record<string, string> = {
-  // a venue string matching none of the indexed venues' names (Web of Science writes it with its volume), and no link or DOI
-  // naming an indexed paper: it may well be an indexed venue's paper, so never "its venue is not …"
+  // a venue string matching none of the indexed venues' names (Web of Science writes it with its volume), and no link
+  // or DOI naming an indexed paper: it may well be an indexed venue's paper, so never "its venue is not …"
   venue_unrecognised:
     "its venue is not recognised as one of the indexed venues, and no link or DOI names an indexed paper",
   venue: "it matched a record outside the compared venues",

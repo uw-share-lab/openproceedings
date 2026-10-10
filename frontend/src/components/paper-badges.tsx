@@ -6,11 +6,12 @@
 
 /**
  * Track values shown by another name, with the full name for assistive technology (RH-11). An acronym a reader
- * types (`track:iaai`) keeps the acronym in its accessible name too (WCAG 2.5.3 Label in Name), and its badge
- * shows the full name on hover. `student_abstract` is shown as the value itself, which is what the reader types.
+ * types (`track:iaai`) or sees (`D&B`) keeps the visible short form at the start of its accessible name (WCAG 2.5.3
+ * Label in Name). The badge's hover `title` is a courtesy for pointer users only: it sits on an `aria-hidden` span, so it is
+ * neither announced nor reachable by keyboard; the screen-reader text carries the full name. `student_abstract` is shown as the value itself, which is what the reader types.
  */
 const TRACK_SHORT: Readonly<Record<string, { short: string; long: string }>> = {
-  datasets_benchmarks: { short: "D&B", long: "datasets and benchmarks" },
+  datasets_benchmarks: { short: "D&B", long: "D&B, datasets and benchmarks" },
   iaai: { short: "IAAI", long: "IAAI, Innovative Applications of AI" },
   eaai: { short: "EAAI", long: "EAAI, Educational Advances in AI" },
 };

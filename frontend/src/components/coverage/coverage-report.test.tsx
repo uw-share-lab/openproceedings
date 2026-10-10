@@ -337,7 +337,7 @@ describe("the years indexed per venue (copy deck CV-7, decision-047)", () => {
     expect(line.textContent).toBe(
       "Years indexed: ICLR 2013–2015 · ICML 1988–1990. The venues cover different years, so a search " +
         "without a year: filter compares them over different years. No year is held by every venue: give " +
-        "each venue its own years, as in (venue:ICLR year:2013..2015).",
+        "each venue its own years, one clause per venue joined with OR, as in (venue:ICLR year:2013..2015).",
     );
     expect([...line.querySelectorAll("code")].map((n) => n.textContent)).toEqual([
       "year:",

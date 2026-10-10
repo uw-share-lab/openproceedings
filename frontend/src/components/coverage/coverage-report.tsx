@@ -78,7 +78,8 @@ function YearSpans({ venueYears }: { venueYears: readonly VenueYear[] }) {
             </>
           ) : (
             <>
-              . No year is held by every venue: give each venue its own years, as in{" "}
+              . No year is held by every venue: give each venue its own years, one clause per venue joined
+              with OR, as in{" "}
               <code className="font-mono">{`(venue:${latest.venue} ${yearClause(latest.from, latest.to)})`}</code>
             </>
           )}

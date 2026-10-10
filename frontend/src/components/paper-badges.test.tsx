@@ -6,7 +6,7 @@ import { PaperBadges, trackDisplay } from "./paper-badges";
 
 describe("trackDisplay", () => {
   it.each([
-    ["datasets_benchmarks", "D&B", "datasets and benchmarks"],
+    ["datasets_benchmarks", "D&B", "D&B, datasets and benchmarks"],
     ["student_abstract", "student_abstract", "student_abstract"], // the value itself, as typed
     ["iaai", "IAAI", "IAAI, Innovative Applications of AI"], // the acronym is in the name (WCAG 2.5.3)
     ["eaai", "EAAI", "EAAI, Educational Advances in AI"],
