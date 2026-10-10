@@ -386,7 +386,8 @@ class TantivyEngine:
         schema 4), by id; an id the index doesn't hold is left out (a drifted record's removed papers, TASK-227).
         Read from the per-value document bitmaps (`_value_masks`, built once from the indexed values and kept)
         at each id's `ord`: no stored document is decoded and no search runs. Tantivy's Python binding reads only
-        numeric fast columns, so the text fields can't be read the way `ids_of` reads `ord`."""
+        numeric fast columns, so the text fields can't be read the way `ids_of` reads `ord`. A field in which a
+        document has no value (no value's bitmap holds it) is left out of that id's values."""
         table = self._ord_table()
         ords = {i: table[i] for i in ids if i in table}
         if not ords:
@@ -395,9 +396,12 @@ class TantivyEngine:
         out: dict[str, dict[str, str | int]] = {}
         for i, o in ords.items():
             bit = 1 << o
-            out[i] = {
-                f: next(v for v, m in values if m & bit) for f, values in zip(self.combo, masks, strict=True)
+            found = {
+                f: next((v for v, m in values if m & bit), None)
+                for f, values in zip(self.combo, masks, strict=True)
             }
+            # a field the document has no value in is left out, never a StopIteration
+            out[i] = {f: v for f, v in found.items() if v is not None}
         return out
 
     def _display(self, address: tantivy.DocAddress) -> dict[str, Any]:

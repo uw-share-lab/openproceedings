@@ -192,3 +192,37 @@ def test_the_ordinal_table_is_lazy_reused_and_resettable(engine: TantivyEngine) 
     engine._ords = None
     assert engine.ids_of(engine.id_set(ids)) == frozenset(ids)
     assert engine._ords is not table
+
+
+@pytest.mark.parametrize("which", [0, 1], ids=["schema3", "schema4"])
+def test_filter_values_equal_display_for_every_combo_field(pair: Pair, which: int) -> None:
+    """`filter_values` reads the value bitmaps, never a stored document: each held id's values are exactly what
+    `display` shows for every `combo` field; an absent id is left out; no ids, nothing."""
+    engine = pair[which]
+    ids = random.Random(11).sample(engine.ids, 50)
+    absent = "op:neurips:1900:NotAnId"
+    got = engine.filter_values([*ids, absent])
+    shown = engine.display(ids)
+    assert set(got) == set(ids)
+    assert got == {i: {f: shown[i][f] for f in engine.combo} for i in ids}
+    assert set(engine.combo) == (
+        {"venue", "year", "track", "status"} | ({"abstract_kind"} if which else set())
+    )
+    assert engine.filter_values([]) == {} and engine.filter_values([absent]) == {}
+
+
+def test_a_document_with_no_value_in_a_field_omits_that_field(
+    engine: TantivyEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A field none of whose value bitmaps holds the document (it has no value there) is left out of that id's
+    values, never a `StopIteration`."""
+    i = engine.ids[0]
+    bit = 1 << engine._ord_table()[i]
+    masks = engine._value_masks()
+    track = engine.combo.index("track")
+    cleared = tuple(
+        tuple((v, m & ~bit) for v, m in values) if n == track else values for n, values in enumerate(masks)
+    )
+    monkeypatch.setattr(engine, "_masks", cleared)
+    got = engine.filter_values([i])
+    assert set(got[i]) == set(engine.combo) - {"track"}
