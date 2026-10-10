@@ -119,13 +119,13 @@ def test_the_shipped_table_loads() -> None:
 
 def test_the_shipped_mapping_is_pinned_per_track_and_journal() -> None:
     """Spec 01's row counts, per journal: a row whose track flips (a student abstract into `main`) fails here.
-    `main` 401 = AAAI 396 (the two Robotics Program rows, 2011 and 2013, are its AI and Robotics special track),
-    AIES 4, IASEAI 1; `other` 38, of which 8 rows (5 sections) await the owner (TASK-218)."""
+    `main` 402 = AAAI 397 (the two Robotics Program rows, 2011 and 2013, are its AI and Robotics special track; the
+    2010 Short Papers row is main by the owner's decision of 2026-10-10, TASK-218), AIES 4, IASEAI 1; `other` 37."""
     rows: Counter[tuple[str, str]] = Counter()
     for s in ojs_table.TABLE.sections.values():
         rows[(s.journal, s.track or s.kind)] += 1
     assert dict(rows) == {
-        ("AAAI", "main"): 396,
+        ("AAAI", "main"): 397,
         ("AIES", "main"): 4,
         ("IASEAI", "main"): 1,
         ("AAAI", "student_abstract"): 17,
@@ -134,7 +134,7 @@ def test_the_shipped_mapping_is_pinned_per_track_and_journal() -> None:
         ("AAAI", "demo"): 13,
         ("AAAI", "iaai"): 53,
         ("AAAI", "eaai"): 52,
-        ("AAAI", "other"): 38,
+        ("AAAI", "other"): 37,
         ("AAAI", "front_matter"): 2,
         ("AIES", "front_matter"): 1,
         ("IASEAI", "front_matter"): 1,
@@ -142,9 +142,9 @@ def test_the_shipped_mapping_is_pinned_per_track_and_journal() -> None:
     assert sum(rows.values()) == 601
 
 
+# 2010's `Short Papers` is main (refereed AAAI-10 technical papers; owner decision 2026-10-10, TASK-218), so not here
 _NOT_MAIN = re.compile(
-    r"student|demo|poster|doctoral|undergraduate|consortium|senior|faculty|iaai|eaai|sister|spotlight|hot|nectar"
-    r"|short papers",
+    r"student|demo|poster|doctoral|undergraduate|consortium|senior|faculty|iaai|eaai|sister|spotlight|hot|nectar",
     re.IGNORECASE,
 )
 _LABEL_TRACK = [

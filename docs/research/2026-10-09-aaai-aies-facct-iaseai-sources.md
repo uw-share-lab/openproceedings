@@ -275,20 +275,23 @@ The 2026 `main` figure is 4,475 records; the table's 4,476 includes the unavaila
 counts per volume, not per section, so a record that moves between sections within a volume is not caught by the
 count check.
 
-### For owner review (mapped to `other` because the design's mapping doesn't name them)
+### Owner decisions on the sections the mapping doesn't name (2026-10-10, TASK-218)
 
-`AAAI:Errata` (2023, 2 notices) was in this table; the owner ruled it front matter, so it is no longer a record.
+The design's mapping doesn't name these sections, so they were first mapped to `other` and put to the owner. The owner
+decided each on 2026-10-10. `AAAI:ROBOT` ("Robotics Program", 2011 and 2013) had already moved to `main`: AAAI's official
+2013 count of 203 includes it as a special track (§Official counts). `AAAI:Errata` (2023, 2 notices) became front
+matter by the controller's ruling (errata are no papers), so it is no record.
 
-| Section | Years (rows) | Papers | Why it is not obviously a mapped track |
-|---|---|---|---|
-| `AAAI:NECTAR` "New Scientific and Technical Advances in Research" | 2010, 2011 | 12 + 12 | digests of papers published at other conferences |
-| `AAAI:SHORT` "Short Papers" | 2010 | 3 | AAAI-10 short papers: posters, not a technical track |
-| `AAAI:SPOT` "Spotlight" | 2012 | 17 | unclear what the section held |
-| `AAAI:HOT` "What's Hot Abstracts" | 2015–2017 | 8 + 9 + 7 | short abstracts summarising hot topics at other venues |
-| `AAAI:SIS` "Sister Conference Track" | 2020 | 15 | digests of papers from sister conferences |
+| Section | Years | Papers | Decision | Why |
+|---|---|---|---|---|
+| `AAAI:SHORT` "Short Papers" | 2010 | 3 | **main** | refereed, original AAAI-10 technical papers, only shorter |
+| `AAAI:NECTAR` "New Scientific and Technical Advances in Research" | 2010, 2011 | 12 + 12 | other | digests of papers published at other venues |
+| `AAAI:HOT` "What's Hot Abstracts" | 2015–2017 | 8 + 9 + 7 | other | summaries of hot topics at other venues |
+| `AAAI:SIS` "Sister Conference Track" | 2020 | 15 | other | digests of papers from sister conferences |
+| `AAAI:SPOT` "Spotlight" | 2012 | 17 | other | content unconfirmed (likely sub-area overview talks); revisit if the AAAI-12 programme shows otherwise |
 
-Each row (8 rows, 5 sections) carries an "owner review" comment in `ojs_sections.toml`. Moving one to another track is a one-line table
-edit, with no code change.
+Re-presented work stays out of the default search so it doesn't sit beside its original and inflate AAAI hit counts;
+`track:other` brings it back. Each row carries an "owner decision" comment in `ojs_sections.toml`.
 
 ## Official counts (spec 07 §C)
 

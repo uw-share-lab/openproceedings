@@ -36,7 +36,7 @@
 # the spec's mapping (docs/plans/2026-10-09-new-venues-design.md §Data model): technical, special and journal tracks
 # main; student abstracts student_abstract; doctoral and undergraduate consortia consortium; demonstrations demo;
 # IAAI iaai; EAAI eaai; senior member, new faculty highlights and emerging trends other. A section the mapping
-# doesn't name is other, marked "owner review" here and listed in the research note.
+# doesn't name is other; the owner decided each on 2026-10-10 (TASK-218), marked "owner decision" here and in the research note.
 
 [[journal]]
 code = "AAAI"
@@ -202,7 +202,7 @@ papers = 49
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
 
-# owner review: 'New Scientific and Technical Advances in Research' → other (NECTAR: digests of papers from other conferences)
+# owner decision 2026-10-10 (TASK-218), kept: 'New Scientific and Technical Advances in Research' → other (NECTAR: digests of papers from other conferences)
 [[section]]
 journal = "AAAI"
 volume = 24
@@ -291,13 +291,13 @@ papers = 3
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
 
-# owner review: 'Short Papers' → other (AAAI-10 short papers: main-conference posters, not a technical track)
+# owner decision 2026-10-10 (TASK-218): 'Short Papers' → main (refereed, original AAAI-10 technical papers, shorter)
 [[section]]
 journal = "AAAI"
 volume = 24
 set_spec = "AAAI:SHORT"
 kind = "papers"
-track = "other"
+track = "main"
 label = "Short Papers"
 papers = 3
 verified = 2026-10-09
@@ -446,7 +446,7 @@ papers = 14
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
 
-# owner review: 'New Scientific and Technical Advances in Research' → other (NECTAR: digests of papers from other conferences)
+# owner decision 2026-10-10 (TASK-218), kept: 'New Scientific and Technical Advances in Research' → other (NECTAR: digests of papers from other conferences)
 [[section]]
 journal = "AAAI"
 volume = 25
@@ -778,7 +778,7 @@ papers = 27
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
 
-# owner review: 'Spotlight' → other (unclear what the section held)
+# owner decision 2026-10-10 (TASK-218), kept: 'Spotlight' → other (unclear what the section held)
 [[section]]
 journal = "AAAI"
 volume = 26
@@ -1396,7 +1396,7 @@ papers = 8
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
 
-# owner review: "What's Hot Abstracts" → other (short abstracts summarising hot topics at other venues)
+# owner decision 2026-10-10 (TASK-218), kept: "What's Hot Abstracts" → other (short abstracts summarising hot topics at other venues)
 [[section]]
 journal = "AAAI"
 volume = 29
@@ -1695,7 +1695,7 @@ papers = 6
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
 
-# owner review: "What's Hot Abstracts" → other (short abstracts summarising hot topics at other venues)
+# owner decision 2026-10-10 (TASK-218), kept: "What's Hot Abstracts" → other (short abstracts summarising hot topics at other venues)
 [[section]]
 journal = "AAAI"
 volume = 30
@@ -2170,7 +2170,7 @@ papers = 3
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
 
-# owner review: "What's Hot Abstracts" → other (short abstracts summarising hot topics at other venues)
+# owner decision 2026-10-10 (TASK-218), kept: "What's Hot Abstracts" → other (short abstracts summarising hot topics at other venues)
 [[section]]
 journal = "AAAI"
 volume = 31
@@ -3447,7 +3447,7 @@ papers = 129
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
 
-# owner review: 'Sister Conference Track' → other (digests of papers from sister conferences)
+# owner decision 2026-10-10 (TASK-218), kept: 'Sister Conference Track' → other (digests of papers from sister conferences)
 [[section]]
 journal = "AAAI"
 volume = 34

@@ -1,10 +1,10 @@
 ---
 id: TASK-218
 title: 'Owner review: five AAAI OJS sections mapped to track other'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-10 03:47'
-updated_date: '2026-10-10 04:24'
+updated_date: '2026-10-10 05:04'
 labels:
   - ingest
   - new-venues
@@ -20,5 +20,11 @@ Sections the design's mapping doesn't name were mapped to other (excluded by def
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Owner decision recorded per section and the table updated
+- [x] #1 Owner decision recorded per section and the table updated
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Owner decisions 2026-10-10: AAAI:SHORT (2010, 3) → main; NECTAR (2010-11), HOT (2015-17), SIS (2020) stay other (digests of work published elsewhere); SPOT (2012) stays other (content unconfirmed; revisit if the AAAI-12 programme shows otherwise). Applied in ojs_sections.toml (owner-decision comments), the research note and spec 01.
+<!-- SECTION:NOTES:END -->
