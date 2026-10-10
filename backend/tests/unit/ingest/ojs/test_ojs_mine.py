@@ -264,3 +264,29 @@ def test_authors_evidence_says_what_was_done(tmp_path) -> None:
 
     assert "shown First Last" in evidence("ojs-1")
     assert "as published" in evidence("ojs-2") and "shown First Last" not in evidence("ojs-2")
+
+
+def test_a_public_id_record_names_itself_by_its_numeric_url(tmp_path) -> None:
+    """AAAI 2013 #8500: dc:identifier and dc:relation use the public id `1678-1679`."""
+    _seed(tmp_path, oai.page(oai.record(8500, public_id="1678-1679"), oai.record(8501)))
+    result = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    odd = next(r for r in result.records if r.native == "ojs-8500")
+    assert odd.urls.proceedings == "https://ojs.aaai.org/index.php/AAAI/article/view/8500"
+    assert odd.urls.pdf is None
+    claim = next(c for c in odd.provenance if c.field == "urls.proceedings")
+    assert "https://ojs.aaai.org/index.php/AAAI/article/view/1678-1679" in (claim.evidence or "")
+    assert not any(c.field == "urls.pdf" for c in odd.provenance)
+    normal = next(r for r in result.records if r.native == "ojs-8501")
+    assert normal.urls.proceedings == "https://ojs.aaai.org/index.php/AAAI/article/view/8501"
+    assert normal.urls.pdf == "https://ojs.aaai.org/index.php/AAAI/article/view/8501/15501"
+    plain = next(c for c in normal.provenance if c.field == "urls.proceedings")
+    assert "public-id" not in (plain.evidence or "")
+
+
+def test_a_public_id_record_passes_dedup_self_naming(tmp_path) -> None:
+    from openproceedings.ingest.dedup import dedup
+
+    _seed(tmp_path, oai.page(oai.record(8500, public_id="1678-1679"), oai.record(8501)))
+    result = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    out = dedup(result.records)  # raised "must name itself" before the numeric URL
+    assert {r.native for r in out.records} == {"ojs-8500", "ojs-8501"}

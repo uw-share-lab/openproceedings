@@ -53,6 +53,7 @@ from xml.parsers import expat
 
 from pydantic import ValidationError
 
+from openproceedings.ingest import urls
 from openproceedings.ingest.ojs_table import TABLE, Table
 from openproceedings.ingest.record import (
     Claim,
@@ -496,8 +497,15 @@ def _record(
         )
     if e.doi:
         claim("urls.doi", e.doi, f"{listed} dc:identifier")
-    if e.article_url and is_url(e.article_url):
-        claim("urls.proceedings", e.article_url, f"{listed} dc:identifier")
-    if e.pdf_url and is_url(e.pdf_url):
+    # The record names itself by the numeric article URL built from the OAI article id, always: dc:identifier may
+    # carry an OJS "public id" (`/article/view/1678-1679`, AAAI 2013 #8500) that `urls.ojs_article` refuses; the
+    # server redirects the numeric URL to it (checked live 2026-10-09).
+    numeric = f"https://{HOST}/index.php/{journal}/article/view/{e.article}"
+    how = f"{listed} (article id from the OAI header)"
+    if e.article_url and e.article_url != numeric and urls.ojs_article(e.article_url) != e.article:
+        how += f" (dc:identifier gives the public-id URL {e.article_url}; the numeric URL redirects to it)"
+    claim("urls.proceedings", numeric, how)
+    # A galley URL is claimed only when it names this article by its numeric id; a public-id one is dropped.
+    if e.pdf_url and is_url(e.pdf_url) and urls.ojs_article(e.pdf_url) == e.article:
         claim("urls.pdf", e.pdf_url, f"{listed} dc:relation (the article's galley)")
     return record_from_claims(f"op:{venue.lower()}:{year}:ojs-{e.article}", claims), cleaned

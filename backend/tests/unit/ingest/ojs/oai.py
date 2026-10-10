@@ -15,7 +15,11 @@ def record(
     volume: str = "Vol. 34 No. 01: AAAI-20 Technical Tracks 1",
     journal: str = "AAAI",
     extra: str = "",
+    public_id: str | None = None,
 ) -> str:
+    """`public_id` replaces the article id in the dc:identifier and dc:relation URLs (an OJS public id)."""
+    seg = public_id or str(article)
+
     desc = (
         ""
         if description is None
@@ -26,11 +30,11 @@ def record(
 <datestamp>2026-07-15T06:11:29Z</datestamp><setSpec>{set_spec}</setSpec></header><metadata>
 <oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" xmlns:dc="http://purl.org/dc/elements/1.1/">
 <dc:title xml:lang="en-US">{escape(title)}</dc:title>{names}{desc}{extra}
-<dc:identifier>https://ojs.aaai.org/index.php/{journal}/article/view/{article}</dc:identifier>
+<dc:identifier>https://ojs.aaai.org/index.php/{journal}/article/view/{seg}</dc:identifier>
 <dc:identifier>10.1609/{journal.lower()}.v34i01.{article}</dc:identifier>
 <dc:source xml:lang="en-US">Proceedings of the AAAI Conference on Artificial Intelligence; {volume}; 1-8</dc:source>
 <dc:source>2374-3468</dc:source>
-<dc:relation>https://ojs.aaai.org/index.php/{journal}/article/view/{article}/{article + 7000}</dc:relation>
+<dc:relation>https://ojs.aaai.org/index.php/{journal}/article/view/{seg}{"" if public_id else f"/{article + 7000}"}</dc:relation>
 </oai_dc:dc></metadata></record>"""
 
 
