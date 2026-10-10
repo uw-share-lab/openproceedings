@@ -4081,6 +4081,30 @@
             "description": "`delta` as a percentage of `official_accepted` (unrounded); null without one.",
             "title": "Delta Pct"
           },
+          "gate_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For an ungated cell, why it has no official count to gate on (e.g. the official figure counts a different set of papers); null for a gated cell and where no note is recorded.",
+            "title": "Gate Note"
+          },
+          "gate_note_citation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where `gate_note`'s facts come from: a URL or citation; null exactly when `gate_note` is.",
+            "title": "Gate Note Citation"
+          },
           "gated": {
             "description": "Whether the M4 coverage gate applies: a main-track or D&B cell with an official count.",
             "title": "Gated",
@@ -4218,7 +4242,9 @@
           "delta",
           "delta_pct",
           "gated",
-          "within_gate"
+          "within_gate",
+          "gate_note",
+          "gate_note_citation"
         ],
         "title": "TrackCoverage",
         "type": "object"

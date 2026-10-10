@@ -74,7 +74,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "blogpost",
@@ -92,7 +94,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -131,7 +135,9 @@
           "delta": -860,
           "delta_pct": -100.0,
           "gated": true,
-          "within_gate": false
+          "within_gate": false,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -180,7 +186,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "blogpost",
@@ -198,7 +206,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -242,7 +252,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "other",
@@ -260,7 +272,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -299,7 +313,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -338,7 +354,9 @@
           "delta": -773,
           "delta_pct": -100.0,
           "gated": true,
-          "within_gate": false
+          "within_gate": false,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -387,7 +405,9 @@
           "delta": -1084,
           "delta_pct": -100.0,
           "gated": true,
-          "within_gate": false
+          "within_gate": false,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "competition",
@@ -405,7 +425,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "unknown",
@@ -423,7 +445,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -462,7 +486,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -516,7 +542,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "workshop",
@@ -534,7 +562,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "competition",
@@ -552,7 +582,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -601,7 +633,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "tiny_papers",
@@ -619,7 +653,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "blogpost",
@@ -637,7 +673,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -681,7 +719,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "other",
@@ -699,7 +739,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -743,7 +785,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -782,7 +826,9 @@
           "delta": -1427,
           "delta_pct": -99.92997198879551,
           "gated": true,
-          "within_gate": false
+          "within_gate": false,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -821,7 +867,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -870,7 +918,9 @@
           "delta": -174,
           "delta_pct": -100.0,
           "gated": true,
-          "within_gate": false
+          "within_gate": false,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "other",
@@ -888,7 +938,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "unknown",
@@ -906,7 +958,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -950,7 +1004,9 @@
           "delta": -163,
           "delta_pct": -100.0,
           "gated": true,
-          "within_gate": false
+          "within_gate": false,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "position",
@@ -968,7 +1024,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -1022,7 +1080,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "workshop",
@@ -1040,7 +1100,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "competition",
@@ -1058,7 +1120,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "other",
@@ -1076,7 +1140,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     },
@@ -1120,7 +1186,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         },
         {
           "track": "other",
@@ -1138,7 +1206,9 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null
         }
       ]
     }

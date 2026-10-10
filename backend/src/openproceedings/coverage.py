@@ -39,7 +39,14 @@ from typing import Any
 
 from openproceedings.ingest.snapshot import SnapshotError, utc_query_sources
 from openproceedings.ingest.statuses import statuses_indexed
-from openproceedings.official_counts import GATED_TRACKS, OFFICIAL_ACCEPTED, OfficialTable, within_gate
+from openproceedings.official_counts import (
+    GATED_TRACKS,
+    OFFICIAL_ACCEPTED,
+    UNGATED_NOTES,
+    OfficialTable,
+    UngatedNote,
+    within_gate,
+)
 from openproceedings.vocab import STATUSES, TRACKS, VENUES, bootstrap_only, crawl_dates_kind
 
 ALL_SOURCES = "*"  # records.ALL_SOURCES: the corpus-wide window's key (a test pins them equal)
@@ -195,13 +202,16 @@ def _track_row(
     official: OfficialTable,
     withheld: int = 0,
     openalex: int = 0,
+    notes: Mapping[TrackKey, UngatedNote] | None = None,
 ) -> dict[str, Any]:
-    """One spec 07 §C cell (venue × year × track): its indexed counts beside the official accepted count."""
+    """One spec 07 §C cell (venue × year × track): its indexed counts beside the official accepted count, and an
+    ungated cell's note saying why it has none (TASK-222)."""
     mine = [c for c in cells if c["track"] == key[2]]
     accepted = sum(c["count"] for c in mine if c["status"] == "accepted")
     records = sum(c["count"] for c in mine)
     row = official.get(key)
     gated = row is not None and key[2] in GATED_TRACKS
+    note = None if gated else (notes or {}).get(key)
     return {
         "track": key[2],
         "records": records,
@@ -219,6 +229,8 @@ def _track_row(
         "delta_pct": 100 * (accepted - row.accepted) / row.accepted if row else None,
         "gated": gated,
         "within_gate": within_gate(accepted, row.accepted) if row and gated else None,
+        "gate_note": note.note if note else None,
+        "gate_note_citation": note.citation if note else None,
     }
 
 
@@ -227,10 +239,12 @@ def breakdown(
     name: str,
     facts: TrackFacts | None = None,
     official: OfficialTable = OFFICIAL_ACCEPTED,
+    notes: Mapping[TrackKey, UngatedNote] = UNGATED_NOTES,
 ) -> dict[str, Any]:
     """The coverage of snapshot `name` (its directory) from its manifest: `snapshot` (name, hash, crawl
     date and windows, build time, sources), `totals` and `venue_years` (see the module docstring), each
-    venue-year with its statuses indexed and its `tracks` (spec 07 §C cells, beside `official`'s counts).
+    venue-year with its statuses indexed and its `tracks` (spec 07 §C cells, beside `official`'s counts and, for an
+    ungated cell, its note from `notes`).
     `facts` stands in for the per-track keys of a format-1 manifest (and is otherwise unused)."""
     missing_by_track, sources_by_track, statuses = _per_track(manifest, facts)
     withheld_by_year, withheld_by_track = _withheld(manifest)
@@ -300,6 +314,7 @@ def breakdown(
                     official,
                     withheld_by_track.get(k, 0),
                     openalex_by_track.get(k, 0),
+                    notes,
                 )
                 for k in keys
             ]

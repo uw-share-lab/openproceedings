@@ -307,8 +307,8 @@ def test_a_same_day_report_is_replaced_whole(
     assert (out / "2026-10-01-coverage.md").read_text().startswith("# Coverage report, 2026-10-01")
     logged = [json.loads(ln) for ln in capsys.readouterr().err.splitlines() if ln.startswith("{")]
     [written] = [e for e in logged if e.get("event") == "coverage_report_written"]  # one INFO line per run
-    # the real official table's gated cells (+26: NeurIPS 1987-2012, decision-047)
-    assert (written["replaced"], written["gated"]) == (True, 78)
+    # the real official table's gated cells (+26: NeurIPS 1987-2012, decision-047; +6: AAAI list counts, TASK-219)
+    assert (written["replaced"], written["gated"]) == (True, 84)
     assert sorted(p.name for p in out.iterdir()) == ["2026-10-01-coverage.md"]  # no temp file left
 
 
@@ -990,3 +990,19 @@ def test_the_aaai_line_stops_saying_dblp_holds_no_abstract_once_openalex_filled_
         in some
     )
     assert "dblp holds none" not in some
+
+
+def test_each_noted_ungated_cell_is_listed_with_its_note_and_citation() -> None:
+    """TASK-222: an ungated cell with a note (`official_counts.UNGATED_NOTES`) is listed under its own heading,
+    with the note and its citation, as `/coverage` serves them; without one the section says so."""
+    from openproceedings.official_counts import UNGATED_NOTES
+
+    papers = corpus() + [
+        paper(f"IA2026x{i:04d}", f"Archival paper {i}", venue="IASEAI", year=2026) for i in range(3)
+    ]
+    manifest = manifest_of(papers)
+    text = render(breakdown(manifest, "x", official=TABLE), manifest, META, official=TABLE)
+    note = UNGATED_NOTES[("IASEAI", 2026, "main")]
+    assert "## Ungated cells with a note" in text
+    assert f"- IASEAI 2026 main: {note.note} (source: {note.citation})" in text
+    assert "None: no ungated cell in this snapshot has a note." in report()

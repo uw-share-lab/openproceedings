@@ -768,6 +768,13 @@ class TrackCoverage(Model):
     within_gate: bool | None = Field(
         description="For a gated cell, whether |`delta`| is at most 1% of `official_accepted`; null otherwise."
     )
+    gate_note: str | None = Field(  # TASK-222: additive
+        description="For an ungated cell, why it has no official count to gate on (e.g. the official figure "
+        "counts a different set of papers); null for a gated cell and where no note is recorded."
+    )
+    gate_note_citation: str | None = Field(
+        description="Where `gate_note`'s facts come from: a URL or citation; null exactly when `gate_note` is."
+    )
 
 
 class VenueYearCoverage(Model):

@@ -15,7 +15,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from openproceedings.coverage import TrackFacts, breakdown
 from openproceedings.ingest.snapshot import SnapshotError
-from openproceedings.official_counts import OfficialCount
+from openproceedings.official_counts import UNGATED_NOTES, OfficialCount, UngatedNote
 
 EVERY = ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"]
 MANIFEST: dict[str, Any] = {
@@ -70,6 +70,8 @@ def _track(track: str, records: int, accepted: int, missing: int, sources: list[
         "delta_pct": None,
         "gated": False,
         "within_gate": None,
+        "gate_note": None,  # TASK-222: no note says why it is not gated
+        "gate_note_citation": None,
     }
 
 
@@ -499,3 +501,46 @@ def test_listing_one_openalex_and_one_official_id_moves_each_from_its_own_count(
             == row.records
         )
     assert (main.abstract_official, main.abstract_missing) == (0, 1)
+
+
+def test_an_ungated_cell_carries_its_note_and_a_cell_without_one_nulls() -> None:
+    """TASK-222: an ungated cell with a note (`official_counts.UNGATED_NOTES`) is served with the note and its
+    citation; every other cell with nulls. A note never rides on a gated cell."""
+    note = UngatedNote("the list counts a different set", "https://example.org/list", date(2026, 10, 10))
+    data = breakdown(
+        MANIFEST,
+        "s",
+        official={("NeurIPS", 2024, "main"): _official(3)},
+        notes={("ICLR", 2024, "main"): note, ("NeurIPS", 2024, "main"): note},
+    )
+    rows = {(vy["venue"], vy["year"], t["track"]): t for vy in data["venue_years"] for t in vy["tracks"]}
+    noted = rows[("ICLR", 2024, "main")]
+    assert (noted["gated"], noted["gate_note"], noted["gate_note_citation"]) == (
+        False,
+        "the list counts a different set",
+        "https://example.org/list",
+    )
+    assert rows[("NeurIPS", 2024, "main")]["gated"] is True
+    assert rows[("NeurIPS", 2024, "main")]["gate_note"] is None
+    assert all(
+        (t["gate_note"], t["gate_note_citation"]) == (None, None)
+        for k, t in rows.items()
+        if k != ("ICLR", 2024, "main")
+    )
+
+
+def test_the_iaseai_2026_main_cell_carries_its_note_by_default() -> None:
+    """The served notes are `UNGATED_NOTES`: IASEAI 2026 main, 57 archival of 92 accepted, says why it is not gated."""
+    manifest = copy.deepcopy(MANIFEST)  # NeurIPS 2024 renamed IASEAI 2026 in every per-venue map
+    for value in manifest.values():
+        if isinstance(value, dict) and "NeurIPS" in value:
+            value["IASEAI"] = {"2026": value.pop("NeurIPS")["2024"]}
+    rows = {
+        (vy["venue"], vy["year"], t["track"]): t
+        for vy in breakdown(manifest, "s", official={})["venue_years"]
+        for t in vy["tracks"]
+    }
+    expected = UNGATED_NOTES[("IASEAI", 2026, "main")]
+    assert rows[("IASEAI", 2026, "main")]["gate_note"] == expected.note
+    assert rows[("IASEAI", 2026, "main")]["gate_note_citation"] == expected.citation
+    assert "57" in expected.note and "92" in expected.note

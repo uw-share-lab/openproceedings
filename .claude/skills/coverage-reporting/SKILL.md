@@ -28,6 +28,11 @@ As built (TASK-082): `GET /coverage` serves each venue-year's `statuses_indexed`
 apart from `abstract_missing`, which leaves them out. `op eval coverage` reports the snapshot's own counts and
 adds one line under its totals when the snapshot withheld any (`coverage_report.withheld_note`); the served
 `/coverage` also counts ids listed since the build, so it can move under one `index_version`: cite the report.
+TASK-222 adds each track's `gate_note` and `gate_note_citation`: an ungated cell's cited reason for having no
+official count (`official_counts.UNGATED_NOTES`, kept equal to `coverage-sources.md` §Ungated cells with a note by
+`test_official_counts.py`; `check_notes` refuses a note on a gated cell or one without a citation). The page shows it
+under the track's row (copy deck CV-9) and the report lists it under "Ungated cells with a note". A failing gated
+cell's cause still goes in `coverage-causes.toml`, never a note.
 
 ## The gate (M4)
 Exactly spec 07 §C: **every main-track and D&B cell for which an official accepted count exists is within

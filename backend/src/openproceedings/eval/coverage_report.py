@@ -5,6 +5,8 @@
 What it adds to that data, and nothing else:
 - **Gaps.** A gated official cell (main or D&B with an official count) that the snapshot holds no record for is
   a row with 0 indexed and ✗, never a silent zero (spec 07 §C: a venue-year with no source is a reported gap).
+- **Ungated cells with a note.** Each cell `GET /coverage` serves with a `gate_note` (`official_counts.UNGATED_NOTES`,
+  TASK-222), with its note and citation: why it has no official count to gate on.
 - **The M4 gate verdict.** Every gated cell within ±1% (`official_counts.within_gate`), gaps included.
 - **Cause notes.** Every failing cell gets its cause from `causes` (a person's classification: source
   definition, classification, dedup or crawl gap), or `**unclassified**`: never adjust an official number to fit.
@@ -642,6 +644,20 @@ def render(
             "",
         ]
         lines += [f"- {v} {y} {t}: {causes[(v, y, t)]}" for v, y, t in stale]
+    lines += ["", "## Ungated cells with a note", ""]
+    noted = [
+        (vy["venue"], vy["year"], t) for vy in cov["venue_years"] for t in vy["tracks"] if t["gate_note"]
+    ]
+    if noted:  # why a cell has no official count to gate on (TASK-222), as `/coverage` serves it
+        lines += [
+            "These cells are reported, not gated: each has no official count that the index's cell can be checked "
+            "against, for the reason given (`docs/results/coverage-sources.md` §Ungated cells with a note).",
+            "",
+            *(f"- {v} {y} {t['track']}: {t['gate_note']} (source: {t['gate_note_citation']})"
+              for v, y, t in sorted(noted, key=lambda n: (n[0], n[1], TRACK_ORDER[n[2]["track"]]))),
+        ]  # fmt: skip
+    else:
+        lines.append("None: no ungated cell in this snapshot has a note.")
     lines += ["", "## Owner-accepted exceptions", ""]
     if verdict.accepted:
         lines += [

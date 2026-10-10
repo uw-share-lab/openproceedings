@@ -203,6 +203,50 @@ describe("a venue-year's details", () => {
   });
 });
 
+describe("an ungated cell's note (TASK-222, CV-9)", () => {
+  it("shows the note and its citation under the track's row, each URL a link", () => {
+    const data = copy();
+    const vy = data.venue_years[0]!;
+    const [first] = vy.tracks;
+    Object.assign(first!, {
+      gate_note: "the list counts a different set of papers",
+      gate_note_citation: "https://example.org/list (linked from https://example.org/conf/) and notes.md",
+    });
+    render(<CoverageReport coverage={data} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: `Details: track and status for ${vy.venue} ${vy.year}` }),
+    );
+    const official = screen.getByRole("table", {
+      name: `${vy.venue} ${vy.year}: accepted records against the official count`,
+    });
+    const rows = within(official).getAllByRole("row");
+    expect(rows[1]!.querySelector("th")?.textContent).toBe(first!.track);
+    expect(rows[2]!.textContent).toBe(
+      "Not gated: the list counts a different set of papers. Source: " +
+        "https://example.org/list (linked from https://example.org/conf/) and notes.md",
+    );
+    expect(
+      within(rows[2]!)
+        .getAllByRole("link")
+        .map((a) => a.getAttribute("href")),
+    ).toEqual(["https://example.org/list", "https://example.org/conf/"]);
+  });
+
+  it("adds no row for a track without a note", () => {
+    const vy = COVERAGE.venue_years[0]!;
+    expect(vy.tracks.every((t) => t.gate_note === null && t.gate_note_citation === null)).toBe(true);
+    render(<CoverageReport coverage={COVERAGE} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: `Details: track and status for ${vy.venue} ${vy.year}` }),
+    );
+    const official = screen.getByRole("table", {
+      name: `${vy.venue} ${vy.year}: accepted records against the official count`,
+    });
+    expect(within(official).getAllByRole("row")).toHaveLength(vy.tracks.length + 1);
+    expect(official.textContent).not.toMatch(/Not gated:/);
+  });
+});
+
 describe("the header", () => {
   it("names the index, snapshot, build time, windows and sources from the snapshot facts", () => {
     render(<CoverageReport coverage={COVERAGE} />);

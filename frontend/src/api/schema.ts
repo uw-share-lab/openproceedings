@@ -1796,6 +1796,16 @@ export interface components {
              */
             delta_pct: number | null;
             /**
+             * Gate Note
+             * @description For an ungated cell, why it has no official count to gate on (e.g. the official figure counts a different set of papers); null for a gated cell and where no note is recorded.
+             */
+            gate_note: string | null;
+            /**
+             * Gate Note Citation
+             * @description Where `gate_note`'s facts come from: a URL or citation; null exactly when `gate_note` is.
+             */
+            gate_note_citation: string | null;
+            /**
              * Gated
              * @description Whether the M4 coverage gate applies: a main-track or D&B cell with an official count.
              */

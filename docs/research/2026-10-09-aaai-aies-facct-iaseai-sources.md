@@ -583,7 +583,8 @@ Re-presented work stays out of the default search so it doesn't sit beside its o
 ## Official counts (spec 07 §C)
 
 Six rows were added to `official_counts.py` and `docs/results/coverage-sources.md` (TASK-219, read 2026-10-09 by
-plain GETs of the pages named; dblp.org never fetched). Classes: **gateable** (an official statement whose
+plain GETs of the pages named; dblp.org never fetched). Six more followed on 2026-10-10 (below, "AAAI list counts"),
+and every other new-venue main cell this table classifies as not gated carries a cited note (TASK-222). Classes: **gateable** (an official statement whose
 definition is our `main` cell, within ±1%), **definition mismatch**, **not found** (aggregator or news figures
 exist for some years; they are never a row). "Ours" is the `main` cell after the Robotics Program move (the
 2026-10-10 coverage report's figure, plus the moved rows for 2011 and 2013).
@@ -596,8 +597,15 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
 | AAAI 2015 | 539 | papers "selected … and presented" from the main technical and topical tracks (AI Magazine report) | https://ojs.aaai.org/index.php/aimagazine/article/view/2606/2500 | 538 | gateable (row; the weakest wording) |
 | AAAI 2018 | 938 | original research publications in the proceedings (3,800 submissions) | https://ojs.aaai.org/index.php/AAAI/issue/view/301 | 937 | gateable (row) |
 | AAAI 2019 | 1,147 | original research publications in the proceedings (7,095 submissions) | https://ojs.aaai.org/index.php/AAAI/issue/view/246 | 1,147 | gateable (row) |
-| AAAI 2014, 2016, 2017 | none | submissions only (1,406; 2,132; 2,571) | issue pages 305, 303, 302 | 398, 548, 639 | not found |
-| AAAI 2010–2012, 2020–2026 | none | no AAAI statement found (aggregator figures only) | issue pages; aaai.org conference pages | see the per-year table | not found |
+| AAAI 2010 | 262 | counted on AAAI's own list: 202 main technical (short papers included) + 60 in five special tracks; Nectar and senior member excluded | https://web.archive.org/web/20100830185521/http://www.aaai.org/Conferences/AAAI/2010/aaai10papers.php | 262 | gateable (row, list count, 2026-10-10) |
+| AAAI 2011 | 240 | counted on AAAI's own list, which has no Robotics Program | https://web.archive.org/web/20120605015434/http://www.aaai.org/Conferences/AAAI/2011/aaai11accepts.php | 248 | definition mismatch (note) |
+| AAAI 2012 | 292 | counted on AAAI's own list: 220 main technical (poster-only full papers included) + 26 + 11 + 21 + 14 in four special tracks | https://aaai.org/wp-content/uploads/2023/01/aaai12accepted-papers.pdf | 294 | gateable (row, list count, 2026-10-10) |
+| AAAI 2014 | 398 | counted on AAAI's own list: the 22 AAAI technical categories (submissions 1,406) | https://web.archive.org/web/20150906033202/http://www.aaai.org/Conferences/AAAI/2014/aaai14accepts.php | 398 | gateable (row, list count, 2026-10-10) |
+| AAAI 2016 | 548 | AAAI's list, "ordered … in each proceedings category", matching the OJS sections exactly (submissions 2,132) | aaai.org list; issue page 303 | 548 | not gated: the list appears derived from the proceedings (note) |
+| AAAI 2017 | 637 | counted on AAAI's own list: 599 main technical + 38 in three special tracks (submissions 2,571) | https://aaai.org/wp-content/uploads/2023/01/aaai17accepted-papers.pdf | 639 | gateable (row, list count, 2026-10-10) |
+| AAAI 2020 | 1,614 | counted on AAAI's own pre-camera-ready lists: 1,589 main technical + 25 AI for Social Impact | https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-Paper-List.pdf and https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-AISI-Papers.pdf | 1,610 | gateable (row, list count, 2026-10-10) |
+| AAAI 2021 | 1,696 | counted on AAAI's own list: 1,656 main technical + 40 AI for Social Impact | https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf | 1,694 | gateable (row, list count, 2026-10-10) |
+| AAAI 2022–2026 | none | chairs' notification emails quoted on third-party sites and aggregator figures only (1,349; 1,721; 2,342; 3,032; 4,167), apparently the main technical track alone | none official | see the per-year table | not found (note) |
 | IASEAI 2026 | 92 | accepted research papers, 35 of them non-archival and unpublished on OJS | https://ojs.aaai.org/index.php/IASEAI/issue/view/741 | 57 | definition mismatch: recorded, not gated |
 
 - **AIES.** The chairs' statements are not the OJS issue listing (whose totals this note once called circular);
@@ -605,9 +613,21 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   stated; the exact match with the listing suggests none.
 - **AAAI 2018, 2019.** "Original research publications" is read as the technical program, special tracks
   included; the front matter does not itemise.
+- **AAAI list counts (2026-10-10).** For 2010, 2012, 2014, 2016, 2017, 2020 and 2021 no AAAI document *states* an
+  accepted count (prefaces, conference pages and press releases give submissions only), so the rows count the
+  entries of AAAI's own accepted-paper list (aaai.org PDFs, or aaai.org pages archived by the Wayback Machine). The
+  controller's ruling for the owner: a list count backs a row when the list is independent of the OJS proceedings (a
+  pre-camera-ready list or an aaai.org page of the time) and its definition equals our `main` cell within 1%; each
+  row's description says "counted" and names the list. AAAI 2016's list is "ordered … in each proceedings
+  category" and matches the OJS sections exactly, so it may have been built from the proceedings; a gate against it
+  would be circular, and the cell gets a note instead. Indexed figures are from snapshot `2026-10-10-9efa49481112`.
+- **Ungated-cell notes (TASK-222).** AAAI 2011, 2016 and 2022–2026 main and IASEAI 2026 main each carry a cited note
+  saying why they are not gated (`official_counts.UNGATED_NOTES`, `coverage-sources.md` §Ungated cells with a note),
+  served on `/coverage` and listed in the coverage report.
 - **AAAI 2020–2026.** The trackers' figures sit close to our `main` minus the special tracks and Journal Track, so
   they likely count the Main Technical Track only; even an official figure of that kind would be a definition
-  mismatch with our `main`. The chairs' opening slides or AAAI press releases may hold the official numbers.
+  mismatch with our `main`. For 2020 and 2021 AAAI's own accepted-paper lists itemise the special tracks and back a
+  row (above); for 2022–2026 no such list was found.
 - **FAccT 2018–2026 and AIES 2018–2023 (2026-10-10): none gated, no row.** The census counts are the proceedings'
   contents (Crossref's DOIs, PMLR's index), and no official accepted-paper statement was read for these years.
   FAccT's site gives accepted-paper lists, not a stated count, and the 2025/2026 lists include non-archival papers

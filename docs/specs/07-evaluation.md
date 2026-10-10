@@ -216,17 +216,25 @@ not gaps: their public archive listings supply accepted main-track records (TASK
 2026 from ojs.aaai.org, every record `accepted` (published in the proceedings: the source lists no rejected paper),
 each venue-year a coverage cell with its real tracks (`main`, `student_abstract`, `consortium`, `demo`, `iaai`,
 `eaai`, `other`). AAAI's `main` is the section mapping of `ingest/ojs_sections.toml` (technical, special and Journal
-tracks, and the 2010–2014 topic sections), not a track AAAI itself names. **Six cells are gated**
-(`official_counts.py`, read 2026-10-09): AAAI 2013 (203), 2015 (539), 2018 (938) and 2019 (1,147) main, and AIES 2024
+tracks, and the 2010–2014 topic sections), not a track AAAI itself names. **Twelve cells are gated**
+(`official_counts.py`). Six were read 2026-10-09: AAAI 2013 (203), 2015 (539), 2018 (938) and 2019 (1,147) main, and AIES 2024
 (150) and 2025 (238) main, each the program chairs' own statement of accepted papers (a preface, an issue's
 front-matter description, the AI Magazine conference report, the AIES program), not a count of the listing the
 crawl reads. AAAI 2013's count includes its AI and Robotics special track, which is why the 2011 and 2013
 "Robotics Program" sections are `main`; AAAI 2013's gate row therefore pins that mapping ruling (the one gated row that
-depends on a section decision), so a failing 2013 cell is a reason to check the mapping before the crawl. The other cells are recorded, not gated: AAAI 2014, 2016 and 2017 state
-submissions only, and 2010–2012 and 2020–2026 have only aggregator figures, which are never a row; IASEAI 2026's
-front matter states 92 accepted research papers, but 35 of them are non-archival and unpublished on OJS, so 57
-indexed against 92 would fail the ±1% gate for a reason the index cannot repair. The research note classifies every
-venue-year (`docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md` §Official counts). Each OJS volume's listed
+depends on a section decision), so a failing 2013 cell is a reason to check the mapping before the crawl. Six more,
+read 2026-10-10, are counts of AAAI's own published accepted-paper list (no AAAI document states an accepted count
+for these years): AAAI 2010 (262), 2012 (292), 2014 (398), 2017 (637), 2020 (1,614) and 2021 (1,696) main. A list
+count backs a row only when the list is independent of the OJS proceedings (a pre-camera-ready list or an aaai.org
+page of the time) and its definition is our `main` cell, and each row's description says "counted" and names the
+list. The other cells are recorded, not gated, and each carries a cited **ungated-cell note** (`gate_note` on
+`/coverage`, a section of the report; `official_counts.UNGATED_NOTES`, TASK-222): AAAI 2011's list leaves out the
+Robotics Program our `main` holds (240 against 248); AAAI 2016's list matches the proceedings section by section, so
+it appears to be derived from them and a gate on it would check nothing; AAAI 2022–2026 have only chairs' emails
+quoted elsewhere and aggregator figures, which are never a row and seem to count the main technical track alone;
+IASEAI 2026's front matter states 92 accepted research papers, but 35 of them are non-archival and unpublished on
+OJS, so 57 indexed against 92 would fail the ±1% gate for a reason the index cannot repair. The research note
+classifies every venue-year (`docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md` §Official counts). Each OJS volume's listed
 count is also checked against the verified count in `ingest/ojs_sections.toml`, and a difference stops the crawl
 (`count_mismatch`, spec 01), so no snapshot holds a mismatched OJS listing: the report's listings section can name an OJS
 volume only for its skipped entries (AAAI 2026's `unavailable 1`), always with `count_ok` yes. One article the OAI list names, AAAI 39173, is served in no form; it is counted
@@ -259,7 +267,8 @@ how many of those official pages' abstracts (ICML 1997 and 1998's) are submissio
 from the published papers' (TASK-207). After the gate verdict it says how many gated cells compare the crawl with
 its own listing's stated count (decision-047).
 `GET /coverage` serves every column per cell (`venue_years[].tracks`: sources, indexed accepted,
-`official_accepted` with its citation, `delta`, `delta_pct`, `gated`, `within_gate`, missing abstracts) and
+`official_accepted` with its citation, `delta`, `delta_pct`, `gated`, `within_gate`, an ungated cell's `gate_note`
+and `gate_note_citation`, missing abstracts) and
 the statuses indexed per venue-year; `/coverage` in the UI renders the same data. A takedown (TASK-136,
 decision-022) adds `abstract_withheld` beside the missing abstracts, which then leave the withheld ones out;
 the served `/coverage` also counts ids the takedown list names since the snapshot was built, while the report

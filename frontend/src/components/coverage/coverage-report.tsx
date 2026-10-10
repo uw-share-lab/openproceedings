@@ -219,6 +219,41 @@ function Official({ track }: { track: Track }) {
   );
 }
 
+/** A citation with each URL in it a link and the rest as text (a citation may name two pages, or a repo path). */
+function Citation({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(https?:\/\/[^\s)]+)/).map((part, i) =>
+        i % 2 === 1 ? (
+          <a key={i} className="underline underline-offset-4" href={part}>
+            {part}
+          </a>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
+/** Why an ungated cell has no official count to gate on, under its track's row (TASK-222, copy deck CV-9). */
+function GateNote({ track }: { track: Track }) {
+  if (track.gate_note === null) return null;
+  return (
+    <tr>
+      <td colSpan={5} className="px-2 pb-1 text-left text-xs text-muted-foreground">
+        Not gated: {track.gate_note}.
+        {track.gate_note_citation ? (
+          <>
+            {" "}
+            Source: <Citation text={track.gate_note_citation} />
+          </>
+        ) : null}
+      </td>
+    </tr>
+  );
+}
+
 /** One venue-year's detail: records by track and status (from `cells`), then each track against its official
  * accepted count (from `tracks`). Columns are the venue-year's statuses indexed, which hold every status it has. */
 function Detail({ vy, id }: { vy: VenueYear; id: string }) {
@@ -307,27 +342,30 @@ function Detail({ vy, id }: { vy: VenueYear; id: string }) {
         </thead>
         <tbody>
           {vy.tracks.map((track) => (
-            <tr key={track.track}>
-              <th scope="row" className="px-2 text-left font-normal">
-                {track.track}
-              </th>
-              <td className="px-2 text-right">{count(track.indexed_accepted)}</td>
-              <td className="px-2 text-left">
-                <Official track={track} />
-              </td>
-              <td className="px-2 text-right">
-                {track.delta === null || track.delta_pct === null ? (
-                  <None />
-                ) : (
-                  <>
-                    {signed(track.delta)} ({percent(track.delta_pct)})
-                  </>
-                )}
-              </td>
-              <td className="px-2 text-left">
-                <Gate track={track} />
-              </td>
-            </tr>
+            <Fragment key={track.track}>
+              <tr>
+                <th scope="row" className="px-2 text-left font-normal">
+                  {track.track}
+                </th>
+                <td className="px-2 text-right">{count(track.indexed_accepted)}</td>
+                <td className="px-2 text-left">
+                  <Official track={track} />
+                </td>
+                <td className="px-2 text-right">
+                  {track.delta === null || track.delta_pct === null ? (
+                    <None />
+                  ) : (
+                    <>
+                      {signed(track.delta)} ({percent(track.delta_pct)})
+                    </>
+                  )}
+                </td>
+                <td className="px-2 text-left">
+                  <Gate track={track} />
+                </td>
+              </tr>
+              <GateNote track={track} />
+            </Fragment>
           ))}
         </tbody>
       </table>

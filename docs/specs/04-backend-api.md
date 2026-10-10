@@ -1425,7 +1425,10 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   `crawl_windows`), in a search record too. TASK-136 adds `abstract_withheld` to the totals, each venue-year and
   each track (decision-022): the abstracts this instance withholds when it serves (those the snapshot withheld,
   from the manifest's `abstract_withheld` keys and checked against the records, plus the takedown list's ids
-  listed since), never counted in `abstract_missing`.
+  listed since), never counted in `abstract_missing`. TASK-222 adds, additively, each track's `gate_note` and
+  `gate_note_citation`: for an ungated cell, why it has no official count to gate on and where that comes from
+  (`official_counts.UNGATED_NOTES`, the copy of `docs/results/coverage-sources.md` §Ungated cells with a note);
+  both null for a gated cell and for a cell without a note.
   - The numbers are the manifest of the snapshot the served index was built from (`counts`,
     `abstract_missing`, `unknown_track`, `record_count`: counted from the records once, at snapshot build),
     reshaped by `coverage.breakdown`, which never recounts; the one serve-time adjustment is the takedown

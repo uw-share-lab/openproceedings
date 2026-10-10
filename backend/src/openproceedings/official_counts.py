@@ -6,11 +6,13 @@ row goes into both in one change, and `tests/unit/test_official_counts.py` fails
 `GET /coverage` joins it to the indexed counts (`coverage.breakdown`). A row is added only with a citation a
 reader can check (the conference's statistics page, the proceedings index or the OpenReview accepted
 group), what it counts, and the date it was read; never a number from memory. Until a row exists, a cell is
-reported with no official count and is not gated. The table is empty until the counts are sourced.
+reported with no official count and is not gated. An ungated cell may carry a cited note saying why it has no
+row (`UNGATED_NOTES`, TASK-222), served on `/coverage` and listed in the coverage report.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 
@@ -31,17 +33,41 @@ class OfficialCount:
 # (venue, year, track) → its official accepted count
 type OfficialTable = dict[tuple[str, int, str], OfficialCount]
 OFFICIAL_ACCEPTED: OfficialTable = {
+    ("AAAI", 2010, "main"): OfficialCount(
+        262,
+        "papers counted on AAAI's own accepted-paper list (the AAAI-10 papers page on aaai.org, archived): 202 in the main technical track, short papers included, plus 60 in the five special tracks (AI and Bioinformatics, AI and the Web, Challenges in AI, Integrated Intelligence, Physically Grounded AI); Nectar and senior member papers excluded",
+        "https://web.archive.org/web/20100830185521/http://www.aaai.org/Conferences/AAAI/2010/aaai10papers.php",
+        date(2026, 10, 10),
+    ),
+    ("AAAI", 2012, "main"): OfficialCount(
+        292,
+        "papers counted on AAAI's own accepted-paper list (the AAAI-12 accepted-papers PDF on aaai.org): 220 main technical, poster-only full papers included, plus 26 AI and the Web, 11 Cognitive Systems, 21 Computational Sustainability and AI, and 14 Robotics",
+        "https://aaai.org/wp-content/uploads/2023/01/aaai12accepted-papers.pdf (linked from https://aaai.org/conference/aaai/aaai12/)",
+        date(2026, 10, 10),
+    ),
     ("AAAI", 2013, "main"): OfficialCount(
         203,
         "papers accepted for publication in the proceedings from the 690 technical-program submissions, the four special tracks included (AI and the Web, Cognitive Systems, Computational Sustainability, AI and Robotics); late-breaking papers and spotlights excluded",
         "https://ojs.aaai.org/index.php/AAAI/article/view/8512 (AAAI-13 preface)",
         date(2026, 10, 9),
     ),
+    ("AAAI", 2014, "main"): OfficialCount(
+        398,
+        "papers counted on AAAI's own accepted-paper list (the AAAI-14 accepted-papers page on aaai.org, archived), in its 22 AAAI technical categories; IAAI, EAAI, doctoral consortium and student abstracts excluded",
+        "https://web.archive.org/web/20150906033202/http://www.aaai.org/Conferences/AAAI/2014/aaai14accepts.php",
+        date(2026, 10, 10),
+    ),
     ("AAAI", 2015, "main"): OfficialCount(
         539,
         "papers selected from the 1,991 main technical and topical track submissions and presented (AI Magazine conference report); student abstracts, IAAI, demos and the doctoral consortium excluded",
         "https://ojs.aaai.org/index.php/aimagazine/article/view/2606/2500 (submissions: https://ojs.aaai.org/index.php/AAAI/issue/view/304)",
         date(2026, 10, 9),
+    ),
+    ("AAAI", 2017, "main"): OfficialCount(
+        637,
+        "papers counted on AAAI's own accepted-paper list (the AAAI-17 accepted-papers PDF on aaai.org): 599 main technical plus 38 in three special tracks (Cognitive Systems, Computational Sustainability, Integrated Systems)",
+        "https://aaai.org/wp-content/uploads/2023/01/aaai17accepted-papers.pdf (linked from https://aaai.org/conference/aaai/aaai17/aaai-17-program-overview/)",
+        date(2026, 10, 10),
     ),
     ("AAAI", 2018, "main"): OfficialCount(
         938,
@@ -54,6 +80,18 @@ OFFICIAL_ACCEPTED: OfficialTable = {
         "original research publications in the proceedings, selected from 7,095 original full paper submissions (acceptance rate 16.2%); senior member, doctoral consortium, student abstracts and demos excluded",
         "https://ojs.aaai.org/index.php/AAAI/issue/view/246",
         date(2026, 10, 9),
+    ),
+    ("AAAI", 2020, "main"): OfficialCount(
+        1614,
+        "papers counted on AAAI's own accepted-paper lists (the AAAI-20 PDFs on aaai.org, made before camera-ready): 1,589 main technical plus 25 AI for Social Impact; sister conference track, student abstracts, IAAI and EAAI excluded",
+        "https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-Paper-List.pdf and https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-AISI-Papers.pdf (linked from https://aaai.org/conference/aaai/aaai-20/)",
+        date(2026, 10, 10),
+    ),
+    ("AAAI", 2021, "main"): OfficialCount(
+        1696,
+        "papers counted on AAAI's own accepted-paper list (the AAAI-21 main technical track PDF on aaai.org): 1,656 main technical plus 40 AI for Social Impact",
+        "https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (linked from https://aaai.org/conference/aaai/aaai-21/)",
+        date(2026, 10, 10),
     ),
     ("AIES", 2024, "main"): OfficialCount(
         150,
@@ -502,6 +540,70 @@ OFFICIAL_ACCEPTED: OfficialTable = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class UngatedNote:
+    """Why a cell has no official count to gate on, with a citation a reader can check (TASK-222)."""
+
+    note: str
+    citation: str
+    accessed: date
+
+
+_NOT_FOUND = (
+    "no official accepted count was found: the only figure, {}, comes from the chairs' notification email as "
+    "quoted on other sites and from paper trackers, and it appears to count the main technical track alone, while "
+    "this main track also holds the special tracks"
+)
+
+# (venue, year, track) → why that ungated cell has no official count; `docs/results/coverage-sources.md`
+# §Ungated cells with a note is the cited copy, and `tests/unit/test_official_counts.py` keeps the two equal
+UNGATED_NOTES: dict[tuple[str, int, str], UngatedNote] = {
+    ("AAAI", 2011, "main"): UngatedNote(
+        "AAAI's own accepted-paper list has 240 papers and leaves out the Robotics Program; the index's main track "
+        "holds 248, those 240 plus the 8 Robotics Program papers, so the list counts a different set of papers",
+        "https://web.archive.org/web/20120605015434/http://www.aaai.org/Conferences/AAAI/2011/aaai11accepts.php",
+        date(2026, 10, 10),
+    ),
+    ("AAAI", 2016, "main"): UngatedNote(
+        "AAAI's own accepted-paper list matches the proceedings section by section, so it appears to be derived from "
+        "them; a gate on it would check the proceedings against themselves",
+        "https://ojs.aaai.org/index.php/AAAI/issue/view/303 (the proceedings the list matches; docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts)",
+        date(2026, 10, 10),
+    ),
+    ("AAAI", 2022, "main"): UngatedNote(
+        _NOT_FOUND.format("1,349"),
+        "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts",
+        date(2026, 10, 10),
+    ),
+    ("AAAI", 2023, "main"): UngatedNote(
+        _NOT_FOUND.format("1,721"),
+        "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts",
+        date(2026, 10, 10),
+    ),
+    ("AAAI", 2024, "main"): UngatedNote(
+        _NOT_FOUND.format("2,342"),
+        "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts",
+        date(2026, 10, 10),
+    ),
+    ("AAAI", 2025, "main"): UngatedNote(
+        _NOT_FOUND.format("3,032"),
+        "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts",
+        date(2026, 10, 10),
+    ),
+    ("AAAI", 2026, "main"): UngatedNote(
+        _NOT_FOUND.format("4,167"),
+        "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts",
+        date(2026, 10, 10),
+    ),
+    ("IASEAI", 2026, "main"): UngatedNote(
+        "57 archival papers are published in the proceedings; the conference accepted 92, and the 35 non-archival "
+        "ones have no findable listing, so no official count of what the index can hold exists",
+        "https://ojs.aaai.org/index.php/IASEAI/issue/view/741 (docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §IASEAI)",
+        date(2026, 10, 9),
+    ),
+}
+
+
 def check_table(table: OfficialTable) -> None:
     """Every row names a known venue and track, a positive count and a citation (ValueError otherwise)."""
     for (venue, _year, track), row in table.items():
@@ -512,6 +614,25 @@ def check_table(table: OfficialTable) -> None:
 
 
 check_table(OFFICIAL_ACCEPTED)
+
+
+def check_notes(
+    notes: Mapping[tuple[str, int, str], UngatedNote], table: OfficialTable = OFFICIAL_ACCEPTED
+) -> None:
+    """Every note names a known venue and track, an ungated cell, its note and a citation (ValueError otherwise)."""
+    for key, n in notes.items():
+        venue, _year, track = key
+        if venue not in VENUES.values() or track not in TRACKS or track == "unknown":
+            raise ValueError(f"an ungated note names an unknown venue or track: {venue} {track}")
+        if key in table and track in GATED_TRACKS:
+            raise ValueError(
+                f"{key}: a gated cell takes its cause in coverage-causes.toml, not an ungated note"
+            )
+        if not n.note.strip() or not n.citation.strip():
+            raise ValueError(f"{key}: an ungated note needs its note and a citation")
+
+
+check_notes(UNGATED_NOTES)
 
 
 def within_gate(indexed: int, official: int) -> bool:
