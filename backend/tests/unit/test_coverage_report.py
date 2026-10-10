@@ -937,7 +937,10 @@ def test_the_scope_says_what_the_crossref_years_rest_on_and_that_aies_has_no_sec
         "- AIES 2018–2019: from Crossref's records of the ACM proceedings (decision-049): 171 records, no abstracts (title-only);"
         in text
     )
-    assert "Crossref carries no section data, so student abstracts and keynotes are in `main`" in text
+    assert (
+        "Crossref carries no section data, so student abstracts and keynotes are placed by page position"
+        in text
+    )
     assert (
         "- FAccT 2022–2023: from Crossref's records of the ACM proceedings (decision-049): 334 records, 169 with"
         in text

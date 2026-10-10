@@ -492,7 +492,7 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
             "one); the rest are title-only"
             if venue == "FAccT"
             else "no abstracts (title-only); Crossref carries no section data, so student "
-            "abstracts and keynotes are in `main` (OJS labels student abstracts from 2024)"
+            "abstracts and keynotes are placed by page position (`student_abstract` and not-paper rows; TASK-224)"
         )
         out.append(
             f"- {venue} {held[0]}–{held[-1]}: from Crossref's records of the ACM proceedings (decision-049): "

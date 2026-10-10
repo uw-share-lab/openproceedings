@@ -13,6 +13,11 @@ read once for both venues, so two pins can never drift apart.
 - `[[excluded]]` is any other `conf/aaai/` proceedings key dated 1980-2009, with the reason it is not read.
 - `[[not_paper]]` is an entry under a main or workshop key that is no paper (an invited talk, a panel): counted in
   its year's listing, never a record.
+- `[[section]]` is one section of a year's official table of contents (aaai.org's contents page, TASK-226) as a
+  page range: an entry under the year's main keys whose dblp start page is in it takes the section's track, not
+  `main`. A year's ranges never overlap.
+- `[[track]]` gives one main-key entry its track by key, where dblp's page field can't place it (a page typo).
+  A `[[not_paper]]` row beats a `[[track]]` row (they never name one key), and a `[[track]]` row beats a range.
 """
 
 from __future__ import annotations
@@ -37,7 +42,16 @@ CHECKED = range(
 )  # 1980-2009: every conf/aaai/ proceedings key dated in it is classified
 _KEY = re.compile(r"conf/aaai/[A-Za-z0-9_-]+")
 NOT_PAPER_KINDS = frozenset({"invited talk", "panel", "front matter", "tutorial summary", "workshop summary"})
-_TABLES = {"not_held", "year", "workshop", "excluded", "not_paper"}
+_TABLES = {"not_held", "year", "workshop", "excluded", "not_paper", "section", "track"}
+# the tracks a section or track row may give: the official contents' sections other than the technical program
+SECTION_TRACKS = frozenset({"student_abstract", "consortium", "demo", "iaai", "other"})
+_START = re.compile(r"([0-9]+)(?:-[0-9]*)?")  # dblp `pages`: "856", "1425-1426", or "1853-" with no end page
+
+
+def start_page(pages: str | None) -> int | None:
+    """The start page of a dblp `pages` field ("1425-1426" → 1425, "856" → 856, "1853-" → 1853), else None."""
+    m = _START.fullmatch(pages or "")
+    return int(m.group(1)) if m else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +92,34 @@ class NotPaper:
 
 
 @dataclass(frozen=True, slots=True)
+class Section:
+    """One official contents section of a year's main proceedings, as the dblp start pages it spans."""
+
+    year: int
+    first: int
+    last: int
+    track: str
+    label: str
+    verified: date
+    source: str
+
+    def holds(self, page: int | None) -> bool:
+        return page is not None and self.first <= page <= self.last
+
+
+@dataclass(frozen=True, slots=True)
+class TrackRow:
+    """One main-key entry's track by key, where dblp's pages can't place it in a section."""
+
+    key: str
+    year: int
+    track: str
+    reason: str
+    verified: date
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
 class Table:
     release: Pinned
     dtd: Pinned
@@ -86,12 +128,23 @@ class Table:
     excluded: Mapping[str, Excluded]
     not_papers: Mapping[str, NotPaper]
     not_held: frozenset[int]
+    sections: tuple[Section, ...] = ()
+    tracks: Mapping[str, TrackRow] = MappingProxyType({})
 
     def main_key(self, crossref: str | None) -> AaaiYear | None:
         return next((y for y in self.years.values() if crossref in y.proceedings), None)
 
     def workshop(self, crossref: str | None) -> Workshop | None:
         return self.workshops.get(crossref or "")
+
+    def main_track(self, key: str, year: int, pages: str | None) -> tuple[str, Section | TrackRow | None]:
+        """A main-key entry's track and the row that gives it: its `[[track]]` row, else the `[[section]]` its
+        dblp start page is in, else `main` (None)."""
+        if (row := self.tracks.get(key)) is not None and row.year == year:
+            return row.track, row
+        page = start_page(pages)
+        section = next((s for s in self.sections if s.year == year and s.holds(page)), None)
+        return (section.track, section) if section is not None else ("main", None)
 
     def stated(self, year: int) -> int:
         """The inproceedings the table verified for `year`: its main conference's and its workshops'."""
@@ -137,6 +190,41 @@ def _key(raw: Mapping[str, Any], where: str) -> str:
     if not isinstance(raw["key"], str) or not _KEY.fullmatch(raw["key"]):
         raise ValueError(f"dblp_aaai.toml {where}: a conf/aaai/<key> string")
     return raw["key"]
+
+
+def _provenance(raw: Mapping[str, Any], where: str) -> None:
+    if raw["track"] not in SECTION_TRACKS:
+        raise ValueError(f"dblp_aaai.toml {where}: track must be one of {sorted(SECTION_TRACKS)}")
+    if type(raw["verified"]) is not date or not isinstance(raw["source"], str) or not raw["source"]:
+        raise ValueError(f"dblp_aaai.toml {where}: a verified date and a source")
+
+
+def _sections(rows: list[Mapping[str, Any]], years: Mapping[int, AaaiYear]) -> tuple[Section, ...]:
+    out: list[Section] = []
+    for r in rows:
+        where = f"section {r.get('year')!r} {r.get('pages')!r}"
+        _check(r, {"year", "pages", "track", "label", "verified", "source"}, where)
+        if type(r["year"]) is not int or r["year"] not in years:
+            raise ValueError(f"dblp_aaai.toml {where}: a year the table holds")
+        pages = r["pages"]
+        if (
+            not isinstance(pages, list)
+            or len(pages) != 2
+            or not all(type(p) is int and p > 0 for p in pages)
+            or pages[0] > pages[1]
+        ):
+            raise ValueError(f"dblp_aaai.toml {where}: pages must be [first, last], positive, first <= last")
+        if not isinstance(r["label"], str) or not r["label"]:
+            raise ValueError(f"dblp_aaai.toml {where}: a label")
+        _provenance(r, where)
+        row = Section(r["year"], pages[0], pages[1], r["track"], r["label"], r["verified"], r["source"])
+        if clash := next((s for s in out if s.year == row.year and s.first <= row.last and row.first <= s.last),
+                         None):  # fmt: skip
+            raise ValueError(
+                f"dblp_aaai.toml {where}: overlaps {row.year}'s pages {[clash.first, clash.last]}"
+            )
+        out.append(row)
+    return tuple(sorted(out, key=lambda s: (s.year, s.first)))
 
 
 def load(text: str, pins: dblp_table.Table | None = None) -> Table:
@@ -203,11 +291,25 @@ def load(text: str, pins: dblp_table.Table | None = None) -> Table:
         if key in seen or key in workshops or key in excluded or key in not_papers:
             raise ValueError(f"dblp_aaai.toml: {key} listed twice")
         not_papers[key] = NotPaper(key, r["year"], str(r["kind"]), str(r["reason"]))
+    tracks: dict[str, TrackRow] = {}
+    for r in raw.get("track", []):
+        where = f"track {r.get('key')!r}"
+        _check(r, {"key", "year", "track", "reason", "verified", "source"}, where)
+        key = _key(r, where)
+        if type(r["year"]) is not int or r["year"] not in years:
+            raise ValueError(f"dblp_aaai.toml {where}: a year the table holds")
+        if not isinstance(r["reason"], str) or not r["reason"]:
+            raise ValueError(f"dblp_aaai.toml {where}: a reason")
+        _provenance(r, where)
+        if key in seen or key in workshops or key in excluded or key in not_papers or key in tracks:
+            raise ValueError(f"dblp_aaai.toml: {key} listed twice")
+        tracks[key] = TrackRow(key, r["year"], r["track"], r["reason"], r["verified"], r["source"])
+    sections = _sections(raw.get("section", []), years)
     return Table(
         pins.release, pins.dtd,
         MappingProxyType(dict(sorted(years.items()))), MappingProxyType(dict(sorted(workshops.items()))),
         MappingProxyType(dict(sorted(excluded.items()))), MappingProxyType(dict(sorted(not_papers.items()))),
-        not_held,
+        not_held, sections, MappingProxyType(dict(sorted(tracks.items()))),
     )  # fmt: skip
 
 

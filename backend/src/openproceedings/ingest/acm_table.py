@@ -7,6 +7,10 @@ import error, never a best guess. The window is the proceedings' own dates, wide
 extends the proceedings DOI. `dois` counts every such DOI in the window, not-paper rows included: a `[[not_paper]]`
 DOI (a tutorial, a keynote, front matter) is counted, never a record, so a row's expected record count is `dois`
 minus its not-paper rows.
+
+Crossref has no section data, so every record is `main` unless a `[[section]]` row places it: a page range of one
+proceedings (AIES 2018-2023's student abstract blocks, TASK-224) whose works, by their Crossref start page, take
+the row's track. A not-paper row beats a section; one proceedings' ranges never overlap.
 """
 
 from __future__ import annotations
@@ -30,6 +34,16 @@ _PAPER = re.compile(r"10\.1145/([0-9]+)\.([0-9]+)")
 NOT_PAPER_KINDS = frozenset({"tutorial", "craft session", "keynote", "panel", "front matter"})
 _PROCEEDINGS = {"venue", "year", "doi", "title", "window_from", "window_until", "dois", "verified", "source"}
 _NOT_PAPER = {"doi", "kind", "reason"}
+_SECTION = {"venue", "year", "pages", "track", "label", "verified", "source"}
+# the tracks a section row may give (never `main`, nor `iaai`/`eaai`, which are AAAI's alone)
+SECTION_TRACKS = frozenset({"student_abstract", "consortium", "demo", "other"})
+_START = re.compile(r"([0-9]+)(?:-[0-9]*)?")  # Crossref `page`: "354-355", "7", "1-1"
+
+
+def start_page(page: str | None) -> int | None:
+    """The start page of a Crossref `page` field ("354-355" → 354, "7" → 7), else None."""
+    m = _START.fullmatch(page or "")
+    return int(m.group(1)) if m else None
 
 
 def paper_doi(doi: str) -> tuple[str, str] | None:
@@ -72,9 +86,32 @@ class NotPaper:
 
 
 @dataclass(frozen=True, slots=True)
+class Section:
+    """A page range of one proceedings whose works take `track` (an inferred section: its source says how)."""
+
+    venue: str
+    year: int
+    first: int
+    last: int
+    track: str
+    label: str
+    verified: date
+    source: str
+
+    def holds(self, page: int | None) -> bool:
+        return page is not None and self.first <= page <= self.last
+
+
+@dataclass(frozen=True, slots=True)
 class Table:
     proceedings: Mapping[tuple[str, int], Proceedings]
     not_papers: Mapping[str, NotPaper]
+    sections: tuple[Section, ...] = ()
+
+    def section(self, venue: str, year: int, page: str | None) -> Section | None:
+        """The section row a work of `venue` `year` with Crossref page `page` falls in, else None (`main`)."""
+        start = start_page(page)
+        return next((s for s in self.sections if (s.venue, s.year) == (venue, year) and s.holds(start)), None)
 
     def by_toc(self, toc: str) -> Proceedings | None:
         return next((p for p in self.proceedings.values() if p.toc == toc), None)
@@ -150,7 +187,35 @@ def load(text: str) -> Table:
     for (venue, year), row in rows.items():
         if sum(1 for n in not_papers.values() if (n.venue, n.year) == (venue, year)) >= row.dois:
             raise ValueError(f"acm_proceedings.toml: {venue} {year} needs fewer not-paper rows than its dois")
-    return Table(MappingProxyType(dict(sorted(rows.items()))), MappingProxyType(not_papers))
+    sections: list[Section] = []
+    for raw in data.get("section", []):
+        where = f"acm_proceedings.toml section {raw.get('venue')!r} {raw.get('year')!r} {raw.get('pages')!r}"
+        _check(raw, _SECTION, where)
+        if (raw["venue"], raw["year"]) not in rows:
+            raise ValueError(f"{where}: no proceedings row for that venue and year")
+        pages = raw["pages"]
+        if (
+            not isinstance(pages, list)
+            or len(pages) != 2
+            or not all(type(p) is int and p > 0 for p in pages)
+            or pages[0] > pages[1]
+        ):
+            raise ValueError(f"{where}: pages must be [first, last], positive, first <= last")
+        if raw["track"] not in SECTION_TRACKS:
+            raise ValueError(f"{where}: track must be one of {sorted(SECTION_TRACKS)}")
+        for column in ("label", "source"):
+            if not isinstance(raw[column], str) or not raw[column]:
+                raise ValueError(f"{where}: {column} must be a non-empty string")
+        if type(raw["verified"]) is not date:
+            raise ValueError(f"{where}: verified must be a date")
+        sec = Section(raw["venue"], raw["year"], pages[0], pages[1], raw["track"], raw["label"], raw["verified"],
+                      raw["source"])  # fmt: skip
+        if any((s.venue, s.year) == (sec.venue, sec.year) and s.first <= sec.last and sec.first <= s.last
+               for s in sections):  # fmt: skip
+            raise ValueError(f"{where}: overlaps another section of {sec.venue} {sec.year}")
+        sections.append(sec)
+    return Table(MappingProxyType(dict(sorted(rows.items()))), MappingProxyType(not_papers),
+                 tuple(sorted(sections, key=lambda s: (s.venue, s.year, s.first))))  # fmt: skip
 
 
 TABLE: Table = load(

@@ -281,3 +281,51 @@ def test_an_offline_run_without_the_chain_is_refused(tmp_path: Path) -> None:
     with pytest.raises(CrawlError) as e:
         crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE)
     assert e.value.reason == "not_cached"
+
+
+# TASK-224: a section row gives the works whose Crossref start page it holds its track; a not-paper row beats it
+_SECTION = """
+[[section]]
+venue = "FAccT"
+year = 2023
+pages = [900, 950]
+track = "student_abstract"
+label = "Student abstracts"
+verified = 2026-10-10
+source = "test position"
+"""
+
+
+def test_a_section_row_gives_its_track_and_a_not_paper_row_beats_it(tmp_path: Path, monkeypatch) -> None:
+    table = acm_table.load(api.TABLE_TEXT + _SECTION)
+    monkeypatch.setattr(acm_table, "TABLE", table)
+    _whole(
+        tmp_path,
+        api.work(D1, page="899-900"),
+        api.work(D2, page="900-901"),
+        api.work(NP, page="902"),
+        total=3,
+    )
+    by = {
+        r.native: r for r in crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=table).records
+    }
+    assert {n: r.track for n, r in by.items()} == {"doi-3593013.3594011": "main",
+                                                   "doi-3593013.3594012": "student_abstract"}  # fmt: skip
+    claim = next(c for c in by["doi-3593013.3594012"].provenance if c.field == "track")
+    assert claim.evidence == (
+        f'Crossref work {D2} in proceedings {ROW.doi} (acm_proceedings.toml FAccT 2023): page 900-901 is in "Student '
+        'abstracts", pp. 900-950 (acm_proceedings.toml [[section]], verified 2026-10-10; test position)'
+    )  # fmt: skip
+    main = next(c for c in by["doi-3593013.3594011"].provenance if c.field == "track")
+    assert main.evidence.endswith("every paper of the proceedings is main (decision-049)")  # unchanged
+
+
+def test_a_section_row_that_holds_no_work_stops(tmp_path: Path, monkeypatch) -> None:
+    table = acm_table.load(api.TABLE_TEXT + _SECTION)
+    monkeypatch.setattr(acm_table, "TABLE", table)
+    _whole(
+        tmp_path, api.work(D1, page="1-10"), api.work(D2, page="951-952"), api.work(NP, page="902"), total=3
+    )
+    with pytest.raises(CrawlError, match="Student abstracts") as e:
+        crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=table)
+    assert e.value.reason == "stale_section"

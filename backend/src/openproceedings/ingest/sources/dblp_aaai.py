@@ -4,8 +4,9 @@ ojs.aaai.org starts at AAAI 2010 (Vol. 24); the earlier proceedings are on aaai.
 between requests and whose pages give no abstracts. dblp lists them under `conf/aaai/<year>` (1986, 1991, 1994 and
 1996 in two volumes). The release is the one ICML reads (`dblp_table.TABLE`'s pin), read in the same streaming pass
 into AAAI's own extract (`dblp.AAAI_SLICE`). `dblp_aaai_table.TABLE` names each year's main-conference keys, the
-workshop keys (track `workshop`), the `[[not_paper]]` entries (counted, never records) and the years AAAI was not
-held. A `conf/aaai/` proceedings key dated 1980-2009 the table doesn't classify, a not-held year dblp holds a key
+workshop keys (track `workshop`), the `[[not_paper]]` entries (counted, never records), the years AAAI was not
+held, and the official contents' sections (`[[section]]` page ranges and `[[track]]` key rows, TASK-226): a main-key
+entry in one takes its track (student abstracts, doctoral consortium, demonstrations, IAAI, other), else `main`. A `conf/aaai/` proceedings key dated 1980-2009 the table doesn't classify, a not-held year dblp holds a key
 for, a row whose key the release lacks, or a count that differs from the table's stops the ingest, and the count
 check runs again in every replay. dblp's AAAI keys of 2010 on are never read: the extract holds them, but a record
 is made only from a key the table lists, and the table's years end at 2008. Fields as for ICML (`dblp.py`):
@@ -21,7 +22,16 @@ from collections import Counter
 
 from pydantic import ValidationError
 
-from openproceedings.ingest.dblp_aaai_table import CHECKED, FIRST_YEAR, LAST_YEAR, TABLE, Table
+from openproceedings.ingest.dblp_aaai_table import (
+    CHECKED,
+    FIRST_YEAR,
+    LAST_YEAR,
+    TABLE,
+    Section,
+    Table,
+    TrackRow,
+    start_page,
+)
 from openproceedings.ingest.record import (
     Claim,
     ClaimField,
@@ -75,6 +85,10 @@ def check_extract(extract: Extract, table: Table | None = None) -> None:
             raise CrawlError(f"dblp_aaai.toml names {key} for {year}, but release {extract.doi} doesn't hold "
                              "it for that year", reason="table_mismatch")  # fmt: skip
     papers = {e.key: e.fields.get("crossref") for e in extract.entries if e.type == "inproceedings"}
+    for tr in table.tracks.values():
+        if papers.get(tr.key) not in table.years[tr.year].proceedings:
+            raise CrawlError(f"dblp_aaai.toml's track row {tr.key} is not an AAAI {tr.year} main-conference entry "
+                             f"of release {extract.doi}", reason="table_mismatch")  # fmt: skip
     for np in table.not_papers.values():
         crossref = papers.get(np.key)
         row = table.years[np.year]
@@ -122,6 +136,7 @@ def mine_year(year: int, extract: Extract, *, table: Table | None = None) -> Yea
                              f"verified {want}", reason="count_mismatch")  # fmt: skip
     records: list[PaperRecord] = []
     seen: set[str] = set()
+    used: set[Section] = set()
     for e, track in listed:
         tail = e.key[len(PREFIX) :]
         if not NATIVE.fullmatch(tail):
@@ -134,20 +149,42 @@ def mine_year(year: int, extract: Extract, *, table: Table | None = None) -> Yea
             skipped["duplicate"] += 1
         else:
             seen.add(e.key)
+            rule: Section | TrackRow | None = None
+            if track == "main":
+                track, rule = table.main_track(e.key, year, e.fields.get("pages"))
+                if isinstance(rule, Section):
+                    used.add(rule)
             try:
-                record = _record(year, tail, e, track, extract, table)
+                record = _record(year, tail, e, track, extract, table, rule)
             except (ValidationError, ValueError) as err:
                 raise CrawlError(f"AAAI {year}: dblp record {e.key} won't build ({type(err).__name__}); check the "
                                  "release and the table", reason="invalid_record") from err  # fmt: skip
             records.append(record)
             report.count(record, "no_abstract")
+    if stale := [s for s in table.sections if s.year == year and s not in used]:
+        raise CrawlError(f"AAAI {year}: dblp_aaai.toml's section {stale[0].label!r} pp. {stale[0].first}-{stale[0].last} "
+                         f"holds no paper of release {extract.doi}: check the table", reason="stale_section")  # fmt: skip
     log.info("dblp_aaai_year_mined", extra={"year": year, "listed": report.listed, "stated": report.stated,
                                             "records": report.records,
                                             "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     return YearResult(records, [report])
 
 
-def _record(year: int, tail: str, e: DblpEntry, track: str, extract: Extract, table: Table) -> PaperRecord:
+def _track_evidence(year: int, e: DblpEntry, track: str, rule: Section | TrackRow | None) -> str:
+    crossref = e.fields["crossref"]
+    if isinstance(rule, Section):
+        return (f"crossref {crossref}, dblp pages {e.fields.get('pages')} (start page {start_page(e.fields.get('pages'))}): "
+                f"in AAAI {year}'s official contents section \"{rule.label}\", pp. {rule.first}-{rule.last} "
+                f"(dblp_aaai.toml [[section]], verified {rule.verified.isoformat()}; {rule.source})")  # fmt: skip
+    if isinstance(rule, TrackRow):
+        return (f"crossref {crossref}: {rule.reason} (dblp_aaai.toml [[track]], verified "
+                f"{rule.verified.isoformat()}; {rule.source})")  # fmt: skip
+    kind = "main conference" if track == "main" else "workshop"
+    return f"crossref {crossref}: AAAI {year} {kind} (dblp_aaai.toml)"
+
+
+def _record(year: int, tail: str, e: DblpEntry, track: str, extract: Extract, table: Table,
+            rule: Section | TrackRow | None = None) -> PaperRecord:  # fmt: skip
     title, replaced = title_text(dblp.clean_title(e.fields.get("title", "")))
     if not title:
         raise ValueError("no title")
@@ -164,8 +201,7 @@ def _record(year: int, tail: str, e: DblpEntry, track: str, extract: Extract, ta
     claim("title", title, title_evidence(f"{where}: title, dblp's closing period dropped", replaced))
     if authors := tuple(a for a in (dblp.clean_author(x) for x in e.lists.get("author", [])) if a):
         claim("authors", authors, f"{where}: author (dblp homonym numbers dropped)")
-    kind = "main conference" if track == "main" else "workshop"
-    claim("track", track, f"crossref {e.fields['crossref']}: AAAI {year} {kind} (dblp_aaai.toml)")
+    claim("track", track, _track_evidence(year, e, track, rule))
     claim("status", "accepted", f"in AAAI {year}'s proceedings {e.fields['crossref']}: {where}")
     for fld, link in dblp.links(e.key, e.lists.get("ee", []), pdf_hosts=frozenset()).items():
         claim(fld, link, where if fld == "urls.proceedings" else f"{where}: ee")
