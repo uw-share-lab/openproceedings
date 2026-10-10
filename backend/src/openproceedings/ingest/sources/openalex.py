@@ -65,6 +65,10 @@ _DOI = re.compile(r"10\.[0-9]{1,9}(?:\.[0-9]{1,9}){0,8}/\S{1,1000}")
 _ID = re.compile(r"(?:https://openalex\.org/)?(W[0-9]{1,12})")
 _SOURCE_ID = re.compile(r"(?:https://openalex\.org/)?(S[0-9]{1,12})")
 _CURSOR = re.compile(rf"[\x21-\x7e]{{1,{MAX_CURSOR}}}")
+_WORD = re.compile(r"\S+")  # one word: a key with whitespace in it is no inverted index
+_DOI_UNSAFE = frozenset(
+    "|,&#?%+"
+)  # what would split the filter or the query string, or change it once decoded
 _KEY = re.compile(r"[\x21-\x7e]{1,256}")  # printable ASCII: nothing a header would split on, nothing to quote
 
 
@@ -103,7 +107,12 @@ def rebuild(inverted: object) -> Rebuilt:
     at: dict[int, str] = {}
     entries = 0
     for word, positions in inverted.items():
-        if not isinstance(word, str) or not word.strip() or not isinstance(positions, list) or not positions:
+        if (
+            not isinstance(word, str)
+            or not _WORD.fullmatch(word)
+            or not isinstance(positions, list)
+            or not positions
+        ):
             return Rebuilt(None, "inverted_unreadable")
         entries += len(positions)
         if entries > MAX_POSITIONS:
@@ -125,6 +134,12 @@ def abstract_of(work: Work) -> tuple[Cleaned | None, str | None]:
     rebuilt = rebuild(work.inverted)
     if rebuilt.text is None:
         return None, rebuilt.refused
+    try:
+        rebuilt.text.encode("utf-8")
+    except (
+        UnicodeEncodeError
+    ):  # a lone surrogate (JSON's `\ud800`), which no record may hold (`record._utf8`)
+        return None, "abstract_unusable"
     cleaned = clean_abstract(rebuilt.text)
     return (cleaned, None) if cleaned.text is not None else (None, "abstract_unusable")
 
@@ -138,8 +153,15 @@ def bare_doi(value: object) -> str | None:
 
 
 def doi_url(dois: Sequence[str]) -> str:
+    """The DOI route's URL for a batch. Every DOI must already be bare (`bare_doi(d) == d`) and hold nothing that
+    would split the filter's OR list or the query string, or change once decoded (`| , & # ? % +`, whitespace):
+    such a DOI stops (`openalex_bad_doi`, never quoted), never encoded or dropped silently."""
     if not 0 < len(dois) <= BATCH:
         raise ValueError(f"a DOI batch holds 1 to {BATCH} DOIs")
+    for d in dois:
+        if bare_doi(d) != d or any(c in _DOI_UNSAFE or c.isspace() for c in d):
+            raise CrawlError("a DOI for OpenAlex is not a bare DOI safe in a filter (| , & # ? % + or whitespace)",
+                             reason="openalex_bad_doi")  # fmt: skip
     return f"https://{HOST}/works?filter=doi:{'|'.join(sorted(dois))}&per-page={BATCH}&select={SELECT}"
 
 
@@ -214,11 +236,19 @@ def parse_works(text: str) -> WorksPage:
 
 def api_key(environ: Mapping[str, str], dotenv: Path | None) -> str | None:
     """The optional OpenAlex API key from `OPENALEX_API_KEY` (the environment first, then `.env`), stripped, or
-    None when it is unset, blank, unreadable or not printable ASCII (a value a header would split on is never sent).
-    Never raises, and the value goes into a request header only: never a URL, a log line or an exception."""
+    None when it is unset or blank, or `.env` cannot be read. A value that is set but is not 1-256 printable ASCII
+    characters (a header would split on it) stops (`bad_key`, as `crossref.valid_contact` does), never quoting it.
+    The value goes into a request header only: never a URL, a cache entry, a log line or an exception."""
     try:
         values = {**(read_dotenv(dotenv) if dotenv else {}), **environ}
     except (OSError, UnicodeError):  # a directory, an unreadable or undecodable file: no key
         values = dict(environ)
     value = values.get(KEY_ENV, "").strip()
-    return value if _KEY.fullmatch(value) else None
+    if not value:
+        return None
+    if not _KEY.fullmatch(value):
+        raise CrawlError(
+            "OPENALEX_API_KEY is set but is not 1-256 printable ASCII characters: fix or unset it",
+            reason="bad_key",
+        )
+    return value

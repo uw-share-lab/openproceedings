@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import date
 
 import pytest
@@ -28,11 +29,16 @@ def test_rebuild_keeps_a_word_listed_twice_at_its_position_once() -> None:
     assert openalex.rebuild({"the": [0, 2, 2], "cat": [1]}) == openalex.Rebuilt("the cat the", None)
 
 
-@pytest.mark.parametrize("raw", [[], "x", {"": [0]}, {"a": []}, {"a": [-1]}, {"a": [True]}, {"a": [0.0]},
-                                 {"a": "0"}, {1: [0]}, {"a": [10**7]}])  # fmt: skip
-def test_rebuild_refuses_unreadable_shapes(raw) -> None:
-    got = openalex.rebuild(raw)
-    assert got.text is None and got.refused in ("inverted_unreadable", "inverted_gap")
+@pytest.mark.parametrize(("raw", "reason"), [
+    ([], "inverted_unreadable"), ("x", "inverted_unreadable"), ({"": [0]}, "inverted_unreadable"),
+    ({"a": []}, "inverted_unreadable"), ({"a": [-1]}, "inverted_unreadable"), ({"a": [True]}, "inverted_unreadable"),
+    ({"a": [0.0]}, "inverted_unreadable"), ({"a": "0"}, "inverted_unreadable"), ({1: [0]}, "inverted_unreadable"),
+    ({"a": [10**7]}, "inverted_unreadable"), ({"a b": [0]}, "inverted_unreadable"),
+    ({"a\tb": [0]}, "inverted_unreadable"), ({" a": [0]}, "inverted_unreadable"),
+    ({"a\u00a0b": [0]}, "inverted_unreadable"),
+])  # fmt: skip
+def test_rebuild_refuses_unreadable_shapes(raw, reason: str) -> None:
+    assert openalex.rebuild(raw) == openalex.Rebuilt(None, reason)
 
 
 def test_rebuild_refuses_more_entries_than_any_abstract_has_words() -> None:
@@ -58,6 +64,13 @@ def test_hygiene_is_every_abstracts(text: str, kept: str | None) -> None:
     cleaned, refused = openalex.abstract_of(w)
     assert (cleaned.text if cleaned else None) == kept
     assert refused == (None if kept else "abstract_unusable")
+
+
+def test_a_lone_surrogate_abstract_is_unusable_not_a_crash() -> None:
+    """JSON can carry a lone surrogate (`"\\ud800"`), which no record may hold (`record._utf8`): refused here."""
+    text = '{"meta": {"count": 1}, "results": [{"id": "W1", "abstract_inverted_index": {"a\\ud800": [0]}}]}'
+    (w,) = openalex.parse_works(text).works
+    assert openalex.abstract_of(w) == (None, "abstract_unusable")
 
 
 def test_abstract_of_passes_rebuild_refusals_and_absence_through() -> None:
@@ -154,6 +167,17 @@ def test_the_doi_url_is_sorted_and_capped() -> None:
         openalex.doi_url([])
 
 
+@pytest.mark.parametrize("doi", [
+    "10.1/a&api_key=x#", "10.1/a|10.1/b", "10.1/a,b", "10.1/a?x", "10.1/a%20", "10.1/a+b", "10.1/a#b",
+    "10.1/a b", "10.1/A", " 10.1/a", "https://doi.org/10.1/a", "doi:10.1/a", "",
+])  # fmt: skip
+def test_the_doi_url_refuses_a_doi_that_would_split_or_change_it(doi: str) -> None:
+    with pytest.raises(CrawlError) as e:
+        openalex.doi_url(["10.1/ok", doi])
+    assert e.value.reason == "openalex_bad_doi"
+    assert "api_key" not in str(e.value)
+
+
 def test_the_listing_and_work_urls() -> None:
     row = Listing("AAAI", 1990, ("S1", "S2"), 3, date(2026, 10, 10), "x")
     assert openalex.listing_url(row, "a/b=") == (
@@ -183,13 +207,25 @@ def test_the_key_is_optional_and_read_from_the_environment_first(tmp_path) -> No
     assert openalex.api_key({"OPENALEX_API_KEY": "  "}, None) is None
 
 
-def test_the_key_never_raises(tmp_path) -> None:
+def test_an_unset_blank_or_unreadable_key_is_none(tmp_path) -> None:
     assert openalex.api_key({}, tmp_path) is None  # a directory, not a file
     bad = tmp_path / "bad.env"
     bad.write_bytes(b"\xff\xfe OPENALEX_API_KEY=x\n")
     assert openalex.api_key({}, bad) is None
     assert openalex.api_key({}, tmp_path / "missing.env") is None
-    # a value a header would split on, or not printable ASCII, is no key (never sent, never quoted)
-    assert openalex.api_key({"OPENALEX_API_KEY": "a\r\nX-Evil: 1"}, None) is None
-    assert openalex.api_key({"OPENALEX_API_KEY": "ké"}, None) is None
-    assert openalex.api_key({"OPENALEX_API_KEY": "k" * 1000}, None) is None
+    assert openalex.api_key({"OPENALEX_API_KEY": ""}, None) is None
+
+
+@pytest.mark.parametrize("value", ["a\r\nX-Evil: 1", "SECRETk\u00e9", "SECRET" + "k" * 1000, "SECRET key"])
+def test_a_malformed_key_stops_without_quoting_it(value: str, tmp_path, caplog) -> None:
+    caplog.set_level(logging.DEBUG)
+    with pytest.raises(CrawlError) as e:
+        openalex.api_key({"OPENALEX_API_KEY": value}, None)
+    assert e.value.reason == "bad_key"
+    env = tmp_path / ".env"
+    env.write_text(f"OPENALEX_API_KEY={value.splitlines()[0]}x y\n", encoding="utf-8")
+    with pytest.raises(CrawlError) as from_dotenv:
+        openalex.api_key({}, env)
+    for err in (e.value, from_dotenv.value):
+        assert "SECRET" not in str(err) and "Evil" not in str(err) and "SECRET" not in repr(err.args)
+    assert "SECRET" not in caplog.text and "Evil" not in caplog.text
