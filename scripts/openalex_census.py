@@ -123,7 +123,7 @@ def doi_route(records: list[PaperRecord], f: Any) -> list[openalex.Lookup]:
     )
     lookups: list[openalex.Lookup] = []
     for chunk in batches:
-        lookups += openalex._doi_lookups(chunk, f, refresh=False)
+        lookups += openalex.doi_lookups(chunk, f, refresh=False)
     _print_batches(lookups)
     return lookups
 
@@ -156,7 +156,7 @@ def facct_reconciliation(records: list[PaperRecord], f: Any) -> list[openalex.Lo
         )
         lookups: list[openalex.Lookup] = []
         for i in range(0, len(dois), openalex.BATCH):
-            lookups += openalex._doi_lookups(dois[i : i + openalex.BATCH], f, refresh=False)
+            lookups += openalex.doi_lookups(dois[i : i + openalex.BATCH], f, refresh=False)
         works = [w for lk in lookups for w in lk.works if w.doi in set(dois)]
         found = {w.doi for w in works}
         with_abstract = {w.doi for w in works if openalex.abstract_of(w)[0] is not None}
@@ -225,7 +225,7 @@ def listing_route(records: list[PaperRecord], f: Any) -> tuple[str, list[openale
         probe = openalex_table.Listing("AAAI", year, tuple(sids), 1, today, NOTE)
         first = openalex.parse_works(f.get(openalex.listing_url(probe)).text)
         row = openalex_table.Listing("AAAI", year, tuple(sids), first.total, today, NOTE)
-        lk = openalex._listing(row, f, refresh=False)
+        lk = openalex.listing_lookup(row, f, refresh=False)
         lookups.append(lk)
         rec_keys = Counter(title_key(r.title) for r in recs)
         work_keys = Counter(title_key(w.title) for w in lk.works if w.title and w.year == year)

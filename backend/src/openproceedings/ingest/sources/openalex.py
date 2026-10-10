@@ -493,7 +493,7 @@ def _walk(row: Listing, get: _Get) -> list[tuple[Page, WorksPage]] | None:
         cursor = parsed.next_cursor
 
 
-def _listing(row: Listing, fetcher: Fetcher, *, refresh: bool) -> Lookup:
+def listing_lookup(row: Listing, fetcher: Fetcher, *, refresh: bool) -> Lookup:
     """One table row's works: the chain the cache holds whole, else (live) a fresh chain from `cursor=*` with its
     first page fetched again (a cursor expires, so a half-cached chain can't be resumed). The works must number
     `meta.count` (`listing_changed`) and the table's verified `works` (`count_mismatch`)."""
@@ -517,7 +517,7 @@ def _listing(row: Listing, fetcher: Fetcher, *, refresh: bool) -> Lookup:
     return Lookup("listing", listing_url(row), chain[0][0].fetched_at, (), row.venue, row.year, works)
 
 
-def _doi_lookups(chunk: Sequence[str], fetcher: Fetcher, *, refresh: bool) -> list[Lookup]:
+def doi_lookups(chunk: Sequence[str], fetcher: Fetcher, *, refresh: bool) -> list[Lookup]:
     url = doi_url(chunk)
     page = fetcher.get(url, refresh=refresh)
     if not page.ok:
@@ -531,8 +531,8 @@ def _doi_lookups(chunk: Sequence[str], fetcher: Fetcher, *, refresh: bool) -> li
             raise CrawlError(f"one DOI matched {parsed.total} OpenAlex works, more than a page holds "
                              f"({len(parsed.works)})", reason="doi_batch_incomplete")  # fmt: skip
         half = len(chunk) // 2
-        return [*_doi_lookups(chunk[:half], fetcher, refresh=refresh),
-                *_doi_lookups(chunk[half:], fetcher, refresh=refresh)]  # fmt: skip
+        return [*doi_lookups(chunk[:half], fetcher, refresh=refresh),
+                *doi_lookups(chunk[half:], fetcher, refresh=refresh)]  # fmt: skip
     return [Lookup("doi", url, page.fetched_at, tuple(chunk), None, None, parsed.works)]
 
 
@@ -542,14 +542,14 @@ def harvest(
     """Every lookup the fill replays: the candidates' DOIs in batches (`doi_url`), then each listing row of the
     table (`listing_url`, cursor paged). A batch that is not HTTP 200 stops (`no_listing`), and so does one whose
     `meta.count` is more than twice the batch (the filter was misread). A batch matching more works than its page
-    holds (several works for its DOIs) is split in half, first half first, down to one DOI (`_doi_lookups`); one
+    holds (several works for its DOIs) is split in half, first half first, down to one DOI (`doi_lookups`); one
     DOI that still overflows a page stops (`doi_batch_incomplete`): no work is dropped unseen."""
     table = table or openalex_table.TABLE
     out: list[Lookup] = []
     batches, _ = doi_batches(records)
     for chunk in batches:
-        out += _doi_lookups(chunk, fetcher, refresh=refresh)
-    out += [_listing(row, fetcher, refresh=refresh) for row in table.listings.values()]
+        out += doi_lookups(chunk, fetcher, refresh=refresh)
+    out += [listing_lookup(row, fetcher, refresh=refresh) for row in table.listings.values()]
     return tuple(out)
 
 

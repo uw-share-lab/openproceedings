@@ -67,6 +67,6 @@ def test_the_1984_listing_replays_against_its_table_row(tmp_path: Path) -> None:
     seed(tmp_path, openalex.CACHE_DIR, f["request"]["url"], f["response"]["text"], keep_query=True)
     offline = Fetcher(PageCache(tmp_path / openalex.CACHE_DIR), None, hosts=openalex.HOSTS, expect="json",
                       keep_query=True)  # fmt: skip
-    lookup = openalex._listing(row, offline, refresh=False)
+    lookup = openalex.listing_lookup(row, offline, refresh=False)
     assert len(lookup.works) == row.works == 32
     assert all(w.sources == row.source_ids and w.year == 1984 for w in lookup.works)

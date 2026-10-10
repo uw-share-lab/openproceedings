@@ -521,7 +521,9 @@ def build_parser() -> argparse.ArgumentParser:
     openapi.add_argument("--out", type=Path, help="write to this file (default standard output)")
     openapi.set_defaults(run=_openapi)
 
-    ev = sub.add_parser("eval", help="evaluation reports: coverage | scholar | audit | near-miss (spec 07)")
+    ev = sub.add_parser(
+        "eval", help="evaluation reports: coverage | scholar | openalex | audit | near-miss (spec 07)"
+    )
     reports = ev.add_subparsers(dest="report", required=True, metavar="REPORT")
     cov = reports.add_parser(
         "coverage",
@@ -579,6 +581,24 @@ def build_parser() -> argparse.ArgumentParser:
     )  # fmt: skip
     sch.add_argument("--check", action="store_true", help="exit 1 when any `our_bug` row is found")
     sch.set_defaults(run=_eval_scholar)
+    oal = reports.add_parser(
+        "openalex",
+        help="write docs/results/<date>-openalex-audit.md: OpenAlex's abstracts against official ones per "
+        "venue-year, and the title route's attaches against OpenAlex's authors (keyless; --offline replays the "
+        "cache)",
+    )
+    oal.add_argument("--snapshot", help="a snapshot name, path or hash prefix (default the current index's)")
+    oal.add_argument(
+        "--aaai-sample", type=int, default=1000, help="AAAI 2010+ records sampled (default 1000)"
+    )
+    oal.add_argument("--title-sample", type=int, default=50, help="title-route attaches checked (default 50)")
+    oal.add_argument("--seed", type=int, default=49, help="the samples' seed (default 49)")
+    oal.add_argument("--offline", action="store_true", help="read only the OpenAlex cache: no network")
+    oal.add_argument(
+        "--out", type=Path, help="the report's directory (default the repository's docs/results)"
+    )
+    oal.add_argument("--date", help="the report's date, YYYY-MM-DD (default today, UTC)")
+    oal.set_defaults(run=_eval_openalex)
     for name, task in PLANNED_EVALS.items():
         _stub(reports.add_parser(name, help=_stub_status(task)), f"eval {name}", task)
 
@@ -1174,6 +1194,80 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
     if ns.check and stale_ex:  # a stale exception fails --check, as a gate failure does
         print(f"--check: {len(stale_ex)} stale accepted exception(s)", file=sys.stderr)
     return 1 if ns.check and (not verdict.passed or stale_ex) else 0
+
+
+def _audited_snapshot(ns: argparse.Namespace) -> Path:
+    """`--snapshot` (a name, path or hash prefix), else the snapshot the current index was built from."""
+    from openproceedings.ingest.snapshot import indexed_snapshot
+
+    if ns.snapshot:
+        return resolve_snapshot(ns.snapshot, ns.data_dir / "snapshots")
+    index = _index_path(argparse.Namespace(data_dir=ns.data_dir, index=None))
+    path, _manifest = indexed_snapshot(ns.data_dir, json.loads((index / "manifest.json").read_text("utf-8")))
+    return path
+
+
+def _commit() -> str:
+    """The checkout's commit (short), or `unknown` outside a git checkout."""
+    import subprocess
+
+    root = _repo_root()
+    try:
+        done = subprocess.run(["git", "rev-parse", "--short=12", "HEAD"], cwd=root, capture_output=True,
+                              text=True, timeout=10, check=True)  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return done.stdout.strip() or "unknown"
+
+
+def _eval_openalex(ns: argparse.Namespace) -> int:
+    """`op eval openalex` (milestone C Task 13): the OpenAlex fidelity audit, through the one OpenAlex fetcher
+    and cache. Keyless always: no key and no `.env` is read, and no contact address is sent."""
+    from datetime import UTC, date, datetime
+
+    from openproceedings import storage
+    from openproceedings.eval import openalex_audit as oa
+    from openproceedings.ingest.snapshot import iter_records
+    from openproceedings.ingest.sources import openalex
+    from openproceedings.ingest.sources.crawl import openalex_fetcher
+
+    started = time.perf_counter()
+    try:
+        day = date.fromisoformat(ns.date) if ns.date else datetime.now(UTC).date()
+    except ValueError:
+        raise _usage(f"--date must be YYYY-MM-DD, not {ns.date!r}") from None
+    if ns.aaai_sample < 0 or ns.title_sample < 0:
+        raise _usage("--aaai-sample and --title-sample must be 0 or more")
+    root = _repo_root()
+    out = ns.out or (root / "docs" / "results" if root else None)
+    if out is None:
+        raise _usage("pass --out: there is no checkout to write docs/results in")
+    snapshot = _audited_snapshot(ns)
+    records = list(iter_records(snapshot))  # verified whole before any is used
+    picked = oa.sample(records, aaai_sample=ns.aaai_sample, seed=ns.seed)
+    cache = ns.data_dir / "cache"
+    fetcher = openalex_fetcher(cache, offline=ns.offline)
+    log.info("openalex_audit_started", extra={"snapshot": snapshot.name, "sampled": len(picked),
+                                              "offline": ns.offline})  # fmt: skip
+    with storage.exclusive(cache / openalex.CACHE_DIR):
+        result = oa.audit(picked, fetcher)
+        result.title = oa.title_check(records, fetcher, seed=ns.seed, size=ns.title_sample)
+    meta = oa.Meta(snapshot=snapshot.name, commit=_commit(), seed=ns.seed, aaai_sample=ns.aaai_sample, day=day,
+                   aaai_pool=oa.aaai_pool(records), title_sample=ns.title_sample)  # fmt: skip
+    path = out / f"{day.isoformat()}-openalex-audit.md"
+    replaced = path.exists()
+    storage.write_bytes(path, oa.render(result, meta).encode("utf-8"))
+    title = result.title
+    log.info("openalex_audit_written", extra={
+        "snapshot": snapshot.name, "sampled": len(picked), "differs": len(result.differs),
+        "title_attached": title.attached if title else 0,
+        "title_wrong": sum(a.verdict == "wrong" for a in title.sampled) if title else 0,
+        "requests": fetcher.stats.network, "cached": fetcher.stats.cached, "replaced": replaced,
+        "ms": elapsed_ms(started),
+    })  # fmt: skip
+    print(f"wrote {path} ({fetcher.stats.network} OpenAlex requests, {fetcher.stats.cached} from the cache)",
+          file=sys.stderr)  # fmt: skip
+    return 0
 
 
 def _scholar_scope(ns: argparse.Namespace) -> Scope:
