@@ -260,13 +260,17 @@ def test_a_bare_lt_no_longer_reshapes_the_tree() -> None:
 
 
 def test_every_committed_proceedings_page_is_unchanged_by_the_escape() -> None:
-    """The recorded pages have no bare `<` outside script and style: the escape changes none of them, so every
-    crawler reads them exactly as before."""
+    """The recorded HTML pages have no bare `<` outside script and style: the escape changes none of them, so every
+    crawler reads them exactly as before. (XML responses, ojs.aaai.org's OAI-PMH, are read by expat, never by the
+    HTML path.)"""
     pages = sorted(FIXTURES.glob("http/**/*.json"))
     checked = 0
     for path in pages:
-        body = json.loads(path.read_text(encoding="utf-8")).get("response", {}).get("text")
+        response = json.loads(path.read_text(encoding="utf-8")).get("response", {})
+        body = response.get("text")
         if not isinstance(body, str) or "bare-lt" in path.name:
+            continue
+        if "xml" in response.get("headers", {}).get("content-type", ""):
             continue
         assert html.escape_bare_lt(body) == body, path
         checked += 1
