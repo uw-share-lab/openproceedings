@@ -43,6 +43,7 @@ from openproceedings.eval.scholar_compare import (
     with_prefixes,
     with_variants,
 )
+from openproceedings.ingest import volumes
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.query.ast import Node, _Node
 from openproceedings.query.canonical import render
@@ -1207,3 +1208,14 @@ def test_a_rows_evidence_serialises_no_tree_per_row(
 
 def test_a_dblp_aaai_page_names_no_key() -> None:
     assert proceedings_key("https://dblp.org/rec/conf/aaai/Smith90") is None
+
+
+def test_proceedings_key_reads_a_facct_v81_url_from_the_venue_tagged_map(monkeypatch) -> None:
+    monkeypatch.setattr(
+        volumes, "PMLR_NATIVE_VOLUMES", {**volumes.PMLR_NATIVE_VOLUMES, 81: ("FAccT", 2018, "main")}
+    )
+    assert proceedings_key("https://proceedings.mlr.press/v81/one18a.html") == (
+        "FAccT",
+        2018,
+        "pmlr-v81-one18a",
+    )

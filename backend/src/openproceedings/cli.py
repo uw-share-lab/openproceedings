@@ -141,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, about in (
         ("iclr", "ICLR 2014-2016 accepted-paper archive pages (iclr.cc)"),
         ("neurips", "NeurIPS proceedings years (proceedings.neurips.cc; 2021 adds the D&B host)"),
-        ("pmlr", "ICML years from PMLR (the volume in ingest/pmlr_volumes.toml)"),
+        ("pmlr", "ICML years, or FAccT 2018 (--venue FAccT), from PMLR (the volume in ingest/pmlr_volumes.toml)"),
         ("dblp", "ICML 1988-2012 (--venue ICML, the default) or AAAI 1980-2008 (--venue AAAI) from the pinned "
                  "dblp release (ingest/dblp_icml.toml, ingest/dblp_aaai.toml; downloaded once from "
                  "drops.dagstuhl.de, never dblp.org); ICML with the abstracts the official ICML pages in "
@@ -157,6 +157,11 @@ def build_parser() -> argparse.ArgumentParser:
             crawl.add_argument(
                 "--venue", default="ICML", choices=("ICML", "AAAI"),
                 help="ICML 1988-2012 (default) or AAAI 1980-2008; both read the one pinned release",
+            )  # fmt: skip
+        if name == "pmlr":
+            crawl.add_argument(
+                "--venue", default="ICML", choices=("ICML", "FAccT"),
+                help="ICML 2013 on (default) or FAccT 2018 (v81); each year's volume is the table's row",
             )  # fmt: skip
         crawl.add_argument(
             "--year", dest="years", action="append", required=True, type=_years, metavar="YYYY[-YYYY]",
@@ -608,9 +613,10 @@ def _ingest_crawl(ns: argparse.Namespace) -> int:
     run = {"iclr": ingest_iclr, "neurips": ingest_neurips, "pmlr": ingest_pmlr, "dblp": ingest_dblp}[
         ns.source
     ]
+    extra = {"venue": ns.venue} if ns.source == "pmlr" else {}
     _print(
         run(years, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run, refresh=ns.refresh,
-            min_interval=ns.delay)
+            min_interval=ns.delay, **extra)
     )  # fmt: skip
     return 0
 

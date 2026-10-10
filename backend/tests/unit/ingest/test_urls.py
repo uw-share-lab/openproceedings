@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from openproceedings.ingest import urls
+from openproceedings.ingest import urls, volumes
 from openproceedings.ingest.record import PaperRecord
 
 H = "0336dcbab05b9d5ad24f4333c7658a0e"
@@ -126,3 +126,12 @@ def test_dblp_aaai(url: str, key: str | None) -> None:
 
 def test_native_reads_an_aaai_dblp_page() -> None:
     assert urls.native("https://dblp.org/rec/conf/aaai/Smith90") == "dblp-Smith90"
+
+
+def test_native_names_a_facct_v81_paper_only_once_the_table_has_the_volume(monkeypatch) -> None:
+    url = "https://proceedings.mlr.press/v81/one18a.html"
+    assert urls.native(url) is None  # the shipped table lacks v81 until the live census
+    monkeypatch.setattr(
+        volumes, "PMLR_NATIVE_VOLUMES", {**volumes.PMLR_NATIVE_VOLUMES, 81: ("FAccT", 2018, "main")}
+    )
+    assert urls.native(url) == "pmlr-v81-one18a"

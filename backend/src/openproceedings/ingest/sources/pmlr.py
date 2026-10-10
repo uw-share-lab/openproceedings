@@ -1,8 +1,11 @@
-"""PMLR miner for ICML (spec 01 §Sources, PMLR row; pmlr-proceedings skill; task-053).
+"""PMLR miner for ICML and FAccT 2018 (spec 01 §Sources, PMLR row; pmlr-proceedings skill; task-053).
 
-The primary source for ICML 2013-2022 and a confirming one for 2023+. A volume is crawled only if the
-volume table (`ingest/pmlr_volumes.toml`, `volumes.py`) lists it as an ingested ICML volume; anything else,
-including every competition and workshop volume, is refused, never coerced into ICML. The volume index's
+The primary source for ICML 2013-2022 and a confirming one for 2023+, and for FAccT 2018 (v81, then FAT*). A
+volume is crawled only if the volume table (`ingest/pmlr_volumes.toml`, `volumes.py`) lists it as an ingested
+ICML or FAccT volume; anything else, including every competition and workshop volume, is refused, never
+coerced into either. A row's `not_papers` (a preface) are counted `not_paper` and never fetched or records; a
+key the index lacks stops the crawl (`stale_not_paper`). A non-ICML volume whose index count differs from the
+table stops the crawl (`count_mismatch`); ICML's only warns. The volume index's
 heading (`<h1>`/`<h2>` `Volume N: …`) must start with the table's `heading`, or the crawl stops: the table
 and the site disagree, and a person must look.
 
@@ -48,7 +51,7 @@ from openproceedings.ingest.sources.common import (
 )
 from openproceedings.ingest.sources.html import collapse, meta, metas, node_text, parse
 from openproceedings.ingest.sources.http import Fetcher, Page, canonical
-from openproceedings.ingest.volumes import VOLUMES, Volume
+from openproceedings.ingest.volumes import PMLR_VENUES, VOLUMES, Volume
 from openproceedings.logs import elapsed_ms
 
 log = logging.getLogger(__name__)
@@ -63,12 +66,12 @@ _VOLUME_PREFIX = re.compile(r"Volume\s+([0-9]+)\s*:\s*")
 
 
 def ingestable(number: int) -> Volume:
-    """The table's row for an ingested ICML volume, or a MinerError: a volume the table doesn't list, or
-    lists as competition, workshop or another venue, is never crawled as ICML."""
+    """The table's row for an ingested ICML or FAccT volume, or a MinerError: a volume the table doesn't list,
+    or lists as competition, workshop or another venue, is never crawled."""
     volume = VOLUMES.get(number)
     if volume is None:
         raise MinerError(f"PMLR v{number} is not in the volume table: out of scope", reason="unlisted_volume")
-    if not volume.ingested or volume.venue != "ICML":
+    if not volume.ingested or volume.venue not in PMLR_VENUES:
         raise MinerError(
             f"PMLR v{number} is a {volume.venue} {volume.track} volume ({volume.role}): not ingested",
             reason="out_of_scope_volume",
@@ -158,7 +161,7 @@ class VolumeResult:
 def mine_volume(
     number: int, fetcher: Fetcher, *, refresh_index: bool = False, plan_only: bool = False
 ) -> VolumeResult:
-    """Every paper on an ingested ICML volume, as records (`plan_only`: read the index, fetch no paper)."""
+    """Every paper on an ingested ICML or FAccT volume, as records (`plan_only`: read the index, fetch no paper)."""
     volume = ingestable(number)
     assert volume.year is not None and volume.heading is not None  # the table checks ingested rows
     index = fetcher.get(volume.index_url, refresh=refresh_index)
@@ -174,12 +177,18 @@ def mine_volume(
         )
     entries, unlinked = parse_volume_index(index.text, volume.index_url)
     report = ListingReport(
-        SOURCE, "ICML", volume.year, volume.index_url, volume.role, volume.papers, volume=number,
+        SOURCE, volume.venue, volume.year, volume.index_url, volume.role, volume.papers, volume=number,
         listed=len(entries) + unlinked,
     )  # fmt: skip
     report.fetched.append(index.fetched_at)
     if unlinked:
         report.skipped["no_link"] = unlinked
+    listed_keys = {p[1] for e in entries if (p := urls.pmlr(e.url)) is not None and p[0] == number}
+    if stale := sorted(set(volume.not_papers) - listed_keys):  # before any paper page is fetched
+        raise MinerError(
+            f"PMLR v{number}: not_papers {stale} are not on the index; correct pmlr_volumes.toml",
+            reason="stale_not_paper",
+        )
     records: list[PaperRecord] = []
     seen: set[str] = set()
     started = last = time.monotonic()
@@ -191,6 +200,9 @@ def mine_volume(
             continue
         if urlparse(entry.url).netloc.lower() not in HOSTS:  # never fetched off the PMLR host, counted
             report.skipped["off_host"] += 1
+            continue
+        if parts[1] in volume.not_papers:  # a preface: counted, never fetched, never a record
+            report.skipped["not_paper"] += 1
             continue
         native = f"pmlr-v{number}-{parts[1]}"
         if native in seen:
@@ -220,6 +232,11 @@ def mine_volume(
         if time.monotonic() - last >= PROGRESS_SECONDS:
             last = time.monotonic()
             log.info("pmlr_volume_progress", extra={"volume": number, "done": n, "of": len(entries)})
+    if volume.venue != "ICML" and not report.count_ok:  # ICML keeps its warning (planner decision)
+        raise MinerError(
+            f"PMLR v{number}: the index lists {report.listed} entries, the table verified {report.stated}",
+            reason="count_mismatch",
+        )
     log.info(
         "pmlr_volume_mined",
         extra={"volume": number, "year": volume.year, "listed": report.listed, "stated": report.stated,
@@ -288,4 +305,4 @@ def _record(
         claim("urls.pdf", page_pdf, "citation_pdf_url", page.fetched_at)
     elif entry.pdf and is_url(entry.pdf) and urls.native(entry.pdf) == native:
         claim("urls.pdf", entry.pdf, listed_on, index.fetched_at)
-    return record_from_claims(f"op:icml:{volume.year}:{native}", claims), missing, cleaned
+    return record_from_claims(f"op:{volume.venue.lower()}:{volume.year}:{native}", claims), missing, cleaned

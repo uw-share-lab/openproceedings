@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
+from openproceedings.ingest import volumes
 from openproceedings.ingest.record import (
     DBLP_YEARS,
     DERIVED,
@@ -682,3 +683,14 @@ def test_dblp_ids_are_refused_for_another_venue() -> None:
 
 def test_the_year_tables_name_their_venues() -> None:
     assert set(DBLP_YEARS) == {"ICML", "AAAI"} and set(DOI_YEARS) == {"AIES", "FAccT"}
+
+
+def test_a_faccts_pmlr_id_must_name_its_own_volume_and_year(monkeypatch) -> None:
+    monkeypatch.setattr(
+        volumes, "PMLR_NATIVE_VOLUMES", {**volumes.PMLR_NATIVE_VOLUMES, 81: ("FAccT", 2018, "main")}
+    )
+    assert _rec("op:facct:2018:pmlr-v81-one18a", "FAccT", 2018).native == "pmlr-v81-one18a"
+    for rid, year in (("op:facct:2018:pmlr-v28-x13", 2018), ("op:facct:2019:pmlr-v81-one18a", 2019)):
+        with pytest.raises(ValidationError, match="PMLR volume"):
+            _rec(rid, "FAccT", year)
+    assert _rec("op:icml:2013:pmlr-v999-x", "ICML", 2013)  # ICML's rule is unchanged

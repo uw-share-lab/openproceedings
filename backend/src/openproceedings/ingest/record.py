@@ -35,6 +35,7 @@ from pydantic import (
     model_validator,
 )
 
+from openproceedings.ingest import volumes as _volumes
 from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
 from openproceedings.vocab import Status, Track, Venue, venue_name
 
@@ -64,7 +65,7 @@ ClaimField = Literal[
 _ID = re.compile(r"op:(neurips|iclr|icml|aaai|aies|facct|iaseai):([0-9]{4}):(\S+)")
 # Native ids (record-schema skill): an OpenReview forum id, or a proceedings form tied to its venue.
 PROCEEDINGS_NATIVE: dict[str, tuple[re.Pattern[str], frozenset[str]]] = {
-    "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), frozenset({"ICML"})),
+    "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), frozenset({"ICML", "FAccT"})),
     # `-round1`/`-round2`: the 2021 D&B host, which numbers each round separately (urls.proceedings_native)
     "nips": (
         re.compile(rf"nips-[0-9a-f]{{32}}(?:-(?:{'|'.join(sorted(NEURIPS_DB_2021_ROUNDS))}))?"),
@@ -350,6 +351,12 @@ class PaperRecord(BaseModel):
                 raise ValueError(
                     f"native id {native!r} is not a valid {'/'.join(sorted(venues))} proceedings id for {self.venue}"
                 )
+            if native.startswith("pmlr-") and self.venue != "ICML":
+                number = int(native.split("-", 2)[1][1:])
+                if _volumes.PMLR_NATIVE_VOLUMES.get(number, ("", 0, ""))[:2] != (self.venue, self.year):
+                    raise ValueError(
+                        f"native id {native!r} is not a {self.venue} {self.year} PMLR volume's (pmlr_volumes.toml)"
+                    )
             if native.startswith("dblp-") and self.year not in DBLP_YEARS[self.venue]:
                 raise ValueError(
                     f"native id {native!r} is not a valid id for {self.venue} {self.year}: dblp ids are ICML "

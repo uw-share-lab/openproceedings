@@ -3,14 +3,17 @@
 #
 # Columns
 #   number       the PMLR volume (https://proceedings.mlr.press/v<number>/)
-#   venue        NeurIPS | ICLR | ICML
+#   venue        NeurIPS | ICLR | ICML | FAccT (only ICML and FAccT 2018, v81, are ingested)
 #   year         the conference year (from this table, never a page footer or PDF date); may be absent
 #                only on an out_of_scope row whose year was not verified
 #   track        a spec 01 track; the table's value is the record's track, never inferred from the page
 #   role         primary       PMLR is the source of record for this venue-year (ICML 2013-2022)
+#                (a non-ICML volume is always primary)
 #                confirm       OpenReview is primary; PMLR confirms acceptance (ICML 2023+)
 #                out_of_scope  classified, never ingested (competition and workshop volumes)
 #   papers       the number of `<div class="paper">` entries on the volume index when verified
+#   not_papers   keys of index entries that are no paper (a preface), counted and never records; an ingested
+#                row only, fewer than `papers`; a key the index lacks stops the crawl
 #   heading      what the volume index's first <h1>/<h2> reads after `Volume N: ` (a prefix); the miner
 #                refuses a volume whose page says anything else
 #   index_title  the volume's title on the PMLR index (https://proceedings.mlr.press/)

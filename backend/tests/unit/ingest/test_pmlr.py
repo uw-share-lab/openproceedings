@@ -8,6 +8,8 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from openproceedings.ingest import volumes
+from openproceedings.ingest.dedup import dedup
 from openproceedings.ingest.sources import pmlr
 from openproceedings.ingest.sources.common import MinerError
 from openproceedings.ingest.sources.crawl import ingest_pmlr, load_crawls
@@ -393,3 +395,107 @@ def test_a_volume_counts_the_abstracts_that_lost_a_control_character(
     seed_v235(plain)
     clean = mine(plain, 235).report
     assert clean.abstract_control_characters == 0 and "abstract_control_characters" not in clean.to_manifest()
+
+
+# --- FAccT 2018 (v81): PMLR beside ICML (decision-049, milestone B) ---------------------------------------
+
+FACCT = """
+[[volume]]
+number = 81
+venue = "FAccT"
+year = 2018
+track = "main"
+role = "primary"
+papers = 3
+not_papers = ["preface18a"]
+heading = "Conference on Fairness, Accountability and Transparency"
+verified = 2026-10-10
+source = "test"
+"""
+V81_INDEX = """<html><body><h1>Volume 81: Conference on Fairness, Accountability and Transparency, 23-24 February 2018,
+New York, NY, USA</h1>
+<div class="paper"><p class="title">Synthetic preface</p><span class="authors">Synthetic Editor</span>
+<a href="https://proceedings.mlr.press/v81/preface18a.html">abs</a></div>
+<div class="paper"><p class="title">Synthetic title 1</p><span class="authors">Synthetic Author 1, Synthetic Author 2</span>
+<a href="https://proceedings.mlr.press/v81/one18a.html">abs</a>
+<a href="https://proceedings.mlr.press/v81/one18a/one18a.pdf">pdf</a></div>
+<div class="paper"><p class="title">Synthetic title 2</p><span class="authors">Synthetic Author 3</span>
+<a href="https://proceedings.mlr.press/v81/two18a.html">abs</a></div>
+</body></html>"""
+
+
+@pytest.fixture
+def facct_table(monkeypatch):
+    table = {**volumes.VOLUMES, **load(FACCT)}
+    native = {**volumes.PMLR_NATIVE_VOLUMES, 81: ("FAccT", 2018, "main")}
+    monkeypatch.setattr(volumes, "VOLUMES", table)
+    monkeypatch.setattr(pmlr, "VOLUMES", table)
+    monkeypatch.setattr(volumes, "PMLR_NATIVE_VOLUMES", native)
+    return table
+
+
+def seed_v81(cache: Path, index: str = V81_INDEX) -> None:
+    seed(cache, "pmlr", "https://proceedings.mlr.press/v81/", index)
+    for key in ("one18a", "two18a"):
+        seed(cache, "pmlr", f"https://proceedings.mlr.press/v81/{key}.html", "", status=404)
+
+
+def test_v81_is_faccts_2018_and_the_preface_is_counted_never_a_record(tmp_path: Path, facct_table) -> None:
+    seed_v81(tmp_path)
+    result = mine(tmp_path, 81)
+    assert sorted(r.id for r in result.records) == [
+        "op:facct:2018:pmlr-v81-one18a",
+        "op:facct:2018:pmlr-v81-two18a",
+    ]
+    r = next(r for r in result.records if r.native == "pmlr-v81-one18a")
+    assert (r.venue, r.year, r.track, r.status) == ("FAccT", 2018, "main", "accepted")
+    assert r.urls.pdf == "https://proceedings.mlr.press/v81/one18a/one18a.pdf"
+    report = result.report
+    assert (report.venue, report.stated, report.listed, report.records, report.count_ok) == (
+        "FAccT",
+        3,
+        3,
+        2,
+        True,
+    )
+    assert report.skipped == {"not_paper": 1}
+    assert not list((tmp_path / "pmlr").rglob("preface18a*"))  # never fetched
+    assert len(dedup(result.records).records) == 2  # each names itself: urls.native knows v81
+
+
+def test_a_non_icml_volume_whose_count_differs_stops(tmp_path: Path, facct_table) -> None:
+    seed_v81(
+        tmp_path,
+        V81_INDEX.replace(
+            '<div class="paper"><p class="title">Synthetic title 2',
+            '<div class="x"><p class="title">Synthetic title 2',
+        ),
+    )
+    with pytest.raises(MinerError) as e:
+        mine(tmp_path, 81)
+    assert e.value.reason == "count_mismatch"
+
+
+def test_a_not_paper_key_the_index_lacks_stops(tmp_path: Path, facct_table) -> None:
+    seed_v81(tmp_path, V81_INDEX.replace("preface18a", "other18a"))
+    with pytest.raises(MinerError) as e:
+        mine(tmp_path, 81)
+    assert e.value.reason in ("count_mismatch", "stale_not_paper")
+
+
+def test_icml_is_untouched() -> None:
+    assert set(volumes.ICML_PMLR_VOLUMES) == {28, 32, 37, 48, 70, 80, 97, 119, 139, 162, 202, 235, 267}
+    assert volumes.icml_volume(2013).number == 28 and volumes.ingested_volume("ICML", 2013).number == 28
+
+
+@pytest.mark.parametrize(
+    ("row", "error"),
+    [(FACCT.replace('venue = "FAccT"', 'venue = "AIES"'), "only ICML and FAccT"),
+     (FACCT.replace('role = "primary"', 'role = "confirm"'), "primary"),
+     (FACCT.replace('not_papers = ["preface18a"]', 'not_papers = ["a", "a"]'), "not_papers"),
+     (FACCT.replace('not_papers = ["preface18a"]', 'not_papers = ["a b"]'), "not_papers"),
+     (FACCT.replace("papers = 3", "papers = 1"), "fewer not_papers than papers")],
+)  # fmt: skip
+def test_a_malformed_non_icml_row_is_refused(row: str, error: str) -> None:
+    with pytest.raises(ValueError, match=error):
+        load(row)

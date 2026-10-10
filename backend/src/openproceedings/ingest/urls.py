@@ -11,10 +11,10 @@ import hashlib
 import re
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
+from openproceedings.ingest import volumes as _volumes
 from openproceedings.ingest.classify import NEURIPS_DB_2021_HOST, NEURIPS_DB_2021_ROUNDS
 from openproceedings.ingest.ojs_table import TABLE as OJS_TABLE
 from openproceedings.ingest.record import FORUM_ID
-from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
 _PROCEEDINGS_HOSTS = {
     "proceedings.neurips.cc": "NeurIPS",
@@ -105,11 +105,11 @@ def names_native(url: str, native_id: str) -> bool:
 
 
 def native(url: str) -> str | None:
-    """The proceedings native id a URL names (`proceedings_native`, `pmlr-v<N>-<key>` for an ICML volume,
+    """The proceedings native id a URL names (`proceedings_native`, `pmlr-v<N>-<key>` for an ingested PMLR volume (ICML, FAccT 2018),
     `dblp-<key>` for an ICML or AAAI (1980-2008) record's dblp page, or `ojs-<id>` for an ojs.aaai.org article), or None."""
     if proceedings(url) is not None:
         return proceedings_native(url)
-    if (q := pmlr(url)) is not None and q[0] in ICML_PMLR_VOLUMES:
+    if (q := pmlr(url)) is not None and q[0] in _volumes.PMLR_NATIVE_VOLUMES:
         return f"pmlr-v{q[0]}-{q[1]}"
     if (key := dblp_icml(url)) is not None:
         return f"dblp-{key}"

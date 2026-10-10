@@ -618,6 +618,19 @@ def test_an_unparseable_non_icml_pmlr_url_is_out_of_scope(tmp_path: Path) -> Non
     assert (report.skipped["out_of_scope"], report.skipped["unresolved"]) == (3, 2)
 
 
+def test_a_facct_v81_pmlr_url_is_still_out_of_scope(tmp_path: Path, monkeypatch) -> None:
+    from openproceedings.ingest import volumes
+
+    monkeypatch.setattr(
+        volumes, "PMLR_NATIVE_VOLUMES", {**volumes.PMLR_NATIVE_VOLUMES, 81: ("FAccT", 2018, "main")}
+    )
+    _, report = run(
+        tmp_path,
+        lambda e: (pmlr_urls("https://proceedings.mlr.press/v81/one18a.html")(e), drop_pmlr_index(e)),
+    )
+    assert report.skipped["out_of_scope"] == 3
+
+
 @pytest.mark.parametrize(
     ("year", "track", "host"),
     [

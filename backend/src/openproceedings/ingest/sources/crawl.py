@@ -48,7 +48,7 @@ from openproceedings.ingest.sources.http import (
     urllib_stream,
     urllib_transport,
 )
-from openproceedings.ingest.volumes import icml_volume
+from openproceedings.ingest.volumes import ingested_volume
 
 log = logging.getLogger(__name__)
 
@@ -115,15 +115,15 @@ def ingest_iclr(
 
 def ingest_pmlr(
     years: Iterable[int], cache: Path, *, offline: bool = False, dry_run: bool = False, refresh: bool = False,
-    transport: Transport | None = None, min_interval: float = DEFAULT_INTERVAL,
+    transport: Transport | None = None, min_interval: float = DEFAULT_INTERVAL, venue: str = "ICML",
 ) -> dict[str, Any]:  # fmt: skip
-    """Crawl the ICML volume of each year (from the volume table) into the cache."""
+    """Crawl the `venue` (ICML, or FAccT 2018) volume of each year (from the volume table) into the cache."""
     volumes = []
     for year in sorted(set(years)):
-        volume = icml_volume(year)
+        volume = ingested_volume(venue, year)
         if volume is None:
             raise MinerError(
-                f"ICML {year}: no verified PMLR volume in the volume table (add its row once its index is live)",
+                f"{venue} {year}: no verified PMLR volume in the volume table (add its row once its index is live)",
                 reason="no_volume",
             )
         volumes.append(volume.number)
