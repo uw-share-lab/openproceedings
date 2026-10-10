@@ -309,6 +309,41 @@ def test_ingest_crossref_usage_refusals(
     assert message in capsys.readouterr().err
 
 
+def test_ingest_openalex_dispatches_the_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    seen: dict[str, object] = {}
+
+    def fake(cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(cache=cache, **kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(crawl, "ingest_openalex", fake)
+    argv = ["--data-dir", str(tmp_path), "ingest", "openalex", "--offline", "--delay", "2"]
+    assert cli.main(argv) == 0
+    assert json.loads(capsys.readouterr().out) == {"ok": True}
+    assert (seen["offline"], seen["dry_run"], seen["refresh"], seen["min_interval"]) == (
+        True,
+        False,
+        False,
+        2.0,
+    )
+    assert seen["cache"] == tmp_path / "cache"
+
+
+@pytest.mark.parametrize(
+    ("flags", "message"),
+    [(["--dry-run", "--offline"], "don't combine"), (["--delay", "0.1"], "--delay must be finite")],
+)
+def test_ingest_openalex_usage_refusals(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], flags: list[str], message: str
+) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "openalex", *flags]) == 1
+    assert message in capsys.readouterr().err
+
+
 def test_ingest_ojs_oai_error_exits_nonzero_with_the_refresh_hint(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

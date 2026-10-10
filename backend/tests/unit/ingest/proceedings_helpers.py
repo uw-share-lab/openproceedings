@@ -78,9 +78,11 @@ class FakeTransport:
     def __init__(self, script: Mapping[str, Response | list[Response]]) -> None:
         self.script = {canonical(k): v if isinstance(v, list) else [v] for k, v in script.items()}
         self.calls: list[str] = []
+        self.requests: list[Request] = []  # every request as sent (its headers too: an API key's route)
 
     def __call__(self, request: Request, timeout: float) -> Response:
         self.calls.append(request.url)
+        self.requests.append(request)
         queue = self.script[request.url]
         r = queue.pop(0) if len(queue) > 1 else queue[0]
         return Response(r.status, r.headers, r.body, r.url or request.url)

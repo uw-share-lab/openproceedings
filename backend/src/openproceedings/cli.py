@@ -111,7 +111,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest = sub.add_parser(
         "ingest",
-        help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | ojs | crossref | openreview (spec 01)",
+        help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | ojs | crossref | openalex | openreview "
+        "(spec 01)",
     )
     sources = ingest.add_subparsers(dest="source", metavar="<source>", required=True)
     ris = sources.add_parser(
@@ -254,6 +255,28 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"seconds between requests (default 1, at least {MIN_DELAY}; Crossref is never paced under 1)",
     )  # fmt: skip
     crossref_parser.set_defaults(run=_ingest_crossref)
+    openalex_parser = sources.add_parser(
+        "openalex",
+        help="look up the AAAI, AIES and FAccT records the other crawls leave without an abstract in OpenAlex "
+        "(by DOI; AAAI 1980-2008 by ingest/openalex_sources.toml's listings) and pin what it read as an extract "
+        "under <data-dir>/cache/openalex, for op snapshot build to fill from; run it after the other crawls. "
+        "OPENALEX_API_KEY (optional, env or .env) goes in a request header only",
+    )
+    openalex_parser.add_argument(
+        "--dry-run", action="store_true", help="no network, no key: say what is cached; write nothing"
+    )
+    openalex_parser.add_argument(
+        "--offline", action="store_true", help="use the page cache only (no network)"
+    )
+    openalex_parser.add_argument(
+        "--refresh", action="store_true",
+        help="fetch every DOI batch again, and each listing's chain again from cursor=*",
+    )  # fmt: skip
+    openalex_parser.add_argument(
+        "--delay", type=float, default=1.0,
+        help=f"seconds between requests (default 1, at least {MIN_DELAY}; OpenAlex is never paced under 1)",
+    )  # fmt: skip
+    openalex_parser.set_defaults(run=_ingest_openalex)
     for name, task in PLANNED_SOURCES.items():
         _stub(sources.add_parser(name, help=_stub_status(task)), f"ingest {name}", task)
 
@@ -680,6 +703,18 @@ def _ingest_crossref(ns: argparse.Namespace) -> int:
                      f"and years {sorted(years)}")  # fmt: skip
     _print(ingest_crossref(keys, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
                            refresh=ns.refresh, min_interval=ns.delay))  # fmt: skip
+    return 0
+
+
+def _ingest_openalex(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest.sources import crawl
+
+    if not math.isfinite(ns.delay) or ns.delay < MIN_DELAY:
+        raise _usage(f"--delay must be finite and at least {MIN_DELAY} seconds (politeness)")
+    if ns.dry_run and ns.offline:
+        raise _usage("--dry-run and --offline don't combine: a dry run already reads the cache only")
+    _print(crawl.ingest_openalex(ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
+                                 refresh=ns.refresh, min_interval=ns.delay))  # fmt: skip
     return 0
 
 

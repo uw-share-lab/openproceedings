@@ -955,3 +955,39 @@ def test_build_replays_a_marked_crossref_crawl(
     assert {"op:facct:2023:doi-3593013.3594011", "op:facct:2023:doi-3593013.3594012"} <= ids
     [listing] = manifest["sources"]["crossref"]["listings"]
     assert listing["count_ok"] is True
+
+
+def test_build_fills_a_null_abstract_from_the_pinned_openalex_extract_before_takedowns(
+    cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fill runs after dedup and reconcile (`openalex.apply`) and before `withhold`: the record carries
+    OpenAlex's abstract, the manifest its fill report, and a takedown of that id still withholds it."""
+    from openproceedings.ingest import acm_table
+    from openproceedings.ingest.sources import crawl, openalex
+
+    from tests.unit.ingest.crossref import api
+    from tests.unit.ingest.crossref.test_crossref_mine import D1, D2, NP, TABLE, _whole
+    from tests.unit.ingest.openalex import api as oa
+
+    monkeypatch.setattr(acm_table, "TABLE", TABLE)
+    _whole(cache, api.work(D1), api.work(D2), api.work(NP), total=3)
+    crawl.ingest_crossref([("FAccT", 2023)], cache, offline=True, table=TABLE)
+    works = openalex.parse_works(oa.page(oa.work("W1", D1, text="An OpenAlex abstract."))).works
+    at = datetime(2026, 10, 10, tzinfo=UTC)
+    openalex.write_extract(
+        cache, (openalex.Lookup("doi", openalex.doi_url([D1, D2]), at, (D1, D2), None, None, works),)
+    )
+    rid = "op:facct:2023:doi-3593013.3594011"
+
+    result = build(cache, tmp_path / "snapshots", BUILT)
+    filled = load_records(result.path)[rid]
+    assert filled.abstract == "An OpenAlex abstract." and filled.abstract_kind == "openalex"
+    manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
+    [fills] = manifest["sources"]["openalex"]["fills"]
+    assert fills["attached_doi"] == 1 and fills["refused"] == {"doi_unmatched": 1}
+
+    withheld = build(cache, tmp_path / "withheld", BUILT, takedowns=frozenset({rid}))
+    m = json.loads((withheld.path / "manifest.json").read_text(encoding="utf-8"))
+    gone = load_records(withheld.path)[rid]
+    assert m["withheld"] == [rid] and gone.abstract is None and gone.abstract_kind == "none"
+    assert "OpenAlex abstract" not in (withheld.path / "records.jsonl").read_text(encoding="utf-8")

@@ -7,7 +7,9 @@ cache proceedings pages (`sources/crawl.py`). `build` imports everything cached 
 OpenReview crawl replayed from its cached responses, and each finished ICLR/NeurIPS/PMLR crawl re-mined from its cached
 pages), dedups, reconciles OpenReview acceptance against the crawled proceedings (`reconcile.py`: an
 OpenReview-accepted paper a complete listing doesn't hold becomes `unknown`, decision-005), adds the conflicts a
-crawl found inside one source (`with_crawl_conflicts`), and writes
+crawl found inside one source (`with_crawl_conflicts`), then fills OpenAlex abstracts from the pinned extract
+(`sources/openalex.apply`: only a null abstract of an AAAI, AIES or FAccT record, before takedowns are withheld, so a
+takedown still withholds a filled abstract), and writes
 `<snapshots>/<crawl date>-<shorthash>/` with `records.jsonl`, `manifest.json`, `merges.csv` and
 `conflicts.csv`. It never fetches, so it works offline. It also reports (and logs) each venue-year status
 its records hold that their sources can't supply (`status_check`, TASK-109), without changing the snapshot.
@@ -254,6 +256,19 @@ def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], li
             "`op ingest openreview --venue <V> --years <Y>` or `op ingest iclr|neurips|pmlr ...` first"
         )
     return records, reports, crawls
+
+
+def fill_openalex(result: DedupResult, cache: Path) -> tuple[DedupResult, list[Report]]:
+    """The OpenAlex fill from the pinned extract (`sources/openalex.apply`), offline; an extract that can't be
+    replayed (a `SourceError`: missing, changed, malformed) refuses the build, as `load_sources` does."""
+    from openproceedings.ingest.sources import openalex
+    from openproceedings.ingest.sources.http import SourceError
+
+    try:
+        filled, fills = openalex.apply(result, cache)
+    except SourceError as e:
+        raise SnapshotError(f"the OpenAlex extract can't be replayed: {e}", reason=e.reason) from e
+    return filled, list(fills)
 
 
 def record_line(record: PaperRecord) -> str:
@@ -611,6 +626,8 @@ def build(
     began = time.monotonic()
     records, reports, crawls = load_sources(cache)
     result = with_crawl_conflicts(reconcile(dedup(records), crawled(crawls)).result, crawls)
+    result, fills = fill_openalex(result, cache)  # after reconcile, before withhold: a takedown still applies
+    crawls = [*crawls, *fills]
     withholding = withhold(result, takedowns)
     result = withholding.result
     unexpected = tuple(unexpected_statuses(result.records))

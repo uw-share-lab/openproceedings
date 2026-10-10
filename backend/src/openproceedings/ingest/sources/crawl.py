@@ -6,18 +6,21 @@ time per source: an exclusive lock on `<cache>/<source>/.lock`) and, when the wh
 its crawl marker. A dry run reads only the index pages (through the cache) and reports what a crawl would
 fetch; it writes no marker. `--offline` crawls from the cache alone. `replay_all` re-runs every marked crawl
 of every source (OpenReview API v2, then v1, then ICLR, NeurIPS, PMLR, dblp (ICML), OJS and dblp (AAAI); `common.Crawls`) with no
-transport at all, so a snapshot never fetches.
+transport at all, so a snapshot never fetches. `op ingest openalex` (`ingest_openalex`) is not one of them: it
+writes a pinned extract that `op snapshot build` replays after dedup (`openalex.apply`).
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import time
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
-from openproceedings.ingest import acm_table, dblp_aaai_table
+from openproceedings import storage
+from openproceedings.ingest import acm_table, dblp_aaai_table, openalex_table
 from openproceedings.ingest.dblp_table import TABLE as DBLP_TABLE
 from openproceedings.ingest.dblp_table import Table as DblpTable
 from openproceedings.ingest.ojs_table import TABLE as OJS_TABLE
@@ -32,6 +35,7 @@ from openproceedings.ingest.sources import (
     icml_sites,
     neurips,
     ojs,
+    openalex,
     openreview_v1,
     openreview_v2,
     pmlr,
@@ -53,6 +57,7 @@ from openproceedings.ingest.sources.http import (
 )
 from openproceedings.ingest.sources.openreview_client import repo_dotenv
 from openproceedings.ingest.volumes import ingested_volume
+from openproceedings.logs import elapsed_ms
 
 log = logging.getLogger(__name__)
 
@@ -408,6 +413,61 @@ CROSSREF: Crawls[crossref.ProceedingsResult] = Crawls(
     lambda cache, k: crossref.mine_proceedings(k[0], k[1], crossref_fetcher(cache, offline=True),
                                                site=_facct_site(k[0], k[1], facct_site_fetcher(cache, offline=True))),
 )  # fmt: skip
+
+
+def openalex_fetcher(cache: Path, *, offline: bool, transport: Transport | None = None,
+                     min_interval: float = DEFAULT_INTERVAL, key: str | None = None) -> Fetcher:  # fmt: skip
+    """OpenAlex's fetcher, one request at a time. Live, the optional API key goes in an `Authorization` header
+    only (`Fetcher(headers=)`: never a URL, a cache entry, a log line or an error); offline, none is sent. No
+    contact address is sent to OpenAlex."""
+    live = None if offline else (transport or urllib_transport)
+    headers = {"Authorization": f"Bearer {key}"} if key and not offline else None
+    return Fetcher(PageCache(cache / openalex.CACHE_DIR), live, hosts=openalex.HOSTS,
+                   min_interval=max(min_interval, openalex.MIN_INTERVAL), accept="application/json",
+                   expect="json", keep_query=True, headers=headers)  # fmt: skip
+
+
+def ingest_openalex(
+    cache: Path, *, offline: bool = False, dry_run: bool = False, refresh: bool = False,
+    transport: Transport | None = None, min_interval: float = DEFAULT_INTERVAL,
+    table: openalex_table.Table | None = None, key: str | None = None,
+) -> dict[str, Any]:  # fmt: skip
+    """Harvest OpenAlex for the AAAI, AIES and FAccT records every marked crawl leaves without an abstract
+    (`replay_all`'s, so `op ingest openalex` runs after the other crawls), and write the pinned extract and its
+    marker (`openalex.write_extract`) under `<cache>/openalex`'s lock. Not a `SOURCES` crawl: `op snapshot build`
+    replays the extract after dedup (`openalex.apply`). A dry run reads nothing live (no network, no key) and
+    says what is cached; it writes nothing. The key (`key`, else `OPENALEX_API_KEY` from the environment or
+    `.env`) is read only for a live run."""
+    started = time.monotonic()
+    table = table or openalex_table.TABLE
+    records, _ = replay_all(cache)
+    batches, unqueryable = openalex.doi_batches(records)
+    candidates = len(openalex.candidates(records))
+    if dry_run:
+        f = openalex_fetcher(cache, offline=True)
+        urls = [openalex.doi_url(b) for b in batches] + [
+            openalex.listing_url(r) for r in table.listings.values()
+        ]
+        return {"dry_run": True, "candidates": candidates, "doi_batches": len(batches),
+                "doi_unqueryable": unqueryable, "listings": len(table.listings),
+                "cached": sum(f.is_cached(u) for u in urls), "requests": 0}  # fmt: skip
+    if offline:
+        key = None
+    elif key is None:
+        key = openalex.api_key(os.environ, repo_dotenv())
+    f = openalex_fetcher(cache, offline=offline, transport=transport, min_interval=min_interval, key=key)
+    with storage.exclusive(cache / openalex.CACHE_DIR):
+        lookups = openalex.harvest(records, f, refresh=refresh, table=table)
+        sha = openalex.write_extract(cache, lookups)
+    works = sum(len(lk.works) for lk in lookups)
+    log.info("openalex_ingested", extra={"extract": sha, "lookups": len(lookups), "works": works,
+                                         "candidates": candidates, "doi_unqueryable": unqueryable,
+                                         "requests": f.stats.network, "cached": f.stats.cached,
+                                         "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+    return {"dry_run": False, "extract": sha, "lookups": len(lookups), "works": works, "candidates": candidates,
+            "doi_unqueryable": unqueryable, "requests": f.stats.network, "cached": f.stats.cached}  # fmt: skip
+
+
 SOURCES: tuple[Crawls[Any], ...] = (
     openreview_v2.CRAWLS,
     openreview_v1.CRAWLS,
