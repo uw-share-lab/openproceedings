@@ -97,7 +97,11 @@ built by another Tantivy, so it strands old indexes whatever `SERVED_SCHEMAS` ho
 (`FIELD_NOT_INDEXED`) and derives the kind it displays from the stored abstract, which is exact only because a
 schema-3 build refuses an OpenAlex abstract. Schema 2 (a verified clause's ids as a term set on the text `id`) is
 gone, with `TantivyEngine.ord_indexed`, the text-`id` `id_set` and its tests and benches; an index of schema 2 is
-refused (`unservable`). A schema 5 first retires schema 3.
+refused (`unservable`). The retirement is done: each of the four schema-2 indexes the data directory held was checked
+with `op index retire --dry-run` (0 pins, no `data/records/` store), and they are deleted locally in milestone C's
+real-data step (spec 03 §Versioning). A schema-3 index is never converted: an OpenAlex-filled snapshot can only be
+indexed at schema 4, so promoting one means building a schema-4 index, and the schema-3 index stays until no record
+pins it. A schema 5 first retires schema 3.
 
 ## Two served tokenizers (decision-033)
 
@@ -126,7 +130,11 @@ bump makes a record claim `reproduced` when its results changed, which is the on
 a systematic review.
 
 Schema and tokenizer are independent index inputs. Build fixtures with explicit `schema_version=` and
-`tokenizer_version=` arguments to `build_index`; every served schema × tokenizer combination must open.
+`tokenizer_version=` arguments to `build_index`; every served schema × tokenizer combination must open: today
+schema 3 × tokenizer 2, schema 3 × tokenizer 3, schema 4 × tokenizer 2 and schema 4 × tokenizer 3 (the tokenizer bump
+test in `test_records.py` is parametrized on schema "3" and "4"; a schema-4 record saved before the build replays
+`reproduced` on its schema-3 index, and the parity check also compares a schema-4 document's stored `abstract_kind`
+with its record's).
 While two schemas are served, both must give identical membership and ranking for each tokenizer; for each schema, records
 pinned to tokenizer 2 must reproduce after tokenizer 3 is served. Keep these checks independent of the
 current defaults (`test_served_schemas.py` and the parametrized bump tests in `test_records.py`).

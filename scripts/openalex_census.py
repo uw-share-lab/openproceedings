@@ -3,7 +3,7 @@ on, and the draft `[[listing]]` rows of `ingest/openalex_sources.toml`. A person
 
 It reads OpenAlex only through `crawl.openalex_fetcher` (api.openalex.org only, the repo's generic User-Agent, one
 request at a time, `openalex.MIN_INTERVAL` apart) and **keyless**: it never reads `OPENALEX_API_KEY` or `.env`, and
-sends no contact address (no `mailto`, no custom User-Agent). Every page lands in `<cache>/openalex/pages`, where
+sends no contact address (no `mailto`, no address in the User-Agent). Every page lands in `<cache>/openalex/pages`, where
 `op ingest openalex` finds the same DOI batches and listings; it writes nothing else. It prints:
 
 1. Auth and budget: whether a keyless request answers 200, and the rate-limit and cost headers it carries (the key,

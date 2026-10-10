@@ -230,6 +230,49 @@ describe("an official count's citation", () => {
         .map((a) => a.getAttribute("href")),
     ).toEqual(["https://example.org/list.pdf", "https://example.org/conf/"]);
   });
+
+  function linksOf(citation: string): { hrefs: (string | null)[]; text: string } {
+    cleanup(); // one render at a time, so a loop over citations sees only its own
+    const data = copy();
+    const vy = data.venue_years[0]!;
+    Object.assign(vy.tracks[0]!, {
+      official_accepted: 10,
+      official_counts: "papers counted on the list",
+      official_citation: citation,
+      official_accessed: "2026-10-10",
+      delta: 0,
+      delta_pct: 0,
+      gated: true,
+      within_gate: true,
+    });
+    render(<CoverageReport coverage={data} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: `Details: track and status for ${vy.venue} ${vy.year}` }),
+    );
+    const official = screen.getByRole("table", {
+      name: `${vy.venue} ${vy.year}: accepted records against the official count`,
+    });
+    return {
+      hrefs: within(official)
+        .queryAllByRole("link")
+        .map((a) => a.getAttribute("href")),
+      text: official.textContent ?? "",
+    };
+  }
+
+  it("links an http(s) URL only: a javascript: string beside one gives exactly one link", () => {
+    const { hrefs, text } = linksOf("javascript:alert(1) and https://ok.org");
+    expect(hrefs).toEqual(["https://ok.org"]);
+    expect(text).toContain("javascript:alert(1) and https://ok.org");
+  });
+
+  it("leaves a sentence's closing punctuation out of the link", () => {
+    for (const mark of [".", ",", ";", ":", ".)"]) {
+      const { hrefs, text } = linksOf(`see https://ok.org/list${mark} Then more`);
+      expect(hrefs, mark).toEqual(["https://ok.org/list"]);
+      expect(text, mark).toContain(`see https://ok.org/list${mark} Then more`);
+    }
+  });
 });
 
 describe("an ungated cell's note (TASK-222, CV-9)", () => {

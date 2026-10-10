@@ -458,11 +458,20 @@ ran 2026-10-10 21:09–21:16 UTC (387 s, of which about 290 s is the offline rep
 - A key, when there is one, goes as `Authorization: Bearer <key>` (`crawl.openalex_fetcher`), never in a URL. The
   answers' `access-control-allow-headers` list `Authorization`.
 
-**Licence.** The API does not state one. The root answer is `{"version", "documentation_url", "msg"}`, and the work
-answers carry only each paper's own `license` field, which is not a data licence. OpenAlex documents its data as
-CC0 on openalex.org. That page is outside the host this census may read, so **the licence is not verified here**,
-and the Licence posture table below keeps OpenAlex as "documented CC0, not re-read". The owner should confirm it
-before Task 15 stores any OpenAlex abstract.
+**Licence (checked by the controller, 2026-10-10).** The API itself states none: its root answer is `{"version",
+"documentation_url", "msg"}`, and a work answer carries only each paper's own `license` field, which is not a data
+licence. The two statements that matter are in OpenAlex's help pages:
+- help.openalex.org (Pricing): the data is "released under a CC0 public-domain license with no 'personal use only'
+  carve-out and no permission to ask".
+- The work-object documentation (https://help.openalex.org/api-entities/works/work-object): "OpenAlex does not ship
+  plaintext abstracts for legal reasons; reconstruct the abstract from the index."
+
+So the data is CC0, but the abstract text is deliberately not shipped: the `abstract_inverted_index` is the form
+OpenAlex releases, and `openalex.rebuild` turns it back into text. The consequence for this project is that serving a
+rebuilt OpenAlex abstract carries **the same copyright posture as serving a publisher's abstract**, not a CC0 one.
+It rests on decision-018 (README §Abstracts on a public instance), the takedown list (a listed paper's abstract is
+withheld whatever its source, so an OpenAlex abstract too) and the pending copyright-office consultation (TASK-135).
+The `abstract_kind` label and filter let a review see and exclude these abstracts.
 
 ### The DOI route (AIES 2018–2023, FAccT, two AAAI 2020 records)
 
@@ -591,7 +600,8 @@ records at `none`, 3,648 of them AAAI 1980–2008.
     index of the real 1984 page reads as a dense one in the fixture.
   - `test_openalex_recorded.py` pins them to the parser, the rebuild and the shipped table.
 - **For the owner:**
-  1. Confirm the OpenAlex data licence (CC0) on openalex.org. It was not readable here.
+  1. The OpenAlex licence is settled (§OpenAlex, Licence): CC0 data, abstracts rebuilt from the index under
+     the publisher-abstract posture.
   2. Decide whether a key holding CR/LF (117 old AAAI works) should be split or stripped rather than refused. That
      would be a rule change in `openalex.rebuild`, and the extract keeps the raw index, so no refetch is needed.
   3. Note that the `works` counts are a live total. If OpenAlex adds or merges a work under S4306420577 for a
@@ -611,7 +621,7 @@ project's position is decision-018 (README §Abstracts on a public instance).
 | Crossref (FAccT 2019–2026, AIES 2018–2023) | not read: milestone B takes titles, authors and DOIs from it and no abstract (it holds none for these DOIs) | not checked (2026-10-10, no network in the review) |
 | PMLR v81 (FAccT 2018) | PMLR's CC BY 4.0, as README states for its volumes (known from ICML 2017, v70); v81's own page not read for it | 2026-10-10 *(v81 unverified)* |
 | the pinned dblp release | CC0, as spec 01 records for the Dagstuhl DROPS release (titles, no abstracts; decision-047, and AAAI 1980–2008 in milestone B) | spec 01's record of the release page; not re-read 2026-10-10 |
-| OpenAlex (milestone C fallback) | documented as CC0 on openalex.org; the API states no licence (§OpenAlex), and openalex.org was outside the census's one host, so it is not re-read: the owner confirms it before Task 15 stores any abstract | 2026-10-10: API only |
+| OpenAlex (milestone C fallback) | CC0 for the data, "with no 'personal use only' carve-out and no permission to ask" (help.openalex.org, Pricing); abstracts are not shipped as text "for legal reasons" and are rebuilt from the inverted index (the work-object docs). A rebuilt abstract is served on the publisher-abstract posture: decision-018, the takedown list and TASK-135 | 2026-10-10: controller read both help pages |
 
 **Index versus fixtures.** The live index stores and shows an OJS abstract with its attribution ("AAAI Digital
 Library") and a link to the paper's own page on ojs.aaai.org, never the full text, on decision-018's fair-dealing

@@ -16,7 +16,7 @@ near       = operand , "NEAR/" , INT , operand ;
 field_term = FIELD , ":" , ( term | "(" , or_expr , ")" | range ) ;
 term       = PHRASE | WORD ;                                  (* WORD may contain * or $ *)
 range      = INT , ".." , INT ;
-FIELD      = "title" | "abstract" | "venue" | "year" | "track" | "status" | "source" ;
+FIELD      = "title" | "abstract" | "venue" | "year" | "track" | "status" | "abstract_kind" | "source" ;
 ```
 Code: `backend/src/openproceedings/query/{lexer,parser,ast,canonical}.py`.
 
@@ -41,7 +41,7 @@ Code: `backend/src/openproceedings/query/{lexer,parser,ast,canonical}.py`.
 
 ## Fields
 (none) → title OR abstract · `title:` · `abstract:` · `venue:` (NeurIPS, ICLR, ICML, AAAI, AIES, FAccT, IASEAI; case-insensitive, exact) ·
-`year:` · `track:` (01 taxonomy; unknown value → error listing valid values) · `status:` · `source:`
+`year:` · `track:` (01 taxonomy; unknown value → error listing valid values) · `status:` · `abstract_kind:` (`official`, `openalex`, `none`; decision-049, milestone C: a filter on where the abstract came from, never text, no default; an index of schema 3 refuses it with `FIELD_NOT_INDEXED`, 422) · `source:`
 (compat alias, see `.claude/skills/scholar-syntax-compat/SKILL.md`). Anything else before `:` → unknown-field error.
 
 ## AST
@@ -58,7 +58,7 @@ returns `ast=None` exactly when `errors` is non-empty, never raises (property-te
 `canonical` (`query/canonical.py`, spec 02 §Outputs) is: flattened, fully parenthesised, uppercase operators (`|` → `OR`, juxtaposition → `AND`, `-` → `NOT`),
 default filters made explicit (`.claude/skills/default-filters/SKILL.md`), wildcards kept
 **unexpanded** (`benchmark*`, not its expansion — the expansion belongs to an `index_version`).
-Top-level filters are ordered `venue`, `year`, `track`, `status`, then any other field alphabetically; the
+Top-level filters are ordered `venue`, `year`, `track`, `status`, `abstract_kind` (the last field of `FILTER_FIELDS`), then any other field alphabetically; the
 values in a single-field OR group are sorted; one spelling per value (e.g. `venue:NeurIPS`). Decision-001
 records this; snapshot tests pin it.
 

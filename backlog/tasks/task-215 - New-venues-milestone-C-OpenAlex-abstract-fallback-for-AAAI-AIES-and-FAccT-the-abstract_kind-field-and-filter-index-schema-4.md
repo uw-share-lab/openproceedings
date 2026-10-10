@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-10 03:47'
-updated_date: '2026-10-10 21:50'
+updated_date: '2026-10-10 22:05'
 labels:
   - ingest
   - query
@@ -24,7 +24,7 @@ Milestone C of docs/plans/2026-10-09-new-venues-design.md: sources/openalex.py f
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 No official abstract is ever replaced; NeurIPS/ICLR/ICML untouched
-- [ ] #2 abstract_kind: filters identically in Tantivy and the reference matcher
+- [x] #1 No official abstract is ever replaced; NeurIPS/ICLR/ICML untouched
+- [x] #2 abstract_kind: filters identically in Tantivy and the reference matcher
 - [x] #3 OpenAlex fidelity audit written to docs/results
 <!-- AC:END -->

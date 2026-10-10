@@ -551,7 +551,7 @@ class UngatedNote:
 
 _NOT_FOUND = (
     "no official accepted count was found: the only figure, {}, comes from the chairs' notification email as "
-    "quoted on other sites and from paper trackers, and it appears to count the main technical track alone, while "
+    "quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while "
     "this main track also holds the special tracks"
 )
 

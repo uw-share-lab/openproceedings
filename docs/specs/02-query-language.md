@@ -240,6 +240,7 @@ Rules:
 | `year:` | filter | `2024`, `2020..2026` (inclusive) |
 | `track:` | filter | 01 taxonomy (`main`, `datasets_benchmarks`, `workshop`, `student_abstract`, `consortium`, `demo`, `iaai`, `eaai`, …; the last two are AAAI-only). `datasets_benchmarks` includes NeurIPS 2026's renamed `Evaluations_and_Datasets_Track`, and `position` includes the NeurIPS and ICML position-paper tracks (TASK-094) |
 | `status:` | filter | `accepted`, `rejected`, `withdrawn`, … |
+| `abstract_kind:` | filter | `official`, `openalex`, `none` (`vocab.ABSTRACT_KINDS`; decision-049, milestone C): where a record's abstract came from (01 §Record schema, `abstract_kind`). Case-insensitive, exact. **No default**: a query without it counts every value. A filter and never text, so `abstract_kind:openalex` matches the kind, not a paper that says "openalex" (guarantee 2). The index must hold it: an index of schema 4 does, one of schema 3 does not, and a query naming it on a schema-3 index is refused with `FIELD_NOT_INDEXED` (HTTP 422) by every route that runs the query (`/search`, `/export`, `/records`, `/compare`, `GET /papers/{id}?q=`); `/parse` is engine-free and accepts it. |
 | `source:` | compat | Scholar-style. Mapped to `venue:` through an alias table ("neural information processing systems", "PMLR" → ICML *with a warning* because PMLR hosts other venues). Unknown values are errors, never silent substrings. The AAAI, AIES and IASEAI aliases are `aaai` and "association for the advancement of artificial intelligence" → AAAI, `aies` → AIES, `facct` → FAccT and `iaseai` → IASEAI; there is no `fat*` alias (the token contract reads `FAT*` as a wildcard stem). |
 
 ### Default filters
@@ -312,7 +313,8 @@ is `query/clauses.py::filter_clauses(q, parse(q, mode))`, a separate function ra
 field, because it parses the edited string, which `/search` and replay don't need.
 
 ```python
-ParsedFilters = {venue: ParsedClause, year: ParsedYearClause, track: ParsedClause, status: ParsedClause}
+ParsedFilters = {venue: ParsedClause, year: ParsedYearClause, track: ParsedClause, status: ParsedClause,
+                 abstract_kind: ParsedClause}
 ParsedClause  = {field, negated: bool, span: [start, end] | None, toggleable: bool,
                  reason: ClauseReason | None, blocking_spans: [[start, end]],
                  values: [str] | None}                                       # sorted
@@ -509,7 +511,7 @@ ParseResult = {               # `query/parser.py`; every Optional below is None 
   ast: Node | None,            # the tree as typed (spans into q): Or, And, Not, Term, Phrase, Near, Wildcard, Filter
   effective_ast: Node | None,  # canonical tree with the default filters: what the engine runs
   canonical: str | None,       # render(effective_ast): fully parenthesised, uppercase operators, defaults
-                               #   explicit, filters ordered venue, year, track, status (§Canonical form)
+                               #   explicit, filters ordered venue, year, track, status, abstract_kind (§Canonical form)
   canonical_hash: str | None,
   identification_query: str | None,  # canonical without default conjuncts; "" = every record
   identification_ast: Node | None,    # the same set as a tree (None = every record): what counts use
@@ -542,7 +544,7 @@ keep their written order; a bare term that a sibling filter's field could read a
 words count toward a wildcard's stem). Semantically equal spellings
 (`trust venue:ICLR`, `venue:iclr Trust`) therefore share one hash. `QUERY_VERSION`
 (`openproceedings.query`) is `"2"` (decision-008: canonical overflow and folded-piece wildcard detachment; decision-028 left it at
-`"2"`, since refusing a range glued to `(` changes no canonical string).
+`"2"`, since refusing a range glued to `(` changes no canonical string). Milestone C's `abstract_kind:` left it at `"2"` too: before it, a query naming the field was a `FIELD_UNKNOWN` error, so no query that parsed changes meaning or canonical form, and the parse goldens pin that every existing canonical string is unchanged. The new field is last in the filter order, so a query that writes it gets `… AND status:accepted AND abstract_kind:openalex` (several values: `abstract_kind:(none OR openalex)`).
 
 ## Error handling
 

@@ -217,15 +217,19 @@ function Official({ track }: { track: Track }) {
 function Citation({ text }: { text: string }) {
   return (
     <>
-      {text.split(/(https?:\/\/[^\s)]+)/).map((part, i) =>
-        i % 2 === 1 ? (
-          <a key={i} className="underline underline-offset-4" href={part}>
-            {part}
-          </a>
-        ) : (
-          part
-        ),
-      )}
+      {text.split(/(https?:\/\/[^\s)]+)/).map((part, i) => {
+        if (i % 2 === 0) return part;
+        // sentence punctuation after a URL belongs to the sentence, not the link
+        const url = part.replace(/[.,;:]+$/, "");
+        return (
+          <Fragment key={i}>
+            <a className="underline underline-offset-4" href={url}>
+              {url}
+            </a>
+            {part.slice(url.length)}
+          </Fragment>
+        );
+      })}
     </>
   );
 }

@@ -108,7 +108,7 @@ reviews without the UI.
 | `GET` | `/records/{id}/diff` | For a record of any status: added and removed ids (with titles, tracks and statuses; each removed one with its cause, and a per-cause tally, TASK-227), paged, and which `index_version` inputs changed (empty unless `drifted`) |
 | `POST` | `/compare` | `q, mode` and a RIS file as the body → which of the file's papers the query's result keeps, drops (and why) and adds, and which the index doesn't hold (§Comparing with a RIS file; TASK-177). Off unless the operator turned it on |
 | `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date, what kind its window is and whether its counts are citable; per venue-year the statuses indexed, per venue × year × track the spec 07 §C cell (official count, delta, gate) |
-| `GET` | `/meta` | Current and servable `index_version`s, the field names and the venue, track and status vocabularies (these feed the UI's autocomplete), and this instance's query `limits`; `limits.compare` holds `POST /compare`'s caps, or null when comparisons are off |
+| `GET` | `/meta` | Current and servable `index_version`s, the field names and the venue, track, status and `abstract_kind` vocabularies (these feed the UI's autocomplete), and this instance's query `limits`; `limits.compare` holds `POST /compare`'s caps, or null when comparisons are off |
 | `GET` | `/healthz` | Liveness and whether the index is loaded |
 | `GET` | `/near-misses` | **M5 only, deferred** (not in v1, decision-017): the semantic suggestion panel, a separate resource (see 06) |
 
@@ -128,7 +128,7 @@ reviews without the UI.
                 "status": { "rejected": 88, "unknown": 0 } },
   "identified_total": 716,
   "unclassified_total": 0,
-  "facets": { "venue": {...}, "year": {...}, "track": {...}, "status": {...} },
+  "facets": { "venue": {...}, "year": {...}, "track": {...}, "status": {...}, "abstract_kind": {...} },
   "groups": { "counts": [ { "span": [0, 19], "total": 1873, "total_without": 2410 },
                           { "span": [24, 33], "total": 2410, "total_without": 1873 } ],
               "groups_total": 2, "limit": 10, "not_counted": null },
@@ -137,7 +137,7 @@ reviews without the UI.
               "highlights": { "title": [[0,5]], "abstract": [[102,114]] }, "urls": {...},
               "abstract_source": { "source": "ris", "origin": "pmlr",
                                    "url": "https://proceedings.mlr.press/v202/…html" },
-              "abstract_withheld": false, "twins": [], "abstract_note": null } ]
+              "abstract_withheld": false, "twins": [], "abstract_note": null, "abstract_kind": "official" } ]
 }
 ```
 
@@ -163,9 +163,14 @@ can attribute it:
   `GET /papers/{id}` lists it). `ris` means it came through an imported RIS file (the Google Scholar
   bootstrap), which is most of the served corpus.
 - `origin`: the site that published it, an open set (`openreview`, `neurips_proceedings`, `iclr_proceedings`,
-  `pmlr`, `iclr_archive`, `icml_site`; `iclr_archive` can't occur yet, since the ICLR archive supplies no abstracts;
-  `icml_site` is an official ICML conference page, for ICML 1988–2012, decision-047, and its `url` is the page as
-  fetched: live, or the Internet Archive capture, `https://web.archive.org/web/<timestamp>id_/<page>`). A direct
+  `pmlr`, `iclr_archive`, `icml_site`, `ojs`, `crossref`, `facct_site`, `openalex`; `iclr_archive` can't occur yet,
+  since the ICLR archive supplies no abstracts; `icml_site` is an official ICML conference page, for ICML 1988–2012,
+  decision-047, and its `url` is the page as fetched: live, or the Internet Archive capture,
+  `https://web.archive.org/web/<timestamp>id_/<page>`; `ojs` is the AAAI Digital Library (AAAI, AIES and IASEAI) and
+  `crossref` and `facct_site` are FAccT and AIES (ACM proceedings via Crossref, the official FAccT pages), each with
+  the paper's own page or DOI link as `url`, decision-049; **`openalex`** is an AAAI, AIES or FAccT abstract no
+  official source gives, filled from OpenAlex (decision-049, milestone C), whose `url` is the paper's own page
+  (`urls.proceedings`), never OpenAlex's API; `api/models.py::ORIGIN_DOC` is the schema's wording). A direct
   claim maps to its site. A `ris` claim's evidence names its route (`scholarmend:<route> <evidence>`,
   `ingest/ris.py`): `openreview_api` → `openreview`; `proceedings_page` → the site its evidence url's host
   names (NeurIPS, ICLR or PMLR proceedings), or `urls.proceedings`'s when the evidence has no url. Null when
@@ -197,7 +202,7 @@ abstract is null or withheld (a takedown). `GET /papers/{id}` carries the same `
 source), `openalex` (filled from OpenAlex, only for an AAAI, AIES or FAccT paper no official source gives one) or
 `none` (no abstract, or one withheld by a takedown). `GET /papers/{id}` carries it on `paper` (a derived field, like
 `venue_name`). `facets.abstract_kind` counts it like the other facets, and is null on an index of schema 3, which holds
-no such field (a query naming `abstract_kind:` on one is 422 `FIELD_NOT_INDEXED`). `GET /meta` `values.abstract_kind`
+no such field (a query naming `abstract_kind:` on one is 422 `FIELD_NOT_INDEXED`, spec 03 §Versioning). `GET /meta` `values.abstract_kind`
 lists the three values.
 
 `excluded` always has this shape: `total` (= the `identification_ast` count − `total`, 03 §Exclusion
@@ -410,7 +415,7 @@ route execution.
   text out. The attribution is the record's `Attribution` from the exported index's snapshot, computed once
   when the snapshot is loaded (`RecordFile.attributions`, `ingest/dedup.py::attribution`), the same one
   `GET /search` sends as `abstract_source`; nothing recomputes it. `<site>` is the results list's name for the
-  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`, `ICML conference site`, `AAAI Digital Library` (ojs.aaai.org: AAAI, AIES and IASEAI, decision-049), `Crossref` and `FAccT conference site` (decision-049, milestone B: Crossref's records of the ACM proceedings, and the official FAccT pages; Crossref carries no abstract today, so a FAccT abstract's origin is `facct_site`, and both link the paper's DOI);
+  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`, `ICML conference site`, `AAAI Digital Library` (ojs.aaai.org: AAAI, AIES and IASEAI, decision-049), `Crossref` and `FAccT conference site` (decision-049, milestone B: Crossref's records of the ACM proceedings, and the official FAccT pages; Crossref carries no abstract today, so a FAccT abstract's origin is `facct_site`, and both link the paper's DOI) and `OpenAlex` (decision-049, milestone C: an abstract filled from OpenAlex, linking the paper's own page, so the RIS line reads `N1  - Abstract source: OpenAlex <paper's page>`; the design said "the work's URL", but a reader who follows the link should reach the paper, not OpenAlex's API, so the claim's own API url is kept in the provenance only);
   `export.ORIGIN_NAMES`,
   pinned equal to `hit-item.tsx`'s), plus ` (via RIS import)` when the claim came through an imported RIS file;
   a route that names no known site reads `an imported RIS file`; the url is left out when there is none.
@@ -423,7 +428,9 @@ route execution.
   | JSONL | `abstract_source`: `{source, origin, url}` (the `/search` hit's object) or null; `abstract_withheld`: a boolean | `"abstract_source": {"origin": "pmlr", "source": "pmlr", "url": "https://proceedings.mlr.press/v202/okafor23a.html"}, "abstract_withheld": false` |
 
   TASK-136 appends one more CSV column and JSONL key, `abstract_withheld_reason` (below, **Withheld by a
-  takedown**).
+  takedown**). Milestone C appends the last CSV column, `abstract_kind` (`official`, `openalex` or `none`; JSONL the
+  same key on every record), read from the index's display record; a withheld record's is `none` in both, as in a
+  hit and a paper. An OpenAlex abstract's `abstract_source` is `openalex` and its `abstract_origin` is `openalex`.
 
   A record with no abstract, or whose abstract no claim holds (synthetic fixtures), names nothing: no `N1`, no
   field, three empty CSV cells, JSONL null. **Additive** under
@@ -1051,6 +1058,7 @@ once released: changing one is a breaking change under `/api/v1`.
 |---|---|---|
 | Query does not parse, uses an unknown field or value, or has a bad wildcard (incl. more than 200 expansions) (on endpoints that run the query) | 422 | `PARSE_*`, `FIELD_*`, `WILDCARD_*` (diagnostics carry the spans); a query over 2,000 code points is `PARSE_TOO_LONG`, rejected before parsing, and so is one whose canonical form is over 2,000 code points, refused after canonicalising (decision-008) |
 | A parameter is invalid (bad `sort`, `limit` > 200, unknown `format`, a malformed paper or record id), unknown to the route, or given twice; or a body is malformed. The message names at most 5 problems (more are counted) and never the value; each location is quoted between backticks through `diagnostics.clip`, since a parameter name or body key is the client's own text (TASK-143) | 422 | `API_BAD_PARAM` |
+| A query names a filter field the served index does not hold: `abstract_kind:` on an index of schema 3 (decision-049, milestone C; spec 03 §Versioning). The message names the field and the index; `/parse` accepts it. Every route that runs the query refuses it before any work: `/search`, `/export`, `POST /records`, `POST /compare`, `GET /papers/{id}?q=` | 422 | `FIELD_NOT_INDEXED` |
 | Paper or search record not found (a well-formed id) | 404 | `API_PAPER_NOT_FOUND` / `API_RECORD_NOT_FOUND` |
 | A pinned `index_version` is not available on this instance (an export's; a record save's `index_version` that is not the served index, TASK-091) | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
 | Export requested for a record whose replay status is `mismatch` | 409 | `API_RECORD_MISMATCH` |
@@ -1428,7 +1436,14 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   listed since), never counted in `abstract_missing`. TASK-222 adds, additively, each track's `gate_note` and
   `gate_note_citation`: for an ungated cell, why it has no official count to gate on and where that comes from
   (`official_counts.UNGATED_NOTES`, the copy of `docs/results/coverage-sources.md` §Ungated cells with a note);
-  both null for a gated cell and for a cell without a note.
+  both null for a gated cell and for a cell without a note. Decision-049 (milestone C) adds, additively, `abstract_official` and
+  `abstract_openalex` to the totals, each venue-year and each track, 0 included: the records with an abstract from
+  an official source and the records whose abstract OpenAlex filled, so that `abstract_official + abstract_openalex +
+  abstract_missing + abstract_withheld = records` in every cell. They come from the manifest's `abstract_openalex`
+  and `abstract_openalex_by_track` (spec 01 §Pipeline 4), which are absent when OpenAlex filled nothing, and a
+  takedown listed since the build moves a listed record out of the bucket its kind was in (OpenAlex's or
+  official) into `abstract_withheld`. A manifest whose OpenAlex counts disagree with the records fails the load
+  (`abstract_openalex_mismatch`).
   - The numbers are the manifest of the snapshot the served index was built from (`counts`,
     `abstract_missing`, `unknown_track`, `record_count`: counted from the records once, at snapshot build),
     reshaped by `coverage.breakdown`, which never recounts; the one serve-time adjustment is the takedown
@@ -1452,7 +1467,7 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     vocabulary, a manifest that disagrees with the records, a missing or different snapshot, or a record
     count that differs from the index's document count. The reasons are `snapshot_missing`,
     `snapshot_unreadable`, `snapshot_hash_mismatch`, `index_manifest_invalid`, `manifest_invalid`,
-    `counts_mismatch`, `abstract_missing_mismatch`, `abstract_withheld_mismatch`, `track_facts_mismatch`,
+    `counts_mismatch`, `abstract_missing_mismatch`, `abstract_openalex_mismatch`, `abstract_withheld_mismatch`, `track_facts_mismatch`,
     `doc_count_mismatch`, `withheld_invalid` and `withheld_abstract_present` (the snapshot's withheld ids), and
     the takedown list's `takedowns_invalid`, `takedowns_unreadable` and `takedowns_missing`. A snapshot whose
     merges.csv doesn't match its manifest does not fail the load: the list applies without that snapshot's

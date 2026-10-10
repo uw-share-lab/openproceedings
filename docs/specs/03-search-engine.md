@@ -216,7 +216,10 @@ change was kept by owner decision, since it is exact and replay-safe (decision-0
 
 Schema 2 was retired (decision-049 milestone C) once no search record pinned a schema-2 index: every served index
 was rebuilt at schema 3, `current` repointed, and each schema-2 version checked with `op index retire --dry-run`
-(0 pins). Its path and tests are dropped from the code; any other schema is refused (`unservable`).
+(0 pins). Its path and tests are dropped from the code; any other schema is refused (`unservable`). The four
+schema-2 indexes the real data directory held (05a0541717f6, 6508b8cf66ff, a7cfd04b656f and c76d7f26ee06) are
+deleted locally in milestone C's real-data step, with the owner's approval of 2026-10-10 (no `data/records/` store
+existed, so nothing pinned them). Served schemas are now 3 and 4, in that order of age; the one the code writes is 4.
 
 **Schema 4 (decision-049 milestone C).** New indexes store the record's derived `abstract_kind` as a raw fast field,
 so `abstract_kind:` filters and facets. `SERVED_SCHEMAS` is `{"3": SchemaForm(abstract_kind=False), "4":
@@ -250,6 +253,12 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
   exclusion accounting and each concept group's counts at the instance's default bounds, 04 §SearchResponse
   `groups`; `docs/results/2026-10-06-bench-group-counts.md`), and under 300 ms for `match_ids` with
   exclusion accounting.
+- **Milestone C re-measurement (decision-049).** Schema 4 aggregates five fields instead of four, so a base can
+  have up to three times schema 3's combinations (`MAX_FACET_COMBOS` 300,000), and a first page's facets and counts
+  are measured again on the new index with `tests.bench.group_counts_report` (from `backend/`, on a copy of the
+  index) and `tests.bench.report_80k`. A run counts only when the machine's 1-minute load average is under 5 at
+  its start and its end. The citable group-count report is `docs/results/<date>-bench-group-counts.md`, written by
+  that command and never edited by hand; the milestone's reports are linked from `docs/README.md`.
 - A wildcard expansion of up to 200 terms: under 50 ms.
 - **Group counts, as measured (TASK-197, closing decision-039's exception):** every Trust-Evals string's cold
   first page (the facet memo forgotten) with its group counts is within the 100 ms search budget on index

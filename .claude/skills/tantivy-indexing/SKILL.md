@@ -12,6 +12,7 @@ description: The Tantivy index standard for openproceedings — the schema table
 | `title` | text, freqs + positions | ✓ | ✓ | | pre-normalized tokens joined by `" "` |
 | `abstract` | text, freqs + positions | ✓ | ✓ | | same; a missing abstract is `""`, never omitted |
 | `venue`, `track`, `status` | text, `raw` (facet) | ✓ | ✓ | ✓ | one spelling per value, fixed by the ingest vocabulary |
+| `abstract_kind` | text, `raw` (facet) | ✓ (schema 4) | ✓ | ✓ | the record's **derived** `official` / `openalex` / `none` (`SchemaForm(abstract_kind=True)`, decision-049); schema 3 has no such field; read from `PaperRecord.abstract_kind`, never re-derived in the build, and `op index parity` compares each stored value with the record's |
 | `year` | u64 | ✓ | ✓ | ✓ | `RangeQuery` target |
 | `ord` | u64 | ✓ (schema 3) | | ✓ | the record's position in id order; `ids.txt` (hashed with the index) maps it back, so a match set reads as ids without fetching documents; indexed from schema 3, so a verified clause names its ids as a u64 term set (TASK-167) |
 | `title_rank` | u64 | | | ✓ | the record's position in (casefold(NFKC(display title)), id) order (`title_key`), for `sort=title` |
@@ -19,8 +20,15 @@ description: The Tantivy index standard for openproceedings — the schema table
 
 Positions are mandatory on `title`/`abstract` (phrases, NEAR, highlights). Any change to this table bumps
 `SCHEMA_VERSION` (`.claude/skills/index-versioning/SKILL.md`), and the code keeps serving the previous schema
-(`SERVED_SCHEMAS`) until no search record pins an index built with it: `schema(version)` builds either one (the
-older one only in tests), and the engine picks its path from the manifest (`TantivyEngine.ord_indexed`).
+(`SERVED_SCHEMAS`: now 3 and 4) until no search record pins an index built with it: `schema(version)` builds either one
+(the older one only in tests), and the engine reads its `SchemaForm` from the manifest (`form.facets`: its raw fast text
+fields, so its `filter_fields` and its facet `combo`; schema 2's `ord_indexed` is gone with schema 2).
+
+**The schema-3 build guard.** A schema-3 build refuses a record whose abstract is OpenAlex's (`IndexBuildError`, "needs
+index schema 4"), before any token check: a schema-3 index holds no `abstract_kind`, so it derives the kind it shows from the
+stored abstract (`none` or `official`), which is exact only because that guard keeps an OpenAlex abstract out. An
+OpenAlex-filled snapshot is therefore indexed at schema 4 only. A schema-3 engine refuses a query naming `abstract_kind:`
+(`FIELD_NOT_INDEXED`, 422; `TantivyEngine.admit`).
 
 ## Analyzer: `exact_v1`
 - The index is fed the output of `query/normalize.py::normalize()` joined by single spaces

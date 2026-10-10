@@ -231,7 +231,7 @@ list. The other cells are recorded, not gated, and each carries a cited **ungate
 `/coverage`, a section of the report; `official_counts.UNGATED_NOTES`, TASK-222): AAAI 2011's list leaves out the
 Robotics Program our `main` holds (240 against 248); AAAI 2016's list matches the proceedings section by section, so
 it appears to be derived from them and a gate on it would check nothing; AAAI 2022–2026 have only chairs' emails
-quoted elsewhere and aggregator figures, which are never a row and seem to count the main technical track alone;
+quoted elsewhere and third-party paper trackers' figures, which are never a row and seem to count the main technical track alone;
 IASEAI 2026's front matter states 92 accepted research papers, but 35 of them are non-archival and unpublished on
 OJS, so 57 indexed against 92 would fail the ±1% gate for a reason the index cannot repair. The research note
 classifies every venue-year (`docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md` §Official counts). Each OJS volume's listed
@@ -256,10 +256,23 @@ accepted papers without a stated count, and its 2025 and 2026 lists hold non-arc
 217 and 325 rows against 206 and 314 DOIs), so even a stated figure would likely be a definition mismatch with our
 `main`. The research note's §Official counts says the same. Cross-venue counts still compare venues over different year
 spans (AAAI from 1980, NeurIPS from 1987, ICML from 1988, ICLR from 2013, AIES and FAccT from 2018, IASEAI 2026).
-OpenAlex's abstract fallback and `abstract_kind:` are milestone C, planned ([design](../plans/2026-10-09-new-venues-design.md)).
+**Where abstracts come from (decision-049, milestone C).** AAAI, AIES and FAccT records that no official source gives an
+abstract are filled from OpenAlex where it has one (spec 01 §Sources, OpenAlex row), and the coverage report and
+`/coverage` count them apart: every cell, venue-year and the totals carry **Official abstract** and **OpenAlex
+abstract** columns beside **No abstract** (and the withheld count, when there is one), so that official + OpenAlex +
+missing + withheld = records. The database-scope line says, for AAAI, that 1980–2008 comes with no abstract from dblp
+and that OpenAlex's is filled in where no official AAAI source gives one, and, when a snapshot holds any, it adds how
+many abstracts (and for which venues) are OpenAlex's, labelled `abstract_kind:openalex`; a snapshot OpenAlex filled
+nothing in reads as it did. The coverage numbers come from the manifest's `abstract_openalex` and
+`abstract_openalex_by_track`, which the load checks against the records. How faithful those abstracts are is §G.
 The source of statuses indexed is spec 01's source table as `ingest/statuses.py` holds it (spec 01
 §Pipeline 5); the snapshot manifest records them per venue-year, and the missing abstracts and sources per
 cell (manifest format 2, TASK-082).
+**Ungated cells with a note (TASK-222).** `op eval coverage` ends with a section "Ungated cells with a note": one line per
+cell `GET /coverage` serves with a `gate_note`, `- <V> <Y> <track>: <note> (source: <citation>)`, or "None: no ungated
+cell in this snapshot has a note." when there is none. The notes are `official_counts.UNGATED_NOTES`, whose cited
+copy is `docs/results/coverage-sources.md` §Ungated cells with a note (a test keeps the two equal); a note may not sit
+on a gated cell. `/coverage` shows the same text under the track's row (copy CV-9).
 The methods text cites the coverage report (with its snapshot hash) as the database-scope caveat. Under its header
 the report states each venue's indexed years, and, when the snapshot holds the dblp release, that ICML 1988–2012
 rests on that pinned bibliography and official ICML pages rather than a crawl on the window's dates. It also says
@@ -353,6 +366,56 @@ of 200 rounds, cited only at a 1-minute load under 5 at the start and the end), 
 This is 06's recall@25 protocol, using the review's Covidence included set as ground truth. Deferred with
 06 (decision-017): v1 is Boolean search only, so neither this report nor §A's semantic invariant is a v1
 release gate. Both become required when the semantic layer is built.
+
+## G. OpenAlex abstract fidelity (report, `op eval openalex`)
+
+OpenAlex fills an abstract only where every official source gave none (spec 01 §Sources), so on the records it fills
+there is no official text to check it against. The audit measures it where both exist, and writes
+`docs/results/<date>-openalex-audit.md` (the milestone's report is
+[2026-10-10-openalex-audit.md](../results/2026-10-10-openalex-audit.md), on snapshot `2026-10-10-9efa49481112`).
+It feeds nothing: it writes no extract, touches no snapshot and gates nothing, and the rates are not thresholds.
+
+**Method (`eval/openalex_audit.py`).**
+- **The DOI route.** Every record of FAccT 2022, 2025 and 2026 and AIES 2024 and 2025 with an official abstract and a
+  DOI (FAccT's official abstracts are the conference site's; AIES's are ojs.aaai.org's), and a seeded sample (seed 49,
+  1,000 in id order) of the 25,124 such AAAI 2010+ records. Each venue-year's DOIs are looked up in OpenAlex in sorted
+  batches of 50, exactly as `op ingest openalex` looks them up (`openalex.doi_lookups`, halving included), each work's
+  `abstract_inverted_index` is rebuilt and cleaned by the fill's own rules (`openalex.abstract_of`), and the text is
+  compared with the official one. A work returned for a DOI that was not asked is counted and never compared.
+- **Classes.** `exact` (equal once whitespace is collapsed); `near_exact` (the same search tokens under the token
+  contract, so every search matches both alike); `truncated` (OpenAlex's tokens a strict prefix of the official
+  ones); `similar` (a token `SequenceMatcher` ratio of at least 0.9); `differs`. Beside these, a record's outcome can
+  be `no_abstract` (OpenAlex has the work but no abstract), `no_openalex` (no work for the DOI; kept apart from
+  `no_abstract`), `refused` (the rebuild or cleaning refused it, the reasons listed) or `duplicate` (several works with differing
+  texts; several with one text are compared once). Every rate is of the records compared in its row, and the report
+  quotes no abstract text: records are named by id.
+- **The title route.** AAAI 1980–2008 has no DOI, so the fill matches by exact title key and year in the listing
+  (spec 01). The fill is replayed over the cached listings and **every** title-route attach (1,061) is checked
+  against OpenAlex's authors for the work (one request per 50 works): the years must match (they do by
+  construction) and the author lists must share a surname (surnames compared without marks or case, dblp's
+  homonym numbers and Jr./II suffixes dropped, `Last, First` handled); `agree`, `wrong` (OpenAlex lists authors and
+  none is ours) or `unverifiable` (an empty list on either side). The report lists each `wrong` one and the rules
+  that would exclude it, with what each rule costs, and counts how many have a near-spelling first-author surname.
+- **Reproducibility.** The fetcher is the one OpenAlex fetcher and cache (api.openalex.org only, one request a second,
+  keyless, no contact address). The reproduction command in the report starts `op eval openalex --offline …` and
+  carries `--date` and the controller's `--ruling`, so a re-run from the cache makes no request and renders the same
+  bytes. Flags: `--snapshot` (default: the current index's), `--aaai-sample`, `--title-sample`, `--seed`, `--offline`,
+  `--out`, `--date`, `--ruling`. The command holds the `<cache>/openalex` lock.
+
+**The rates (2026-10-10, 2,122 records compared).** Exact or near-exact for 83.1% (exact 72.8%, near-exact 10.3%); 1.7%
+truncated, 9.6% similar, 3.8% differs (81), 1.6% no abstract at OpenAlex; no refusal, no missing work. By venue:
+AAAI 2010+ 99.3% exact or near-exact (991 exact, 2 near-exact of 1,000), AIES 2024 and 2025 100%, and FAccT far lower:
+2022 23.1% (14.8% exact), 2025 59.2%, 2026 53.6%. **FAccT's difference looks like a different version, not noise**:
+its `similar` and `differs` cases are mostly the same length and open with the same words, so OpenAlex often carries
+ACM's published version of an abstract, not the conference site's text (a few are entirely different texts). An
+abstract the fill takes from OpenAlex is labelled `abstract_kind: openalex`, never `official`, which already tells
+a reader it is OpenAlex's, possibly ACM's version; the label is how a review excludes them.
+
+**The title route's result.** 1,052 of 1,061 attaches agree (99.2%); 9 look wrong (0.8%), none is unverifiable.
+Seven of the nine are spelling or OCR variants of the same surname (for example kender/render, pentland/pentlaud), so
+a surname rule would mostly drop correct attaches (requiring a shared surname excludes exactly the 9; requiring the
+first author to match also excludes 8 that agree on another author). **Ruling (controller, 2026-10-10): keep the exact
+title-key and year rule**; the residual wrong-attach risk is at most 2 of 1,061.
 
 ## Error handling
 

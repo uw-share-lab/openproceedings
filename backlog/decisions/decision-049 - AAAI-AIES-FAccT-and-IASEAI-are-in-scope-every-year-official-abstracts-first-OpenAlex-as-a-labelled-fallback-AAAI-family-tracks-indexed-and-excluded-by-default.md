@@ -56,8 +56,27 @@ NAACL, CHI and CSCW remain out of scope for now.
   keynotes are in `main`. No source was added for the scheduled crawl's `facct-site` target: it is folded into
   `crossref`. Spec 01 §Sources has the rows; the design's "Milestone B as built" note records where the build
   departs from the plan.
-- **Milestone C (planned):** the OpenAlex abstract fill, `abstract_kind` and its filter (index schema 4),
-  the coverage and abstract-origin copy, the snapshot and index build, and the benchmarks at the larger size.
+- **Milestone C (built, 2026-10-10):** the OpenAlex abstract fill (`sources/openalex.py`, `openalex_table.py` with
+  `openalex_sources.toml`, `op ingest openalex`, last in a full crawl; `OPENALEX_API_KEY` optional, no contact address
+  sent), `abstract_kind` and its `abstract_kind:` filter (index schema 4), the coverage, export and label copy, and the
+  fidelity audit (`op eval openalex`).
+  - **Record schema 7 → 8:** the `openalex` claim source (an `abstract` claim only, AAAI, AIES and FAccT only) and the
+    derived, never-stored `abstract_kind` (`official`, `openalex`, `none`).
+  - **Index schema 3 → 4:** `abstract_kind` is a raw fast field, and each engine's facets and combos are its own.
+    Schemas 3 and 4 are served; **schema 2 is retired** (its four local indexes were checked with `op index retire
+    --dry-run`: 0 pins). A schema-3 index refuses `abstract_kind:` with `FIELD_NOT_INDEXED` and cannot be built from
+    a snapshot holding an OpenAlex abstract, so promoting an OpenAlex-filled snapshot needs a schema-4 index.
+  - **The fill is a post-dedup step** (after reconcile, before takedowns) replaying a pinned extract, so it only ever
+    touches a record whose abstract is still `null`, never an official one, and a takedown still withholds what it
+    filled.
+  - **No `QUERY_VERSION` change:** a query naming `abstract_kind:` was a `FIELD_UNKNOWN` error before.
+  - **Licence:** OpenAlex's data is CC0, but it ships no plaintext abstracts, so serving a rebuilt abstract carries the
+    publisher-abstract posture (this decision's fair-dealing basis, the takedown list and the pending copyright-office
+    consultation, TASK-135), not a CC0 one. The label and the filter let a review exclude them.
+  - **Fidelity:** OpenAlex agrees with the official abstract (exact or near-exact) for 83.1% of 2,122 records audited,
+    almost always for AAAI and AIES and far less for FAccT, where it likely carries ACM's published version; every
+    title-route attach for AAAI 1980–2008 was checked (1,052 of 1,061 agree; the exact title-key rule stands).
+    `docs/results/2026-10-10-openalex-audit.md`; spec 07 §G.
 - Spec 00's venue list says what is indexed now and what is in scope and planned; a venue-year appears in the
   coverage report only once it is crawled.
 - Licence posture is the one already used for PMLR and NeurIPS (titles and abstracts with links back; AAAI
