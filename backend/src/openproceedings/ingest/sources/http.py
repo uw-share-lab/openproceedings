@@ -145,6 +145,9 @@ class TransportError(Exception):
 
 @dataclass(frozen=True)
 class Request:
+    """`headers`: sent on every request (an API key); never in the URL, so never in the cache key, a cache
+    entry, a `Page`, a log line or an error."""
+
     method: str
     url: str
     headers: Mapping[str, str] = field(repr=False)
@@ -633,7 +636,7 @@ class Fetcher(HttpClient[Page]):
         min_interval: float = 1.0, attempts: int = 5, max_wait: float = 3600.0, timeout: float = 30.0,
         clock: Clock | None = None, accept: str = "text/html",
         expect: Literal["html", "json", "xml", "text"] = "html", keep_query: bool = False,
-        user_agent: str | None = None,
+        user_agent: str | None = None, headers: Mapping[str, str] | None = None,
     ) -> None:  # fmt: skip
         policy = replace(PROCEEDINGS, hosts=hosts, min_interval=min_interval, attempts=attempts,
                          max_wait=max_wait, timeout=timeout, accept=accept, expect=expect,
@@ -641,6 +644,9 @@ class Fetcher(HttpClient[Page]):
         super().__init__(cache, transport, policy, clock)
         # a source's own (Crossref's polite pool); it never reaches the cache, a log line or an error message
         self.user_agent = user_agent or USER_AGENT
+        # `headers`: sent on every request (an API key); never in the URL, so never in the cache key, a cache
+        # entry, a `Page`, a log line or an error (`Request` keeps them out of its repr)
+        self._headers = dict(headers or {})
 
     def get(
         self, url: str, *, refresh: bool = False, keep_absent: bool = False, charset: str = "utf-8",
@@ -659,7 +665,9 @@ class Fetcher(HttpClient[Page]):
         return self.through_cache(url, fetch, refresh=refresh)
 
     def _page(self, url: str, default_charset: str = "utf-8", by_length: bool = False) -> Page:
-        request = Request("GET", url, {"User-Agent": self.user_agent, "Accept": self.policy.accept})
+        request = Request(
+            "GET", url, {**self._headers, "User-Agent": self.user_agent, "Accept": self.policy.accept}
+        )
         resp = self.send(request, by_length=by_length)
         if resp.status == 200:
             content_type = resp.headers.get("content-type", "text/html; charset=utf-8")
