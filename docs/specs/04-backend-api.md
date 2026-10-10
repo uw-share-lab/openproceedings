@@ -324,8 +324,9 @@ Two readings follow from "the canonical form decides", and are worth knowing:
     the extra, where a charge would either price every ordinary three-group search for a cost only a query
     built for it has, or still let one request do the work; and the counts are not worth a 429.
   - **Collections, memo entries, workers and waiting are capped by count.** At most 2 × `limit` collections (20
-    by default), each the facets' own kind (`TantivyEngine.combos`: per combination of the engine's `combo`, (venue, year, track,
-    status) plus `abstract_kind` on schema 4, the filters applied to the combos) and memoised per base in `faceted` (at most 2 × `limit`
+    by default), each the facets' own kind (`TantivyEngine.combos`: per combination of the engine's
+    `combo`, (venue, year, track, status) plus `abstract_kind` on schema 4, the filters applied to the combos) and
+    memoised per base in `faceted` (at most 2 × `limit`
     entries of a few hundred combos against its 300,000 budget; another page, a facet click and a later query
     with the same groups and kept clauses collect nothing; a changed kept clause collects again, within the
     same bounds). When a conjunct holding a position-verified clause is in two or more of the trees, each tree

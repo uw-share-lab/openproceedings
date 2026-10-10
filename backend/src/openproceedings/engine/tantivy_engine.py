@@ -198,7 +198,9 @@ class TantivyEngine:
     MAX_COMPILED_UNITS = 500_000
     MAX_VERIFIED_IDS = 500_000
     MAX_EXPANDED_TERMS = 100_000
-    # `faceted`: a base's (venue, year, track, status, abstract_kind) combos, + 1: up to three times schema 3's
+    # `faceted`: a base's (venue, year, track, status, abstract_kind) combos, + 1: up to three times schema 3's.
+    # Measured: 352 combos per base on the 173k corpus (index 99c2e7ea2a0a, schema 3), so three kinds stay far
+    # below this budget.
     MAX_FACET_COMBOS = 300_000
 
     def __init__(self, path: Path) -> None:
@@ -407,13 +409,14 @@ class TantivyEngine:
         One collection serves every field (task-086). The query's top-level facet-field filters (`Filter`,
         or `NOT` of one) are set aside, and the rest (the *base*) is collected once, counting its matches
         per combination of the engine's `combo` fields ((venue, year, track, status), and `abstract_kind` on
-        schema 4) with one nested terms aggregation over those fast columns. A filter depends only on its field's value, so field F's count is exact from the combos:
-        those passing every set-aside filter not on F, summed by their F value. The combos are memoised per
+        schema 4) with one nested terms aggregation over those fast columns. A filter depends only on its field's
+        value, so field F's count is exact from the combos: those passing every set-aside filter not on F, summed by their F value. The combos are memoised per
         base (`faceted`, by its span-less, sorted conjuncts), so another page, exclusion accounting (whose
         trees differ only in top-level filters) and a later query with the same base never collect again.
         Proved equal to one collection per kept set, and to ReferenceEngine (`test_facets_equal.py`).
 
-        `over` (the engine's `combo` by default) narrows the aggregation to some of those fields (each counted field among them): only their
+        `over` (the engine's `combo` by default) narrows the aggregation to some of those fields (each counted
+        field among them): only their
         top-level filters are set aside, and every other field's stay in the collected query, so the combos
         are fewer. Exclusion accounting without facets passes the two default fields (`exclusions.ORDER`,
         `search.run`): a few combos to read instead of hundreds, and the base it collects is no wider than the
@@ -576,8 +579,8 @@ class TantivyEngine:
     def _combos_of(
         self, documents: int, check: Callable[[], None] | None = None
     ) -> tuple[tuple[Combo, int], ...]:
-        """`combos` of a bitmap of documents (bit `ord` set for each), over every field of the engine's `combo`: each combination's
-        documents are the AND of its values' bitmaps, walked field by field and pruned where none is left.
+        """`combos` of a bitmap of documents (bit `ord` set for each), over every field of the engine's `combo`:
+        each combination's documents are the AND of its values' bitmaps, walked field by field and pruned where none is left.
         `check`, as `counts`': asked before each collection, should the per-value bitmaps be built now."""
         masks = self._value_masks(check)
         found: list[tuple[Combo, int]] = []

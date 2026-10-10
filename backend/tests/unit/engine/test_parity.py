@@ -277,20 +277,25 @@ def test_a_schema_4_index_holds_each_records_abstract_kind(kinds_built: tuple[Pa
 def test_a_stored_abstract_kind_that_differs_from_the_records_is_caught(
     kinds_built: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A record whose claims now derive another kind than the index stored (the OpenAlex claim gone, so `none`):
-    the walk names it, as it names a token difference."""
+    """A record whose claims now derive another kind than the index stored, with the same abstract text and so the
+    same tokens (its OpenAlex claim's source swapped for `crossref`, so `official`): only the kind check fires."""
     target = next(r for r in abstract_kinds.records() if r.abstract_kind == "openalex")
     real = parity.normalized
 
     def tampered(*args: Any, **kwargs: Any) -> Iterator[tuple[PaperRecord, dict[str, list[str]]]]:
         for record, fields in real(*args, **kwargs):
             if record.id == target.id:
-                record = record.model_copy(update={"abstract": None, "provenance": ()})
+                swapped = tuple(
+                    c.model_copy(update={"source": "crossref"}) if c.source == "openalex" else c
+                    for c in record.provenance
+                )
+                record = record.model_copy(update={"provenance": swapped})
             yield record, fields
 
     monkeypatch.setattr(parity, "normalized", tampered)
     with pytest.raises(
-        ParityError, match=rf"{target.id}: the index stores abstract_kind 'openalex', the record's is 'none'"
+        ParityError,
+        match=rf"{target.id}: the index stores abstract_kind 'openalex', the record's is 'official'",
     ):
         check_parity(*kinds_built, workers=1)
 
