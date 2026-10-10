@@ -149,7 +149,7 @@ class RisRecord:
 
     key: str
     title: str
-    venue: str | None  # NeurIPS, ICLR or ICML when `venue_raw` is exactly one of Scholar mode's source names
+    venue: str | None  # an indexed venue when `venue_raw` is exactly one of Scholar mode's source names
     venue_raw: str
     year: int | None
     forum_ids: tuple[str, ...]  # OpenReview forum ids its URLs name
@@ -387,9 +387,9 @@ class MatchIndex:
         """`r`'s index record by the merge rules, in their order: an id first (a forum id, then a proceedings
         id, then a DOI), then the title key within `r`'s venue and year. An id or a key that names two records
         is ambiguous, never a pick, and so are two ids that name different records; a record with no year, or
-        whose venue is not one of the three, is matched by id only. A DOI never matches across venue or year:
-        it names its record only when the file's year, if it gives one, and its venue, if it is one of the
-        three, are the record's (`doi_elsewhere` otherwise)."""
+        whose venue is no indexed venue's name, is matched by id only. A DOI never matches across venue or
+        year: it names its record only when the file's year, if it gives one, and its venue, if it names one,
+        are the record's (`doi_elsewhere` otherwise)."""
         by_forum = {rid for f in r.forum_ids for rid in self.forums.get(f, ())}
         by_listing = {rid for p in r.proceedings_ids for rid in self.proceedings.get(p, ())}
         named = {rid for d in r.dois for rid in self.dois.get(d, ())}

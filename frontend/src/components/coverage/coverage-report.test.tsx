@@ -316,7 +316,7 @@ describe("the years indexed per venue (copy deck CV-7, decision-047)", () => {
     expect(line.textContent).toBe(
       "Years indexed: ICLR 2013–2015 · ICML 1988–2015 (none in " +
         Array.from({ length: 25 }, (_, i) => 1990 + i).join(", ") +
-        "). The venues start in different years, so a search without a year: filter compares them over " +
+        "). The venues cover different years, so a search without a year: filter compares them over " +
         "different years. Add year:2013..2015 to compare them over the same years.",
     );
     expect([...line.querySelectorAll("code")].map((n) => n.textContent)).toEqual([
@@ -325,7 +325,7 @@ describe("the years indexed per venue (copy deck CV-7, decision-047)", () => {
     ]);
   });
 
-  it("suggests no year: clause when the venues' spans share no year", () => {
+  it("suggests a per-venue clause when the venues' spans share no year", () => {
     const c = copy();
     const base = c.venue_years[0]!;
     c.venue_years = [
@@ -335,10 +335,35 @@ describe("the years indexed per venue (copy deck CV-7, decision-047)", () => {
     render(<CoverageReport coverage={c} />);
     const line = screen.getByText(/^Years indexed:/);
     expect(line.textContent).toBe(
-      "Years indexed: ICLR 2013–2015 · ICML 1988–1990. The venues start in different years, so a search " +
-        "without a year: filter compares them over different years.",
+      "Years indexed: ICLR 2013–2015 · ICML 1988–1990. The venues cover different years, so a search " +
+        "without a year: filter compares them over different years. No year is held by every venue: give " +
+        "each venue its own years, as in (venue:ICLR year:2013..2015).",
     );
-    expect(line.querySelectorAll("code")).toHaveLength(1);
+    expect([...line.querySelectorAll("code")].map((n) => n.textContent)).toEqual([
+      "year:",
+      "(venue:ICLR year:2013..2015)",
+    ]);
+  });
+
+  it("says the spans differ when the venues start together but end apart (one year alone as year:Y)", () => {
+    const c = copy();
+    const base = c.venue_years[0]!;
+    c.venue_years = [
+      ...[2024, 2025].map((year) => ({ ...base, venue: "AIES" as const, year })),
+      { ...base, venue: "ICLR" as const, year: 2025 },
+      { ...base, venue: "IASEAI" as const, year: 2026 },
+    ];
+    render(<CoverageReport coverage={c} />);
+    const line = screen.getByText(/^Years indexed:/);
+    expect(line.textContent).toContain("The venues cover different years");
+    expect(line.textContent).toContain("as in (venue:IASEAI year:2026).");
+    c.venue_years = [
+      ...[2024, 2025].map((year) => ({ ...base, venue: "AIES" as const, year })),
+      { ...base, venue: "ICLR" as const, year: 2024 },
+    ];
+    cleanup();
+    render(<CoverageReport coverage={c} />);
+    expect(screen.getByText(/^Years indexed:/).textContent).toContain("Add year:2024 to compare them");
   });
 
   it("says nothing about different spans when every venue starts in the same year", () => {

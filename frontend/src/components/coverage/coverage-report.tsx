@@ -36,6 +36,11 @@ export function yearSpans(venueYears: readonly VenueYear[]): Span[] {
     .sort((a, b) => (a.venue < b.venue ? -1 : a.venue > b.venue ? 1 : 0));
 }
 
+/** A venue and its years as both coverage surfaces write them: `AAAI 2010–2026`, one year alone (`IASEAI 2026`). */
+export function spanRange(s: Span): string {
+  return s.from === s.to ? `${s.venue} ${s.from}` : `${s.venue} ${s.from}–${s.to}`;
+}
+
 function spanText(s: Span): string {
   const range = s.from === s.to ? `${s.from}` : `${s.from}–${s.to}`;
   return s.missing.length === 0
@@ -43,27 +48,40 @@ function spanText(s: Span): string {
     : `${s.venue} ${range} (none in ${s.missing.join(", ")})`;
 }
 
-/** "Years indexed: …", and when the venues start in different years, why that matters and the `year:` clause
- * that compares them over the same years (copy deck CV-7, decision-047 and decision-049: NeurIPS from 1987, ICML from 1988, ICLR
- * from 2013, AAAI from 2010, AIES from 2024, IASEAI 2026). Display only: the clause is a suggestion the reader may add to their query. */
+/** A `year:` clause for a span: one year alone, else `from..to`. */
+function yearClause(from: number, to: number): string {
+  return from === to ? `year:${from}` : `year:${from}..${to}`;
+}
+
+/** "Years indexed: …", and when the venues cover different years, why that matters and what compares them: the
+ * `year:` clause of the years every venue holds, or, when no year is held by all, a per-venue clause (copy deck
+ * CV-7; decision-047 and decision-049: NeurIPS from 1987, ICML from 1988, ICLR from 2013, AAAI from 2010, AIES
+ * 2024–2025, IASEAI 2026). Display only: the clause is a suggestion the reader may add to their query. */
 function YearSpans({ venueYears }: { venueYears: readonly VenueYear[] }) {
   const spans = yearSpans(venueYears);
   if (spans.length === 0) return null;
-  const differ = new Set(spans.map((s) => s.from)).size > 1;
+  const differ = new Set(spans.map((s) => s.from)).size > 1 || new Set(spans.map((s) => s.to)).size > 1;
   const common = { from: Math.max(...spans.map((s) => s.from)), to: Math.min(...spans.map((s) => s.to)) };
+  // the venue that starts last, as the example of a venue with its own years
+  const latest = spans.reduce((a, b) => (b.from > a.from ? b : a));
   return (
     <p className="tabular-nums">
       Years indexed: {spans.map(spanText).join(" · ")}
       {differ ? (
         <>
-          . The venues start in different years, so a search without a{" "}
+          . The venues cover different years, so a search without a{" "}
           <code className="font-mono">year:</code> filter compares them over different years
           {common.from <= common.to ? (
             <>
-              . Add <code className="font-mono">{`year:${common.from}..${common.to}`}</code> to compare them
+              . Add <code className="font-mono">{yearClause(common.from, common.to)}</code> to compare them
               over the same years
             </>
-          ) : null}
+          ) : (
+            <>
+              . No year is held by every venue: give each venue its own years, as in{" "}
+              <code className="font-mono">{`(venue:${latest.venue} ${yearClause(latest.from, latest.to)})`}</code>
+            </>
+          )}
           .
         </>
       ) : null}
