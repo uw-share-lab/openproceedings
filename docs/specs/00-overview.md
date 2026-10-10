@@ -5,7 +5,8 @@ Status: **draft for review** · 2026-09-25 · SHARE Lab, University of Waterloo
 ## Why this exists
 
 Systematic reviews of ML research need a search they can *report*: a query string, a date, and a hit
-count that anyone can re-run. Google Scholar can't give that for NeurIPS, ICLR and ICML:
+count that anyone can re-run. Google Scholar can't give that for these venues (NeurIPS, ICLR and ICML, with AAAI, AIES and IASEAI added by
+decision-049 and FAccT planned):
 
 | Problem with Scholar | What openproceedings does instead |
 |---|---|
@@ -23,8 +24,15 @@ venues.
 ## Scope
 
 **In scope (v1):**
-- Venues: NeurIPS (including the Datasets & Benchmarks track; from 1987), ICLR (from 2013), ICML (from 1988: on
-  OpenReview, in PMLR, and before 2013 from a pinned dblp release; decision-047).
+- Venues **indexed now**: NeurIPS (including the Datasets & Benchmarks track; from 1987), ICLR (from 2013), ICML
+  (from 1988: on OpenReview, in PMLR, and before 2013 from a pinned dblp release; decision-047), AAAI (2010–2026),
+  AIES (2024–2025) and IASEAI (2026), the last three from ojs.aaai.org (decision-049, milestone A).
+- Venues **in scope and planned** (decision-049; milestones B and C of the
+  [design](../plans/2026-10-09-new-venues-design.md), not built): AAAI 1980–2008, AIES 2018–2023 and FAccT
+  2018 onward (every paper of every year, as decision-047 did for NeurIPS and ICML), IASEAI 2027 once its accepted
+  papers are public, and an OpenAlex fallback for abstracts no official source holds (labelled, with an
+  `abstract_kind:` filter). Until a milestone is built its venue-years are absent from the index and the coverage
+  page, which says so (copy deck CV-7).
 - Content: title and abstract, plus metadata (authors, venue, year, track, acceptance status, links).
 - Search: exact-token Boolean search with phrases, proximity, explicit wildcards, field scopes, and
   filters written inside the query itself.
@@ -33,8 +41,8 @@ venues.
 
 **Out of scope (for now):**
 - Full text.
-- Venues outside the three above. ACL, EMNLP, NAACL, FAccT, CHI and CSCW are a later extension; the
-  record schema is designed for it.
+- Venues outside the seven above. ACL, EMNLP, NAACL, CHI and CSCW are a later extension; the record schema is
+  designed for it. (FAccT, once listed here, moved into scope in decision-049.)
 - User accounts.
 - Citation graphs.
 - Any matching that goes beyond the literal query: stemming, synonyms, or embeddings deciding what

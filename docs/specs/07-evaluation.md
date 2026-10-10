@@ -212,6 +212,21 @@ so cross-venue counts over those years compare two venues, not three. ICML 1988�
 which has no abstracts: only the years whose official ICML pages give abstracts have them (TASK-206), and every
 other record of those years is title-only, counted in the cell's missing abstracts. ICLR 2014–2016 are
 not gaps: their public archive listings supply accepted main-track records (TASK-096).
+**AAAI, AIES and IASEAI (decision-049, milestone A).** The index holds AAAI 2010–2026, AIES 2024–2025 and IASEAI
+2026 from ojs.aaai.org, every record `accepted`, each venue-year a coverage cell with its real tracks (`main`,
+`student_abstract`, `consortium`, `demo`, `iaai`, `eaai`, `other`). **None of these cells is gated:**
+`official_counts.py` has no row for them, because none has an official accepted count that is independent of the
+source indexed. IASEAI 2026's front matter states 92 accepted research papers, but 35 of them are non-archival and
+unpublished on OJS, so 57 indexed against 92 would fail the ±1% gate for a reason the index cannot repair (a
+recorded, not gated, cell). AIES 2024–2025's only counts (150 + 20 and 238 + 41) are the OJS issue listings, the
+very source indexed, so a gate would be circular. AAAI's issue-page totals mix every track, and its published
+acceptance statistics were not read in this milestone. Each OJS volume's listed count is still checked against the
+verified count in `ingest/ojs_sections.toml` (the listing report's `count_ok`), and the listings section of the
+report flags a volume that disagrees. A gate for AAAI main follows if its acceptance statistics are sourced.
+FAccT, AAAI 1980–2008 and AIES 2018–2023 are planned (milestones B and C of the
+[design](../plans/2026-10-09-new-venues-design.md)) and have no cells until built, which the report states as scope
+(a venue-year with no source is a reported gap, never a silent zero). Before milestone B, cross-venue counts compare
+venues over different year spans (AAAI from 2010, AIES from 2024, IASEAI 2026).
 The source of statuses indexed is spec 01's source table as `ingest/statuses.py` holds it (spec 01
 §Pipeline 5); the snapshot manifest records them per venue-year, and the missing abstracts and sources per
 cell (manifest format 2, TASK-082).

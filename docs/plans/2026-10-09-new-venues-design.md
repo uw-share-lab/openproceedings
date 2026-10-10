@@ -1,9 +1,12 @@
 # AAAI, AIES, FAccT and IASEAI — design
 
-Status: **approved in conversation, written spec for owner review** · 2026-10-09 · Decision: decision-049 (to
-be written in milestone A) · Supersedes: spec 00 §Scope's venue list and the "later extension" line · Sources
-checked live on 2026-10-09 (facts recorded in `docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md`,
-milestone A)
+Status: **approved; milestone A built (2026-10-09), milestones B and C planned** · Decision: decision-049 ·
+Supersedes: spec 00 §Scope's venue list and the "later extension" line · Sources checked live on 2026-10-09
+(facts recorded in `docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md`)
+
+Milestone A as built is documented in `docs/specs/01-ingestion.md` §Sources (OJS row). Everything below about
+milestones B and C (dblp AAAI 1980–2008, Crossref, PMLR v81, the FAccT site, OpenAlex, `abstract_kind`) is
+the plan, not built.
 
 ## Owner decisions (2026-10-09)
 

@@ -44,8 +44,8 @@ function spanText(s: Span): string {
 }
 
 /** "Years indexed: …", and when the venues start in different years, why that matters and the `year:` clause
- * that compares them over the same years (copy deck CV-7, decision-047: NeurIPS from 1987, ICML from 1988, ICLR
- * from 2013). Display only: the clause is a suggestion the reader may add to their query. */
+ * that compares them over the same years (copy deck CV-7, decision-047 and decision-049: NeurIPS from 1987, ICML from 1988, ICLR
+ * from 2013, AAAI from 2010, AIES from 2024, IASEAI 2026). Display only: the clause is a suggestion the reader may add to their query. */
 function YearSpans({ venueYears }: { venueYears: readonly VenueYear[] }) {
   const spans = yearSpans(venueYears);
   if (spans.length === 0) return null;

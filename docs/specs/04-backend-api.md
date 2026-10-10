@@ -402,7 +402,7 @@ route execution.
   text out. The attribution is the record's `Attribution` from the exported index's snapshot, computed once
   when the snapshot is loaded (`RecordFile.attributions`, `ingest/dedup.py::attribution`), the same one
   `GET /search` sends as `abstract_source`; nothing recomputes it. `<site>` is the results list's name for the
-  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`, `ICML conference site`;
+  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`, `ICML conference site`, `AAAI Digital Library` (ojs.aaai.org: AAAI, AIES and IASEAI, decision-049);
   `export.ORIGIN_NAMES`,
   pinned equal to `hit-item.tsx`'s), plus ` (via RIS import)` when the claim came through an imported RIS file;
   a route that names no known site reads `an imported RIS file`; the url is left out when there is none.
@@ -528,6 +528,14 @@ route execution.
   | NeurIPS | 2018 on | `Conference on Neural Information Processing Systems (NeurIPS <year>)` |
   | ICLR | 2013 on | `International Conference on Learning Representations (ICLR <year>)` |
   | ICML | 1988 on | `International Conference on Machine Learning (ICML <year>)` |
+  | AAAI | 1980 on | `AAAI Conference on Artificial Intelligence (AAAI <year>)` (held as the National Conference on AI before it took its present name; the table uses the current name) |
+  | AIES | 2018 on | `AAAI/ACM Conference on AI, Ethics, and Society (AIES <year>)` |
+  | FAccT | 2018–2020 | `ACM Conference on Fairness, Accountability, and Transparency (FAT* <year>)` |
+  | FAccT | 2021 on | `ACM Conference on Fairness, Accountability, and Transparency (FAccT <year>)` |
+  | IASEAI | 2025 on | `International Association for Safe and Ethical AI Conference (IASEAI <year>)` (only 2026 has papers) |
+
+  The AAAI, AIES, FAccT and IASEAI rows are `vocab.CONFERENCES` (decision-049). Records exist for AAAI 2010+, AIES
+  2024+ and IASEAI 2026 now; FAccT's rows are the vocabulary only until milestone B builds its source.
 
   This covers every year the sources can yield, and every year each venue was held under its name (spec 01
   §Sources: NeurIPS proceedings for all years, from 1987; ICLR on OpenReview from 2013; ICML from 1988 in the

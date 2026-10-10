@@ -17,8 +17,8 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | `title` | Raw, whitespace-collapsed. **No** search normalization here (spec 03 owns it). Capped by the snapshot build at 1,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
 | `abstract` | Raw text or `null` (never an empty or whitespace-only string). Reject a value that starts or ends with `…`: that's a Scholar snippet. An ellipsis inside a real abstract (`x₁, …, x_n`) is allowed. HTML stripped, LaTeX kept verbatim. Capped by the snapshot build at 20,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
 | `authors` | Display order, as the source gives them. |
-| `venue` | `NeurIPS` \| `ICLR` \| `ICML` (enum; extensible later). |
-| `year` | Conference year. Never the arXiv or PDF year. Required: a record with no year is not a valid `PaperRecord`, nor is one for a year its venue was not held under its name (NeurIPS before 1987, ICLR before 2013, ICML before 1988; `vocab.CONFERENCES`, spec 04 §Exports). |
+| `venue` | `NeurIPS` \| `ICLR` \| `ICML` \| `AAAI` \| `AIES` \| `FAccT` \| `IASEAI` (`vocab.VENUES`; decision-049; extensible later). Only AAAI 2010+, AIES 2024+ and IASEAI 2026 have a source so far (the `ojs` source); FAccT arrives in milestone B. |
+| `year` | Conference year. Never the arXiv or PDF year. Required: a record with no year is not a valid `PaperRecord`, nor is one for a year its venue was not held under its name (NeurIPS before 1987, ICLR before 2013, ICML before 1988, AAAI before 1980, AIES and FAccT before 2018, IASEAI before 2025; `vocab.CONFERENCES`, spec 04 §Exports). |
 | `track` | `.claude/skills/track-taxonomy/SKILL.md`. No default value in the model. |
 | `status` | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown`. No default. |
 | `presentation` | `oral` \| `spotlight` \| `poster` \| `null`, only when a source states it: a v1 decision note or venue string (`openreview_v1._PRESENTATION`); a v2 accepted, non-workshop note's `content.venue`, matched exactly per venue-year in `classify.V2_PRESENTATION` (an unlisted string is `null` and counted as `presentation_unmapped`; spec 01 §Presentation). Its claim's evidence is `content.venue=<string>`. `dedup.resolve` keeps it only when the resolved `status` is `accepted` (a reconcile-demoted `unknown` shows `null`; the claim stays). Never a track, never hashed. |
@@ -36,6 +36,7 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | PMLR only | `pmlr-v<N>-<key>` (ICML volumes only, `ingest/volumes.py`) |
 | NeurIPS proceedings only | `nips-<hash>`, the 32-hex hash from the paper_files path; on the 2021 D&B host `nips-<hash>-round1`/`-round2` (its hash is md5 of a per-round paper number, so rounds and the main track reuse hashes; a D&B link without a round gets no id). One function, `urls.proceedings_native`, makes it for the miner, the RIS importer and dedup |
 | dblp release (ICML 1988–2012) | `dblp-<key>`, the dblp key after `conf/icml/` (`conf/icml/SzitaL09` → `dblp-SzitaL09`; one paper in every year, as dblp keys are unique); the record's `urls.proceedings` is its dblp page, `https://dblp.org/rec/conf/icml/<key>`, which `urls.native` reads back (never fetched) |
+| ojs.aaai.org (AAAI, AIES, IASEAI) | `ojs-<article id>`, the OJS article id (`oai:ojs.aaai.org:article/<id>`), unique across the three journals; `PROCEEDINGS_NATIVE["ojs"]` ties it to those three venues. `urls.proceedings` is the article page |
 | ICLR proceedings / archive | `iclr-<hash>` from a proceedings path; for the official 2014–2016 archive, an OpenReview target keeps its forum id and any other target is `iclr-<sha256(canonical-target)[:32]>` |
 | RIS import | a venueid plus its forum id → the forum id; else the proceedings or PMLR form above, from scholarmend's `proceedings_url` / `pmlr_url` claim (`ingest/urls.py`). A record with neither is skipped and counted (`unresolved` / `no_id`), never given a minted id. |
 
@@ -53,7 +54,7 @@ forum the page links.
 
 ## Provenance claims
 One `Claim` per (field, source): `field`, `value`, `source` (`openreview_v2`, `openreview_v1`,
-`iclr_archive`, `neurips_proceedings`, `pmlr`, `dblp`, `icml_site`, `ris`), `url`, `fetched_at` (**from the cache entry**, never `now()` at
+`iclr_archive`, `neurips_proceedings`, `pmlr`, `dblp`, `icml_site`, `ojs`, `ris`), `url`, `fetched_at` (**from the cache entry**, never `now()` at
 build time), `evidence` (for example `venueid=ICLR.cc/2024/Conference`, or a decision note id). Evidence starting
 `not listed:` is **reserved** for reconcile's absence claims (`dedup.is_absence`, decision-005): no miner or
 importer may write it, or its claim would stop counting as a listing. Claims are
@@ -91,7 +92,7 @@ in Scholar. The abstract is never Scholar's (`null` instead).
 
 ## Versions
 `RECORD_SCHEMA_VERSION` (`record.py`) names this shape: the fields, native-id forms and content_hash
-rule. It is `5` since TASK-205/206 added the `dblp` and `icml_site` sources and the `dblp-<key>` native id (decision-047);
+rule. It is `6` since decision-049 added the AAAI, AIES, FAccT and IASEAI venues, the tracks `student_abstract`, `consortium`, `demo`, `iaai` and `eaai`, the `ojs` source and the `ojs-<id>` native id (`iaai` and `eaai` are AAAI-only: `record.VENUE_ONLY_TRACKS`); it was `5` from TASK-205/206, which added the `dblp` and `icml_site` sources and the `dblp-<key>` native id (decision-047);
 it was `4` from TASK-159/157, which added two provenance-only claim fields, `twin` (a v1 copy's linked twins, a tuple of
 record ids, decision-029) and `invitation` (scholarmend 0.1.5's v1 submission invitation); it was `3` from TASK-118,
 which added the round-qualified `nips-<hash>-round1`/`-round2` form, and `2` from TASK-096, which added the

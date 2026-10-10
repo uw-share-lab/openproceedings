@@ -8,17 +8,21 @@ description: The track and status enums from spec 01 with the source signal that
 ## `track`
 | Value | Accepted signals (any one, with its claim) | In default filter? |
 |---|---|---|
-| `main` | venueid `<Org>.cc/<Y>/Conference`; a PMLR volume listed as `main` in the volume table (`ingest/pmlr_volumes.toml`); NeurIPS path `-Conference`; a token-less NeurIPS listing on `proceedings.neurips.cc` up to 2021 (host and year, `classify_neurips_listing`) | **yes** |
+| `main` | OJS (AAAI 2010+, AIES 2024+, IASEAI 2026): a section whose `ojs_sections.toml` row says `main` (the track comes from the record's section, never the OJS issue); venueid `<Org>.cc/<Y>/Conference`; a PMLR volume listed as `main` in the volume table (`ingest/pmlr_volumes.toml`); NeurIPS path `-Conference`; a token-less NeurIPS listing on `proceedings.neurips.cc` up to 2021 (host and year, `classify_neurips_listing`) | **yes** |
 | `datasets_benchmarks` | venueid `NeurIPS.cc/<Y>/Track/Datasets_and_Benchmarks` or `…_Track`, and NeurIPS 2026's rename `NeurIPS.cc/2026/Evaluations_and_Datasets_Track` (TASK-094); NeurIPS path `Datasets_and_Benchmarks(_Track)` (≤2023 alias) | **yes** |
 | `position` | ICML position-paper track (venueid `ICML.cc/<Y>/Position_Paper_Track`, seen); the proceedings token `Position_Paper_Track` (seen); NeurIPS `NeurIPS.cc/<Y>/Position_Paper_Track` (2025+, verified live 2026-09-27; TASK-094) | **yes** |
 | `workshop` | any venueid segment `Workshop` or `Workshop_<City>`; a PMLR workshop volume | no |
 | `competition` | NeurIPS `NeurIPS.cc/<Y>/Competition_Track` (2024+, verified; TASK-094) or `Track/Competition`; PMLR competition volumes (v123, v133, v176, v220) | no |
 | `tiny_papers` | ICLR Tiny Papers (2023–2024) | no |
 | `blogpost` | ICLR Blogpost track | no |
-| `other` | a form that parses but isn't listed above (e.g. `Creative_AI_Track`, `Education_Program`); `venue_id_raw` kept. Of these only NeurIPS Creative AI is also in the proceedings, so only it merges with a listing (dedup-rules §Never merge, TASK-137) | no |
+| `student_abstract` | OJS (ojs.aaai.org) sections of AAAI and AIES student abstracts and posters, by `ingest/ojs_sections.toml` row | no |
+| `consortium` | OJS sections of AAAI's doctoral and undergraduate consortia | no |
+| `demo` | OJS sections of AAAI's demonstration tracks | no |
+| `iaai`, `eaai` | OJS sections printed in the AAAI volumes for IAAI and EAAI; **AAAI only** (the record refuses them on another venue, `record.VENUE_ONLY_TRACKS`) | no |
+| `other` | a form that parses but isn't listed above (e.g. `Creative_AI_Track`, `Education_Program`); `venue_id_raw` kept. OJS: Senior Member presentations, New Faculty Highlights, Emerging Trends and the sections the design's mapping does not name (marked "owner review" in `ojs_sections.toml`). Of these only NeurIPS Creative AI is also in the proceedings, so only it merges with a listing (dedup-rules §Never merge, TASK-137) | no |
 | `unknown` | no trustworthy signal | no, but always counted on coverage |
 
-Exact venueid spellings are in `.claude/skills/openreview-venueids/SKILL.md`, and proceedings path
+The OJS signal is a table row per journal, volume and OAI set (spec 01 §Sources OJS row; the mapping's reasoning is `docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md`). Exact venueid spellings are in `.claude/skills/openreview-venueids/SKILL.md`, and proceedings path
 segments in `.claude/skills/neurips-proceedings/SKILL.md` and `.claude/skills/pmlr-proceedings/SKILL.md`.
 
 ## `status`
