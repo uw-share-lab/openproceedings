@@ -91,8 +91,8 @@ CSV_COLUMNS = (
     "abstract_withheld", "abstract_withheld_reason", "twins", "abstract_note",
     "abstract_kind",
 )  # fmt: skip
-# (TASK-138's four abstract columns, then TASK-136's reason, then TASK-162's twins, then TASK-210's note, then decision-049's kind, are
-# appended last: every earlier column keeps its position)
+# (TASK-138's four abstract columns, then TASK-136's reason, then TASK-162's twins, then TASK-210's note, then
+# decision-049's kind, are appended last: every earlier column keeps its position)
 # each record id → its abstract's attribution (`RecordFile.attributions`, computed at snapshot load)
 type Sources = Mapping[str, Attribution | None]
 # each record id with a twin → its twins' ids (`RecordFile.twins`: its `twin` claims, decision-029, TASK-162)
@@ -207,7 +207,8 @@ def _attributed(
     """Each record with its abstract's attribution under `abstract_source`. A record `sources` doesn't hold is
     an invariant broken (the index and its snapshot disagree): EngineInternalError, as on `GET /search`.
     Without `sources`, each record's abstract is dropped and it is marked withheld; so is a record `withheld`
-    lists, whatever `sources` says (its reason `takedown`)."""
+    lists, whatever `sources` says (its reason `takedown`). A withheld record's `abstract_kind` is `none`, as a
+    hit's and a paper's."""
     for r in records:
         if sources is not None and r["id"] not in sources:  # checked for every record, withheld or not
             raise EngineInternalError(
@@ -215,10 +216,11 @@ def _attributed(
             )
         linked = twins.get(r["id"], ())
         if r["id"] in withheld:
-            yield {**r, "abstract": None, _SOURCE: None, _WITHHELD: True, _REASON: "takedown", _TWINS: linked}
+            yield {**r, "abstract": None, "abstract_kind": "none", _SOURCE: None, _WITHHELD: True,
+                   _REASON: "takedown", _TWINS: linked}  # fmt: skip
         elif sources is None:
-            yield {**r, "abstract": None, _SOURCE: None, _WITHHELD: True, _REASON: "source_unavailable",
-                   _TWINS: linked}  # fmt: skip
+            yield {**r, "abstract": None, "abstract_kind": "none", _SOURCE: None, _WITHHELD: True,
+                   _REASON: "source_unavailable", _TWINS: linked}  # fmt: skip
         else:
             yield {**r, _SOURCE: sources[r["id"]], _WITHHELD: False, _REASON: None, _TWINS: linked}
 

@@ -17,7 +17,7 @@ PLAIN = [r for r in CORPUS if r.abstract_kind != "openalex"]  # what a schema-3 
 
 
 def _paper(r: PaperRecord) -> PaperRecord:
-    return r
+    return r  # `build`'s default converts a corpus `Rec`; these records are already snapshot records
 
 
 def _app(tmp_path: Path, schema: str | None = None, corpus: list[PaperRecord] = CORPUS):
@@ -85,3 +85,26 @@ def test_csv_and_jsonl_carry_the_kind_last(tmp_path: Path) -> None:
     assert {r[rows[0].index("abstract_source")] for r in rows[1:]} == {"openalex"}  # the claim source column
     assert {json.loads(x)["abstract_kind"] for x in lines.splitlines() if x} == {"openalex"}
     assert "N1  - Abstract source: OpenAlex" in ris
+
+
+def test_a_takedown_on_an_openalex_record_makes_its_kind_none_everywhere(tmp_path: Path) -> None:
+    """A withheld abstract is `none` in a hit, the paper and both exports (never the stored `openalex`)."""
+    data = tmp_path / "data"
+    version = build(CORPUS, data / "snapshots", "snap", data / "indexes", paper=_paper)
+    point_current(data, version)
+    target = next(r for r in CORPUS if r.abstract_kind == "openalex")
+    (data / "takedowns").mkdir()
+    (data / "takedowns" / "withheld.txt").write_text(f"{target.id}  # logged\n", encoding="utf-8")
+    with TestClient(make_app(data)) as client:
+        hits = client.get("/api/v1/search", params={"q": "abstract_kind:openalex"}).json()["hits"]
+        hit = next(h for h in hits if h["id"] == target.id)
+        assert hit["abstract_withheld"] is True and hit["abstract_kind"] == "none"
+        assert client.get(f"/api/v1/papers/{target.id}").json()["paper"]["abstract_kind"] == "none"
+        params = {"q": "abstract_kind:openalex"}
+        text = client.get("/api/v1/export", params={**params, "format": "csv"}).text
+        lines = client.get("/api/v1/export", params={**params, "format": "jsonl"}).text
+    rows = list(csv.DictReader(io.StringIO(text.removeprefix("\ufeff"))))
+    by_id = {r["id"]: r["abstract_kind"] for r in rows}
+    assert by_id[target.id] == "none" and "openalex" in by_id.values()  # the others keep theirs
+    objs = {o["id"]: o for o in map(json.loads, filter(None, lines.splitlines()))}
+    assert objs[target.id]["abstract_kind"] == "none" and objs[target.id]["abstract"] is None

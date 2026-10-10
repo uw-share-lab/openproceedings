@@ -1263,11 +1263,28 @@ def test_without_sources_every_abstract_is_withheld_and_each_record_says_so() ->
     (entry,) = parse_string(withheld("bibtex", PMLR_RECORD))
     assert "abstract" not in entry.fields and "abstract_source" not in entry.fields
     assert entry.fields["abstract_withheld"] == export.WITHHELD and entry.fields["note"] == PROVENANCE.line()
-    assert withheld("csv", PMLR_RECORD).endswith(",2026-09-26,,,,,,true,source_unavailable,,,\r\n")
+    assert withheld("csv", PMLR_RECORD).endswith(",2026-09-26,,,,,,true,source_unavailable,,,none\r\n")
     assert ",We adapt.," not in withheld("csv", PMLR_RECORD)
     (obj,) = [json.loads(x) for x in withheld("jsonl", PMLR_RECORD).splitlines()]
     assert obj["abstract"] is None and obj["abstract_source"] is None and obj["abstract_withheld"] is True
     assert obj["abstract_withheld_reason"] == "source_unavailable"
+    # a withheld abstract's kind is none, whatever the index stored (the hit and the paper say the same)
+    openalex = {**PMLR_RECORD, "abstract_kind": "openalex"}
+    assert json.loads(withheld("jsonl", openalex))["abstract_kind"] == "none"
+    assert withheld("csv", openalex).endswith(",true,source_unavailable,,,none\r\n")
+    (taken,) = [
+        json.loads(x)
+        for x in "".join(
+            export.entries(
+                "jsonl",
+                [openalex],
+                PROVENANCE,
+                sources={openalex["id"]: PMLR},
+                withheld=frozenset({openalex["id"]}),
+            )
+        ).splitlines()
+    ]
+    assert taken["abstract_kind"] == "none" and taken["abstract_withheld_reason"] == "takedown"
 
 
 def test_the_abstract_source_header_states_are_a_closed_enum() -> None:

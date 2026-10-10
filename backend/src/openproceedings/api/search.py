@@ -190,6 +190,7 @@ def _hit(found: Found, credit: Attribution | None, *, withheld: bool, twins: tup
     query matched the withheld text), its source and its note."""
     r: Any = found.record
     assert found.highlights is not None
+    abstract_kind = "none" if withheld else r["abstract_kind"]  # a withheld abstract is none, as the paper's
     return Hit(
         id=found.id,
         title=r["title"],
@@ -209,7 +210,5 @@ def _hit(found: Found, credit: Attribution | None, *, withheld: bool, twins: tup
         abstract_withheld=withheld,
         twins=list(twins),
         abstract_note=None if withheld or credit is None else credit.note,
-        abstract_kind="none"
-        if withheld
-        else r["abstract_kind"],  # a withheld abstract is none, as the paper's
+        abstract_kind=abstract_kind,
     )
