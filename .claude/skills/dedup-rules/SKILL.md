@@ -78,6 +78,10 @@ over-merge silently deletes a paper from someone's systematic review.
    in step 3, not `Guard` by its title; when step 3 can't take it, it stays apart with a `title_key` row. A
    partner keeping the abstract (main note + workshop version) keeps the merge; two RIS rows with one title and
    different abstracts still merge.
+   - **Steps 2 and 3 repeat until step 3 merges nothing.** An import step 3 merges with a newer RIS row of
+     another title loses its own title claim (one claim per source), so a title group it alone made ambiguous
+     (two proceedings ids) may now merge, and a second run would merge it (`TITLE_LOST_TO_A_NEWER_RIS_ROW`,
+     a Hypothesis-found idempotence case, 2026-10-10).
 
 Step 2 only runs **across sources**: the clusters' provenance source sets must be disjoint
 (OpenReview ↔ proceedings), **`ris` aside** (TASK-179): RIS is a route, each RIS row names its paper by a forum

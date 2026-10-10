@@ -381,7 +381,11 @@ the NeurIPS 1987–2012, dblp and ICML sites rows on 2026-10-06 (`docs/research/
    row of the note's forum id may have replaced the import's abstract claim, while the note's own still holds
    the text they merged on), so the row is written on every run. A pair a title key already reported gets no
    second, `abstract_key` row: it would say nothing more (the 14 such pairs on the 2026-10-05 crawl were each a
-   listing and its same-title workshop version). The
+   listing and its same-title workshop version). (b) and (c) then run again until (c) merges nothing: an import
+   that (c) merges with a newer RIS row of another title loses its own title claim (one claim per source), so a
+   title group it alone made ambiguous (two proceedings ids, say) may now merge, and a second run would merge it.
+   Repeating keeps dedup idempotent (a Hypothesis-found case, 2026-10-10: `TITLE_LOST_TO_A_NEWER_RIS_ROW` in
+   `test_reconcile.py`). The
    title key is never loosened: two papers whose titles differ only by a symbol and whose abstracts differ
    stay two records. The title step consults the abstract in one case (TASK-189, decision-045): an import whose
    title lost a symbol can equal another paper's title key (`-Guard` beside a note titled `Guard`), so (b)

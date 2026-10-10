@@ -38,6 +38,9 @@ a review, a duplicate only shows in the hit count.
    import never merges with a record that is no listing by crawled evidence and is rejected, withdrawn or
    desk-rejected (a note, also one whose forum id's RIS row names a proceedings paper, or another import: a
    forum id's RIS row; decision-040).
+   Steps 2 and 3 then run again until step 3 merges nothing: an import merged with a newer RIS row of another
+   title loses its own title claim (one claim per source), so a title group it made ambiguous may now merge, as a
+   second run would merge it (a Hypothesis-found idempotence case, 2026-10-10).
 
 `ris` is a route, not a publisher: each RIS row names its paper by a forum id or a proceedings id. So two
 candidates that share only `ris` are judged by those ids (at most one of each in a merged record), not refused
@@ -685,16 +688,20 @@ def _dedup(records: Iterable[PaperRecord]) -> DedupResult:
     # The forum link: one forum id (own or in a urls.forum claim) in the same venue and year, any title.
     clusters, linked = _link(same_id)
     merges += linked
-    # Step 2: (venue, year, title key) across sources.
-    titled: dict[tuple[str, int, str], set[int]] = defaultdict(set)
-    for ci, c in enumerate(clusters):
-        for key in c.keys:  # a title of only punctuation or math has no key and never matches
-            titled[(c.summary.venue, c.summary.year, key)].add(ci)
-    clusters, found = _join(clusters, titled, "title_venue_year", _crawled_abstracts(clusters))
-    merges += found
-    # Step 3: an imported record that matched nothing, on (venue, year, abstract key).
-    clusters, found = _join(clusters, _abstract_buckets(clusters), "abstract_venue_year")
-    merges += found
+    # Steps 2 and 3 run again until step 3 merges nothing, as a second run would (the docstring's step 3).
+    while True:
+        # Step 2: (venue, year, title key) across sources.
+        titled: dict[tuple[str, int, str], set[int]] = defaultdict(set)
+        for ci, c in enumerate(clusters):
+            for key in c.keys:  # a title of only punctuation or math has no key and never matches
+                titled[(c.summary.venue, c.summary.year, key)].add(ci)
+        clusters, found = _join(clusters, titled, "title_venue_year", _crawled_abstracts(clusters))
+        merges += found
+        # Step 3: an imported record that matched nothing, on (venue, year, abstract key).
+        clusters, found = _join(clusters, _abstract_buckets(clusters), "abstract_venue_year")
+        merges += found
+        if not found:
+            break
 
     out: list[PaperRecord] = []
     for cluster in clusters:
