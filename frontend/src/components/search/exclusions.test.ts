@@ -44,6 +44,7 @@ const FACETS = {
   year: { "2024": 141 },
   track: { main: 301, datasets_benchmarks: 64, position: 47, workshop: 205, competition: 4 },
   status: { accepted: 412, rejected: 88 },
+  abstract_kind: null,
 };
 
 describe("bannerOf (design W5 banner; BN-1–3)", () => {

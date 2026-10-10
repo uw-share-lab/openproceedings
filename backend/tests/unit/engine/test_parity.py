@@ -8,16 +8,19 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from openproceedings.cli import main
 from openproceedings.engine import index as index_module
 from openproceedings.engine import parity
-from openproceedings.engine.index import build_index, open_index
+from openproceedings.engine.index import IndexBuildError, build_index, open_index
 from openproceedings.engine.parity import ParityError, check_parity
+from openproceedings.ingest.record import PaperRecord
 from openproceedings.query.normalize import normalize
 
 from tests.corpus import fixture_records
+from tests.fixtures.corpus import abstract_kinds
 from tests.fixtures.corpus.synthetic_5k import records
 from tests.unit.engine.test_exclusions import tantivy_of
 
@@ -126,8 +129,8 @@ def test_documents_on_one_side_only_are_named(
 ) -> None:
     real = parity._stored
 
-    def changed(searcher: object) -> Iterator[tuple[str, dict[str, str]]]:
-        docs = list(real(searcher))  # type: ignore[arg-type]
+    def changed(searcher: object, kind: bool = False) -> Iterator[tuple[str, dict[str, str]]]:
+        docs = list(real(searcher, kind))  # type: ignore[arg-type]
         if change == "missing":
             docs = docs[1:]
         elif change == "missing-middle":
@@ -257,3 +260,52 @@ def test_the_cli_verifies_the_index_before_reading_its_manifest(
     assert main(args) == 1
     err = capsys.readouterr().err
     assert "op index parity:" in err and "Traceback" not in err and "KeyError" not in err
+
+
+# --- schema 4: each document's stored `abstract_kind` is its record's (decision-049) ---------------------------
+@pytest.fixture(scope="module")
+def kinds_built(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
+    root = tmp_path_factory.mktemp("parity-kinds")
+    engine = tantivy_of(abstract_kinds.records(), root, "4")
+    return root / "indexes" / engine.index_version, root / "snap"
+
+
+def test_a_schema_4_index_holds_each_records_abstract_kind(kinds_built: tuple[Path, Path]) -> None:
+    assert check_parity(*kinds_built, workers=1).records == len(abstract_kinds.records())
+
+
+def test_a_stored_abstract_kind_that_differs_from_the_records_is_caught(
+    kinds_built: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A record whose claims now derive another kind than the index stored (the OpenAlex claim gone, so `none`):
+    the walk names it, as it names a token difference."""
+    target = next(r for r in abstract_kinds.records() if r.abstract_kind == "openalex")
+    real = parity.normalized
+
+    def tampered(*args: Any, **kwargs: Any) -> Iterator[tuple[PaperRecord, dict[str, list[str]]]]:
+        for record, fields in real(*args, **kwargs):
+            if record.id == target.id:
+                record = record.model_copy(update={"abstract": None, "provenance": ()})
+            yield record, fields
+
+    monkeypatch.setattr(parity, "normalized", tampered)
+    with pytest.raises(
+        ParityError, match=rf"{target.id}: the index stores abstract_kind 'openalex', the record's is 'none'"
+    ):
+        check_parity(*kinds_built, workers=1)
+
+
+def test_a_schema_3_index_has_no_abstract_kind_to_check(tmp_path: Path) -> None:
+    plain = [r for r in abstract_kinds.records() if r.abstract_kind != "openalex"]
+    engine = tantivy_of(plain, tmp_path, "3")
+    assert check_parity(
+        tmp_path / "indexes" / engine.index_version, tmp_path / "snap", workers=1
+    ).records == len(plain)
+
+
+def test_an_index_of_an_unserved_schema_is_refused_before_the_walk(kinds_built: tuple[Path, Path]) -> None:
+    index, snap = kinds_built
+    manifest = {**index_module.verify_index(index), "schema_version": "2"}
+    with pytest.raises(IndexBuildError, match="schema 2, which this code no longer serves") as refused:
+        check_parity(index, snap, workers=1, manifest=manifest)
+    assert not isinstance(refused.value, ParityError)

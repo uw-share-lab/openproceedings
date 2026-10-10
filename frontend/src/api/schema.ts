@@ -728,6 +728,13 @@ export interface components {
          *     occur only; years as strings.
          */
         Facets: {
+            /**
+             * Abstract Kind
+             * @description Each abstract kind's count (`official`, `openalex`, `none`; decision-049), counted like the other fields. null on an index of schema 3, which holds no such field (not "no records").
+             */
+            abstract_kind: {
+                [key: string]: number;
+            } | null;
             /** Status */
             status: {
                 [key: string]: number;

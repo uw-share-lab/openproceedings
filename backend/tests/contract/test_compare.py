@@ -1944,7 +1944,13 @@ def test_a_web_of_science_record_is_matched_by_its_doi(tmp_path: Path) -> None:
     assert body["not_compared_total"] == 0
 
 
-def test_abstract_kind_on_a_schema_3_index_is_a_422(shared: TestClient) -> None:
+def test_abstract_kind_on_a_schema_3_index_is_a_422(tmp_path: Path) -> None:
     """decision-049: the compared query runs on the served index, which (schema 3) holds no `abstract_kind`."""
-    e = error(post(shared, the_file(), f"{Q} abstract_kind:openalex"), 422, "FIELD_NOT_INDEXED")
-    assert "schema 4" in e["message"]
+    corpus = [*list(records())[:800], list(records())[TWIN]]
+    version = build(
+        corpus, tmp_path / "snapshots", "compared", tmp_path / "indexes", paper=attributed, schema_version="3"
+    )
+    (tmp_path / "indexes" / "current").symlink_to(version)
+    with app_of(tmp_path) as client:
+        e = error(post(client, the_file(), f"{Q} abstract_kind:openalex"), 422, "FIELD_NOT_INDEXED")
+    assert "schema 4" in e["message"] and version in e["message"]

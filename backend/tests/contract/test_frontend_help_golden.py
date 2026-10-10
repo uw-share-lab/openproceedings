@@ -52,8 +52,9 @@ def test_parse_serves_each_examples_message(client: TestClient) -> None:
         assert (m["code"], m["message"]) in said, m["code"]
 
 
-def test_search_serves_the_unindexed_field_message_with_its_own_index(client: TestClient) -> None:
-    """The example's 422 from a schema-3 index (the served fixture's) is the page's message, naming that index."""
+def test_search_serves_the_unindexed_field_message_with_its_own_index(schema_3_client: TestClient) -> None:
+    """The example's 422 from a schema-3 index is the page's message, naming that index."""
+    client = schema_3_client
     engine = client.app.state.index.engine  # type: ignore[attr-defined]
     for m in COMMITTED["messages"]:
         if m["code"] == "FIELD_NOT_INDEXED":

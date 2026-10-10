@@ -91,9 +91,13 @@ record pins it. Only then drop the schema from `SERVED_SCHEMAS`, with its path a
 while two are served first retires the oldest. A tantivy-py upgrade is different: the engine refuses an index
 built by another Tantivy, so it strands old indexes whatever `SERVED_SCHEMAS` holds.
 
-**Now served: schema 3 only.** Schema 2 (a verified clause's ids as a term set on the text `id`) is gone, with
-`TantivyEngine.ord_indexed`, the text-`id` `id_set` and the 2-vs-3 comparison tests and benches. `SchemaForm` is
-empty until the next schema adds a field. An index of schema 2 is refused (`unservable`).
+**Now served: schemas 3 and 4.** Schema 4 (current) stores the derived `abstract_kind` as a raw fast field
+(`SchemaForm(abstract_kind=True)`, decision-049); schema 3 lacks it. An engine reads its own `filter_fields` and
+`combo` from its form (never the module `COMBO`, which is schema 4's); a schema-3 engine refuses `abstract_kind:`
+(`FIELD_NOT_INDEXED`) and derives the kind it displays from the stored abstract, which is exact only because a
+schema-3 build refuses an OpenAlex abstract. Schema 2 (a verified clause's ids as a term set on the text `id`) is
+gone, with `TantivyEngine.ord_indexed`, the text-`id` `id_set` and its tests and benches; an index of schema 2 is
+refused (`unservable`). A schema 5 first retires schema 3.
 
 ## Two served tokenizers (decision-033)
 

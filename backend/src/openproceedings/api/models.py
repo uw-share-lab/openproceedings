@@ -131,6 +131,12 @@ class QueryInfo(Model):
     expansions: dict[str, list[str]]  # "<stem><op>" → every term it expands to (guarantee 6)
 
 
+FACET_KIND_DOC = (
+    "Each abstract kind's count (`official`, `openalex`, `none`; decision-049), counted like the other fields. "
+    'null on an index of schema 3, which holds no such field (not "no records").'
+)
+
+
 class Facets(Model):
     """Disjunctive (decision-001): each field counted without its own top-level conjuncts. Values that
     occur only; years as strings."""
@@ -139,6 +145,7 @@ class Facets(Model):
     year: dict[str, int]
     track: dict[str, int]
     status: dict[str, int]
+    abstract_kind: dict[str, int] | None = Field(description=FACET_KIND_DOC)  # decision-049: additive
 
 
 class Highlights(Model):

@@ -119,6 +119,7 @@ function body(over: Partial<Body> = {}): Body {
       year: { "2024": 141, "2023": 88 },
       track: { main: 301, datasets_benchmarks: 64, position: 47, workshop: 205, competition: 4 },
       status: { accepted: 412, rejected: 88 },
+      abstract_kind: null,
     },
     groups: { counts: [], groups_total: 1, limit: 10, not_counted: "fewer_than_two_groups" },
     hits: [HIT],

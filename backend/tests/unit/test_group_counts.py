@@ -22,7 +22,7 @@ from openproceedings import search
 from openproceedings.engine.compile import conjuncts
 from openproceedings.engine.protocol import EngineInputError, EngineInternalError
 from openproceedings.engine.reference import ReferenceEngine
-from openproceedings.engine.tantivy_engine import COMBO, Scope, TantivyEngine, _filter_field, _Parts
+from openproceedings.engine.tantivy_engine import Scope, TantivyEngine, _filter_field, _Parts
 from openproceedings.query.ast import And, Filter, Node, Not, Phrase, Term, Wildcard
 from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.defaults import apply_defaults
@@ -1045,7 +1045,7 @@ def test_bitwise_counting_costs_the_memos_nothing_more(tmp_path: Any) -> None:
     assert engine._masks is not None
     whole = engine.combos([])
     assert [len(values) for values in engine._masks] == [
-        len({c[i] for c, _n in whole}) for i in range(len(COMBO))
+        len({c[i] for c, _n in whole}) for i in range(len(engine.combo))
     ]
 
 

@@ -53,7 +53,7 @@ from openproceedings.engine.compile import FIELDS, Compiled, verified_clauses, w
 from openproceedings.engine.exclusions import ORDER, Excluded, excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInputError, EngineInternalError, Expansions
-from openproceedings.engine.tantivy_engine import COMBO, Scope, TantivyEngine, WouldVerify
+from openproceedings.engine.tantivy_engine import Scope, TantivyEngine, WouldVerify
 from openproceedings.logs import frames, reason_of
 from openproceedings.query.ast import Node, Span, TextField
 from openproceedings.query.groups import Groups, split
@@ -105,12 +105,12 @@ class Shown:
 
     @classmethod
     def of(cls, record: Mapping[str, Any]) -> Shown:
-        # a schema-3 display record has no `abstract_kind`: derived from its abstract, which is exact (no schema-3
-        # index holds an OpenAlex abstract; decision-049)
-        kind = record.get("abstract_kind") or ("none" if record["abstract"] is None else "official")
+        # every display record carries `abstract_kind` (a schema-3 one derives it: `TantivyEngine._display`)
         return cls(
-            **{f: record[f] for f in ("id", "title", "abstract", "venue", "year", "track", "status")},
-            abstract_kind=kind,
+            **{
+                f: record[f]
+                for f in ("id", "title", "abstract", "venue", "year", "track", "status", "abstract_kind")
+            }
         )
 
 
@@ -223,7 +223,7 @@ def run(
         elif facets:  # no worker (the pool is shutting down): counted here instead
             counted = engine.facets(ast, scope=scope)
         # with facets, the combos the worker just collected; without, only the default fields' (TASK-166)
-        over = COMBO if facets else ORDER
+        over = engine.combo if facets else ORDER
         gone = excluded(engine, parsed, total, facets=partial(engine.facets, scope=scope, over=over))
     except BaseException:
         abandoned.set()  # a counting job already running stops before its next collection

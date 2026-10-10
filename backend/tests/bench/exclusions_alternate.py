@@ -24,7 +24,7 @@ from functools import partial
 from pathlib import Path
 
 from openproceedings.engine.exclusions import ORDER, Excluded, excluded
-from openproceedings.engine.tantivy_engine import COMBO, TantivyEngine
+from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.query.ast import Node
 from openproceedings.query.parser import ParseResult, parse
 
@@ -32,7 +32,10 @@ from tests.bench.report_80k import ms, quantile
 from tests.bench.test_bench import BROAD, trust_evals
 from tests.golden.test_trust_evals import STRINGS
 
-PATHS = {"facets": COMBO, "defaults": ORDER}
+
+def paths_of(engine: TantivyEngine) -> dict[str, tuple[str, ...]]:
+    """The two aggregations compared: the engine's own combo (what a search with facets collects) and the defaults'."""
+    return {"facets": engine.combo, "defaults": ORDER}
 
 
 def engine_of(arg: str) -> TantivyEngine:
@@ -51,6 +54,7 @@ def accounting(engine: TantivyEngine, parsed: ParseResult, ast: Node, over: tupl
 
 def main() -> None:
     engine = engine_of(sys.argv[1])
+    paths = paths_of(engine)
     rounds = int(sys.argv[2]) if len(sys.argv) > 2 else 200
     queries: dict[str, ParseResult] = {name: trust_evals(name) for name in STRINGS}
     if sys.argv[1] == "5k":
@@ -64,31 +68,31 @@ def main() -> None:
     for name, parsed in queries.items():
         ast = parsed.effective_ast
         assert ast is not None
-        runs = {k: partial(accounting, engine, parsed, ast, over) for k, over in PATHS.items()}
+        runs = {k: partial(accounting, engine, parsed, ast, over) for k, over in paths.items()}
         engine.faceted.clear()
         assert runs["facets"]() == runs["defaults"](), name
         held = {key.split("\x00")[0]: len(v) for key, v in engine.faceted.items()}  # one base per path here
-        combos = {k: held.get(",".join(over), 0) for k, over in PATHS.items()}
+        combos = {k: held.get(",".join(over), 0) for k, over in paths.items()}
         cells: list[str] = [str(combos["facets"]), str(combos["defaults"])]
-        warm: dict[str, list[float]] = {k: [] for k in PATHS}
-        cpu: dict[str, list[float]] = {k: [] for k in PATHS}
-        cold: dict[str, list[float]] = {k: [] for k in PATHS}
+        warm: dict[str, list[float]] = {k: [] for k in paths}
+        cpu: dict[str, list[float]] = {k: [] for k in paths}
+        cold: dict[str, list[float]] = {k: [] for k in paths}
         print(f"load before warm {name}: {os.getloadavg()[0]:.1f}", flush=True)
         for r in range(rounds):
-            for which in tuple(PATHS) if r % 2 == 0 else tuple(reversed(PATHS)):
+            for which in tuple(paths) if r % 2 == 0 else tuple(reversed(paths)):
                 t, c = time.perf_counter(), time.process_time()
                 runs[which]()
                 warm[which].append(time.perf_counter() - t)
                 cpu[which].append(time.process_time() - c)
         print(f"load before cold {name}: {os.getloadavg()[0]:.1f}", flush=True)
         for r in range(rounds):
-            for which in tuple(PATHS) if r % 2 == 0 else tuple(reversed(PATHS)):
+            for which in tuple(paths) if r % 2 == 0 else tuple(reversed(paths)):
                 engine.faceted.clear()
                 t = time.perf_counter()
                 runs[which]()
                 cold[which].append(time.perf_counter() - t)
         for d, q in ((warm, 0.5), (warm, 0.95), (cpu, 0.5), (cold, 0.5), (cold, 0.95)):
-            cells += [ms(quantile(d[k], q)) for k in PATHS]
+            cells += [ms(quantile(d[k], q)) for k in paths]
         print(f"| {name} | " + " | ".join(cells) + " |", flush=True)
     print(f"load at end: {os.getloadavg()[0]:.1f}")
 

@@ -693,7 +693,7 @@ FORMS_CORPUS = [
 ]
 
 
-@pytest.mark.parametrize("schema_version", ["3"])
+@pytest.mark.parametrize("schema_version", ["3", "4"])
 def test_a_record_saved_on_a_tokenizer_2_index_reproduces_after_the_tokenizer_3_build(
     tmp_path: Path, schema_version: str
 ) -> None:
@@ -764,3 +764,53 @@ def test_a_record_saved_on_a_tokenizer_2_index_reproduces_after_the_tokenizer_3_
     assert drift["status"] == "drifted" and drift["index_version"] == new
     assert [c["input"] for c in drift["changed"]] == ["tokenizer_version"]
     assert (drift["changed"][0]["recorded"], drift["changed"][0]["current"]) == ("2", "3")
+
+
+# --- replay across a schema bump (decision-049): a record pinned to a schema-3 index still reproduces ----------
+@pytest.mark.parametrize("tokenizer_version", ["2", "3"])
+def test_a_record_saved_on_a_schema_3_index_reproduces_after_the_schema_4_build(
+    tmp_path: Path, tokenizer_version: str
+) -> None:
+    """Guarantee 4 across the schema 4 bump: this code serves the schema-3 index a record pins (no `abstract_kind`)
+    beside a schema-4 build of the same snapshot (no OpenAlex abstract, so schema 3 builds). Records saved on the
+    schema-3 index replay `reproduced` on it after `current` moves to the schema-4 one, and both indexes match the
+    same ids, with the same exclusion counts, for every query, verified clauses included."""
+    data_dir = tmp_path / "data"
+    corpus = list(records())
+    old = build(
+        corpus,
+        data_dir / "snapshots",
+        "snap",
+        data_dir / "indexes",
+        schema_version="3",
+        tokenizer_version=tokenizer_version,
+    )
+    new = build(
+        corpus, data_dir / "snapshots", "snap", data_dir / "indexes", tokenizer_version=tokenizer_version
+    )
+    assert old != new  # the schema is an index_version input
+    point_current(data_dir, old)
+    queries = [
+        ("trust AND calibrat*", "native"),
+        ('"large language model$" OR "AI agent$"', "native"),
+        ("agent NEAR/2 trust*", "native"),
+        *((q, "scholar") for q in STRINGS.values() if q.strip()),
+    ]
+    app = make_app(data_dir, record_saves_network_burst=100)  # every query saved twice, in one test
+    with TestClient(app) as client:
+        saved = [save(client, q, mode) for q, mode in queries]
+        point_current(data_dir, new)
+        state: IndexState = app.state.index
+        assert state.load() and state.engine is not None and state.engine.index_version == new
+        assert state.engine.form.abstract_kind
+        on_new = [save(client, q, mode) for q, mode in queries]
+        for record_id, other in zip(saved, on_new, strict=True):
+            body, again = replayed(client, record_id, ids=True), replayed(client, other, ids=True)
+            assert body["replay"]["status"] == "reproduced", body["replay"]
+            assert body["replay"]["index_version"] == old
+            assert again["replay"]["status"] == "reproduced" and again["replay"]["index_version"] == new
+            # the same membership and exclusion counts on either schema
+            mine, theirs = body["record"], again["record"]
+            assert mine["schema_version"] == "3" and theirs["schema_version"] == "4"
+            assert theirs["ids_hash"] == mine["ids_hash"] and theirs["ids"] == mine["ids"]
+            assert theirs["excluded"] == mine["excluded"] and theirs["expansions"] == mine["expansions"]

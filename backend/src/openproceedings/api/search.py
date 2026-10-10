@@ -150,7 +150,7 @@ def search(
         excluded=Excluded.model_validate(found.excluded.to_json()),
         identified_total=identified_total(found.total, found.excluded.total),
         unclassified_total=unclassified_total(found.excluded.track, found.excluded.status),
-        facets=Facets.model_validate(found.facets),
+        facets=Facets.model_validate({**found.facets, "abstract_kind": found.facets.get("abstract_kind")}),
         groups=GroupCounts(
             counts=[
                 GroupCount(span=span, total=alone, total_without=without)

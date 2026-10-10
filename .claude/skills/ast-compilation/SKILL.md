@@ -55,7 +55,8 @@ on a synthetic 80k index stopword cases take 2.3–3.3 s cold and the wildcard-p
 query holds each distinct item once, so a repeated term isn't scored twice. `facets` compiles each distinct
 filter-free query once, and the engine memoises every verified clause (per field), so facets after a match
 cost 0.1–0.3 s on 80k. `facets` collects the query once, without its top-level facet-field filters (`Filter` or
-`NOT` of one; the *base*), as counts per (venue, year, track, status) from one nested terms aggregation (text
+`NOT` of one; the *base*), as counts per combination of the engine's `combo` fields ((venue, year, track, status), plus `abstract_kind`
+on schema 4) from one nested terms aggregation (text
 fast columns can't be read per document in tantivy-py), then counts every field in Python: a combo counts for
 F when it passes every set-aside filter not on F (task-086; equal to one collection per kept set and to the
 oracle, `test_facets_equal.py`). The combos are memoised per base (`faceted`, keyed by its span-less, sorted

@@ -102,7 +102,7 @@ def test_the_response_has_every_field_of_spec_04(client: TestClient, store: Stor
         "translations": [],
         "expansions": {"calibrat*": list(engine_of(client).expand(result.ast.children[1]))},  # type: ignore[union-attr]
     }
-    assert set(body["facets"]) == {"venue", "year", "track", "status"}
+    assert set(body["facets"]) == {"venue", "year", "track", "status", "abstract_kind"}
     assert body["hits"] and all(set(h) == HIT_KEYS for h in body["hits"])
     assert all(set(h["highlights"]) == {"title", "abstract"} for h in body["hits"])
     assert all(set(h["urls"]) == {"forum", "pdf", "proceedings", "doi"} for h in body["hits"])
@@ -313,10 +313,12 @@ def error(r: Any, status: int, code: str) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize("route", ["search", "records", "export", "papers"])
-def test_abstract_kind_on_a_schema_3_index_is_a_422_never_a_500(client: TestClient, route: str) -> None:
+def test_abstract_kind_on_a_schema_3_index_is_a_422_never_a_500(
+    schema_3_client: TestClient, route: str
+) -> None:
     """decision-049: a schema-3 index holds no `abstract_kind`, so a query naming it is the client's error on
     every route that runs a query, refused before anything is compiled."""
-    q = "trust abstract_kind:openalex"
+    q, client = "trust abstract_kind:openalex", schema_3_client
     engine = engine_of(client)
     assert engine.schema_version == "3" and "abstract_kind" not in engine.filter_fields
     r = {

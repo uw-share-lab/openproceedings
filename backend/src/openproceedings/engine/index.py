@@ -51,7 +51,7 @@ log = logging.getLogger(__name__)
 
 # The schema table below, the analyzer and how fields are populated (a missing abstract is ""). Any
 # change to them is a new SCHEMA_VERSION (index-versioning skill).
-SCHEMA_VERSION = "3"  # 3: `ord` indexed too, so a verified clause's ids are a u64 term set (TASK-167)
+SCHEMA_VERSION = "4"  # 4: `abstract_kind`, a raw fast field (decision-049); 3: `ord` indexed too (TASK-167)
 
 
 # The schema versions this code serves (guarantee 4: an index a search record pins keeps replaying): the current
@@ -62,13 +62,20 @@ SCHEMA_VERSION = "3"  # 3: `ord` indexed too, so a verified clause's ids are a u
 class SchemaForm:
     """What differs between the served schemas, read per index from its manifest's `schema_version`."""
 
-    abstract_kind: bool  # a stored fast `abstract_kind` (schema 4)
+    abstract_kind: bool  # a stored raw fast `abstract_kind` (schema 4): its filter and facet
+
+    @property
+    def facets(self) -> tuple[str, ...]:
+        """The raw fast text fields every document holds: filtered and counted (year is the u64 column)."""
+        return ("venue", "track", "status", *(("abstract_kind",) if self.abstract_kind else ()))
 
 
-SERVED_SCHEMAS: Mapping[str, SchemaForm] = MappingProxyType({SCHEMA_VERSION: SchemaForm(abstract_kind=False)})
+SERVED_SCHEMAS: Mapping[str, SchemaForm] = MappingProxyType(
+    {"3": SchemaForm(abstract_kind=False), SCHEMA_VERSION: SchemaForm(abstract_kind=True)}
+)
 ANALYZER = "exact_v1"
 TEXT: tuple[str, ...] = TEXT_FIELDS  # the searched fields (vocab), as the schema's field names
-FACETS = ("venue", "track", "status")
+FACETS = SERVED_SCHEMAS[SCHEMA_VERSION].facets  # the current schema's
 # Tantivy drops a longer token without a word; a build refuses one instead (measured on tantivy 0.26.2).
 MAX_TOKEN_BYTES = 65_530
 # Ranking is part of what gets reproduced, so it is part of index_version (spec 03 §Ranking).
@@ -152,7 +159,7 @@ def schema(version: str | None = None) -> tantivy.Schema:
     b.add_text_field("id", stored=True, tokenizer_name="raw")
     for field in TEXT:
         b.add_text_field(field, stored=True, tokenizer_name=ANALYZER, index_option="position")
-    for field in FACETS:
+    for field in SERVED_SCHEMAS[version].facets:
         b.add_text_field(field, stored=True, fast=True, tokenizer_name="raw")
     b.add_unsigned_field("year", stored=True, indexed=True, fast=True)
     # the record's position in id order (a fast column), so a match set reads back as ids without
@@ -203,14 +210,16 @@ def _cpus() -> int:
     return os.cpu_count() or 1
 
 
-def _document(r: PaperRecord, fields: dict[str, list[str]], ord_: int, title_rank: int) -> tantivy.Document:
+def _document(
+    r: PaperRecord, fields: dict[str, list[str]], ord_: int, title_rank: int, form: SchemaForm
+) -> tantivy.Document:
     doc = tantivy.Document()
     doc.add_text("id", r.id)
     doc.add_unsigned("ord", ord_)
     doc.add_unsigned("title_rank", title_rank)
     for field in TEXT:
         doc.add_text(field, " ".join(fields[field]))  # the token contract's output; "" for a missing abstract
-    for field in FACETS:
+    for field in form.facets:  # `abstract_kind` (schema 4) is the record's derived field
         doc.add_text(field, getattr(r, field))
     doc.add_unsigned("year", r.year)
     # the display text (the indexed fields hold tokens, never shown) and every display-only field (DISPLAY)
@@ -355,18 +364,24 @@ def _add_all(
     exact: tantivy.TextAnalyzer,
     workers: int,
     ids: Any,
+    form: SchemaForm,
     commit_every: int | None = None,
     tokenizer: str = TOKENIZER_VERSION,
 ) -> int:
-    """Stream the snapshot's records through normalize() into the writer."""
+    """Stream the snapshot's records through normalize() into the writer, as documents of schema `form`."""
     ranks = _title_ranks(snapshot)
     added = 0
     started = time.perf_counter()
     for r, fields in normalized(snapshot, workers, tokenizer):
+        if not form.abstract_kind and r.abstract_kind == "openalex":
+            # a schema-3 index could neither filter nor label it, and its display derives the kind from the
+            # stored abstract (`TantivyEngine._display`), which is exact only while no schema-3 index holds one
+            raise IndexBuildError(f"{r.id}: an OpenAlex abstract needs index schema 4 (schema 3 can't filter or "
+                                  "label it): build at the current schema")  # fmt: skip
         _check_tokens(r, fields, exact)
         if r.id not in ranks:  # can't happen for a valid line; refuse rather than guess a rank
             raise IndexBuildError(f"{r.id}: no title rank (the snapshot's lines didn't read the same twice)")
-        writer.add_document(_document(r, fields, added, ranks[r.id]))
+        writer.add_document(_document(r, fields, added, ranks[r.id], form))
         if commit_every and (added + 1) % commit_every == 0:
             writer.commit()  # tests: several segments
         ids.write(r.id + "\n")
@@ -447,6 +462,7 @@ def build_index(
                     exact,
                     workers if workers is not None else _cpus(),
                     ids,
+                    SERVED_SCHEMAS[schema_version],
                     commit_every,
                     tokenizer,
                 )

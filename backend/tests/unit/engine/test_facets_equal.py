@@ -150,8 +150,10 @@ def test_a_counted_field_must_be_aggregated(engines: Engines) -> None:
 
 
 def test_the_combo_fields_are_the_facet_fields(engines: Engines) -> None:
-    # a schema-3 index holds every facet field but `abstract_kind`, and aggregates exactly the fields it holds
-    assert sorted(COMBO) == sorted(set(FACET_FIELDS) - {"abstract_kind"}) == sorted(engines[1].filter_fields)
+    # an engine aggregates exactly the filter fields its index holds; schema 4's (COMBO) are every facet field
+    engine = engines[1]
+    assert sorted(engine.combo) == sorted(engine.filter_fields)
+    assert FACET_FIELDS == COMBO == engine.combo
 
 
 def test_combos_cover_every_document_of_the_base(engines: Engines) -> None:

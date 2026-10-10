@@ -48,9 +48,10 @@ from openproceedings.query.normalize import SERVED_TOKENIZERS
 SORTS = ("relevance", "year_desc", "year_asc", "title")
 # every served schema's filter fields; an engine's own (`filter_fields`) add what its schema holds beyond them
 BASE_COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
-# a document's facet values, in this order: what every filter and facet depends on (task-086)
-COMBO: tuple[str, ...] = BASE_COMBO
-# a document's values of the aggregated fields (`facets`' `over`; all of COMBO unless narrowed), in COMBO order:
+# a document's facet values, in this order: what every filter and facet depends on (task-086). Schema 4's; an
+# engine's own is `self.combo` (its `filter_fields`: schema 3's lacks `abstract_kind`)
+COMBO: tuple[str, ...] = (*BASE_COMBO, "abstract_kind")
+# a document's values of the aggregated fields (`facets`' `over`; all of the engine's combo unless narrowed), in that order:
 # each a str, but `year`, an int; as many values as `over` has fields
 type Combo = tuple[str | int, ...]
 # (field, clause) → the ids that clause verified: the engine's memo, or one request's own (`Overlay`)
@@ -197,7 +198,8 @@ class TantivyEngine:
     MAX_COMPILED_UNITS = 500_000
     MAX_VERIFIED_IDS = 500_000
     MAX_EXPANDED_TERMS = 100_000
-    MAX_FACET_COMBOS = 100_000  # `faceted`: a base's (venue, year, track, status) combos, + 1 (a few hundred)
+    # `faceted`: a base's (venue, year, track, status, abstract_kind) combos, + 1: up to three times schema 3's
+    MAX_FACET_COMBOS = 300_000
 
     def __init__(self, path: Path) -> None:
         manifest = verify_index(path)
@@ -221,6 +223,8 @@ class TantivyEngine:
         self.filter_fields: tuple[str, ...] = BASE_COMBO + (
             ("abstract_kind",) if self.form.abstract_kind else ()
         )
+        # the fields a document's combo holds (`combos`), in this order: the filter fields, already in COMBO's order
+        self.combo: tuple[str, ...] = self.filter_fields
         if not _indexes_ord(self.index.schema, self.searcher):
             # a manifest that names a schema its files don't have: refused here, not query by query
             raise IndexUnservable(
@@ -232,7 +236,7 @@ class TantivyEngine:
         # id → ord (its position in `ids.txt`), built on the first verified clause a schema-3 compile names
         # (`id_set`), then kept: one dict entry per record (a few MB at 80k), never changed after
         self._ords: dict[str, int] | None = None
-        # each facet field's values (COMBO order), each with the bitmap of the documents (by ord) that have it, built
+        # each facet field's values (`combo` order), each with the bitmap of the documents (by ord) that have it, built
         # on the first count that collects its conjuncts as bitmaps (`counts`), then kept, never changed after:
         # values × documents / 8 bytes (~0.5 MB at 133k documents and 30 values; it grows with the index's facet
         # values, e.g. more track values, TASK-130)
@@ -358,8 +362,8 @@ class TantivyEngine:
         return [(float(sign * v), i, s) for v, s, i in zip(values, scores, ids, strict=True)]
 
     def documents(self, ast: Node) -> tuple[int, Iterator[dict[str, Any]]]:
-        """How many documents match, and every match's display record (id, venue, year, track, status, and
-        the stored title, abstract, authors, urls, presentation, keywords, venue_id_raw) in id order, read
+        """How many documents match, and every match's display record (id, venue, year, track, status, abstract_kind,
+        and the stored title, abstract, authors, urls, presentation, keywords, venue_id_raw) in id order, read
         one at a time: what an export streams (spec 04 §Exports). One collection of the match set."""
         addresses = self.hits(self.compile(ast).query)
         if not addresses:
@@ -377,10 +381,16 @@ class TantivyEngine:
 
     def _display(self, address: tantivy.DocAddress) -> dict[str, Any]:
         doc = self.searcher.doc(address).to_dict()
+        shown = record_of(doc["record"][0])
+        # schema 3 stores no kind: derived from the stored abstract, exact because a schema-3 build refuses a
+        # record whose abstract is OpenAlex's (`index._add_all`)
+        kind = doc["abstract_kind"][0] if self.form.abstract_kind else (
+            "none" if shown.get("abstract") is None else "official")  # fmt: skip
         return {
             "id": doc["id"][0],
             **{f: doc[f][0] for f in ("venue", "track", "status", "year")},
-            **record_of(doc["record"][0]),
+            "abstract_kind": kind,
+            **shown,
         }
 
     def facets(
@@ -389,21 +399,21 @@ class TantivyEngine:
         fields: tuple[str, ...] | None = None,
         *,
         scope: Scope | None = None,
-        over: tuple[str, ...] = COMBO,
+        over: tuple[str, ...] | None = None,
     ) -> dict[str, dict[str, int]]:
         """Disjunctive facets (spec 04, decision-001 rule 6): field F is counted over the matches of the
         query without F's own top-level conjuncts (a filter on F, or NOT of one; nested ones stay).
 
         One collection serves every field (task-086). The query's top-level facet-field filters (`Filter`,
         or `NOT` of one) are set aside, and the rest (the *base*) is collected once, counting its matches
-        per combination of (venue, year, track, status) with one nested terms aggregation over those fast
-        columns. A filter depends only on its field's value, so field F's count is exact from the combos:
+        per combination of the engine's `combo` fields ((venue, year, track, status), and `abstract_kind` on
+        schema 4) with one nested terms aggregation over those fast columns. A filter depends only on its field's value, so field F's count is exact from the combos:
         those passing every set-aside filter not on F, summed by their F value. The combos are memoised per
         base (`faceted`, by its span-less, sorted conjuncts), so another page, exclusion accounting (whose
         trees differ only in top-level filters) and a later query with the same base never collect again.
         Proved equal to one collection per kept set, and to ReferenceEngine (`test_facets_equal.py`).
 
-        `over` narrows the aggregation to some of those fields (each counted field among them): only their
+        `over` (the engine's `combo` by default) narrows the aggregation to some of those fields (each counted field among them): only their
         top-level filters are set aside, and every other field's stay in the collected query, so the combos
         are fewer. Exclusion accounting without facets passes the two default fields (`exclusions.ORDER`,
         `search.run`): a few combos to read instead of hundreds, and the base it collects is no wider than the
@@ -417,7 +427,7 @@ class TantivyEngine:
             raise EngineInputError(
                 DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {self.filter_fields}"
             )
-        over = _aggregated(over)
+        over = self._aggregated(self.combo if over is None else over)
         if not set(fields) <= set(over):
             raise EngineInternalError(
                 DiagnosticCode.API_INTERNAL, f"facet fields {fields} must be among the aggregated {over}"
@@ -462,7 +472,7 @@ class TantivyEngine:
         """How many documents match each of `trees`, without reading an id (TASK-176: a query's concept groups,
         each alone and the query without each; `search.run`). Counted as a facet is: a tree's top-level
         filters (`Filter`, or `NOT` of one) are set aside, the rest (its *base*) is counted per combination of
-        (venue, year, track, status) (`combos`, memoised per base: another page, and the same group under
+        the engine's `combo` fields (`combos`, memoised per base: another page, and the same group under
         other filters, never collect again), and the combos passing every filter are summed. A filter
         depends only on its field's value, so the sum is exact (`test_group_counts.py` holds it to
         `match_ids` and to ReferenceEngine).
@@ -503,7 +513,7 @@ class TantivyEngine:
             if check is not None:
                 check()
             self.expansions(ast)  # the cap applies, as for every tree an engine is given
-            filters = [(COMBO.index(f), c) for c in tops if (f := _filter_field(c)) is not None]
+            filters = [(self.combo.index(f), c) for c in tops if (f := _filter_field(c)) is not None]
             combos = self.combos(base, scope, parts=parts)
             out.append(sum(n for combo, n in combos if all(_passes(c, combo[at]) for at, c in filters)))
         return out
@@ -512,21 +522,21 @@ class TantivyEngine:
         self,
         base: list[Node],
         scope: Scope | None = None,
-        over: tuple[str, ...] = COMBO,
+        over: tuple[str, ...] | None = None,
         *,
         parts: _Parts | None = None,
     ) -> tuple[tuple[Combo, int], ...]:
         """How many matches of `base`'s conjunction (every document when empty) have each combination of the
-        `over` fields' values (a subsequence of COMBO: (venue, year, track, status) unless narrowed), from one
+        `over` fields' values (a subsequence of the engine's `combo`, the whole of it unless narrowed), from one
         collection (or, for `counts`, from its conjuncts' bitmaps: `_Parts.bitwise`); memoised per base and
         fields under task-080's rules."""
-        over = _aggregated(over)
+        over = self._aggregated(self.combo if over is None else over)
         spanless = _spanless if parts is None else parts.spanless
         key = "\x00".join((",".join(over), *sorted(spanless(c) for c in base)))
         hit = self.faceted.get(key)  # one read (task-080)
         if hit is not None:
             return hit
-        if parts is not None and parts.bitwise and over == COMBO:
+        if parts is not None and parts.bitwise and over == self.combo:
             combos = self._combos_of(parts.bits(base), parts.check)
         else:
             combos = self._aggregate(base, scope, over, parts)
@@ -534,6 +544,16 @@ class TantivyEngine:
         self.faceted[key] = combos  # stored complete (an immutable tuple), never changed after
         self.charges["faceted"].append(len(combos) + 1)
         return combos
+
+    def _aggregated(self, over: tuple[str, ...]) -> tuple[str, ...]:
+        """`over` as the combos aggregate it: in the engine's `combo` order (one memo key per set of fields),
+        refused when empty or naming a field outside it (a caller's bug: an internal error, never a silent
+        drop)."""
+        if not over or not set(over) <= set(self.combo):
+            raise EngineInternalError(
+                DiagnosticCode.API_INTERNAL, f"the aggregated fields {over} must be some of {self.combo}"
+            )
+        return tuple(f for f in self.combo if f in over)
 
     def _aggregate(
         self, base: list[Node], scope: Scope | None, over: tuple[str, ...], parts: _Parts | None
@@ -547,7 +567,7 @@ class TantivyEngine:
         else:
             query = self.compile(node, scope).query
         aggs: dict[str, Any] = {}
-        for f in reversed(over):  # venue → year → track → status, innermost last
+        for f in reversed(over):  # venue → year → track → status (→ abstract_kind), innermost last
             aggs = {f: {"terms": {"field": f, "size": 100_000}, **({"aggs": aggs} if aggs else {})}}
         found: list[tuple[Combo, int]] = []
         _walk(self.searcher.aggregate(query, aggs), over, (), found)
@@ -556,7 +576,7 @@ class TantivyEngine:
     def _combos_of(
         self, documents: int, check: Callable[[], None] | None = None
     ) -> tuple[tuple[Combo, int], ...]:
-        """`combos` of a bitmap of documents (bit `ord` set for each), over every COMBO field: each combination's
+        """`combos` of a bitmap of documents (bit `ord` set for each), over every field of the engine's `combo`: each combination's
         documents are the AND of its values' bitmaps, walked field by field and pruned where none is left.
         `check`, as `counts`': asked before each collection, should the per-value bitmaps be built now."""
         masks = self._value_masks(check)
@@ -578,7 +598,7 @@ class TantivyEngine:
     def _value_masks(
         self, check: Callable[[], None] | None = None
     ) -> tuple[tuple[tuple[str | int, int], ...], ...]:
-        """Each COMBO field's values, each with the bitmap of the documents that have it (`_masks`): the values
+        """Each `combo` field's values, each with the bitmap of the documents that have it (`_masks`): the values
         a terms aggregation over every document finds, and each one's documents collected by its own term (a
         year by its one-year range), so a document is in a value's bitmap exactly when the aggregation counts it
         under that value. Built lazily, by the first count that needs them (about 30 collections on the real
@@ -587,7 +607,7 @@ class TantivyEngine:
         masks = self._masks  # one read (task-080); built whole, then stored with one assignment
         if masks is None:
             built = []
-            for f in COMBO:
+            for f in self.combo:
                 found = self.searcher.aggregate(
                     tantivy.Query.all_query(), {f: {"terms": {"field": f, "size": 100_000}}}
                 )
@@ -861,16 +881,6 @@ class _Parts:
                 query = self.conjunct(c)
             bits = self.matched[id(c)] = self.engine._bitmap(query)
         return bits
-
-
-def _aggregated(over: tuple[str, ...]) -> tuple[str, ...]:
-    """`over` as the combos aggregate it: in COMBO's order (one memo key per set of fields), refused when empty
-    or naming a field outside COMBO (a caller's bug: an internal error, never a silent drop)."""
-    if not over or not set(over) <= set(COMBO):
-        raise EngineInternalError(
-            DiagnosticCode.API_INTERNAL, f"the aggregated fields {over} must be some of {COMBO}"
-        )
-    return tuple(f for f in COMBO if f in over)
 
 
 def _indexes_ord(schema: tantivy.Schema, searcher: tantivy.Searcher) -> bool:

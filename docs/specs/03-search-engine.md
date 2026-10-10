@@ -57,6 +57,7 @@ never logged. It runs on the synthetic 5k corpus in CI; on the real corpus it ru
 | `title` | text, positions | ✓ | ✓ | |
 | `abstract` | text, positions | ✓ | ✓ | |
 | `venue`, `track`, `status` | text (raw, facet) | ✓ | ✓ | ✓ |
+| `abstract_kind` | text (raw, facet): the record's derived `official` / `openalex` / `none` (decision-049) | ✓ from schema 4 | ✓ | ✓ |
 | `year` | u64 | ✓ | ✓ | ✓ |
 | `ord` | u64: the record's position in id order (`ids.txt` maps it back) | ✓ from schema 3 | | ✓ |
 | `title_rank` | u64: the record's position in display-title order (`sort=title`) | | | ✓ |
@@ -216,6 +217,19 @@ change was kept by owner decision, since it is exact and replay-safe (decision-0
 Schema 2 was retired (decision-049 milestone C) once no search record pinned a schema-2 index: every served index
 was rebuilt at schema 3, `current` repointed, and each schema-2 version checked with `op index retire --dry-run`
 (0 pins). Its path and tests are dropped from the code; any other schema is refused (`unservable`).
+
+**Schema 4 (decision-049 milestone C).** New indexes store the record's derived `abstract_kind` as a raw fast field,
+so `abstract_kind:` filters and facets. `SERVED_SCHEMAS` is `{"3": SchemaForm(abstract_kind=False), "4":
+SchemaForm(abstract_kind=True)}`, and `SchemaForm.facets` names each schema's raw fast text fields. An engine's
+`filter_fields` and its combo (`TantivyEngine.combo`: the fields one nested terms aggregation counts a base by) are
+its own: (venue, year, track, status), plus `abstract_kind` on schema 4 (the module's `COMBO`). A schema-3 engine
+refuses a query naming `abstract_kind:` (`FIELD_NOT_INDEXED`, 422). Its display records derive the kind from the
+stored abstract (`none` or `official`), which is exact because a schema-3 build refuses a record whose abstract
+is OpenAlex's (`IndexBuildError`, "needs index schema 4"). The combo memo's budget (`MAX_FACET_COMBOS`) triples to
+300,000, since a base can have up to three times schema 3's combos. On schema 4, `op index parity` also checks that
+each document's stored `abstract_kind` equals its record's. On a corpus both can hold, the two schemas give the
+same ids, float scores and shared-field facets (`test_served_schemas.py`), and a record saved on a schema-3 index
+replays `reproduced` after the schema-4 build (`test_records.py`).
 
 **Served tokenizers (decision-033).** An index's terms are its tokenizer's, so a query is parsed, its canonical
 hashed and its hits highlighted with the tokenizer its index was built with (`TantivyEngine.tokenizer_version`,

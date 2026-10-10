@@ -4,6 +4,7 @@ counts from `identification_ast`, never from re-parsing `identification_query`."
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from openproceedings.engine.protocol import Engine, EngineInputError, EngineInte
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.ingest.dedup import DedupResult
+from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import render
 from openproceedings.query.defaults import DEFAULT_CLAUSES
 from openproceedings.query.parser import ParseResult, parse
@@ -43,12 +45,19 @@ QUERIES = [
 
 
 def tantivy_of(
-    records: list[Rec], root: Path, schema_version: str | None = None, tokenizer_version: str | None = None
+    records: Sequence[Rec | PaperRecord],
+    root: Path,
+    schema_version: str | None = None,
+    tokenizer_version: str | None = None,
 ) -> TantivyEngine:
-    """An engine over a fresh index of `records` (at `schema_version`, the current one by default)."""
+    """An engine over a fresh index of `records` (at `schema_version`, the current one by default). A fixture
+    `Rec` becomes a snapshot record (`as_paper`); a `PaperRecord` is indexed as it is, its provenance (and so its
+    `abstract_kind`) kept."""
     snap = root / "snap"
     snap.mkdir(parents=True)
-    papers = tuple(sorted((as_paper(r) for r in records), key=lambda p: p.id))
+    papers = tuple(
+        sorted((r if isinstance(r, PaperRecord) else as_paper(r) for r in records), key=lambda p: p.id)
+    )
     for name, data in render(DedupResult(papers, (), ()), [], BUILT).items():
         (snap / name).write_bytes(data)
     return TantivyEngine(

@@ -1183,6 +1183,21 @@
       "Facets": {
         "description": "Disjunctive (decision-001): each field counted without its own top-level conjuncts. Values that\noccur only; years as strings.",
         "properties": {
+          "abstract_kind": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Each abstract kind's count (`official`, `openalex`, `none`; decision-049), counted like the other fields. null on an index of schema 3, which holds no such field (not \"no records\").",
+            "title": "Abstract Kind"
+          },
           "status": {
             "additionalProperties": {
               "type": "integer"
@@ -1216,7 +1231,8 @@
           "venue",
           "year",
           "track",
-          "status"
+          "status",
+          "abstract_kind"
         ],
         "title": "Facets",
         "type": "object"
