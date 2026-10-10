@@ -209,4 +209,7 @@ def _hit(found: Found, credit: Attribution | None, *, withheld: bool, twins: tup
         abstract_withheld=withheld,
         twins=list(twins),
         abstract_note=None if withheld or credit is None else credit.note,
+        abstract_kind="none"
+        if withheld
+        else r["abstract_kind"],  # a withheld abstract is none, as the paper's
     )

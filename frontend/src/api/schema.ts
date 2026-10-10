@@ -838,6 +838,12 @@ export interface components {
             /** Abstract */
             abstract: string | null;
             /**
+             * Abstract Kind
+             * @description Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @enum {string}
+             */
+            abstract_kind: "official" | "openalex" | "none";
+            /**
              * Abstract Note
              * @description TASK-210 (additive): what to know about the abstract beside its source; null when there is nothing, or when `abstract` is null or withheld. Today only a submission-time abstract has one (an `icml_site` claim read from an official ICML 1997 or 1998 submission page, TASK-207), and it reads, word for word as in every export: Submission-time abstract: as the authors submitted it, which may differ from the published paper's. It is read from the abstract's claim when the snapshot is loaded (`ingest/dedup.py`), never stored in the record.
              */
@@ -1034,7 +1040,7 @@ export interface components {
             abstract: string | null;
             /**
              * Abstract Kind
-             * @description Where the abstract came from: `official` (the venue's own source), `openalex` (OpenAlex's fallback, only for AAAI, AIES and FAccT papers no official source gives one), or `none`. Derived from the abstract's claims; never stored, never hashed. Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @description Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             readonly abstract_kind: "official" | "openalex" | "none";
@@ -1836,6 +1842,11 @@ export interface components {
         };
         /** Vocabularies */
         Vocabularies: {
+            /**
+             * Abstract Kind
+             * @description The `abstract_kind` values (decision-049).
+             */
+            abstract_kind: ("official" | "openalex" | "none")[];
             /** Status */
             status: ("accepted" | "rejected" | "withdrawn" | "desk_rejected" | "unknown")[];
             /** Track */

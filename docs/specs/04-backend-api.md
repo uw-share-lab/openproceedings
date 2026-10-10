@@ -193,6 +193,13 @@ snapshot is loaded, never stored in the record or the index: a record whose abst
 (PMLR, OpenReview, a proceedings site) also holds is credited to that claim and has no note. Null when the
 abstract is null or withheld (a takedown). `GET /papers/{id}` carries the same `abstract_note` at its top level.
 
+`abstract_kind` (decision-049, additive; open enum) says where a hit's abstract came from: `official` (the venue's own
+source), `openalex` (filled from OpenAlex, only for an AAAI, AIES or FAccT paper no official source gives one) or
+`none` (no abstract, or one withheld by a takedown). `GET /papers/{id}` carries it on `paper` (a derived field, like
+`venue_name`). `facets.abstract_kind` counts it like the other facets, and is null on an index of schema 3, which holds
+no such field (a query naming `abstract_kind:` on one is 422 `FIELD_NOT_INDEXED`). `GET /meta` `values.abstract_kind`
+lists the three values.
+
 `excluded` always has this shape: `total` (= the `identification_ast` count − `total`, 03 §Exclusion
 accounting) plus a `track` and a `status` map whose buckets sum to it. Each map always carries an `unknown`
 key, even when 0, so unclassified records are itemised and never folded into another bucket. Buckets are
@@ -563,8 +570,8 @@ route execution.
   columns `abstract_source`, `abstract_origin`, `abstract_url` and `abstract_withheld` (TASK-138, above;
   JSONL: an `abstract_source` object and `abstract_withheld`), then `abstract_withheld_reason` (TASK-136;
   JSONL the same key), then `twins` (TASK-162; JSONL a list, only on a record with a twin), then
-  `abstract_note` (TASK-210; JSONL the same key, only on a submission-time abstract), UTF-8 with a BOM
-  (so Excel opens it correctly).
+  `abstract_note` (TASK-210; JSONL the same key, only on a submission-time abstract), then `abstract_kind`
+  (decision-049; JSONL the same key on every record), UTF-8 with a BOM (so Excel opens it correctly).
 - **BibTeX:** `@inproceedings` for an `accepted` paper, with `booktitle` = the venue string. Any other status
   (`rejected`, `withdrawn`, `desk_rejected`, `unknown`) is `@unpublished`, BibTeX's type for a paper with an
   author and title that was not formally published, and has **no `booktitle`**. Its `note` starts

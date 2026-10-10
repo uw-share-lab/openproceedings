@@ -17,7 +17,7 @@ from openproceedings.api.state import IndexState
 from openproceedings.ingest.caps import MAX_TITLE
 from openproceedings.query.ast import FILTER_FIELDS
 from openproceedings.query.parser import MAX_DEPTH, MAX_QUERY_LENGTH
-from openproceedings.vocab import STATUSES, TEXT_FIELDS, TRACKS, VENUES
+from openproceedings.vocab import ABSTRACT_KINDS, STATUSES, TEXT_FIELDS, TRACKS, VENUES
 
 router = APIRouter(prefix=API_PREFIX)
 
@@ -32,7 +32,12 @@ def get_meta(request: Request, engine: EngineDep, served: ServedDep) -> MetaResp
         text_fields=list(TEXT_FIELDS),
         filter_fields=list(FILTER_FIELDS),
         values=Vocabularies.model_validate(
-            {"venue": list(VENUES.values()), "track": list(TRACKS), "status": list(STATUSES)}
+            {
+                "venue": list(VENUES.values()),
+                "track": list(TRACKS),
+                "status": list(STATUSES),
+                "abstract_kind": list(ABSTRACT_KINDS),
+            }
         ),
         limits=Limits(
             max_query_length=MAX_QUERY_LENGTH,

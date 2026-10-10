@@ -2338,7 +2338,8 @@
             "abstract_source": null,
             "abstract_withheld": false,
             "twins": [],
-            "abstract_note": null
+            "abstract_note": null,
+            "abstract_kind": "official"
           }
         ]
       },
@@ -2550,7 +2551,8 @@
             "abstract_source": null,
             "abstract_withheld": false,
             "twins": [],
-            "abstract_note": null
+            "abstract_note": null,
+            "abstract_kind": "official"
           }
         ]
       },
@@ -2778,7 +2780,8 @@
             "abstract_source": null,
             "abstract_withheld": false,
             "twins": [],
-            "abstract_note": null
+            "abstract_note": null,
+            "abstract_kind": "official"
           }
         ]
       },
@@ -3006,7 +3009,8 @@
             "abstract_source": null,
             "abstract_withheld": false,
             "twins": [],
-            "abstract_note": null
+            "abstract_note": null,
+            "abstract_kind": "official"
           }
         ]
       },

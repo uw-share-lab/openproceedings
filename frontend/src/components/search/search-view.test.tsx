@@ -90,6 +90,7 @@ const HIT: Hit = {
   abstract_withheld: false,
   twins: [],
   abstract_note: null,
+  abstract_kind: "official",
 };
 
 function body(over: Partial<Body> = {}): Body {

@@ -15,7 +15,13 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.engine.index import VERSION_NAME
 from openproceedings.ingest.dedup import SUBMISSION_NOTE, Origin
-from openproceedings.ingest.record import PaperRecord, Presentation, Source, Urls
+from openproceedings.ingest.record import (
+    ABSTRACT_KIND_DOC,
+    PaperRecord,
+    Presentation,
+    Source,
+    Urls,
+)
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import MIN_YEAR, FilterField, Node, TextField
 from openproceedings.query.clauses import ParsedFilters
@@ -25,7 +31,7 @@ from openproceedings.records import Excluded as Excluded  # one schema for the e
 from openproceedings.records import SearchRecord
 from openproceedings.search import NotCounted
 from openproceedings.timestamps import CrawlWindow, Timestamp
-from openproceedings.vocab import Status, Track, Venue
+from openproceedings.vocab import AbstractKind, Status, Track, Venue
 
 Sort = Literal["relevance", "year_desc", "year_asc", "title"]  # tantivy_engine.SORTS (a test pins them equal)
 MAX_LIMIT = 200  # spec 04: `limit` above it is a 422 API_BAD_PARAM, never clamped
@@ -231,6 +237,7 @@ class Hit(Model):
     abstract_withheld: bool = Field(description=ABSTRACT_WITHHELD_DOC)  # TASK-136: additive
     twins: list[str] = Field(description=TWINS_DOC)  # TASK-162: additive
     abstract_note: str | None = Field(description=ABSTRACT_NOTE_DOC)  # TASK-210: additive
+    abstract_kind: AbstractKind = Field(description=ABSTRACT_KIND_DOC)  # decision-049: additive
 
 
 IDENTIFIED_DOC = (
@@ -583,6 +590,7 @@ class Vocabularies(Model):
     venue: list[Venue]
     track: list[Track]
     status: list[Status]
+    abstract_kind: list[AbstractKind] = Field(description="The `abstract_kind` values (decision-049).")
 
 
 class Limits(Model):

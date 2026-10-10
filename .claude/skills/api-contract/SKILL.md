@@ -33,7 +33,9 @@ has `id, title, abstract, authors, venue, year, track, status, presentation, sco
 published it, for `ris` read from the claim's evidence, and the paper's page there; TASK-134, decision-018;
 computed per record at snapshot load, `RecordFile.attributions`), and `abstract_note` (TASK-210, additive: the
 attribution's `note`, `ingest/dedup.py::SUBMISSION_NOTE` for an ICML 1997/1998 submission-time abstract, else null;
-`/papers/{id}` carries it at its top level).
+`/papers/{id}` carries it at its top level), and `abstract_kind` (decision-049, additive: `official` | `openalex` |
+`none`; `facets.abstract_kind` is null on a schema-3 index, `/meta` `values.abstract_kind` lists the values; CSV's last
+column and a JSONL key).
 
 **Every response** (not only `/search`) carries `index_version`, `tokenizer_version` and `query_version`
 (spec 04 §Conventions; `.claude/skills/index-versioning/SKILL.md`).

@@ -17,7 +17,8 @@ openproceedings id, so an export round-trips to the ids it came from.
   `searched_at` (the last two empty unless pinned by a record), then `abstract_source`, `abstract_origin` and
   `abstract_url`, then `abstract_withheld` (`true`/`false`), then `abstract_withheld_reason` (`takedown`,
   `source_unavailable` or empty), then `twins` (the record's twins' ids, empty for most; TASK-162), then
-  `abstract_note` (`SUBMISSION_NOTE` or empty; TASK-210), UTF-8 with a BOM (Excel). Lists (authors, keywords,
+  `abstract_note` (`SUBMISSION_NOTE` or empty; TASK-210), then `abstract_kind` (`official`, `openalex` or `none`;
+  decision-049), UTF-8 with a BOM (Excel). Lists (authors, keywords,
   twins) are joined with "; ".
 - BibTeX: `@inproceedings` for an accepted paper, `@unpublished` (no `booktitle`; `note` starts "Submitted to
   <venue>, status: <status in words>.") for any other; keyed `<first author's last name><year><first title
@@ -30,16 +31,18 @@ openproceedings id, so an export round-trips to the ids it came from.
   `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null),
   `abstract_withheld` (a boolean) and `abstract_withheld_reason` (`takedown`, `source_unavailable` or null), and
   `twins` (a list of ids) only on a record with a twin (TASK-162), and `abstract_note` (`SUBMISSION_NOTE`) only
-  on a record whose abstract is a submission-time one (TASK-210).
+  on a record whose abstract is a submission-time one (TASK-210); every record carries `abstract_kind` (the
+  display record's own, decision-049).
 
 A submission-time abstract (TASK-210: an ICML 1997 or 1998 abstract read from the conference's submission pages,
 TASK-207) says so beside its source in every format, in the one sentence the API sends as `abstract_note`
 (`Attribution.note`, `ingest/dedup.py::SUBMISSION_NOTE`), read from the attribution, never from the record. Every
-other record exports byte for byte as before in RIS, BibTeX and JSONL; CSV gains one last, empty cell.
+other record exports byte for byte as before in RIS and BibTeX (JSONL gains `abstract_kind`; CSV gains it as its
+last column, and one empty `abstract_note` cell).
 
 A record's twins (decision-029: an ICLR 2017 workshop copy and its conference submission, two records of one
 paper, never merged) are the ids its `twin` claims name (`RecordFile.twins`, the same ones `GET /search` sends as
-`twins`). A record without one exports byte for byte as before in RIS, BibTeX and JSONL; CSV, whose columns are
+`twins`). A record without one exports as without twins in RIS, BibTeX and JSONL; CSV, whose columns are
 fixed, has one more column, empty for it.
 
 The abstract's source (decision-018, TASK-138) is each record's `Attribution`, computed once per record when
@@ -86,8 +89,9 @@ CSV_COLUMNS = (
     "venue_id_raw", "forum", "pdf", "proceedings", "doi", "keywords", "index_version", "canonical_hash",
     "exported_at", "record_id", "searched_at", "abstract_source", "abstract_origin", "abstract_url",
     "abstract_withheld", "abstract_withheld_reason", "twins", "abstract_note",
+    "abstract_kind",
 )  # fmt: skip
-# (TASK-138's four abstract columns, then TASK-136's reason, then TASK-162's twins, then TASK-210's note, are
+# (TASK-138's four abstract columns, then TASK-136's reason, then TASK-162's twins, then TASK-210's note, then decision-049's kind, are
 # appended last: every earlier column keeps its position)
 # each record id → its abstract's attribution (`RecordFile.attributions`, computed at snapshot load)
 type Sources = Mapping[str, Attribution | None]
@@ -350,6 +354,7 @@ def _csv(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             "abstract_withheld_reason": r.get(_REASON),
             "twins": "; ".join(r.get(_TWINS) or ()),
             "abstract_note": source.note if source else None,
+            "abstract_kind": r.get("abstract_kind"),
         }
         yield _csv_row(csv_cell(row[c]) for c in CSV_COLUMNS)
 

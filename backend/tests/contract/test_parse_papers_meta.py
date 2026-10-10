@@ -17,7 +17,7 @@ from openproceedings.query.clauses import filter_clauses
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import MAX_QUERY_LENGTH, parse
 from openproceedings.query.wordforms import report
-from openproceedings.vocab import STATUSES, TRACKS, VENUES, venue_name
+from openproceedings.vocab import ABSTRACT_KINDS, STATUSES, TRACKS, VENUES, venue_name
 
 from tests.contract.conftest import SECRET, Store, make_app
 
@@ -280,7 +280,12 @@ def test_meta_lists_the_versions_and_vocabularies(client: TestClient, store: Sto
     assert body["index_versions"] == sorted([store.big, store.small])
     assert body["text_fields"] == ["title", "abstract"]
     assert body["filter_fields"] == list(FILTER_FIELDS)
-    assert body["values"] == {"venue": list(VENUES.values()), "track": list(TRACKS), "status": list(STATUSES)}
+    assert body["values"] == {
+        "venue": list(VENUES.values()),
+        "track": list(TRACKS),
+        "status": list(STATUSES),
+        "abstract_kind": list(ABSTRACT_KINDS),
+    }
 
 
 def test_every_meta_value_parses_as_a_filter(client: TestClient) -> None:

@@ -34,6 +34,7 @@ const HIT: Hit = {
   abstract_withheld: false,
   twins: [],
   abstract_note: null,
+  abstract_kind: "official",
 };
 
 /** The API's `abstract_note` for a submission-time abstract (TASK-210; `ingest/dedup.py::SUBMISSION_NOTE`). */

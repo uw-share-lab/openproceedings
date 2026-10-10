@@ -67,6 +67,15 @@ class _HoldsText(Protocol):
     def value(self) -> Any: ...
 
 
+ABSTRACT_KIND_DOC = (
+    "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the "
+    "proceedings, ojs.aaai.org, PMLR, the FAccT site), `openalex` (filled from OpenAlex only for an AAAI, AIES or "
+    "FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` "
+    "filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from "
+    "`abstract_source`, the claim the abstract came from."
+)  # the one wording of a hit's and a paper's field
+
+
 def abstract_kind_of(abstract: str | None, claims: Iterable[_HoldsText]) -> AbstractKind:
     """`none` without an abstract; `openalex` when at least one of the abstract claims holds its exact text and
     every such claim is OpenAlex's; else `official` (a record without provenance, as fixtures are, included).
@@ -323,11 +332,7 @@ class PaperRecord(BaseModel):
     def venue_name(self) -> str:
         return venue_name(self.venue, self.year)
 
-    @computed_field(  # type: ignore[prop-decorator]
-        description="Where the abstract came from: `official` (the venue's own source), `openalex` (OpenAlex's "
-        "fallback, only for AAAI, AIES and FAccT papers no official source gives one), or `none`. Derived from the "
-        "abstract's claims; never stored, never hashed."
-    )
+    @computed_field(description=ABSTRACT_KIND_DOC)  # type: ignore[prop-decorator]
     @property
     def abstract_kind(self) -> AbstractKind:
         return abstract_kind_of(self.abstract, self.claims("abstract"))
