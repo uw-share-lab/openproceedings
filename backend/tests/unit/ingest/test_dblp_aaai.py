@@ -62,6 +62,18 @@ def test_aaai_records_from_the_release(tmp_path: Path) -> None:
     assert report.skipped == {"not_paper": 1, "publtype_withdrawn": 1}
 
 
+def test_a_record_that_will_not_build_stops_the_crawl_naming_the_key(tmp_path: Path, monkeypatch) -> None:
+    _table, aaai, extract = setup(tmp_path)
+
+    def boom(*_a, **_k):
+        raise ValueError("no title")
+
+    monkeypatch.setattr(dblp_aaai, "_record", boom)
+    with pytest.raises(CrawlError, match=r"conf/aaai/Synthetic86a.*ValueError") as caught:
+        dblp_aaai.mine_year(1986, extract, table=aaai)
+    assert caught.value.reason == "invalid_record"
+
+
 def test_a_workshop_key_gives_track_workshop(tmp_path: Path) -> None:
     _t, aaai, extract = setup(tmp_path)
     tracks = {r.native: r.track for r in dblp_aaai.mine_year(2006, extract, table=aaai).records}

@@ -137,20 +137,13 @@ def mine_year(year: int, extract: Extract, *, table: Table | None = None) -> Yea
             try:
                 record = _record(year, tail, e, track, extract, table)
             except (ValidationError, ValueError) as err:
-                skipped["invalid"] += 1
-                log.debug(
-                    "dblp_aaai_record_invalid",
-                    extra={"year": year, "key": e.key, "error": type(err).__name__},
-                )
-                continue
+                raise CrawlError(f"AAAI {year}: dblp record {e.key} won't build ({type(err).__name__}); check the "
+                                 "release and the table", reason="invalid_record") from err  # fmt: skip
             records.append(record)
             report.count(record, "no_abstract")
     log.info("dblp_aaai_year_mined", extra={"year": year, "listed": report.listed, "stated": report.stated,
                                             "records": report.records,
                                             "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
-    if skipped.get("invalid"):
-        log.warning("listing_attention", extra={"year": year, "listing": report.listing, "unknown_track": 0,
-                                                "skipped": dict(skipped)})  # fmt: skip
     return YearResult(records, [report])
 
 
