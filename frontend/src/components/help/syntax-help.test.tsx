@@ -186,6 +186,22 @@ describe("the sections", () => {
   });
 });
 
+describe("Filters: abstract_kind: (decision-049)", () => {
+  it("lists the golden's abstract kinds, noting the indexes that hold them", () => {
+    page();
+    const items = [...document.getElementById("filters")!.querySelectorAll("li")].map((li) => li.textContent);
+    const row = items.find((t) => t?.startsWith("abstract_kind:"));
+    expect(row).toBe(
+      `abstract_kind: ${golden.values.abstract_kind.join(", ")} (on indexes built since schema 4)`,
+    );
+    cleanup();
+    const changed = structuredClone(golden);
+    changed.values.abstract_kind = ["official", "openalex", "none", "future_kind"];
+    page(changed);
+    expect(document.getElementById("filters")!.textContent).toContain("future_kind");
+  });
+});
+
 describe("Limits", () => {
   it("shows this instance's limits from /meta", async () => {
     page();

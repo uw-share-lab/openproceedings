@@ -36,9 +36,11 @@ describe("the venue × year table", () => {
     for (const vy of COVERAGE.venue_years) {
       const cells = [...row(vy.venue, vy.year).querySelectorAll("td")].map((td) => td.textContent);
       const flagged = vy.records > 0 && vy.abstract_missing === vy.records;
-      expect(cells.slice(0, 6)).toEqual([
+      expect(cells.slice(0, 8)).toEqual([
         String(vy.year),
         count(vy.records),
+        count(vy.abstract_official),
+        count(vy.abstract_openalex),
         flagged
           ? `⚠ ${count(vy.abstract_missing)}no abstracts: only titles are searchable`
           : count(vy.abstract_missing),
@@ -65,6 +67,25 @@ describe("the venue × year table", () => {
     expect(order).toEqual(expected);
     for (const th of within(table()).getAllByRole("columnheader"))
       expect(th.getAttribute("scope")).toBe("col");
+  });
+
+  it("heads its columns with the official and OpenAlex abstract counts beside No abstract (CV-4)", () => {
+    render(<CoverageReport coverage={COVERAGE} />);
+    const heads = within(table())
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+    expect(heads).toEqual([
+      "Venue",
+      "Year",
+      "Records",
+      "Official abstract",
+      "OpenAlex abstract",
+      "No abstract",
+      "Unknown track",
+      "Unknown status",
+      "Statuses indexed",
+      "Details",
+    ]);
   });
 
   it("flags a venue-year with no abstracts at all, and only that one", () => {
@@ -96,7 +117,15 @@ describe("a venue-year's details", () => {
     const header = within(byStatus)
       .getAllByRole("columnheader")
       .map((h) => h.textContent);
-    expect(header).toEqual(["Track", ...vy.statuses_indexed, "Records", "No abstract", "Sources"]);
+    expect(header).toEqual([
+      "Track",
+      ...vy.statuses_indexed,
+      "Records",
+      "Official abstract",
+      "OpenAlex abstract",
+      "No abstract",
+      "Sources",
+    ]);
     const body = within(byStatus).getAllByRole("row").slice(1);
     expect(body.map((r) => within(r).getByRole("rowheader").textContent)).toEqual(
       vy.tracks.map((t) => t.track),
@@ -111,6 +140,8 @@ describe("a venue-year's details", () => {
       expect(shown).toEqual([
         ...expected,
         count(track.records),
+        count(track.abstract_official),
+        count(track.abstract_openalex),
         count(track.abstract_missing),
         track.sources.join(", "),
       ]);
@@ -216,7 +247,7 @@ describe("the header", () => {
     expect(document.body.textContent).toContain(
       "of unknown status · 2 with the abstract removed at a rights holder's request",
     );
-    const noAbstract = [...row(vy.venue, vy.year).querySelectorAll("td")][2]!;
+    const noAbstract = [...row(vy.venue, vy.year).querySelectorAll("td")][4]!;
     expect(noAbstract.textContent).toContain(`${count(vy.abstract_missing)}and 2 removed on request`);
     // a venue-year whose every record lacks a shown abstract, removed ones included, is flagged (CV-5)
     cleanup();
@@ -224,7 +255,7 @@ describe("the header", () => {
     const flagged = all.venue_years.find((v) => v.records > v.abstract_missing)!;
     flagged.abstract_withheld = flagged.records - flagged.abstract_missing;
     render(<CoverageReport coverage={all} />);
-    const cell = [...row(flagged.venue, flagged.year).querySelectorAll("td")][2]!.textContent;
+    const cell = [...row(flagged.venue, flagged.year).querySelectorAll("td")][4]!.textContent;
     // removed abstracts may still be matched on an older index, so the flag says "shown", not "searchable"
     expect(cell).toContain(`and ${count(flagged.abstract_withheld)} removed on request`);
     expect(cell).toMatch(/removed on requestno abstracts shown$/);
@@ -243,6 +274,37 @@ describe("the header", () => {
     expect(screen.getByText(/^Only titles and abstracts are indexed/).textContent).toBe(
       "Only titles and abstracts are indexed. A record without an abstract can be found by its title only.",
     );
+  });
+
+  it("counts OpenAlex abstracts in the totals only when there are any (CV-2)", () => {
+    expect(COVERAGE.totals.abstract_openalex).toBe(0);
+    render(<CoverageReport coverage={COVERAGE} />);
+    expect(document.body.textContent).not.toContain("abstracts from OpenAlex");
+    cleanup();
+    const c = copy();
+    c.totals.abstract_openalex = 7;
+    render(<CoverageReport coverage={c} />);
+    const t = c.totals;
+    expect(document.body.textContent).toContain(
+      `${count(t.unknown_track)} of unknown track · ${count(t.unknown_status)} of unknown status · ` +
+        "7 abstracts from OpenAlex",
+    );
+  });
+
+  it("explains OpenAlex abstracts under the table, at the anchor the label links to (CV-8)", () => {
+    render(<CoverageReport coverage={COVERAGE} />);
+    const note = document.getElementById("openalex")!;
+    expect(note.tagName).toBe("P");
+    expect(note.textContent).toBe(
+      "OpenAlex abstracts fill AAAI, AIES and FAccT papers whose official source publishes no abstract: " +
+        "AAAI before 2010, AIES 2018–2023, and FAccT papers without one on the conference site. OpenAlex is " +
+        "an open catalogue that gathers abstracts from publishers and repositories, so its text can differ " +
+        "from the published one. Each is labelled, and abstract_kind:official leaves them out of a search.",
+    );
+    expect(within(note).getByText("abstract_kind:official").tagName).toBe("CODE");
+    const region = screen.getByRole("region", { name: "Coverage table" });
+    // under the table: after its region
+    expect(region.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("says Crawled for a crawl and drops the citability note for a citable snapshot", () => {
@@ -299,6 +361,9 @@ describe("no hard-coded numbers (TASK-045 AC1)", () => {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const numbers: string[] = [];
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      // CV-8's OpenAlex explanation names fixed years of the sources' design (AAAI before 2010, AIES
+      // 2018–2023), not counts: the spec gives them in its words
+      if (node.parentElement?.closest("#openalex")) continue;
       numbers.push(...(node.textContent?.match(/\d[\d,]*/g) ?? []));
     }
     expect(numbers.length).toBeGreaterThan(100);

@@ -384,6 +384,10 @@ export function SyntaxHelp({
           <li>
             <code className={CODE}>status:</code> <Values values={data.values.status} />
           </li>
+          <li>
+            <code className={CODE}>abstract_kind:</code> <Values values={data.values.abstract_kind} /> (on
+            indexes built since schema 4)
+          </li>
         </ul>
         <p>Values take no wildcards or quotes; join several with OR inside parentheses.</p>
         <Examples items={data.sections.filters} />

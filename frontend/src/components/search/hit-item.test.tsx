@@ -51,6 +51,37 @@ function attribution(article: HTMLElement): HTMLElement | undefined {
   return [...article.querySelectorAll("p")].find((p) => p.textContent?.startsWith("Abstract:"));
 }
 
+describe("an OpenAlex abstract (decision-049, RH-20)", () => {
+  it("labels it under the attribution, OpenAlex linking to the coverage page's explanation", () => {
+    const article = show({
+      abstract_kind: "openalex",
+      abstract_source: { source: "openalex", origin: "openalex", url: PMLR_PAGE },
+    });
+    const label = within(article).getByText(
+      (_, el) =>
+        el?.tagName === "P" &&
+        el.textContent === "Abstract via OpenAlex: no official source publishes one for this paper.",
+    );
+    expect(label.previousElementSibling).toBe(attribution(article));
+    expect(within(label).getByRole("link", { name: "OpenAlex" }).getAttribute("href")).toBe(
+      "/coverage#openalex",
+    );
+  });
+
+  it("says nothing for an official abstract, a missing one or a withheld one", () => {
+    expect(show().textContent).not.toContain("via OpenAlex");
+    cleanup();
+    expect(show({ abstract: null, abstract_source: null, abstract_kind: "none" }).textContent).not.toContain(
+      "via OpenAlex",
+    );
+    cleanup();
+    expect(
+      show({ abstract: null, abstract_source: null, abstract_withheld: true, abstract_kind: "openalex" })
+        .textContent,
+    ).not.toContain("via OpenAlex");
+  });
+});
+
 describe("authors (ui-design-system §Result item, RH-13)", () => {
   it("shows the first three and et al., and the full list behind a button that says how many", () => {
     const article = show();

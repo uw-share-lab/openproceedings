@@ -31,7 +31,7 @@ from openproceedings.query.defaults import DEFAULT_CLAUSES
 from openproceedings.query.lexer import MAX_NEAR, MIN_STEM
 from openproceedings.query.normalize import normalize
 from openproceedings.query.parser import MAX_DEPTH, MAX_QUERY_LENGTH, Mode, parse
-from openproceedings.vocab import STATUSES, TEXT_FIELDS, TRACKS, VENUES
+from openproceedings.vocab import ABSTRACT_KINDS, STATUSES, TEXT_FIELDS, TRACKS, VENUES
 
 from tests.golden.test_tokens import GOLDEN as TOKEN_GOLDEN
 
@@ -85,6 +85,7 @@ SECTIONS: dict[str, tuple[tuple[str, Mode], ...]] = {
         ("trust year:(2020 OR 2024..2026)", "native"),
         ("trust track:(main OR workshop)", "native"),
         ("trust status:(accepted OR withdrawn)", "native"),
+        ("trust abstract_kind:official", "native"),
         ("trust NOT venue:ICML", "native"),
     ),
     "defaults": (
@@ -313,7 +314,12 @@ def build() -> dict[str, Any]:
             "max_counted_ids": config["max_counted_ids"].default,
         },
         "text_fields": list(TEXT_FIELDS),
-        "values": {"venue": list(VENUES.values()), "track": list(TRACKS), "status": list(STATUSES)},
+        "values": {
+            "venue": list(VENUES.values()),
+            "track": list(TRACKS),
+            "status": list(STATUSES),
+            "abstract_kind": list(ABSTRACT_KINDS),
+        },
         "defaults": [
             {"field": field, "values": list(values), "canonical": _clause(field, values)}
             for field, values in DEFAULT_CLAUSES.items()

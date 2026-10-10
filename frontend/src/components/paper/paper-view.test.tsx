@@ -201,6 +201,44 @@ describe("a submission-time abstract (TASK-210, PA-11)", () => {
   });
 });
 
+describe("an OpenAlex abstract (decision-049, PA-12)", () => {
+  const LABEL = "Abstract via OpenAlex: no official source publishes one for this paper.";
+
+  it("labels it right under the text, OpenAlex linking to the coverage page's explanation", async () => {
+    draw(
+      null,
+      api(() => json(answer({ paper: { ...PAPER, abstract_kind: "openalex" } }))),
+    );
+    const heading = await screen.findByRole("heading", { level: 2, name: "Abstract" });
+    const section = heading.closest("section") as HTMLElement;
+    const label = within(section).getByText((_, el) => el?.tagName === "P" && el.textContent === LABEL);
+    expect(label.previousElementSibling?.textContent).toBe(PAPER.abstract);
+    expect(within(label).getByRole("link", { name: "OpenAlex" }).getAttribute("href")).toBe(
+      "/coverage#openalex",
+    );
+  });
+
+  it("says nothing for an official abstract, or a withheld one", async () => {
+    draw(
+      null,
+      api(() => json(answer())),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(document.body.textContent).not.toContain("via OpenAlex");
+    cleanup();
+    draw(
+      null,
+      api(() =>
+        json(
+          answer({ paper: { ...PAPER, abstract: null, abstract_kind: "openalex" }, abstract_withheld: true }),
+        ),
+      ),
+    );
+    await screen.findByText(ABSTRACT_WITHHELD);
+    expect(document.body.textContent).not.toContain("via OpenAlex");
+  });
+});
+
 describe("a record's twins (TASK-162, decision-029, PA-10)", () => {
   const COPY = "op:iclr:2024:Hy-Copy01";
   const COPY2 = "op:iclr:2024:Hy-Copy02";

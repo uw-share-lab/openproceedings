@@ -75,7 +75,7 @@ export interface Clauses {
   readonly limits: readonly string[];
 }
 
-const FIELDS = ["venue", "year", "track", "status"] as const;
+const FIELDS = ["venue", "year", "track", "status", "abstract_kind"] as const;
 
 function slice(text: string, span: readonly number[]): string | null {
   const [start, end] = span;

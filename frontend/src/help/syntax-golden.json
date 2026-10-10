@@ -34,7 +34,8 @@
       "other",
       "unknown"
     ],
-    "status": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"]
+    "status": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+    "abstract_kind": ["official", "openalex", "none"]
   },
   "defaults": [
     {
@@ -263,6 +264,11 @@
         "q": "trust status:(accepted OR withdrawn)",
         "mode": "native",
         "canonical": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:(accepted OR withdrawn))"
+      },
+      {
+        "q": "trust abstract_kind:official",
+        "mode": "native",
+        "canonical": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted AND abstract_kind:official)"
       },
       {
         "q": "trust NOT venue:ICML",

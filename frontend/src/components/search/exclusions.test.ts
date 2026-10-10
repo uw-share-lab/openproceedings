@@ -185,6 +185,32 @@ describe("limitsOf (design W5 Limits line; RH-4, BN-5)", () => {
   });
 });
 
+describe("limitsOf: an abstract_kind: clause the reader wrote (decision-049)", () => {
+  it("is a limit, with what it leaves out from the facet when the index counts it", () => {
+    const q = "trust abstract_kind:official";
+    const filters: ParsedFilters = {
+      ...TRUST,
+      abstract_kind: clause("abstract_kind", [6, 28], ["official"]),
+    };
+    const vocab = { abstract_kind: ["official", "openalex", "none"] };
+    const kinds = { official: 40, openalex: 7, none: 3 };
+    expect(limitsOf(q, filters, ["track", "status"], { ...FACETS, abstract_kind: kinds }, vocab)).toEqual([
+      {
+        field: "abstract_kind",
+        text: "abstract_kind:official",
+        leavesOut: [
+          ["openalex", 7],
+          ["none", 3],
+        ],
+      },
+    ]);
+    // no counts on an index without the field: the limit is still listed
+    expect(limitsOf(q, filters, ["track", "status"], FACETS, vocab)).toEqual([
+      { field: "abstract_kind", text: "abstract_kind:official", leavesOut: [] },
+    ]);
+  });
+});
+
 describe("clauseText", () => {
   it("writes one value bare and several grouped", () => {
     expect(clauseText("status", ["accepted"])).toBe("status:accepted");

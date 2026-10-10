@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * The filter sidebar (spec 05 §4; design W5 "Sidebar", W13; copy SB-1–9). Venue, Year, Track, Status: every
- * option is a real checkbox labelled with its facet count, checked when the field's clause admits it, and a
+ * The filter sidebar (spec 05 §4; design W5 "Sidebar", W13; copy SB-1–12). Venue, Year, Track, Status, and
+ * Abstract on an index that counts it (schema 4; decision-049): every option is a real checkbox labelled with its facet count, checked when the field's clause admits it, and a
  * click is a reducer action that rewrites `q` (guarantee 3). Clauses come from `/parse`'s `filters` for the
  * searched query; counts from `/search`'s `facets`. A control that can't act is `aria-disabled` (still
  * focusable) and described by the reason (`blockOf`), never refused after the click.
@@ -36,13 +36,22 @@ import { DRAFT_DIRTY_MESSAGE } from "./search-workspace";
 import type { SearchResponse } from "./use-search";
 
 type Facets = SearchResponse["facets"];
-type ValueField = "venue" | "track" | "status";
+type ValueField = "venue" | "track" | "status" | "abstract_kind";
 
 const FIELD_TITLE: Record<ValueField | "year", string> = {
   venue: "Venue",
   year: "Year",
   track: "Track",
   status: "Status",
+  abstract_kind: "Abstract",
+};
+
+/** How the Abstract field shows its values (copy SB-12); a value this code doesn't know (an open set,
+ * decision-009) is shown as it came. */
+const ABSTRACT_KIND_LABELS: Readonly<Record<string, string>> = {
+  official: "Official",
+  openalex: "OpenAlex",
+  none: "No abstract",
 };
 
 /** Reasons whose clauses `/parse` points at (`blocking_spans`), or the negated clause's own span. */
@@ -185,6 +194,7 @@ function ValueFieldset({
   vocabulary,
   sidebarNote,
   anchor,
+  labels,
 }: {
   field: ValueField;
   controls: Controls;
@@ -193,6 +203,9 @@ function ValueFieldset({
   sidebarNote: string;
   /** The fieldset's id: the export menu's "Show the Status filter" moves focus here (design E2). */
   anchor: string;
+  /** Each value's label, shown and named in its place (SB-2's "`<label>`, `<count>` papers"); a value it
+   * doesn't hold is shown as it came. Without it, values are shown as written in the query. */
+  labels?: Readonly<Record<string, string>>;
 }) {
   const noteId = useId();
   const { parse } = controls;
@@ -237,7 +250,8 @@ function ValueFieldset({
       />
       <ul className="space-y-0.5 text-sm">
         {rows.map(({ value, action, block: b, checked }) => {
-          const shown = field === "track" ? trackDisplay(value) : { short: value, long: value };
+          const label = labels?.[value] ?? value;
+          const shown = field === "track" ? trackDisplay(value) : { short: label, long: label };
           return (
             <Option
               key={value}
@@ -248,7 +262,10 @@ function ValueFieldset({
               block={b}
               describedBy={describedBy}
               onToggle={() =>
-                controls.act(action, `${title}: ${value} ${checked === true ? "left out" : "included"}.`)
+                controls.act(
+                  action,
+                  `${title}: ${labels?.[value] ?? value} ${checked === true ? "left out" : "included"}.`,
+                )
               }
             />
           );
@@ -517,6 +534,18 @@ export function FilterSidebar({ id, controls, facets, vocabulary, hiddenWhenNarr
         sidebarNote={noteId}
         anchor={filterAnchor(id, "status")}
       />
+      {/* null: the index has no such field (schema 3), not "no records" (decision-049) */}
+      {facets.abstract_kind !== null && (
+        <ValueFieldset
+          field="abstract_kind"
+          controls={controls}
+          counts={facets.abstract_kind}
+          vocabulary={vocabulary.abstract_kind ?? []}
+          sidebarNote={noteId}
+          anchor={filterAnchor(id, "abstract_kind")}
+          labels={ABSTRACT_KIND_LABELS}
+        />
+      )}
     </section>
   );
 }

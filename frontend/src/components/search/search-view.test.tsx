@@ -562,6 +562,42 @@ describe("filter sidebar (spec 05 §4; W13)", () => {
     expect(view.state.sliceDoc(sel.from, sel.to)).toBe("track:main");
   });
 
+  it("shows the Abstract fieldset after Status, each value by its label with its count (SB-1, SB-12)", async () => {
+    const kinds = { official: 40, openalex: 7, none: 3 };
+    await setup(
+      stateOf(),
+      handler({ search: () => json(body({ facets: { ...body().facets, abstract_kind: kinds } })) }),
+    );
+    const legends = [...document.querySelectorAll("fieldset > legend")].map((l) => l.textContent);
+    expect(legends).toEqual(["Venue", "Year", "Track (default)", "Status (default)", "Abstract"]);
+    const group = screen.getByRole("group", { name: "Abstract" });
+    expect(within(group).getByRole("checkbox", { name: "OpenAlex, 7 papers" })).toHaveProperty(
+      "checked",
+      true,
+    );
+    expect(within(group).getByRole("checkbox", { name: "Official, 40 papers" })).toBeTruthy();
+    expect(within(group).getByRole("checkbox", { name: "No abstract, 3 papers" })).toBeTruthy();
+    expect(group.textContent).not.toContain("openalex");
+  });
+
+  it("an Abstract toggle writes the abstract_kind: clause into q", async () => {
+    const kinds = { official: 40, openalex: 7, none: 3 };
+    await setup(
+      stateOf(),
+      handler({ search: () => json(body({ facets: { ...body().facets, abstract_kind: kinds } })) }),
+    );
+    fireEvent.click(box("OpenAlex, 7 papers"));
+    expect(nav.push).toHaveBeenCalledWith(
+      searchHref(stateOf({ q: "(trust) AND abstract_kind:(none OR official)" })),
+    );
+  });
+
+  it("hides the Abstract fieldset on an index without the field (facets.abstract_kind null)", async () => {
+    await setup();
+    expect(screen.queryByRole("group", { name: "Abstract" })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: /^OpenAlex/ })).toBeNull();
+  });
+
   it("with no search that ever ran, a 422 says the query wasn't searched instead of an empty list (ER-2)", async () => {
     await setup(
       stateOf({ q: "(trust" }),

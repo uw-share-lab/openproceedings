@@ -123,7 +123,8 @@ function YearSpans({ venueYears }: { venueYears: readonly VenueYear[] }) {
   );
 }
 
-/** The snapshot facts and totals above the table (design C1; copy deck CV-1 to CV-3, CV-7). */
+/** The snapshot facts and totals above the table (design C1; copy deck CV-1 to CV-3, CV-7; CV-2's OpenAlex count,
+ * decision-049). */
 function Header({ coverage }: { coverage: Coverage }) {
   const { snapshot, totals } = coverage;
   const corpus = corpusWindow(snapshot);
@@ -165,6 +166,8 @@ function Header({ coverage }: { coverage: Coverage }) {
       <p className="pt-2 tabular-nums">
         {count(totals.records)} records · {count(totals.abstract_missing)} without an abstract ·{" "}
         {count(totals.unknown_track)} of unknown track · {count(totals.unknown_status)} of unknown status
+        {totals.abstract_openalex > 0 &&
+          ` · ${count(totals.abstract_openalex)} ${totals.abstract_openalex === 1 ? "abstract" : "abstracts"} from OpenAlex`}
         {totals.abstract_withheld > 0 && (
           <>
             {" "}
@@ -240,6 +243,12 @@ function Detail({ vy, id }: { vy: VenueYear; id: string }) {
               Records
             </th>
             <th scope="col" className="px-2 text-right">
+              Official abstract
+            </th>
+            <th scope="col" className="px-2 text-right">
+              OpenAlex abstract
+            </th>
+            <th scope="col" className="px-2 text-right">
               No abstract
             </th>
             <th scope="col" className="px-2 text-left">
@@ -262,6 +271,8 @@ function Detail({ vy, id }: { vy: VenueYear; id: string }) {
                 );
               })}
               <td className="px-2 text-right">{count(track.records)}</td>
+              <td className="px-2 text-right">{count(track.abstract_official)}</td>
+              <td className="px-2 text-right">{count(track.abstract_openalex)}</td>
               <td className="px-2 text-right">
                 {count(track.abstract_missing)}
                 <Withheld n={track.abstract_withheld} />
@@ -324,7 +335,27 @@ function Detail({ vy, id }: { vy: VenueYear; id: string }) {
   );
 }
 
-const COLUMNS = ["Records", "No abstract", "Unknown track", "Unknown status"] as const;
+const COLUMNS = [
+  "Records",
+  "Official abstract",
+  "OpenAlex abstract",
+  "No abstract",
+  "Unknown track",
+  "Unknown status",
+] as const;
+
+/** Under the table, the anchor an OpenAlex abstract's label links to (copy CV-8, RH-20, PA-12; decision-049). */
+function OpenAlexExplanation() {
+  return (
+    <p id="openalex" className="text-sm text-muted-foreground">
+      OpenAlex abstracts fill AAAI, AIES and FAccT papers whose official source publishes no abstract: AAAI
+      before 2010, AIES 2018–2023, and FAccT papers without one on the conference site. OpenAlex is an open
+      catalogue that gathers abstracts from publishers and repositories, so its text can differ from the
+      published one. Each is labelled, and <code className="font-mono">abstract_kind:official</code> leaves
+      them out of a search.
+    </p>
+  );
+}
 
 /** The whole `/coverage` report for one `GET /coverage` answer. Every number is an API field (design C1). */
 export function CoverageReport({ coverage }: { coverage: Coverage }) {
@@ -389,6 +420,8 @@ export function CoverageReport({ coverage }: { coverage: Coverage }) {
                     </th>
                     <td className="px-2">{vy.year}</td>
                     <td className="px-2 text-right">{count(vy.records)}</td>
+                    <td className="px-2 text-right">{count(vy.abstract_official)}</td>
+                    <td className="px-2 text-right">{count(vy.abstract_openalex)}</td>
                     <td className="px-2 text-right">
                       {noAbstracts ? (
                         <span className="text-warn-fg">
@@ -438,6 +471,7 @@ export function CoverageReport({ coverage }: { coverage: Coverage }) {
           </tbody>
         </table>
       </div>
+      <OpenAlexExplanation />
     </div>
   );
 }
