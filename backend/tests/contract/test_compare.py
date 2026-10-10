@@ -329,12 +329,18 @@ def test_an_ojs_article_link_is_compared_not_a_500(shared: TestClient) -> None:
     k = BY_ID[KEPT[0]]
     file = "".join(
         [
-            entry(one_line(k.title), k.venue, k.year, "https://ojs.aaai.org/index.php/AAAI/article/view/25561"),
-            entry("benchmark at AAAI", "AAAI", 2023, "https://ojs.aaai.org/index.php/AIES/article/view/31612/1"),
+            entry(
+                one_line(k.title), k.venue, k.year, "https://ojs.aaai.org/index.php/AAAI/article/view/25561"
+            ),
+            entry(
+                "benchmark at AAAI", "AAAI", 2023, "https://ojs.aaai.org/index.php/AIES/article/view/31612/1"
+            ),
         ]
     )
     body = compared(shared, file)
-    assert [(r["ris_record"], r["matched_by"], r["id"]) for r in body["kept"]] == [(1, "title_venue_year", k.id)]
+    assert [(r["ris_record"], r["matched_by"], r["id"]) for r in body["kept"]] == [
+        (1, "title_venue_year", k.id)
+    ]
     assert [(r["ris_record"], r["matched_by"]) for r in body["not_in_index"]] == [(2, "not_found")]
 
 

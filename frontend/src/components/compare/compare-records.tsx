@@ -800,8 +800,8 @@ function NotCompared({ c }: { c: Comparison }) {
       <CountHeading label={LIST_LABELS.not_compared} count={total} />
       <p className="break-words">
         Records of your file whose venue is not recognised as one of the indexed venues (and no link or DOI
-        names an indexed paper), or which are outside the indexed venues and years. They are in none of the lists
-        above.
+        names an indexed paper), or which are outside the indexed venues and years. They are in none of the
+        lists above.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <ListToggle

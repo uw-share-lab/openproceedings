@@ -106,11 +106,12 @@ def test_ojs_article(url: str, article: int | None) -> None:
     assert urls.native(url) == (None if article is None else f"ojs-{article}")
 
 
-
 def test_ojs_article_names_exactly_the_tables_journals() -> None:
     """The URL pattern's journals are the table's: a journal added to `ojs_sections.toml` names its articles."""
     from openproceedings.ingest import ojs_table
 
     for journal in ojs_table.TABLE.journals:
         assert urls.ojs_article(f"https://ojs.aaai.org/index.php/{journal}/article/view/7") == 7
-    assert urls.ojs_article("https://ojs.aaai.org/index.php/AIMAG/article/view/7") is None  # not a table journal
+    assert (
+        urls.ojs_article("https://ojs.aaai.org/index.php/AIMAG/article/view/7") is None
+    )  # not a table journal

@@ -344,7 +344,9 @@ class JournalResult:
     reports: list[ListingReport]
     deleted: int = 0  # deleted headers: counted, never records
     front_matter: int = 0
-    pages: int = 0  # ListIdentifiers, ListRecords and GetRecord pages read whole (not ListSets, nor a 5xx failure)
+    pages: int = (
+        0  # ListIdentifiers, ListRecords and GetRecord pages read whole (not ListSets, nor a 5xx failure)
+    )
     unavailable: int = 0  # articles named in the table's [[unavailable]] rows: listed, never records
     duplicates: int = 0  # extra identical copies of an article that two set requests returned: counted once
     recovered: int = 0  # live inventory articles no set returned, read by GetRecord

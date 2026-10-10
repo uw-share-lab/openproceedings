@@ -31,7 +31,9 @@ _SECTION_COLUMNS = {"journal", "volume", "set_spec", "kind", "track", "label", "
 _UNAVAILABLE_COLUMNS = {"journal", "article", "set_spec", "volume", "reason", "verified", "source"}
 # the tracks an ojs.aaai.org section can be (the design's §Data model): never `datasets_benchmarks` or `position`
 # (default-filter tracks no OJS venue has), nor `workshop`, `competition`, `tiny_papers`, `blogpost` or `unknown`
-OJS_TRACKS: frozenset[str] = frozenset({"main", "student_abstract", "consortium", "demo", "iaai", "eaai", "other"})
+OJS_TRACKS: frozenset[str] = frozenset(
+    {"main", "student_abstract", "consortium", "demo", "iaai", "eaai", "other"}
+)
 
 
 @dataclass(frozen=True, slots=True)

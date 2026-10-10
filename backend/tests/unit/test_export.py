@@ -315,7 +315,12 @@ def test_bibtex_cites_only_accepted_papers_as_inproceedings() -> None:
         ("AAAI", 2012, "student_abstract", "AAAI Conference on Artificial Intelligence (AAAI 2012)"),
         ("AAAI", 2010, "iaai", "AAAI Conference on Artificial Intelligence (AAAI 2010)"),
         ("AIES", 2024, "main", "AAAI/ACM Conference on AI, Ethics, and Society (AIES 2024)"),
-        ("IASEAI", 2026, "main", "International Association for Safe and Ethical AI Conference (IASEAI 2026)"),
+        (
+            "IASEAI",
+            2026,
+            "main",
+            "International Association for Safe and Ethical AI Conference (IASEAI 2026)",
+        ),
         ("FAccT", 2019, "main", "ACM Conference on Fairness, Accountability, and Transparency (FAT* 2019)"),
         ("FAccT", 2021, "main", "ACM Conference on Fairness, Accountability, and Transparency (FAccT 2021)"),
     ],

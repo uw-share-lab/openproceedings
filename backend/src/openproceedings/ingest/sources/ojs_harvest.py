@@ -62,7 +62,9 @@ class Progress:
     def page(self, step: str) -> None:
         self.pages += 1
         if self.beat.due():
-            log.info("ojs_journal_progress", extra={"journal": self.journal, "step": step, "pages": self.pages})
+            log.info(
+                "ojs_journal_progress", extra={"journal": self.journal, "step": step, "pages": self.pages}
+            )
 
 
 @dataclass

@@ -69,8 +69,8 @@ function YearSpans({ venueYears }: { venueYears: readonly VenueYear[] }) {
       Years indexed: {spans.map(spanText).join(" · ")}
       {differ ? (
         <>
-          . The venues cover different years, so a search without a{" "}
-          <code className="font-mono">year:</code> filter compares them over different years
+          . The venues cover different years, so a search without a <code className="font-mono">year:</code>{" "}
+          filter compares them over different years
           {common.from <= common.to ? (
             <>
               . Add <code className="font-mono">{yearClause(common.from, common.to)}</code> to compare them

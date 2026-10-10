@@ -1131,8 +1131,14 @@ def test_an_open_year_range_value_is_refused_without_a_text_warning() -> None:
     ("q", "canonical"),
     [
         # a new venue keeps the default track and status, written out: the non-main tracks are excluded visibly
-        ("venue:AAAI", "(venue:AAAI AND track:(datasets_benchmarks OR main OR position) AND status:accepted)"),
-        ("venue:facct", "(venue:FAccT AND track:(datasets_benchmarks OR main OR position) AND status:accepted)"),
+        (
+            "venue:AAAI",
+            "(venue:AAAI AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+        ),
+        (
+            "venue:facct",
+            "(venue:FAccT AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+        ),
         # a track clause replaces the track default; values are canonical and sorted
         ("track:iaai", "(track:iaai AND status:accepted)"),
         ("track:(main OR iaai)", "(track:(iaai OR main) AND status:accepted)"),

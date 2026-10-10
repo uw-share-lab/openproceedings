@@ -148,7 +148,9 @@ def test_an_oai_page_keeps_its_structure_and_loses_its_free_text() -> None:
 
 
 def test_an_oai_page_binding_dublin_core_to_another_prefix_is_refused() -> None:
-    other = OAI_PAGE.replace('xmlns:dc="http://purl.org/dc/elements/1.1/"', 'xmlns:d="http://purl.org/dc/elements/1.1/"')
+    other = OAI_PAGE.replace(
+        'xmlns:dc="http://purl.org/dc/elements/1.1/"', 'xmlns:d="http://purl.org/dc/elements/1.1/"'
+    )
     assert other != OAI_PAGE
     with pytest.raises(ValueError, match=r"prefix\(es\) \['d'\]"):
         scrub.scrub_oai(other)

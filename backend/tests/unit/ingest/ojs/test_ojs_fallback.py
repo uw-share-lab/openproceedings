@@ -265,7 +265,9 @@ def test_a_resumption_token_that_repeats_stops_the_chain(tmp_path, chain: str) -
         script = _cycle(ojs.ids_url("AAAI"), ojs.ids_url("AAAI", "T"), ids)
         run = lambda f: ojs_harvest.inventory("AAAI", f)  # noqa: E731
     elif chain == "set":
-        script = _cycle(ojs.oai_url("AAAI", set_spec="AAAI:APP"), ojs.oai_url("AAAI", "T"), oai.page(token="T"))
+        script = _cycle(
+            ojs.oai_url("AAAI", set_spec="AAAI:APP"), ojs.oai_url("AAAI", "T"), oai.page(token="T")
+        )
         run = lambda f: ojs_harvest.harvest_set("AAAI", "AAAI:APP", f)  # noqa: E731
     elif chain == "fallback":
         script = _cycle(ojs.ids_url("AAAI", set_spec="AAAI:APP"), ojs.ids_url("AAAI", "T"), ids)
@@ -284,7 +286,9 @@ def test_a_resumption_token_that_repeats_stops_the_chain(tmp_path, chain: str) -
 def test_the_harvest_logs_a_start_a_heartbeat_and_each_fallback_once(tmp_path, caplog) -> None:
     transport = FakeTransport({})
     transport.script = _script()
-    f, _clock = fetcher(tmp_path / "ojs", transport, ojs.HOSTS, min_interval=20, expect="xml", keep_query=True)
+    f, _clock = fetcher(
+        tmp_path / "ojs", transport, ojs.HOSTS, min_interval=20, expect="xml", keep_query=True
+    )
     with caplog.at_level("DEBUG", logger="openproceedings.ingest.sources"):
         ojs.mine_journal("AAAI", f, table=FULL)
     lines = {r.getMessage(): r for r in caplog.records}

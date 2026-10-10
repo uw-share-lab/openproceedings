@@ -208,7 +208,9 @@ def test_a_row_with_an_ojs_link_matches_the_ojs_record_by_title_or_doi() -> None
     [by_title] = read_ris(entry("Trust in an AAAI paper", venue="AAAI", year=2023, url=OJS_ARTICLE), NAME)
     assert index.match(by_title).op_id == ojs.id and index.match(by_title).rule == "title_venue_year"
     [by_doi] = read_ris(
-        entry("Scholar's own title", venue="AAAI", year=2023, url=OJS_ARTICLE, doi="10.1609/aaai.v37i1.25561"),
+        entry(
+            "Scholar's own title", venue="AAAI", year=2023, url=OJS_ARTICLE, doi="10.1609/aaai.v37i1.25561"
+        ),
         NAME,
     )
     assert (index.match(by_doi).op_id, index.match(by_doi).rule) == (ojs.id, "doi")
