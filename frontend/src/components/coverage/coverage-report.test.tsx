@@ -203,6 +203,35 @@ describe("a venue-year's details", () => {
   });
 });
 
+describe("an official count's citation", () => {
+  it("links each URL in it, not the whole citation", () => {
+    const data = copy();
+    const vy = data.venue_years[0]!;
+    Object.assign(vy.tracks[0]!, {
+      official_accepted: 10,
+      official_counts: "papers counted on the list",
+      official_citation: "https://example.org/list.pdf (linked from https://example.org/conf/)",
+      official_accessed: "2026-10-10",
+      delta: 0,
+      delta_pct: 0,
+      gated: true,
+      within_gate: true,
+    });
+    render(<CoverageReport coverage={data} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: `Details: track and status for ${vy.venue} ${vy.year}` }),
+    );
+    const official = screen.getByRole("table", {
+      name: `${vy.venue} ${vy.year}: accepted records against the official count`,
+    });
+    expect(
+      within(official)
+        .getAllByRole("link")
+        .map((a) => a.getAttribute("href")),
+    ).toEqual(["https://example.org/list.pdf", "https://example.org/conf/"]);
+  });
+});
+
 describe("an ungated cell's note (TASK-222, CV-9)", () => {
   it("shows the note and its citation under the track's row, each URL a link", () => {
     const data = copy();

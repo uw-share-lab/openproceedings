@@ -205,13 +205,7 @@ function Official({ track }: { track: Track }) {
         <span className="block text-xs text-muted-foreground">
           {track.official_counts}
           {track.official_counts ? "; " : ""}
-          {/^https?:\/\//.test(track.official_citation) ? (
-            <a className="underline underline-offset-4" href={track.official_citation}>
-              {track.official_citation}
-            </a>
-          ) : (
-            track.official_citation
-          )}
+          <Citation text={track.official_citation} />
           {track.official_accessed ? `, read ${track.official_accessed}` : ""}
         </span>
       ) : null}
