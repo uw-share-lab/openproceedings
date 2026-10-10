@@ -1,7 +1,7 @@
 """The ojs.aaai.org section census: per journal, volume and OAI set, how many records the live list holds (spec 01
 §Sources, OJS row; decision-049). A person runs it to build or re-check `ingest/ojs_sections.toml`; no test runs it.
 
-It harvests each journal with the miner's own `ojs.harvest_journal` (the journal-wide ListIdentifiers inventory,
+It harvests each journal with the miner's own `ojs_harvest.harvest_journal` (the journal-wide ListIdentifiers inventory,
 the per-set `ListRecords` chains with their fallback, then GetRecord for every inventory article no set returned)
 through `crawl.ojs_fetcher`, the same fetcher and URLs `op ingest ojs` reads, so the pages it caches are the ones
 the miner replays. It needs no table, so it never stops at an unlisted section. Section names come from `ListSets`
@@ -30,7 +30,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from openproceedings.ingest.sources import ojs
+from openproceedings.ingest.sources import ojs, ojs_harvest
 from openproceedings.ingest.sources.crawl import ojs_fetcher
 from openproceedings.ingest.sources.http import CacheMiss
 from openproceedings.logs import configure_logging
@@ -59,19 +59,18 @@ class Census:
 def walk(journal: str, cache: Path, *, offline: bool, refresh: bool = False) -> Census:
     f = ojs_fetcher(cache, offline=offline)
     c = Census(journal)
-    c.labels = ojs.list_sets(journal, f)
-    first = f.get(ojs.ids_url(journal))
-    if m := _SIZE.search(first.text):
-        c.complete_list_size = int(m.group(1))
-    headers, _pages = ojs.inventory(journal, f)
-    for hd in headers:
-        if hd.deleted:
-            c.deleted[hd.set_spec] += 1
     try:
-        h = ojs.harvest_journal(journal, f, refresh=refresh)
+        c.labels = ojs.list_sets(journal, f, refresh=refresh)
+        h = ojs_harvest.harvest_journal(
+            journal, f, refresh=refresh
+        )  # its inventory pass counts the deleted headers
+        first = f.get(ojs.ids_url(journal))  # cached by that pass: the inventory's first page
     except CacheMiss as miss:
         print(f"# {journal}: {miss}; stopped", file=sys.stderr)
         return c
+    if m := _SIZE.search(first.text):
+        c.complete_list_size = int(m.group(1))
+    c.deleted = Counter(h.deleted_by_set)
     c.pages, c.duplicates, c.recovered = h.pages, h.duplicates, h.recovered
     c.fallback = h.fallback_sets
     c.unavailable = [(hd.set_spec, hd.article) for hd, _p in h.unavailable]

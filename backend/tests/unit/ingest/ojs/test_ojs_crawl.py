@@ -6,8 +6,8 @@ from openproceedings.ingest.sources.common import MinerError
 from openproceedings.ingest.sources.http import canonical
 
 from tests.unit.ingest.ojs import oai
-from tests.unit.ingest.ojs.test_ojs_mine import TABLE, _seed
-from tests.unit.ingest.proceedings_helpers import (  # the 3-paper AAAI v34 table and chain seeder
+from tests.unit.ingest.ojs.test_ojs_mine import TABLE, _seed  # the 3-paper AAAI v34 table and chain seeder
+from tests.unit.ingest.proceedings_helpers import (
     FakeTransport,
     response,
 )

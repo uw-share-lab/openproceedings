@@ -1,12 +1,12 @@
-"""`op ingest iclr|neurips|pmlr|dblp|ojs`, and the one offline replay of every crawler that `op snapshot build` runs (spec 01
-§CLI, §Pipeline).
+"""`op ingest iclr|neurips|pmlr|dblp|ojs`, and the one offline replay of every crawler that
+`op snapshot build` runs (spec 01 §CLI, §Pipeline).
 
 `ingest_*` crawls each listing into `<cache>/<source>/pages/` through `common.Crawls.ingest` (one run at a
 time per source: an exclusive lock on `<cache>/<source>/.lock`) and, when the whole listing is cached, writes
 its crawl marker. A dry run reads only the index pages (through the cache) and reports what a crawl would
-fetch; it writes no marker. `--offline` crawls from the cache alone. `replay_all` re-runs every marked crawl of every source
-(OpenReview API v2, then v1, then ICLR, NeurIPS, PMLR, dblp and OJS; `common.Crawls`) with no transport at all, so a snapshot
-never fetches.
+fetch; it writes no marker. `--offline` crawls from the cache alone. `replay_all` re-runs every marked crawl
+of every source (OpenReview API v2, then v1, then ICLR, NeurIPS, PMLR, dblp and OJS; `common.Crawls`) with no
+transport at all, so a snapshot never fetches.
 """
 
 from __future__ import annotations
@@ -262,7 +262,8 @@ def ingest_ojs(
                                     "deleted": sum(m.deleted for m in mined),
                                     "front_matter": sum(m.front_matter for m in mined),
                                     "unavailable": sum(m.unavailable for m in mined),
-                                    "duplicates": sum(m.duplicates for m in mined)})  # fmt: skip
+                                    "duplicates": sum(m.duplicates for m in mined),
+                                    "recovered": sum(m.recovered for m in mined)})  # fmt: skip
     out = _output(reports, f, False)
     out["journals"] = [{"journal": j, "pages": m.pages, "deleted": m.deleted, "front_matter": m.front_matter,
                         "unavailable": m.unavailable, "duplicates": m.duplicates, "recovered": m.recovered}

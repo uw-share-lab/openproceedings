@@ -1,4 +1,4 @@
-"""The journal harvest (`ojs.harvest_journal`): the inventory (journal-wide ListIdentifiers) says which articles exist
+"""The journal harvest (`ojs_harvest.harvest_journal`): the inventory (journal-wide ListIdentifiers) says which articles exist
 and counts the deleted ones; each set's ListRecords chain supplies metadata, with its fallback (a page that answers
 HTTP 5xx on every retry sends the set to ListIdentifiers + GetRecord); an inventory article no set returned is read
 by GetRecord; an article returned twice is kept once (two different copies stop the crawl); an article no route
@@ -7,7 +7,7 @@ the same path."""
 
 import pytest
 from openproceedings.ingest import ojs_table
-from openproceedings.ingest.sources import ojs
+from openproceedings.ingest.sources import ojs, ojs_harvest
 from openproceedings.ingest.sources.common import CrawlError
 from openproceedings.ingest.sources.http import CacheMiss, Fetcher, PageCache, RetriesExhausted, canonical
 
@@ -108,19 +108,18 @@ def _offline(tmp_path) -> Fetcher:
 def test_each_set_chain_is_followed_and_only_the_journals_own_sets(tmp_path) -> None:
     f, transport = _live(tmp_path)
     assert ojs.journal_sets("AAAI", f) == ["AAAI:AISI", "AAAI:APP", "AAAI:FMT", "AAAI:IAAI", "AAAI:Iaai"]
-    h = ojs.harvest_set("AAAI", "AAAI:AISI", f)
-    assert [e.article for _p, e in h.live] == [1, 2] and (h.deleted, h.pages, h.fallback) == (1, 2, False)
+    h = ojs_harvest.harvest_set("AAAI", "AAAI:AISI", f)
+    assert [e.article for _p, e in h.live] == [1, 2] and (h.pages, h.fallback) == (2, False)
     assert _key(ojs.oai_url("AAAI", "a1")) in transport.calls
 
 
 def test_a_5xx_page_falls_back_to_identifiers_and_getrecord(tmp_path) -> None:
     f, transport = _live(tmp_path)
-    h = ojs.harvest_set("AAAI", "AAAI:APP", f)
+    h = ojs_harvest.harvest_set("AAAI", "AAAI:APP", f)
     assert h.fallback
     assert [e.article for _p, e in h.live] == [101, 102, 103]  # 101 from ListRecords, not fetched again
     assert _key(ojs.record_url("AAAI", 101)) not in transport.calls
     assert [a for a, _p in h.unavailable] == [39173] and h.unavailable[0][1].status == 500
-    assert h.deleted == 2  # every deleted header ListIdentifiers lists (90 twice), not ListRecords' subset
     recovered = next(p for p, e in h.live if e.article == 102)
     assert recovered.url == _key(ojs.record_url("AAAI", 102))
 
@@ -202,11 +201,35 @@ def test_a_failure_that_is_not_a_5xx_is_not_cached(tmp_path) -> None:
     script[_key(ojs.oai_url("AAAI", "p1"))] = [response("", status=429, headers=XML)]
     f, _t = _live(tmp_path, script)
     with pytest.raises(RetriesExhausted) as e:
-        ojs.harvest_set("AAAI", "AAAI:APP", f)
+        ojs_harvest.harvest_set("AAAI", "AAAI:APP", f)
     assert e.value.status == 429
     assert not _offline(tmp_path).is_cached(ojs.oai_url("AAAI", "p1"))
 
 
 def test_offline_a_missing_page_is_a_miss_not_a_fallback(tmp_path) -> None:
     with pytest.raises(CacheMiss):
-        ojs.harvest_set("AAAI", "AAAI:APP", _offline(tmp_path))
+        ojs_harvest.harvest_set("AAAI", "AAAI:APP", _offline(tmp_path))
+
+
+def test_an_unavailable_article_named_under_another_set_says_so(tmp_path) -> None:
+    f, _t = _live(tmp_path)
+    other = ojs_table.load(IAAI_TEXT + APP + NAMED.replace('set_spec = "AAAI:APP"', 'set_spec = "AAAI:IAAI"'))
+    with pytest.raises(CrawlError) as e:
+        ojs.mine_journal("AAAI", f, table=other)
+    assert e.value.reason == "unavailable_record"
+    msg = str(e.value)
+    assert (
+        "named in ojs_sections.toml [[unavailable]] under set AAAI:IAAI v34, but served under set AAAI:APP"
+        in msg
+    )
+    assert "is not named" not in msg
+
+
+def test_a_served_article_named_in_an_unavailable_row_stops_the_crawl(tmp_path) -> None:
+    f, _t = _live(tmp_path)
+    stale = NAMED.replace("39173", "1").replace('set_spec = "AAAI:APP"', 'set_spec = "AAAI:AISI"')
+    table = ojs_table.load(IAAI_TEXT + APP + NAMED + stale)
+    with pytest.raises(CrawlError, match=r"article 1 is named in .*\[\[unavailable\]\].*delete its") as e:
+        ojs.mine_journal("AAAI", f, table=table)
+    assert e.value.reason == "stale_unavailable_row"
+    assert "set AAAI:AISI v34" in str(e.value)

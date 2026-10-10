@@ -132,7 +132,7 @@ Every count below was read live on 2026-10-09 (UTC dates may read 2026-10-10 for
 
 ## The census: how it was taken
 
-`scripts/ojs_section_census.py` drives the miner's own harvest (`ojs.harvest_journal`) through `crawl.ojs_fetcher`.
+`scripts/ojs_section_census.py` drives the miner's own harvest (`ojs_harvest.harvest_journal`) through `crawl.ojs_fetcher`.
 The pages it caches are therefore the ones `op ingest ojs` replays. A journal is harvested in three steps:
 1. **Inventory:** the journal-wide `ListIdentifiers` chain (AAAI: 53 pages of 500). It is the source of truth for
    which articles exist and which are deleted.
@@ -235,6 +235,10 @@ Per year, AAAI's `main` count is:
 | Year | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 |
 |---|---|---|---|---|---|---|---|---|
 | `main` | 1,147 | 1,610 | 1,694 | 1,369 | 1,720 | 2,542 | 3,189 | 4,475 |
+
+The 2026 `main` figure is 4,475 records; the table's 4,476 includes the unavailable article 39173. The miner enforces
+counts per volume, not per section, so a record that moves between sections within a volume is not caught by the
+count check.
 
 ### For owner review (mapped to `other` because the design's mapping doesn't name them)
 

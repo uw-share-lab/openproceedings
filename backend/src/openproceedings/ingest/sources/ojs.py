@@ -5,7 +5,7 @@ Each journal (`ojs_table.TABLE.journals`) is harvested in three steps, every pag
 (XML judged whole by its root's closing tag; the query string names the page, so it is the cache key):
 
 1. **Inventory.** The journal-wide `ListIdentifiers` chain (headers only) is the source of truth for which
-   articles exist and which are deleted; deleted headers are counted from it (every one, as `completeListSize`
+   articles exist and which are deleted; deleted headers are counted from it, and only from it (every one, as `completeListSize`
    counts them; AAAI keeps 1-6 stale tombstones for a re-published article).
 2. **Sets.** Each of the journal's own sets (`<journal>:…`, from `ListSets`) is read by `ListRecords&set=…` in
    `oai_dc`, following each `resumptionToken`: the metadata in bulk. Per set, not one journal-wide chain, because one
@@ -34,6 +34,10 @@ A record's article id is its native id (`ojs-<id>`), its section (`setSpec`) and
 lacks stops the crawl. Deleted headers and front-matter sections are counted, never records. The abstract is
 `dc:description` (the English one, else the first), cleaned like every abstract (`common.clean_abstract`).
 Authors come as `Last, First` and are shown `First Last` (`display_name`). Every record is `accepted`.
+
+**Layout:** this module has the constants, URL builders, parsers, `mine_journal` and `_record`; the harvest layer
+(`_get`, `harvest_set`, `inventory`, `harvest_journal`) is `ojs_harvest.py`, which imports this module (never the
+reverse at import time: `mine_journal` imports `harvest_journal` inside the function).
 """
 
 from __future__ import annotations
@@ -42,7 +46,7 @@ import logging
 import re
 import time
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import quote
 from xml.parsers import expat
@@ -69,7 +73,7 @@ from openproceedings.ingest.sources.common import (
     pdf_codes_evidence,
     record_from_claims,
 )
-from openproceedings.ingest.sources.http import Fetcher, Page, RetriesExhausted
+from openproceedings.ingest.sources.http import Fetcher, Page
 from openproceedings.logs import elapsed_ms
 
 log = logging.getLogger(__name__)
@@ -295,185 +299,6 @@ def journal_sets(journal: str, fetcher: Fetcher, *, refresh: bool = False) -> li
     return sorted(s for s in list_sets(journal, fetcher, refresh=refresh) if s.startswith(f"{journal}:"))
 
 
-def _get(fetcher: Fetcher, url: str, *, refresh: bool = False) -> Page:
-    """`fetcher.get`, except that a page the server answers with HTTP 5xx on every retry is cached as that status
-    (an empty `Page`), so an offline replay reads the same failure and takes the same fallback; it is fetched
-    again only with `refresh` (a token page's URL is new on every fresh chain anyway)."""
-    try:
-        return fetcher.get(url, refresh=refresh)
-    except RetriesExhausted as e:
-        if e.status is None or e.status < 500 or fetcher.offline:
-            raise
-        page = Page(fetcher.check(url), e.status, "", fetcher.clock.now(), "")
-        fetcher.cache.put(page)
-        log.warning("ojs_page_failed", extra={"url": page.url, "status": e.status})
-        return page
-
-
-@dataclass
-class SetHarvest:
-    """One set's records as harvested: its live records with the page each came from, its deleted headers, and
-    the articles the server could not serve (each with the cached failure)."""
-
-    set_spec: str
-    live: list[tuple[Page, OaiRecord]] = field(default_factory=list)
-    deleted: int = 0
-    unavailable: list[tuple[int, Page]] = field(default_factory=list)
-    pages: int = 0
-    fallback: bool = False
-
-
-def harvest_set(journal: str, set_spec: str, fetcher: Fetcher, *, refresh: bool = False) -> SetHarvest:
-    """One set's `ListRecords` chain; if a page of it fails with HTTP 5xx (a record the server can't render
-    breaks the whole page, and the chain's next token with it), the set's `ListIdentifiers` chain instead, then
-    `GetRecord` for each live article the chain had not reached. A `GetRecord` that also fails is `unavailable`."""
-    h = SetHarvest(set_spec)
-    seen: set[int] = set()
-    token: str | None = None
-    while True:
-        url = oai_url(journal, token, set_spec=set_spec)
-        page = _get(fetcher, url, refresh=refresh and token is None)
-        if page.status >= 500:
-            _fallback(journal, h, seen, fetcher, refresh=refresh, failed=page)
-            return h
-        if not page.ok:
-            raise CrawlError(f"{url} answered HTTP {page.status}", reason="no_listing")
-        h.pages += 1
-        entries, token = parse_page(page.text)
-        for e in entries:
-            if e.deleted:
-                h.deleted += 1
-            else:
-                h.live.append((page, e))
-                seen.add(e.article)
-        if token is None:
-            return h
-
-
-def _fallback(
-    journal: str, h: SetHarvest, seen: set[int], fetcher: Fetcher, *, refresh: bool, failed: Page
-) -> None:
-    log.warning("ojs_set_fallback", extra={"journal": journal, "set": h.set_spec, "status": failed.status})
-    h.fallback = True
-    deleted = 0
-    token: str | None = None
-    while True:
-        url = ids_url(journal, token, set_spec=h.set_spec)
-        page = fetcher.get(url, refresh=refresh and token is None)
-        if not page.ok:
-            raise CrawlError(f"{url} answered HTTP {page.status}", reason="no_listing")
-        h.pages += 1
-        headers, token = parse_identifiers(page.text)
-        for e in headers:
-            if e.deleted:
-                deleted += 1
-                continue
-            if e.article in seen:
-                continue
-            seen.add(e.article)
-            got = _get(fetcher, record_url(journal, e.article), refresh=refresh)
-            if got.status >= 500:
-                h.unavailable.append((e.article, got))
-                continue
-            if not got.ok:
-                raise CrawlError(f"{got.url} answered HTTP {got.status}", reason="no_listing")
-            h.pages += 1
-            h.live.append((got, parse_record(got.text)))
-        if token is None:
-            break
-    h.deleted = (
-        deleted  # every deleted header of the set; ListRecords' pages before the failure held a subset
-    )
-
-
-def inventory(journal: str, fetcher: Fetcher, *, refresh: bool = False) -> tuple[list[OaiRecord], int]:
-    """The journal-wide `ListIdentifiers` chain: every header (live and deleted, in list order), the source of truth
-    for which articles exist, and the pages read."""
-    headers: list[OaiRecord] = []
-    token: str | None = None
-    pages = 0
-    while True:
-        url = ids_url(journal, token)
-        page = fetcher.get(url, refresh=refresh and token is None)
-        if not page.ok:
-            raise CrawlError(f"{url} answered HTTP {page.status}", reason="no_listing")
-        pages += 1
-        found, token = parse_identifiers(page.text)
-        headers += found
-        if token is None:
-            return headers, pages
-
-
-@dataclass
-class JournalHarvest:
-    """One journal as harvested: each live inventory article once, in inventory order, with the page its metadata
-    came from; the live articles neither route could serve; the deleted headers (from the inventory)."""
-
-    live: list[tuple[Page, OaiRecord]] = field(default_factory=list)
-    unavailable: list[tuple[OaiRecord, Page]] = field(
-        default_factory=list
-    )  # (inventory header, cached failure)
-    deleted: int = 0
-    duplicates: int = 0  # extra copies of an article that more than one set request returned (identical)
-    recovered: int = 0  # live inventory articles no set returned, read by GetRecord
-    pages: int = 0
-    fallback_sets: list[str] = field(default_factory=list)
-
-
-def harvest_journal(journal: str, fetcher: Fetcher, *, refresh: bool = False) -> JournalHarvest:
-    """The inventory, then every set's records (`harvest_set`), then `GetRecord` for each live inventory article no
-    set returned (a set name two sections share reaches only one of them: AAAI's `EAAI-POS`, `EAAI-Full`). An article
-    returned twice is kept once; two copies that differ stop the crawl, as does a set record the inventory lacks."""
-    out = JournalHarvest()
-    headers, out.pages = inventory(journal, fetcher, refresh=refresh)
-    out.deleted = sum(h.deleted for h in headers)
-    live: dict[int, OaiRecord] = {}
-    for h in headers:
-        if not h.deleted:
-            live.setdefault(h.article, h)
-    got: dict[int, tuple[Page, OaiRecord]] = {}
-    failed: dict[int, Page] = {}
-    for spec in journal_sets(journal, fetcher, refresh=refresh):
-        sh = harvest_set(journal, spec, fetcher, refresh=refresh)
-        out.pages += sh.pages
-        if sh.fallback:
-            out.fallback_sets.append(spec)
-        for article, page in sh.unavailable:
-            failed.setdefault(article, page)
-        for page, rec in sh.live:
-            if rec.article not in live:
-                raise CrawlError(
-                    f"OJS {journal} article {rec.article} (set {spec}) is not a live article of the inventory "
-                    "(ListIdentifiers): the journal changed during the harvest; run it again with --refresh",
-                    reason="not_in_inventory",
-                )
-            if (first := got.get(rec.article)) is not None:
-                if first[1] != rec:
-                    raise CrawlError(
-                        f"OJS {journal} article {rec.article} came back from two set requests with different "
-                        f"metadata ({first[1].set_spec} v{first[1].volume} and {rec.set_spec} v{rec.volume}); "
-                        "check it by hand",
-                        reason="conflicting_duplicate",
-                    )
-                out.duplicates += 1
-                continue
-            got[rec.article] = (page, rec)
-    for article, header in live.items():
-        if article in got:
-            out.live.append(got[article])
-            continue
-        page = failed.get(article) or _get(fetcher, record_url(journal, article), refresh=refresh)
-        if page.status >= 500:
-            out.unavailable.append((header, page))
-            continue
-        if not page.ok:
-            raise CrawlError(f"{page.url} answered HTTP {page.status}", reason="no_listing")
-        out.pages += 1
-        out.recovered += 1
-        out.live.append((page, parse_record(page.text)))
-    return out
-
-
 def display_name(creator: str) -> str:
     """`Doe, Jane` → `Jane Doe` (OJS writes surname first); any other shape (no comma, or more than one, as in
     `Smith, Jr., John`) is kept as published, whitespace collapsed."""
@@ -525,6 +350,13 @@ def mine_journal(
         return report
 
     def take(page: Page, e: OaiRecord) -> None:
+        if (stale := table.unavailable.get((journal, e.article))) is not None:
+            raise CrawlError(
+                f"OJS {journal} article {e.article} is named in ojs_sections.toml [[unavailable]] (set "
+                f"{stale.set_spec} v{stale.volume}) but the server now serves it as a record (set {e.set_spec} "
+                f"v{e.volume}): delete its [[unavailable]] row, and count it in its section's papers",
+                reason="stale_unavailable_row",
+            )
         if e.volume is None:
             raise CrawlError(
                 f"OJS {journal} article {e.article}: dc:source names no volume", reason="oai_unreadable"
@@ -563,6 +395,9 @@ def mine_journal(
         records.append(record)
         report.count(record, None if record.abstract else "no_abstract", cleaned.spaced, cleaned.pdf_codes)
 
+    # imported here, not at the top: ojs_harvest imports this module
+    from openproceedings.ingest.sources.ojs_harvest import harvest_journal
+
     h = harvest_journal(journal, fetcher, refresh=refresh)
     result.pages, result.deleted = h.pages, h.deleted
     result.duplicates, result.recovered = h.duplicates, h.recovered
@@ -573,10 +408,17 @@ def mine_journal(
             log.info("ojs_journal_progress", extra={"journal": journal, "records": len(records)})
     for header, failed in h.unavailable:
         row = table.unavailable.get((journal, header.article))
-        if row is None or row.set_spec != header.set_spec:
+        if row is None:
             raise CrawlError(
                 f"OJS {journal} article {header.article} (set {header.set_spec}) answers HTTP {failed.status} "
                 "in every form and is not named in ojs_sections.toml [[unavailable]]: check it, then name it",
+                reason="unavailable_record",
+            )
+        if row.set_spec != header.set_spec:
+            raise CrawlError(
+                f"OJS {journal} article {header.article} answers HTTP {failed.status} in every form and is named "
+                f"in ojs_sections.toml [[unavailable]] under set {row.set_spec} v{row.volume}, but served under "
+                f"set {header.set_spec} (an inventory header names no volume): correct its row",
                 reason="unavailable_record",
             )
         report = report_for(row.volume, failed)
