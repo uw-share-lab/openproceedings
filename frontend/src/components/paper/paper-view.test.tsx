@@ -420,3 +420,29 @@ describe("fetchedText", () => {
     expect(fetchedText("not a date")).toBe("not a date");
   });
 });
+
+describe("Track expansions (TASK-223)", () => {
+  it.each([
+    ["iaai", "IAAI (Innovative Applications of AI)"],
+    ["eaai", "EAAI (Educational Advances in AI)"],
+  ] as const)("prints the %s expansion as visible text beside the badge", async (track, shown) => {
+    draw(
+      null,
+      api(() => json(answer({ paper: { ...PAPER, venue: "AAAI", track } }))),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    const badge = within(screen.getByRole("list", { name: "Details" })).getByText(shown);
+    // visible text: not aria-hidden, not screen-reader-only, not only a title
+    expect(badge.closest("[aria-hidden='true']")).toBeNull();
+    expect(badge.closest(".sr-only")).toBeNull();
+  });
+
+  it("leaves a track with no expansion as its value", async () => {
+    draw(
+      null,
+      api(() => json(answer())),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(within(screen.getByRole("list", { name: "Details" })).getByText("main")).toBeTruthy();
+  });
+});

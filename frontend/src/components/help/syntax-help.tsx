@@ -380,6 +380,19 @@ export function SyntaxHelp({
           </li>
           <li>
             <code className={CODE}>track:</code> <Values values={data.values.track} />
+            {Object.keys(data.track_expansions).length > 0 && (
+              <>
+                {" "}
+                (
+                {Object.entries(data.track_expansions).map(([track, expansion], i) => (
+                  <span key={track}>
+                    {i > 0 ? "; " : ""}
+                    <code className={CODE}>{track}</code>: {expansion}
+                  </span>
+                ))}
+                )
+              </>
+            )}
           </li>
           <li>
             <code className={CODE}>status:</code> <Values values={data.values.status} />

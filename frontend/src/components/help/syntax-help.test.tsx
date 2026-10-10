@@ -202,6 +202,24 @@ describe("Filters: abstract_kind: (decision-049)", () => {
   });
 });
 
+describe("Filters: the track expansions (TASK-223)", () => {
+  it("writes each expansion in the track row as visible text, from the golden", () => {
+    page();
+    const row = [...document.getElementById("filters")!.querySelectorAll("li")].find((li) =>
+      li.textContent?.startsWith("track:"),
+    )!;
+    expect(row.textContent).toContain("iaai: Innovative Applications of AI");
+    expect(row.textContent).toContain("eaai: Educational Advances in AI");
+    // visible text, not a title or an aria-label
+    expect(row.querySelector("[title],[aria-label]")).toBeNull();
+    cleanup();
+    const changed = structuredClone(golden);
+    (changed.track_expansions as Record<string, string>).demo = "Demonstrations";
+    page(changed);
+    expect(document.getElementById("filters")!.textContent).toContain("demo: Demonstrations");
+  });
+});
+
 describe("Limits", () => {
   it("shows this instance's limits from /meta", async () => {
     page();

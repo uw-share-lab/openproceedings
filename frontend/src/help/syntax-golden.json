@@ -37,6 +37,10 @@
     "status": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
     "abstract_kind": ["official", "openalex", "none"]
   },
+  "track_expansions": {
+    "iaai": "Innovative Applications of AI",
+    "eaai": "Educational Advances in AI"
+  },
   "defaults": [
     {
       "field": "track",

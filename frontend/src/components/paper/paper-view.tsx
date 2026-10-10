@@ -194,6 +194,7 @@ function Paper({
         track={paper.track}
         presentation={paper.presentation}
         status={paper.status}
+        expandTrack
       />
       {paper.authors.length > 0 && <p className="text-sm">{paper.authors.join(", ")}</p>}
       {paper.status !== "accepted" && (

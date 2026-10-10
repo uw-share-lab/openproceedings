@@ -2,6 +2,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import golden from "@/help/syntax-golden.json";
 import { PaperBadges, trackDisplay } from "./paper-badges";
 
 describe("trackDisplay", () => {
@@ -41,5 +42,13 @@ describe("an acronym track badge", () => {
     const shown = screen.getByText("IAAI", { selector: "[aria-hidden=true]" });
     expect(shown.getAttribute("title")).toBe("IAAI, Innovative Applications of AI");
     expect(screen.getByText("IAAI, Innovative Applications of AI", { selector: ".sr-only" })).toBeTruthy();
+  });
+});
+
+describe("track expansions match the syntax help's (TASK-223)", () => {
+  it("has the golden's expansion in each long name", () => {
+    for (const [track, expansion] of Object.entries(golden.track_expansions)) {
+      expect(trackDisplay(track).long).toBe(`${trackDisplay(track).short}, ${expansion}`);
+    }
   });
 });

@@ -320,6 +320,7 @@ def build() -> dict[str, Any]:
             "status": list(STATUSES),
             "abstract_kind": list(ABSTRACT_KINDS),
         },
+        "track_expansions": dict(TRACK_EXPANSIONS),
         "defaults": [
             {"field": field, "values": list(values), "canonical": _clause(field, values)}
             for field, values in DEFAULT_CLAUSES.items()
@@ -332,6 +333,14 @@ def build() -> dict[str, Any]:
         "messages": messages,
         "slow_clauses": [c.value for c in SLOW_CLAUSES],
     }
+
+
+# Track values whose acronym the help page spells out beside the value (TASK-223). The frontend's track badge
+# (`paper-badges.tsx`) uses the same words; a frontend test holds the two together.
+TRACK_EXPANSIONS: dict[str, str] = {
+    "iaai": "Innovative Applications of AI",
+    "eaai": "Educational Advances in AI",
+}
 
 
 def _clause(field: str, values: tuple[str, ...]) -> str:
