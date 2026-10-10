@@ -37,7 +37,7 @@ AAAI 1980–2008: 1,089 entries move off `main` and 21 more are not-paper rows (
 rows now name the pages they fall outside, so those 377 records change provenance only (AIES 2020, which has no
 section row, keeps its decision-049 wording). Record content changes, so a new snapshot (and index) changes
 `snapshot_hash`; no schema, tokenizer or query version changes, and records saved on an index built from an earlier
-snapshot replay as `drifted`. Specs 00, 01, 02, 05, 07, the track-taxonomy and dedup-rules skills and the research
+snapshot replay as `drifted`. No public instance has served an index built from the earlier snapshots (hosting is parked, TASK-064), so only locally saved records are affected. Specs 00, 01, 02, 05, 07, the track-taxonomy and dedup-rules skills and the research
 note describe the rules; `backend/tests/unit/ingest/test_track_rules_replay.py` pins the counts over the pinned data;
 the coverage report's scope lines say which entries are counted but not indexed. A range holding no paper stops the
 crawl (`stale_section`). Revisit if an official AIES 2018–2023 table of contents becomes readable, or for 2005's
