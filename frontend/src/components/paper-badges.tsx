@@ -13,7 +13,7 @@
 const TRACK_SHORT: Readonly<Record<string, { short: string; long: string }>> = {
   datasets_benchmarks: { short: "D&B", long: "D&B, datasets and benchmarks" },
   iaai: { short: "IAAI", long: "IAAI, Innovative Applications of Artificial Intelligence" },
-  eaai: { short: "EAAI", long: "EAAI, Educational Advances in AI" },
+  eaai: { short: "EAAI", long: "EAAI, Educational Advances in Artificial Intelligence" },
 };
 
 /** A track as the sidebar and badges show it: its short form, and its accessible name. */

@@ -209,7 +209,7 @@ describe("Filters: the track expansions (TASK-223)", () => {
       li.textContent?.startsWith("track:"),
     )!;
     expect(row.textContent).toContain("iaai: Innovative Applications of Artificial Intelligence");
-    expect(row.textContent).toContain("eaai: Educational Advances in AI");
+    expect(row.textContent).toContain("eaai: Educational Advances in Artificial Intelligence");
     // visible text, not a title or an aria-label
     expect(row.querySelector("[title],[aria-label]")).toBeNull();
     cleanup();

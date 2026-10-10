@@ -339,7 +339,7 @@ def build() -> dict[str, Any]:
 # (`paper-badges.tsx`) uses the same words; a frontend test holds the two together.
 TRACK_EXPANSIONS: dict[str, str] = {
     "iaai": "Innovative Applications of Artificial Intelligence",
-    "eaai": "Educational Advances in AI",
+    "eaai": "Educational Advances in Artificial Intelligence",
 }
 
 

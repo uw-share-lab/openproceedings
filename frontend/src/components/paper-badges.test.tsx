@@ -10,7 +10,7 @@ describe("trackDisplay", () => {
     ["datasets_benchmarks", "D&B", "D&B, datasets and benchmarks"],
     ["student_abstract", "student_abstract", "student_abstract"], // the value itself, as typed
     ["iaai", "IAAI", "IAAI, Innovative Applications of Artificial Intelligence"], // the acronym is in the name (WCAG 2.5.3)
-    ["eaai", "EAAI", "EAAI, Educational Advances in AI"],
+    ["eaai", "EAAI", "EAAI, Educational Advances in Artificial Intelligence"],
   ])("shows %s as %s, named %s for assistive technology", (track, short, long) => {
     expect(trackDisplay(track)).toEqual({ short, long });
   });
@@ -25,7 +25,7 @@ describe("PaperBadges", () => {
 
   it.each([
     ["iaai", ["AAAI", "2024", "IAAIIAAI, Innovative Applications of Artificial Intelligence"]],
-    ["eaai", ["AAAI", "2024", "EAAIEAAI, Educational Advances in AI"]],
+    ["eaai", ["AAAI", "2024", "EAAIEAAI, Educational Advances in Artificial Intelligence"]],
     ["student_abstract", ["AAAI", "2024", "student_abstract"]],
   ])("badges a %s paper", (track, badges) => {
     render(<PaperBadges venue="AAAI" year={2024} track={track} presentation={null} status="accepted" />);

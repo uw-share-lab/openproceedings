@@ -22,7 +22,7 @@ Track = Literal[
     "consortium",  # AAAI doctoral and undergraduate consortia
     "demo",  # AAAI demonstrations
     "iaai",  # Innovative Applications of Artificial Intelligence, printed in the AAAI volumes (AAAI only)
-    "eaai",  # Educational Advances in AI, printed in the AAAI volumes (AAAI only)
+    "eaai",  # Educational Advances in Artificial Intelligence, printed in the AAAI volumes (AAAI only)
     "other",
     "unknown",
 ]
