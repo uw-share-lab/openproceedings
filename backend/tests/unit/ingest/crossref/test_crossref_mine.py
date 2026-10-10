@@ -175,15 +175,71 @@ def test_a_total_that_moves_mid_chain_stops(tmp_path: Path) -> None:
     assert e.value.reason == "listing_changed"
 
 
-def test_a_proceedings_record_that_is_not_the_tables_stops(tmp_path: Path) -> None:
-    _whole(tmp_path, api.work(D1), api.work(D2), api.work(NP), total=3)
-    seed(
+def test_a_chain_that_returns_more_works_than_its_stated_total_stops(tmp_path: Path) -> None:
+    # page 2 repeats D1 (a looping chain): 4 works of a stated 3, though the DOIs alone would count right
+    _seed_chain(
         tmp_path,
-        "crossref",
-        crossref.proceedings_url(ROW.doi),
-        api.proceedings(title="Another Conference"),
-        keep_query=True,
+        api.works_page(api.work(D1), api.work(D2), cursor="c2", total=3),
+        api.works_page(api.work(NP), api.work(D1), cursor="c3", total=3),
+        api.works_page(cursor="c4", total=3),
     )
+    with pytest.raises(CrawlError, match="4 works of a stated 3") as e:
+        crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE)
+    assert e.value.reason == "listing_changed"
+
+
+def test_a_doi_listed_twice_identically_is_skipped_and_counted(tmp_path: Path) -> None:
+    _seed_chain(
+        tmp_path,
+        api.works_page(api.work(D1), api.work(D2), cursor="c2", total=4),
+        api.works_page(api.work(D2), api.work(NP), cursor="c3", total=4),
+        api.works_page(cursor="c4", total=4),
+    )
+    result = crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE)
+    (report,) = result.reports
+    assert (report.listed, report.count_ok, report.records) == (3, True, 2)
+    assert report.skipped == {"duplicate": 1, "not_paper": 1}
+
+
+def test_a_doi_listed_twice_with_different_records_stops(tmp_path: Path) -> None:
+    _seed_chain(
+        tmp_path,
+        api.works_page(api.work(D1), api.work(D2), cursor="c2", total=4),
+        api.works_page(api.work(D2, title="Another Title"), api.work(NP), cursor="c3", total=4),
+        api.works_page(cursor="c4", total=4),
+    )
+    with pytest.raises(CrawlError, match=D2) as e:
+        crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE)
+    assert e.value.reason == "conflicting_duplicate"
+
+
+def test_a_work_that_will_not_build_stops_the_crawl_naming_the_doi(tmp_path: Path, monkeypatch) -> None:
+    from openproceedings.ingest.record import PaperRecord
+    from pydantic import ValidationError
+
+    _whole(tmp_path, api.work(D1), api.work(D2), api.work(NP), total=3)
+    with pytest.raises(ValidationError) as made:
+        PaperRecord.model_validate({})
+
+    def boom(*_a, **_k):
+        raise made.value
+
+    monkeypatch.setattr(crossref, "record_from_claims", boom)
+    with pytest.raises(CrawlError, match=rf"{D1}.*ValidationError") as e:
+        crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE)
+    assert e.value.reason == "invalid_record"
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        pytest.param(api.proceedings(title="Another Conference"), id="another-title"),
+        pytest.param(api.proceedings(doi="10.1145/9999999"), id="another-doi"),  # the table's title
+    ],
+)
+def test_a_proceedings_record_that_is_not_the_tables_stops(tmp_path: Path, head: str) -> None:
+    _whole(tmp_path, api.work(D1), api.work(D2), api.work(NP), total=3)
+    seed(tmp_path, "crossref", crossref.proceedings_url(ROW.doi), head, keep_query=True)
     with pytest.raises(CrawlError) as e:
         crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE)
     assert e.value.reason == "proceedings_mismatch"

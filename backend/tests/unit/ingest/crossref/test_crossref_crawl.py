@@ -16,6 +16,12 @@ def _acm(monkeypatch):
     monkeypatch.setattr(acm_table, "TABLE", TABLE)
 
 
+def _logged_anywhere(caplog, text: str) -> bool:
+    """Whether `text` is in any captured record: its message or any attribute, `extra={...}` fields included
+    (`caplog.text` holds the formatted message only, and every log call here puts its fields in `extra`)."""
+    return any(text in json.dumps(vars(r), default=str) for r in caplog.records)
+
+
 def test_offline_ingest_marks_the_proceedings_and_the_replay_rebuilds_them(tmp_path, monkeypatch) -> None:
     _whole(tmp_path, api.work(D1), api.work(D2), api.work(NP), total=3)
     out = crawl.ingest_crossref([("FAccT", 2023)], tmp_path, offline=True, table=TABLE)
@@ -43,7 +49,7 @@ def test_a_live_crawl_sends_the_contact_in_the_user_agent_and_nowhere_else(tmp_p
     caplog.set_level(logging.DEBUG)
     crawl.ingest_crossref([("FAccT", 2023)], tmp_path, transport=t, min_interval=0, table=TABLE,
                           mailto="reviewer@example.org")  # fmt: skip
-    assert "reviewer@example.org" not in caplog.text
+    assert caplog.records and not _logged_anywhere(caplog, "reviewer@example.org")
     assert all("reviewer@example.org" not in p.read_text() for p in tmp_path.rglob("*.json"))
 
 
@@ -120,9 +126,10 @@ def test_a_dry_run_reads_the_cache_only_and_writes_no_marker(tmp_path, monkeypat
     assert not (tmp_path / "crossref" / "crawls").exists()
 
 
-def test_the_contact_never_reaches_the_cache_or_an_error(tmp_path, monkeypatch) -> None:
+def test_the_contact_never_reaches_the_cache_or_an_error(tmp_path, monkeypatch, caplog) -> None:
     import pytest
 
+    caplog.set_level(logging.DEBUG)
     monkeypatch.setattr(crawl, "repo_dotenv", lambda: None)
     t = FakeTransport({})
     _script(t, crossref.proceedings_url(ROW.doi), api.proceedings())
@@ -132,6 +139,7 @@ def test_the_contact_never_reaches_the_cache_or_an_error(tmp_path, monkeypatch) 
         crawl.ingest_crossref([("FAccT", 2023)], tmp_path, transport=t, min_interval=0, table=TABLE,
                               mailto="reviewer@example.org")  # fmt: skip
     assert e.value.reason == "count_mismatch" and "reviewer@example.org" not in str(e.value)
+    assert caplog.records and not _logged_anywhere(caplog, "reviewer@example.org")
     assert all("reviewer@example.org" not in p.read_text() for p in tmp_path.rglob("*") if p.is_file())
     assert not (tmp_path / "crossref" / "crawls").exists()  # no marker for a stopped crawl
 

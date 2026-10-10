@@ -5,6 +5,7 @@ replay. Synthetic release (test_dblp_slices.AAAI_BODY). No network."""
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -98,7 +99,11 @@ def test_a_count_that_differs_from_the_table_stops_the_year_and_its_replay(tmp_p
     [(lambda s: s.replace('"conf/aaai/2006"]', '"conf/aaai/2006x"]'), "unlisted_proceedings"),  # the release's 2006 key is unlisted
      (lambda s: s.replace("not_held = [1981, 1985, 1989, 2001, 2003, 2009]", "not_held = [1981, 1985, 1989, 2001, 2003, 2006, 2009]")
       .split("[[year]]\nyear = 2006")[0], "table_mismatch"),
-     (lambda s: s.replace('key = "conf/aaai/Invited86"', 'key = "conf/aaai/Nowhere86"'), "table_mismatch")],
+     (lambda s: s.replace('key = "conf/aaai/Invited86"', 'key = "conf/aaai/Nowhere86"'), "table_mismatch"),
+     # the release's own key stays listed; a second key the release lacks reaches the "named" check
+     (lambda s: s.replace('"conf/aaai/2006"]', '"conf/aaai/2006", "conf/aaai/2006-absent"]'), "table_mismatch"),
+     # a key the release holds, dated another year (2024: outside the years the first loop checks)
+     (lambda s: s.replace('"conf/aaai/1986-2"]', '"conf/aaai/1986-2", "conf/aaai/2024"]'), "table_mismatch")],
 )  # fmt: skip
 def test_the_check_stops_on_an_unlisted_key_a_not_held_year_or_an_absent_row(
     tmp_path: Path, edit, reason
@@ -138,6 +143,18 @@ def test_ingest_marks_each_year_and_the_replay_rebuilds_it(tmp_path: Path, monke
         "op:aaai:1986:dblp-Synthetic86a",
         "op:aaai:1986:dblp-Synthetic86b",
     ]
+
+
+def test_a_marker_from_another_dblp_release_never_replays(tmp_path: Path, monkeypatch) -> None:
+    table, aaai, _ = setup(tmp_path)
+    monkeypatch.setattr(dblp_aaai, "TABLE", aaai)
+    crawl.ingest_dblp_aaai([1986], tmp_path, offline=True, table=table, aaai=aaai)
+    marker = tmp_path / "dblp" / "aaai-crawls" / "1986.json"
+    marker.write_text(json.dumps(json.loads(marker.read_text()) | {"release": "10.4230/dblp.xml.1999-01-01"}))
+    monkeypatch.setattr(crawl, "DBLP_TABLE", table)  # pinned to the release the extract was written from
+    with pytest.raises(crawl.MinerError, match=re.escape("10.4230/dblp.xml.1999-01-01")) as e:
+        crawl.DBLP_AAAI.replay(tmp_path)
+    assert e.value.reason == "release_changed"
 
 
 def test_a_year_outside_the_table_is_refused(tmp_path: Path) -> None:
