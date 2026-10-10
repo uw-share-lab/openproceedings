@@ -26,7 +26,8 @@ venues.
 **In scope (v1):**
 - Venues **indexed now**: NeurIPS (including the Datasets & Benchmarks track; from 1987), ICLR (from 2013), ICML
   (from 1988: on OpenReview, in PMLR, and before 2013 from a pinned dblp release; decision-047), AAAI (2010–2026),
-  AIES (2024–2025) and IASEAI (2026), the last three from ojs.aaai.org (decision-049, milestone A).
+  AIES (2024–2025) and IASEAI (2026; its archival papers only, 57 of the 92 accepted, the other 35 being
+  non-archival and unpublished), the last three from ojs.aaai.org (decision-049, milestone A).
 - Venues **in scope and planned** (decision-049; milestones B and C of the
   [design](../plans/2026-10-09-new-venues-design.md), not built): AAAI 1980–2008, AIES 2018–2023 and FAccT
   2018 onward (every paper of every year, as decision-047 did for NeurIPS and ICML), IASEAI 2027 once its accepted

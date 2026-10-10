@@ -1,4 +1,4 @@
-# AAAI, AIES, FAccT and IASEAI: sources, census and section table (checked 2026-10-09)
+# AAAI, AIES, FAccT and IASEAI: sources, census and section table (checked 2026-10-09 and 2026-10-10)
 
 This note supports `backend/src/openproceedings/ingest/ojs_sections.toml` (decision-049) and the new-venues design
 (`docs/plans/2026-10-09-new-venues-design.md`).
@@ -9,7 +9,8 @@ It records four things:
 - two server quirks the harvest had to handle;
 - the section-to-track decisions, including the sections left for the owner to review.
 
-Every count below was read live on 2026-10-09 (UTC dates may read 2026-10-10 for the late fetches).
+Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 retry and the dblp check are
+2026-10-10, and say so).
 
 ## ojs.aaai.org (AAAI 2010–2026, AIES 2024–2025, IASEAI 2026)
 
@@ -105,6 +106,11 @@ Every count below was read live on 2026-10-09 (UTC dates may read 2026-10-10 for
 
 ## FAccT (milestone B)
 
+These facts feed milestone B, which is not built, and their evidence trail is thinner than the OJS one: the
+session recorded the DOIs below and the counts, but not the exact OpenAlex queries, the CSV file URLs or a per-fact
+fetch time. Each fact marked *(unverified here)* must be re-read, with its URL or query recorded, before milestone B
+relies on it (TASK-214 builds it).
+
 - 2018 (FAT\*): PMLR v81, 20 entries = 17 papers + a preface + 2 keynotes.
 - 2019–2026 are ACM proceedings:
 
@@ -119,16 +125,39 @@ Every count below was read live on 2026-10-09 (UTC dates may read 2026-10-10 for
   | 2025 | 3715275 | 206 |
   | 2026 | 3805689 | 314 (published 2026-06-25) |
 
-- Crossref holds no abstract for any of the 1,341 DOIs.
+- Crossref holds no abstract for any DOI checked. The session recorded "1,341 DOIs", 102 more than the 1,239
+  entries above (82 more with the 2018 PMLR volume's 20); what the extra DOIs were, and how many were checked, was
+  not recorded *(unverified here)*.
 - facctconference.org (robots.txt allows everything) has:
-  - the 2025 final CSV: 217 rows, abstracts, DOIs;
-  - the 2026 final CSV: 325 rows, abstracts, no DOIs;
+  - the 2025 final CSV: 217 rows, abstracts, DOIs *(file URL not recorded; unverified here)*;
+  - the 2026 final CSV: 325 rows, abstracts, no DOIs *(file URL not recorded; unverified here)*;
   - a 2022 accepted-papers page with abstracts;
   - titles only for the other years.
 - The ACM DL answers 403 (Cloudflare).
-- OpenAlex has abstracts for 100% of 2019–2024, 195 of 206 for 2025, and 293 of 317 for 2026. Its DOIs are
-  sometimes truncated or duplicated.
+- OpenAlex has abstracts for 100% of 2019–2024, 195 of 206 for 2025, and 293 of 317 for 2026 *(query not
+  recorded; unverified here)*. Its DOIs are sometimes truncated or duplicated, which is the likely reason its
+  counts (206, 317) differ from the ACM entries (206, 314) and the CSV rows (217, 325); the difference was not
+  itemised.
 - ACM has been fully open access since 2026-01-01. No metadata or abstract licence was found.
+
+## Licence posture
+
+What each source states about reuse, and what the index does with its text. None of this is legal advice; the
+project's position is decision-018 (README §Abstracts on a public instance).
+
+| Source | Stated licence | Checked |
+|---|---|---|
+| ojs.aaai.org (AAAI, AIES, IASEAI) | `dc:rights` "Copyright (c) <year> …"; no open licence | 2026-10-09, in every record read |
+| ACM DL (FAccT 2019–2026) | none found for metadata or abstracts (the DL answers 403; ACM is open access since 2026-01-01, which covers the papers, not a metadata licence) | 2026-10-09 |
+| facctconference.org CSVs | none found | 2026-10-09 *(page not recorded; unverified here)* |
+| OpenAlex (milestone C fallback) | not checked in this task (OpenAlex documents its data as CC0; re-check before milestone C stores any abstract) | not checked |
+| Crossref | not checked in this task (it holds no FAccT abstract, so none would be taken from it) | not checked |
+| the pinned dblp release | not checked in this task; decision-047 covers it (titles, no abstracts) | not checked |
+
+**Index versus fixtures.** The live index stores and shows an OJS abstract with its attribution ("AAAI Digital
+Library") and a link to the paper's own page on ojs.aaai.org, never the full text, on decision-018's fair-dealing
+basis, as for the other non-CC sources. Committed test fixtures are different: their titles, authors and abstracts
+are synthetic (decision-004), so no copyrighted text is in the repository.
 
 ## The census: how it was taken
 
@@ -166,11 +195,12 @@ The AAAI harvest read 589 OAI pages, IASEAI 5 and AIES 12, plus the `ListSets` p
   never as a record.
 
 `op ingest ojs --offline` on the cache: 20 listings (AAAI 2010–2026, AIES 2024–2025, IASEAI 2026), every one
-`count_ok`. The journals:
+`count_ok`. The journals (after the owner ruled AAAI 2023's two Errata front matter; the first run read AAAI
+25,128 records and 8 front matter):
 
 | Journal | Records | Deleted | Front matter | Unavailable | Duplicates | Recovered by GetRecord |
 |---|---|---|---|---|---|---|
-| AAAI | 25,128 | 1,048 | 8 | 1 | 19 | 5 |
+| AAAI | 25,126 | 1,048 | 10 | 1 | 19 | 5 |
 | AIES | 449 | 0 | 1 | 0 | 0 | 0 |
 | IASEAI | 57 | 57 | 1 | 0 | 0 | 0 |
 
@@ -262,18 +292,32 @@ edit, with no code change.
 
 ## Official counts (spec 07 §C)
 
-No row was added to `official_counts.py`.
+Six rows were added to `official_counts.py` and `docs/results/coverage-sources.md` (TASK-219, read 2026-10-09 by
+plain GETs of the pages named; dblp.org never fetched). Classes: **gateable** (an official statement whose
+definition is our `main` cell, within ±1%), **definition mismatch**, **not found** (aggregator or news figures
+exist for some years; they are never a row). "Ours" is the `main` cell after the Robotics Program move (the
+2026-10-10 coverage report's figure, plus the moved rows for 2011 and 2013).
 
-- **IASEAI 2026: recorded, not gated.** The front matter's "92 accepted research papers" is a count a reader can
-  check. But it includes the 35 non-archival papers that are not published on OJS. Against the 57 indexed `main`
-  papers the delta is 35/92, or 38%, far outside the ±1% gate. A row would fail the gate, so none is added. The
-  cell is reported with no official count.
-- **AIES 2024–2025.** The only accepted counts found (150 + 20; 238 + 41) are the OJS issue listings, the very
-  source being indexed. As a "gate" they would be circular. No independent official statement (a statistics page
-  or an acceptance announcement) was sourced in this task.
-- **AAAI 2010–2026.** The issue-page totals mix all tracks, so they are not main-track accepted counts. AAAI's
-  published acceptance statistics were not read in this task. Sourcing them is a follow-up; until then the AAAI
-  main cells are not gated.
+| Venue-year | Official | What it counts | Source | Ours | Class |
+|---|---|---|---|---|---|
+| AIES 2024 | 150 | archival full papers accepted (468 reviewed); student abstracts separate | https://ojs.aaai.org/index.php/AIES/article/view/31763 (chairs' front matter); the table in https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 150 | gateable (row) |
+| AIES 2025 | 238 | archival full papers accepted (748 reviewed); student abstracts separate | https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 238 | gateable (row) |
+| AAAI 2013 | 203 | technical program incl. the four special tracks (AI and the Web, Cognitive Systems, Computational Sustainability, AI and Robotics); late-breaking and spotlights excluded | https://ojs.aaai.org/index.php/AAAI/article/view/8512 (AAAI-13 preface) | 202 | gateable (row) once "Robotics Program" is `main` (it was a mismatch at 191) |
+| AAAI 2015 | 539 | papers "selected … and presented" from the main technical and topical tracks (AI Magazine report) | https://ojs.aaai.org/index.php/aimagazine/article/view/2606/2500 | 538 | gateable (row; the weakest wording) |
+| AAAI 2018 | 938 | original research publications in the proceedings (3,800 submissions) | https://ojs.aaai.org/index.php/AAAI/issue/view/301 | 937 | gateable (row) |
+| AAAI 2019 | 1,147 | original research publications in the proceedings (7,095 submissions) | https://ojs.aaai.org/index.php/AAAI/issue/view/246 | 1,147 | gateable (row) |
+| AAAI 2014, 2016, 2017 | none | submissions only (1,406; 2,132; 2,571) | issue pages 305, 303, 302 | 398, 548, 639 | not found |
+| AAAI 2010–2012, 2020–2026 | none | no AAAI statement found (aggregator figures only) | issue pages; aaai.org conference pages | see the per-year table | not found |
+| IASEAI 2026 | 92 | accepted research papers, 35 of them non-archival and unpublished on OJS | https://ojs.aaai.org/index.php/IASEAI/issue/view/741 | 57 | definition mismatch: recorded, not gated |
+
+- **AIES.** The chairs' statements are not the OJS issue listing (whose totals this note once called circular);
+  the 2025 program is on the conference's own site. Whether "accepted" is before or after withdrawals is not
+  stated; the exact match with the listing suggests none.
+- **AAAI 2018, 2019.** "Original research publications" is read as the technical program, special tracks
+  included; the front matter does not itemise.
+- **AAAI 2020–2026.** The trackers' figures sit close to our `main` minus the special tracks and Journal Track, so
+  they likely count the Main Technical Track only; even an official figure of that kind would be a definition
+  mismatch with our `main`. The chairs' opening slides or AAAI press releases may hold the official numbers.
 
 ## Sources checked
 
@@ -282,6 +326,9 @@ No row was added to `official_counts.py`.
   and GetRecord
 - AAAI issue 306 (2013)
 - https://ojs.aaai.org/index.php/IASEAI/issue/view/741 and article/view/43116
+- for the official counts (2026-10-09): AAAI issue pages 246, 301–310, the AAAI-13 preface (article/view/8512), the
+  AI Magazine AAAI-15 report (aimagazine/article/view/2606), the AIES 2024 front matter (AIES/article/view/31763),
+  the AIES 2025 program (aies-conference.com), and the aaai.org AAAI-10 to AAAI-26 conference pages
 - https://api.crossref.org/works/10.1609/aaai.v40i24.39173 and the v40i25 DOI
 - `api.crossref.org/works?filter=prefix:10.1609&query=39173`
 - iaseai.org (IASEAI '25, '26, '27 pages)
