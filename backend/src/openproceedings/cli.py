@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest = sub.add_parser(
         "ingest",
-        help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | ojs | openreview (spec 01)",
+        help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | ojs | crossref | openreview (spec 01)",
     )
     sources = ingest.add_subparsers(dest="source", metavar="<source>", required=True)
     ris = sources.add_parser(
@@ -223,6 +223,37 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"seconds between requests (default 1, at least {MIN_DELAY}; the host is never paced under 3)",
     )  # fmt: skip
     ojs_parser.set_defaults(run=_ingest_ojs)
+    from openproceedings.ingest import acm_table  # the venues the table names are the --venue choices
+
+    crossref_parser = sources.add_parser(
+        "crossref",
+        help="read the ACM proceedings of FAccT 2019+ and AIES 2018-2023 (ingest/acm_proceedings.toml) from "
+        "Crossref into <data-dir>/cache/crossref; CROSSREF_MAILTO (optional, env or .env) names a contact in "
+        "the User-Agent",
+    )
+    crossref_parser.add_argument(
+        "--venue", dest="venues", action="append", choices=sorted(acm_table.VENUES),
+        help="repeatable; default every venue the table lists",
+    )  # fmt: skip
+    crossref_parser.add_argument(
+        "--year", dest="years", action="append", type=_years, metavar="YYYY[-YYYY]",
+        help="a year or an inclusive range; repeatable; default every year the table lists",
+    )  # fmt: skip
+    crossref_parser.add_argument(
+        "--dry-run", action="store_true", help="no network, no contact: say what is cached; write nothing"
+    )
+    crossref_parser.add_argument(
+        "--offline", action="store_true", help="use the page cache only (no network)"
+    )
+    crossref_parser.add_argument(
+        "--refresh", action="store_true",
+        help="fetch the proceedings record and the chain again from cursor=*",
+    )  # fmt: skip
+    crossref_parser.add_argument(
+        "--delay", type=float, default=1.0,
+        help=f"seconds between requests (default 1, at least {MIN_DELAY}; Crossref is never paced under 1)",
+    )  # fmt: skip
+    crossref_parser.set_defaults(run=_ingest_crossref)
     for name, task in PLANNED_SOURCES.items():
         _stub(sources.add_parser(name, help=_stub_status(task)), f"ingest {name}", task)
 
@@ -630,6 +661,25 @@ def _ingest_ojs(ns: argparse.Namespace) -> int:
         raise _usage("--dry-run and --offline don't combine: a dry run reads the live first page")
     _print(ingest_ojs(ns.journals, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
                       refresh=ns.refresh, min_interval=ns.delay))  # fmt: skip
+    return 0
+
+
+def _ingest_crossref(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest import acm_table
+    from openproceedings.ingest.sources.crawl import ingest_crossref
+
+    if not math.isfinite(ns.delay) or ns.delay < MIN_DELAY:
+        raise _usage(f"--delay must be finite and at least {MIN_DELAY} seconds (politeness)")
+    if ns.dry_run and ns.offline:
+        raise _usage("--dry-run and --offline don't combine: a dry run already reads the cache only")
+    years = {y for chunk in ns.years or [] for y in chunk}
+    keys = [k for k in sorted(acm_table.TABLE.proceedings)
+            if (not ns.venues or k[0] in ns.venues) and (not years or k[1] in years)]  # fmt: skip
+    if not keys:
+        raise _usage(f"no acm_proceedings.toml row matches venues {sorted(ns.venues or [])} "
+                     f"and years {sorted(years)}")  # fmt: skip
+    _print(ingest_crossref(keys, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
+                           refresh=ns.refresh, min_interval=ns.delay))  # fmt: skip
     return 0
 
 

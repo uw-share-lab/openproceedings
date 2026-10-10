@@ -5,25 +5,43 @@ The route: a table row's proceedings record (`/works/<doi>`), then `/works` page
 a time (`MIN_INTERVAL`), because parallel requests get HTTP 429. `CROSSREF_MAILTO` is optional: with it the
 User-Agent names a contact (Crossref's polite pool), without it the plain repo User-Agent goes (the public pool);
 the address is in the User-Agent only, never a URL, a cache entry, a claim, a log line or an exception. The cursor
-is opaque and never a claim's url (Task 7 fixes the cursor rule). The fields: no abstracts, which `select` leaves out.
+is opaque and never a claim's url: a claim's url is the work's own API URL, and `dedup.attribution` credits the
+DOI link. A cursor expires within minutes, so a chain that is not whole in the cache restarts from `cursor=*`; the
+replay follows the cached chain offline. The fields: no abstracts, which `select` leaves out.
 """
 
 from __future__ import annotations
 
 import html
 import json
+import logging
 import re
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from pydantic import ValidationError
+
+from openproceedings.ingest import acm_table
 from openproceedings.ingest.acm_table import Proceedings
-from openproceedings.ingest.record import Source
-from openproceedings.ingest.sources.common import CrawlError
-from openproceedings.ingest.sources.http import USER_AGENT
+from openproceedings.ingest.record import (
+    Claim,
+    ClaimField,
+    ClaimValue,
+    PaperRecord,
+    Source,
+    title_evidence,
+    title_text,
+)
+from openproceedings.ingest.sources.common import CrawlError, ListingReport, record_from_claims
+from openproceedings.ingest.sources.http import USER_AGENT, Fetcher, Page
 from openproceedings.ingest.sources.openreview_client import read_dotenv
+from openproceedings.logs import elapsed_ms
+
+log = logging.getLogger(__name__)
 
 SOURCE: Source = "crossref"
 CACHE_DIR = "crossref"  # <data>/cache/crossref
@@ -35,7 +53,9 @@ MIN_INTERVAL = (
 ROWS = 1000  # Crossref's page maximum
 SELECT = "DOI,title,subtitle,author,type,page,published"  # never `abstract` (design: official sources only)
 MAILTO_ENV = "CROSSREF_MAILTO"
-_EMAIL = re.compile(r"[^@\s<>()\"';,]+@[^@\s<>()\"';,]+\.[A-Za-z]{2,}")
+# printable ASCII only (no control character, no non-ASCII), and none of the characters a header or a list would split on
+_PART = r"(?:(?![@<>()\"';,])[\x21-\x7e])+"
+_EMAIL = re.compile(rf"{_PART}@{_PART}\.[A-Za-z]{{2,}}")
 _TAG = re.compile(r"<[^<>]*>")
 
 
@@ -73,14 +93,16 @@ def clean_title(raw: str) -> str:
     return " ".join(html.unescape(_TAG.sub("", raw)).split())
 
 
+def _strings(value: Any) -> list[str]:
+    """The cleaned strings of a Crossref list field; a bare string or any other shape is no title text."""
+    return [clean_title(t) for t in value if isinstance(t, str)] if isinstance(value, list) else []
+
+
 def title_of(item: Mapping[str, Any]) -> str | None:
-    titles = [clean_title(t) for t in item.get("title") or [] if isinstance(t, str)]
-    title = next((t for t in titles if t), None)
+    title = next((t for t in _strings(item.get("title")) if t), None)
     if title is None:
         return None
-    sub = next(
-        (s for s in (clean_title(x) for x in item.get("subtitle") or [] if isinstance(x, str)) if s), None
-    )
+    sub = next((s for s in _strings(item.get("subtitle")) if s), None)
     return f"{title}: {sub}" if sub and sub.casefold() not in title.casefold() else title
 
 
@@ -139,6 +161,7 @@ def contact(environ: Mapping[str, str], dotenv: Path | None) -> str | None:
     """The address Crossref's polite pool asks for, from `CROSSREF_MAILTO` (the environment first, then `.env`),
     or None when it is unset or blank (the crawl then uses the public pool). It goes into the User-Agent only,
     never a URL, a cache entry, a claim, a log line or an exception: a malformed value stops without quoting it."""
+    # an exported but empty `CROSSREF_MAILTO=` overrides `.env`: the crawl then uses the public pool
     values = {**(read_dotenv(dotenv) if dotenv else {}), **environ}
     value = values.get(MAILTO_ENV, "").strip()
     if not value:
@@ -152,3 +175,168 @@ def contact(environ: Mapping[str, str], dotenv: Path | None) -> str | None:
 
 def user_agent(mailto: str | None) -> str:
     return USER_AGENT if mailto is None else f"{USER_AGENT.removesuffix(')')}; mailto:{mailto})"
+
+
+@dataclass(kw_only=False)
+class CrossrefReport(ListingReport):
+    """One ACM proceedings from Crossref: the shared listing counts, plus the works the window returned (every
+    prefix:10.1145 DOI, this proceedings' and others'), the cursor pages read, and the records with no author."""
+
+    window_works: int = 0
+    pages: int = 0
+    no_authors: int = 0
+
+    def to_manifest(self) -> dict[str, Any]:
+        out = super().to_manifest() | {"window_works": self.window_works, "pages": self.pages,
+                                       "no_authors": self.no_authors}  # fmt: skip
+        return dict(sorted(out.items()))
+
+
+@dataclass
+class ProceedingsResult:
+    records: list[PaperRecord]
+    reports: list[CrossrefReport]
+
+
+Get = Callable[[str, bool], Page | None]
+
+
+def _walk(row: Proceedings, get: Get) -> list[tuple[Page, WorksPage]] | None:
+    """The cursor chain from `cursor=*` to its first empty page, through `get` (None: a page `get` can't give).
+    The works read may never outnumber the total the first page states (a chain that loops is stopped)."""
+    out: list[tuple[Page, WorksPage]] = []
+    cursor, total, seen = "*", None, 0
+    while True:
+        page = get(works_url(row, cursor), cursor == "*")
+        if page is None:
+            return None
+        if not page.ok:
+            raise CrawlError(f"{page.url} answered HTTP {page.status}", reason="no_listing")
+        parsed = parse_works(page.text)
+        if total is None:
+            total = parsed.total
+        elif parsed.total != total:
+            raise CrawlError(f"Crossref {row.venue} {row.year}: total-results moved from {total} to {parsed.total} "
+                             "mid-chain; re-run with --refresh", reason="listing_changed")  # fmt: skip
+        out.append((page, parsed))
+        seen += len(parsed.works)
+        if not parsed.works or parsed.next_cursor is None:
+            return out
+        if seen > total:
+            raise CrawlError(f"Crossref {row.venue} {row.year}: the cursor chain returned {seen} works of a "
+                             f"stated {total}", reason="listing_changed")  # fmt: skip
+        cursor = parsed.next_cursor
+
+
+def harvest(row: Proceedings, fetcher: Fetcher, *, refresh: bool = False) -> list[tuple[Page, WorksPage]]:
+    """The chain the cache holds whole (the replay's route), else, live, a fresh chain from `cursor=*` with its first
+    page fetched again: a cursor expires within minutes, so a half-cached chain can't be resumed."""
+    chain = (
+        None
+        if refresh
+        else _walk(row, lambda url, _first: fetcher.get(url) if fetcher.is_cached(url) else None)
+    )
+    if chain is not None:
+        return chain
+    if fetcher.offline:
+        raise CrawlError(f"Crossref {row.venue} {row.year}: the cursor chain is not in the cache; run op ingest "
+                         "crossref", reason="not_cached")  # fmt: skip
+    fresh = _walk(row, lambda url, first: fetcher.get(url, refresh=first))
+    assert fresh is not None  # a live get always gives a page
+    return fresh
+
+
+def mine_proceedings(
+    venue: str, year: int, fetcher: Fetcher, *, refresh: bool = False, table: acm_table.Table | None = None
+) -> ProceedingsResult:
+    """One ACM proceedings' records from Crossref, with the table's count checked (a mismatch stops the crawl)."""
+    started = time.monotonic()
+    table = table or acm_table.TABLE
+    row = table.proceedings.get((venue, year))
+    if row is None:
+        raise CrawlError(f"{venue} {year}: no acm_proceedings.toml row", reason="unlisted_proceedings")
+    head = fetcher.get(proceedings_url(row.doi), refresh=refresh)
+    if not head.ok:
+        raise CrawlError(f"{head.url} answered HTTP {head.status}", reason="no_listing")
+    doi, title, _isbn = parse_proceedings(head.text)
+    if doi != row.doi or not title.startswith(row.title):
+        raise CrawlError(f"Crossref's record {doi} is titled {title!r}, not the table's {row.doi} "
+                         f"{row.title!r}", reason="proceedings_mismatch")  # fmt: skip
+    chain = harvest(row, fetcher, refresh=refresh)
+    report = CrossrefReport(
+        SOURCE, venue, year, proceedings_url(row.doi), "primary", row.dois, pages=len(chain)
+    )
+    report.fetched.append(head.fetched_at)
+    report.fetched += [page.fetched_at for page, _ in chain]
+    seen: dict[str, tuple[Page, Work]] = {}
+    for page, parsed in chain:
+        for w in parsed.works:
+            report.window_works += 1
+            if not row.paper(w.doi):
+                continue
+            if acm_table.paper_doi(w.doi) is None:
+                raise CrawlError(f"Crossref {venue} {year}: DOI {w.doi!r} extends {row.doi} but is not "
+                                 f"{row.doi}.<digits>: check it before it is indexed", reason="odd_doi")  # fmt: skip
+            if w.doi in seen:
+                if seen[w.doi][1] != w:
+                    raise CrawlError(f"Crossref {venue} {year}: {w.doi} is listed twice with different "
+                                     "records", reason="conflicting_duplicate")  # fmt: skip
+                report.skipped["duplicate"] += 1
+                continue
+            seen[w.doi] = (page, w)
+            report.listed += 1
+    if report.listed != row.dois:
+        raise CrawlError(f"Crossref {venue} {year}: {report.listed} DOIs extend {row.doi} in the window, the table "
+                         f"verified {row.dois}: check the window and the table", reason="count_mismatch")  # fmt: skip
+    if stale := sorted(
+        np.doi for np in table.not_papers.values() if row.paper(np.doi) and np.doi not in seen
+    ):
+        raise CrawlError(f"Crossref {venue} {year}: acm_proceedings.toml's not_paper rows {', '.join(stale)} are not "
+                         "in the harvest: check the window and the table", reason="stale_not_paper")  # fmt: skip
+    records: list[PaperRecord] = []
+    for doi in sorted(seen, key=lambda d: int((acm_table.paper_doi(d) or ("", "0"))[1])):
+        page, w = seen[doi]
+        if doi in table.not_papers:
+            report.skipped["not_paper"] += 1
+            continue
+        if w.title is None:
+            raise CrawlError(f"Crossref {venue} {year}: {doi} has no title: name it in acm_proceedings.toml "
+                             "[[not_paper]] if it is no paper, else check Crossref", reason="no_title")  # fmt: skip
+        try:
+            record = _record(row, w, page)
+        except (ValidationError, ValueError) as e:
+            raise CrawlError(f"Crossref {venue} {year}: {doi} makes no valid record ({type(e).__name__})",
+                             reason="invalid_record") from e  # fmt: skip
+        report.no_authors += not record.authors
+        records.append(record)
+        report.count(record, "no_abstract")
+    log.info("crossref_proceedings_mined", extra={"venue": venue, "year": year, "listed": report.listed,
+                                                  "records": report.records, "window_works": report.window_works,
+                                                  "pages": report.pages,
+                                                  "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+    if report.no_authors:
+        log.warning("listing_attention", extra={"venue": venue, "year": year, "listing": report.listing,
+                                                "no_authors": report.no_authors})  # fmt: skip
+    return ProceedingsResult(records, [report])
+
+
+def _record(row: Proceedings, w: Work, page: Page) -> PaperRecord:
+    """The record of one Crossref work: every claim at the work's own API URL (never a cursor page)."""
+    where = f"Crossref work {w.doi} in proceedings {row.doi} (acm_proceedings.toml {row.venue} {row.year})"
+    claims: list[Claim] = []
+
+    def claim(fld: ClaimField, value: ClaimValue, evidence: str) -> None:
+        claims.append(Claim(field=fld, value=value, source=SOURCE, url=work_url(w.doi),
+                            fetched_at=page.fetched_at, evidence=evidence))  # fmt: skip
+
+    title, replaced = title_text(w.title or "")
+    claim("venue", row.venue, where)
+    claim("year", row.year, where)
+    claim("track", "main", f"{where}: every paper of the proceedings is main (decision-049)")
+    claim("status", "accepted", f"published in {row.doi}")
+    claim("title", title, title_evidence(f"{where}: title", replaced))
+    if w.authors:
+        claim("authors", w.authors, f"{where}: author, in Crossref's order")
+    claim("urls.doi", w.doi, where)
+    claim("urls.proceedings", f"https://doi.org/{w.doi}", where)
+    return record_from_claims(f"op:{row.venue.lower()}:{row.year}:doi-{w.doi.split('/', 1)[1]}", claims)

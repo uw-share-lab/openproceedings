@@ -12,17 +12,19 @@ transport at all, so a snapshot never fetches.
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
-from openproceedings.ingest import dblp_aaai_table
+from openproceedings.ingest import acm_table, dblp_aaai_table
 from openproceedings.ingest.dblp_table import TABLE as DBLP_TABLE
 from openproceedings.ingest.dblp_table import Table as DblpTable
 from openproceedings.ingest.ojs_table import TABLE as OJS_TABLE
 from openproceedings.ingest.ojs_table import Table as OjsTable
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources import (
+    crossref,
     dblp,
     dblp_aaai,
     iclr,
@@ -48,6 +50,7 @@ from openproceedings.ingest.sources.http import (
     urllib_stream,
     urllib_transport,
 )
+from openproceedings.ingest.sources.openreview_client import repo_dotenv
 from openproceedings.ingest.volumes import ingested_volume
 
 log = logging.getLogger(__name__)
@@ -333,6 +336,57 @@ DBLP_AAAI: Crawls[dblp.YearResult] = Crawls(
     lambda cache: cache / dblp.CACHE_DIR / "aaai-crawls", _aaai_key,
     lambda k: f"AAAI {k[0]} (dblp)", "op ingest dblp --venue AAAI", _replay_dblp_aaai,
 )  # fmt: skip
+
+
+def crossref_fetcher(cache: Path, *, offline: bool, transport: Transport | None = None,
+                     min_interval: float = DEFAULT_INTERVAL, mailto: str | None = None) -> Fetcher:  # fmt: skip
+    """Crossref's fetcher, one request at a time. Live, the User-Agent names the contact (`mailto`, else
+    `CROSSREF_MAILTO` from the environment or `.env`) when there is one; with none the plain User-Agent goes (the
+    public pool). Offline, no contact is read at all."""
+    live = None if offline else (transport or urllib_transport)
+    agent = None if offline else crossref.user_agent(mailto or crossref.contact(os.environ, repo_dotenv()))
+    return Fetcher(PageCache(cache / crossref.CACHE_DIR), live, hosts=crossref.HOSTS,
+                   min_interval=max(min_interval, crossref.MIN_INTERVAL), accept="application/json", expect="json",
+                   keep_query=True, user_agent=agent)  # fmt: skip
+
+
+def ingest_crossref(
+    keys: Iterable[tuple[str, int]], cache: Path, *, offline: bool = False, dry_run: bool = False,
+    refresh: bool = False, transport: Transport | None = None, min_interval: float = DEFAULT_INTERVAL,
+    table: acm_table.Table | None = None, mailto: str | None = None,
+) -> dict[str, Any]:  # fmt: skip
+    """Crawl each (venue, year) ACM proceedings of `acm_proceedings.toml` from Crossref into the cache. A dry run
+    reads nothing live (no network, no contact) and says what is cached; it writes no marker."""
+    table = table or acm_table.TABLE
+    wanted = sorted(set(keys)) or sorted(table.proceedings)
+    for v, y in wanted:
+        if (v, y) not in table.proceedings:
+            raise MinerError(f"{v} {y}: no acm_proceedings.toml row", reason="unlisted_proceedings")
+    if dry_run:
+        f = crossref_fetcher(cache, offline=True)
+        return {"dry_run": True, "requests": 0, "cached": 0,
+                "proceedings": [{"venue": v, "year": y,
+                                 "record_cached": f.is_cached(crossref.proceedings_url(table.proceedings[v, y].doi)),
+                                 "first_page_cached": f.is_cached(crossref.works_url(table.proceedings[v, y]))}
+                                for v, y in wanted]}  # fmt: skip
+    f = crossref_fetcher(
+        cache, offline=offline, transport=transport, min_interval=min_interval, mailto=mailto
+    )
+    mined = CROSSREF.ingest(
+        cache, wanted, lambda k: crossref.mine_proceedings(*k, f, refresh=refresh, table=table),
+        lambda k, _: (f"{k[0]}-{k[1]}", {"source": crossref.SOURCE, "venue": k[0], "year": k[1]}),
+    )  # fmt: skip
+    reports = [r for m in mined for r in m.reports]
+    log.info("crossref_ingested", extra={"proceedings": len(wanted), "listings": len(reports),
+                                         "requests": f.stats.network})  # fmt: skip
+    return _output(reports, f, False)
+
+
+CROSSREF: Crawls[crossref.ProceedingsResult] = Crawls(
+    lambda cache: crawls_dir(cache, crossref.CACHE_DIR), lambda m: (str(m["venue"]), int(m["year"])),
+    lambda k: f"Crossref {k[0]} {k[1]}", "op ingest crossref",
+    lambda cache, k: crossref.mine_proceedings(k[0], k[1], crossref_fetcher(cache, offline=True)),
+)  # fmt: skip
 SOURCES: tuple[Crawls[Any], ...] = (
     openreview_v2.CRAWLS,
     openreview_v1.CRAWLS,
@@ -342,6 +396,7 @@ SOURCES: tuple[Crawls[Any], ...] = (
     DBLP,
     OJS,
     DBLP_AAAI,
+    CROSSREF,
 )
 
 

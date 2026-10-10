@@ -42,7 +42,9 @@ def test_the_proceedings_record() -> None:
     ("item", "title"),
     [({"title": ["Fair: A Study"], "subtitle": ["A Study"]}, "Fair: A Study"),  # subtitle already in the title
      ({"title": ["X<sub>1</sub> and <mml:math><mml:mi>k</mml:mi></mml:math>"]}, "X1 and k"),
-     ({"title": []}, None), ({}, None), ({"title": ["   "]}, None)],
+     ({"title": []}, None), ({}, None), ({"title": ["   "]}, None),
+     ({"title": "A bare string"}, None),  # a non-list title is no title text
+     ({"title": ["Fair"], "subtitle": "A bare string"}, "Fair")],
 )  # fmt: skip
 def test_title_of(item, title) -> None:
     assert crossref.title_of(item) == title
@@ -91,6 +93,23 @@ def test_a_malformed_contact_stops_without_echoing_it() -> None:
     with pytest.raises(CrawlError) as e:
         crossref.contact({"CROSSREF_MAILTO": "not an address"}, None)
     assert e.value.reason == "bad_contact" and "not an address" not in str(e.value)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "jane\x00@example.org",
+        "jane@exa\x07mple.org",
+        "jane\tx@example.org",
+        "jané@example.org",
+        "jane@exämple.org",
+        "jane\x7f@example.org",
+    ],
+)
+def test_a_contact_with_a_control_or_non_ascii_character_stops_without_echoing_it(bad) -> None:
+    with pytest.raises(CrawlError) as e:
+        crossref.contact({"CROSSREF_MAILTO": bad}, None)
+    assert e.value.reason == "bad_contact" and bad not in str(e.value)
 
 
 def test_a_doi_link_names_the_record_and_passes_dedups_self_naming_check(monkeypatch) -> None:

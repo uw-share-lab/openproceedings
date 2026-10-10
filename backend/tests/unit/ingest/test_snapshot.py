@@ -915,3 +915,24 @@ def test_build_replays_a_marked_ojs_crawl(
     assert {f"op:aaai:2020:ojs-{n}" for n in (1, 2, 3)} <= ids
     [listing] = manifest["sources"]["ojs"]["listings"]
     assert listing["count_ok"] is True
+
+
+def test_build_replays_a_marked_crossref_crawl(
+    cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest import acm_table
+    from openproceedings.ingest.sources import crawl
+
+    from tests.unit.ingest.crossref import api
+    from tests.unit.ingest.crossref.test_crossref_mine import D1, D2, NP, TABLE, _whole
+
+    monkeypatch.setattr(acm_table, "TABLE", TABLE)  # the replay and urls.native read the shipped table
+    _whole(cache, api.work(D1), api.work(D2), api.work(NP), total=3)
+    crawl.ingest_crossref([("FAccT", 2023)], cache, offline=True, table=TABLE)
+    result = build(cache, tmp_path / "snapshots", BUILT)
+    manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
+    lines = (result.path / "records.jsonl").read_text(encoding="utf-8").splitlines()
+    ids = {json.loads(line)["id"] for line in lines}
+    assert {"op:facct:2023:doi-3593013.3594011", "op:facct:2023:doi-3593013.3594012"} <= ids
+    [listing] = manifest["sources"]["crossref"]["listings"]
+    assert listing["count_ok"] is True
