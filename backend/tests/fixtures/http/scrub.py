@@ -490,14 +490,20 @@ def scrub_html(url: str, page: str) -> tuple[str, str | None]:
 # stays real: headers (identifiers, datestamps, setSpecs, deleted status), dc:identifier (URLs, DOIs), dc:source
 # (journal, volume, issue, pages), dc:relation, dc:date, dc:type, dc:format, dc:language, dc:rights, dc:publisher,
 # resumption tokens and their attributes.
+# the attributes never hold `/`: a self-closing `<dc:title/>` is no element with text to replace
 _OAI_FREE_TEXT = re.compile(
-    r"<dc:(title|creator|contributor|description|subject)\b([^>]*)>(.*?)</dc:\1>", re.S
+    r"<dc:(title|creator|contributor|description|subject)\b([^>/]*)>(.*?)</dc:\1>", re.S
 )
+_DC_NAMESPACE = "http://purl.org/dc/elements/1.1/"
+_XMLNS = re.compile(r"""xmlns:([A-Za-z_][\w.-]*)\s*=\s*["']([^"']*)["']""")
 
 
 def scrub_oai(page: str) -> str:
     """An OAI-PMH response with every free-text Dublin Core value synthetic, its element and attributes kept. A
-    creator keeps OJS's `Last, First` shape, which the miner turns around."""
+    creator keeps OJS's `Last, First` shape, which the miner turns around. ValueError for a page that binds the
+    Dublin Core namespace to a prefix other than `dc`: its values would be kept as captured (fail closed)."""
+    if others := sorted({p for p, ns in _XMLNS.findall(page) if ns == _DC_NAMESPACE and p != "dc"}):
+        raise ValueError(f"the page binds Dublin Core to the prefix(es) {others}, not dc: scrub it by hand")
     c = _Counter()
 
     def replacement(m: re.Match[str]) -> str:

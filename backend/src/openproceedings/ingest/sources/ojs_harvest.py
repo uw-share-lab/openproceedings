@@ -14,11 +14,12 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from openproceedings.ingest.sources.common import CrawlError
-from openproceedings.ingest.sources.http import Fetcher, Page, RetriesExhausted
+from openproceedings.ingest.sources.http import Fetcher, Heartbeat, Page, RetriesExhausted
 from openproceedings.ingest.sources.ojs import (
     OaiRecord,
     ids_url,
     journal_sets,
+    next_token,
     oai_url,
     parse_identifiers,
     parse_page,
@@ -40,8 +41,28 @@ def _get(fetcher: Fetcher, url: str, *, refresh: bool = False) -> Page:
             raise
         page = Page(fetcher.check(url), e.status, "", fetcher.clock.now(), "")
         fetcher.cache.put(page)
-        log.warning("ojs_page_failed", extra={"url": page.url, "status": e.status})
+        # debug: the set's `ojs_set_fallback` line and the journal's `ojs_journal_mined` count the failures
+        log.debug("ojs_page_failed", extra={"url": page.url, "status": e.status})
         return page
+
+
+@dataclass
+class Progress:
+    """One journal's harvest heartbeat: the harvest is the slow phase (thousands of pages at 3 s or more each),
+    so every chain reports each page here and a progress line is logged at most every 30 s (`http.Heartbeat`)."""
+
+    journal: str
+    beat: Heartbeat
+    pages: int = 0
+
+    @classmethod
+    def of(cls, journal: str, fetcher: Fetcher) -> Progress:
+        return cls(journal, Heartbeat(fetcher.clock.monotonic))
+
+    def page(self, step: str) -> None:
+        self.pages += 1
+        if self.beat.due():
+            log.info("ojs_journal_progress", extra={"journal": self.journal, "step": step, "pages": self.pages})
 
 
 @dataclass
@@ -52,27 +73,33 @@ class SetHarvest:
     set_spec: str
     live: list[tuple[Page, OaiRecord]] = field(default_factory=list)
     unavailable: list[tuple[int, Page]] = field(default_factory=list)
-    pages: int = 0
+    pages: int = 0  # pages read whole (a 5xx failure is not counted)
     fallback: bool = False
 
 
-def harvest_set(journal: str, set_spec: str, fetcher: Fetcher, *, refresh: bool = False) -> SetHarvest:
+def harvest_set(
+    journal: str, set_spec: str, fetcher: Fetcher, *, refresh: bool = False, progress: Progress | None = None
+) -> SetHarvest:
     """One set's `ListRecords` chain; if a page of it fails with HTTP 5xx (a record the server can't render
     breaks the whole page, and the chain's next token with it), the set's `ListIdentifiers` chain instead, then
     `GetRecord` for each live article the chain had not reached. A `GetRecord` that also fails is `unavailable`."""
     h = SetHarvest(set_spec)
+    progress = progress or Progress.of(journal, fetcher)
     seen: set[int] = set()
     token: str | None = None
+    tokens: set[str] = set()
     while True:
         url = oai_url(journal, token, set_spec=set_spec)
         page = _get(fetcher, url, refresh=refresh and token is None)
         if page.status >= 500:
-            _fallback(journal, h, seen, fetcher, refresh=refresh, failed=page)
+            _fallback(journal, h, seen, fetcher, refresh=refresh, failed=page, progress=progress)
             return h
         if not page.ok:
             raise CrawlError(f"{url} answered HTTP {page.status}", reason="no_listing")
         h.pages += 1
+        progress.page("sets")
         entries, token = parse_page(page.text)
+        token = next_token(tokens, token, url)
         for e in entries:
             if not e.deleted:
                 h.live.append((page, e))
@@ -82,18 +109,22 @@ def harvest_set(journal: str, set_spec: str, fetcher: Fetcher, *, refresh: bool 
 
 
 def _fallback(
-    journal: str, h: SetHarvest, seen: set[int], fetcher: Fetcher, *, refresh: bool, failed: Page
-) -> None:
-    log.warning("ojs_set_fallback", extra={"journal": journal, "set": h.set_spec, "status": failed.status})
+    journal: str, h: SetHarvest, seen: set[int], fetcher: Fetcher, *, refresh: bool, failed: Page,
+    progress: Progress,
+) -> None:  # fmt: skip
     h.fallback = True
+    before, pages = len(h.live), h.pages
     token: str | None = None
+    tokens: set[str] = set()
     while True:
         url = ids_url(journal, token, set_spec=h.set_spec)
         page = fetcher.get(url, refresh=refresh and token is None)
         if not page.ok:
             raise CrawlError(f"{url} answered HTTP {page.status}", reason="no_listing")
         h.pages += 1
+        progress.page("fallback")
         headers, token = parse_identifiers(page.text)
+        token = next_token(tokens, token, url)
         for e in headers:
             if e.deleted or e.article in seen:
                 continue
@@ -105,16 +136,27 @@ def _fallback(
             if not got.ok:
                 raise CrawlError(f"{got.url} answered HTTP {got.status}", reason="no_listing")
             h.pages += 1
+            progress.page("fallback")
             h.live.append((got, parse_record(got.text, e.article)))
         if token is None:
             break
+    # one line per set that fell back, once its outcome is known (the failed page itself is logged at debug)
+    log.warning(
+        "ojs_set_fallback",
+        extra={"journal": journal, "set": h.set_spec, "status": failed.status, "recovered": len(h.live) - before,
+               "unavailable": len(h.unavailable), "fallback_pages": h.pages - pages},
+    )  # fmt: skip
 
 
-def inventory(journal: str, fetcher: Fetcher, *, refresh: bool = False) -> tuple[list[OaiRecord], int]:
+def inventory(
+    journal: str, fetcher: Fetcher, *, refresh: bool = False, progress: Progress | None = None
+) -> tuple[list[OaiRecord], int]:
     """The journal-wide `ListIdentifiers` chain: every header (live and deleted, in list order), the source of truth
     for which articles exist, and the pages read."""
+    progress = progress or Progress.of(journal, fetcher)
     headers: list[OaiRecord] = []
     token: str | None = None
+    tokens: set[str] = set()
     pages = 0
     while True:
         url = ids_url(journal, token)
@@ -122,7 +164,9 @@ def inventory(journal: str, fetcher: Fetcher, *, refresh: bool = False) -> tuple
         if not page.ok:
             raise CrawlError(f"{url} answered HTTP {page.status}", reason="no_listing")
         pages += 1
+        progress.page("inventory")
         found, token = parse_identifiers(page.text)
+        token = next_token(tokens, token, url)
         headers += found
         if token is None:
             return headers, pages
@@ -141,7 +185,7 @@ class JournalHarvest:
     deleted_by_set: Counter[str] = field(default_factory=Counter)  # the same headers, per set
     duplicates: int = 0  # extra copies of an article that more than one set request returned (identical)
     recovered: int = 0  # live inventory articles no set returned, read by GetRecord
-    pages: int = 0
+    pages: int = 0  # pages read whole (a 5xx failure is not counted)
     fallback_sets: list[str] = field(default_factory=list)
 
 
@@ -150,7 +194,8 @@ def harvest_journal(journal: str, fetcher: Fetcher, *, refresh: bool = False) ->
     set returned (a set name two sections share reaches only one of them: AAAI's `EAAI-POS`, `EAAI-Full`). An article
     returned twice is kept once; two copies that differ stop the crawl, as does a set record the inventory lacks."""
     out = JournalHarvest()
-    headers, out.pages = inventory(journal, fetcher, refresh=refresh)
+    progress = Progress.of(journal, fetcher)
+    headers, out.pages = inventory(journal, fetcher, refresh=refresh, progress=progress)
     out.deleted_by_set = Counter(h.set_spec for h in headers if h.deleted)
     out.deleted = sum(out.deleted_by_set.values())
     live: dict[int, OaiRecord] = {}
@@ -160,7 +205,7 @@ def harvest_journal(journal: str, fetcher: Fetcher, *, refresh: bool = False) ->
     got: dict[int, tuple[Page, OaiRecord]] = {}
     failed: dict[int, Page] = {}
     for spec in journal_sets(journal, fetcher, refresh=refresh):
-        sh = harvest_set(journal, spec, fetcher, refresh=refresh)
+        sh = harvest_set(journal, spec, fetcher, refresh=refresh, progress=progress)
         out.pages += sh.pages
         if sh.fallback:
             out.fallback_sets.append(spec)
@@ -195,6 +240,7 @@ def harvest_journal(journal: str, fetcher: Fetcher, *, refresh: bool = False) ->
         if not page.ok:
             raise CrawlError(f"{page.url} answered HTTP {page.status}", reason="no_listing")
         out.pages += 1
+        progress.page("gaps")
         out.recovered += 1
         out.live.append((page, parse_record(page.text, article)))
     return out

@@ -156,6 +156,8 @@ def test_an_article_two_set_requests_return_is_counted_once(tmp_path) -> None:
     result = ojs.mine_journal("AAAI", f, table=FULL)
     assert [r.native for r in result.records].count("ojs-3") == 1
     assert result.duplicates == 1 and result.reports[0].listed == 8  # listed counts distinct articles
+    three = next(r for r in result.records if r.native == "ojs-3")  # the first set request's copy is kept
+    assert {c.url for c in three.provenance} == {_key(ojs.oai_url("AAAI", set_spec="AAAI:IAAI"))}
 
 
 def test_two_different_copies_of_an_article_stop_the_crawl(tmp_path) -> None:
@@ -245,3 +247,55 @@ def test_a_failing_later_listsets_page_is_named_by_its_own_url(tmp_path) -> None
     with pytest.raises(CrawlError, match=r"resumptionToken=t1 answered HTTP 404") as e:
         ojs.list_sets("AAAI", f)
     assert e.value.reason == "no_listing"
+
+
+# --- a resumption-token cycle never loops (every chain), and the harvest says how far it has got ----------------
+def _cycle(first: str, again: str, page: str) -> dict[str, list]:
+    """`first` answers with token T; `again` (T's URL) answers with T once more."""
+    return {_key(first): [response(page, headers=XML)], _key(again): [response(page, headers=XML)]}
+
+
+@pytest.mark.parametrize(
+    "chain",
+    ["inventory", "set", "fallback", "sets"],
+)
+def test_a_resumption_token_that_repeats_stops_the_chain(tmp_path, chain: str) -> None:
+    ids = oai.identifiers_page((90, True, "AAAI:APP"), token="T")
+    if chain == "inventory":
+        script = _cycle(ojs.ids_url("AAAI"), ojs.ids_url("AAAI", "T"), ids)
+        run = lambda f: ojs_harvest.inventory("AAAI", f)  # noqa: E731
+    elif chain == "set":
+        script = _cycle(ojs.oai_url("AAAI", set_spec="AAAI:APP"), ojs.oai_url("AAAI", "T"), oai.page(token="T"))
+        run = lambda f: ojs_harvest.harvest_set("AAAI", "AAAI:APP", f)  # noqa: E731
+    elif chain == "fallback":
+        script = _cycle(ojs.ids_url("AAAI", set_spec="AAAI:APP"), ojs.ids_url("AAAI", "T"), ids)
+        script[_key(ojs.oai_url("AAAI", set_spec="AAAI:APP"))] = [response("", status=500, headers=XML)]
+        run = lambda f: ojs_harvest.harvest_set("AAAI", "AAAI:APP", f)  # noqa: E731
+    else:
+        script = _cycle(ojs.sets_url("AAAI"), ojs.sets_url("AAAI", "T"), oai.sets_page("AAAI:APP", token="T"))
+        run = lambda f: ojs.list_sets("AAAI", f)  # noqa: E731
+    f, transport = _live(tmp_path, script)
+    with pytest.raises(CrawlError, match="resumptionToken repeats an earlier page") as e:
+        run(f)
+    assert e.value.reason == "token_cycle"
+    assert sum("resumptionToken=T" in c for c in transport.calls) == 1  # T's page fetched once: never a loop
+
+
+def test_the_harvest_logs_a_start_a_heartbeat_and_each_fallback_once(tmp_path, caplog) -> None:
+    transport = FakeTransport({})
+    transport.script = _script()
+    f, _clock = fetcher(tmp_path / "ojs", transport, ojs.HOSTS, min_interval=20, expect="xml", keep_query=True)
+    with caplog.at_level("DEBUG", logger="openproceedings.ingest.sources"):
+        ojs.mine_journal("AAAI", f, table=FULL)
+    lines = {r.getMessage(): r for r in caplog.records}
+    assert lines["ojs_journal_started"].__dict__["offline"] is False
+    beats = [r for r in caplog.records if r.getMessage() == "ojs_journal_progress"]
+    assert beats and all(r.__dict__["journal"] == "AAAI" and r.__dict__["pages"] > 0 for r in beats)
+    assert {r.__dict__["step"] for r in beats} <= {"inventory", "sets", "fallback", "gaps"}
+    (fallback,) = [r for r in caplog.records if r.getMessage() == "ojs_set_fallback"]
+    assert fallback.levelname == "WARNING"
+    assert {k: fallback.__dict__[k] for k in ("set", "status", "recovered", "unavailable", "fallback_pages")} == {
+        "set": "AAAI:APP", "status": 500, "recovered": 2, "unavailable": 1, "fallback_pages": 4,
+    }  # fmt: skip
+    failed = [r for r in caplog.records if r.getMessage() == "ojs_page_failed"]
+    assert failed and all(r.levelname == "DEBUG" for r in failed)  # counted in the set's line, not one each

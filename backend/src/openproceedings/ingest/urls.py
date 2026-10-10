@@ -12,6 +12,7 @@ import re
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from openproceedings.ingest.classify import NEURIPS_DB_2021_HOST, NEURIPS_DB_2021_ROUNDS
+from openproceedings.ingest.ojs_table import TABLE as OJS_TABLE
 from openproceedings.ingest.record import FORUM_ID
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
@@ -118,11 +119,17 @@ def native(url: str) -> str | None:
 
 
 _OJS_HOST = "ojs.aaai.org"
-_OJS_PATH = re.compile(r"/index\.php/(?:AAAI|AIES|IASEAI)/article/view/([0-9]+)(?:/[0-9]+)?/?")
+# the journals are the table's (`ojs_sections.toml`), so a journal added there is a journal whose URLs name articles
+_OJS_PATH = re.compile(
+    r"/index\.php/(?:" + "|".join(map(re.escape, sorted(OJS_TABLE.journals))) + r")/article/view/([0-9]+)"
+    r"(?:/[0-9]+)?/?"
+)
 
 
 def ojs_article(url: str) -> int | None:
-    """The article id of an ojs.aaai.org article or galley URL (AAAI, AIES, IASEAI; decision-049), or None."""
+    """The article id of an ojs.aaai.org article or galley URL (AAAI, AIES, IASEAI; decision-049), or None. The
+    URL's journal is deliberately not matched to a record's venue: article ids are unique across the site's
+    journals, so the id alone names the paper (a record's self-naming check compares ids)."""
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or parsed.netloc.lower() != _OJS_HOST:
         return None

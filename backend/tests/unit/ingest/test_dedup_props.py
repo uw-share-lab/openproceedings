@@ -38,6 +38,8 @@ PROCEEDINGS = {  # native id → its venue
     **{f"iclr-{H[n]}": "ICLR" for n in (1, 2)},
     **{f"pmlr-v202-key{n}": "ICML" for n in (1, 2)},
     **{f"dblp-Key0{n}": "ICML" for n in (1, 2)},  # ICML 1988-2012 (decision-047): years 2009-2010 below
+    "ojs-101": "AAAI",  # ojs.aaai.org (decision-049)
+    "ojs-102": "AIES",
 }
 SOURCE_NATIVES = {
     "openreview_v2": FORUMS,
@@ -46,6 +48,7 @@ SOURCE_NATIVES = {
     "neurips_proceedings": [n for n in PROCEEDINGS if n.startswith(("nips-", "iclr-"))],
     "pmlr": [n for n in PROCEEDINGS if n.startswith("pmlr-")],
     "dblp": [n for n in PROCEEDINGS if n.startswith("dblp-")],
+    "ojs": [n for n in PROCEEDINGS if n.startswith("ojs-")],
     "ris": [*FORUMS, *PROCEEDINGS],
 }
 
@@ -560,7 +563,7 @@ def test_a_creative_ai_listing_merges_with_its_own_note_and_nothing_else(
 
 OPENREVIEW, OFFICIAL = (
     ("openreview_v2", "openreview_v1"),
-    ("iclr_archive", "neurips_proceedings", "pmlr", "dblp"),
+    ("iclr_archive", "neurips_proceedings", "pmlr", "dblp", "ojs"),
 )
 
 

@@ -145,3 +145,16 @@ def test_an_oai_page_keeps_its_structure_and_loses_its_free_text() -> None:
     records, token = ojs.parse_page(text)  # still a page the miner reads
     assert [(r.article, r.deleted, r.volume) for r in records] == [(43116, False, 2), (42953, True, None)]
     assert token == "abc123" and records[0].creators == ("Author2, Synthetic", "Author3, Synthetic")
+
+
+def test_an_oai_page_binding_dublin_core_to_another_prefix_is_refused() -> None:
+    other = OAI_PAGE.replace('xmlns:dc="http://purl.org/dc/elements/1.1/"', 'xmlns:d="http://purl.org/dc/elements/1.1/"')
+    assert other != OAI_PAGE
+    with pytest.raises(ValueError, match=r"prefix\(es\) \['d'\]"):
+        scrub.scrub_oai(other)
+
+
+def test_a_self_closing_oai_element_is_left_alone_and_the_next_one_scrubbed() -> None:
+    page = "<dc:title/><dc:subject>x</dc:subject><dc:title>Real title</dc:title>"
+    out = scrub.scrub_oai(page)
+    assert out.startswith("<dc:title/>") and "Real title" not in out and out.count("</dc:title>") == 1

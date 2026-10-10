@@ -217,9 +217,15 @@ def test_refresh_fetches_only_the_first_page_again(tmp_path) -> None:
     sets, first, inv = ojs.sets_url("AAAI"), ojs.oai_url("AAAI", set_spec=SET), ojs.ids_url("AAAI")
     transport = FakeTransport({})
     headers = {"content-type": "text/xml; charset=utf-8"}
-    pages = (oai.page(oai.record(1), token="t1"), oai.page(oai.record(2), oai.record(3, "AAAI:IAAI")))
+    # a two-page inventory: only its first page is fetched again (the next page's token URL is new on a fresh chain)
+    inv_pages = (
+        oai.identifiers_page((1, False, SET), token="i1"),
+        oai.identifiers_page((2, False, SET), (3, False, "AAAI:IAAI")),
+    )
+    seed(tmp_path, "ojs", inv, inv_pages[0], at=T0, keep_query=True)
+    seed(tmp_path, "ojs", ojs.ids_url("AAAI", "i1"), inv_pages[1], at=T0, keep_query=True)
     transport.script = {
-        canonical(inv, keep_query=True): [response(oai.inventory_of(*pages), headers=headers)],
+        canonical(inv, keep_query=True): [response(inv_pages[0], headers=headers)],
         canonical(sets, keep_query=True): [response(oai.sets_page(SET), headers=headers)],
         canonical(first, keep_query=True): [response(oai.page(oai.record(1), token="t1"), headers=headers)],
     }

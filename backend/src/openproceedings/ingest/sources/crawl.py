@@ -259,6 +259,7 @@ def ingest_ojs(
     )  # fmt: skip
     reports = [r for m in mined for r in m.reports]
     log.info("ojs_ingested", extra={"journals": len(wanted), "listings": len(reports), "requests": f.stats.network,
+                                    "cached": f.stats.cached,
                                     "deleted": sum(m.deleted for m in mined),
                                     "front_matter": sum(m.front_matter for m in mined),
                                     "unavailable": sum(m.unavailable for m in mined),

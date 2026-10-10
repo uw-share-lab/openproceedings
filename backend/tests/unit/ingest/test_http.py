@@ -6,6 +6,7 @@ back-off, what is cached and how) stays in `test_fetch.py` and `test_openreview_
 from __future__ import annotations
 
 import json
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -253,8 +254,28 @@ def test_xml_unterminated_prolog_is_truncated(tmp_path: Path, prolog: str) -> No
         f.get(OAI)
 
 
-@pytest.mark.parametrize("body", [b"<?a?>" * 800 + b"x", b"<!--a-->" * 500 + b"x", b"<?" + b"?" * 4000])
-def test_xml_root_scan_is_linear_on_adversarial_prologs(body: bytes) -> None:
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"<?a?>" * 800 + b"x",
+        b"<!--a-->" * 500 + b"x",
+        b"<?" + b"?" * 4000,
+        b"<?a?>" * 200_000 + b"x",  # 1 MB, far past the 4096-byte window
+    ],
+)
+def test_xml_root_scan_is_bounded_on_adversarial_prologs(body: bytes) -> None:
+    """Run in a daemon thread, so a scan that never returns (a backtracking pattern) fails here by name, fast,
+    instead of hanging the job until CI's timeout."""
+    found: list[bytes | None] = []
+    worker = threading.Thread(target=lambda: found.append(_xml_root(body)), daemon=True)
     start = time.perf_counter()
-    assert _xml_root(body) is None
-    assert time.perf_counter() - start < 0.5
+    worker.start()
+    worker.join(timeout=2)
+    assert not worker.is_alive(), "_xml_root did not return within 2 s"
+    assert found == [None] and time.perf_counter() - start < 0.5
+
+
+def test_xml_root_reads_only_the_first_4096_bytes() -> None:
+    """A root after 4096 bytes of prolog is not found: the window is what bounds the scan."""
+    assert _xml_root(b"<?a?>" * 800 + b"<OAI-PMH/>") == b"OAI-PMH"  # 4,000 bytes of prolog, then the root
+    assert _xml_root(b"<?a?>" * 1000 + b"<OAI-PMH/>") is None

@@ -317,9 +317,8 @@ def attribution(
         return Attribution(source, origin, forum)
     if origin == "icml_site":  # a submission page's evidence says so (TASK-207); read here, never re-derived
         return Attribution(source, origin, claim.url, AS_SUBMITTED in (claim.evidence or ""))
-    if (
-        origin == "ojs"
-    ):  # the claim's url is the OAI ListRecords page (a resumption-token url that expires): credit the paper
+    # an ojs claim's url is the OAI ListRecords page (a resumption-token url that expires): credit the paper
+    if origin == "ojs":
         return Attribution(source, origin, proceedings)
     if origin is not None:
         return Attribution(source, origin, claim.url)

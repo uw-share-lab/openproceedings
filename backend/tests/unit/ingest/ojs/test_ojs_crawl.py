@@ -2,7 +2,7 @@ import json
 
 import pytest
 from openproceedings.ingest.sources import crawl, ojs
-from openproceedings.ingest.sources.common import MinerError
+from openproceedings.ingest.sources.common import CrawlError, MinerError
 from openproceedings.ingest.sources.http import canonical
 
 from tests.unit.ingest.ojs import oai
@@ -69,3 +69,18 @@ def test_dry_run_refuses_a_non_ok_first_page(tmp_path) -> None:
     transport = _live("gone", status=404, headers={"content-type": "text/xml"})
     with pytest.raises(MinerError, match="HTTP 404"):
         crawl.ingest_ojs(["AAAI"], tmp_path, dry_run=True, transport=transport, table=TABLE)
+
+
+def test_the_replay_is_offline_so_a_missing_page_is_a_miss_never_a_fetch(tmp_path, monkeypatch) -> None:
+    """`op snapshot build` replays the cache and never fetches: with one page gone, `CacheMiss` (a live fetcher
+    would reach for ojs.aaai.org, which the network guard refuses as another error)."""
+    from openproceedings.ingest.sources.http import CacheMiss, PageCache
+
+    monkeypatch.setattr(ojs, "TABLE", TABLE)
+    _seed(tmp_path, oai.page(oai.record(1), oai.record(2), oai.record(3, "AAAI:IAAI")))
+    crawl.ingest_ojs(["AAAI"], tmp_path, offline=True, table=TABLE)
+    gone = crawl.ojs_fetcher(tmp_path, offline=True).check(ojs.ids_url("AAAI"))
+    PageCache(tmp_path / ojs.CACHE_DIR).path(gone).unlink()
+    with pytest.raises(CrawlError, match="not in the cache") as e:
+        crawl.OJS.replay(tmp_path)
+    assert isinstance(e.value.__cause__, CacheMiss)

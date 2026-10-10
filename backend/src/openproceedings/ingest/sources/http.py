@@ -592,23 +592,30 @@ _XML_ROOT = re.compile(rb"<([A-Za-z_][\w.:-]*)[\s>/]")
 
 def _xml_root(body: bytes) -> bytes | None:
     """The name of an XML document's root element, after a BOM, the declaration, processing instructions and
-    comments before it (a linear scan over the first 4096 bytes, never a backtracking pattern: the body is
-    untrusted server output), or None when there is none."""
-    rest = body[:4096].removeprefix(b"\xef\xbb\xbf").lstrip()
+    comments before it, or None when there is none in the first 4096 bytes. One forward walk of an index over
+    those bytes (never a backtracking pattern, never a copy of the tail: the body is untrusted server output)."""
+    data = body[:4096].removeprefix(b"\xef\xbb\xbf")
+    pos = _skip_space(data, 0)
     while True:
-        if rest.startswith(b"<?"):
-            end = rest.find(b"?>", 2)
+        if data.startswith(b"<?", pos):
+            end = data.find(b"?>", pos + 2)
             cut = end + 2
-        elif rest.startswith(b"<!--"):
-            end = rest.find(b"-->", 4)
+        elif data.startswith(b"<!--", pos):
+            end = data.find(b"-->", pos + 4)
             cut = end + 3
         else:
             break
         if end < 0:
             return None
-        rest = rest[cut:].lstrip()
-    m = _XML_ROOT.match(rest)
+        pos = _skip_space(data, cut)
+    m = _XML_ROOT.match(data, pos)
     return m.group(1) if m else None
+
+
+def _skip_space(data: bytes, pos: int) -> int:
+    while pos < len(data) and data[pos] in b" \t\n\r\x0b\x0c":  # bytes.lstrip()'s whitespace
+        pos += 1
+    return pos
 
 
 class Fetcher(HttpClient[Page]):

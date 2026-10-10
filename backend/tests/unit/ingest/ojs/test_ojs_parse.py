@@ -66,8 +66,16 @@ def test_a_page_that_is_not_oai_pmh_stops(text: str) -> None:
 
 
 @pytest.mark.parametrize("prolog", ["", "<!-- " + "x" * 5000 + " -->"])
-def test_a_doctype_is_refused_wherever_it_sits(prolog: str) -> None:  # no entity expansion from a response
-    text = f'<?xml version="1.0"?>{prolog}<!DOCTYPE x [<!ENTITY a "b">]><OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"/>'
+@pytest.mark.parametrize(
+    "doctype",
+    [
+        '<!DOCTYPE x [<!ENTITY a "b">]>',
+        "<!DOCTYPE OAI-PMH>",  # no internal subset: refused by the DOCTYPE handler, not the entity one
+        '<!DOCTYPE OAI-PMH SYSTEM "http://example.invalid/x.dtd">',
+    ],
+)
+def test_a_doctype_is_refused_wherever_it_sits(prolog: str, doctype: str) -> None:  # no entity expansion
+    text = f'<?xml version="1.0"?>{prolog}{doctype}<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"/>'
     with pytest.raises(CrawlError, match="DOCTYPE") as e:
         ojs.parse_page(text)
     assert e.value.reason == "oai_unreadable"
@@ -138,6 +146,12 @@ def test_list_sets_follows_tokens_through_the_fetcher() -> None:
             return Page(url, 200, pages[url], datetime(2026, 10, 9, tzinfo=UTC), "text/xml")
 
     assert ojs.list_sets("AAAI", Fake()) == {"A": "One", "B": "Two"}  # type: ignore[arg-type]
+
+
+def test_a_journal_with_no_sets_lists_none() -> None:
+    """OAI-PMH's `noSetHierarchy` is an empty set list, not an error: every live inventory article then comes
+    by GetRecord (`ojs_harvest`)."""
+    assert ojs.parse_sets(oai.error("noSetHierarchy")) == ({}, None)
 
 
 def test_list_sets_error_stops() -> None:

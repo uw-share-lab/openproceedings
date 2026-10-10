@@ -84,7 +84,6 @@ CACHE_DIR = "ojs"  # <data>/cache/ojs
 HOST = "ojs.aaai.org"
 HOSTS = frozenset({HOST})
 MIN_INTERVAL = 3.0  # seconds between requests: the server takes 2-3 s a page (checked 2026-10-09)
-PROGRESS_SECONDS = 30.0
 
 _OAI = "{http://www.openarchives.org/OAI/2.0/}"
 _DC = "{http://purl.org/dc/elements/1.1/}"
@@ -279,6 +278,20 @@ def sets_url(journal: str, token: str | None = None) -> str:
     return base if token is None else f"{base}&resumptionToken={quote(token, safe='')}"
 
 
+def next_token(seen: set[str], token: str | None, url: str) -> str | None:
+    """`token`, the next page of a chain, after checking that the chain has not followed it before. A page that
+    names its own token, or any A→B→A cycle, would otherwise loop for ever, and once cached at no cost in network
+    or pacing, so every later offline replay and snapshot build would hang too (`openreview_v2._pages` refuses
+    the same): `CrawlError` `token_cycle`."""
+    if token is not None:
+        if token in seen:
+            raise CrawlError(
+                f"{url}: resumptionToken repeats an earlier page of the chain", reason="token_cycle"
+            )
+        seen.add(token)
+    return token
+
+
 def parse_sets(text: str) -> tuple[dict[str, str], str | None]:
     """The sets (setSpec → setName) on one ListSets page and the next resumption token (None: complete)."""
     listing = _listing(text, "ListSets", frozenset({"noSetHierarchy"}))
@@ -298,11 +311,13 @@ def list_sets(journal: str, fetcher: Fetcher, *, refresh: bool = False) -> dict[
     is paginated). The harvest walks each of the journal's own sets; the names label the table's rows."""
     sets: dict[str, str] = {}
     token: str | None = None
+    tokens: set[str] = set()
     while True:
         page = fetcher.get(sets_url(journal, token), refresh=refresh and token is None)
         if not page.ok:
             raise CrawlError(f"{page.url} answered HTTP {page.status}", reason="no_listing")
         found, token = parse_sets(page.text)
+        token = next_token(tokens, token, page.url)
         for spec, name in found.items():  # a spec two sections share (AAAI's EAAI-POS): both names, kept
             sets[spec] = name if sets.get(spec, name) == name else f"{sets[spec]} | {name}"
         if token is None:
@@ -329,7 +344,7 @@ class JournalResult:
     reports: list[ListingReport]
     deleted: int = 0  # deleted headers: counted, never records
     front_matter: int = 0
-    pages: int = 0  # ListIdentifiers, ListRecords and GetRecord pages read (ListSets not counted)
+    pages: int = 0  # ListIdentifiers, ListRecords and GetRecord pages read whole (not ListSets, nor a 5xx failure)
     unavailable: int = 0  # articles named in the table's [[unavailable]] rows: listed, never records
     duplicates: int = 0  # extra identical copies of an article that two set requests returned: counted once
     recovered: int = 0  # live inventory articles no set returned, read by GetRecord
@@ -354,7 +369,8 @@ def mine_journal(
     records: list[PaperRecord] = []
     listed_volumes = frozenset(table.volumes(journal))
     result = JournalResult(records, [])
-    started = last = time.monotonic()
+    started = time.monotonic()
+    log.info("ojs_journal_started", extra={"journal": journal, "offline": fetcher.offline})
 
     def report_for(volume: int, page: Page) -> ListingReport:
         report = reports.get(volume)
@@ -420,11 +436,8 @@ def mine_journal(
     result.pages, result.deleted = h.pages, h.deleted
     result.duplicates, result.recovered = h.duplicates, h.recovered
     result.fallback_sets = sorted(h.fallback_sets)
-    for page, e in h.live:
+    for page, e in h.live:  # over pages already read: CPU only (the harvest above logs the progress lines)
         take(page, e)
-        if time.monotonic() - last >= PROGRESS_SECONDS:
-            last = time.monotonic()
-            log.info("ojs_journal_progress", extra={"journal": journal, "records": len(records)})
     for header, failed in h.unavailable:
         row = table.unavailable.get((journal, header.article))
         if row is None:

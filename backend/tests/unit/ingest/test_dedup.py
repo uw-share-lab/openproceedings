@@ -56,6 +56,8 @@ def self_url(native: str, year: int) -> str | None:
         return f"https://proceedings.mlr.press/{volume}/{key}.html"
     if prefix == "dblp":
         return f"https://dblp.org/rec/conf/icml/{rest}"
+    if prefix == "ojs":  # article ids are unique across the site's journals: any table journal names it
+        return f"https://ojs.aaai.org/index.php/AAAI/article/view/{rest}"
     return None
 
 
@@ -1836,3 +1838,17 @@ def test_two_dblp_records_sharing_a_title_are_never_merged() -> None:
     result = dedup([a, b])
     assert sorted(r.id for r in result.records) == ["op:icml:2009:dblp-Smith09", "op:icml:2009:dblp-Smith09b"]
     assert not result.merges and result.conflicts
+
+
+def test_two_ojs_records_sharing_a_title_stay_apart_and_never_join_another_venue() -> None:
+    """decision-049: two ojs papers of one AAAI year with one title key are two proceedings ids (a conflicts.csv
+    `ambiguous_not_merged` row); an ojs AAAI paper and a PMLR ICML paper of the same year and title are two
+    venues, never compared."""
+    a = paper("ojs-101", "Trust in AI", source="ojs", venue="AAAI", year=2024)
+    b = paper("ojs-102", "trust in AI!", source="ojs", venue="AAAI", year=2024)
+    aies = paper("ojs-103", "Trust in AI", source="ojs", venue="AIES", year=2024)
+    icml = paper("pmlr-v235-key1", "Trust in AI", source="pmlr", venue="ICML", year=2024)
+    result = dedup([a, b, aies, icml])
+    assert sorted(r.id for r in result.records) == sorted(r.id for r in (a, b, aies, icml))
+    assert not result.merges
+    assert [(c.field, c.resolution) for c in result.conflicts] == [("title_key", "ambiguous_not_merged")]

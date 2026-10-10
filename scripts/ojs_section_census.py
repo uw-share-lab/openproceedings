@@ -112,7 +112,7 @@ def toml_rows(c: Census, verified: str) -> str:
     out = []
     for (volume, s), n in sorted(c.live.items()):
         out.append(
-            f'[[section]]\njournal = "{c.journal}"\nvolume = {volume}\nset_spec = "{s}"\nkind = "papers"\n'
+            f'[[section]]\njournal = "{c.journal}"\nvolume = {volume}\nset_spec = {json.dumps(s)}\nkind = "papers"\n'
             f'track = "?"\nlabel = {json.dumps(c.labels.get(s, "?"), ensure_ascii=False)}\npapers = {n}\n'
             f'verified = {verified}\nsource = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"\n'
         )
@@ -136,7 +136,10 @@ def main() -> int:
     dump = {}
     for j in ns.journals:
         c = walk(j, data / "cache", offline=ns.offline, refresh=ns.refresh)
-        print(toml_rows(c, ns.verified)) if ns.toml else report(c)
+        if ns.toml:
+            print(toml_rows(c, ns.verified))
+        else:
+            report(c)
         dump[j] = {
             "complete": c.complete, "pages": c.pages, "complete_list_size": c.complete_list_size,
             "duplicates": c.duplicates, "recovered": c.recovered, "labels": c.labels,
