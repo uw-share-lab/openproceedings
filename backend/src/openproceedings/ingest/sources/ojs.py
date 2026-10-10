@@ -63,6 +63,10 @@ _OAI = "{http://www.openarchives.org/OAI/2.0/}"
 _DC = "{http://purl.org/dc/elements/1.1/}"
 _LANG = "{http://www.w3.org/XML/1998/namespace}lang"
 _ARTICLE = re.compile(r"oai:ojs\.aaai\.org:article/([0-9]+)")
+# A deleted header from before the 2020 move to ojs.aaai.org keeps the old repository's identifier (AAAI holds
+# such headers, datestamp 2020-06-02; checked 2026-10-09). A deleted header is only counted, so it may carry one;
+# a live record never may (its article id is its native id).
+_OLD_DELETED = re.compile(r"oai:ojs\.pkp\.sfu\.ca:article/([0-9]+)")
 _VOLUME = re.compile(r";\s*Vol\.\s*([0-9]+)\s+No\.\s*[0-9]+")
 _DOI = re.compile(r"10\.1609/\S+")
 _EMPTY_LIST = "noRecordsMatch"  # an OAI-PMH error code that means an empty list, not a failure
@@ -147,6 +151,8 @@ def parse_page(text: str) -> tuple[list[OaiRecord], str | None]:
         header = rec.find(f"{_OAI}header")
         ident = header.findtext(f"{_OAI}identifier", "") if header is not None else ""
         m = _ARTICLE.fullmatch(ident.strip())
+        if m is None and header is not None and header.get("status") == "deleted":
+            m = _OLD_DELETED.fullmatch(ident.strip())
         if header is None or m is None:
             raise CrawlError(f"an OAI-PMH record has no ojs.aaai.org article id ({ident[:80]!r})",
                              reason="oai_unreadable")  # fmt: skip
@@ -173,6 +179,49 @@ def parse_page(text: str) -> tuple[list[OaiRecord], str | None]:
     token_node = listing.find(f"{_OAI}resumptionToken")
     token = (token_node.text or "").strip() if token_node is not None else ""
     return out, token or None
+
+
+def sets_url(journal: str, token: str | None = None) -> str:
+    base = f"https://{HOST}/index.php/{journal}/oai?verb=ListSets"
+    return base if token is None else f"{base}&resumptionToken={quote(token, safe='')}"
+
+
+def parse_sets(text: str) -> tuple[dict[str, str], str | None]:
+    """The sets (setSpec → setName) on one ListSets page and the next resumption token (None: complete)."""
+    root = _root(text)
+    if root.tag != f"{_OAI}OAI-PMH":
+        raise CrawlError("an ojs.aaai.org page is not an OAI-PMH response", reason="oai_unreadable")
+    if (err := root.find(f"{_OAI}error")) is not None:
+        code = err.get("code", "")
+        if code == "noSetHierarchy":
+            return {}, None
+        raise CrawlError(f"ojs.aaai.org answered OAI-PMH error {code}", reason="oai_error")
+    listing = root.find(f"{_OAI}ListSets")
+    if listing is None:
+        raise CrawlError("an OAI-PMH response has no ListSets", reason="oai_unreadable")
+    sets = {
+        spec: " ".join((s.findtext(f"{_OAI}setName") or "").split())
+        for s in listing.findall(f"{_OAI}set")
+        if (spec := (s.findtext(f"{_OAI}setSpec") or "").strip())
+    }
+    token_node = listing.find(f"{_OAI}resumptionToken")
+    token = (token_node.text or "").strip() if token_node is not None else ""
+    return sets, token or None
+
+
+def list_sets(journal: str, fetcher: Fetcher, *, refresh: bool = False) -> dict[str, str]:
+    """Every set of one journal (its sections, setSpec → name) through `ListSets`, following resumption tokens.
+    Section names label the table's rows (`ojs_sections.toml`); the harvest itself never needs them."""
+    sets: dict[str, str] = {}
+    token: str | None = None
+    while True:
+        page = fetcher.get(sets_url(journal, token), refresh=refresh and token is None)
+        if not page.ok:
+            raise CrawlError(f"{sets_url(journal)} answered HTTP {page.status}", reason="no_listing")
+        found, token = parse_sets(page.text)
+        sets.update(found)
+        if token is None:
+            return sets
 
 
 def display_name(creator: str) -> str:

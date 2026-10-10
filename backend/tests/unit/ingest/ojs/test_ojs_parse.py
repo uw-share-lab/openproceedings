@@ -93,3 +93,66 @@ def test_english_description_wins_over_other_locales() -> None:
     assert rec.index("Un resume") < rec.index("An abstract")
     (r,), _ = ojs.parse_page(oai.page(rec))
     assert r.description == "An abstract."
+
+
+def _sets_page(sets: str, token: str | None = None) -> str:
+    rt = (
+        "" if token is None else f'<resumptionToken completeListSize="3" cursor="0">{token}</resumptionToken>'
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><responseDate>2026-10-09T22:01:20Z</responseDate>
+<request verb="ListSets">https://ojs.aaai.org/index.php/AAAI/oai</request><ListSets>{sets}{rt}</ListSets></OAI-PMH>
+"""
+
+
+def test_list_sets_parses_names_and_the_next_token() -> None:
+    page = _sets_page(
+        "<set><setSpec>AAAI</setSpec><setName>Proceedings of the AAAI Conference</setName></set>"
+        "<set><setSpec>AAAI:AISI</setSpec><setName>AAAI Special Track on\n  AI for Social Impact</setName></set>",
+        token="t1",
+    )
+    sets, token = ojs.parse_sets(page)
+    assert sets == {
+        "AAAI": "Proceedings of the AAAI Conference",
+        "AAAI:AISI": "AAAI Special Track on AI for Social Impact",
+    }
+    assert token == "t1"
+    assert ojs.parse_sets(_sets_page("<set><setSpec>X</setSpec><setName>Y</setName></set>"))[1] is None
+
+
+def test_list_sets_follows_tokens_through_the_fetcher() -> None:
+    from datetime import UTC, datetime
+
+    from openproceedings.ingest.sources.http import Page
+
+    pages = {
+        ojs.sets_url("AAAI"): _sets_page(
+            "<set><setSpec>A</setSpec><setName>One</setName></set>", token="t/1"
+        ),
+        ojs.sets_url("AAAI", "t/1"): _sets_page("<set><setSpec>B</setSpec><setName>Two</setName></set>"),
+    }
+    assert ojs.sets_url("AAAI", "t/1").endswith("&resumptionToken=t%2F1")
+
+    class Fake:
+        def get(self, url: str, *, refresh: bool = False) -> Page:
+            return Page(url, 200, pages[url], datetime(2026, 10, 9, tzinfo=UTC), "text/xml")
+
+    assert ojs.list_sets("AAAI", Fake()) == {"A": "One", "B": "Two"}  # type: ignore[arg-type]
+
+
+def test_list_sets_error_stops() -> None:
+    with pytest.raises(CrawlError, match="badArgument"):
+        ojs.parse_sets(oai.error("badArgument"))
+
+
+def test_a_deleted_header_may_keep_the_pre_2020_identifier() -> None:
+    old = oai.deleted(5828, "AAAI:ML").replace("oai:ojs.aaai.org:", "oai:ojs.pkp.sfu.ca:")
+    (r,), _ = ojs.parse_page(oai.page(old))
+    assert (r.article, r.deleted, r.set_spec) == (5828, True, "AAAI:ML")
+
+
+def test_a_live_record_with_the_pre_2020_identifier_stops() -> None:
+    old = oai.record(5828).replace("oai:ojs.aaai.org:", "oai:ojs.pkp.sfu.ca:", 1)
+    with pytest.raises(CrawlError, match=r"no ojs\.aaai\.org article id") as e:
+        ojs.parse_page(oai.page(old))
+    assert e.value.reason == "oai_unreadable"
