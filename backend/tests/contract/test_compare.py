@@ -323,6 +323,21 @@ def test_how_each_record_was_matched(shared: TestClient) -> None:
     assert body["kept"][0]["title"] == "a title the index does not hold"  # the file's own, as written
 
 
+def test_an_ojs_article_link_is_compared_not_a_500(shared: TestClient) -> None:
+    """An ojs.aaai.org article or galley link (AAAI, AIES, IASEAI; decision-049) names no year, so it names no
+    proceedings key: the row is matched by title as any other, and the file is never refused (it was a 500)."""
+    k = BY_ID[KEPT[0]]
+    file = "".join(
+        [
+            entry(one_line(k.title), k.venue, k.year, "https://ojs.aaai.org/index.php/AAAI/article/view/25561"),
+            entry("benchmark at AAAI", "AAAI", 2023, "https://ojs.aaai.org/index.php/AIES/article/view/31612/1"),
+        ]
+    )
+    body = compared(shared, file)
+    assert [(r["ris_record"], r["matched_by"], r["id"]) for r in body["kept"]] == [(1, "title_venue_year", k.id)]
+    assert [(r["ris_record"], r["matched_by"]) for r in body["not_in_index"]] == [(2, "not_found")]
+
+
 def test_why_each_paper_was_dropped(shared: TestClient) -> None:
     body = compared(shared, the_file())
     why = {r["id"]: r for r in body["dropped"]}

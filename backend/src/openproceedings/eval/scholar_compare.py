@@ -194,16 +194,18 @@ def openreview_id(url: str) -> str | None:
 
 def proceedings_key(url: str) -> ProceedingsKey | None:
     """The proceedings paper a URL names, or None: `urls.native`'s id with the venue and year the URL itself
-    carries (a NeurIPS or ICLR proceedings path; for PMLR, the ICML volume's year from the volume table). A dblp
-    record page (`dblp-<key>`, ICML 1988-2012; decision-047) carries no year, so it names no key here: None."""
+    carries (a NeurIPS or ICLR proceedings path; for PMLR, the ICML volume's year from the volume table). Any
+    other native names no key here: a dblp record page (`dblp-<key>`, ICML 1988-2012; decision-047) and an
+    ojs.aaai.org article or galley (`ojs-<id>`, AAAI, AIES, IASEAI; decision-049) carry no year, so the row
+    is matched by its DOI or its title instead, never refused."""
     native = urls.native(url)
-    if native is None or urls.dblp_icml(url) is not None:
+    if native is None:
         return None
     if (parts := urls.proceedings_parts(url)) is not None:
         return (parts[0], parts[1], native)
-    volume = urls.pmlr(url)
-    assert volume is not None  # `urls.native` names a NeurIPS/ICLR paper or an ICML volume's, nothing else
-    return ("ICML", ICML_PMLR_VOLUMES[volume[0]][0], native)
+    if (volume := urls.pmlr(url)) is not None and volume[0] in ICML_PMLR_VOLUMES:
+        return ("ICML", ICML_PMLR_VOLUMES[volume[0]][0], native)
+    return None  # dblp-<key>, ojs-<id>: no year in the URL
 
 
 def _named[T](read: Callable[[str], T | None], url: str) -> T | None:
