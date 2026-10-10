@@ -1,14 +1,14 @@
 # OpenAlex fidelity audit (2026-10-10)
 
-- Snapshot: `2026-10-10-9efa49481112`
-- Code: commit `6a7263e1b3ed`
+- Snapshot: `2026-10-10-22a339940466`
+- Code: commit `3968d852b74f`
 - Sample: seed 49; every record with an official abstract and a DOI of FAccT 2022, 2025, 2026; AIES 2024, 2025; and 1,000 of 25,124 such AAAI 2010+ records, drawn in id order. Title-route check: 1,061 attaches.
 - Date: 2026-10-10
 
 Reproduce (from the OpenAlex cache, no network):
 
 ```
-uv run op eval openalex --offline --snapshot 2026-10-10-9efa49481112 --seed 49 --aaai-sample 1000 --title-sample 1061 --date 2026-10-10 --ruling 'Keep the exact title-key and year rule. The 9 flagged attaches are mostly OCR or spelling variants of the same author, and a surname rule would drop correct attaches; the residual wrong-attach risk is at most 2 of 1,061 (controller, 2026-10-10).'
+uv run op eval openalex --offline --snapshot 2026-10-10-22a339940466 --seed 49 --aaai-sample 1000 --title-sample 1061 --date 2026-10-10 --ruling 'Keep the exact title-key and year rule. The 9 flagged attaches are mostly OCR or spelling variants of the same author, and a surname rule would drop correct attaches; the residual wrong-attach risk is at most 2 of 1,061 (controller, 2026-10-10).'
 ```
 
 ## Method
@@ -77,7 +77,7 @@ ACM's version rather than the site's.
 
 AAAI 1980–2008 records have no DOI. The fill matches each one by exact title key in the year's OpenAlex listing (`openalex_sources.toml`), attaching only when one listed work and one DOI-less record share the key. The listing source also holds proceedings volumes, other venues' papers and OCR-garbled titles, so an exact title could still name another paper. The fill was replayed over the cached listings (no new listing fetch). A seeded sample of its title-route attaches was then checked against OpenAlex's authors for each work (seed 49; one request per 50 works, `select=id,authorships,biblio`).
 
-- DOI-less AAAI 1980–2008 records with no abstract: 4,709; title-route attaches: 1,061; the fill's refusals: `inverted_gap` 50, `inverted_unreadable` 101, `no_abstract` 119, `title_ambiguous` 21, `title_unmatched` 3,357.
+- DOI-less AAAI 1980–2008 records with no abstract: 3,648; title-route attaches: 1,061; the fill's refusals: `inverted_gap` 50, `inverted_unreadable` 101, `no_abstract` 119, `title_ambiguous` 21, `title_unmatched` 3,357.
 - Sampled: 1,061 of 1,061 attaches.
 - Year: OpenAlex's `publication_year` equals ours in 1,061 of 1,061. The listing is filtered by year and the fill requires the year, so this holds by construction.
 - Authors: OpenAlex lists authors for 1,061 of 1,061; the first-author surname matches ours in 1,044; the lists share at least one surname in 1,052.
