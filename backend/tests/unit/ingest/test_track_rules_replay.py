@@ -102,7 +102,7 @@ def test_the_aaai_rows_the_rulings_name() -> None:
     # round 2: the IAAI 1996-1999 ranges; 1997's DevA97 starts at p. 853 in dblp, p. 852 on the IAAI page
     assert track("DevA97", *entries["DevA97"]) == "iaai" and entries["DevA97"][1] == "853-860"
     assert entries["LimCKO00"][1] == "1020-1015" and track("LimCKO00", *entries["LimCKO00"]) == "iaai"
-    # the full-length invited papers, the 2008 Short Papers and 2005's two unlisted entries stay main
+    # the full-length invited papers, the 2008 Short Papers and 2005's three unlisted entries stay main
     for key in (
         "Kambhampati96a",
         "Hinton00",

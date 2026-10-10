@@ -10,10 +10,12 @@ main-key entry in one takes its track (student abstracts, doctoral consortium, d
 `main`. A `conf/aaai/` proceedings key dated 1980-2009 the table doesn't classify, a not-held year dblp holds a key
 for, a row whose key the release lacks, a count that differs from the table's, a section range that holds no paper,
 or a main-key entry of a year with sections that has no readable start page and no row (`unplaced_page`) stops the
-ingest, and these checks run again in every replay. dblp's AAAI keys of 2010 on are never read: the extract holds them, but a record
-is made only from a key the table lists, and the table's years end at 2008. Fields as for ICML (`dblp.py`):
-title without dblp's closing period, authors without homonym numbers, `urls.doi` from a DOI `ee`, `urls.proceedings`
-the dblp record page (linked, never fetched). No abstracts. Every record is `accepted`.
+ingest, and these checks run again in every replay.
+
+dblp's AAAI keys of 2010 on are never read: the extract holds them, but a record is made only from a key the table
+lists, and the table's years end at 2008. Fields as for ICML (`dblp.py`): title without dblp's closing period,
+authors without homonym numbers, `urls.doi` from a DOI `ee`, `urls.proceedings` the dblp record page (linked, never
+fetched). No abstracts. Every record is `accepted`.
 """
 
 from __future__ import annotations
@@ -158,7 +160,7 @@ def mine_year(year: int, extract: Extract, *, table: Table | None = None) -> Yea
                 if isinstance(rule, Section):
                     used.add(rule)
                 elif rule is None and sectioned and start_page(e.fields.get("pages")) is None:
-                    raise CrawlError(f"AAAI {year}: {e.key} has no readable start page ({e.fields.get('pages')!r}), so "
+                    raise CrawlError(f"AAAI {year}: {e.key} has no readable start page ({str(e.fields.get('pages'))[:40]!r}), so "
                                      "no dblp_aaai.toml section can place it: give it a [[track]] or [[not_paper]] "
                                      "row", reason="unplaced_page")  # fmt: skip
             try:

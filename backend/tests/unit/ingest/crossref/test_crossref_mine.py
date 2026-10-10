@@ -360,3 +360,28 @@ def test_an_unreadable_page_in_an_unsectioned_proceedings_is_main(tmp_path: Path
     _whole(tmp_path, api.work(D1, page="1" * 5000), api.work(D2, page=None), api.work(NP), total=3)
     records = crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE).records
     assert [r.track for r in records] == ["main", "main"]
+
+
+_OTHER_PROCEEDINGS = """
+[[proceedings]]
+venue = "AIES"
+year = 2018
+doi = "10.1145/3278721"
+title = "Proceedings of the 2018 AAAI/ACM Conference on AI, Ethics, and Society"
+window_from = 2018-12-20
+window_until = 2019-01-03
+dois = 3
+verified = 2026-10-10
+source = "test"
+""" + _SECTION.replace('venue = "FAccT"\nyear = 2023', 'venue = "AIES"\nyear = 2018')
+
+
+def test_only_a_proceedings_with_its_own_section_rows_refuses_an_unreadable_page(
+    tmp_path: Path, monkeypatch
+) -> None:
+    table = acm_table.load(api.TABLE_TEXT + _OTHER_PROCEEDINGS)
+    assert [(s.venue, s.year) for s in table.sections] == [("AIES", 2018)]
+    monkeypatch.setattr(acm_table, "TABLE", table)
+    _whole(tmp_path, api.work(D1, page=None), api.work(D2, page="1" * 5000), api.work(NP), total=3)
+    records = crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=table).records
+    assert [r.track for r in records] == ["main", "main"]

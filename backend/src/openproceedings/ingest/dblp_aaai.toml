@@ -445,8 +445,8 @@ reason = "listed under \"Invited Talks\" in the official AAAI-00 contents (p. 11
 # (TASK-226; docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §AAAI 1993-2008 sections). Each range runs
 # from the lowest dblp start page to the highest dblp end page of the entries the contents list in the section.
 # Robot competition and exhibition abstracts are `other` (event reports, not system demos). Invited-talk sections
-# have no range (the short talks are not_paper rows above). 2005's Sultanik05 and Thornton05 (pp. 1628-1631) are
-# on no official page and stay main, unresolved.
+# have no range (the short talks are not_paper rows above). 2005's Sultanik05, Thornton05 and WangL05 (pp. 1628-1635)
+# are on no official page and stay main, unresolved.
 
 [[section]]
 year = 1993

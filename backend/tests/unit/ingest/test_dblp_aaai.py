@@ -247,3 +247,12 @@ def test_an_entry_a_sectioned_year_cannot_place_stops_the_year(tmp_path: Path, p
     assert {r.native: r.track for r in dblp_aaai.mine_year(2006, extract, table=aaai).records}[
         "dblp-Main06"
     ] == "main"
+
+
+def test_a_pageless_entry_of_a_year_without_its_own_section_rows_is_main(tmp_path: Path) -> None:
+    """Only a year with its own section rows refuses a pageless entry: here only 1986 has one."""
+    other_year = SECTIONS.split("[[section]]")[1].replace("year = 2006", "year = 1986", 1)
+    aaai, extract = paged(tmp_path, GOOD + "[[section]]" + other_year, main06_pages=None)
+    assert [s.year for s in aaai.sections] == [1986]
+    tracks = {r.native: r.track for r in dblp_aaai.mine_year(2006, extract, table=aaai).records}
+    assert tracks["dblp-Main06"] == "main"

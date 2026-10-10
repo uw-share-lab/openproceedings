@@ -135,7 +135,7 @@ source = "test contents page"
     ("pages", "start"),
     [("1425-1426", 1425), ("856", 856), ("1853-", 1853), ("855-1856", 855), (None, None), ("", None),
      ("I-XV", None), ("12-13, 15", None), ("-5", None), ("1" * 5000, None), ("12-" + "3" * 5000, None),
-     ("123456789-123456790", 123456789), ("1234567890", None)],
+     ("123456789-123456790", 123456789), ("1234567890", None), ("12-1234567890", None)],
 )  # fmt: skip
 def test_start_page_reads_dblps_page_field(pages, start) -> None:
     assert dblp_aaai_table.start_page(pages) == start
