@@ -96,9 +96,13 @@ def test_the_icml_extract_is_the_same_bytes_whether_or_not_aaai_shares_the_pass(
 
 
 # sha256 of the ICML extract origin/dev's writer (5f147e32, `write_extract` before slices existed) wrote from GZ_FULL
-# and its DTD, with `fetched_at` 2026-10-10T00:00:00+00:00: computed once from a `git archive 5f147e32` copy on
-# 2026-10-10. A change to the extract's format, keys or order fails here (guarantee 4: ICML's bytes are unchanged).
-PRE_SLICE_ICML_SHA256 = "c6611859a5709add4569b599c35d5696e6a2a9a23d3c613467303c8eff1f2590"
+# and its DTD, with `fetched_at` 2026-10-10T00:00:00+00:00 and the release's sha256 replaced by 64 zeros: computed once
+# from a `git archive 5f147e32` copy on 2026-10-10. The hash is normalized because the extract records
+# `release_sha256`, the sha256 of `gzip.compress(...)`, and gzip/zlib output bytes differ between platforms' zlib
+# builds (macOS vs Linux CI), so the raw extract's bytes are not portable. A change to the extract's format, keys or
+# order still fails here (guarantee 4: ICML's bytes are unchanged).
+PRE_SLICE_ICML_SHA256 = "fd19a9138bae87e2c45c3696cf40fea428573061d84e86481daf9efda3ced56f"
+RELEASE_SHA256_PLACEHOLDER = "0" * 64
 
 
 def test_the_icml_extract_is_byte_identical_to_the_pre_slice_writers(tmp_path: Path) -> None:
@@ -107,7 +111,12 @@ def test_the_icml_extract_is_byte_identical_to_the_pre_slice_writers(tmp_path: P
     dblp.write_extracts(tmp_path, fixed, dtd, table, dblp.SLICES)
     path = dblp.extract_path(tmp_path, table)
     assert path == tmp_path / "dblp" / "extract" / f"{table.release.file.sha256}.json"
-    assert hashlib.sha256(path.read_bytes()).hexdigest() == PRE_SLICE_ICML_SHA256
+    raw = path.read_bytes()
+    assert (
+        raw.count(table.release.file.sha256.encode()) == 1
+    )  # only `release_sha256` derives from the gzip bytes
+    normalized = raw.replace(table.release.file.sha256.encode(), RELEASE_SHA256_PLACEHOLDER.encode())
+    assert hashlib.sha256(normalized).hexdigest() == PRE_SLICE_ICML_SHA256
 
 
 def test_prepare_slices_reads_the_release_once_for_every_missing_slice(tmp_path: Path, monkeypatch) -> None:
