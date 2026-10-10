@@ -221,7 +221,8 @@ def _count_surrogates(
     surrogate: set[str], records: Mapping[str, PaperRecord], venue: str, year: int, source: str
 ) -> int:
     """How many of the notes whose abstract was refused for a lone surrogate became records (TASK-229), one
-    `abstract_surrogate_refused` WARNING each (both API versions; a note dropped as a duplicate isn't counted)."""
+    `abstract_surrogate_refused` DEBUG line each (both API versions; a note dropped as a duplicate isn't counted;
+    the count is on the finished line and in the attention WARNING)."""
     ids = sorted(rid for n in surrogate if (rid := f"op:{venue.lower()}:{year}:{n}") in records)
     for rid in ids:
         log_surrogate(source, rid)
@@ -512,14 +513,22 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
                     "presentation_unmapped": report.presentation_unmapped,
                     "title_control_characters": report.title_control_characters,
                     "abstract_control_characters": report.abstract_control_characters,
+                    "abstract_surrogate": report.abstract_surrogate,
                     "requests": client.requests, "cached": client.cached, "cache_incompatible": incompatible,
                     "ms": elapsed_ms(began, time.monotonic)})  # fmt: skip
     anomalies = {k: report.skipped[k] for k in ("out_of_scope", "invalid", "duplicate")}
-    if report.unknown_track or report.presentation_unmapped or incompatible or any(anomalies.values()):
+    surrogates = {"abstract_surrogate": report.abstract_surrogate} if report.abstract_surrogate else {}
+    if (
+        report.unknown_track
+        or report.presentation_unmapped
+        or incompatible
+        or any(anomalies.values())
+        or surrogates
+    ):
         log.warning("openreview_crawl_attention",
                     extra={"api": report.api, "venue": venue, "year": year, "unknown_track": report.unknown_track,
                            "presentation_unmapped": report.presentation_unmapped,
-                           **anomalies, "cache_incompatible": incompatible})  # fmt: skip
+                           **anomalies, "cache_incompatible": incompatible, **surrogates})  # fmt: skip
     return Crawl(tuple(sorted(records.values(), key=lambda r: r.id)), report)
 
 

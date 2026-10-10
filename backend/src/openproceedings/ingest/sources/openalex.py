@@ -703,6 +703,7 @@ def apply(result: DedupResult, cache: Path) -> tuple[DedupResult, list[FillRepor
     report.fetched = sorted({lk.fetched_at for lk in extract.lookups})
     log.info("openalex_filled", extra={"extract": extract.sha256, "candidates": report.candidates,
                                        "attached": report.attached_doi + report.attached_title,
-                                       "refused": sum(report.refused.values()), "not_queried": report.not_queried,
+                                       "refused": dict(sorted(report.refused.items())),
+                                       "not_queried": report.not_queried,
                                        "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     return replace(result, records=tuple(sorted(records, key=lambda r: r.id))), [report]

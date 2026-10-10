@@ -468,10 +468,15 @@ def mine_journal(
     result.reports = [reports[v] for v in sorted(reports)]
     mismatched = [r for r in result.reports if not r.count_ok]
     for r in result.reports:
-        if r.skipped:
+        if r.skipped or r.abstract_surrogate:
             log.warning(
                 "listing_attention",
-                extra={"journal": journal, "volume": r.volume, "skipped": dict(r.skipped)},
+                extra={
+                    "journal": journal,
+                    "volume": r.volume,
+                    "skipped": dict(r.skipped),
+                    **r.surrogate_attention(),
+                },
             )
     if (
         mismatched
@@ -493,6 +498,7 @@ def mine_journal(
             "unavailable": result.unavailable,
             "duplicates": result.duplicates,
             "recovered": result.recovered,
+            "abstract_surrogate": sum(r.abstract_surrogate for r in result.reports),
             "ms": elapsed_ms(started, time.monotonic),
         },
     )

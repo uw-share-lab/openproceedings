@@ -243,6 +243,7 @@ def mine_volume(
         extra={"volume": number, "year": volume.year, "listed": report.listed, "stated": report.stated,
                "records": report.records, "abstract_missing": report.abstract_missing,
                "abstract_control_characters": report.abstract_control_characters,
+               "abstract_surrogate": report.abstract_surrogate,
                "abstract_pdf_codes": report.abstract_pdf_codes, "abstract_short": report.abstract_short,
                "ms": elapsed_ms(started, time.monotonic)},
     )  # fmt: skip
@@ -256,8 +257,9 @@ def mine_volume(
                 "stated": report.stated,
             },
         )
-    if report.skipped:
-        log.warning("listing_attention", extra={"volume": number, "skipped": dict(report.skipped)})
+    if report.skipped or report.abstract_surrogate:
+        log.warning("listing_attention", extra={"volume": number, "skipped": dict(report.skipped),
+                                                **report.surrogate_attention()})  # fmt: skip
     return VolumeResult(records, report)
 
 

@@ -94,8 +94,13 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   `pmlr_record_invalid`, `dblp_record_invalid` (the dblp key and the error type), and per cache entry `openreview_cache_incompatible`, a purged pre-projection entry,
   which a crawl reports as `cache_incompatible`). Each listing or crawl logs **at most one aggregate WARNING**
   with the counts
-  (`listing_attention`, `openreview_crawl_attention`); listing-level conditions (`listing_count_mismatch`,
-  `listing_see_also_unfollowed`) keep their own line.
+  (`listing_attention`, `openreview_crawl_attention`, `ris_import_attention`); listing-level conditions (`listing_count_mismatch`,
+  `listing_see_also_unfollowed`) keep their own line. **Abstracts refused for a lone surrogate** (TASK-229) are
+  visible at the default level that way: `abstract_surrogate` (`site_surrogate` for an official ICML or FAccT
+  page's rows) is always on the source's INFO end line (`pmlr_volume_mined`, `neurips_listing_mined`,
+  `ojs_journal_mined`, `dblp_year_mined`, `crossref_proceedings_mined`, `openreview_crawl_finished`, `ris_import`),
+  and, when above 0, it is in that source's aggregate WARNING and triggers it; `openalex_filled` carries the
+  per-reason `refused` counts (`abstract_surrogate` among them), never only their total.
 - **HTTP policy events are constants** (`http.PolicyEvents`: `crawl_retry_wait` / `openreview_retry_wait`
   WARNING, `*_budget_wait` INFO, `*_cache_expired` INFO), selected by the source's `Policy`, never built from
   a prefix; a test walks every crawler log call and refuses an f-string or concatenated event.

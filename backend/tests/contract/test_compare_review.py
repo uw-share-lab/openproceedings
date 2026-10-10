@@ -153,6 +153,11 @@ def test_cooldowns_are_per_network_and_bounded() -> None:
 
 def test_a_network_waits_after_a_comparison_and_search_is_untouched(corpus_dir: Path, logs: Logs) -> None:
     with app_of(corpus_dir, rate_limit=RateLimit(capacity=10_000)) as c:  # the default cooldown
+        # the gate's clock stands still: the pause (3x the comparison's real time) can never run out before the
+        # second request arrives, however loaded the machine (it once did under xdist)
+        cool = c.app.state.comparisons.cooldowns
+        now = cool.clock()
+        cool.clock = lambda: now
         assert post(c, the_file()).status_code == 200
         r = post(c, the_file())
         e = error(r, 429, "API_RATE_LIMITED")

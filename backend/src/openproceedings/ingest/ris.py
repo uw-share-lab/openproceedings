@@ -558,10 +558,13 @@ def import_ris(
     counts = {k: v for k, v in report.to_manifest().items() if k not in ("track_status",)}
     # always on the line, as on the crawl lines; the manifest lists it only when above 0
     counts["abstract_control_characters"] = report.abstract_control_characters
+    counts["abstract_surrogate"] = report.abstract_surrogate
     log.info("ris_import", extra=counts)
     attention = {
         k: skipped[k] for k in ("unresolved", "ambiguous", "conflict", "no_query_date") if skipped[k]
     }
+    if report.abstract_surrogate:
+        attention["abstract_surrogate"] = report.abstract_surrogate
     if attention or report.unknown_track or report.status_overrides:
         log.warning(
             "ris_import_attention",

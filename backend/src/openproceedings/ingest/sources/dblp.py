@@ -395,13 +395,16 @@ def mine_year(
         "site_ambiguous": report.site_ambiguous, "site_unjoined": report.site_unjoined,
         "abstract_control_characters": report.abstract_control_characters,
         "abstract_pdf_codes": report.abstract_pdf_codes, "abstract_short": report.abstract_short,
-        "site_dropped": report.site_dropped, "site_withheld": report.site_withheld, "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+        "site_dropped": report.site_dropped, "site_surrogate": report.site_surrogate,
+        "site_withheld": report.site_withheld, "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     if not report.count_ok:
         log.warning("listing_count_mismatch", extra={"year": year, "listing": report.listing,
                                                      "listed": report.listed, "stated": report.stated})  # fmt: skip
-    if report.skipped.get("invalid") or report.skipped.get("unparsed_key"):
+    if report.skipped.get("invalid") or report.skipped.get("unparsed_key") or report.site_surrogate:
         log.warning("listing_attention", extra={"year": year, "listing": report.listing, "unknown_track": 0,
-                                                "skipped": dict(report.skipped)})  # fmt: skip
+                                                "skipped": dict(report.skipped),
+                                                **({"site_surrogate": report.site_surrogate}
+                                                   if report.site_surrogate else {})})  # fmt: skip
     return YearResult(records, [report])
 
 

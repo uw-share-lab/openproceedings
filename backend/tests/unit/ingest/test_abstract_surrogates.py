@@ -56,6 +56,16 @@ def refusals(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
     return got
 
 
+def line(caplog: pytest.LogCaptureFixture, event: str) -> dict[str, Any]:
+    """The one log line named `event` (I1: the count is on each source's INFO line and in its attention WARNING)."""
+    [got] = [r for r in caplog.records if r.getMessage() == event]
+    return got.__dict__
+
+
+def no_line(caplog: pytest.LogCaptureFixture, event: str) -> bool:
+    return event not in [r.getMessage() for r in caplog.records]
+
+
 # --- the shared step ----------------------------------------------------------------------------------------------
 
 
@@ -154,10 +164,33 @@ def test_neurips_keeps_the_paper_on_its_title_with_no_abstract_claim() -> None:
     )  # fmt: skip
 
 
+def test_a_pmlr_volume_and_a_neurips_listing_show_the_count_at_default_log_level(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """I1: on the `_mined` INFO line (always) and in the one `listing_attention` WARNING (when above 0)."""
+    from tests.unit.ingest import test_neurips, test_pmlr
+
+    read_pmlr, read_neurips = pmlr.parse_paper_page, neurips.parse_abstract_page
+    monkeypatch.setattr(pmlr, "parse_paper_page", lambda *a: replace(read_pmlr(*a), abstract=LONE))
+    monkeypatch.setattr(neurips, "parse_abstract_page", lambda *a: replace(read_neurips(*a), abstract=LONE))
+    test_pmlr.seed_v235(tmp_path / "p")
+    test_neurips.seed_2013(test_neurips.cache_of(tmp_path / "n"))
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+        assert test_pmlr.mine(tmp_path / "p", 235).report.abstract_surrogate == 1
+        [listing] = test_neurips.mine(test_neurips.cache_of(tmp_path / "n"), 2013).reports
+    assert listing.abstract_surrogate == 1
+    assert line(caplog, "pmlr_volume_mined")["abstract_surrogate"] == 1
+    assert line(caplog, "neurips_listing_mined")["abstract_surrogate"] == 1
+    attention = [r.__dict__ for r in caplog.records if r.getMessage() == "listing_attention"]
+    assert [a["abstract_surrogate"] for a in attention] == [1, 1]
+
+
 # --- OJS -----------------------------------------------------------------------------------------------------------
 
 
-def test_ojs_keeps_the_paper_and_counts_the_refusal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ojs_keeps_the_paper_and_counts_the_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     from tests.unit.ingest.ojs import oai
     from tests.unit.ingest.ojs.test_ojs_mine import TABLE, _offline, _seed
 
@@ -169,7 +202,15 @@ def test_ojs_keeps_the_paper_and_counts_the_refusal(tmp_path: Path, monkeypatch:
 
     monkeypatch.setattr(ojs, "_oai_record", lone)
     _seed(tmp_path, oai.page(oai.record(1), oai.record(2), oai.record(3, "AAAI:IAAI")))
-    result = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+        result = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    assert line(caplog, "ojs_journal_mined")["abstract_surrogate"] == 1
+    attention = line(caplog, "listing_attention")
+    assert (attention["levelno"], attention["volume"], attention["abstract_surrogate"]) == (
+        logging.WARNING,
+        34,
+        1,
+    )
     rec = next(r for r in result.records if r.native == "ojs-1")
     assert rec.title and rec.abstract is None and not rec.claims("abstract")
     (report,) = result.reports
@@ -185,7 +226,7 @@ def test_ojs_keeps_the_paper_and_counts_the_refusal(tmp_path: Path, monkeypatch:
 
 
 def test_an_icml_site_entry_is_dropped_and_counted_by_name(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     from tests.unit.ingest.test_dblp import TABLE, prepared
     from tests.unit.ingest.test_icml_sites import CYBERCHAIR, one_page
@@ -200,7 +241,10 @@ def test_an_icml_site_entry_is_dropped_and_counted_by_name(
     f, pages = one_page(tmp_path, CYBERCHAIR)
     site = icml_sites.read_year(1990, f, pages=pages)
     assert site is not None and (len(site.entries), site.dropped, site.surrogate) == (1, 1, 1)
-    report = dblp.mine_year(1990, prepared(tmp_path / "x"), table=TABLE, site=site).reports[0]
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+        report = dblp.mine_year(1990, prepared(tmp_path / "x"), table=TABLE, site=site).reports[0]
+    assert line(caplog, "dblp_year_mined")["site_surrogate"] == 1
+    assert line(caplog, "listing_attention")["site_surrogate"] == 1
     assert (report.site_dropped, report.site_surrogate) == (1, 1)
     assert report.to_manifest()["site_surrogate"] == 1
     plain_f, plain_pages = one_page(tmp_path / "plain", CYBERCHAIR)
@@ -214,7 +258,7 @@ def test_an_icml_site_entry_is_dropped_and_counted_by_name(
 
 
 def test_a_facct_site_row_is_dropped_and_counted_by_name(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     from openproceedings.ingest import acm_table
 
@@ -239,7 +283,10 @@ def test_a_facct_site_row_is_dropped_and_counted_by_name(
     s = site(tmp_path, csv26(("1", "fair ranking revisited", "Official abstract one."),
                              ("2", "A non-archival talk", "Abstract two."), ("3", "Third", "Three.")))  # fmt: skip
     assert (s.dropped, s.surrogate) == (1, 1)
-    result = crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE, site=s)
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+        result = crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE, site=s)
+    assert line(caplog, "crossref_proceedings_mined")["site_surrogate"] == 1
+    assert line(caplog, "listing_attention")["site_surrogate"] == 1
     r = next(x for x in result.records if x.urls.doi == D1)
     assert r.title == "Fair Ranking, Revisited" and r.abstract is None
     report = result.reports[0]
@@ -282,8 +329,14 @@ def test_openreview_v2_keeps_the_note_and_counts_the_refusal(
         result = orv.crawl(client(tmp_path, server), "ICLR", 2024)
     assert result.report.abstract_surrogate == 1 == result.report.to_manifest()["abstract_surrogate"]
     assert len(refusals(caplog)) == 1
-    plain = orv.crawl(client(tmp_path / "plain", world()), "ICLR", 2024).report
+    assert line(caplog, "openreview_crawl_finished")["abstract_surrogate"] == 1
+    assert line(caplog, "openreview_crawl_attention")["abstract_surrogate"] == 1
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+        plain = orv.crawl(client(tmp_path / "plain", world()), "ICLR", 2024).report
     assert plain.abstract_surrogate == 0 and "abstract_surrogate" not in plain.to_manifest()
+    assert line(caplog, "openreview_crawl_finished")["abstract_surrogate"] == 0
+    assert no_line(caplog, "openreview_crawl_attention")
 
 
 def test_openreview_v1_keeps_the_note_and_counts_the_refusal(
@@ -295,6 +348,8 @@ def test_openreview_v1_keeps_the_note_and_counts_the_refusal(
     note["content"]["abstract"] = LONE
     with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
         crawl = iclr_2017(tmp_path, [note], [])
+    assert line(caplog, "openreview_crawl_finished")["abstract_surrogate"] == 1
+    assert line(caplog, "openreview_crawl_attention")["abstract_surrogate"] == 1
     record = by_forum(crawl)[note["id"]]
     assert record.title and record.abstract is None and not record.claims("abstract")
     assert crawl.report.abstract_surrogate == 1 == crawl.report.to_manifest()["abstract_surrogate"]
@@ -322,6 +377,8 @@ def test_ris_refuses_that_claim_takes_the_next_and_counts_it(
 
     with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest"):
         by_id, report = run(tmp_path, lone)
+    assert line(caplog, "ris_import")["abstract_surrogate"] == 2
+    assert line(caplog, "ris_import_attention")["abstract_surrogate"] == 2
     assert by_id[WORKSHOP].title and by_id[WORKSHOP].abstract is None
     assert by_id[DB].abstract == "A synthetic datasets-track abstract with extra spaces."
     assert report.abstract_surrogate == 2 == report.to_manifest()["abstract_surrogate"]
@@ -329,6 +386,21 @@ def test_ris_refuses_that_claim_takes_the_next_and_counts_it(
 
 
 # --- OpenAlex ------------------------------------------------------------------------------------------------------
+
+
+def test_the_openalex_fill_logs_each_refusal_reason(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """I1: `openalex_filled` carries the per-reason `refused` counts, so `abstract_surrogate` shows at INFO."""
+    from openproceedings.ingest.dedup import DedupResult
+
+    from tests.unit.ingest.openalex import api
+    from tests.unit.ingest.openalex.test_openalex_crawl import D1, rec
+    from tests.unit.ingest.openalex.test_openalex_fill import doi_lookup
+
+    openalex.write_extract(tmp_path, (doi_lookup(api.work("W1", D1, raw={"a\ud800": [0]}), requested=(D1,)),))
+    r = rec("op:facct:2023:doi-3593013.3594011", "FAccT", 2023, doi=D1)
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+        openalex.apply(DedupResult((r,), (), ()), tmp_path)
+    assert line(caplog, "openalex_filled")["refused"] == {"abstract_surrogate": 1}
 
 
 def test_openalex_refuses_it_under_the_shared_name() -> None:

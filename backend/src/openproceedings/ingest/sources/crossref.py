@@ -394,11 +394,14 @@ def mine_proceedings(
                                                   "site_unmatched": report.site_unmatched,
                                                   "site_ambiguous": report.site_ambiguous,
                                                   "site_dropped": report.site_dropped,
+                                                  "site_surrogate": report.site_surrogate,
                                                   "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
-    if report.no_authors or report.unnamed_authors:
+    if report.no_authors or report.unnamed_authors or report.site_surrogate:
         log.warning("listing_attention", extra={"venue": venue, "year": year, "listing": report.listing,
                                                 "no_authors": report.no_authors,
-                                                "unnamed_authors": report.unnamed_authors})  # fmt: skip
+                                                "unnamed_authors": report.unnamed_authors,
+                                                **({"site_surrogate": report.site_surrogate}
+                                                   if report.site_surrogate else {})})  # fmt: skip
     return ProceedingsResult(records, [report])
 
 

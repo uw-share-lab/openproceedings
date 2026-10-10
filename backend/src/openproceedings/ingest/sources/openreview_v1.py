@@ -907,6 +907,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
                     "conflicts": len(report.conflicts), "twins_linked": report.twins_linked,
                     "title_control_characters": report.title_control_characters,
                     "abstract_control_characters": report.abstract_control_characters,
+                    "abstract_surrogate": report.abstract_surrogate,
                     "requests": client.requests, "cached": client.cached,
                     "cache_incompatible": incompatible,
                     "ms": elapsed_ms(began, time.monotonic)})  # fmt: skip
@@ -921,6 +922,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
         or report.skipped[DUPLICATE_SUBMISSION]
         or report.skipped["invalid"]
         or incompatible
+        or report.abstract_surrogate
     ):
         log.warning("openreview_crawl_attention",
                     extra={"api": "v1", "venue": venue, "year": year, "unknown_track": report.unknown_track,
@@ -929,7 +931,9 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
                            "duplicate": report.skipped["duplicate"],
                            "duplicate_submission": report.skipped[DUPLICATE_SUBMISSION],
                            "invalid": report.skipped["invalid"],
-                           "cache_incompatible": incompatible})  # fmt: skip
+                           "cache_incompatible": incompatible,
+                           **({"abstract_surrogate": report.abstract_surrogate}
+                              if report.abstract_surrogate else {})})  # fmt: skip
     return Crawl(tuple(sorted(records.values(), key=lambda r: r.id)), report)
 
 

@@ -324,8 +324,9 @@ the OJS, AAAI 1980–2008, Crossref and FAccT site rows on 2026-10-09 and 2026-1
    **Lone UTF-16 surrogates in an abstract (TASK-229).** JSON can carry a lone surrogate (`"\ud800"`, U+D800–U+DFFF
    on its own), which no record may hold (`record._utf8`, `record.lone_surrogate`). Every source has one rule for
    it: **the abstract claim is refused, the paper is kept on its title with no abstract from that source, and the
-   source's report counts it as `abstract_surrogate`** (listed in a manifest only when above 0; a DEBUG
-   `abstract_surrogate_refused` line names the source and the record or page row, never the text). The crawl
+   source's report counts it as `abstract_surrogate`** (listed in a manifest only when above 0; always on the
+   source's INFO end line, and when above 0 in its aggregate attention WARNING, logging-standards §Crawl lines; a
+   DEBUG `abstract_surrogate_refused` line names the source and the record or page row, never the text). The crawl
    never stops for it and the abstract is never silently missing (decision-036's "nothing is silent"). Where the
    rule lives, per source:
 
@@ -336,7 +337,7 @@ the OJS, AAAI 1980–2008, Crossref and FAccT site rows on 2026-10-09 and 2026-1
    | OJS (AAAI, AIES, IASEAI) | `common.clean_abstract` | `abstract_surrogate`, of `abstract_missing` | the whole paper skipped as `invalid` |
    | Official ICML pages (dblp, ICML 1988–2012) | `common.clean_abstract` in `icml_sites.read_year` | `site_surrogate`, of `site_dropped`, in the dblp year report | the whole paper skipped as `invalid` |
    | Official FAccT pages (Crossref) | `common.clean_abstract` in `facct_site.read_year` | `site_surrogate`, of `site_dropped`, in the Crossref report | `invalid_record`: the crawl stopped |
-   | RIS import | `ris._abstract` | `abstract_surrogate` in the import report; the next claim in source order is taken, as for an empty one | the import stopped |
+   | RIS import | `ris._abstract` | `abstract_surrogate` in the import report; the next claim in source order is taken, as for an empty one. RIS counts the records with a refused claim, not missing abstracts: a record whose later claim gave it an abstract is still counted. | the import stopped |
    | OpenAlex fill | `common.clean_abstract` in `openalex.abstract_of` | `refused["abstract_surrogate"]` in the fill report | `abstract_unusable` (milestone C, before release) |
    | ICLR archive, dblp AAAI, Crossref (its own works) | no abstract | n/a | n/a |
 

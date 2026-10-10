@@ -327,6 +327,10 @@ class ListingReport(Report):
                 self.abstract_surrogate += 1
                 log_surrogate(self.source, record.id)
 
+    def surrogate_attention(self) -> dict[str, int]:
+        """`abstract_surrogate` for the listing's `listing_attention` WARNING when above 0 (TASK-229), else nothing."""
+        return {"abstract_surrogate": self.abstract_surrogate} if self.abstract_surrogate else {}
+
     @property
     def count_ok(self) -> bool:
         """Did we parse every entry the listing says it has? (None stated: nothing to compare with.)"""
