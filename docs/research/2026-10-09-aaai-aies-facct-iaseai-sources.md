@@ -265,7 +265,8 @@ and recorded (scrubbed, trimmed) under `backend/tests/fixtures/http/facct_site/`
 - **robots.txt** (https://facctconference.org/robots.txt): `User-agent: *` with an empty `Disallow:`, and a
   sitemap line. Everything is allowed.
 - **2025 final CSV** (https://facctconference.org/static/docs/facct2025-final.csv), served as
-  `application/octet-stream`, no byte-order mark, `\n` line ends. Columns `TYPE, ID, ABSTRACT, AUTHOR, TITLE, URL,
+  `application/octet-stream`, no byte-order mark, `\r\n` row ends (217 of them, and a few bare `\n` inside quoted
+  fields; the census's first reading said `\n`, corrected by Task 10). Columns `TYPE, ID, ABSTRACT, AUTHOR, TITLE, URL,
   URL-OLD`. **217 rows** = 206 `archival` + 11 `nonarchival`; `ID` distinct; every row has an abstract. **206 rows
   have a `10.1145/3715275.` DOI in `URL`** (`https://doi.org/…`), exactly the archival rows, and exactly the 206
   Crossref DOIs. The 11 non-archival rows have an arXiv, SSRN or empty `URL` (5 empty). `AUTHOR` is BibTeX style,
@@ -290,8 +291,10 @@ and recorded (scrubbed, trimmed) under `backend/tests/fixtures/http/facct_site/`
   Every entry has exactly one `Paper` DOI link, but they name 180 distinct DOIs: "Seeing without Looking: Analysis
   Pipeline for Child Sexual Abuse Datasets" (`id="295"`) links 3531146.3533138, which is "Robots Enact Malignant
   Stereotypes" (`id="314"`); its own DOI, 3531146.3534636, is linked nowhere. A DOI join would mis-attach that
-  abstract, which is why the 2022 join is by title. An exact title join leaves 11 of the 181 unmatched (wording
-  differences). The recorded fixture keeps 20 entries, among them ids 295 and 314, an `<h5>` entry and the spaced id
+  abstract, which is why the 2022 join is by title. An exact title join leaves 12 of the 181 unmatched (11 wording
+  differences, found in the census, and one token-contract case found when the join was built: "Pareto-Improving
+  Data-Sharing" has `∗` (U+2217) on the page and `✱` (U+2731) in Crossref, and the token contract keeps the first as
+  the token `ast` and drops the second, where the census's case-and-punctuation fold dropped both). The recorded fixture keeps 20 entries, among them ids 295 and 314, an `<h5>` entry and the spaced id
   form `id = "17"`.
 
 ## AAAI 1980–2008 (dblp)
@@ -617,3 +620,18 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
 - https://proceedings.mlr.press/v81/ and https://proceedings.mlr.press/ (2026-10-10)
 - OpenAlex
 - the pinned dblp release `dblp-2026-10-03.xml.gz`
+
+## Milestone B as built: the official FAccT abstracts and the totals (2026-10-10)
+
+The join is exact and one to one (`sources/facct_site.py`): 2022 and 2026 by exact title key, 2025 by DOI.
+
+| Year | Join | Page entries | Records | Attached | Unmatched | Records without an abstract |
+|---|---|---|---|---|---|---|
+| 2022 | title | 181 | 181 | 169 | 12 | 12 |
+| 2025 | DOI | 217 | 206 | 206 | 11 (the non-archival rows) | 0 |
+| 2026 | title | 325 | 314 | 298 | 27 (11 non-archival, 16 worded differently) | 16 |
+
+Totals as built: FAccT 1,230 records (1,239 ACM DOIs, minus 26 FAccT 2020 tutorial and CRAFT rows, plus 17 from PMLR
+v81); AIES 2018–2023 575 records; AAAI 1980–2008 4,730 records in 23 held years. Crossref carries no section data, so
+AIES 2018–2023's student abstracts and keynotes (141 entries of two pages or fewer, listed above) are in `main`, where
+from 2024 OJS labels student abstracts `student_abstract`.

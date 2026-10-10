@@ -475,6 +475,23 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
             "bibliography read from one pinned file; decision-049). "
             f"Its {sum(int(x['records']) for x in aaai):,} records have no abstract (dblp holds none)."
         )
+    crossref = manifest.get("sources", {}).get("crossref", {}).get("listings", [])
+    for venue in sorted({str(x["venue"]) for x in crossref}):
+        mine = [x for x in crossref if x["venue"] == venue]
+        held = sorted({int(x["year"]) for x in mine})
+        records = sum(int(x["records"]) for x in mine)
+        attached = sum(int(x.get("abstract_attached", 0)) for x in mine)
+        what = (
+            f"{attached:,} with an abstract, each from an official FAccT page (only 2022, 2025 and 2026 have "
+            "one); the rest are title-only"
+            if venue == "FAccT"
+            else f"{attached:,} with an abstract (title-only); Crossref carries no section data, so student "
+            "abstracts and keynotes are in `main` (OJS labels student abstracts from 2024)"
+        )
+        out.append(
+            f"- {venue} {held[0]}–{held[-1]}: from Crossref's records of the ACM proceedings (decision-049): "
+            f"{records:,} records, {what}."
+        )
     return out
 
 

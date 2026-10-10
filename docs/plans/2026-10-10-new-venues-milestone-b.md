@@ -41,6 +41,10 @@ Every record is built from claims (`common.record_from_claims`) and replayed off
   - official-count rows were added;
   - the TASK-218 owner decisions are applied.
   Where task text names line numbers, find the code by name.
+- **Correction (Task 8, 2026-10-10): AAAI was not held in 1995 either.** The not-held years are 1981, 1985, 1989,
+  1995, 2001, 2003 and 2009, so AAAI 1980–2008 has 23 held years (23 listings, 4,730 records). Where this plan lists six
+  years or 24 listings it is superseded; the shipped `dblp_aaai.toml` and spec 01 are as built. FAccT is 1,230 records
+  (1,239 ACM DOIs, minus 26 FAccT 2020 not-paper rows, plus 17 from PMLR v81), not the brief's 1,341 + 575.
 - e2e runs on `OP_E2E_API_PORT=8100 OP_E2E_WEB_PORT=3100` (the owner's dev servers hold :8000 and :3000).
 
 ## Planner decisions (where the spec is silent; for the controller to rule on)

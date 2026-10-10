@@ -55,8 +55,9 @@ function yearClause(from: number, to: number): string {
 
 /** "Years indexed: …", and when the venues cover different years, why that matters and what compares them: the
  * `year:` clause of the years every venue holds, or, when no year is held by all, a per-venue clause (copy deck
- * CV-7; decision-047 and decision-049: NeurIPS from 1987, ICML from 1988, ICLR from 2013, AAAI from 2010, AIES
- * 2024–2025, IASEAI 2026). Display only: the clause is a suggestion the reader may add to their query. */
+ * CV-7; decision-047 and decision-049: NeurIPS from 1987, ICML from 1988, ICLR from 2013, AAAI from 1980 (not
+ * held in seven of its years, listed under "none in"), AIES and FAccT from 2018, IASEAI 2026). Display only: the
+ * clause is a suggestion the reader may add to their query. */
 function YearSpans({ venueYears }: { venueYears: readonly VenueYear[] }) {
   const spans = yearSpans(venueYears);
   if (spans.length === 0) return null;

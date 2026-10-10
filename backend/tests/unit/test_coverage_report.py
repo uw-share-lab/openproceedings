@@ -918,3 +918,27 @@ def test_the_scope_names_each_dblp_venue_by_its_own_listings() -> None:
     assert "- ICML 1990–1990: from the pinned dblp snapshot release" in text and "ICML 1986" not in text
     assert "- AAAI 1986–1986: from the pinned dblp snapshot release" in text and "decision-049" in text
     assert "Its 7 records have no abstract (dblp holds none)." in text and "of its 49 records" in text
+
+
+def test_the_scope_says_what_the_crossref_years_rest_on_and_that_aies_has_no_sections() -> None:
+    from openproceedings.eval.coverage_report import _scope
+
+    cov = {"venue_years": [{"venue": "FAccT", "year": 2022, "records": 1, "tracks": [{"track": "main"}]}]}
+    manifest = {"sources": {"crossref": {"listings": [
+        {"venue": "AIES", "year": 2018, "records": 78},
+        {"venue": "AIES", "year": 2019, "records": 91},
+        {"venue": "FAccT", "year": 2022, "records": 181, "abstract_attached": 169},
+        {"venue": "FAccT", "year": 2023, "records": 153},
+    ]}}}  # fmt: skip
+    text = "\n".join(_scope(cov, manifest))
+    assert (
+        "- AIES 2018–2019: from Crossref's records of the ACM proceedings (decision-049): 169 records, 0 with an"
+        in text
+    )
+    assert "Crossref carries no section data, so student abstracts and keynotes are in `main`" in text
+    assert (
+        "- FAccT 2022–2023: from Crossref's records of the ACM proceedings (decision-049): 334 records, 169 with"
+        in text
+    )
+    assert "only 2022, 2025 and 2026 have one" in text
+    assert "Crossref" not in "\n".join(_scope(cov, {"sources": {}}))

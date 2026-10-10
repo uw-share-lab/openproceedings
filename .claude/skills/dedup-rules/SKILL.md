@@ -189,6 +189,19 @@ safe direction.
   are parsed by `ingest/urls.py`. An `iclr_archive` proceedings claim is source-aware: its canonical target
   recomputes the OpenReview forum id or `iclr-<sha256(target)[:32]>`, so an arbitrary arXiv URL from another
   source cannot accidentally become ICLR identity evidence.
+- **The newer venues' ids name themselves too** (decision-049): an `ojs-<id>` from the OJS article URL, a
+  `doi-<toc>.<n>` (FAccT, AIES 2018–2023) from the record's doi.org link when its toc is a row of
+  `acm_proceedings.toml`, a `dblp-<key>` (ICML, AAAI 1980–2008) from its dblp record page, and FAccT 2018's
+  `pmlr-v81-<key>` from its PMLR link (`urls.native`, through the venue-tagged `volumes.PMLR_NATIVE_VOLUMES`).
+  `crossref` and `facct_site` are not in `PROCEEDINGS_SOURCES`, as `dblp` and `ojs` are not: no other source holds
+  their venue-years, so reconcile never judges them and their records are still listings by their ids.
+- **Abstract attribution** (`dedup.attribution`, spec 04 §Exports): an `ojs`, `crossref` or `facct_site` claim's url
+  is an API page (an OAI resumption-token page, a Crossref work) or a listing of every paper (a FAccT CSV), so each
+  is credited to the record's own `urls.proceedings` (the article page, the DOI link), never to the claim's url. A
+  new source ships the self-naming and the attribution tests before its first real run.
+- **The takedown and rekey link scopes a dblp id by venue** (`takedowns.global_native`): `aaai:dblp-<key>`, because
+  an ICML and an AAAI dblp key can coincide; a `doi-` and an `ojs-` id are global, and a `nips-`/`iclr-` hash never
+  links two ids.
 
 ## Combining a merge
 - The survivor's id uses the OpenReview forum id if any side has one (`.claude/skills/record-schema/SKILL.md`).

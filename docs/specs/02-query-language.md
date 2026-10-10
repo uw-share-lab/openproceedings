@@ -255,10 +255,10 @@ The UI toggles edit these same clauses; they are not a separate state.
   publishes every submission, and a floor for NeurIPS and ICML, which publish rejected papers only when
   the authors opt in (01 §Status handling). `status:(accepted OR rejected)` or removing the default brings
   them into the result set. The index covers each venue from its first year a source holds: NeurIPS from 1987, ICML from 1988,
-  ICLR from 2013, AAAI from 2010, AIES from 2024, IASEAI from 2026 (decisions 047 and 049; 047 superseded decision-013's 2013 floor); a year range is always a `year:`
-  clause the user writes, never a default. Before 2013 only NeurIPS and ICML are indexed, so a search without
-  a `year:` clause compares venues over different year spans (AAAI from 2010, AIES from 2024 and IASEAI 2026 until
-  milestone B of the [new-venues design](../plans/2026-10-09-new-venues-design.md)).
+  ICLR from 2013, AAAI from 1980, AIES and FAccT from 2018, IASEAI from 2026 (decisions 047 and 049; 047 superseded decision-013's 2013 floor); a year range is always a `year:`
+  clause the user writes, never a default. Before 2013 only NeurIPS, ICML and AAAI are indexed, so a search without
+  a `year:` clause compares venues over different year spans (AAAI from 1980, AIES and FAccT from 2018 and IASEAI 2026;
+  the [new-venues design](../plans/2026-10-09-new-venues-design.md)).
 - **The tracks AAAI, AIES and IASEAI add are excluded by default** (decision-049, owner decision of 2026-10-09). The
   default is unchanged, so `student_abstract`, `consortium`, `demo`, `iaai`, `eaai` and an AAAI `other` section are
   not in a default result: each is indexed with its real track, and the exclusion accounting counts it in its
