@@ -639,63 +639,93 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
 - OpenAlex
 - the pinned dblp release `dblp-2026-10-03.xml.gz`
 
-## AAAI 1993–2008 sections (TASK-224/225/226, 2026-10-10)
+## AAAI 1993–2008 sections (TASK-224/225/226, decision-050, 2026-10-10)
 
 TASK-225's evidence found 767 AAAI main-track entries of 1993–2008 of two pages or fewer, mostly in trailing
 blocks. The official source for their sections is the AAAI Digital Library contents page
-`http://www.aaai.org/Library/AAAI/aaai<yy>contents.php`, read from Wayback copies of January 2013 (the live site no
-longer serves it), which gives each section heading and each paper's start page; the IAAI contents pages
-`.../Library/IAAI/iaai<yy>contents.php` give the IAAI papers 1996–2000, 2004 and 2005 print in the AAAI volumes (Wayback copies of 2012–2013). Every
-dblp entry was joined to the contents by start page and title (762 of the 767 matched; the other five are named
-below), and each section became a `[[section]]` row of `dblp_aaai.toml`: a page range from the lowest dblp start
-page to the highest dblp end page of the entries the contents list in it.
+`http://www.aaai.org/Library/AAAI/aaai<yy>contents.php` (the live site no longer serves it), read from Wayback
+captures of 2013-01-17/18, which give each section heading and each paper's start page; the IAAI contents pages
+`.../Library/IAAI/iaai<yy>contents.php` give the IAAI papers that 1996–2000, 2004 and 2005 print in the AAAI volumes
+(captures of 2012-06-05, 2013-01-18 and, for 2000, 2013-10-04). Every capture is in the table below; each
+`[[section]]` row of `dblp_aaai.toml` cites its own in `source`. Every dblp entry was joined to the contents by start
+page and title (all but Sultanik05, Thornton05 and WangL05 matched), and each section became a `[[section]]` row: a
+page range from the lowest dblp start page to the highest dblp end page of the entries the contents list in it.
+
+| Page | Capture | Captured | Evidences |
+|---|---|---|---|
+| 1993 AAAI contents | https://web.archive.org/web/20130118005519/http://www.aaai.org/Library/AAAI/aaai93contents.php | 2013-01-18 | the year's sections and start pages (135 entries; dblp's main keys hold 135) |
+| 1994 AAAI contents | https://web.archive.org/web/20130118002450/http://www.aaai.org/Library/AAAI/aaai94contents.php | 2013-01-18 | the year's sections and start pages (302 entries; dblp's main keys hold 302) |
+| 1996 AAAI contents | https://web.archive.org/web/20130118002805/http://www.aaai.org/Library/AAAI/aaai96contents.php | 2013-01-18 | the year's sections and start pages (269 entries; dblp's main keys hold 289) |
+| 1997 AAAI contents | https://web.archive.org/web/20130118001218/http://www.aaai.org/Library/AAAI/aaai97contents.php | 2013-01-18 | the year's sections and start pages (181 entries; dblp's main keys hold 213) |
+| 1998 AAAI contents | https://web.archive.org/web/20130118000422/http://www.aaai.org/Library/AAAI/aaai98contents.php | 2013-01-18 | the year's sections and start pages (184 entries; dblp's main keys hold 206) |
+| 1999 AAAI contents | https://web.archive.org/web/20130118002324/http://www.aaai.org/Library/AAAI/aaai99contents.php | 2013-01-18 | the year's sections and start pages (176 entries; dblp's main keys hold 193) |
+| 2000 AAAI contents | https://web.archive.org/web/20130118002858/http://www.aaai.org/Library/AAAI/aaai00contents.php | 2013-01-18 | the year's sections and start pages (215 entries; dblp's main keys hold 233) |
+| 2002 AAAI contents | https://web.archive.org/web/20130118002719/http://www.aaai.org/Library/AAAI/aaai02contents.php | 2013-01-18 | the year's sections and start pages (181 entries; dblp's main keys hold 180) |
+| 2004 AAAI contents | https://web.archive.org/web/20130118001614/http://www.aaai.org/Library/AAAI/aaai04contents.php | 2013-01-18 | the year's sections and start pages (171 entries; dblp's main keys hold 194) |
+| 2005 AAAI contents | https://web.archive.org/web/20130118001834/http://www.aaai.org/Library/AAAI/aaai05contents.php | 2013-01-18 | the year's sections and start pages (268 entries; dblp's main keys hold 325) |
+| 2006 AAAI contents | https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php | 2013-01-17 | the year's sections and start pages (368 entries; dblp's main keys hold 385) |
+| 2007 AAAI contents | https://web.archive.org/web/20130117223503/http://www.aaai.org/Library/AAAI/aaai07contents.php | 2013-01-17 | the year's sections and start pages (369 entries; dblp's main keys hold 368) |
+| 2008 AAAI contents | https://web.archive.org/web/20130118002504/http://www.aaai.org/Library/AAAI/aaai08contents.php | 2013-01-18 | the year's sections and start pages (357 entries; dblp's main keys hold 356) |
+| 1996 IAAI contents | https://web.archive.org/web/20120605045614/http://www.aaai.org/Library/IAAI/iaai96contents.php | 2012-06-05 | the IAAI papers printed in the AAAI volume (18 entries) |
+| 1997 IAAI contents | https://web.archive.org/web/20120605040048/http://www.aaai.org/Library/IAAI/iaai97contents.php | 2012-06-05 | the IAAI papers printed in the AAAI volume (32 entries) |
+| 1998 IAAI contents | https://web.archive.org/web/20120605045432/http://www.aaai.org/Library/IAAI/iaai98contents.php | 2012-06-05 | the IAAI papers printed in the AAAI volume (22 entries) |
+| 1999 IAAI contents | https://web.archive.org/web/20120605045227/http://www.aaai.org/Library/IAAI/iaai99contents.php | 2012-06-05 | the IAAI papers printed in the AAAI volume (17 entries) |
+| 2000 IAAI contents | https://web.archive.org/web/20131004120945/http://www.aaai.org/Library/IAAI/iaai00contents.php | 2013-10-04 | the IAAI papers printed in the AAAI volume (17 entries) |
+| 2004 IAAI contents | https://web.archive.org/web/20130118001753/http://www.aaai.org/Library/IAAI/iaai04contents.php | 2013-01-18 | the IAAI papers printed in the AAAI volume (24 entries) |
+| 2005 IAAI contents | https://web.archive.org/web/20130118002518/http://www.aaai.org/Library/IAAI/iaai05contents.php | 2013-01-18 | the IAAI papers printed in the AAAI volume (18 entries) |
+| 2005 demo paper pages | https://web.archive.org/web/20130312180408/http://www.aaai.org/Library/AAAI/2005/isd05-002.php (isd05-001 … 018 captured 2013-03-12; 019 … 022 on 2006-10-05, e.g. https://web.archive.org/web/20061005161718/http://www.aaai.org/Library/AAAI/2005/isd05-020.php) | 2013-03-12, 2006-10-05 | the page numbers of the 22 Intelligent Systems Demonstrations, pp. 1670–1713 |
+| 2005 robot paper pages | https://web.archive.org/web/20130312181902/http://www.aaai.org/Library/AAAI/2005/rbc05-001.php (rbc05-001 … 015) | 2013-03-12 | the page numbers of the 15 Mobile Robot Competition and Exhibition entries, pp. 1716–1744 |
 
 | Section (variants) | Track | Years | Records |
 |---|---|---|---|
 | Student Abstracts | `student_abstract` | 1994, 1996–2000, 2002, 2004–2008 | 399 |
 | (SIGART/AAAI) Doctoral Consortium | `consortium` | 1996–2000, 2002, 2004–2008 | 158 |
 | Video Abstracts (1993), Video Program (1994), Intelligent Systems Demonstrations | `demo` | 1993, 1994, 1999, 2000, 2002, 2004–2008 | 127 |
-| IAAI Case Studies (1996), Deployed and Emerging Applications | `iaai` | 1996–2000, 2002, 2004–2008 | 231 |
-| Robot Competition and Exhibition (Abstracts) | `other` | 1996, 1997, 1999, 2000, 2005–2007 | 64 |
+| IAAI Case Studies (1996), Deployed and Emerging Applications | `iaai` | 1996–2000, 2002, 2004–2008 | 232 |
+| (Mobile) Robot Competition and Exhibition (Abstracts) | `other` | 1996, 1997, 1999, 2000, 2005–2007 | 64 |
+| NECTAR Papers, Senior Member Papers | `other` | 2006–2008 | 91 |
+| AAAI Member Abstracts (no pages in dblp: 18 `[[track]]` rows) | `other` | 2006 | 18 |
 | Invited Talks, two pages or fewer | `[[not_paper]]`, kind `invited talk` | 1993, 1996–1998, 2000 | 12 removed |
 
 Rulings (2026-10-10, the controller for the owner): robot competition and exhibition entries are `other` (event
-reports, not system demos, as the 2010+ SPOT section); the 15 longer invited papers (1996: 6, 1997: 3, 2000: 6)
-stay `main` as full papers; the 2008 Short Papers section is a technical-program section and stays `main` (11), as
-does GaurJH97 (a full paper dblp gives only a start page). Invited-talk sections have no range (their short talks are rows; the 1997 contents print
-ArkinF97 at p. 748, dblp at 755). 2006 Student Abstracts starts at 1853 (AhmadiS06a's page; dblp's pages field is
-`1853-`).
+reports, not system demos, as the 2010+ SPOT section); NECTAR and Senior Member Papers are `other`, as the owner
+decided for the same sections from 2010 (TASK-218, `ojs_sections.toml`); invited entries of more than two pages stay
+`main` as full papers (e.g. Kambhampati96a, Hinton00, Epstein99, Geffner02, DomingosKPRS06, Walsh07); the 2008 Short
+Papers section is a technical-program section and stays `main` (11), as does GaurJH97 (a full paper dblp gives only a
+start page). Invited-talk sections have no range (their short talks are rows; the 1997 contents print ArkinF97 at
+p. 748, dblp at 755). 2006 Student Abstracts starts at 1853 (AhmadiS06a's page; dblp's pages field is `1853-`).
 
-- **Weaker evidence, 2005.** `aaai05contents.php` has no demo or robot section in any capture (2006–2021). The
-  37 entries on pp. 1670–1744 are placed by aaai.org's own paper pages, `2005/isd05-NNN.php` (Intelligent Systems
-  Demonstrations, pp. 1670–1713) and `2005/rbc05-NNN.php` (Robot Competition and Exhibition, pp. 1716–1744): the
-  section comes from the file prefix only, which follows the page's `sa05-`/`dc05-` convention. Accepted, labelled
-  weaker in the table's comment.
-- **dblp page typos.** `BlackH06`'s pages `855-1856` (for 1855–1856) put it outside its range, so a `[[track]]` row
+- **2005's demonstrations and robot entries.** `aaai05contents.php` lists both sections, "Intelligent Systems
+  Demonstrations" (all 22 `isd05-` entries) and "Mobile Robot Competition and Exhibition" (all 15 `rbc05-`
+  entries), but prints no page numbers for them. The ranges (pp. 1670–1713 and 1716–1744) come from the entries' own
+  aaai.org paper pages, whose pages are contiguous; the section itself is the contents page's.
+- **dblp page oddities.** `BlackH06`'s pages `855-1856` (for 1855–1856) put it outside its range, so a `[[track]]` row
   gives it `student_abstract`. `LimCKO00` (`1020-1015`) and `HanF08` (`1802-1893`) start inside their ranges and
-  need no row; `AhmadiS06a` (`1853-`) reads as start page 1853.
-- **Range-covered entries the contents don't list:** `BraunlKLM96` (p. 1351, robot abstracts), `Taylor96` (p. 1411,
-  student abstracts); `Murphy96`
-  is listed under a shorter title; `Hoz-WeissKWS02` is listed with a misprinted page (1174). The ranges also move
-  six entries of three pages or more that the contents list in the same sections (`NumaoTN02a`, `ZhouH02`,
-  `TaylorS06`, `ValenteJV06`, `Wang06`, `HanF08`).
+  need no row; `AhmadiS06a` (`1853-`) reads as start page 1853. 2006's 18 AAAI Member Abstracts have no pages field
+  at all, so each has a `[[track]]` row (`other`); a main-key entry of a year with sections that has no readable start
+  page and no row now stops the replay (`unplaced_page`), so the next one can't fall to `main` unseen.
+- **Entries the contents print without a page, or under another title, which the ranges hold:** `BraunlKLM96`
+  (p. 1351, robot abstracts), `Taylor96` (p. 1411, student abstracts), `BarishKCMPS00` (pp. 980–987, the first IAAI
+  2000 Emerging Applications entry, printed without a page number); `Murphy96` is listed under a shorter title;
+  `Hoz-WeissKWS02` is listed with a misprinted page (1174). The ranges also move six entries of three pages or more
+  that the contents list in the same sections (`NumaoTN02a`, `ZhouH02`, `TaylorS06`, `ValenteJV06`, `Wang06`,
+  `HanF08`).
 - **Unresolved.** `Sultanik05` (pp. 1628–1629) and `Thornton05` (pp. 1630–1631) sit between the last listed
-  student abstract and the Doctoral Consortium but are on no aaai.org page (Wayback holds `sa05-001`…`022` only);
-  they stay `main`. So does `WangL05` (pp. 1632–1635), four pages, in the same gap, and `BarishKCMPS00` (pp. 980–987),
-  between two IAAI 2000 papers but on no IAAI page (it skips from p. 973 to 988): the 2000 IAAI range is split
-  around it (937–978, 988–1059).
-- **IAAI 1996–1999 (round 2).** The AAAI contents pages of these years leave out the IAAI papers printed in the
-  volume (blocks of 18, 32, 22 and 17 entries no AAAI heading lists). The IAAI contents pages (`iaai96contents.php`
-  … `iaai99contents.php`, Wayback captures of 2012-06-05) list exactly those entries: every dblp entry in each
-  range matched an IAAI entry by start page and title (title ratio ≥ 0.8 for all), and each IAAI entry matched one
-  dblp entry. The one page difference: 1997's `DevA97` starts at p. 853 in dblp, p. 852 on the IAAI page (same
-  title); the range starts at dblp's 853. Ranges: 1996 pp. 1421–1587 (Case Studies), 1997 pp. 853–1085, 1998
-  pp. 1013–1166, 1999 pp. 778–896. Every IAAI year of 1996–2008 is resolved.
+  student abstract and the Doctoral Consortium but are on no aaai.org page (Wayback holds `sa05-001`…`022` only); so
+  is `WangL05` (pp. 1632–1635), four pages, in the same gap. They stay `main`: counted as technical-program papers
+  for want of evidence, not on evidence.
+- **IAAI 1996–1999.** The AAAI contents pages of these years leave out the IAAI papers printed in the volume (blocks
+  of 18, 32, 22 and 17 entries no AAAI heading lists). The IAAI contents pages list exactly those entries: every
+  dblp entry in each range matched an IAAI entry by start page and title (title ratio ≥ 0.8 for all), and each IAAI
+  entry matched one dblp entry. The one page difference: 1997's `DevA97` starts at p. 853 in dblp, p. 852 on the
+  IAAI page (same title); the range starts at dblp's 853. Ranges: 1996 pp. 1421–1587 (Case Studies), 1997
+  pp. 853–1085, 1998 pp. 1013–1166, 1999 pp. 778–896. Every IAAI year of 1996–2008 is resolved.
 
 **Result** (the replay test `backend/tests/unit/ingest/test_track_rules_replay.py` pins these counts over the
-pinned release): of the 4,689 main-volume entries, 33 are not-paper rows and 979 take a section's track, so AAAI
-1980–2008 is 4,709 records: 3,677 `main`, 399 `student_abstract`, 158 `consortium`, 127 `demo`, 231 `iaai`, 64
-`other`, 53 `workshop`. Per year:
+pinned release): of the 4,689 main-volume entries, 33 are not-paper rows and 1,089 take a section's track, so AAAI
+1980–2008 is 4,709 records (4,730 before): 3,567 `main`, 399 `student_abstract`, 158 `consortium`, 127 `demo`, 232
+`iaai`, 173 `other`, 53 `workshop`. AIES 2018–2023's 108 `student_abstract` records are all inferred from page
+position; no official contents page confirms any of them. Per year (AAAI):
 
 | Year | student_abstract | consortium | demo | iaai | other | not-paper rows added |
 |---|---|---|---|---|---|---|
@@ -706,13 +736,13 @@ pinned release): of the 4,689 main-volume entries, 33 are not-paper rows and 979
 | 1997 | 30 | 13 | | 32 | 16 | 3 |
 | 1998 | 24 | 16 | | 22 | | 1 |
 | 1999 | 29 | 16 | 17 | 17 | 4 | |
-| 2000 | 38 | 12 | 12 | 17 | 2 | 2 |
+| 2000 | 38 | 12 | 12 | 18 | 2 | 2 |
 | 2002 | 17 | 13 | 10 | 18 | | |
 | 2004 | 17 | 12 | 21 | 24 | | |
 | 2005 | 22 | 16 | 22 | 18 | 15 | |
-| 2006 | 25 | 13 | 13 | 21 | 12 | |
-| 2007 | 42 | 17 | 9 | 22 | 6 | |
-| 2008 | 35 | 15 | 10 | 22 | | |
+| 2006 | 25 | 13 | 13 | 21 | 77 | |
+| 2007 | 42 | 17 | 9 | 22 | 26 | |
+| 2008 | 35 | 15 | 10 | 22 | 24 | |
 
 ## Milestone B as built: the official FAccT abstracts and the totals (2026-10-10)
 
@@ -726,5 +756,5 @@ The join is exact and one to one (`sources/facct_site.py`): 2022 and 2026 by exa
 
 Totals as built: FAccT 1,230 records (1,239 ACM DOIs, minus 26 FAccT 2020 tutorial and CRAFT rows, plus 17 from PMLR
 v81); AIES 2018–2023 575 records; AAAI 1980–2008 4,730 records in 23 held years. Since TASK-224/225/226: AIES
-2018–2023 557 records (449 `main`, 108 `student_abstract`), AAAI 1980–2008 4,709 records (3,677 `main`; §AAAI
+2018–2023 557 records (449 `main`, 108 `student_abstract`), AAAI 1980–2008 4,709 records (3,567 `main`; §AAAI
 1993–2008 sections).

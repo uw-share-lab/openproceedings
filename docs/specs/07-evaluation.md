@@ -236,8 +236,9 @@ in AAAI 2026's listed 4,921 but is never a record (spec 01, `[[unavailable]]`).
 "none in" list saying so; AIES 2018–2023; FAccT 2018–2026), and the report's database scope names where each comes from:
 the pinned dblp release for AAAI (4,709 records, none with an abstract), Crossref's records of the ACM proceedings
 for FAccT 2019–2026 and AIES 2018–2023, and, for FAccT, how many abstracts the official pages gave (2022 169 of 181,
-2025 206 of 206, 2026 298 of 314). Crossref carries no section data, so AIES 2018–2023's student abstracts and keynotes
-are placed by page position (`student_abstract` cells and not-paper rows, TASK-224), which the scope line says. **None of these cells is gated, and no row was added to `official_counts.py`.** Each count is the
+2025 206 of 206, 2026 298 of 314). Crossref carries no section data, so each AIES 2018–2023 paper's track comes from its page
+position (`student_abstract` cells), and the scope line counts each venue's entries that are not papers (keynotes,
+invited talks, panels, tutorials: counted, not indexed; decision-050). **None of these cells is gated, and no row was added to `official_counts.py`.** Each count is the
 proceedings' own contents (Crossref's DOIs, PMLR's index, dblp's keys) checked against the table in `ingest/`, which is
 the crawl stopping on a mismatch (spec 01 §Sources), not an independent statement of accepted papers, so these cells
 are `accepted` by construction (statuses indexed: `accepted`) and cannot show a missing paper: a `Δ —` is no

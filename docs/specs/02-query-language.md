@@ -266,7 +266,7 @@ The UI toggles edit these same clauses; they are not a separate state.
   (`track:(main OR iaai)`), and saved searches' canonical strings are unaffected. AAAI's special tracks, Journal
   Track and AIES's and IASEAI's main papers are `main`, so a default search includes them. **AIES by era:**
   2018–2023 comes from Crossref, which labels no section, so its student abstracts are `student_abstract` by a page
-  range per year and its keynotes are not-paper rows (TASK-224, inferred from page position), and 2024–2025's
+  range per year and its keynotes are counted, not indexed (TASK-224, inferred from page position), and 2024–2025's
   student abstracts are `student_abstract` by their OJS section: a default search excludes both eras' alike
   (spec 01 `main` and `student_abstract` rows). AAAI 1993–2008's student abstracts, doctoral consortium,
   demonstrations, IAAI papers and robot abstracts likewise take their tracks from the official contents (TASK-226). For these venues `main`
