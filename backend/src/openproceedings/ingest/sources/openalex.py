@@ -284,6 +284,9 @@ EXTRACT_FORMAT = "1"
 EXTRACT_DIR = "extract"  # <cache>/openalex/extract/<sha256>.json
 MARKER = "openalex"  # <cache>/openalex/crawls/openalex.json names the extract a build replays
 _SHA = re.compile(r"[0-9a-f]{64}")
+# bytes of an extract `load_extract` will read: about 7,000 records' lookups (each work a few kB of inverted index)
+# come to tens of MB, so 1 GiB is generous; a larger file is refused unread (`crawl_file_invalid`)
+MAX_EXTRACT = 1 << 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,9 +391,10 @@ def _lookup_from(raw: Any) -> Lookup:
 
 def load_extract(cache: Path) -> Extract | None:
     """The extract the marker names, from the cache alone, its bytes re-hashed (guarantee 4): None when no crawl
-    wrote a marker (no fill). A marker that is unreadable or names no extract, or an extract that is malformed,
-    is `crawl_file_invalid`; a missing extract `not_cached`; bytes that no longer hash to the marker's sha256
-    `extract_changed`. Any other extract beside it is never read."""
+    wrote a marker (no fill). A marker that is unreadable or names no extract, or an extract that is malformed
+    or larger than `MAX_EXTRACT` (refused before it is read), is `crawl_file_invalid`; a missing extract
+    `not_cached`; bytes that no longer hash to the marker's sha256 `extract_changed`. Any other extract beside it
+    is never read."""
     marker = cache / CACHE_DIR / "crawls" / f"{MARKER}.json"
     if not marker.exists():
         return None
@@ -404,8 +408,11 @@ def load_extract(cache: Path) -> Extract | None:
     ):
         raise CrawlError("the OpenAlex crawl marker names no extract; run op ingest openalex",
                          reason="crawl_file_invalid")  # fmt: skip
+    path = _extract_path(cache, sha)
     try:
-        body = _extract_path(cache, sha).read_bytes()
+        if path.stat().st_size > MAX_EXTRACT:
+            raise _invalid(f"{sha[:12]} is larger than {MAX_EXTRACT} bytes")
+        body = path.read_bytes()
     except FileNotFoundError:
         raise CrawlError(f"the OpenAlex extract {sha[:12]} the marker names is not in the cache; run op ingest "
                          "openalex", reason="not_cached") from None  # fmt: skip
@@ -452,9 +459,16 @@ def doi_batches(records: Iterable[PaperRecord]) -> tuple[list[list[str]], int]:
 type _Get = Callable[[str, bool], "Page | None"]
 
 
+def _count_mismatch(row: Listing, n: int) -> CrawlError:
+    return CrawlError(f"OpenAlex {row.venue} {row.year}: {n} works under {', '.join(row.source_ids)}, the table "
+                      f"verified {row.works}: check openalex_sources.toml", reason="count_mismatch")  # fmt: skip
+
+
 def _walk(row: Listing, get: _Get) -> list[tuple[Page, WorksPage]] | None:
     """A listing's cursor chain from `cursor=*` to its last page, through `get` (None: a page `get` can't give).
-    A total that moves mid-chain, or a chain that returns more works than its total, stops (`listing_changed`)."""
+    A first page whose total is not the table's verified `works` stops there (`count_mismatch`: a hostile or moved
+    total is never walked); a total that moves mid-chain, or a chain that returns more works than its total, stops
+    (`listing_changed`)."""
     out: list[tuple[Page, WorksPage]] = []
     cursor, total, seen = "*", None, 0
     while True:
@@ -467,6 +481,8 @@ def _walk(row: Listing, get: _Get) -> list[tuple[Page, WorksPage]] | None:
         parsed = parse_works(page.text)
         if total is None:
             total = parsed.total
+            if total != row.works:
+                raise _count_mismatch(row, total)
         elif parsed.total != total:
             raise CrawlError(f"OpenAlex {row.venue} {row.year}: meta.count moved from {total} to {parsed.total} "
                              "mid-chain; re-run with --refresh", reason="listing_changed")  # fmt: skip
@@ -500,9 +516,27 @@ def _listing(row: Listing, fetcher: Fetcher, *, refresh: bool) -> Lookup:
         raise CrawlError(f"OpenAlex {row.venue} {row.year}: the chain returned {len(works)} works of a stated "
                          f"{chain[0][1].total}; re-run with --refresh", reason="listing_changed")  # fmt: skip
     if len(works) != row.works:
-        raise CrawlError(f"OpenAlex {row.venue} {row.year}: {len(works)} works under {', '.join(row.source_ids)}, "
-                         f"the table verified {row.works}: check openalex_sources.toml", reason="count_mismatch")  # fmt: skip
+        raise _count_mismatch(row, len(works))
     return Lookup("listing", listing_url(row), chain[0][0].fetched_at, (), row.venue, row.year, works)
+
+
+def _doi_lookups(chunk: Sequence[str], fetcher: Fetcher, *, refresh: bool) -> list[Lookup]:
+    url = doi_url(chunk)
+    page = fetcher.get(url, refresh=refresh)
+    if not page.ok:
+        raise CrawlError(f"an OpenAlex DOI batch answered HTTP {page.status}", reason="no_listing")
+    parsed = parse_works(page.text)
+    if parsed.total > BATCH * 2:
+        raise CrawlError(f"an OpenAlex DOI batch of {len(chunk)} matched {parsed.total} works: the filter was "
+                         "misread", reason="no_listing")  # fmt: skip
+    if parsed.total > len(parsed.works):
+        if len(chunk) == 1:
+            raise CrawlError(f"one DOI matched {parsed.total} OpenAlex works, more than a page holds "
+                             f"({len(parsed.works)})", reason="doi_batch_incomplete")  # fmt: skip
+        half = len(chunk) // 2
+        return [*_doi_lookups(chunk[:half], fetcher, refresh=refresh),
+                *_doi_lookups(chunk[half:], fetcher, refresh=refresh)]  # fmt: skip
+    return [Lookup("doi", url, page.fetched_at, tuple(chunk), None, None, parsed.works)]
 
 
 def harvest(
@@ -510,24 +544,14 @@ def harvest(
 ) -> tuple[Lookup, ...]:
     """Every lookup the fill replays: the candidates' DOIs in batches (`doi_url`), then each listing row of the
     table (`listing_url`, cursor paged). A batch that is not HTTP 200 stops (`no_listing`), and so does one whose
-    `meta.count` is more than twice the batch (the filter was misread) or more than the page holds (a work would
-    be dropped unseen, `doi_batch_incomplete`)."""
+    `meta.count` is more than twice the batch (the filter was misread). A batch matching more works than its page
+    holds (several works for its DOIs) is split in half, first half first, down to one DOI (`_doi_lookups`); one
+    DOI that still overflows a page stops (`doi_batch_incomplete`): no work is dropped unseen."""
     table = table or openalex_table.TABLE
     out: list[Lookup] = []
     batches, _ = doi_batches(records)
     for chunk in batches:
-        url = doi_url(chunk)
-        page = fetcher.get(url, refresh=refresh)
-        if not page.ok:
-            raise CrawlError(f"an OpenAlex DOI batch answered HTTP {page.status}", reason="no_listing")
-        parsed = parse_works(page.text)
-        if parsed.total > BATCH * 2:
-            raise CrawlError(f"an OpenAlex DOI batch of {len(chunk)} matched {parsed.total} works: the filter was "
-                             "misread", reason="no_listing")  # fmt: skip
-        if parsed.total > len(parsed.works):
-            raise CrawlError(f"an OpenAlex DOI batch of {len(chunk)} matched {parsed.total} works, more than its "
-                             f"page holds ({len(parsed.works)})", reason="doi_batch_incomplete")  # fmt: skip
-        out.append(Lookup("doi", url, page.fetched_at, tuple(chunk), None, None, parsed.works))
+        out += _doi_lookups(chunk, fetcher, refresh=refresh)
     out += [_listing(row, fetcher, refresh=refresh) for row in table.listings.values()]
     return tuple(out)
 
@@ -545,6 +569,8 @@ class FillReport(Report):
     attached_title: int = 0
     official_won: int = 0  # records the extract has a work for whose own abstract is official now
     not_queried: int = 0  # candidates no lookup of the extract covered (a DOI not batched; no listing row)
+    # refused also counts `listing_stale`: a DOI-less candidate whose venue-year listing is in the extract but the
+    # table's row has changed since (other source ids, or no row): re-run op ingest openalex
     refused: Counter[str] = field(default_factory=Counter)
 
     manifest_key: ClassVar[str] = "fills"
@@ -566,6 +592,8 @@ def _attach(r: PaperRecord, works: Sequence[Work], cleaned: Cleaned, lookup: Loo
                   fetched_at=lookup.fetched_at, evidence=pdf_codes_evidence(controls_evidence(
                       f"OpenAlex work {', '.join(work_page(w.id) for w in works)}; matched {how}",
                       cleaned.spaced), cleaned.pdf_codes))  # fmt: skip
+    # `PaperRecord.model_copy` is a full `model_validate` of the updated fields (record.py): every invariant runs
+    # again, the OpenAlex guard (an abstract of AAAI, AIES or FAccT only) included, and the hash is recomputed
     return cap_record(r.model_copy(update={"abstract": cleaned.text, "provenance": (*r.provenance, claim)}))
 
 
@@ -583,6 +611,7 @@ def fill(
     by_doi: dict[str, list[tuple[Work, Lookup]]] = {}
     queried: set[str] = set()
     listings: dict[tuple[str, int], Lookup] = {}
+    stale: set[tuple[str, int]] = set()
     for lk in extract.lookups:
         if lk.route == "doi":
             queried.update(lk.requested)
@@ -593,14 +622,15 @@ def fill(
                     report.refused["doi_mismatch"] += 1
         elif lk.venue is not None and lk.year is not None:
             row = table.listings.get((lk.venue, lk.year))
-            if (
-                row is not None and listing_url(row) == lk.url
-            ):  # a row the table changed since is not replayed
+            if row is not None and listing_url(row) == lk.url:
                 listings[(lk.venue, lk.year)] = lk
+            else:  # a row the table changed since is not replayed: counted `listing_stale`
+                stale.add((lk.venue, lk.year))
     corpus_dois = {d for r in ordered if (d := bare_doi(r.urls.doi))}
-    doi_less = Counter(
-        (r.venue, r.year, title_key(r.title)) for r in candidates(ordered) if not bare_doi(r.urls.doi)
-    )
+    # every DOI-less record of those venues, with an abstract or not: a work whose key a record with an official
+    # abstract also has is never credited to the other one
+    doi_less = Counter((r.venue, r.year, title_key(r.title)) for r in ordered
+                       if r.venue in OPENALEX_VENUES and not bare_doi(r.urls.doi))  # fmt: skip
 
     def listed(r: PaperRecord, lk: Lookup) -> list[Work]:
         key = title_key(r.title)
@@ -637,6 +667,8 @@ def fill(
                         r, [w for w, *_ in usable], usable[0][2], usable[0][1], f"by DOI {doi}"
                     )
                     report.attached_doi += 1
+        elif listing is None and (r.venue, r.year) in stale:
+            refusal = "listing_stale"
         elif listing is None:
             report.not_queried += 1
         elif doi_less[(r.venue, r.year, title_key(r.title))] > 1:

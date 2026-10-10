@@ -974,7 +974,7 @@ def test_build_fills_a_null_abstract_from_the_pinned_openalex_extract_before_tak
     crawl.ingest_crossref([("FAccT", 2023)], cache, offline=True, table=TABLE)
     works = openalex.parse_works(oa.page(oa.work("W1", D1, text="An OpenAlex abstract."))).works
     at = datetime(2026, 10, 10, tzinfo=UTC)
-    openalex.write_extract(
+    sha = openalex.write_extract(
         cache, (openalex.Lookup("doi", openalex.doi_url([D1, D2]), at, (D1, D2), None, None, works),)
     )
     rid = "op:facct:2023:doi-3593013.3594011"
@@ -985,6 +985,7 @@ def test_build_fills_a_null_abstract_from_the_pinned_openalex_extract_before_tak
     manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
     [fills] = manifest["sources"]["openalex"]["fills"]
     assert fills["attached_doi"] == 1 and fills["refused"] == {"doi_unmatched": 1}
+    assert fills["extract"] == sha
 
     withheld = build(cache, tmp_path / "withheld", BUILT, takedowns=frozenset({rid}))
     m = json.loads((withheld.path / "manifest.json").read_text(encoding="utf-8"))

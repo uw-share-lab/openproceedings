@@ -201,3 +201,60 @@ def test_a_lone_surrogate_from_openalex_is_kept_in_the_extract_and_refused_at_th
     r = rec("op:facct:2023:doi-3593013.3594011", "FAccT", 2023, doi=D1)
     (out,), report = openalex.fill([r], ext(*extract.lookups), TABLE)
     assert out.abstract is None and report.refused == {"abstract_unusable": 1}
+
+
+def test_a_doi_batch_that_overflows_its_page_is_split_in_half_until_it_fits(tmp_path) -> None:
+    from openproceedings.ingest.sources.http import canonical
+
+    dois = [f"10.1145/3593013.{3594011 + i}" for i in range(4)]
+    recs = [rec(f"op:facct:2023:doi-3593013.{3594011 + i}", "FAccT", 2023, doi=d) for i, d in enumerate(dois)]
+    t = FakeTransport({})
+
+    def seed(chunk, *works, count=None):
+        t.script[canonical(openalex.doi_url(chunk), keep_query=True)] = [
+            response(api.page(*works, count=count), headers=api.JSON)
+        ]
+
+    seed(dois, api.work("W1", dois[0]), count=60)  # 60 matched, one page of 50: split
+    seed(dois[:2], *(api.work(f"W{i}", dois[i]) for i in range(2)))
+    seed(dois[2:], *(api.work(f"W{i}", dois[i]) for i in range(2, 4)))
+    f = crawl.openalex_fetcher(tmp_path, offline=False, transport=t, min_interval=0)
+    lookups = openalex.harvest(recs, f, table=openalex_table_empty())
+    assert [lk.requested for lk in lookups] == [tuple(dois[:2]), tuple(dois[2:])]
+    assert [w.id for lk in lookups for w in lk.works] == ["W0", "W1", "W2", "W3"]
+
+
+def test_a_single_doi_that_still_overflows_stops(tmp_path) -> None:
+    from openproceedings.ingest.sources.http import canonical
+
+    t = FakeTransport({})
+    t.script[canonical(openalex.doi_url([D1]), keep_query=True)] = [
+        response(api.page(api.work("W1", D1), count=51), headers=api.JSON)
+    ]
+    f = crawl.openalex_fetcher(tmp_path, offline=False, transport=t, min_interval=0)
+    with pytest.raises(CrawlError) as e:
+        openalex.harvest([rec("op:facct:2023:doi-3593013.3594011", "FAccT", 2023, doi=D1)], f,
+                         table=openalex_table_empty())  # fmt: skip
+    assert e.value.reason == "doi_batch_incomplete"
+
+
+def test_a_first_page_whose_total_is_not_the_tables_stops_before_walking(tmp_path, monkeypatch) -> None:
+    from openproceedings.ingest.sources.http import canonical
+
+    monkeypatch.setattr(crawl, "replay_all", lambda cache: ([], []))
+    t = FakeTransport({})
+    row = TABLE.listings[("AAAI", 1990)]
+    t.script[canonical(openalex.listing_url(row), keep_query=True)] = [
+        response(api.page(api.work("W5", None, year=1990), count=10**9, cursor="c2"), headers=api.JSON)
+    ]
+    with pytest.raises(CrawlError) as e:
+        crawl.ingest_openalex(tmp_path, transport=t, min_interval=0, table=TABLE)
+    assert e.value.reason == "count_mismatch" and len(t.calls) == 1
+
+
+def test_an_oversized_extract_is_refused_unread(tmp_path, monkeypatch) -> None:
+    sha = openalex.write_extract(tmp_path, ())
+    monkeypatch.setattr(openalex, "MAX_EXTRACT", 10)
+    with pytest.raises(CrawlError) as e:
+        openalex.load_extract(tmp_path)
+    assert e.value.reason == "crawl_file_invalid" and sha

@@ -188,7 +188,8 @@ def test_a_listing_the_table_has_changed_since_is_not_replayed() -> None:
     lookup = _listing(api.work("W5", None, title="Learning", year=1990))
     moved = openalex_table.load(TABLE_TEXT_MOVED)  # the row now names another source: the extract's is stale
     (out,), report = openalex.fill([r], ext(lookup), moved)
-    assert out.abstract is None and report.not_queried == 1 and report.attached_title == 0
+    assert out.abstract is None and report.refused["listing_stale"] == 1 and report.not_queried == 0
+    assert report.attached_title == 0
 
 
 TABLE_TEXT_MOVED = """
@@ -216,3 +217,34 @@ def test_the_fill_report_goes_in_the_manifest_sorted() -> None:
     report.refused.update({"title_unmatched": 1, "doi_unmatched": 2})
     assert list(report.to_manifest()["refused"]) == ["doi_unmatched", "title_unmatched"]
     assert openalex.FillReport.manifest_key == "fills"
+
+
+def test_a_doi_less_record_with_an_official_abstract_still_makes_a_title_key_ambiguous() -> None:
+    """One work, two records sharing its key: never credited to the one without an abstract (I-1)."""
+    a = rec(
+        "op:aaai:1990:dblp-A90", "AAAI", 1990, title="Panel", source="dblp", abstract=("Official.", "dblp")
+    )
+    b = rec("op:aaai:1990:dblp-B90", "AAAI", 1990, title="Panel.", source="dblp")
+    lookup = _listing(api.work("W5", None, title="Panel", year=1990, text="OpenAlex text."))
+    (x, y), report = openalex.fill([a, b], ext(lookup), TABLE)
+    assert x.abstract == "Official." and y.abstract is None
+    assert report.refused["title_ambiguous"] == 1 and report.attached_title == 0
+
+
+def test_a_title_match_in_another_year_attaches_nothing() -> None:
+    r = rec("op:aaai:1990:dblp-Smith90", "AAAI", 1990, title="Planning", source="dblp")
+    lookup = _listing(api.work("W5", None, title="Planning", year=1991, text="Wrong year."))
+    (out,), report = openalex.fill([r], ext(lookup), TABLE)
+    assert out.abstract is None and report.refused["title_unmatched"] == 1
+
+
+def test_an_openalex_attach_runs_the_record_guard() -> None:
+    """`_attach` builds a validated record: an OpenAlex claim on a venue outside AAAI/AIES/FAccT is refused."""
+    from pydantic import ValidationError
+
+    r = rec("op:icml:2005:dblp-Smith05", "ICML", 2005, source="dblp")
+    lookup = doi_lookup(api.work("W1", D1, text="Text."))
+    cleaned, _ = openalex.abstract_of(lookup.works[0])
+    assert cleaned is not None
+    with pytest.raises(ValidationError):
+        openalex._attach(r, lookup.works, cleaned, lookup, "by DOI")
