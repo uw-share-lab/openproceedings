@@ -1,5 +1,12 @@
 # New venues, milestone A (AAAI 2010+, AIES 2024+, IASEAI 2026 from ojs.aaai.org) — implementation plan
 
+> **As built (2026-10-10):** this is the plan as written; the boxes were tracked in the task ledger, not here.
+> Where the build differs, spec 01 §Sources (OJS row) is authoritative: notably a volume whose listed count
+> differs from its table count **stops the crawl** (`count_mismatch`), so the test below named
+> `test_count_mismatch_is_reported_not_hidden` became a stop test; the harvest is inventory + per-set
+> `ListRecords` + `GetRecord`; and the review gate moved AAAI's Robotics Program to `main` and added six official
+> counts (spec 07 §C).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

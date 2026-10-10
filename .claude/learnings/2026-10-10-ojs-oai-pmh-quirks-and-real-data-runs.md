@@ -6,7 +6,7 @@
 - **Artifacts:** `.superpowers/sdd/2026-10-09-new-venues-milestone-a/progress.md`, `docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md`, commits `70b97eeb`, `880606ea`, `673112f6`, `aa668b59`, `d0eea48a`, `fdcea53d`, `57c82ad0`, `ba294afe`
 
 ## What we set out to do
-Index AAAI 2010–2026, AIES 2024–2025 and IASEAI 2026 from ojs.aaai.org over OAI-PMH (166,759 records in the first snapshot, +25,634).
+Index AAAI 2010–2026, AIES 2024–2025 and IASEAI 2026 from ojs.aaai.org over OAI-PMH (166,759 records in the first snapshot, +25,634; final: 166,757, +25,632, after AAAI 2023's two Errata became front matter).
 
 ## What we learned
 - **One unrenderable article cuts the chain.** Article 39173 makes the ListRecords page holding it HTTP 500; resumption tokens chain pages, so everything after offset 23,400 was unreachable (ledger, Task 6).
