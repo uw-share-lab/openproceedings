@@ -640,11 +640,21 @@ def test_schema_is_7() -> None:
 
 
 @pytest.mark.parametrize(
-    ("venue", "year"), [("FAccT", 2019), ("FAccT", 2026), ("AIES", 2018), ("AIES", 2023)]
+    ("venue", "year", "toc"),
+    [("FAccT", 2019, "3287560"), ("FAccT", 2026, "3805689"), ("AIES", 2018, "3278721"), ("AIES", 2023, "3600211")],
+)  # fmt: skip
+def test_doi_native_id_is_valid_for_the_acm_venue_years(venue: str, year: int, toc: str) -> None:
+    r = _rec(f"op:{venue.lower()}:{year}:doi-{toc}.3594011", venue, year)
+    assert r.native == f"doi-{toc}.3594011" and r.forum_id is None
+
+
+@pytest.mark.parametrize(
+    "native",
+    ["doi-3306618.3314231", "doi-99999.1", "doi-3531146.1"],  # AIES 2019's, no row's, FAccT 2022's
 )
-def test_doi_native_id_is_valid_for_the_acm_venue_years(venue: str, year: int) -> None:
-    r = _rec(f"op:{venue.lower()}:{year}:doi-3593013.3594011", venue, year)
-    assert r.native == "doi-3593013.3594011" and r.forum_id is None
+def test_a_doi_native_id_must_name_the_records_own_proceedings_row(native: str) -> None:
+    with pytest.raises(ValidationError, match="FAccT 2019 ACM proceedings"):
+        _rec(f"op:facct:2019:{native}", "FAccT", 2019)
 
 
 @pytest.mark.parametrize(("venue", "year"), [("ICML", 2023), ("AAAI", 2023), ("AIES", 2024), ("FAccT", 2018)])

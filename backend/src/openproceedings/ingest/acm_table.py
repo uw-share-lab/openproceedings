@@ -20,10 +20,11 @@ from importlib.resources import files
 from types import MappingProxyType
 from typing import Any
 
-from openproceedings.ingest.record import DOI_YEARS
 from openproceedings.vocab import venue_name
 
 VENUES: frozenset[str] = frozenset({"AIES", "FAccT"})
+# the years a `doi-` id may name: AIES before OJS (Vol. 7, 2024); FAccT after PMLR v81 (2018)
+DOI_YEARS: Mapping[str, range] = MappingProxyType({"AIES": range(2018, 2024), "FAccT": range(2019, 10000)})
 _TOC = re.compile(r"10\.1145/[0-9]+")
 _PAPER = re.compile(r"10\.1145/([0-9]+)\.([0-9]+)")
 NOT_PAPER_KINDS = frozenset({"tutorial", "craft session", "keynote", "panel", "front matter"})

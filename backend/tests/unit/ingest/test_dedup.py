@@ -41,8 +41,9 @@ def nips(n: int) -> str:
     return f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{H[n]}-Abstract-Conference.html"
 
 
-def self_url(native: str, year: int) -> str | None:
-    """The proceedings URL a proceedings-id record names itself by (dedup requires one)."""
+def self_url(native: str, year: int, venue: str = "ICML") -> str | None:
+    """The proceedings URL a proceedings-id record names itself by (dedup requires one); `venue` picks a `dblp-`
+    key's dblp page (ICML's or AAAI's)."""
     prefix, _, rest = native.partition("-")
     if prefix == "nips" and rest.endswith(("-round1", "-round2")):  # the 2021 D&B host (TASK-118)
         sha, _, rnd = rest.partition("-")
@@ -55,7 +56,9 @@ def self_url(native: str, year: int) -> str | None:
         volume, _, key = rest.partition("-")
         return f"https://proceedings.mlr.press/{volume}/{key}.html"
     if prefix == "dblp":
-        return f"https://dblp.org/rec/conf/icml/{rest}"
+        return f"https://dblp.org/rec/conf/{'aaai' if venue == 'AAAI' else 'icml'}/{rest}"
+    if prefix == "doi":  # an ACM paper of an acm_proceedings.toml row (FAccT 2019 on, AIES 2018-2023)
+        return f"https://doi.org/10.1145/{rest}"
     if prefix == "ojs":  # article ids are unique across the site's journals: any table journal names it
         return f"https://ojs.aaai.org/index.php/AAAI/article/view/{rest}"
     return None
@@ -78,7 +81,7 @@ def paper(
 ) -> PaperRecord:
     """A record whose fields are exactly what its claims say (as every importer builds them); a
     proceedings-id record names itself in `urls.proceedings` unless the caller says otherwise."""
-    extra.setdefault("urls_proceedings", self_url(native, year))
+    extra.setdefault("urls_proceedings", self_url(native, year, venue))
     values: dict[str, Any] = {"title": title, "venue": venue, "year": year, "track": track, "status": status,
                               "abstract": abstract, **{k.replace("urls_", "urls.", 1): v for k, v in extra.items()}}  # fmt: skip
     claims = [
@@ -90,10 +93,10 @@ def paper(
     return record
 
 
-def own_page(native: str, year: int) -> str:
+def own_page(native: str, year: int, venue: str = "ICML") -> str:
     """A RIS abstract claim's evidence as `ingest/ris.py` writes it when scholarmend read the abstract from the
     record's own page: its proceedings page, or its forum."""
-    page = self_url(native, year)
+    page = self_url(native, year, venue)
     return (
         f"scholarmend:proceedings_page {page}" if page else f"scholarmend:openreview_api openreview:{native}"
     )

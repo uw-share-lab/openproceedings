@@ -35,6 +35,7 @@ from pydantic import (
     model_validator,
 )
 
+from openproceedings.ingest import acm_table
 from openproceedings.ingest import volumes as _volumes
 from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
 from openproceedings.vocab import Status, Track, Venue, venue_name
@@ -85,8 +86,8 @@ PROCEEDINGS_NATIVE: dict[str, tuple[re.Pattern[str], frozenset[str]]] = {
 VENUE_ONLY_TRACKS: Mapping[str, str] = MappingProxyType({"iaai": "AAAI", "eaai": "AAAI"})
 # the years a `dblp-` id may name: ICML before PMLR (v28, 2013); AAAI before OJS (Vol. 24, 2010)
 DBLP_YEARS: Mapping[str, range] = MappingProxyType({"ICML": range(1988, 2013), "AAAI": range(1980, 2009)})
-# the years a `doi-` id may name: AIES before OJS (Vol. 7, 2024); FAccT after PMLR v81 (2018)
-DOI_YEARS: Mapping[str, range] = MappingProxyType({"AIES": range(2018, 2024), "FAccT": range(2019, 10000)})
+# the years a `doi-` id may name (acm_table.DOI_YEARS, defined there so the table needs no import of this module)
+DOI_YEARS = acm_table.DOI_YEARS
 
 
 def is_paper_id(text: str) -> bool:
@@ -368,6 +369,13 @@ class PaperRecord(BaseModel):
                     f"native id {native!r} is not a valid id for {self.venue} {self.year}: doi ids are AIES "
                     "2018-2023 and FAccT 2019 on"
                 )
+            if native.startswith("doi-"):  # the table read at call time: a test may swap it
+                row = acm_table.TABLE.by_toc(native.removeprefix("doi-").split(".", 1)[0])
+                if row is None or (row.venue, row.year) != (self.venue, self.year):
+                    raise ValueError(
+                        f"native id {native!r} is not a {self.venue} {self.year} ACM proceedings' DOI "
+                        "(acm_proceedings.toml)"
+                    )
             if native.rsplit("-", 1)[-1] in NEURIPS_DB_2021_ROUNDS and self.year != 2021:
                 raise ValueError(
                     f"native id {native!r} is not a valid id for {self.year}: D&B rounds are 2021 only"
