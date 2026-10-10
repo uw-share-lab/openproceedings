@@ -78,6 +78,18 @@ over-merge silently deletes a paper from someone's systematic review.
    in step 3, not `Guard` by its title; when step 3 can't take it, it stays apart with a `title_key` row. A
    partner keeping the abstract (main note + workshop version) keeps the merge; two RIS rows with one title and
    different abstracts still merge.
+   - **The forum link and steps 2 and 3 repeat until a pass merges nothing.** A merge keeps one claim per field
+     and source, so a RIS row's title can be lost: an import step 3 merges with a newer RIS row of another title,
+     or two RIS rows of one paper that step 2 merges under the newer row's title. A title group the lost title
+     alone made ambiguous (two proceedings ids, two forum ids) may then merge, and a second run would merge it
+     (`TITLE_LOST_TO_A_NEWER_RIS_ROW`, `STEP2_ONLY`: Hypothesis-found idempotence cases, 2026-10-10). The link
+     repeats too, as a second run's would, though no case is known where a later pass links: step 2 and 3
+     partners name at most one forum id and one proceedings id between them, and every record names its own
+     native id, so a merge never takes an id out of a cluster's sets; a forum id's bucket in a later pass is a
+     merge of the first pass's members (plus, at most, proceedings ids they gained), and a link refused once
+     stays refused. A 60,000-example search over the property strategies (2026-10-10, the link run once against
+     in the loop) found no difference. Step 1 doesn't repeat (every cluster after it has its own id). Each pass
+     that goes on removes a cluster, so the loop ends.
 
 Step 2 only runs **across sources**: the clusters' provenance source sets must be disjoint
 (OpenReview ↔ proceedings), **`ris` aside** (TASK-179): RIS is a route, each RIS row names its paper by a forum
@@ -182,6 +194,19 @@ safe direction.
   are parsed by `ingest/urls.py`. An `iclr_archive` proceedings claim is source-aware: its canonical target
   recomputes the OpenReview forum id or `iclr-<sha256(target)[:32]>`, so an arbitrary arXiv URL from another
   source cannot accidentally become ICLR identity evidence.
+- **The newer venues' ids name themselves too** (decision-049): an `ojs-<id>` from the OJS article URL, a
+  `doi-<toc>.<n>` (FAccT, AIES 2018–2023) from the record's doi.org link when its toc is a row of
+  `acm_proceedings.toml`, a `dblp-<key>` (ICML, AAAI 1980–2008) from its dblp record page, and FAccT 2018's
+  `pmlr-v81-<key>` from its PMLR link (`urls.native`, through the venue-tagged `volumes.PMLR_NATIVE_VOLUMES`).
+  `crossref` and `facct_site` are not in `PROCEEDINGS_SOURCES`, as `dblp` and `ojs` are not: no other source holds
+  their venue-years, so reconcile never judges them and their records are still listings by their ids.
+- **Abstract attribution** (`dedup.attribution`, spec 04 §Exports): an `ojs`, `crossref` or `facct_site` claim's url
+  is an API page (an OAI resumption-token page, a Crossref work) or a listing of every paper (a FAccT CSV), so each
+  is credited to the record's own `urls.proceedings` (the article page, the DOI link), never to the claim's url. A
+  new source ships the self-naming and the attribution tests before its first real run.
+- **The takedown and rekey link scopes a dblp id by venue** (`takedowns.global_native`): `aaai:dblp-<key>`, because
+  an ICML and an AAAI dblp key can coincide; a `doi-` and an `ojs-` id are global, and a `nips-`/`iclr-` hash never
+  links two ids.
 
 ## Combining a merge
 - The survivor's id uses the OpenReview forum id if any side has one (`.claude/skills/record-schema/SKILL.md`).
@@ -263,8 +288,10 @@ the forum id, the native id, the linked forum id, the first shared title key or 
 (`sha256:<16 hex>`; recompute it with `dedup.shown_key(dedup.abstract_key(…))` on either side's abstract). Step-1 rows point from a cluster's id to
 itself (`survivor_id == merged_id`: one row per extra copy of that id); a `forum_link` row points from a
 linked cluster's id (the PMLR listing) to the forum id's; a `title_venue_year` row then points from the
-cluster id to the step-2 survivor, and an `abstract_venue_year` row from a step-2 cluster's id to the final
-survivor. So every input id is an output id or a `merged_id`, once per copy, and
+cluster id to the step-2 survivor, and an `abstract_venue_year` row from a step-2 cluster's id to the step-3
+survivor. The link and steps 2 and 3 repeat until a pass merges nothing, so a `forum_link`, `title_venue_year` or
+`abstract_venue_year` row's survivor may itself be merged in a later pass and be no output id: readers follow
+the chain. So every input id is an output id or a `merged_id`, once per copy, and
 following the `forum_link`, `title_venue_year` and `abstract_venue_year` rows from any `merged_id` reaches an output record
 (`snapshot.with_crawl_conflicts` follows them the same way).
 

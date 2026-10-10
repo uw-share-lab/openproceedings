@@ -989,16 +989,18 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
     # a rekey only when exactly one removed and one added id share a globally unique native id: anything else
     # (two papers into one, one into two, a proceedings hash, which in another year is another paper; TASK-067)
     # is reported as added and removed, so a lost record is never hidden
-    gone_by_native = Counter(old[i].native for i in removed)
+    # keyed by `global_native`, which scopes a dblp key by its venue: an AAAI and an ICML `dblp-X` are two papers
+    gone_by_native = Counter(g for i in removed if (g := global_native(i)) is not None)
     new_by_native: dict[str, list[str]] = {}
     for i in added:
-        new_by_native.setdefault(new[i].native, []).append(i)
+        if (g := global_native(i)) is not None:  # a hash never rekeys
+            new_by_native.setdefault(g, []).append(i)
     rekeyed = {
-        i: new_by_native[old[i].native][0]
+        i: new_by_native[g][0]
         for i in sorted(removed)
-        if global_native(i) is not None  # the one place the rule is applied: a hash never rekeys
-        and gone_by_native[old[i].native] == 1
-        and len(new_by_native.get(old[i].native, [])) == 1
+        if (g := global_native(i)) is not None
+        and gone_by_native[g] == 1
+        and len(new_by_native.get(g, [])) == 1
     }
 
     def hashed_diff(x: PaperRecord, y: PaperRecord) -> list[str]:

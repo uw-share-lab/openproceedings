@@ -13,7 +13,7 @@ from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources.common import ListingReport
 
 from tests.unit.ingest.test_dedup import T0, T1, T2, H, archive, creative_listing, creative_note, nips, paper
-from tests.unit.ingest.test_dedup_props import pools, records
+from tests.unit.ingest.test_dedup_props import STEP2_ONLY, TITLE_LOST_TO_A_NEWER_RIS_ROW, pools, records
 
 LISTING = "https://proceedings.neurips.cc/paper_files/paper/2024"
 
@@ -351,6 +351,8 @@ NIGHTLY_154 = (
 
 @given(shapes)
 @example(NIGHTLY_154)
+@example((TITLE_LOST_TO_A_NEWER_RIS_ROW, {}))
+@example((STEP2_ONLY, {}))
 def test_dedup_and_reconcile_again_change_nothing(shape: tuple[list[PaperRecord], dict[Key, Crawl]]) -> None:
     xs, crawls = shape
     once = run(xs, crawls)

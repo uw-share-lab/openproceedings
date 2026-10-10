@@ -230,6 +230,21 @@ describe("the header", () => {
     expect(cell).toMatch(/removed on requestno abstracts shown$/);
   });
 
+  it("names the venue-years with no abstracts after CV-3, and adds nothing when there are none (CV-8)", () => {
+    render(<CoverageReport coverage={copy()} />);
+    expect(screen.getByText(/^Only titles and abstracts are indexed/).textContent).toBe(
+      "Only titles and abstracts are indexed. A record without an abstract can be found by its title only. " +
+        "No abstracts in the index for NeurIPS 2019: their records are found by title only.",
+    );
+    cleanup();
+    const c = copy();
+    for (const vy of c.venue_years) vy.abstract_missing = 0;
+    render(<CoverageReport coverage={c} />);
+    expect(screen.getByText(/^Only titles and abstracts are indexed/).textContent).toBe(
+      "Only titles and abstracts are indexed. A record without an abstract can be found by its title only.",
+    );
+  });
+
   it("says Crawled for a crawl and drops the citability note for a citable snapshot", () => {
     const data = copy();
     data.snapshot.crawl_dates_kind = { "*": "crawl", ris: "crawl" };

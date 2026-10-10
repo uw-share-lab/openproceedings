@@ -1,0 +1,39 @@
+# The official FAccT pages with abstracts (sources/facct_site.py; spec 01 §Sources, FAccT site row; decision-049).
+# Census: docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §FAccT site (milestone B Task 9, 2026-10-10).
+#
+# One [[page]] per year, exactly these columns:
+#   year      the FAccT year the page lists (one page per year)
+#   url       the page, fetched as named: https on facctconference.org only
+#   parser    the function in sources/facct_site.py that reads it (PARSERS)
+#   join      "doi": a row joins the Crossref record with its DOI, and nothing else;
+#             "title": a row joins the one record whose exact title key (dedup.title_key) it alone shares
+#   rows      entries the parser read off the page when verified: any other count stops the crawl (site_count)
+#   verified  the date the count was checked live
+#   note      where the count came from
+
+[[page]]
+year = 2022
+url = "https://facctconference.org/2022/acceptedpapers.html"
+parser = "facct2022_html"
+join = "title"
+rows = 181
+verified = 2026-10-10
+note = "181 entries, as many as the Crossref DOIs; by title, because entry 295 links entry 314's DOI (census B)"
+
+[[page]]
+year = 2025
+url = "https://facctconference.org/static/docs/facct2025-final.csv"
+parser = "facct2025_csv"
+join = "doi"
+rows = 217
+verified = 2026-10-10
+note = "217 rows: 206 archival, each with its 10.1145/3715275. DOI in URL (exactly the Crossref DOIs), and 11 non-archival (census B)"
+
+[[page]]
+year = 2026
+url = "https://facctconference.org/static/docs/facct2026-final.csv"
+parser = "facct2026_csv"
+join = "title"
+rows = 325
+verified = 2026-10-10
+note = "325 rows, no type or DOI column: 314 papers in Crossref, so at least 11 non-archival rows stay unmatched (census B)"

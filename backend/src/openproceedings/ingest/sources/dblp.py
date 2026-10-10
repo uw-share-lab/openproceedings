@@ -9,8 +9,9 @@ year's main-conference proceedings keys.
 `op ingest dblp --year 1988-2012`:
 1. downloads the pinned release and DTD into `<cache>/dblp/release/` through the shared HTTP layer's
    `fetch_file` (drops.dagstuhl.de only, no redirect, the sha256 checked; a verified copy is not fetched again);
-2. reads its `conf/icml/` records once, streaming (`dblp_xml.read_stream`; the file is never loaded whole), into
-   `<cache>/dblp/extract/<release sha256>.json`, and checks them against the table (`check_extract`): a
+2. reads its `conf/icml/` and `conf/aaai/` records once, streaming (`dblp_xml.read_streams`; the file is never
+   loaded whole), into one extract per venue (`<cache>/dblp/extract/<release sha256>.json` for ICML,
+   `<cache>/dblp/extract/aaai/<release sha256>.json` for AAAI), and checks ICML's against the table (`check_extract`): a
    `conf/icml/` proceedings key of 1988–2012 that the table neither lists nor excludes stops the ingest;
 3. for each year, crawls the official ICML pages `icml_sites.toml` lists for its abstracts (`icml_sites.py`,
    TASK-206), then writes the year's crawl marker. `op snapshot build` replays each marked year from the extract
@@ -65,7 +66,7 @@ from openproceedings.ingest.sources.common import (
     pdf_codes_evidence,
     record_from_claims,
 )
-from openproceedings.ingest.sources.dblp_xml import DblpEntry, read_stream
+from openproceedings.ingest.sources.dblp_xml import DblpEntry, read_streams
 from openproceedings.ingest.sources.http import FileEntry, Heartbeat, StreamTransport, fetch_file
 from openproceedings.ingest.sources.icml_sites import SOURCE as SITE_SOURCE
 from openproceedings.ingest.sources.icml_sites import SiteAbstract, SiteYear
@@ -87,8 +88,26 @@ def release_dir(cache: Path) -> Path:
     return cache / CACHE_DIR / "release"
 
 
+@dataclass(frozen=True, slots=True)
+class Slice:
+    """One venue's records in the release: its key prefix and where its extract lives. ICML's file predates the
+    slices and keeps its path (`subdir` ""), so its markers replay the same bytes (guarantee 4)."""
+
+    venue: str
+    prefix: str
+    subdir: str
+
+    def path(self, cache: Path, table: Table = TABLE) -> Path:
+        return cache / CACHE_DIR / "extract" / self.subdir / f"{table.release.file.sha256}.json"
+
+
+ICML_SLICE = Slice("ICML", PREFIX, "")
+AAAI_SLICE = Slice("AAAI", "conf/aaai/", "aaai")
+SLICES = (ICML_SLICE, AAAI_SLICE)
+
+
 def extract_path(cache: Path, table: Table = TABLE) -> Path:
-    return cache / CACHE_DIR / "extract" / f"{table.release.file.sha256}.json"
+    return ICML_SLICE.path(cache, table)
 
 
 # --- the release and its extract -----------------------------------------------------------------------------
@@ -120,19 +139,37 @@ def release_on_disk(cache: Path, table: Table = TABLE) -> bool:
     return (release_dir(cache) / table.release.filename).exists()
 
 
-def prepare(cache: Path, stream: StreamTransport | None, table: Table = TABLE) -> Extract:
-    """The pinned release on disk, its extract written (again when the release had to be fetched), and the
-    extract checked against the table; one run at a time (`<cache>/dblp/.lock`)."""
+def prepare_slices(cache: Path, stream: StreamTransport | None, table: Table = TABLE,
+                   slices: tuple[Slice, ...] = SLICES) -> dict[str, Extract]:  # fmt: skip
+    """The pinned release on disk and each wanted slice's extract: read back when the release was already verified on
+    disk and its file is current, else written. Whenever the release must be read, one pass writes every slice whose
+    extract is missing, wanted or not. One run at a time (`<cache>/dblp/.lock`). No table check here: each venue's
+    own `check_extract` runs on its slice."""
     with storage.exclusive(cache / CACHE_DIR):
         release, dtd = fetch_release(cache, stream, table)
-        extract = None
-        if release.cached and extract_path(cache, table).exists():
-            try:
-                extract = load_extract(cache, table)
-            except CrawlError as e:  # written under another DTD pin or extract format: read the release again
-                log.info("dblp_extract_stale", extra={"doi": table.release.doi, "reason": e.reason})
-        if extract is None:
-            extract = write_extract(cache, release, dtd, table)
+        out: dict[str, Extract] = {}
+        missing: list[Slice] = []
+        for s in slices:
+            if release.cached and s.path(cache, table).exists():
+                try:
+                    out[s.venue] = load_extract(cache, table, s)
+                    continue
+                except (
+                    CrawlError
+                ) as e:  # written under another DTD pin or extract format: read the release again
+                    log.info("dblp_extract_stale",
+                             extra={"doi": table.release.doi, "venue": s.venue, "reason": e.reason})  # fmt: skip
+            missing.append(s)
+        if missing:
+            extra = [s for s in SLICES if s not in missing and not s.path(cache, table).exists()]
+            written = write_extracts(cache, release, dtd, table, (*missing, *extra))
+            out |= {s.venue: written[s.venue] for s in missing}
+    return out
+
+
+def prepare(cache: Path, stream: StreamTransport | None, table: Table = TABLE) -> Extract:
+    """ICML's extract, checked against its table (unchanged behaviour)."""
+    extract = prepare_slices(cache, stream, table, (ICML_SLICE,))["ICML"]
     check_extract(extract, table)
     return extract
 
@@ -141,8 +178,16 @@ def write_extract(
     cache: Path, release: FileEntry, dtd: FileEntry, table: Table = TABLE,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> Extract:  # fmt: skip
-    """Read the release's `conf/icml/` records (streaming) into the extract file, atomically; a
-    `dblp_extract_progress` line when a `Heartbeat` on `monotonic` is due."""
+    """ICML's extract alone (`write_extracts` with the one slice)."""
+    return write_extracts(cache, release, dtd, table, (ICML_SLICE,), monotonic)["ICML"]
+
+
+def write_extracts(
+    cache: Path, release: FileEntry, dtd: FileEntry, table: Table = TABLE,
+    slices: tuple[Slice, ...] = (ICML_SLICE,), monotonic: Callable[[], float] = time.monotonic,
+) -> dict[str, Extract]:  # fmt: skip
+    """Read the release's records for every slice's prefix in one streaming pass, into one extract file per slice,
+    atomically; a `dblp_extract_progress` line when a `Heartbeat` on `monotonic` is due."""
     started = time.monotonic()
     beat = Heartbeat(monotonic)
     log.info("dblp_extract_started", extra={"doi": table.release.doi, "bytes": table.release.file.size})
@@ -153,26 +198,33 @@ def write_extract(
                 "dblp_extract_progress", extra={"doi": table.release.doi, "lines": lines, "records": kept}
             )
 
-    entries = read_stream(release.path, dtd.path.read_bytes(), table.dtd.filename, PREFIX, progress)
-    extract = Extract(table.release.doi, table.release.file.sha256, release.fetched_at, tuple(entries))
-    storage.write_json(extract_path(cache, table), {
-        "format": EXTRACT_FORMAT, "release_doi": extract.doi, "release_sha256": extract.sha256,
-        "dtd_sha256": table.dtd.file.sha256, "fetched_at": extract.fetched_at.isoformat(),
-        "entries": [e.to_json() for e in entries],
-    })  # fmt: skip
-    log.info("dblp_extract_written", extra={"doi": extract.doi, "entries": len(entries),
-                                            "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
-    return extract
+    streams = read_streams(release.path, dtd.path.read_bytes(), table.dtd.filename,
+                           tuple(s.prefix for s in slices), progress)  # fmt: skip
+    out: dict[str, Extract] = {}
+    for s in slices:
+        entries = streams[s.prefix]
+        extract = Extract(table.release.doi, table.release.file.sha256, release.fetched_at, tuple(entries))
+        storage.write_json(s.path(cache, table), {
+            "format": EXTRACT_FORMAT, "release_doi": extract.doi, "release_sha256": extract.sha256,
+            "dtd_sha256": table.dtd.file.sha256, "fetched_at": extract.fetched_at.isoformat(),
+            "entries": [e.to_json() for e in entries],
+        })  # fmt: skip
+        # pass_ms: since the one pass began, so a later slice's value includes the earlier slices' writes
+        log.info("dblp_extract_written", extra={"doi": extract.doi, "venue": s.venue, "entries": len(entries),
+                                                "pass_ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+        out[s.venue] = extract
+    return out
 
 
-def load_extract(cache: Path, table: Table = TABLE) -> Extract:
-    """The pinned release's extract, from the cache alone (a snapshot build never reads the release itself)."""
-    path = extract_path(cache, table)
+def load_extract(cache: Path, table: Table = TABLE, slice_: Slice = ICML_SLICE) -> Extract:
+    """The pinned release's extract for one slice, from the cache alone (a snapshot build never reads the release
+    itself)."""
+    path = slice_.path(cache, table)
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        raise CrawlError(f"no dblp extract for release {table.release.doi}; run op ingest dblp",
-                         reason="not_cached") from None  # fmt: skip
+        raise CrawlError(f"no dblp extract for release {table.release.doi}; run op ingest dblp --venue "
+                         f"{slice_.venue}", reason="not_cached") from None  # fmt: skip
     except (OSError, ValueError) as e:
         raise CrawlError(f"dblp extract {path.name} is unreadable ({type(e).__name__}); delete it and run op "
                          "ingest dblp", reason="crawl_file_invalid") from None  # fmt: skip
@@ -188,6 +240,8 @@ def load_extract(cache: Path, table: Table = TABLE) -> Extract:
         if fetched.tzinfo is None:
             raise ValueError("naive fetched_at")
         entries = tuple(DblpEntry.from_json(e) for e in raw["entries"])
+        if any(not e.key.startswith(slice_.prefix) for e in entries):
+            raise ValueError(f"holds a record outside {slice_.prefix}")
     except (KeyError, TypeError, ValueError, AttributeError) as e:
         raise CrawlError(f"dblp extract {path.name} is malformed ({e}); delete it and run op ingest dblp",
                          reason="crawl_file_invalid") from None  # fmt: skip
@@ -424,10 +478,10 @@ def _record(year: int, tail: str, e: DblpEntry, extract: Extract, table: Table,
 PDF_HOSTS = frozenset({"icml.cc", "www.icml.cc"})
 
 
-def links(key: str, ee: Iterable[str]) -> dict[ClaimField, str]:
+def links(key: str, ee: Iterable[str], pdf_hosts: frozenset[str] = PDF_HOSTS) -> dict[ClaimField, str]:
     """`urls.proceedings`: the record's dblp page (`urls.dblp_record_url`, which names its native id, as dedup
     requires of a proceedings record; linked, never fetched); `urls.doi` from the first doi.org `ee`; `urls.pdf`
-    from the first PDF on a `PDF_HOSTS` host. Every other link is dropped."""
+    from the first PDF on a `pdf_hosts` host (`PDF_HOSTS`; AAAI passes none). Every other link is dropped."""
     out: dict[ClaimField, str] = {"urls.proceedings": urls.dblp_record_url(key)}
     for link in ee:
         if (m := _DOI_URL.match(link)) is not None:
@@ -437,7 +491,7 @@ def links(key: str, ee: Iterable[str]) -> dict[ClaimField, str]:
                 continue
             if doi:
                 out.setdefault("urls.doi", doi)
-        elif is_url(link) and (urlparse(link).hostname or "").lower() in PDF_HOSTS \
+        elif is_url(link) and (urlparse(link).hostname or "").lower() in pdf_hosts \
                 and urlparse(link).path.lower().endswith(".pdf"):  # fmt: skip
             out.setdefault("urls.pdf", link)
     return out

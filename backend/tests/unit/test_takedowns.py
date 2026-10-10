@@ -280,7 +280,19 @@ def test_a_proceedings_hash_links_no_two_years() -> None:
     [("op:iclr:2024:Abcd1234", True), ("op:icml:2024:pmlr-v235-smith24a", True), (f"op:neurips:2019:{H}", False),
      (f"op:neurips:2021:{H}-round1", False), ("op:iclr:2015:iclr-0123456789abcdef0123456789abcdef", False),
      ("op:icml:2009:dblp-SzitaL09", True),  # a dblp key is unique across dblp (decision-047)
-     ("op:aaai:2024:ojs-28000", True)],  # an ojs article id is unique across ojs.aaai.org (decision-049)
+     ("op:aaai:2024:ojs-28000", True),  # an ojs article id is unique across ojs.aaai.org (decision-049)
+     ("op:facct:2023:doi-3593013.3594011", True),  # a DOI is unique everywhere
+     ("op:aaai:1990:dblp-Smith90", True)],  # a dblp key is scoped by its venue (`aaai:dblp-Smith90`)
 )  # fmt: skip
 def test_only_globally_unique_native_ids_link(rid: str, linked: bool) -> None:
     assert (takedowns.global_native(rid) is not None) is linked
+
+
+def test_a_dblp_key_links_only_within_its_venue() -> None:
+    """AAAI and ICML dblp tails can coincide (`conf/aaai/Smith90`, `conf/icml/Smith90`): one paper's takedown
+    never hides the other venue's paper, and still follows its own record to another year."""
+    held = ["op:aaai:1990:dblp-Smith90", "op:icml:1991:dblp-Smith90"]
+    assert takedowns.same_paper(frozenset({"op:icml:1990:dblp-Smith90"}), (), held) == {
+        "op:icml:1991:dblp-Smith90"
+    }
+    assert takedowns.global_native("op:aaai:1990:dblp-X") == "aaai:dblp-X"

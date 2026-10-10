@@ -850,8 +850,9 @@ def test_the_scope_lines_say_each_venues_years_and_what_the_dblp_years_rest_on()
     def vy(venue: str, year: int, records: int = 1) -> dict[str, Any]:
         return {"venue": venue, "year": year, "records": records, "tracks": [{"track": "main"}]}
 
-    cov = {"venue_years": [vy("ICLR", 2013), vy("ICML", 1988), vy("ICML", 2026), vy("NeurIPS", 1987),
-                           vy("NeurIPS", 2026), vy("ICLR", 2012, records=0), vy("IASEAI", 2026)]}  # fmt: skip
+    cov = {"venue_years": [vy("ICLR", 2013), *(vy("ICML", y) for y in range(1988, 2027)), vy("NeurIPS", 1987),
+                           vy("NeurIPS", 2026), vy("ICLR", 2012, records=0), vy("IASEAI", 2026),
+                           *(vy("AAAI", y) for y in (1980, 1982, 1983, 1984, 1986))]}  # fmt: skip
     doi = "https://doi.org/10.4230/dblp.xml.2026-10-03"
     manifest = {"sources": {"dblp": {"listings": [
         {"year": 1988, "listing": doi, "records": 49},
@@ -860,7 +861,8 @@ def test_the_scope_lines_say_each_venues_years_and_what_the_dblp_years_rest_on()
     ]}}}  # fmt: skip
     years, icml = _scope(cov, manifest)
     assert years == (
-        "- Years indexed: IASEAI 2026 · ICLR 2013 · ICML 1988–2026 · NeurIPS 1987–2026 (the venues start in different years)"
+        "- Years indexed: AAAI 1980–1986 (none in 1981, 1985) · IASEAI 2026 · ICLR 2013 · ICML 1988–2026 · "
+        f"NeurIPS 1987–2026 (none in {', '.join(map(str, range(1988, 2026)))}) (the venues start in different years)"
     )
     assert (
         "ICML 1988–2012: from the pinned dblp snapshot release https://doi.org/10.4230/dblp.xml.2026-10-03"
@@ -902,3 +904,43 @@ def test_the_scope_lines_say_each_venues_years_and_what_the_dblp_years_rest_on()
                           {("NeurIPS", 1987, "main"): own, ("NeurIPS", 1988, "main"): own})  # fmt: skip
     assert two.startswith(" 2 gated cells compare")
     assert _own_count_note(cov, {}) == ""
+
+
+def test_the_scope_names_each_dblp_venue_by_its_own_listings() -> None:
+    from openproceedings.eval.coverage_report import _scope
+
+    cov = {"venue_years": [{"venue": "AAAI", "year": 1986, "records": 1, "tracks": [{"track": "main"}]},
+                           {"venue": "ICML", "year": 1990, "records": 1, "tracks": [{"track": "main"}]}]}  # fmt: skip
+    doi = "https://doi.org/10.4230/dblp.xml.2026-10-03"
+    manifest = {"sources": {"dblp": {"listings": [
+        {"venue": "ICML", "year": 1990, "listing": doi, "records": 49},
+        {"venue": "AAAI", "year": 1986, "listing": doi, "records": 7},
+    ]}}}  # fmt: skip
+    text = "\n".join(_scope(cov, manifest))
+    assert "- ICML 1990–1990: from the pinned dblp snapshot release" in text and "ICML 1986" not in text
+    assert "- AAAI 1986–1986: from the pinned dblp snapshot release" in text and "decision-049" in text
+    assert "Its 7 records have no abstract (dblp holds none)." in text and "of its 49 records" in text
+
+
+def test_the_scope_says_what_the_crossref_years_rest_on_and_that_aies_has_no_sections() -> None:
+    from openproceedings.eval.coverage_report import _scope
+
+    cov = {"venue_years": [{"venue": "FAccT", "year": 2022, "records": 1, "tracks": [{"track": "main"}]}]}
+    manifest = {"sources": {"crossref": {"listings": [
+        {"venue": "AIES", "year": 2018, "records": 78},
+        {"venue": "AIES", "year": 2019, "records": 93},
+        {"venue": "FAccT", "year": 2022, "records": 181, "abstract_attached": 169},
+        {"venue": "FAccT", "year": 2023, "records": 153},
+    ]}}}  # fmt: skip
+    text = "\n".join(_scope(cov, manifest))
+    assert (
+        "- AIES 2018–2019: from Crossref's records of the ACM proceedings (decision-049): 171 records, no abstracts (title-only);"
+        in text
+    )
+    assert "Crossref carries no section data, so student abstracts and keynotes are in `main`" in text
+    assert (
+        "- FAccT 2022–2023: from Crossref's records of the ACM proceedings (decision-049): 334 records, 169 with"
+        in text
+    )
+    assert "only 2022, 2025 and 2026 have one" in text
+    assert "Crossref" not in "\n".join(_scope(cov, {"sources": {}}))

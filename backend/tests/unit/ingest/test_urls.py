@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from openproceedings.ingest import urls
+from openproceedings.ingest import acm_table, urls, volumes
 from openproceedings.ingest.record import PaperRecord
+
+from tests.unit.ingest.crossref import api
 
 H = "0336dcbab05b9d5ad24f4333c7658a0e"
 DB = "https://datasets-benchmarks-proceedings.neurips.cc"
@@ -115,3 +117,43 @@ def test_ojs_article_names_exactly_the_tables_journals() -> None:
     assert (
         urls.ojs_article("https://ojs.aaai.org/index.php/AIMAG/article/view/7") is None
     )  # not a table journal
+
+
+@pytest.mark.parametrize(("url", "key"), [("https://dblp.org/rec/conf/aaai/Smith90", "Smith90"),
+    ("http://DBLP.org/rec/conf/aaai/Smith90.html", "Smith90"), ("https://dblp.org/rec/conf/icml/Smith90", None),
+    ("https://dblp.org/rec/conf/aaai/2006w", "2006w"), ("https://example.org/rec/conf/aaai/Smith90", None)])  # fmt: skip
+def test_dblp_aaai(url: str, key: str | None) -> None:
+    assert urls.dblp_aaai(url) == key
+
+
+def test_native_reads_an_aaai_dblp_page() -> None:
+    assert urls.native("https://dblp.org/rec/conf/aaai/Smith90") == "dblp-Smith90"
+
+
+def test_native_names_a_facct_v81_paper_only_while_the_table_has_the_volume(monkeypatch) -> None:
+    url = "https://proceedings.mlr.press/v81/one18a.html"
+    assert urls.native(url) == "pmlr-v81-one18a"  # the shipped table has v81 (census of 2026-10-10)
+    monkeypatch.setattr(
+        volumes, "PMLR_NATIVE_VOLUMES", {k: v for k, v in volumes.PMLR_NATIVE_VOLUMES.items() if k != 81}
+    )
+    assert urls.native(url) is None
+
+
+@pytest.fixture
+def acm(monkeypatch):
+    monkeypatch.setattr(acm_table, "TABLE", acm_table.load(api.TABLE_TEXT))
+
+
+@pytest.mark.parametrize("url", ["https://doi.org/10.1145/3593013.3594011", "http://dx.doi.org/10.1145/3593013.3594011",
+    "https://DOI.org/10.1145/3593013.3594011", "https://doi.org/10.1145%2F3593013.3594011",
+    "https://doi.org/10.1145/3593013.3594011?ref=x"])  # fmt: skip
+def test_a_listed_acm_paper_doi_link_names_its_doi_id(acm, url: str) -> None:
+    assert urls.native(url) == "doi-3593013.3594011"
+
+
+@pytest.mark.parametrize("url", ["https://doi.org/10.1145/3593013.3594011a", "https://doi.org/10.1145/3593013.3594011/x",
+    "https://doi.org/10.1145/3593013.359%204011", "https://doi.org/10.1145/3593013.3594011%0A",
+    "https://doi.org/10.1145/9999999.1", "https://doi.org/10.1145/3593013", "https://dl.acm.org/doi/10.1145/3593013.3594011",
+    "https://example.org/10.1145/3593013.3594011"])  # fmt: skip
+def test_a_link_that_is_not_a_listed_acm_paper_names_nothing(acm, url: str) -> None:
+    assert urls.native(url) is None

@@ -38,6 +38,11 @@ a review, a duplicate only shows in the hit count.
    import never merges with a record that is no listing by crawled evidence and is rejected, withdrawn or
    desk-rejected (a note, also one whose forum id's RIS row names a proceedings paper, or another import: a
    forum id's RIS row; decision-040).
+   The forum link and steps 2 and 3 then run again until a pass merges nothing, as a second run would. A merge
+   keeps one claim per field and source, so a RIS row's title can be lost: an import step 3 merges with a newer
+   RIS row of another title, or two RIS rows of one paper that step 2 merges under the newer row's title. A title
+   group the lost title made ambiguous may then merge (Hypothesis-found idempotence cases, 2026-10-10). Step 1 is
+   not repeated: every cluster after it has its own id, and a merge keeps the survivor's.
 
 `ris` is a route, not a publisher: each RIS row names its paper by a forum id or a proceedings id. So two
 candidates that share only `ris` are judged by those ids (at most one of each in a merged record), not refused
@@ -74,10 +79,12 @@ from openproceedings.ingest.record import Claim, ClaimField, PaperRecord, Source
 from openproceedings.query.normalize import normalize
 
 _TEXT: tuple[Source, ...] = (
-    "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ojs", "ris",
+    "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ojs",
+    "crossref", "facct_site", "ris",
 )  # fmt: skip
 _ACCEPTANCE: tuple[Source, ...] = (
-    "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "ojs", "openreview_v2", "openreview_v1", "ris",
+    "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "ojs", "crossref", "openreview_v2", "openreview_v1",
+    "ris",
 )  # fmt: skip
 # decision-005: OpenReview first for text and track; the official proceedings decide acceptance; RIS last.
 # Track is decided per track (owner, 2026-09-29; TASK-130): an OpenReview track claim is the note's own
@@ -108,6 +115,7 @@ CONFLICT_FIELDS: tuple[ClaimField, ...] = ("title", "track", "status")
 # dblp (ICML 1988-2012, decision-047) is not one: it is a bibliography of the proceedings, and no other source holds
 # its venue-years, so reconcile never judges them; its records are still listings by their `dblp-<key>` id.
 # ojs (AAAI, AIES, IASEAI; decision-049) is not one either, for the same reason: no other source holds its venue-years.
+# crossref (FAccT, AIES 2018-2023; decision-049) is not one either: no other source holds its venue-years.
 PROCEEDINGS_SOURCES: frozenset[str] = frozenset({"iclr_archive", "neurips_proceedings", "pmlr"})
 OPENREVIEW_SOURCES: frozenset[str] = frozenset({"openreview_v2", "openreview_v1"})
 PROCEEDINGS_TRACKS: frozenset[str] = frozenset({"main", "datasets_benchmarks", "position"})
@@ -218,7 +226,15 @@ def _sources(records: Iterable[PaperRecord]) -> frozenset[str]:
 # The site that published an abstract, as the results list names it (TASK-134, decision-018). Distinct from a
 # claim's `Source`: a `ris` claim is a route, and its evidence says which of these the abstract came from.
 Origin = Literal[
-    "openreview", "neurips_proceedings", "iclr_proceedings", "pmlr", "iclr_archive", "icml_site", "ojs"
+    "openreview",
+    "neurips_proceedings",
+    "iclr_proceedings",
+    "pmlr",
+    "iclr_archive",
+    "icml_site",
+    "ojs",
+    "crossref",
+    "facct_site",
 ]
 _DIRECT_ORIGIN: dict[str, Origin] = {
     "openreview_v2": "openreview", "openreview_v1": "openreview", "neurips_proceedings": "neurips_proceedings",
@@ -227,6 +243,8 @@ _DIRECT_ORIGIN: dict[str, Origin] = {
     # url is the page as fetched, so the link reaches the capture
     "icml_site": "icml_site",
     "ojs": "ojs",
+    "crossref": "crossref",
+    "facct_site": "facct_site",
 }  # fmt: skip
 _SITE_ORIGIN: dict[str, Origin] = {
     "NeurIPS": "neurips_proceedings",
@@ -317,8 +335,9 @@ def attribution(
         return Attribution(source, origin, forum)
     if origin == "icml_site":  # a submission page's evidence says so (TASK-207); read here, never re-derived
         return Attribution(source, origin, claim.url, AS_SUBMITTED in (claim.evidence or ""))
-    # an ojs claim's url is the OAI ListRecords page (a resumption-token url that expires): credit the paper
-    if origin == "ojs":
+    # each claim's url is an API page (an OAI token page, a Crossref work) or a listing of every paper (a FAccT
+    # CSV): credit the paper's own page, its urls.proceedings (the article page, the DOI link)
+    if origin in ("ojs", "crossref", "facct_site"):
         return Attribution(source, origin, proceedings)
     if origin is not None:
         return Attribution(source, origin, claim.url)
@@ -668,19 +687,29 @@ def _dedup(records: Iterable[PaperRecord]) -> DedupResult:
             Merge(rid, rid, rule, cluster.summary.native, r.venue, r.year, "+".join(sorted(_sources([r]))))
             for r in by_id[rid][1:]
         ]  # the same id twice: one row per extra copy, survivor_id == merged_id
-    # The forum link: one forum id (own or in a urls.forum claim) in the same venue and year, any title.
-    clusters, linked = _link(same_id)
-    merges += linked
-    # Step 2: (venue, year, title key) across sources.
-    titled: dict[tuple[str, int, str], set[int]] = defaultdict(set)
-    for ci, c in enumerate(clusters):
-        for key in c.keys:  # a title of only punctuation or math has no key and never matches
-            titled[(c.summary.venue, c.summary.year, key)].add(ci)
-    clusters, found = _join(clusters, titled, "title_venue_year", _crawled_abstracts(clusters))
-    merges += found
-    # Step 3: an imported record that matched nothing, on (venue, year, abstract key).
-    clusters, found = _join(clusters, _abstract_buckets(clusters), "abstract_venue_year")
-    merges += found
+    # The forum link, step 2 and step 3 run again until a pass merges nothing, as a second run would: a merge keeps
+    # one claim per field and source, so it can drop a title claim that kept a group apart. The link repeats with
+    # them, though no later pass is known to link: a step 2 or 3 merge never takes a forum or proceedings id out of
+    # a cluster (dedup-rules skill). A pass that goes on has merged, which removes a cluster, so there are at most
+    # len(same_id) passes.
+    clusters = same_id
+    while True:
+        before = len(clusters)
+        # The forum link: one forum id (own or in a urls.forum claim) in the same venue and year, any title.
+        clusters, found = _link(clusters)
+        merges += found
+        # Step 2: (venue, year, title key) across sources.
+        titled: dict[tuple[str, int, str], set[int]] = defaultdict(set)
+        for ci, c in enumerate(clusters):
+            for key in c.keys:  # a title of only punctuation or math has no key and never matches
+                titled[(c.summary.venue, c.summary.year, key)].add(ci)
+        clusters, found = _join(clusters, titled, "title_venue_year", _crawled_abstracts(clusters))
+        merges += found
+        # Step 3: an imported record that matched nothing, on (venue, year, abstract key).
+        clusters, found = _join(clusters, _abstract_buckets(clusters), "abstract_venue_year")
+        merges += found
+        if len(clusters) == before:
+            break
 
     out: list[PaperRecord] = []
     for cluster in clusters:
@@ -896,19 +925,20 @@ def _join(
     return sorted(out, key=lambda c: c.id), merges
 
 
-def _link(same_id: Sequence[_Cluster]) -> tuple[list[_Cluster], list[Merge]]:
-    """The forum link: step-1 clusters naming one forum id (own or in a kept `urls.forum` claim) in one venue
-    and year merge, whatever their titles, unless `_mergeable(linked=True)` refuses. One `forum_link` row per
-    merged cluster, from its id to the survivor's. Sorted by id, so the input order never matters."""
+def _link(before: Sequence[_Cluster]) -> tuple[list[_Cluster], list[Merge]]:
+    """The forum link: `before`, the clusters of step 1 (then of each later pass), that name one forum id (own or in
+    a kept `urls.forum` claim) in one venue and year merge, whatever their titles, unless `_mergeable(linked=True)`
+    refuses. One `forum_link` row per merged cluster, from its id to the survivor's. Sorted by id, so the input
+    order never matters."""
     buckets: dict[tuple[str, int, str], set[int]] = defaultdict(set)
-    for ci, c in enumerate(same_id):
+    for ci, c in enumerate(before):
         for fid in c.forum_ids:
             buckets[(c.summary.venue, c.summary.year, fid)].add(ci)
-    joined = _Clusters(len(same_id))
+    joined = _Clusters(len(before))
     linked_by: dict[int, str] = {}  # cluster → the forum id it linked on
     for (_, _, fid), cis in sorted(buckets.items()):
         ordered = sorted(cis)
-        if len(ordered) < 2 or _mergeable([same_id[ci] for ci in ordered], linked=True) is not None:
+        if len(ordered) < 2 or _mergeable([before[ci] for ci in ordered], linked=True) is not None:
             continue  # a refused link is reported by _refusals, against the output records
         for ci in ordered:
             joined.union(ordered[0], ci)
@@ -917,9 +947,9 @@ def _link(same_id: Sequence[_Cluster]) -> tuple[list[_Cluster], list[Merge]]:
     merges: list[Merge] = []
     for group in joined.groups():
         # a cluster naming two forum ids never links (_mergeable), so buckets can't chain; checked anyway
-        refused = len(group) > 1 and _mergeable([same_id[ci] for ci in group], linked=True) is not None
+        refused = len(group) > 1 and _mergeable([before[ci] for ci in group], linked=True) is not None
         for part in [[ci] for ci in group] if refused else [group]:
-            members = [same_id[ci] for ci in part]
+            members = [before[ci] for ci in part]
             if len(members) == 1:
                 clusters.append(members[0])
                 continue
@@ -927,9 +957,9 @@ def _link(same_id: Sequence[_Cluster]) -> tuple[list[_Cluster], list[Merge]]:
             cluster = _cluster([r for m in members for r in m.members], survivor)
             clusters.append(cluster)
             merges += [
-                Merge(survivor, same_id[ci].id, "forum_link", linked_by[ci], cluster.summary.venue,
-                      cluster.summary.year, "+".join(sorted(same_id[ci].sources)))
-                for ci in part if same_id[ci].id != survivor
+                Merge(survivor, before[ci].id, "forum_link", linked_by[ci], cluster.summary.venue,
+                      cluster.summary.year, "+".join(sorted(before[ci].sources)))
+                for ci in part if before[ci].id != survivor
             ]  # fmt: skip
     return sorted(clusters, key=lambda c: c.id), merges
 

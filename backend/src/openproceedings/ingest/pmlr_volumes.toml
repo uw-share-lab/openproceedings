@@ -3,14 +3,17 @@
 #
 # Columns
 #   number       the PMLR volume (https://proceedings.mlr.press/v<number>/)
-#   venue        NeurIPS | ICLR | ICML
+#   venue        NeurIPS | ICLR | ICML | FAccT (only ICML and FAccT 2018, v81, are ingested)
 #   year         the conference year (from this table, never a page footer or PDF date); may be absent
 #                only on an out_of_scope row whose year was not verified
 #   track        a spec 01 track; the table's value is the record's track, never inferred from the page
 #   role         primary       PMLR is the source of record for this venue-year (ICML 2013-2022)
+#                (a non-ICML volume is always primary)
 #                confirm       OpenReview is primary; PMLR confirms acceptance (ICML 2023+)
 #                out_of_scope  classified, never ingested (competition and workshop volumes)
 #   papers       the number of `<div class="paper">` entries on the volume index when verified
+#   not_papers   keys of index entries that are no paper (a preface), counted and never records; an ingested
+#                row only, fewer than `papers`; a key the index lacks stops the crawl
 #   heading      what the volume index's first <h1>/<h2> reads after `Volume N: ` (a prefix); the miner
 #                refuses a volume whose page says anything else
 #   index_title  the volume's title on the PMLR index (https://proceedings.mlr.press/)
@@ -180,6 +183,21 @@ heading = "International Conference on Machine Learning"
 index_title = "Proceedings of ICML 2025"
 verified = 2026-09-27
 source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (= OpenReview 3,257 main + 73 position)"
+
+# --- FAccT 2018 (FAT*), primary (decision-049; FAccT 2019 on is in acm_proceedings.toml) --------------------
+
+[[volume]]
+number = 81
+venue = "FAccT"
+year = 2018
+track = "main"
+role = "primary"
+papers = 20
+not_papers = ["friedler18a", "sweeney18a", "hellman18a"]  # the preface, Keynote 1, Keynote 2
+heading = "Conference on Fairness, Accountability and Transparency"
+index_title = "FAT* 2018 Proceedings"
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §FAccT; backend/tests/fixtures/http/pmlr/v81/volume-index.json"
 
 # --- NeurIPS competition volumes: classified, not ingested (spec 01 lists PMLR for ICML only, and a
 # --- `pmlr-` native id is ICML-only in the record schema) ------------------------------------------------

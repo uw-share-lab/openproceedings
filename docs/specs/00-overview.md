@@ -25,15 +25,20 @@ venues.
 
 **In scope (v1):**
 - Venues **indexed now**: NeurIPS (including the Datasets & Benchmarks track; from 1987), ICLR (from 2013), ICML
-  (from 1988: on OpenReview, in PMLR, and before 2013 from a pinned dblp release; decision-047), AAAI (2010–2026),
-  AIES (2024–2025) and IASEAI (2026; its archival papers only, 57 of the 92 accepted, the other 35 being
-  non-archival and unpublished), the last three from ojs.aaai.org (decision-049, milestone A).
-- Venues **in scope and planned** (decision-049; milestones B and C of the
-  [design](../plans/2026-10-09-new-venues-design.md), not built): AAAI 1980–2008, AIES 2018–2023 and FAccT
-  2018 onward (every paper of every year, as decision-047 did for NeurIPS and ICML), IASEAI 2027 once its accepted
-  papers are public, and an OpenAlex fallback for abstracts no official source holds (labelled, with an
-  `abstract_kind:` filter). Until a milestone is built its venue-years are absent from the index and the coverage
-  page, which says so (copy deck CV-7).
+  (from 1988: on OpenReview, in PMLR, and before 2013 from a pinned dblp release; decision-047), AAAI (from 1980:
+  1980-2008 from the same pinned dblp release, 23 held years, none in 1981, 1985, 1989, 1995, 2001, 2003 or 2009;
+  2010-2026 from ojs.aaai.org), AIES (from 2018: 2018-2023 from Crossref's records of the ACM proceedings,
+  2024-2025 from ojs.aaai.org), FAccT (from 2018: FAT\* 2018 from PMLR v81, 2019-2026 from Crossref, with the
+  official abstracts of 2022, 2025 and 2026 from facctconference.org) and IASEAI (2026; its archival papers only,
+  57 of the 92 accepted, the other 35 being non-archival and unpublished) (decision-049, milestones A and B).
+- Venues **in scope and planned** (decision-049; milestone C of the
+  [design](../plans/2026-10-09-new-venues-design.md), not built): IASEAI 2027 once its accepted papers are public,
+  and an OpenAlex fallback for abstracts no official source holds (labelled, with an `abstract_kind:` filter).
+  Until a venue-year is built it is absent from the index and the coverage page, which says so (copy deck CV-7).
+  Most records of AAAI 1980-2008 and of FAccT 2019-2021, 2023 and 2024 and AIES 2018-2023 have a title and no
+  abstract until milestone C's labelled OpenAlex fallback, and some will stay without one; the coverage page and
+  the home page name these venue-years (copy deck CV-8). AIES 2018-2023's student abstracts and keynotes are
+  `main` (Crossref labels no section), so a default search counts them, unlike AIES 2024+'s `student_abstract`.
 - Content: title and abstract, plus metadata (authors, venue, year, track, acceptance status, links).
 - Search: exact-token Boolean search with phrases, proximity, explicit wildcards, field scopes, and
   filters written inside the query itself.

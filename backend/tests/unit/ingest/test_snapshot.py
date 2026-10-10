@@ -265,7 +265,7 @@ def test_build_writes_the_layout(cache: Path, tmp_path: Path) -> None:
     }
     assert (manifest["format_version"], manifest["record_schema_version"], manifest["tokenizer_version"]) == (
         "2",
-        "6",
+        "7",
         "3",
     )
     assert manifest["openproceedings_version"]
@@ -668,6 +668,25 @@ def test_diff_names_every_kind_of_change(cache: Path, tmp_path: Path) -> None:
     assert (same["added"], same["removed"], same["rekeyed"], same["changed"]) == ([], [], {}, {})
 
 
+def test_diff_never_reads_an_aaai_dblp_key_and_an_icml_one_as_a_rekey(cache: Path, tmp_path: Path) -> None:
+    """A dblp key is unique within its venue's stream only: an AAAI `dblp-X` removed and an ICML `dblp-X` added
+    are two papers (removed and added), never one paper rekeyed."""
+    a0 = build(cache, tmp_path / "snapshots", BUILT).path
+    aaai, icml = "op:aaai:1990:dblp-Synthetic90a", "op:icml:1990:dblp-Synthetic90a"
+
+    def to_aaai(rs: dict[str, PaperRecord]) -> None:
+        r = rs.pop(REJECTED)
+        rs[aaai] = r.model_copy(update={"id": aaai, "venue": "AAAI", "year": 1990})
+
+    def to_icml(rs: dict[str, PaperRecord]) -> None:
+        r = rs.pop(aaai)
+        rs[icml] = r.model_copy(update={"id": icml, "venue": "ICML"})
+
+    a = rewrite(a0, tmp_path / "a", to_aaai)
+    result = diff(a, rewrite(a, tmp_path / "b", to_icml))
+    assert (result["added"], result["removed"], result["rekeyed"]) == ([icml], [aaai], {})
+
+
 def test_diff_never_reads_a_proceedings_hash_in_another_year_as_a_rekey(cache: Path, tmp_path: Path) -> None:
     """TASK-067 review: a NeurIPS hash is md5 of a per-year paper number, so the same hash in another year is
     another paper: one removed and one added are reported as such, never as one paper rekeyed."""
@@ -914,4 +933,25 @@ def test_build_replays_a_marked_ojs_crawl(
     ids = {json.loads(line)["id"] for line in lines}
     assert {f"op:aaai:2020:ojs-{n}" for n in (1, 2, 3)} <= ids
     [listing] = manifest["sources"]["ojs"]["listings"]
+    assert listing["count_ok"] is True
+
+
+def test_build_replays_a_marked_crossref_crawl(
+    cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest import acm_table
+    from openproceedings.ingest.sources import crawl
+
+    from tests.unit.ingest.crossref import api
+    from tests.unit.ingest.crossref.test_crossref_mine import D1, D2, NP, TABLE, _whole
+
+    monkeypatch.setattr(acm_table, "TABLE", TABLE)  # the replay and urls.native read the shipped table
+    _whole(cache, api.work(D1), api.work(D2), api.work(NP), total=3)
+    crawl.ingest_crossref([("FAccT", 2023)], cache, offline=True, table=TABLE)
+    result = build(cache, tmp_path / "snapshots", BUILT)
+    manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
+    lines = (result.path / "records.jsonl").read_text(encoding="utf-8").splitlines()
+    ids = {json.loads(line)["id"] for line in lines}
+    assert {"op:facct:2023:doi-3593013.3594011", "op:facct:2023:doi-3593013.3594012"} <= ids
+    [listing] = manifest["sources"]["crossref"]["listings"]
     assert listing["count_ok"] is True

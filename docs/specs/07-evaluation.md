@@ -207,12 +207,12 @@ NeurIPS 1987–2020 and ICML 2013–2022 come from proceedings only, and ICML 19
 release (decision-047), so no rejected papers exist there to exclude; NeurIPS and ICML on OpenReview hold only the rejected papers whose authors opted in, while ICLR
 holds every rejected, withdrawn and desk-rejected submission (decision-012). The crawl window is each venue's
 first year on: NeurIPS 1987, ICML 1988, ICLR 2013 (decision-047, superseding decision-013's 2013 floor); any
-venue-year with no source is a reported gap, never a silent zero. Before 2013 only NeurIPS and ICML have cells,
-so cross-venue counts over those years compare two venues, not three. ICML 1988–2012 records come from dblp,
+venue-year with no source is a reported gap, never a silent zero. Before 2013 only NeurIPS, ICML and (from milestone B) AAAI have cells,
+so cross-venue counts over those years compare three venues, not more. ICML 1988–2012 records come from dblp,
 which has no abstracts: only the years whose official ICML pages give abstracts have them (TASK-206), and every
 other record of those years is title-only, counted in the cell's missing abstracts. ICLR 2014–2016 are
 not gaps: their public archive listings supply accepted main-track records (TASK-096).
-**AAAI, AIES and IASEAI (decision-049, milestone A).** The index holds AAAI 2010–2026, AIES 2024–2025 and IASEAI
+**AAAI 2010+, AIES 2024+ and IASEAI (decision-049, milestone A).** The index holds AAAI 2010–2026, AIES 2024–2025 and IASEAI
 2026 from ojs.aaai.org, every record `accepted` (published in the proceedings: the source lists no rejected paper),
 each venue-year a coverage cell with its real tracks (`main`, `student_abstract`, `consortium`, `demo`, `iaai`,
 `eaai`, `other`). AAAI's `main` is the section mapping of `ingest/ojs_sections.toml` (technical, special and Journal
@@ -231,10 +231,24 @@ count is also checked against the verified count in `ingest/ojs_sections.toml`, 
 (`count_mismatch`, spec 01), so no snapshot holds a mismatched OJS listing: the report's listings section can name an OJS
 volume only for its skipped entries (AAAI 2026's `unavailable 1`), always with `count_ok` yes. One article the OAI list names, AAAI 39173, is served in no form; it is counted
 in AAAI 2026's listed 4,921 but is never a record (spec 01, `[[unavailable]]`).
-FAccT, AAAI 1980–2008 and AIES 2018–2023 are planned (milestones B and C of the
-[design](../plans/2026-10-09-new-venues-design.md)) and have no cells until built, which the report states as scope
-(a venue-year with no source is a reported gap, never a silent zero). Before milestone B, cross-venue counts compare
-venues over different year spans (AAAI from 2010, AIES from 2024, IASEAI 2026).
+**AAAI 1980–2008, AIES 2018–2023 and FAccT (decision-049, milestone B).** These venue-years are now coverage cells
+(AAAI 1980–2008's 23 held years, with no cell for 1981, 1985, 1989, 1995, 2001, 2003 or 2009 and the coverage page's
+"none in" list saying so; AIES 2018–2023; FAccT 2018–2026), and the report's database scope names where each comes from:
+the pinned dblp release for AAAI (4,730 records, none with an abstract), Crossref's records of the ACM proceedings
+for FAccT 2019–2026 and AIES 2018–2023, and, for FAccT, how many abstracts the official pages gave (2022 169 of 181,
+2025 206 of 206, 2026 298 of 314). AIES 2018–2023's cells are one `main` track each: Crossref carries no section data,
+so student abstracts and keynotes sit inside `main` there, where OJS labels student abstracts from 2024, which the
+scope line says. **None of these cells is gated, and no row was added to `official_counts.py`.** Each count is the
+proceedings' own contents (Crossref's DOIs, PMLR's index, dblp's keys) checked against the table in `ingest/`, which is
+the crawl stopping on a mismatch (spec 01 §Sources), not an independent statement of accepted papers, so these cells
+are `accepted` by construction (statuses indexed: `accepted`) and cannot show a missing paper: a `Δ —` is no
+agreement; no official
+accepted-paper statement was read for these years (aaai.org states none for 1980–2008; facctconference.org lists
+accepted papers without a stated count, and its 2025 and 2026 lists hold non-archival papers the proceedings don't,
+217 and 325 rows against 206 and 314 DOIs), so even a stated figure would likely be a definition mismatch with our
+`main`. The research note's §Official counts says the same. Cross-venue counts still compare venues over different year
+spans (AAAI from 1980, NeurIPS from 1987, ICML from 1988, ICLR from 2013, AIES and FAccT from 2018, IASEAI 2026).
+OpenAlex's abstract fallback and `abstract_kind:` are milestone C, planned ([design](../plans/2026-10-09-new-venues-design.md)).
 The source of statuses indexed is spec 01's source table as `ingest/statuses.py` holds it (spec 01
 §Pipeline 5); the snapshot manifest records them per venue-year, and the missing abstracts and sources per
 cell (manifest format 2, TASK-082).

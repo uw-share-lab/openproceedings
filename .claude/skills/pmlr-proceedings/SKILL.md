@@ -1,6 +1,6 @@
 ---
 name: pmlr-proceedings
-description: The PMLR (proceedings.mlr.press) source for ICML — the volume table (ingest/pmlr_volumes.toml, loaded and checked by ingest/volumes.py, which derives `ICML_PMLR_VOLUMES`), the known ICML volumes 2013–2025, competition and workshop volumes, page structure and parsing gotchas, the miner (ingest/sources/pmlr.py, `op ingest pmlr`), and why an unfamiliar volume is never coerced into ICML. Use when writing or reviewing the PMLR miner, editing the volume table, or adding an ICML year.
+description: The PMLR (proceedings.mlr.press) source for ICML and FAccT 2018 (v81) — the volume table (ingest/pmlr_volumes.toml, loaded and checked by ingest/volumes.py, which derives `ICML_PMLR_VOLUMES` and the venue-tagged `PMLR_NATIVE_VOLUMES`), `not_papers` and the non-ICML count stop, the known ICML volumes 2013–2025, competition and workshop volumes, page structure and parsing gotchas, the miner (ingest/sources/pmlr.py, `op ingest pmlr`), and why an unfamiliar volume is never coerced into ICML. Use when writing or reviewing the PMLR miner, editing the volume table, or adding an ICML year.
 ---
 
 # PMLR proceedings (spec 01 §Sources)
@@ -15,9 +15,8 @@ volume with `number`, `venue`, `year`, `track`, `role` (`primary` | `confirm` | 
 (the verified `<div class="paper">` count), `heading` (what the page's `Volume N: ` heading starts with),
 `index_title`, `verified` (a TOML date) and `source`. `ingest/volumes.py` loads it at import and refuses a
 malformed table (unknown column or value, duplicate volume, two ingested volumes for one venue-year, an
-ingested competition/workshop or non-ICML row, an ingested row without year, count or heading).
-`ICML_PMLR_VOLUMES` (volume → year, track) is derived from the ingested ICML rows; the RIS importer,
-`urls.native` and the miner all read this one table, and no other module holds a volume number.
+ingested competition/workshop row, an ingested row of a venue other than ICML or FAccT (`volumes.PMLR_VENUES`), a non-ICML row that isn't `primary`, an ingested row without year, count or heading, `not_papers` on a row that isn't ingested or that lists every paper).
+`ICML_PMLR_VOLUMES` (volume → year, track) is derived from the ingested ICML rows and `PMLR_NATIVE_VOLUMES` (volume → venue, year, track) from every ingested row (FAccT 2018's v81 too); the RIS importer reads the first (a v81 `pmlr_url` in a RIS file is still `out_of_scope`), `urls.native`, `scholar_compare.proceedings_key` and the record check the second, and the miner reads the table, and no other module holds a volume number.
 `test_ris.py` pins `ICML_PMLR_VOLUMES`; `test_pmlr.py` checks every row against the recorded PMLR index and
 volume headings. **Adding an ICML row changes the RIS import** (a `pmlr_url` in that volume becomes an ICML
 record instead of a `no_id`/`out_of_scope` skip), so a new row shows in the next `op snapshot diff`.
@@ -48,8 +47,11 @@ title; the paper count is the number of `<div class="paper">` entries (evidence:
 | v176 | NeurIPS | 2021 | `competition` | out_of_scope | 36 (sections "Competitions", "Demonstrations") |
 | v220 | NeurIPS | 2022 | `competition` | out_of_scope | 20 |
 
-The NeurIPS competition volumes are classified but not ingested: spec 01 lists PMLR for ICML only, and a
-`pmlr-` native id is ICML-only in the record schema, so ingesting them needs a spec and schema change (FAccT 2018's PMLR v81 is planned for milestone B of the new-venues design, decision-049, and widens `PROCEEDINGS_NATIVE["pmlr"]` then; it is not built).
+| v81 | FAccT | 2018 | `main` | primary | 20 entries = 17 papers + `not_papers` friedler18a (Preface), sweeney18a (Keynote 1), hellman18a (Keynote 2); the heading says `Conference on Fairness, Accountability and Transparency`, the index title `FAT* 2018 Proceedings` (verified 2026-10-10) |
+
+The NeurIPS competition volumes are classified but not ingested: only ICML and FAccT 2018 are (decision-049,
+milestone B widened `PROCEEDINGS_NATIVE["pmlr"]` to `{ICML, FAccT}`; the record check ties a non-ICML `pmlr-` id to
+the volume of its own venue and year), so ingesting the NeurIPS ones would need a venue added to `volumes.PMLR_VENUES`.
 
 ICML workshop volumes exist and are **out of scope** (never `main`, never ingested unless spec 01 adds
 workshops from PMLR): v27 (2011), v184 (ICML 2022 Healthcare AI), v251 (GRaM at ICML 2024), v292
@@ -91,13 +93,17 @@ with either paper.
    taken from the cache entry.
 5. Every fetch goes through the disk cache (`.claude/skills/openreview-api/SKILL.md` has the retry rules,
    and the same HTTP client serves PMLR).
-6. **The page must agree with the table.** The miner stops on a volume whose `Volume N: ` heading doesn't
+6. **`papers` is the index's entry count; `not_papers` are the entries that are no paper** (a preface or keynote:
+   counted `not_paper`, never fetched, never records; a key the index lacks stops the crawl, `stale_not_paper`,
+   before any paper page is fetched). A **non-ICML volume's count mismatch stops the crawl** (`count_mismatch`);
+   ICML's only warns (tightening it is a separate change).
+7. **The page must agree with the table.** The miner stops on a volume whose `Volume N: ` heading doesn't
    start with the row's `heading` (`heading_mismatch`): fix the table after checking the page, never the
    miner.
 
 ## The miner (as built, task-053)
-`backend/src/openproceedings/ingest/sources/pmlr.py`, run by `op ingest pmlr --year <Y>` (the year's
-ingested ICML volume from the table; `--dry-run`, `--offline`, `--refresh`, `--delay`), cache under
+`backend/src/openproceedings/ingest/sources/pmlr.py`, run by `op ingest pmlr [--venue ICML|FAccT] --year <Y>` (the year's
+ingested ICML (or, with `--venue FAccT`, FAccT 2018's) volume from the table; `--dry-run`, `--offline`, `--refresh`, `--delay`), cache under
 `<data-dir>/cache/pmlr/`. Per entry (`<div class="paper">`): title (`<p class="title">`), authors, the
 `abs` page URL (the native key), the PDF (not `-supp.pdf`) and a v202/v235/v267-style OpenReview forum link
 (`urls.forum`). Per paper page: `citation_title` (the abstract is taken only when it is the listed title,

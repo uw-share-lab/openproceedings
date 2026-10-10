@@ -1,12 +1,12 @@
 # AAAI, AIES, FAccT and IASEAI — design
 
-Status: **approved; milestone A built (2026-10-09), milestones B and C planned** · Decision: decision-049 ·
+Status: **approved; milestone A built (2026-10-09), milestone B built (2026-10-10), milestone C planned** · Decision: decision-049 ·
 Supersedes: spec 00 §Scope's venue list and the "later extension" line · Sources checked live on 2026-10-09
 (facts recorded in `docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md`)
 
-Milestone A as built is documented in `docs/specs/01-ingestion.md` §Sources (OJS row). Everything below about
-milestones B and C (dblp AAAI 1980–2008, Crossref, PMLR v81, the FAccT site, OpenAlex, `abstract_kind`) is
-the plan, not built.
+Milestones A and B as built are documented in `docs/specs/01-ingestion.md` §Sources (the OJS, dblp, PMLR, Crossref
+and FAccT site rows; the "Milestone B as built" note below says where the build departs from this design). Everything
+below about milestone C (OpenAlex, `abstract_kind`) is the plan, not built.
 
 ## Owner decisions (2026-10-09)
 
@@ -30,17 +30,17 @@ the plan, not built.
 
 | Venue | Years | Paper list | Abstract | Papers (live, 2026-10-09) |
 |---|---|---|---|---|
-| AAAI | 1980–2008 (none held 1981, 1985, 1989, 2001, 2003, 2009) | pinned dblp release, `conf/aaai/<year>` main keys | OpenAlex, else `null` (aaai.org has none and sets `Crawl-delay: 43200`) | ~3.7k (dblp main keys 28,802 over 1980–2026, minus 2010+) |
+| AAAI | 1980–2008 (none held 1981, 1985, 1989, **1995**, 2001, 2003, 2009: 23 held years) | pinned dblp release, `conf/aaai/<year>` main keys (built) | OpenAlex, else `null` (aaai.org has none and sets `Crawl-delay: 43200`); none yet (milestone C) | **4,730 as built** (4,689 main-volume entries, minus 12 not-paper rows, plus 53 workshop entries); estimated ~3.7k on 2026-10-09 |
 | AAAI | 2010–2026 (Vol. 24–40) | ojs.aaai.org OAI-PMH, journal `AAAI` | official (`dc:description`) | 25,135 on the issue pages (IAAI and EAAI included) |
-| AIES | 2018–2023 | Crossref, ACM proceedings DOIs 10.1145/3278721, 3306618, 3375627, 3461702, 3514094, 3600211 | OpenAlex, else `null` (Crossref holds none; ACM DL is Cloudflare-challenged and excluded) | 78, 91, 76, 114, 115, 101 |
+| AIES | 2018–2023 | Crossref, ACM proceedings DOIs 10.1145/3278721, 3306618, 3375627, 3461702, 3514094, 3600211 (built) | OpenAlex, else `null` (Crossref holds none; ACM DL is Cloudflare-challenged and excluded); none yet (milestone C) | 78, 91, 76, 114, 115, 101 = **575 as built**, all `main` (no section data: student abstracts and keynotes inside) |
 | AIES | 2024–2025 (Vol. 7–8) | ojs.aaai.org OAI-PMH, journal `AIES` | official | 170, 279 (excl. front matter) |
 | AIES | 2026 | not yet published (Malmö, 12–14 Oct 2026) | — | — |
-| FAccT | 2018 (FAT*) | PMLR v81 | official (PMLR page) | 17 (preface and two keynotes excluded) |
-| FAccT | 2019–2026 | Crossref, ACM proceedings DOIs 10.1145/3287560, 3351095, 3442188, 3531146, 3593013, 3630106, 3715275, 3805689 | official from facctconference.org for 2022, 2025, 2026; else OpenAlex; else `null` | 41, 95 (≈27 tutorial/CRAFT entries to exclude), 82, 181, 153, 167, 206, 314 |
+| FAccT | 2018 (FAT*) | PMLR v81 (built) | official (PMLR page) | **17 as built** (preface and two keynotes excluded) |
+| FAccT | 2019–2026 | Crossref, ACM proceedings DOIs 10.1145/3287560, 3351095, 3442188, 3531146, 3593013, 3630106, 3715275, 3805689 (built) | official from facctconference.org for 2022 (169 of 181), 2025 (206 of 206), 2026 (298 of 314); else OpenAlex (its FAccT coverage figures in the research note are unverified: query not recorded); else `null` | 41, 95 (26 tutorial/CRAFT rows excluded: 69), 82, 181, 153, 167, 206, 314 = 1,239 DOIs, **1,213 as built**; with 2018, **FAccT is 1,230 records** |
 | IASEAI | 2026 (Vol. 2) | ojs.aaai.org OAI-PMH, journal `IASEAI` | official | 57 archival (35 non-archival have no findable listing) |
 | IASEAI | 2027 | OpenReview `IASEAI.org/2027/Conference` once decisions (20 Nov 2026) are public | official (OpenReview) | — (follow-up task) |
 
-About 31k new records; the corpus grows from ~141k to ~172k.
+About 31k new records; the corpus grows from ~141k to ~172k. Milestone B brought 6,535 of them: AAAI 1980–2008's 4,730, AIES 2018–2023's 575 and FAccT's 1,230.
 
 ## Data model
 
@@ -149,7 +149,7 @@ pinned by tests against recorded pages; an unlisted unit (section, key, volume, 
 - `ingest/acm_proceedings.toml`: per venue and year the proceedings DOI, the date window, the verified count and
   `[[not_paper]]` rows (FAccT 2020's tutorials and CRAFT sessions, listed by DOI). A count mismatch stops it.
 - Fields: title, authors in order, DOI, `urls.proceedings` the DOI link. No abstracts (Crossref holds none for
-  these venues; checked on all 1,341 FAccT DOIs and 18 sampled AIES DOIs).
+  these venues; checked on all 1,239 FAccT DOIs (the first count, 1,341, was not reproducible; see Milestone B as built) and 18 sampled AIES DOIs).
 
 ### 4. PMLR v81 — FAccT 2018
 - A row in `ingest/pmlr_volumes.toml` (venue `FAccT`, year 2018, track `main`, 17 papers; preface and two
@@ -240,3 +240,41 @@ Tests never reach a live service (recorded fixtures under `backend/tests/fixture
 - Licence: OJS pages state AAAI copyright; ACM papers carry mixed CC and ACM licences; OpenAlex data is CC0.
   Indexing titles and abstracts with links back is the posture already used for PMLR and NeurIPS; the
   takedown process (spec 08) covers all venues.
+
+## Milestone B as built (2026-10-10)
+
+Milestone B is built ([spec 01](../specs/01-ingestion.md) §Sources: the dblp, PMLR, Crossref and FAccT site rows;
+`docs/plans/2026-10-10-new-venues-milestone-b.md` is its implementation plan). The controller accepted the planner's
+decisions of that plan, and these are where the build departs from, or settles, this design:
+
+- **AAAI was not held in 1995 either.** The not-held years are 1981, 1985, 1989, 1995, 2001, 2003 and 2009 (dblp's
+  titles number 1994 the 12th meeting and 1996 the 13th), so AAAI 1980–2008 has 23 held years and 4,730 records, not
+  the design's 24 years.
+- **dblp:** AAAI has its own extract (`<cache>/dblp/extract/aaai/<sha256>.json`) beside ICML's, which keeps its path
+  and bytes; one streaming pass writes every slice that is missing. The release pin stays in `dblp_icml.toml`. AAAI's
+  markers and replay are their own, and `[[not_paper]]` rows of the three new sources (dblp AAAI, Crossref, PMLR v81)
+  are counted and never records, where ICML's stay `other` records. A takedown scopes a dblp id by venue
+  (`aaai:dblp-<key>`).
+- **PMLR v81:** a `not_papers` column holds the preface and two keynotes (`papers = 20`, 17 records); a non-ICML
+  volume's count mismatch stops the crawl; a venue-tagged `PMLR_NATIVE_VOLUMES` names a v81 record, while the
+  ICML-only maps and the RIS importer are untouched.
+- **Crossref:** requests go one at a time with the `CROSSREF_MAILTO` User-Agent, which the controller made
+  **optional** (unset: the public pool; malformed: the crawl stops, `bad_contact`). The design's "1,341 FAccT DOIs"
+  was not reproducible: the ACM tables of contents hold 1,239, with no extra DOI in any window, and 575 AIES 2018–2023
+  DOIs. The ISBN cross-check could not be built (the papers carry no ISBN), and the count checks the table does stand
+  instead (research note §The ACM census). FAccT 2020's 26 tutorial and CRAFT rows are `[[not_paper]]`.
+- **AIES 2018–2023 are all `main`**, as the design says: Crossref carries no section data, so student abstracts and
+  keynotes (141 entries of two pages or fewer, listed in the research note for the owner) sit inside `main`, unlike
+  2024+, where OJS labels student abstracts. The coverage page's database scope says so.
+- **FAccT site:** the pages are read by `op ingest crossref` (there is no `op ingest facct-site`; spec 08's design
+  target is folded into `crossref`). 2025 joins by DOI and 2022 and 2026 by exact title key, one to one, never fuzzy:
+  169 of 181, 206 of 206 and 298 of 314 attach. The 2022 page's DOI links are never read (entry 295 links entry 314's).
+- **Record schema 7** (decision-049): the `crossref` and `facct_site` sources, `doi-<toc>.<n>` ids (digits only) and
+  `dblp-` ids for AAAI, and the `pmlr-` native id widened from ICML to FAccT (v81). A dedup idempotence bug of TASK-179's step 3 that the milestone's Hypothesis runs found is
+  fixed: the forum link and steps 2 and 3 repeat until a pass merges nothing.
+- **No official count rows** were added for these venue-years (spec 07 §C).
+- **Real data (2026-10-10):** snapshot 2026-10-10-21779e017036 (173,292 records; diff against milestone A's
+  2026-10-10-988e342c9c07 is +6,535 added, 0 changed, 0 removed), index 99c2e7ea2a0a, full parity 0 differences,
+  coverage --check PASS (77/78); ICML's dblp extract hash unchanged.
+
+Milestone C (OpenAlex and `abstract_kind`) is still planned, as above.

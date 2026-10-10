@@ -28,7 +28,10 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
 3. Docs, specs and READMEs as-built in the same branch.
 4. `/record-learnings` → commit the entry and regenerated `INDEX.md`.
 5. `/review-gate` → routed reviewers, every finding dispositioned, `record-review.py APPROVE` for HEAD.
-6. `git push -u origin <branch>`, then `/open-pr` (writes the body, creates the PR, `--attest`s it).
+6. Before the first push, `git log -p origin/dev..HEAD | grep -i` for the owner's contact address and any other
+   personal data (plans, rulings and briefs say "the address in `.env`", never the address; a leak found
+   after commit is removed by rewriting the unpushed branch, never after push). Then
+   `git push -u origin <branch>`, then `/open-pr` (writes the body, creates the PR, `--attest`s it).
 7. Once its checks are green, the PR goes into the merge queue (§Merge method). Once it merges:
    `git worktree remove <its worktree>` and `git branch -d <branch>` (GitHub deletes the remote branch). A
    worktree left behind goes stale; one with uncommitted work is archived as a patch before it is removed,

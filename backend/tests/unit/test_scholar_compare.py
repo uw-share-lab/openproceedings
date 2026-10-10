@@ -43,6 +43,7 @@ from openproceedings.eval.scholar_compare import (
     with_prefixes,
     with_variants,
 )
+from openproceedings.ingest import volumes
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.query.ast import Node, _Node
 from openproceedings.query.canonical import render
@@ -1203,3 +1204,28 @@ def test_a_rows_evidence_serialises_no_tree_per_row(
 ) -> None:
     few, many = _serialisations(monkeypatch, q, make, 2, cls), _serialisations(monkeypatch, q, make, 12, cls)
     assert few == many, f"{cls}: {few} serialisations for 2 rows, {many} for 12"
+
+
+def test_a_dblp_aaai_page_names_no_key() -> None:
+    assert proceedings_key("https://dblp.org/rec/conf/aaai/Smith90") is None
+
+
+def test_proceedings_key_reads_a_facct_v81_url_from_the_venue_tagged_map(monkeypatch) -> None:
+    monkeypatch.setattr(
+        volumes, "PMLR_NATIVE_VOLUMES", {**volumes.PMLR_NATIVE_VOLUMES, 81: ("FAccT", 2018, "main")}
+    )
+    assert proceedings_key("https://proceedings.mlr.press/v81/one18a.html") == (
+        "FAccT",
+        2018,
+        "pmlr-v81-one18a",
+    )
+
+
+def test_proceedings_key_of_an_acm_doi_link(monkeypatch) -> None:
+    from openproceedings.ingest import acm_table
+
+    url = "https://doi.org/10.1145/3593013.3594011"
+    # the shipped table (census 2026-10-10) lists FAccT 2023
+    assert proceedings_key(url) == ("FAccT", 2023, "doi-3593013.3594011")
+    monkeypatch.setattr(acm_table, "TABLE", acm_table.load(""))
+    assert proceedings_key(url) is None  # a toc the table doesn't list names no key

@@ -92,7 +92,7 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 |---|---|
 | [`openreview-api`](skills/openreview-api/SKILL.md) | How openproceedings talks to OpenReview |
 | [`openreview-venueids`](skills/openreview-venueids/SKILL.md) | Every known OpenReview content.venueid form for NeurIPS, ICLR and ICML (OpenReview hosts no AAAI, AIES or IASEAI 2026 papers: those come from ojs.aaai.org, so none of their venues has a venueid |
-| [`pmlr-proceedings`](skills/pmlr-proceedings/SKILL.md) | The PMLR (proceedings.mlr.press) source for ICML |
+| [`pmlr-proceedings`](skills/pmlr-proceedings/SKILL.md) | The PMLR (proceedings.mlr.press) source for ICML and FAccT 2018 (v81) |
 | [`neurips-proceedings`](skills/neurips-proceedings/SKILL.md) | The proceedings.neurips.cc source |
 | [`record-schema`](skills/record-schema/SKILL.md) | The PaperRecord contract from spec 01 |
 | [`track-taxonomy`](skills/track-taxonomy/SKILL.md) | The track and status enums from spec 01 with the source signal that justifies each value, the never-default-to-main and unknown-stays-unknown rules, how evidence claims back every classification, and which tracks and statuses the default query filter includes per spec 02. |

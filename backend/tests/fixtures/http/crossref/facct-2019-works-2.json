@@ -1,0 +1,19 @@
+{
+ "_recorded": {
+  "date": "2026-10-10",
+  "run": "Census B live run, 2026-10-10 (scripts/acm_census.py, op ingest crossref|pmlr; milestone B Task 9)",
+  "scrubbed": "decision-004: titles, subtitles and person names synthetic; DOIs, types, pages, dates, ISBNs, cursors, totals and the proceedings title real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.crossref.org/works?filter=prefix:10.1145,from-pub-date:2019-01-22,until-pub-date:2019-02-05&rows=1000&select=DOI,title,subtitle,author,type,page,published&cursor=MTU5OTYxNDU3NjAwMCwxMC4xMTQ1JTJGMzMxMDM3Ny4zMzEzODY1",
+  "authenticated": false
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json"
+  },
+  "text": "{\"status\": \"ok\", \"message-type\": \"work-list\", \"message-version\": \"1.0.0\", \"message\": {\"facets\": {}, \"total-results\": 676, \"items\": [], \"items-per-page\": 1000, \"query\": {\"start-index\": 0, \"search-terms\": null}}}"
+ }
+}

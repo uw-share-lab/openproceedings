@@ -301,7 +301,7 @@ warnings, the save's index check), the design doc says so; its open questions li
    *As built (TASK-134, decision-018).* Each result shows its authors under the title (the first three and
    "et al.", with a "Show all n authors" button, `aria-expanded`, for the full list) and, under the abstract, its
    attribution "Abstract: `<site>`" linking to the paper's page there (the hit's `abstract_source.origin` and
-   `url`: OpenReview, NeurIPS Proceedings, ICLR Proceedings, PMLR, ICML conference site, AAAI Digital Library (ojs.aaai.org; decision-049); an Internet Archive
+   `url`: OpenReview, NeurIPS Proceedings, ICLR Proceedings, PMLR, ICML conference site, AAAI Digital Library (ojs.aaai.org: AAAI, AIES and IASEAI), FAccT conference site (the official FAccT pages of 2022, 2025 and 2026) and Crossref (ACM proceedings; it gives no abstract today, so only `facct_site` occurs for one; decision-049); an Internet Archive
    capture adds " (Internet Archive copy, <YYYY-MM-DD>)" and links the archive's own view of the page, with its
    banner, TASK-206), with " (via RIS import)" after it when the
    claim came through an imported RIS file; "an imported RIS file", unlinked, when its route names no known
@@ -321,9 +321,12 @@ warnings, the save's index check), the design doc says so; its open questions li
    duplicates were merged at ingest, before indexing (merge counts, and look-alike pairs kept apart by
    track or venue-year, are in the search record). Database scope: coverage
    report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>."*
-   The coverage report this text cites states each venue's indexed years (AAAI from 2010, AIES from 2024 and IASEAI
-   2026 until milestone B of the [new-venues design](../plans/2026-10-09-new-venues-design.md), which also plans the
-   OpenAlex abstract label and the `abstract_kind:` facet, milestone C; neither is built) and, for ICML 1988–2012, that the
+   The coverage report this text cites states each venue's indexed years (AAAI from 1980, with a "none in" list of the years it was not held; AIES from 2018
+   and FAccT from 2018; IASEAI 2026; milestone B, decision-049), where the dblp, Crossref and FAccT years come from
+   (AAAI 1980–2008 has no abstracts; AIES 2018–2023 sits in one `main` track because Crossref carries no section data, so its
+   student abstracts and keynotes are in `main`; FAccT's abstracts come from the official pages of 2022, 2025 and 2026
+   only), and the [new-venues design](../plans/2026-10-09-new-venues-design.md) plans the OpenAlex abstract label and the
+   `abstract_kind:` facet (milestone C; neither is built) and, for ICML 1988–2012, that the
    records reflect the pinned dblp release (its DOI) and archived official pages, not a crawl on the window's
    dates (decision-047): the window below is when the release was read, not when its data was current.
    The crawl clause is always the window `crawl_dates["*"]` from–to (a crawl spans days), never one date,

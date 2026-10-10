@@ -402,7 +402,7 @@ route execution.
   text out. The attribution is the record's `Attribution` from the exported index's snapshot, computed once
   when the snapshot is loaded (`RecordFile.attributions`, `ingest/dedup.py::attribution`), the same one
   `GET /search` sends as `abstract_source`; nothing recomputes it. `<site>` is the results list's name for the
-  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`, `ICML conference site`, `AAAI Digital Library` (ojs.aaai.org: AAAI, AIES and IASEAI, decision-049);
+  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`, `ICML conference site`, `AAAI Digital Library` (ojs.aaai.org: AAAI, AIES and IASEAI, decision-049), `Crossref` and `FAccT conference site` (decision-049, milestone B: Crossref's records of the ACM proceedings, and the official FAccT pages; Crossref carries no abstract today, so a FAccT abstract's origin is `facct_site`, and both link the paper's DOI);
   `export.ORIGIN_NAMES`,
   pinned equal to `hit-item.tsx`'s), plus ` (via RIS import)` when the claim came through an imported RIS file;
   a route that names no known site reads `an imported RIS file`; the url is left out when there is none.
@@ -537,8 +537,8 @@ route execution.
   | FAccT | 2021 on | `ACM Conference on Fairness, Accountability, and Transparency (FAccT <year>)` |
   | IASEAI | 2025 on | `International Association for Safe and Ethical AI Conference (IASEAI <year>)` (only 2026 has papers) |
 
-  The AAAI, AIES, FAccT and IASEAI rows are `vocab.CONFERENCES` (decision-049). Records exist for AAAI 2010+, AIES
-  2024+ and IASEAI 2026 now; FAccT's rows are the vocabulary only until milestone B builds its source.
+  The AAAI, AIES, FAccT and IASEAI rows are `vocab.CONFERENCES` (decision-049). Records exist for AAAI 1980–2008 (dblp)
+  and 2010+ (OJS), AIES 2018–2023 (Crossref) and 2024+ (OJS), FAccT 2018 (PMLR v81) and 2019+ (Crossref), and IASEAI 2026.
 
   This covers every year the sources can yield, and every year each venue was held under its name (spec 01
   §Sources: NeurIPS proceedings for all years, from 1987; ICLR on OpenReview from 2013; ICML from 1988 in the

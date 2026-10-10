@@ -435,12 +435,20 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
     for vy in cov["venue_years"]:
         if vy["records"]:
             years.setdefault(vy["venue"], set()).add(vy["year"])
-    spans = " · ".join(  # a venue with one year prints it once (CV-7): "IASEAI 2026", not "IASEAI 2026–2026"
-        f"{v} {min(ys)}" + (f"–{max(ys)}" if max(ys) != min(ys) else "") for v, ys in sorted(years.items())
-    )
+
+    def span(v: str, ys: set[int]) -> str:
+        """CV-7's span: one year printed once ("IASEAI 2026"), and the years between with no records listed,
+        so a venue-year with no source is a reported gap, never a silent one (spec 07)."""
+        none = [y for y in range(min(ys), max(ys) + 1) if y not in ys]
+        return (f"{v} {min(ys)}" + (f"–{max(ys)}" if max(ys) != min(ys) else "")
+                + (f" (none in {', '.join(map(str, none))})" if none else ""))  # fmt: skip
+
+    spans = " · ".join(span(v, ys) for v, ys in sorted(years.items()))
     out = [f"- Years indexed: {spans}" + (" (the venues start in different years)"
                                           if len({min(ys) for ys in years.values()}) > 1 else "")]  # fmt: skip
-    dblp = manifest.get("sources", {}).get("dblp", {}).get("listings", [])
+    listings = manifest.get("sources", {}).get("dblp", {}).get("listings", [])
+    dblp = [x for x in listings if x.get("venue", "ICML") == "ICML"]
+    aaai = [x for x in listings if x.get("venue") == "AAAI"]
     if dblp:
         held = sorted({int(x["year"]) for x in dblp})
         releases = sorted({str(x["listing"]) for x in dblp})
@@ -464,6 +472,31 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
             f"page ({len(sites)} pages, live or Internet Archive captures: `ingest/icml_sites.toml`); the rest are "
             "title-only. 1989, 1991 and 1992, held as the International Workshop on Machine Learning, are exported "
             f"under the ICML name.{as_submitted}"
+        )
+    if aaai:
+        held = sorted({int(x["year"]) for x in aaai})
+        releases = sorted({str(x["listing"]) for x in aaai})
+        out.append(
+            f"- AAAI {held[0]}–{held[-1]}: from the pinned dblp snapshot release {', '.join(releases)} (a "
+            "bibliography read from one pinned file; decision-049). "
+            f"Its {sum(int(x['records']) for x in aaai):,} records have no abstract (dblp holds none)."
+        )
+    crossref = manifest.get("sources", {}).get("crossref", {}).get("listings", [])
+    for venue in sorted({str(x["venue"]) for x in crossref}):
+        mine = [x for x in crossref if x["venue"] == venue]
+        held = sorted({int(x["year"]) for x in mine})
+        records = sum(int(x["records"]) for x in mine)
+        attached = sum(int(x.get("abstract_attached", 0)) for x in mine)
+        what = (
+            f"{attached:,} with an abstract, each from an official FAccT page (only 2022, 2025 and 2026 have "
+            "one); the rest are title-only"
+            if venue == "FAccT"
+            else "no abstracts (title-only); Crossref carries no section data, so student "
+            "abstracts and keynotes are in `main` (OJS labels student abstracts from 2024)"
+        )
+        out.append(
+            f"- {venue} {held[0]}–{held[-1]}: from Crossref's records of the ACM proceedings (decision-049): "
+            f"{records:,} records, {what}."
         )
     return out
 

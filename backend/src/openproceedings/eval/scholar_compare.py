@@ -57,9 +57,9 @@ from scholarmend.parse import parse_ris
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.protocol import EngineInputError, Searchable
 from openproceedings.engine.reference import ReferenceEngine
-from openproceedings.ingest import dedup, urls
+from openproceedings.ingest import acm_table, dedup, urls
+from openproceedings.ingest import volumes as _volumes
 from openproceedings.ingest.record import FORUM_ID, PaperRecord
-from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 from openproceedings.query.ast import (
     FILTER_FIELDS,
     And,
@@ -194,8 +194,8 @@ def openreview_id(url: str) -> str | None:
 
 def proceedings_key(url: str) -> ProceedingsKey | None:
     """The proceedings paper a URL names, or None: `urls.native`'s id with the venue and year the URL itself
-    carries (a NeurIPS or ICLR proceedings path; for PMLR, the ICML volume's year from the volume table). Any
-    other native names no key here: a dblp record page (`dblp-<key>`, ICML 1988-2012; decision-047) and an
+    carries (a NeurIPS or ICLR proceedings path; for PMLR, the volume's venue and year from the volume table). Any
+    other native names no key here: a dblp record page (`dblp-<key>`, ICML 1988-2012 and AAAI 1980-2008; decisions 047 and 049) and an
     ojs.aaai.org article or galley (`ojs-<id>`, AAAI, AIES, IASEAI; decision-049) carry no year, so the row
     is matched by its DOI or its title instead, never refused."""
     native = urls.native(url)
@@ -203,8 +203,12 @@ def proceedings_key(url: str) -> ProceedingsKey | None:
         return None
     if (parts := urls.proceedings_parts(url)) is not None:
         return (parts[0], parts[1], native)
-    if (volume := urls.pmlr(url)) is not None and volume[0] in ICML_PMLR_VOLUMES:
-        return ("ICML", ICML_PMLR_VOLUMES[volume[0]][0], native)
+    if (volume := urls.pmlr(url)) is not None and volume[0] in _volumes.PMLR_NATIVE_VOLUMES:
+        venue, year, _ = _volumes.PMLR_NATIVE_VOLUMES[volume[0]]
+        return (venue, year, native)
+    if native.startswith("doi-"):  # the proceedings row gives the venue and year the DOI itself lacks
+        row = acm_table.TABLE.by_toc(native.removeprefix("doi-").split(".", 1)[0])
+        return None if row is None else (row.venue, row.year, native)
     return None  # dblp-<key>, ojs-<id>: no year in the URL
 
 

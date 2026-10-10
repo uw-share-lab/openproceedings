@@ -31,8 +31,8 @@ from openproceedings.ingest.sources.http import PinnedFile
 from openproceedings.vocab import venue_name
 
 FIRST_YEAR, LAST_YEAR = (
-    DBLP_YEARS[0],
-    DBLP_YEARS[-1],
+    DBLP_YEARS["ICML"][0],
+    DBLP_YEARS["ICML"][-1],
 )  # ICML's first meeting as a conference; PMLR v28 (2013) on
 _KEY = re.compile(r"conf/icml/[A-Za-z0-9_-]+")
 _SHA256 = re.compile(r"[0-9a-f]{64}")

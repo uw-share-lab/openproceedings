@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest = sub.add_parser(
         "ingest",
-        help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | ojs | openreview (spec 01)",
+        help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | ojs | crossref | openreview (spec 01)",
     )
     sources = ingest.add_subparsers(dest="source", metavar="<source>", required=True)
     ris = sources.add_parser(
@@ -141,10 +141,11 @@ def build_parser() -> argparse.ArgumentParser:
     for name, about in (
         ("iclr", "ICLR 2014-2016 accepted-paper archive pages (iclr.cc)"),
         ("neurips", "NeurIPS proceedings years (proceedings.neurips.cc; 2021 adds the D&B host)"),
-        ("pmlr", "ICML years from PMLR (the volume in ingest/pmlr_volumes.toml)"),
-        ("dblp", "ICML 1988-2012 from the pinned dblp release (ingest/dblp_icml.toml; downloaded once from "
-                 "drops.dagstuhl.de, never dblp.org) with the abstracts the official ICML pages in "
-                 "ingest/icml_sites.toml give"),
+        ("pmlr", "ICML years, or FAccT 2018 (--venue FAccT), from PMLR (the volume in ingest/pmlr_volumes.toml)"),
+        ("dblp", "ICML 1988-2012 (--venue ICML, the default) or AAAI 1980-2008 (--venue AAAI) from the pinned "
+                 "dblp release (ingest/dblp_icml.toml, ingest/dblp_aaai.toml; downloaded once from "
+                 "drops.dagstuhl.de, never dblp.org); ICML with the abstracts the official ICML pages in "
+                 "ingest/icml_sites.toml give, AAAI with none"),
     ):  # fmt: skip
         dblp = name == "dblp"  # its own cache layout and flags' meaning (decision-047, spec 01 §CLI)
         crawl = sources.add_parser(
@@ -152,6 +153,16 @@ def build_parser() -> argparse.ArgumentParser:
             help=f"read {about} into <data-dir>/cache/dblp and <data-dir>/cache/icml_sites" if dblp
             else f"crawl {about} into <data-dir>/cache/{name}",
         )  # fmt: skip
+        if dblp:
+            crawl.add_argument(
+                "--venue", default="ICML", choices=("ICML", "AAAI"),
+                help="ICML 1988-2012 (default) or AAAI 1980-2008; both read the one pinned release",
+            )  # fmt: skip
+        if name == "pmlr":
+            crawl.add_argument(
+                "--venue", default="ICML", choices=("ICML", "FAccT"),
+                help="ICML 2013 on (default) or FAccT 2018 (v81); each year's volume is the table's row",
+            )  # fmt: skip
         crawl.add_argument(
             "--year", dest="years", action="append", required=True, type=_years, metavar="YYYY[-YYYY]",
             help="a year or an inclusive range; repeatable",
@@ -212,6 +223,37 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"seconds between requests (default 1, at least {MIN_DELAY}; the host is never paced under 3)",
     )  # fmt: skip
     ojs_parser.set_defaults(run=_ingest_ojs)
+    from openproceedings.ingest import acm_table  # the venues the table names are the --venue choices
+
+    crossref_parser = sources.add_parser(
+        "crossref",
+        help="read the ACM proceedings of FAccT 2019+ and AIES 2018-2023 (ingest/acm_proceedings.toml) from "
+        "Crossref into <data-dir>/cache/crossref; CROSSREF_MAILTO (optional, env or .env) names a contact in "
+        "the User-Agent",
+    )
+    crossref_parser.add_argument(
+        "--venue", dest="venues", action="append", choices=sorted(acm_table.VENUES),
+        help="repeatable; default every venue the table lists",
+    )  # fmt: skip
+    crossref_parser.add_argument(
+        "--year", dest="years", action="append", type=_years, metavar="YYYY[-YYYY]",
+        help="a year or an inclusive range; repeatable; default every year the table lists",
+    )  # fmt: skip
+    crossref_parser.add_argument(
+        "--dry-run", action="store_true", help="no network, no contact: say what is cached; write nothing"
+    )
+    crossref_parser.add_argument(
+        "--offline", action="store_true", help="use the page cache only (no network)"
+    )
+    crossref_parser.add_argument(
+        "--refresh", action="store_true",
+        help="fetch the proceedings record and the chain again from cursor=*",
+    )  # fmt: skip
+    crossref_parser.add_argument(
+        "--delay", type=float, default=1.0,
+        help=f"seconds between requests (default 1, at least {MIN_DELAY}; Crossref is never paced under 1)",
+    )  # fmt: skip
+    crossref_parser.set_defaults(run=_ingest_crossref)
     for name, task in PLANNED_SOURCES.items():
         _stub(sources.add_parser(name, help=_stub_status(task)), f"ingest {name}", task)
 
@@ -578,6 +620,7 @@ def _ingest_openreview(ns: argparse.Namespace) -> int:
 
 
 def _ingest_crawl(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest.sources import crawl as crawl_module
     from openproceedings.ingest.sources.crawl import ingest_dblp, ingest_iclr, ingest_neurips, ingest_pmlr
 
     if not math.isfinite(ns.delay):
@@ -586,13 +629,25 @@ def _ingest_crawl(ns: argparse.Namespace) -> int:
         raise _usage(f"--delay must be at least {MIN_DELAY} seconds (politeness)")
     if ns.dry_run and ns.offline:
         raise _usage("--dry-run and --offline don't combine: a dry run reads the live index pages")
+    years = sorted({y for chunk in ns.years for y in chunk})
+    if ns.source == "dblp" and ns.venue == "AAAI":
+        if ns.refresh:
+            raise _usage(
+                "--refresh: nothing to refresh for AAAI (the release is pinned; no pages are fetched)"
+            )
+        _print(
+            crawl_module.ingest_dblp_aaai(
+                years, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run
+            )
+        )
+        return 0
     run = {"iclr": ingest_iclr, "neurips": ingest_neurips, "pmlr": ingest_pmlr, "dblp": ingest_dblp}[
         ns.source
     ]
-    years = sorted({y for chunk in ns.years for y in chunk})
+    extra = {"venue": ns.venue} if ns.source == "pmlr" else {}
     _print(
         run(years, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run, refresh=ns.refresh,
-            min_interval=ns.delay)
+            min_interval=ns.delay, **extra)
     )  # fmt: skip
     return 0
 
@@ -606,6 +661,25 @@ def _ingest_ojs(ns: argparse.Namespace) -> int:
         raise _usage("--dry-run and --offline don't combine: a dry run reads the live first page")
     _print(ingest_ojs(ns.journals, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
                       refresh=ns.refresh, min_interval=ns.delay))  # fmt: skip
+    return 0
+
+
+def _ingest_crossref(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest import acm_table
+    from openproceedings.ingest.sources.crawl import ingest_crossref
+
+    if not math.isfinite(ns.delay) or ns.delay < MIN_DELAY:
+        raise _usage(f"--delay must be finite and at least {MIN_DELAY} seconds (politeness)")
+    if ns.dry_run and ns.offline:
+        raise _usage("--dry-run and --offline don't combine: a dry run already reads the cache only")
+    years = {y for chunk in ns.years or [] for y in chunk}
+    keys = [k for k in sorted(acm_table.TABLE.proceedings)
+            if (not ns.venues or k[0] in ns.venues) and (not years or k[1] in years)]  # fmt: skip
+    if not keys:
+        raise _usage(f"no acm_proceedings.toml row matches venues {sorted(ns.venues or [])} "
+                     f"and years {sorted(years)}")  # fmt: skip
+    _print(ingest_crossref(keys, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
+                           refresh=ns.refresh, min_interval=ns.delay))  # fmt: skip
     return 0
 
 

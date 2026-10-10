@@ -76,6 +76,11 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 6. **Claim only what you ran.** Report the command and its summary line (`412 passed in 9.1s`).
 7. **Untrusted input gets a timing-bounded test.** A regex over server output (an XML prolog skip) backtracked
    exponentially; use a linear `find` loop, and test adversarial input (many PIs, unterminated) under a clock.
+8. **A failure that appears in one checkout only is a stored example.** The `.hypothesis` database holds an input
+   no `@example` covers. Extract the falsifying input and pin it as an `@example` before bisecting or calling it
+   pre-existing (a database copied between checkouts stores choice sequences, so the bisect proves nothing; the
+   idempotence bug of 2026-10-10 was real). Check "pre-existing" in a detached temporary worktree
+   (`git worktree add --detach`), never with `git stash`, which every worktree shares.
 
 ## Commands
 `uv run pytest backend/tests/unit backend/tests/golden -q` (fast loop) ·

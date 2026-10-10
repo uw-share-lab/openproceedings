@@ -655,7 +655,7 @@ describe("the empty workspace (W1)", () => {
     setup();
     await pass(10);
     expect(screen.getByText(/records indexed/).textContent).toBe(
-      `Index ${coverageFixture.index_version} · 39 records indexed · ICLR 2019–2026, ICML 2019–2026, NeurIPS 2019–2025 · ` +
+      `Index ${coverageFixture.index_version} · 39 records indexed · ICLR 2019–2026 (none in 2020, 2023, 2024), ICML 2019–2026 (none in 2022), NeurIPS 2019–2025 (none in 2023) · ` +
         "Google Scholar searches run on 2026-09-26 (local time) · Coverage ▸",
     );
     cleanup();

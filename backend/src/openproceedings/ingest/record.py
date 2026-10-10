@@ -35,21 +35,25 @@ from pydantic import (
     model_validator,
 )
 
+from openproceedings.ingest import acm_table
+from openproceedings.ingest import volumes as _volumes
 from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
 from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
-# 6: the AAAI, AIES, FAccT and IASEAI venues, five tracks, the `ojs` source and the `ojs-<article id>` native id
+# 7: the `crossref` and `facct_site` sources, the `doi-<toc>.<n>` native id (FAccT, AIES), `dblp-` ids for AAAI
+# 1980-2008, and the `pmlr-` native id widened from ICML to FAccT (v81) (decision-049, milestone B); 6: the AAAI,
+# AIES, FAccT and IASEAI venues, five tracks, the `ojs` source and the `ojs-<article id>` native id
 # (decision-049); 5: the `dblp` and `icml_site` sources and the `dblp-<key>` native id (TASK-205/206, decision-047);
 # 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-029)
-RECORD_SCHEMA_VERSION = "6"
+RECORD_SCHEMA_VERSION = "7"
 # Sent with a record, never stored: computed from its fields, so a snapshot line never holds it (`record_line`)
 # and the shape above is unchanged (TASK-112). Output only: a dump that is validated again excludes it.
 DERIVED = frozenset({"venue_name"})
 
 Source = Literal[
     "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ojs",
-    "ris",
+    "crossref", "facct_site", "ris",
 ]  # fmt: skip
 Presentation = Literal["oral", "spotlight", "poster"]
 ClaimField = Literal[
@@ -63,22 +67,27 @@ ClaimField = Literal[
 _ID = re.compile(r"op:(neurips|iclr|icml|aaai|aies|facct|iaseai):([0-9]{4}):(\S+)")
 # Native ids (record-schema skill): an OpenReview forum id, or a proceedings form tied to its venue.
 PROCEEDINGS_NATIVE: dict[str, tuple[re.Pattern[str], frozenset[str]]] = {
-    "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), frozenset({"ICML"})),
+    "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), frozenset({"ICML", "FAccT"})),
     # `-round1`/`-round2`: the 2021 D&B host, which numbers each round separately (urls.proceedings_native)
     "nips": (
         re.compile(rf"nips-[0-9a-f]{{32}}(?:-(?:{'|'.join(sorted(NEURIPS_DB_2021_ROUNDS))}))?"),
         frozenset({"NeurIPS"}),
     ),
     "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), frozenset({"ICLR"})),
-    # ICML 1988-2012 from the pinned dblp release: the dblp key after `conf/icml/` (sources/dblp.py, decision-047)
-    "dblp": (re.compile(r"dblp-[A-Za-z0-9_-]+"), frozenset({"ICML"})),
+    # the dblp key after `conf/icml/` (ICML 1988-2012) or `conf/aaai/` (AAAI 1980-2008) in the pinned dblp release
+    # (sources/dblp.py, decision-047, decision-049)
+    "dblp": (re.compile(r"dblp-[A-Za-z0-9_-]+"), frozenset({"ICML", "AAAI"})),
     # an ojs.aaai.org article id (`oai:ojs.aaai.org:article/<id>`), unique across its journals (sources/ojs.py)
     "ojs": (re.compile(r"ojs-[0-9]+"), frozenset({"AAAI", "AIES", "IASEAI"})),
+    # an ACM paper DOI's suffix, `10.1145/<toc>.<n>` → `doi-<toc>.<n>` (FAccT, AIES; sources/crossref.py)
+    "doi": (re.compile(r"doi-[0-9]+\.[0-9]+"), frozenset({"FAccT", "AIES"})),
 }
 # tracks only one venue has (decision-049): IAAI and EAAI are printed in the AAAI volumes alone
 VENUE_ONLY_TRACKS: Mapping[str, str] = MappingProxyType({"iaai": "AAAI", "eaai": "AAAI"})
-# the years a `dblp-` id may name: ICML before PMLR (v28, 2013), so dblp and PMLR never hold one venue-year
-DBLP_YEARS = range(1988, 2013)
+# the years a `dblp-` id may name: ICML before PMLR (v28, 2013); AAAI before OJS (Vol. 24, 2010)
+DBLP_YEARS: Mapping[str, range] = MappingProxyType({"ICML": range(1988, 2013), "AAAI": range(1980, 2009)})
+# the years a `doi-` id may name (acm_table.DOI_YEARS, defined there so the table needs no import of this module)
+DOI_YEARS = acm_table.DOI_YEARS
 
 
 def is_paper_id(text: str) -> bool:
@@ -344,10 +353,35 @@ class PaperRecord(BaseModel):
                 raise ValueError(
                     f"native id {native!r} is not a valid {'/'.join(sorted(venues))} proceedings id for {self.venue}"
                 )
-            if native.startswith("dblp-") and self.year not in DBLP_YEARS:
+            if native.startswith("pmlr-"):
+                number = int(native.split("-", 2)[1][1:])
+                listed = _volumes.PMLR_NATIVE_VOLUMES.get(number)
+                if self.venue == "ICML":  # any ICML volume, as before; never another venue's (FAccT's v81)
+                    if listed is not None and listed[0] != "ICML":
+                        raise ValueError(
+                            f"native id {native!r} is not an ICML PMLR volume's (pmlr_volumes.toml)"
+                        )
+                elif (listed or ("", 0, ""))[:2] != (self.venue, self.year):
+                    raise ValueError(
+                        f"native id {native!r} is not a {self.venue} {self.year} PMLR volume's (pmlr_volumes.toml)"
+                    )
+            if native.startswith("dblp-") and self.year not in DBLP_YEARS[self.venue]:
                 raise ValueError(
-                    f"native id {native!r} is not a valid id for {self.year}: dblp ids are ICML 1988-2012"
+                    f"native id {native!r} is not a valid id for {self.venue} {self.year}: dblp ids are ICML "
+                    "1988-2012 and AAAI 1980-2008"
                 )
+            if native.startswith("doi-") and self.year not in DOI_YEARS[self.venue]:
+                raise ValueError(
+                    f"native id {native!r} is not a valid id for {self.venue} {self.year}: doi ids are AIES "
+                    "2018-2023 and FAccT 2019 on"
+                )
+            if native.startswith("doi-"):  # the table read at call time: a test may swap it
+                row = acm_table.TABLE.by_toc(native.removeprefix("doi-").split(".", 1)[0])
+                if row is None or (row.venue, row.year) != (self.venue, self.year):
+                    raise ValueError(
+                        f"native id {native!r} is not a {self.venue} {self.year} ACM proceedings' DOI "
+                        "(acm_proceedings.toml)"
+                    )
             if native.rsplit("-", 1)[-1] in NEURIPS_DB_2021_ROUNDS and self.year != 2021:
                 raise ValueError(
                     f"native id {native!r} is not a valid id for {self.year}: D&B rounds are 2021 only"

@@ -37,15 +37,47 @@ export function yearSpans(venueYears: readonly VenueYear[]): Span[] {
 }
 
 /** A venue and its years as both coverage surfaces write them: `AAAI 2010–2026`, one year alone (`IASEAI 2026`). */
-export function spanRange(s: Span): string {
+function spanRange(s: Span): string {
   return s.from === s.to ? `${s.venue} ${s.from}` : `${s.venue} ${s.from}–${s.to}`;
 }
 
-function spanText(s: Span): string {
-  const range = s.from === s.to ? `${s.from}` : `${s.from}–${s.to}`;
-  return s.missing.length === 0
-    ? `${s.venue} ${range}`
-    : `${s.venue} ${range} (none in ${s.missing.join(", ")})`;
+/** A span in CV-7's words, with " (none in …)" after a span with years it holds no records for; the home line and
+ * `/coverage` write it alike (copy deck CV-1, CV-7). */
+export function spanText(s: Span): string {
+  return s.missing.length === 0 ? spanRange(s) : `${spanRange(s)} (none in ${s.missing.join(", ")})`;
+}
+
+/** Each venue's runs of indexed years in which no record has an abstract, missing or removed (CV-5's all-missing
+ * venue-years), A–Z: `AAAI 1980–2008`, `FAccT 2019–2021, 2023–2024`. A run spans the venue's indexed years only, so
+ * a year it wasn't held (CV-7's "none in") never breaks one. Derived from `venue_years`, never a fixed list (copy
+ * deck CV-8). */
+export function titleOnlySpans(venueYears: readonly VenueYear[]): string[] {
+  const byVenue = new Map<string, VenueYear[]>();
+  for (const vy of venueYears) byVenue.set(vy.venue, [...(byVenue.get(vy.venue) ?? []), vy]);
+  const out: string[] = [];
+  for (const venue of [...byVenue.keys()].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
+    const years = byVenue.get(venue)!.sort((a, b) => a.year - b.year);
+    const runs: [number, number][] = [];
+    let open = false;
+    for (const vy of years) {
+      const none = vy.records > 0 && vy.abstract_missing + vy.abstract_withheld === vy.records;
+      if (none && open) runs[runs.length - 1]![1] = vy.year;
+      else if (none) runs.push([vy.year, vy.year]);
+      open = none;
+    }
+    if (runs.length > 0)
+      out.push(`${venue} ${runs.map(([a, b]) => (a === b ? `${a}` : `${a}–${b}`)).join(", ")}`);
+  }
+  return out;
+}
+
+/** CV-8: the venue-years whose records can be found by title only, or nothing when every venue-year has an
+ * abstract somewhere. */
+export function titleOnlyText(venueYears: readonly VenueYear[]): string | null {
+  const spans = titleOnlySpans(venueYears);
+  return spans.length === 0
+    ? null
+    : `No abstracts in the index for ${spans.join(" · ")}: their records are found by title only.`;
 }
 
 /** A `year:` clause for a span: one year alone, else `from..to`. */
@@ -55,8 +87,9 @@ function yearClause(from: number, to: number): string {
 
 /** "Years indexed: …", and when the venues cover different years, why that matters and what compares them: the
  * `year:` clause of the years every venue holds, or, when no year is held by all, a per-venue clause (copy deck
- * CV-7; decision-047 and decision-049: NeurIPS from 1987, ICML from 1988, ICLR from 2013, AAAI from 2010, AIES
- * 2024–2025, IASEAI 2026). Display only: the clause is a suggestion the reader may add to their query. */
+ * CV-7; decision-047 and decision-049: NeurIPS from 1987, ICML from 1988, ICLR from 2013, AAAI from 1980 (not
+ * held in seven of its years, listed under "none in"), AIES and FAccT from 2018, IASEAI 2026). Display only: the
+ * clause is a suggestion the reader may add to their query. */
 function YearSpans({ venueYears }: { venueYears: readonly VenueYear[] }) {
   const spans = yearSpans(venueYears);
   if (spans.length === 0) return null;
@@ -95,6 +128,7 @@ function Header({ coverage }: { coverage: Coverage }) {
   const { snapshot, totals } = coverage;
   const corpus = corpusWindow(snapshot);
   const perSource = Object.entries(snapshot.crawl_dates).filter(([key]) => key !== ALL_SOURCES);
+  const titleOnly = titleOnlyText(coverage.venue_years);
   return (
     <div className="space-y-1 text-sm">
       <p>
@@ -141,6 +175,7 @@ function Header({ coverage }: { coverage: Coverage }) {
       <YearSpans venueYears={coverage.venue_years} />
       <p className="text-muted-foreground">
         Only titles and abstracts are indexed. A record without an abstract can be found by its title only.
+        {titleOnly === null ? null : ` ${titleOnly}`}
       </p>
     </div>
   );

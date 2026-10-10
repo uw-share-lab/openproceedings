@@ -249,6 +249,66 @@ def test_ingest_ojs_usage_refusals(
     assert message in capsys.readouterr().err
 
 
+def test_ingest_crossref_dispatches_the_keys_and_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest import acm_table
+    from openproceedings.ingest.sources import crawl
+
+    from tests.unit.ingest.crossref import api
+
+    monkeypatch.setattr(
+        acm_table, "TABLE", acm_table.load(api.TABLE_TEXT)
+    )  # a small fixed table, independent of the shipped one
+    seen: dict[str, object] = {}
+
+    def fake(keys: object, cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(keys=keys, cache=cache, **kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(crawl, "ingest_crossref", fake)
+    argv = [
+        "--data-dir",
+        str(tmp_path),
+        "ingest",
+        "crossref",
+        "--venue",
+        "FAccT",
+        "--year",
+        "2023",
+        "--offline",
+    ]
+    assert cli.main(argv) == 0
+    assert json.loads(capsys.readouterr().out) == {"ok": True}
+    assert seen["keys"] == [("FAccT", 2023)]
+    assert (seen["offline"], seen["dry_run"], seen["refresh"]) == (True, False, False)
+    assert seen["cache"] == tmp_path / "cache"
+
+
+def test_ingest_crossref_rejects_a_venue_the_table_lacks() -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["ingest", "crossref", "--venue", "ICML"])
+    assert exc.value.code == 2
+
+
+def test_ingest_crossref_refuses_a_year_no_row_has(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "crossref", "--year", "2017"]) == 1
+    assert "no acm_proceedings.toml row" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("flags", "message"),
+    [(["--dry-run", "--offline"], "don't combine"), (["--delay", "0.1"], "--delay must be finite")],
+)
+def test_ingest_crossref_usage_refusals(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], flags: list[str], message: str
+) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "crossref", *flags]) == 1
+    assert message in capsys.readouterr().err
+
+
 def test_ingest_ojs_oai_error_exits_nonzero_with_the_refresh_hint(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -262,3 +322,35 @@ def test_ingest_ojs_oai_error_exits_nonzero_with_the_refresh_hint(
     argv = ["--data-dir", str(tmp_path), "ingest", "ojs", "--journal", "AAAI", "--offline"]
     assert cli.main(argv) != 0
     assert "--refresh" in capsys.readouterr().err
+
+
+def test_ingest_dblp_venue_aaai_dispatches_to_the_aaai_ingest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    seen: dict[str, object] = {}
+
+    def fake_aaai(years: object, cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(years=list(years), cache=cache, **kwargs)  # type: ignore[call-overload]
+        return {"aaai": True}
+
+    def fake_icml(years: object, cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(icml=list(years))  # type: ignore[call-overload]
+        return {"icml": True}
+
+    monkeypatch.setattr(crawl, "ingest_dblp_aaai", fake_aaai)
+    monkeypatch.setattr(crawl, "ingest_dblp", fake_icml)
+    base = ["--data-dir", str(tmp_path), "ingest", "dblp"]
+    assert cli.main([*base, "--venue", "AAAI", "--year", "1980-2008", "--offline"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"aaai": True}
+    assert seen["years"] == list(range(1980, 2009)) and seen["cache"] == tmp_path / "cache"
+    assert (seen["offline"], seen["dry_run"]) == (True, False)
+    assert cli.main([*base, "--year", "1990"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"icml": True} and seen["icml"] == [1990]
+
+
+def test_ingest_dblp_aaai_has_nothing_to_refresh(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    argv = ["--data-dir", str(tmp_path), "ingest", "dblp", "--venue", "AAAI", "--year", "1990", "--refresh"]
+    assert cli.main(argv) == 1  # a refusal of the user's own arguments (`_usage`), like every other one
+    assert "nothing to refresh" in capsys.readouterr().err

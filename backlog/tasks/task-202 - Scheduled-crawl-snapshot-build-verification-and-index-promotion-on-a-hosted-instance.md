@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 18:53'
-updated_date: '2026-10-10 01:56'
+updated_date: '2026-10-10 10:24'
 labels:
   - ops
   - deploy
@@ -37,4 +37,6 @@ Spec 08's deploy runbook refreshes the index by hand: crawl, op snapshot build (
 Gate note (2026-10-06): an auto-promotion threshold of 'no drop in records per venue-year' must exempt drops the takedown list explains (op snapshot diff's abstract_withheld / removed ids on the list), or a legitimate takedown would hold promotion.
 
 Scope note (2026-10-09, decision-049, docs/plans/2026-10-09-new-venues-design.md): AAAI, AIES, FAccT and IASEAI join the corpus. Milestone A built the ojs source (op ingest ojs, replayed last in crawl.replay_all); Crossref, the FAccT site and OpenAlex arrive in milestones B and C. AIES 2026 on OJS needs an ojs_sections.toml row, not code.
+
+Milestone B adds `op ingest crossref` (with the FAccT site pages) and `op ingest dblp --venue AAAI` / `op ingest pmlr --venue FAccT`; a full run orders …, ojs, crossref. CROSSREF_MAILTO is optional (controller's ruling): set it in the scheduled environment to use Crossref's polite pool; without it Crossref is queried through the public pool. A malformed value stops the crawl.
 <!-- SECTION:NOTES:END -->

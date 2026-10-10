@@ -110,6 +110,8 @@ const ORIGIN_NAMES: Readonly<Record<string, string>> = {
   iclr_archive: "ICLR archive",
   icml_site: "ICML conference site",
   ojs: "AAAI Digital Library",
+  crossref: "Crossref",
+  facct_site: "FAccT conference site",
 };
 
 type AbstractFrom = NonNullable<SearchHit["abstract_source"]>;
