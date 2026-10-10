@@ -57,7 +57,9 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 - **e2e ports.** Playwright's fixture API and web server listen on 8000 and 3000 unless `OP_E2E_API_PORT` /
   `OP_E2E_WEB_PORT` are set (`playwright.config.ts`, `fixture_server.py`, and every spec that calls the API
   directly read the same two). Locally the config reuses a server already on its port, so with another
-  instance on 8000/3000 an unset run would test *that* instance: set both variables.
+  instance on 8000/3000 an unset run would test *that* instance: set both variables. The owner's dev servers
+  run `main`-branch code on the real index, so from a worktree an unset run failed all 66 tests; always run
+  `OP_E2E_API_PORT=8100 OP_E2E_WEB_PORT=3100 make e2e`.
 
 ## Rules
 1. **TDD.** Write the failing test first, watch it fail for the right reason, then implement. A bug fix
@@ -72,6 +74,8 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
    (`property-testing`). Its wall-clock checks (deadline, `too_slow`) are gates only on CI runners: the local
    `dev` profile turns them off, and `pr`, `ci` and `nightly` keep them (decision-024).
 6. **Claim only what you ran.** Report the command and its summary line (`412 passed in 9.1s`).
+7. **Untrusted input gets a timing-bounded test.** A regex over server output (an XML prolog skip) backtracked
+   exponentially; use a linear `find` loop, and test adversarial input (many PIs, unterminated) under a clock.
 
 ## Commands
 `uv run pytest backend/tests/unit backend/tests/golden -q` (fast loop) ·

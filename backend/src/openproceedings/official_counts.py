@@ -31,6 +31,42 @@ class OfficialCount:
 # (venue, year, track) → its official accepted count
 type OfficialTable = dict[tuple[str, int, str], OfficialCount]
 OFFICIAL_ACCEPTED: OfficialTable = {
+    ("AAAI", 2013, "main"): OfficialCount(
+        203,
+        "papers accepted for publication in the proceedings from the 690 technical-program submissions, the four special tracks included (AI and the Web, Cognitive Systems, Computational Sustainability, AI and Robotics); late-breaking papers and spotlights excluded",
+        "https://ojs.aaai.org/index.php/AAAI/article/view/8512 (AAAI-13 preface)",
+        date(2026, 10, 9),
+    ),
+    ("AAAI", 2015, "main"): OfficialCount(
+        539,
+        "papers selected from the 1,991 main technical and topical track submissions and presented (AI Magazine conference report); student abstracts, IAAI, demos and the doctoral consortium excluded",
+        "https://ojs.aaai.org/index.php/aimagazine/article/view/2606/2500 (submissions: https://ojs.aaai.org/index.php/AAAI/issue/view/304)",
+        date(2026, 10, 9),
+    ),
+    ("AAAI", 2018, "main"): OfficialCount(
+        938,
+        "original research publications in the proceedings, selected from 3,800 well-formed submissions (acceptance rate 24.7%); student abstracts, IAAI and EAAI excluded",
+        "https://ojs.aaai.org/index.php/AAAI/issue/view/301",
+        date(2026, 10, 9),
+    ),
+    ("AAAI", 2019, "main"): OfficialCount(
+        1147,
+        "original research publications in the proceedings, selected from 7,095 original full paper submissions (acceptance rate 16.2%); senior member, doctoral consortium, student abstracts and demos excluded",
+        "https://ojs.aaai.org/index.php/AAAI/issue/view/246",
+        date(2026, 10, 9),
+    ),
+    ("AIES", 2024, "main"): OfficialCount(
+        150,
+        "full archival papers accepted, per the chairs' statement ('sent 468 papers out for review and accepted 150'); student abstracts excluded",
+        "https://ojs.aaai.org/index.php/AIES/article/view/31763 (AIES 2024 front matter); same figure in the table of https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf",
+        date(2026, 10, 9),
+    ),
+    ("AIES", 2025, "main"): OfficialCount(
+        238,
+        "full archival papers accepted, per the chairs' welcome ('sent 748 papers out for review and accepted 238 of them'); student abstracts excluded",
+        "https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf",
+        date(2026, 10, 9),
+    ),
     ("ICLR", 2013, "main"): OfficialCount(
         24,
         "conference-track papers on the ICLR 2013 accepted list (workshop track excluded)",

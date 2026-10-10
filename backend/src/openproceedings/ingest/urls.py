@@ -12,6 +12,7 @@ import re
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from openproceedings.ingest.classify import NEURIPS_DB_2021_HOST, NEURIPS_DB_2021_ROUNDS
+from openproceedings.ingest.ojs_table import TABLE as OJS_TABLE
 from openproceedings.ingest.record import FORUM_ID
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
@@ -104,15 +105,36 @@ def names_native(url: str, native_id: str) -> bool:
 
 
 def native(url: str) -> str | None:
-    """The proceedings native id a URL names (`proceedings_native`, `pmlr-v<N>-<key>` for an ICML volume, or
-    `dblp-<key>` for an ICML record's dblp page), or None."""
+    """The proceedings native id a URL names (`proceedings_native`, `pmlr-v<N>-<key>` for an ICML volume,
+    `dblp-<key>` for an ICML record's dblp page, or `ojs-<id>` for an ojs.aaai.org article), or None."""
     if proceedings(url) is not None:
         return proceedings_native(url)
     if (q := pmlr(url)) is not None and q[0] in ICML_PMLR_VOLUMES:
         return f"pmlr-v{q[0]}-{q[1]}"
     if (key := dblp_icml(url)) is not None:
         return f"dblp-{key}"
+    if (article := ojs_article(url)) is not None:
+        return f"ojs-{article}"
     return None
+
+
+_OJS_HOST = "ojs.aaai.org"
+# the journals are the table's (`ojs_sections.toml`), so a journal added there is a journal whose URLs name articles
+_OJS_PATH = re.compile(
+    r"/index\.php/(?:" + "|".join(map(re.escape, sorted(OJS_TABLE.journals))) + r")/article/view/([0-9]+)"
+    r"(?:/[0-9]+)?/?"
+)
+
+
+def ojs_article(url: str) -> int | None:
+    """The article id of an ojs.aaai.org article or galley URL (AAAI, AIES, IASEAI; decision-049), or None. The
+    URL's journal is deliberately not matched to a record's venue: article ids are unique across the site's
+    journals, so the id alone names the paper (a record's self-naming check compares ids)."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.netloc.lower() != _OJS_HOST:
+        return None
+    m = _OJS_PATH.fullmatch(parsed.path)
+    return int(m.group(1)) if m else None
 
 
 _DBLP_REC = re.compile(r"/rec/conf/icml/([A-Za-z0-9_-]+)(?:\.html)?")

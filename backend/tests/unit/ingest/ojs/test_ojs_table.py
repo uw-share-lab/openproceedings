@@ -1,0 +1,218 @@
+import re
+from collections import Counter
+from datetime import date
+
+import pytest
+from openproceedings.ingest import ojs_table
+
+GOOD = """
+[[journal]]
+code = "AAAI"
+venue = "AAAI"
+year_offset = 1986
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:AISI"
+kind = "papers"
+track = "main"
+label = "Special Track on AI for Social Impact"
+papers = 70
+verified = 2026-10-09
+source = "backend/tests/fixtures/http/ojs/aaai-v34-aisi.json"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:FMT"
+kind = "front_matter"
+label = "Front Matter"
+papers = 1
+verified = 2026-10-09
+source = "x"
+"""
+
+
+def test_loads_and_derives_year_and_expected_count() -> None:
+    t = ojs_table.load(GOOD)
+    assert t.year("AAAI", 34) == 2020
+    assert t.volumes("AAAI") == (34,)
+    assert t.expected("AAAI", 34) == 70  # front matter is counted, never a paper
+    assert t.sections[("AAAI", 34, "AAAI:AISI")].track == "main"
+    assert t.journals["AAAI"].verified == date(2026, 10, 9)
+
+
+@pytest.mark.parametrize(
+    ("edit", "message"),
+    [
+        (lambda s: s.replace("verified = 2026-10-09", "verified = 2026-10-09T10:00:00", 1), "verified date"),
+        (lambda s: s.replace('code = "AAAI"', 'code = ""'), "code must be"),
+        (lambda s: s.replace('set_spec = "AAAI:AISI"', 'set_spec = ""'), "set_spec must be"),
+        (lambda s: s.replace('set_spec = "AAAI:AISI"', "set_spec = 7"), "set_spec must be"),
+        (
+            lambda s: s.replace('label = "Special Track on AI for Social Impact"', 'label = ""'),
+            "label must be",
+        ),
+        (lambda s: s.replace('journal = "AAAI"\nvolume', "journal = [1]\nvolume"), "journal must be"),
+        (lambda s: s.replace('track = "main"', "track = [1]"), "not a spec 01 track"),
+    ],
+)
+def test_loader_type_checks(edit, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        ojs_table.load(edit(GOOD))
+
+
+@pytest.mark.parametrize(
+    ("edit", "message"),
+    [
+        (lambda s: s.replace('track = "main"', 'track = "mainn"'), "not a spec 01 track"),
+        # a spec 01 track no OJS section can be: two of them are in the default filter
+        (lambda s: s.replace('track = "main"', 'track = "position"'), "not an ojs.aaai.org track"),
+        (lambda s: s.replace('track = "main"', 'track = "datasets_benchmarks"'), "not an ojs.aaai.org track"),
+        (lambda s: s.replace('track = "main"', 'track = "unknown"'), "not an ojs.aaai.org track"),
+        (lambda s: s.replace('track = "main"', 'track = "workshop"'), "not an ojs.aaai.org track"),
+        (lambda s: s.replace('venue = "AAAI"', 'venue = "AAAJ"'), "not one of"),
+        (lambda s: s.replace('kind = "papers"', 'kind = "paper"'), "kind"),
+        (lambda s: s.replace("papers = 70", "papers = 0"), "positive"),
+        (
+            lambda s: s.replace(
+                'kind = "front_matter"\nlabel', 'kind = "front_matter"\ntrack = "main"\nlabel'
+            ),
+            "front matter has no track",
+        ),
+        (
+            lambda s: s + s[s.index("[[section]]") : s.index("[[section]]", s.index("[[section]]") + 1)],
+            "listed twice",
+        ),
+        (lambda s: s.replace("year_offset = 1986", "year_offset = 1900"), "not held under that name"),
+        (
+            lambda s: (
+                s.replace('track = "main"', 'track = "iaai"')
+                .replace('venue = "AAAI"', 'venue = "AIES"')
+                .replace('code = "AAAI"', 'code = "AIES"')
+                .replace('journal = "AAAI"', 'journal = "AIES"')
+                .replace("year_offset = 1986", "year_offset = 2017")
+                .replace("volume = 34", "volume = 7")
+            ),
+            "only an AAAI track",
+        ),
+        (
+            lambda s: s.replace(
+                'journal = "AAAI"\nvolume = 34\nset_spec = "AAAI:AISI"',
+                'journal = "AIES"\nvolume = 34\nset_spec = "AAAI:AISI"',
+            ),
+            "no journal row",
+        ),
+    ],
+)
+def test_bad_rows_are_refused(edit, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        ojs_table.load(edit(GOOD))
+
+
+def test_the_shipped_table_loads() -> None:
+    assert set(ojs_table.TABLE.journals) == {"AAAI", "AIES", "IASEAI"}
+
+
+def test_the_shipped_mapping_is_pinned_per_track_and_journal() -> None:
+    """Spec 01's row counts, per journal: a row whose track flips (a student abstract into `main`) fails here.
+    `main` 402 = AAAI 397 (the two Robotics Program rows, 2011 and 2013, are its AI and Robotics special track; the
+    2010 Short Papers row is main by the owner's decision of 2026-10-10, TASK-218), AIES 4, IASEAI 1; `other` 37."""
+    rows: Counter[tuple[str, str]] = Counter()
+    for s in ojs_table.TABLE.sections.values():
+        rows[(s.journal, s.track or s.kind)] += 1
+    assert dict(rows) == {
+        ("AAAI", "main"): 397,
+        ("AIES", "main"): 4,
+        ("IASEAI", "main"): 1,
+        ("AAAI", "student_abstract"): 17,
+        ("AIES", "student_abstract"): 3,
+        ("AAAI", "consortium"): 20,
+        ("AAAI", "demo"): 13,
+        ("AAAI", "iaai"): 53,
+        ("AAAI", "eaai"): 52,
+        ("AAAI", "other"): 37,
+        ("AAAI", "front_matter"): 2,
+        ("AIES", "front_matter"): 1,
+        ("IASEAI", "front_matter"): 1,
+    }
+    assert sum(rows.values()) == 601
+    # the papers per track, so two rows whose tracks are swapped cannot pass on row counts alone
+    papers: Counter[str | None] = Counter()
+    for s in ojs_table.TABLE.sections.values():
+        if (s.journal, s.volume) == ("AAAI", 24):
+            papers[s.track] += s.papers
+    assert dict(papers) == {
+        "main": 262,
+        "student_abstract": 24,
+        "iaai": 23,
+        "other": 15,
+        "eaai": 9,
+    }  # AAAI 2010
+
+
+# 2010's `Short Papers` is main (refereed AAAI-10 technical papers; owner decision 2026-10-10, TASK-218), so not here
+_NOT_MAIN = re.compile(
+    r"student|demo|poster|doctoral|undergraduate|consortium|senior|faculty|iaai|eaai|sister|spotlight|hot|nectar|emerging|bridge|blue sky|summar",
+    re.IGNORECASE,
+)
+_LABEL_TRACK = [
+    (re.compile(r"\bIAAI\b"), "iaai"),
+    (re.compile(r"\bEAAI\b"), "eaai"),
+    (re.compile(r"student abstract", re.IGNORECASE), "student_abstract"),
+    (re.compile(r"doctoral|undergraduate consortium", re.IGNORECASE), "consortium"),
+    (re.compile(r"demonstration", re.IGNORECASE), "demo"),
+]
+
+
+def test_no_shipped_main_row_is_labelled_as_a_non_technical_section() -> None:
+    for (journal, volume, spec), s in ojs_table.TABLE.sections.items():
+        if s.track == "main":
+            assert not _NOT_MAIN.search(f"{s.label} {spec}"), (journal, volume, spec, s.label)
+        for label, track in _LABEL_TRACK:
+            if s.kind == "papers" and label.search(s.label):
+                assert s.track == track, (journal, volume, spec, s.label, s.track)
+                break
+
+
+UNAVAILABLE = """
+[[unavailable]]
+journal = "AAAI"
+article = 39173
+set_spec = "AAAI:AISI"
+volume = 34
+reason = "HTTP 500 in every form"
+verified = 2026-10-09
+source = "x"
+"""
+
+
+def test_an_unavailable_row_loads() -> None:
+    u = ojs_table.load(GOOD + UNAVAILABLE).unavailable[("AAAI", 39173)]
+    assert (u.set_spec, u.volume, u.reason) == ("AAAI:AISI", 34, "HTTP 500 in every form")
+    assert ojs_table.load(GOOD).unavailable == {}
+
+
+@pytest.mark.parametrize(
+    ("edit", "message"),
+    [
+        (lambda s: s.replace('set_spec = "AAAI:AISI"\nvolume = 34\nreason', 'set_spec = "AAAI:NEW"\nvolume = 34\nreason'),
+         "no papers section row"),
+        (lambda s: s.replace('source = "x"', 'source = "x"\nextra = 1'), "unknown columns"),
+        (lambda s: s.replace("article = 39173", "article = 0"), "article must be a positive integer"),
+        (lambda s: s.replace('reason = "HTTP 500 in every form"', 'reason = ""'), "reason must be"),
+        (lambda s: s + s, "listed twice"),
+    ],
+)  # fmt: skip
+def test_bad_unavailable_rows_are_refused(edit, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        ojs_table.load(GOOD + edit(UNAVAILABLE))
+
+
+def test_an_unavailable_row_must_point_at_a_papers_section() -> None:
+    fm = UNAVAILABLE.replace('set_spec = "AAAI:AISI"', 'set_spec = "AAAI:FMT"')
+    with pytest.raises(ValueError, match="no papers section row"):
+        ojs_table.load(GOOD + fm)

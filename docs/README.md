@@ -26,7 +26,8 @@ guarantees are the review standard for everything else.
 |---|---|
 | [`results/`](results/) | dated reports: coverage (`op eval coverage`), the Scholar comparison (`op eval scholar`, with its `-review.csv` rows for a person), benchmarks, audits and data checks; `coverage-sources.md` and `coverage-causes.toml` feed the coverage report, `scholar-comparison-notes.md` and `scholar-comparison-strings.txt` the Scholar comparison |
 | [`design/`](design/) | UX design docs and the copy deck behind spec 05 |
-| [`research/`](research/) | verified facts about the sources (OpenReview and the proceedings sites) |
+| [`plans/`](plans/) | written designs and implementation plans for multi-milestone work, before it is built into the specs |
+| [`research/`](research/) | verified facts about the sources (OpenReview, the proceedings sites, ojs.aaai.org and the AAAI/AIES/FAccT/IASEAI sources) |
 | [`releases.toml`](releases.toml) | each release's data table (spec 08 §Release) |
 
 Decisions are Backlog.md records in [`../backlog/decisions/`](../backlog/decisions/). Tasks are in

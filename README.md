@@ -1,9 +1,12 @@
 # openproceedings
 
-Exact, reproducible Boolean search over **NeurIPS (from 1987), ICLR (from 2013) and ICML (from 1988)** titles
-and abstracts, built for systematic reviews. Reviews of ML research need a search they can report: a query string, a date and a hit count that
+Exact, reproducible Boolean search over **NeurIPS (from 1987), ICLR (from 2013), ICML (from 1988), AAAI (from
+2010), AIES (from 2024) and IASEAI (2026)** titles and abstracts, built for systematic reviews. Reviews of ML research need a search they can report: a query string, a date and a hit count that
 anyone can run again. Google Scholar can't give that: it searches full text, stems terms, mixes workshop
 papers into the results, and its results drift. Neither can OpenReview, which has no Boolean search.
+
+AAAI 1980–2008, AIES 2018–2023 and FAccT are in scope and planned, not built ([decision-049](backlog/decisions/decision-049%20-%20AAAI-AIES-FAccT-and-IASEAI-are-in-scope-every-year-official-abstracts-first-OpenAlex-as-a-labelled-fallback-AAAI-family-tracks-indexed-and-excluded-by-default.md),
+[design](docs/plans/2026-10-09-new-venues-design.md)).
 
 ## Guarantees
 
@@ -69,9 +72,10 @@ authoritative):
   `op eval coverage|scholar`, `op takedown check` and `op openapi` ([spec 08](docs/specs/08-ops-and-tooling.md) §CLI).
 
 **Abstracts on a public instance.** A public deployment shows every abstract, attributed to its source
-(OpenReview, the NeurIPS proceedings or PMLR) with a link to it, and names a takedown contact. Private, local
+(OpenReview, the NeurIPS proceedings, PMLR or the AAAI Digital Library) with a link to it, and names a takedown contact. Private, local
 and development deployments may leave the contact out. For the 2024+ conferences, OpenReview's terms dedicate
-the abstracts under CC0, and PMLR grants CC BY 4.0 (known from ICML 2017, v70). The other years rest on
+the abstracts under CC0, and PMLR grants CC BY 4.0 (known from ICML 2017, v70). The other years, and
+AAAI, AIES and IASEAI (ojs.aaai.org states AAAI copyright and no open licence), rest on
 Canadian fair dealing alone. Consulting the University of Waterloo copyright office before launch is
 recommended, not a gate
 ([decision-018](backlog/decisions/decision-018%20-%20The-public-instance-serves-every-abstract-with-attribution-and-a-source-link-and-a-takedown-contact-on-public-instances-TASK-063.md),
@@ -85,7 +89,8 @@ so those searches replay the same ids (decision-022). This is the project's deci
 | M1 | The query language: tokenizer, parser, canonical form, defaults ([spec 02](docs/specs/02-query-language.md)) |
 | M2 | RIS ingestion, snapshots, the Tantivy index, `op search` / `op export` ([spec 01](docs/specs/01-ingestion.md), [spec 03](docs/specs/03-search-engine.md)) |
 | M3 | The `/api/v1` HTTP API (`op serve`), search records, and the web UI: query editor and builder, results, paper pages, exports, the coverage page and syntax help, with each concept group's counts in the builder ([spec 04](docs/specs/04-backend-api.md), [spec 05](docs/specs/05-frontend.md)) |
-| M4 | Crawlers for OpenReview (API v1 and v2), the NeurIPS proceedings, PMLR and the ICLR archive (`op ingest …`), and the coverage report with the M4 gate (`op eval coverage`, [spec 07](docs/specs/07-evaluation.md) §C). The first full crawl's report passes the gate: 43 of 44 gated cells are within ±1%, and the one other cell is an exception the owner accepted ([`docs/results/2026-09-29-coverage.md`](docs/results/2026-09-29-coverage.md)). After the 2026 OpenReview crawl the gate still passes, with ICLR 2026 and ICML 2026 main added: 45 of 46 gated cells within ±1% and the same exception ([`docs/results/2026-10-05-coverage.md`](docs/results/2026-10-05-coverage.md)). With NeurIPS 1987–2012 and ICML 1988–2012 added (decision-047: the proceedings site, and a pinned dblp release with official ICML pages' abstracts, `op ingest dblp`) it passes with 71 of 72 gated cells within ±1% (33 of them, NeurIPS 1987–2019, check the crawl against its listing's own count) and the same exception; ICML 1988–2012 has no official count, so its cells are reported, not gated ([`docs/results/2026-10-07-coverage.md`](docs/results/2026-10-07-coverage.md)). |
+| M4 | Crawlers for OpenReview (API v1 and v2), the NeurIPS proceedings, PMLR and the ICLR archive (`op ingest …`), and the coverage report with the M4 gate (`op eval coverage`, [spec 07](docs/specs/07-evaluation.md) §C). The first full crawl's report passes the gate: 43 of 44 gated cells are within ±1%, and the one other cell is an exception the owner accepted ([`docs/results/2026-09-29-coverage.md`](docs/results/2026-09-29-coverage.md)). After the 2026 OpenReview crawl the gate still passes, with ICLR 2026 and ICML 2026 main added: 45 of 46 gated cells within ±1% and the same exception ([`docs/results/2026-10-05-coverage.md`](docs/results/2026-10-05-coverage.md)). With NeurIPS 1987–2012 and ICML 1988–2012 added (decision-047: the proceedings site, and a pinned dblp release with official ICML pages' abstracts, `op ingest dblp`) it passes with 71 of 72 gated cells within ±1% (33 of them, NeurIPS 1987–2019, check the crawl against its listing's own count) and the same exception; ICML 1988–2012 has no official count, so its cells are reported, not gated ([`docs/results/2026-10-07-coverage.md`](docs/results/2026-10-07-coverage.md)) After the new venues' crawl (index 0c731ce2eb5b) it passes with 77 of 78 gated cells within ±1% and the same exception, six of them new AAAI and AIES rows (AIES 2024 and 2025; AAAI 2013, 2015, 2018 and 2019) ([`docs/results/2026-10-10-coverage.md`](docs/results/2026-10-10-coverage.md)). |
+| New venues, milestone A (decision-049) | AAAI 2010–2026 (25,126 records), AIES 2024–2025 (449) and IASEAI 2026 (57 archival papers of 92 accepted) from ojs.aaai.org through OAI-PMH (`op ingest ojs`; [spec 01](docs/specs/01-ingestion.md) §Sources), record schema 6 with five new tracks (`student_abstract`, `consortium`, `demo`, `iaai`, `eaai`), excluded from a default search like the other non-main tracks. Planned, not built: milestone B (AAAI 1980–2008, AIES 2018–2023, FAccT) and milestone C (OpenAlex abstract fallback, `abstract_kind:`); see the [design](docs/plans/2026-10-09-new-venues-design.md) |
 | M6 (in progress) | Deployment: Docker Compose with Caddy for TLS, and the api, web and caddy images, verified locally ([`deploy/`](deploy/README.md), TASK-065). Still to come: the hosting choice (TASK-064), the first tagged release, then the public v1 launch. Releases follow [spec 08](docs/specs/08-ops-and-tooling.md) §Release (one semver version, decision-023), and the release notes are the generated [`CHANGELOG.md`](CHANGELOG.md) |
 | Deferred | Semantic "near-miss" suggestions and re-sort (M5, [spec 06](docs/specs/06-semantic-layer.md)): phase 2, not v1. v1 is Boolean search only (decision-017) |
 
@@ -128,6 +133,7 @@ uv run op ingest iclr --year 2014-2016                     # the ICLR archive ye
 uv run op ingest neurips --year 1987-2012                  # NeurIPS before 2013 (decision-047; 4,847 pages, at least 1.4 h)
 uv run op ingest dblp --year 1988-2012                     # ICML before 2013: the pinned dblp release (1.1 GB, once) + 226 ICML pages, at least 11 minutes
 uv run op ingest openreview --venue ICLR --years 2013-2025 # also NeurIPS 2021-2025, ICML 2023-2025
+uv run op ingest ojs                                       # AAAI 2010+, AIES 2024+, IASEAI 2026 (decision-049; about 590 OAI pages for AAAI (589 in the first full harvest) and fewer for AIES and IASEAI, at least 3 s each; --journal AAAI|AIES|IASEAI for one)
 ```
 #### Import an existing Google Scholar RIS collection
 

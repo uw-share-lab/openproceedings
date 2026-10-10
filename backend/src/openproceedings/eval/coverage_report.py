@@ -435,7 +435,9 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
     for vy in cov["venue_years"]:
         if vy["records"]:
             years.setdefault(vy["venue"], set()).add(vy["year"])
-    spans = " · ".join(f"{v} {min(ys)}–{max(ys)}" for v, ys in sorted(years.items()))
+    spans = " · ".join(  # a venue with one year prints it once (CV-7): "IASEAI 2026", not "IASEAI 2026–2026"
+        f"{v} {min(ys)}" + (f"–{max(ys)}" if max(ys) != min(ys) else "") for v, ys in sorted(years.items())
+    )
     out = [f"- Years indexed: {spans}" + (" (the venues start in different years)"
                                           if len({min(ys) for ys in years.values()}) > 1 else "")]  # fmt: skip
     dblp = manifest.get("sources", {}).get("dblp", {}).get("listings", [])

@@ -23,7 +23,7 @@ describe("completion from /meta only", () => {
   it("offers a field's values right after its colon, with or without a space", () => {
     expect(complete("trust track:")?.labels).toEqual(META.values.track);
     expect(complete("trust track: wo")).toEqual({ from: 13, labels: META.values.track });
-    expect(complete("venue:")?.labels).toEqual(["NeurIPS", "ICLR", "ICML"]);
+    expect(complete("venue:")?.labels).toEqual(META.values.venue);
     expect(complete("Status:")?.labels).toEqual(["accepted", "rejected"]);
   });
 

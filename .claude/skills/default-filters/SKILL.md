@@ -24,7 +24,7 @@ description: The default-filter rule (guarantee 3) — `track:(main OR datasets_
   replay of that string all give the same `excluded`. Golden cases pin input → canonical → re-parse →
   toggle-off-and-on.
 - The default value set comes from the 01 track taxonomy. Every non-default track is excluded by default:
-  `workshop`, `competition`, `tiny_papers`, `blogpost`, `other` and `unknown`. NeurIPS Datasets &
+  `workshop`, `competition`, `tiny_papers`, `blogpost`, `student_abstract`, `consortium`, `demo`, `iaai`, `eaai` (the last five since decision-049, owner decision of 2026-10-09: indexed with their real track, excluded by default, counted in the `track` buckets, brought back by one `track:` clause), `other` and `unknown`. NeurIPS Datasets &
   Benchmarks is main-line content and stays in (`datasets_benchmarks`).
 - Idempotence: parsing a canonical string that already contains the defaults adds nothing. The clauses are
   present, so no default fires, and by content recognition they still count as the defaults.

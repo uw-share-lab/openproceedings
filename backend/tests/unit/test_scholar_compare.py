@@ -188,6 +188,34 @@ def test_proceedings_key_carries_the_urls_own_venue_and_year() -> None:
     assert proceedings_key("https://dblp.org/rec/conf/icml/SzitaL09") is None
 
 
+OJS_ARTICLE = "https://ojs.aaai.org/index.php/AAAI/article/view/25561"
+OJS_GALLEY = "https://ojs.aaai.org/index.php/AIES/article/view/31612/33779"
+
+
+@pytest.mark.parametrize("url", [OJS_ARTICLE, OJS_GALLEY])
+def test_an_ojs_article_link_names_no_key_and_never_crashes_the_reader(url: str) -> None:
+    """An ojs.aaai.org article or galley names an `ojs-<id>` native but no year, as a dblp page does
+    (decision-049): no key, and a RIS file holding one reads (it once raised AssertionError, a 500 on /compare)."""
+    assert proceedings_key(url) is None
+    [r] = read_ris(entry("An AAAI paper", venue="AAAI", year=2023, url=url), NAME)
+    assert r.proceedings_ids == () and r.venue == "AAAI" and r.hosts == ("ojs.aaai.org",)
+
+
+def test_a_row_with_an_ojs_link_matches_the_ojs_record_by_title_or_doi() -> None:
+    ojs = paper("ojs-25561", "Trust in an AAAI paper", source="ojs", venue="AAAI", year=2023,
+                urls_proceedings=OJS_ARTICLE, urls_doi="10.1609/aaai.v37i1.25561")  # fmt: skip
+    index = MatchIndex.build([ojs, paper("ttl00001", "Another paper")])
+    [by_title] = read_ris(entry("Trust in an AAAI paper", venue="AAAI", year=2023, url=OJS_ARTICLE), NAME)
+    assert index.match(by_title).op_id == ojs.id and index.match(by_title).rule == "title_venue_year"
+    [by_doi] = read_ris(
+        entry(
+            "Scholar's own title", venue="AAAI", year=2023, url=OJS_ARTICLE, doi="10.1609/aaai.v37i1.25561"
+        ),
+        NAME,
+    )
+    assert (index.match(by_doi).op_id, index.match(by_doi).rule) == (ojs.id, "doi")
+
+
 # --- matching ----------------------------------------------------------------------------------------------
 
 
@@ -278,7 +306,7 @@ def test_scope_limits_venues() -> None:
     scope = Scope(venues=frozenset({"ICLR"}))
     assert scope.holds("ICLR", 1999) and not scope.holds("NeurIPS", 2024) and not scope.holds(None, 2024)
     assert not Scope(years=(2020, 2026)).holds("ICLR", None)
-    assert Scope(years=(2020, 2026)).describe() == "ICLR, ICML, NeurIPS; 2020–2026"
+    assert Scope(years=(2020, 2026)).describe() == "AAAI, AIES, FAccT, IASEAI, ICLR, ICML, NeurIPS; 2020–2026"
 
 
 # --- the classes -------------------------------------------------------------------------------------------

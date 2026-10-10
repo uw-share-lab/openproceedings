@@ -13,6 +13,20 @@ rows for 1987–2012 are each year page's own count (`N papers`), read on 2026-1
 bibliography, and no ICML statement of accepted counts was found for those years (the official pages of 2001–2012
 list papers, but not every year's full set), so those cells are reported, not gated.
 
+Since decision-049 (2026-10-09) the corpus also holds AAAI 2010–2026, AIES 2024–2025 and IASEAI 2026, from
+ojs.aaai.org. Six of their `main` cells have a row, read on 2026-10-09: AAAI 2013, 2015, 2018 and 2019, and AIES 2024
+and 2025, 78 rows in all. Each is the program chairs' own statement of the papers accepted (a proceedings preface, an
+issue's front-matter description, the AI Magazine conference report, the AIES program), not a count of the OAI
+listing the crawl indexes, though the AAAI ones and AIES 2024's share its host. For AAAI, `main` is the section
+mapping of `ingest/ojs_sections.toml` (technical, special and Journal tracks). AAAI 2013's 203 is the technical
+program with its four special tracks, one of them AI and Robotics, which is why the 2011 and 2013 "Robotics Program"
+sections map to `main`. AAAI 2015's report says 539 papers were "selected … and presented" from the main technical
+and topical tracks' submissions; the row reads that as the accepted count (the weakest of the six). No other AAAI
+year has an AAAI statement of accepted papers that we found (2014, 2016 and 2017 state submissions only; 2010–2012
+and 2020–2026 nothing but aggregator figures, which are never a row), and IASEAI 2026 states 92 accepted papers of
+which only the 57 archival ones are published: those cells are reported, not gated. The research note
+(`docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md` §Official counts) classifies every venue-year.
+
 **What the 1987–2012 NeurIPS rows check.** Each is the `N papers` the year page states, and the crawl indexes that
 same page, so these 26 cells check the crawl against its own listing's stated count (every entry parsed and made a
 record), not against an independent statement of accepted papers; their "what it counts" says "the page's own
@@ -70,6 +84,12 @@ skipped NeurIPS 2021, because its D&B listing states no count, so no NeurIPS 202
 
 | venue | year | track | official_accepted | what it counts | source (URL or citation) | accessed |
 |---|---|---|---|---|---|---|
+| AAAI | 2013 | main | 203 | papers accepted for publication in the proceedings from the 690 technical-program submissions, the four special tracks included (AI and the Web, Cognitive Systems, Computational Sustainability, AI and Robotics); late-breaking papers and spotlights excluded | https://ojs.aaai.org/index.php/AAAI/article/view/8512 (AAAI-13 preface) | 2026-10-09 |
+| AAAI | 2015 | main | 539 | papers selected from the 1,991 main technical and topical track submissions and presented (AI Magazine conference report); student abstracts, IAAI, demos and the doctoral consortium excluded | https://ojs.aaai.org/index.php/aimagazine/article/view/2606/2500 (submissions: https://ojs.aaai.org/index.php/AAAI/issue/view/304) | 2026-10-09 |
+| AAAI | 2018 | main | 938 | original research publications in the proceedings, selected from 3,800 well-formed submissions (acceptance rate 24.7%); student abstracts, IAAI and EAAI excluded | https://ojs.aaai.org/index.php/AAAI/issue/view/301 | 2026-10-09 |
+| AAAI | 2019 | main | 1,147 | original research publications in the proceedings, selected from 7,095 original full paper submissions (acceptance rate 16.2%); senior member, doctoral consortium, student abstracts and demos excluded | https://ojs.aaai.org/index.php/AAAI/issue/view/246 | 2026-10-09 |
+| AIES | 2024 | main | 150 | full archival papers accepted, per the chairs' statement ('sent 468 papers out for review and accepted 150'); student abstracts excluded | https://ojs.aaai.org/index.php/AIES/article/view/31763 (AIES 2024 front matter); same figure in the table of https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 2026-10-09 |
+| AIES | 2025 | main | 238 | full archival papers accepted, per the chairs' welcome ('sent 748 papers out for review and accepted 238 of them'); student abstracts excluded | https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 2026-10-09 |
 | ICLR | 2013 | main | 24 | conference-track papers on the ICLR 2013 accepted list (workshop track excluded) | https://iclr.cc/archive/2013/conference-proceedings.html | 2026-09-27 |
 | ICLR | 2014 | main | 35 | conference-track papers on the ICLR 2014 accepted list (workshop track excluded) | https://iclr.cc/archive/2014/conference-proceedings | 2026-09-27 |
 | ICLR | 2015 | main | 31 | distinct conference-track papers on the accepted list (11 orals also listed as posters, counted once; workshop papers excluded) | https://iclr.cc/archive/www/doku.php%3Fid=iclr2015:accepted-main.html | 2026-09-27 |
@@ -263,6 +283,9 @@ the official main-track counts above, so these cells are now ordinary ±1% gate 
 
 2026: NeurIPS 2026 has no row because its main conference is not public yet. The index holds its workshop
 submissions and 95 Creative_AI_Track notes (track `other`, status `unknown`), neither gated.
+
+AAAI 2010–2012, 2014, 2016–2017 and 2020–2026 main and IASEAI 2026 main have no row (above); AAAI's and AIES's
+other tracks (`student_abstract`, `consortium`, `demo`, `iaai`, `eaai`, `other`) are not gated.
 
 Other tracks are reported on the coverage page but not gated (spec 07 §C), so they have no rows here. These
 are position, workshop, competition, Creative AI, Tiny Papers and blog posts. ICML 2013–2023 had no track

@@ -74,10 +74,10 @@ from openproceedings.ingest.record import Claim, ClaimField, PaperRecord, Source
 from openproceedings.query.normalize import normalize
 
 _TEXT: tuple[Source, ...] = (
-    "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ris",
+    "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ojs", "ris",
 )  # fmt: skip
 _ACCEPTANCE: tuple[Source, ...] = (
-    "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "openreview_v2", "openreview_v1", "ris",
+    "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "ojs", "openreview_v2", "openreview_v1", "ris",
 )  # fmt: skip
 # decision-005: OpenReview first for text and track; the official proceedings decide acceptance; RIS last.
 # Track is decided per track (owner, 2026-09-29; TASK-130): an OpenReview track claim is the note's own
@@ -107,6 +107,7 @@ CONFLICT_FIELDS: tuple[ClaimField, ...] = ("title", "track", "status")
 # AI by its own evidence (`is_creative_ai`, TASK-137), and reconcile never judges it.
 # dblp (ICML 1988-2012, decision-047) is not one: it is a bibliography of the proceedings, and no other source holds
 # its venue-years, so reconcile never judges them; its records are still listings by their `dblp-<key>` id.
+# ojs (AAAI, AIES, IASEAI; decision-049) is not one either, for the same reason: no other source holds its venue-years.
 PROCEEDINGS_SOURCES: frozenset[str] = frozenset({"iclr_archive", "neurips_proceedings", "pmlr"})
 OPENREVIEW_SOURCES: frozenset[str] = frozenset({"openreview_v2", "openreview_v1"})
 PROCEEDINGS_TRACKS: frozenset[str] = frozenset({"main", "datasets_benchmarks", "position"})
@@ -216,13 +217,16 @@ def _sources(records: Iterable[PaperRecord]) -> frozenset[str]:
 
 # The site that published an abstract, as the results list names it (TASK-134, decision-018). Distinct from a
 # claim's `Source`: a `ris` claim is a route, and its evidence says which of these the abstract came from.
-Origin = Literal["openreview", "neurips_proceedings", "iclr_proceedings", "pmlr", "iclr_archive", "icml_site"]
+Origin = Literal[
+    "openreview", "neurips_proceedings", "iclr_proceedings", "pmlr", "iclr_archive", "icml_site", "ojs"
+]
 _DIRECT_ORIGIN: dict[str, Origin] = {
     "openreview_v2": "openreview", "openreview_v1": "openreview", "neurips_proceedings": "neurips_proceedings",
     "pmlr": "pmlr", "iclr_archive": "iclr_archive",
     # an official ICML conference page (live, or a pinned Internet Archive capture of one; TASK-206): its claim's
     # url is the page as fetched, so the link reaches the capture
     "icml_site": "icml_site",
+    "ojs": "ojs",
 }  # fmt: skip
 _SITE_ORIGIN: dict[str, Origin] = {
     "NeurIPS": "neurips_proceedings",
@@ -313,6 +317,9 @@ def attribution(
         return Attribution(source, origin, forum)
     if origin == "icml_site":  # a submission page's evidence says so (TASK-207); read here, never re-derived
         return Attribution(source, origin, claim.url, AS_SUBMITTED in (claim.evidence or ""))
+    # an ojs claim's url is the OAI ListRecords page (a resumption-token url that expires): credit the paper
+    if origin == "ojs":
+        return Attribution(source, origin, proceedings)
     if origin is not None:
         return Attribution(source, origin, claim.url)
     via, _, rest = (claim.evidence or "").partition(" ")

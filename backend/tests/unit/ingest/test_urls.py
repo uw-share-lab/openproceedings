@@ -87,3 +87,31 @@ def test_a_dblp_record_page_names_its_icml_key(url: str, key: str | None) -> Non
     assert urls.dblp_icml(url) == key
     assert urls.native(url) == (f"dblp-{key}" if key else None)
     assert urls.dblp_record_url("conf/icml/SzitaL09") == "https://dblp.org/rec/conf/icml/SzitaL09"
+
+
+@pytest.mark.parametrize(
+    ("url", "article"),
+    [
+        ("https://ojs.aaai.org/index.php/AAAI/article/view/28000", 28000),
+        ("https://OJS.aaai.org/index.php/AIES/article/view/31600/33767", 31600),
+        ("http://ojs.aaai.org/index.php/IASEAI/article/view/43010?x=1", 43010),
+        ("https://ojs.aaai.org/index.php/AAAI/article/view/28000/", 28000),
+        ("https://ojs.aaai.org/index.php/AAAI/article/view/28000/35000/", 28000),
+        ("https://ojs.aaai.org/index.php/AAAI/issue/view/741", None),
+        ("https://example.org/index.php/AAAI/article/view/1", None),
+    ],
+)
+def test_ojs_article(url: str, article: int | None) -> None:
+    assert urls.ojs_article(url) == article
+    assert urls.native(url) == (None if article is None else f"ojs-{article}")
+
+
+def test_ojs_article_names_exactly_the_tables_journals() -> None:
+    """The URL pattern's journals are the table's: a journal added to `ojs_sections.toml` names its articles."""
+    from openproceedings.ingest import ojs_table
+
+    for journal in ojs_table.TABLE.journals:
+        assert urls.ojs_article(f"https://ojs.aaai.org/index.php/{journal}/article/view/7") == 7
+    assert (
+        urls.ojs_article("https://ojs.aaai.org/index.php/AIMAG/article/view/7") is None
+    )  # not a table journal

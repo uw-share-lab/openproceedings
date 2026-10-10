@@ -49,7 +49,7 @@ title; the paper count is the number of `<div class="paper">` entries (evidence:
 | v220 | NeurIPS | 2022 | `competition` | out_of_scope | 20 |
 
 The NeurIPS competition volumes are classified but not ingested: spec 01 lists PMLR for ICML only, and a
-`pmlr-` native id is ICML-only in the record schema, so ingesting them needs a spec and schema change.
+`pmlr-` native id is ICML-only in the record schema, so ingesting them needs a spec and schema change (FAccT 2018's PMLR v81 is planned for milestone B of the new-venues design, decision-049, and widens `PROCEEDINGS_NATIVE["pmlr"]` then; it is not built).
 
 ICML workshop volumes exist and are **out of scope** (never `main`, never ingested unless spec 01 adds
 workshops from PMLR): v27 (2011), v184 (ICML 2022 Healthcare AI), v251 (GRaM at ICML 2024), v292

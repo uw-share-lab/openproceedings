@@ -12,7 +12,8 @@ ICLR archive, NeurIPS proceedings and PMLR) fetches through `HttpClient`, and on
 - **Politeness.** At least `min_interval` seconds between requests. 429 and 5xx wait for `Retry-After`
   (seconds or an HTTP date), else `ratelimit-reset` (seconds from now; never `x-ratelimit-reset`, an epoch),
   else an exponential back-off (`backoff[0] · 2^n`, capped at `backoff[1]`, plus jitter); so do a network
-  error and a truncated 200 (an HTML page without `</html>`, or JSON that doesn't parse; a page the caller asks to
+  error and a truncated 200 (an HTML page without `</html>`, an XML document not ending in its root's closing
+  tag, or JSON that doesn't parse; a page the caller asks to
   judge by length, an Internet Archive capture whose original may never have had `</html>`, is truncated when its
   body is not the `Content-Length` the response states, or, when it states none, by the closing-tag rule, logged
   as `truncated_no_length`; TASK-207). A spent budget
@@ -109,7 +110,14 @@ class CacheMiss(FetchError):
 
 
 class RetriesExhausted(FetchError):
+    """Every attempt failed. `status` is the last attempt's HTTP status (a 429 or a 5xx), None when it got no
+    response or a truncated 200: a source may treat a persistent 5xx as the server's stable answer (ojs.py)."""
+
     reason = "retries_exhausted"
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class HTTPRefused(FetchError):
@@ -267,7 +275,7 @@ class Policy:
 
     hosts: frozenset[str]
     accept: str = "text/html"
-    expect: Literal["html", "json"] = "html"  # how a truncated 200 is recognised (and retried)
+    expect: Literal["html", "json", "xml"] = "html"  # how a truncated 200 is recognised (and retried)
     keep_query: bool = False  # does the query string name the resource (and the cache entry)?
     min_interval: float = 1.0
     attempts: int = 5
@@ -410,7 +418,7 @@ class HttpClient[T]:
         for attempt in range(policy.attempts):
             self._pace()
             started = time.monotonic()
-            response, hint = None, None
+            response, hint, last_status = None, None, None
             try:
                 response = self.transport(request, policy.timeout)
             except TransportError as e:
@@ -433,6 +441,7 @@ class HttpClient[T]:
                     raise FetchError(f"{url}: body over {policy.max_body} bytes", reason="too_large")
                 if response.status == 429 or response.status >= 500:
                     why, hint = f"http_{response.status}", retry_after(response.headers, self.clock.now())
+                    last_status = response.status
                 elif response.status == 200 and (cut := self._truncated(response, by_length)):
                     why = cut
                 else:
@@ -444,7 +453,8 @@ class HttpClient[T]:
                 self._wait(self._bounded(wait, url, why) + (0.0 if hint is None else policy.hint_pad), url, why,
                            attempt + 1)  # fmt: skip
         raise RetriesExhausted(
-            f"{url}: gave up after {policy.attempts} attempts; re-run later (cached responses are not fetched again)"
+            f"{url}: gave up after {policy.attempts} attempts; re-run later (cached responses are not fetched again)",
+            status=last_status,
         )
 
     def _truncated(self, response: Response, by_length: bool = False) -> str | None:
@@ -459,6 +469,11 @@ class HttpClient[T]:
             if b"</html>" in response.body[-4096:].lower():
                 return None
             return "truncated_no_length" if by_length else "truncated"
+        if self.policy.expect == "xml":
+            # whole when the body ends with its root element's closing tag (`</OAI-PMH>`); a cut-off body never does
+            root = _xml_root(response.body)
+            tail = response.body.rstrip()[-256:]
+            return None if root and tail.endswith(b"</" + root + b">") else "truncated"
         if not is_json(response):
             return None  # not JSON at all (a challenge page): the source judges it
         try:
@@ -572,6 +587,36 @@ def PageCache(root: Path) -> ResponseCache[Page]:
 
 PROCEEDINGS = Policy(hosts=frozenset())
 
+_XML_ROOT = re.compile(rb"<([A-Za-z_][\w.:-]*)[\s>/]")
+
+
+def _xml_root(body: bytes) -> bytes | None:
+    """The name of an XML document's root element, after a BOM, the declaration, processing instructions and
+    comments before it, or None when there is none in the first 4096 bytes. One forward walk of an index over
+    those bytes (never a backtracking pattern, never a copy of the tail: the body is untrusted server output)."""
+    data = body[:4096].removeprefix(b"\xef\xbb\xbf")
+    pos = _skip_space(data, 0)
+    while True:
+        if data.startswith(b"<?", pos):
+            end = data.find(b"?>", pos + 2)
+            cut = end + 2
+        elif data.startswith(b"<!--", pos):
+            end = data.find(b"-->", pos + 4)
+            cut = end + 3
+        else:
+            break
+        if end < 0:
+            return None
+        pos = _skip_space(data, cut)
+    m = _XML_ROOT.match(data, pos)
+    return m.group(1) if m else None
+
+
+def _skip_space(data: bytes, pos: int) -> int:
+    while pos < len(data) and data[pos] in b" \t\n\r\x0b\x0c":  # bytes.lstrip()'s whitespace
+        pos += 1
+    return pos
+
 
 class Fetcher(HttpClient[Page]):
     """The proceedings crawlers' page fetcher: `HttpClient` with the proceedings' policy, keeping 200s (and,
@@ -580,10 +625,12 @@ class Fetcher(HttpClient[Page]):
     def __init__(
         self, cache: ResponseCache[Page], transport: Transport | None, *, hosts: frozenset[str],
         min_interval: float = 1.0, attempts: int = 5, max_wait: float = 3600.0, timeout: float = 30.0,
-        clock: Clock | None = None,
+        clock: Clock | None = None, accept: str = "text/html",
+        expect: Literal["html", "json", "xml"] = "html", keep_query: bool = False,
     ) -> None:  # fmt: skip
         policy = replace(PROCEEDINGS, hosts=hosts, min_interval=min_interval, attempts=attempts,
-                         max_wait=max_wait, timeout=timeout)  # fmt: skip
+                         max_wait=max_wait, timeout=timeout, accept=accept, expect=expect,
+                         keep_query=keep_query)  # fmt: skip
         super().__init__(cache, transport, policy, clock)
 
     def get(

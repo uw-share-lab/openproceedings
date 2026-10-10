@@ -1,12 +1,12 @@
-"""`op ingest iclr|neurips|pmlr|dblp`, and the one offline replay of every crawler that `op snapshot build` runs (spec 01
-§CLI, §Pipeline).
+"""`op ingest iclr|neurips|pmlr|dblp|ojs`, and the one offline replay of every crawler that
+`op snapshot build` runs (spec 01 §CLI, §Pipeline).
 
 `ingest_*` crawls each listing into `<cache>/<source>/pages/` through `common.Crawls.ingest` (one run at a
 time per source: an exclusive lock on `<cache>/<source>/.lock`) and, when the whole listing is cached, writes
 its crawl marker. A dry run reads only the index pages (through the cache) and reports what a crawl would
-fetch; it writes no marker. `--offline` crawls from the cache alone. `replay_all` re-runs every marked crawl of every source
-(OpenReview API v2, then v1, then ICLR, NeurIPS, PMLR and dblp; `common.Crawls`) with no transport at all, so a snapshot
-never fetches.
+fetch; it writes no marker. `--offline` crawls from the cache alone. `replay_all` re-runs every marked crawl
+of every source (OpenReview API v2, then v1, then ICLR, NeurIPS, PMLR, dblp and OJS; `common.Crawls`) with no
+transport at all, so a snapshot never fetches.
 """
 
 from __future__ import annotations
@@ -18,8 +18,19 @@ from typing import Any
 
 from openproceedings.ingest.dblp_table import TABLE as DBLP_TABLE
 from openproceedings.ingest.dblp_table import Table as DblpTable
+from openproceedings.ingest.ojs_table import TABLE as OJS_TABLE
+from openproceedings.ingest.ojs_table import Table as OjsTable
 from openproceedings.ingest.record import PaperRecord
-from openproceedings.ingest.sources import dblp, iclr, icml_sites, neurips, openreview_v1, openreview_v2, pmlr
+from openproceedings.ingest.sources import (
+    dblp,
+    iclr,
+    icml_sites,
+    neurips,
+    ojs,
+    openreview_v1,
+    openreview_v2,
+    pmlr,
+)
 from openproceedings.ingest.sources.common import (
     Crawls,
     ListingReport,
@@ -203,7 +214,79 @@ DBLP: Crawls[dblp.YearResult] = Crawls(
     lambda cache: crawls_dir(cache, dblp.CACHE_DIR), lambda m: (int(m["year"]), str(m["release"])),
     lambda k: f"ICML {k[0]} (dblp)", "op ingest dblp", _replay_dblp,
 )  # fmt: skip
-SOURCES: tuple[Crawls[Any], ...] = (openreview_v2.CRAWLS, openreview_v1.CRAWLS, ICLR, NEURIPS, PMLR, DBLP)
+
+
+def ojs_fetcher(cache: Path, *, offline: bool, transport: Transport | None = None,
+                min_interval: float = DEFAULT_INTERVAL) -> Fetcher:  # fmt: skip
+    live = None if offline else (transport or urllib_transport)
+    return Fetcher(PageCache(cache / ojs.CACHE_DIR), live, hosts=ojs.HOSTS,
+                   min_interval=max(min_interval, ojs.MIN_INTERVAL), accept="application/xml, text/xml",
+                   expect="xml", keep_query=True)  # fmt: skip
+
+
+def ingest_ojs(
+    journals: Iterable[str], cache: Path, *, offline: bool = False, dry_run: bool = False, refresh: bool = False,
+    transport: Transport | None = None, min_interval: float = DEFAULT_INTERVAL, table: OjsTable = OJS_TABLE,
+) -> dict[str, Any]:  # fmt: skip
+    """Harvest each ojs.aaai.org journal (AAAI, AIES, IASEAI; `ojs_table`) into the cache through OAI-PMH, set by
+    set. A dry run fetches at most each journal's first ListSets page and writes no marker."""
+    wanted = sorted(set(journals)) or sorted(table.journals)
+    for j in wanted:
+        if j not in table.journals:
+            raise MinerError(f"OJS journal {j} is not in ojs_sections.toml", reason="unlisted_journal")
+    f = ojs_fetcher(cache, offline=offline, transport=transport, min_interval=min_interval)
+    if dry_run:
+        plans = []
+        for j in wanted:
+            url = ojs.sets_url(j)
+            cached = f.is_cached(url)  # before the get, which caches the page
+            first = f.get(url)
+            if not first.ok:
+                raise MinerError(f"{url} answered HTTP {first.status}", reason="no_listing")
+            sets, token = ojs.parse_sets(first.text)
+            plans.append(
+                {
+                    "journal": j,
+                    "first_page_cached": cached,
+                    "sets_on_first_page": sum(1 for s in sets if s.startswith(f"{j}:")),
+                    "more_pages": token is not None,
+                }
+            )
+        return {"dry_run": True, "journals": plans, "requests": f.stats.network, "cached": f.stats.cached}
+    mined = OJS.ingest(
+        cache, wanted, lambda j: ojs.mine_journal(j, f, refresh=refresh, table=table),
+        lambda j, _: (j, {"source": ojs.SOURCE, "journal": j}),
+    )  # fmt: skip
+    reports = [r for m in mined for r in m.reports]
+    log.info("ojs_ingested", extra={"journals": len(wanted), "listings": len(reports), "requests": f.stats.network,
+                                    "cached": f.stats.cached,
+                                    "deleted": sum(m.deleted for m in mined),
+                                    "front_matter": sum(m.front_matter for m in mined),
+                                    "unavailable": sum(m.unavailable for m in mined),
+                                    "duplicates": sum(m.duplicates for m in mined),
+                                    "recovered": sum(m.recovered for m in mined)})  # fmt: skip
+    out = _output(reports, f, False)
+    out["journals"] = [{"journal": j, "pages": m.pages, "deleted": m.deleted, "front_matter": m.front_matter,
+                        "unavailable": m.unavailable, "duplicates": m.duplicates, "recovered": m.recovered,
+                        "fallback_sets": m.fallback_sets}
+                       for j, m in zip(wanted, mined, strict=True)]  # fmt: skip
+    return out
+
+
+OJS: Crawls[ojs.JournalResult] = Crawls(
+    lambda cache: crawls_dir(cache, ojs.CACHE_DIR), lambda m: (str(m["journal"]),),
+    lambda k: f"OJS {k[0]}", "op ingest ojs",
+    lambda cache, k: ojs.mine_journal(k[0], ojs_fetcher(cache, offline=True)),
+)  # fmt: skip
+SOURCES: tuple[Crawls[Any], ...] = (
+    openreview_v2.CRAWLS,
+    openreview_v1.CRAWLS,
+    ICLR,
+    NEURIPS,
+    PMLR,
+    DBLP,
+    OJS,
+)
 
 
 def replay_all(cache: Path) -> tuple[list[PaperRecord], list[Report]]:

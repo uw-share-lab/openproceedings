@@ -33,7 +33,7 @@ from openproceedings.query.ast import (
 from openproceedings.query.clauses import ClauseReason, _widest_clause
 from openproceedings.query.normalize import normalize
 from openproceedings.query.parser import Mode, parse
-from openproceedings.vocab import STATUSES, TRACKS
+from openproceedings.vocab import STATUSES, TRACKS, VENUES
 
 _ROWS = [
     json.loads(line)
@@ -141,7 +141,7 @@ def filters(draw: st.DrawFn) -> Filter:
         ]
     else:
         pool = {
-            "venue": ["NeurIPS", "ICLR", "ICML"],
+            "venue": list(VENUES.values()),
             "track": list(TRACKS),
             "status": list(STATUSES),
         }[field]
@@ -283,7 +283,7 @@ def near_cap_queries(draw: st.DrawFn, low: int = 1_500, high: int = 2_000) -> st
 # (`track:(main OR workshop)(x OR y)`), and sometimes padded toward the 2,000-code-point cap or nested toward
 # the depth limit.
 CLAUSE_VALUES: dict[str, tuple[str, ...]] = {
-    "venue": ("ICLR", "ICML", "NeurIPS"),
+    "venue": tuple(sorted(VENUES.values())),
     "track": tuple(TRACKS),
     "status": tuple(STATUSES),
 }

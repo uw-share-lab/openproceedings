@@ -308,7 +308,7 @@ def test_a_same_day_report_is_replaced_whole(
     logged = [json.loads(ln) for ln in capsys.readouterr().err.splitlines() if ln.startswith("{")]
     [written] = [e for e in logged if e.get("event") == "coverage_report_written"]  # one INFO line per run
     # the real official table's gated cells (+26: NeurIPS 1987-2012, decision-047)
-    assert (written["replaced"], written["gated"]) == (True, 72)
+    assert (written["replaced"], written["gated"]) == (True, 78)
     assert sorted(p.name for p in out.iterdir()) == ["2026-10-01-coverage.md"]  # no temp file left
 
 
@@ -851,7 +851,7 @@ def test_the_scope_lines_say_each_venues_years_and_what_the_dblp_years_rest_on()
         return {"venue": venue, "year": year, "records": records, "tracks": [{"track": "main"}]}
 
     cov = {"venue_years": [vy("ICLR", 2013), vy("ICML", 1988), vy("ICML", 2026), vy("NeurIPS", 1987),
-                           vy("NeurIPS", 2026), vy("ICLR", 2012, records=0)]}  # fmt: skip
+                           vy("NeurIPS", 2026), vy("ICLR", 2012, records=0), vy("IASEAI", 2026)]}  # fmt: skip
     doi = "https://doi.org/10.4230/dblp.xml.2026-10-03"
     manifest = {"sources": {"dblp": {"listings": [
         {"year": 1988, "listing": doi, "records": 49},
@@ -860,7 +860,7 @@ def test_the_scope_lines_say_each_venues_years_and_what_the_dblp_years_rest_on()
     ]}}}  # fmt: skip
     years, icml = _scope(cov, manifest)
     assert years == (
-        "- Years indexed: ICLR 2013–2013 · ICML 1988–2026 · NeurIPS 1987–2026 (the venues start in different years)"
+        "- Years indexed: IASEAI 2026 · ICLR 2013 · ICML 1988–2026 · NeurIPS 1987–2026 (the venues start in different years)"
     )
     assert (
         "ICML 1988–2012: from the pinned dblp snapshot release https://doi.org/10.4230/dblp.xml.2026-10-03"

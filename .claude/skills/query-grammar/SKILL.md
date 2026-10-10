@@ -40,7 +40,7 @@ Code: `backend/src/openproceedings/query/{lexer,parser,ast,canonical}.py`.
 | Ranges | `year:2020..2026` inclusive; start > end is an error. |
 
 ## Fields
-(none) → title OR abstract · `title:` · `abstract:` · `venue:` (NeurIPS, ICLR, ICML; case-insensitive, exact) ·
+(none) → title OR abstract · `title:` · `abstract:` · `venue:` (NeurIPS, ICLR, ICML, AAAI, AIES, FAccT, IASEAI; case-insensitive, exact) ·
 `year:` · `track:` (01 taxonomy; unknown value → error listing valid values) · `status:` · `source:`
 (compat alias, see `.claude/skills/scholar-syntax-compat/SKILL.md`). Anything else before `:` → unknown-field error.
 

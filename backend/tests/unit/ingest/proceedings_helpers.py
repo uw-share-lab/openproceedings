@@ -31,8 +31,17 @@ def fixture_url(rel: str) -> str:
     return str(fixture(rel)["request"]["url"])
 
 
-def seed(cache: Path, source_dir: str, url: str, text: str, *, status: int = 200, at: datetime = T0) -> None:
-    PageCache(cache / source_dir).put(Page(canonical(url), status, text, at))
+def seed(
+    cache: Path,
+    source_dir: str,
+    url: str,
+    text: str,
+    *,
+    status: int = 200,
+    at: datetime = T0,
+    keep_query: bool = False,
+) -> None:
+    PageCache(cache / source_dir).put(Page(canonical(url, keep_query=keep_query), status, text, at))
 
 
 def seed_fixture(

@@ -116,6 +116,11 @@ SOURCES = [
     ("source:”proceedings of machine learning research”", "ICML"),
     ("source:ICLR.", "ICLR"),  # matched after the token contract: punctuation and hyphens split
     ("source:neural-information-processing-systems", "NeurIPS"),
+    ("source:AAAI", "AAAI"),
+    ('source:"Association for the Advancement of Artificial Intelligence"', "AAAI"),
+    ("source:AIES", "AIES"),
+    ("source:FAccT", "FAccT"),
+    ("source:IASEAI", "IASEAI"),
 ]
 
 

@@ -1,0 +1,19 @@
+{
+ "_recorded": {
+  "date": "2026-10-09",
+  "run": "manual ojs.aaai.org census (scripts/ojs_section_census.py), 2026-10-09",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://ojs.aaai.org/index.php/IASEAI/oai?verb=ListSets",
+  "authenticated": false
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "text/xml;charset=UTF-8"
+  },
+  "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<?xml-stylesheet type=\"text/xsl\" href=\"https://ojs.aaai.org/lib/pkp/xml/oai2.xsl\" ?>\n<OAI-PMH xmlns=\"http://www.openarchives.org/OAI/2.0/\"\n\txmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n\txsi:schemaLocation=\"http://www.openarchives.org/OAI/2.0/\n\t\thttp://www.openarchives.org/OAI/2.0/OAI-PMH.xsd\">\n\t<responseDate>2026-10-09T23:23:28Z</responseDate>\n\t<request verb=\"ListSets\">https://ojs.aaai.org/index.php/IASEAI/oai</request>\n\t<ListSets>\n\t\t<set>\n\t\t\t<setSpec>IASEAI</setSpec>\n\t\t\t<setName>Proceedings of IASEAI Conference</setName>\n\t\t\t<setDescription>\n\t\t\t\t<oai_dc:dc\n\t\t\t\t\txmlns:oai_dc=\"http://www.openarchives.org/OAI/2.0/oai_dc/\"\n\t\t\t\t\txmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n\t\t\t\t\txmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n\t\t\t\t\txsi:schemaLocation=\"http://www.openarchives.org/OAI/2.0/oai_dc/\n\t\t\t\t\t\thttp://www.openarchives.org/OAI/2.0/oai_dc.xsd\">\n\t\t\t\t\t<dc:description></dc:description>\n\t\t\t\t</oai_dc:dc>\n\t\t\t</setDescription>\n\t\t</set>\n\t\t<set>\n\t\t\t<setSpec>IASEAI:FMT</setSpec>\n\t\t\t<setName>Frontmatter</setName>\n\t\t\t<setDescription>\n\t\t\t\t<oai_dc:dc\n\t\t\t\t\txmlns:oai_dc=\"http://www.openarchives.org/OAI/2.0/oai_dc/\"\n\t\t\t\t\txmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n\t\t\t\t\txmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n\t\t\t\t\txsi:schemaLocation=\"http://www.openarchives.org/OAI/2.0/oai_dc/\n\t\t\t\t\t\thttp://www.openarchives.org/OAI/2.0/oai_dc.xsd\">\n\t\t\t\t\t<dc:description></dc:description>\n\t\t\t\t</oai_dc:dc>\n\t\t\t</setDescription>\n\t\t</set>\n\t\t<set>\n\t\t\t<setSpec>IASEAI:ART</setSpec>\n\t\t\t<setName>Articles</setName>\n\t\t\t<setDescription>\n\t\t\t\t<oai_dc:dc\n\t\t\t\t\txmlns:oai_dc=\"http://www.openarchives.org/OAI/2.0/oai_dc/\"\n\t\t\t\t\txmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n\t\t\t\t\txmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n\t\t\t\t\txsi:schemaLocation=\"http://www.openarchives.org/OAI/2.0/oai_dc/\n\t\t\t\t\t\thttp://www.openarchives.org/OAI/2.0/oai_dc.xsd\">\n\t\t\t\t\t<dc:description></dc:description>\n\t\t\t\t</oai_dc:dc>\n\t\t\t</setDescription>\n\t\t</set>\n\t\t<set>\n\t\t\t<setSpec>IASEAI:IASEAI</setSpec>\n\t\t\t<setName>Main Track</setName>\n\t\t\t<setDescription>\n\t\t\t\t<oai_dc:dc\n\t\t\t\t\txmlns:oai_dc=\"http://www.openarchives.org/OAI/2.0/oai_dc/\"\n\t\t\t\t\txmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n\t\t\t\t\txmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n\t\t\t\t\txsi:schemaLocation=\"http://www.openarchives.org/OAI/2.0/oai_dc/\n\t\t\t\t\t\thttp://www.openarchives.org/OAI/2.0/oai_dc.xsd\">\n\t\t\t\t\t<dc:description></dc:description>\n\t\t\t\t</oai_dc:dc>\n\t\t\t</setDescription>\n\t\t</set>\n\t</ListSets>\n</OAI-PMH>\n"
+ }
+}

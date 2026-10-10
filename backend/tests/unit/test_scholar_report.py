@@ -166,7 +166,7 @@ def test_header_names_every_input_the_numbers_depend_on() -> None:
         "- Index: `index_version` `abc123def456`, `tokenizer_version` `3`",
         f"- Snapshot: `2026-09-29-test`, `snapshot_hash` `{'f' * 64}` (9 records)",
         f"- Scholar set: `set.ris`, sha256 `{'a' * 64}` (8 records)",
-        "- Scope, both sides: ICLR, ICML, NeurIPS; 2020–2026",
+        "- Scope, both sides: AAAI, AIES, FAccT, IASEAI, ICLR, ICML, NeurIPS; 2020–2026",
         "- Queries: `q`",
         "- Notes: none",
         "- Command: `op eval scholar --ris set.ris --index abc123def456 --date 2026-10-04`",

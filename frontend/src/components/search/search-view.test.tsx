@@ -298,7 +298,7 @@ describe("results header, hits and highlights (W5)", () => {
       within(badges)
         .getAllByRole("listitem")
         .map((li) => li.textContent),
-    ).toEqual(["ICLR", "2024", "D&Bdatasets and benchmarks", "poster"]);
+    ).toEqual(["ICLR", "2024", "D&BD&B, datasets and benchmarks", "poster"]);
     const links = screen.getByRole("list", { name: `Links for ${HIT.title}` });
     expect(
       within(links)
@@ -465,7 +465,7 @@ describe("filter sidebar (spec 05 §4; W13)", () => {
     await setup();
     expect(box("workshop, 205 papers")).toHaveProperty("checked", false);
     expect(box("main, 301 papers")).toHaveProperty("checked", true);
-    expect(box("datasets and benchmarks, 64 papers")).toHaveProperty("checked", true);
+    expect(box("D&B, datasets and benchmarks, 64 papers")).toHaveProperty("checked", true);
     expect(box("ICML, 81 papers")).toHaveProperty("checked", true);
     expect(screen.getByText("All venues: untick one to leave it out.")).toBeTruthy();
     const track = screen.getByRole("group", { name: "Track (default)" });

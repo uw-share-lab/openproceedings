@@ -149,7 +149,7 @@ class RisRecord:
 
     key: str
     title: str
-    venue: str | None  # NeurIPS, ICLR or ICML when `venue_raw` is exactly one of Scholar mode's source names
+    venue: str | None  # an indexed venue when `venue_raw` is exactly one of Scholar mode's source names
     venue_raw: str
     year: int | None
     forum_ids: tuple[str, ...]  # OpenReview forum ids its URLs name
@@ -194,16 +194,18 @@ def openreview_id(url: str) -> str | None:
 
 def proceedings_key(url: str) -> ProceedingsKey | None:
     """The proceedings paper a URL names, or None: `urls.native`'s id with the venue and year the URL itself
-    carries (a NeurIPS or ICLR proceedings path; for PMLR, the ICML volume's year from the volume table). A dblp
-    record page (`dblp-<key>`, ICML 1988-2012; decision-047) carries no year, so it names no key here: None."""
+    carries (a NeurIPS or ICLR proceedings path; for PMLR, the ICML volume's year from the volume table). Any
+    other native names no key here: a dblp record page (`dblp-<key>`, ICML 1988-2012; decision-047) and an
+    ojs.aaai.org article or galley (`ojs-<id>`, AAAI, AIES, IASEAI; decision-049) carry no year, so the row
+    is matched by its DOI or its title instead, never refused."""
     native = urls.native(url)
-    if native is None or urls.dblp_icml(url) is not None:
+    if native is None:
         return None
     if (parts := urls.proceedings_parts(url)) is not None:
         return (parts[0], parts[1], native)
-    volume = urls.pmlr(url)
-    assert volume is not None  # `urls.native` names a NeurIPS/ICLR paper or an ICML volume's, nothing else
-    return ("ICML", ICML_PMLR_VOLUMES[volume[0]][0], native)
+    if (volume := urls.pmlr(url)) is not None and volume[0] in ICML_PMLR_VOLUMES:
+        return ("ICML", ICML_PMLR_VOLUMES[volume[0]][0], native)
+    return None  # dblp-<key>, ojs-<id>: no year in the URL
 
 
 def _named[T](read: Callable[[str], T | None], url: str) -> T | None:
@@ -385,9 +387,9 @@ class MatchIndex:
         """`r`'s index record by the merge rules, in their order: an id first (a forum id, then a proceedings
         id, then a DOI), then the title key within `r`'s venue and year. An id or a key that names two records
         is ambiguous, never a pick, and so are two ids that name different records; a record with no year, or
-        whose venue is not one of the three, is matched by id only. A DOI never matches across venue or year:
-        it names its record only when the file's year, if it gives one, and its venue, if it is one of the
-        three, are the record's (`doi_elsewhere` otherwise)."""
+        whose venue is no indexed venue's name, is matched by id only. A DOI never matches across venue or
+        year: it names its record only when the file's year, if it gives one, and its venue, if it names one,
+        are the record's (`doi_elsewhere` otherwise)."""
         by_forum = {rid for f in r.forum_ids for rid in self.forums.get(f, ())}
         by_listing = {rid for p in r.proceedings_ids for rid in self.proceedings.get(p, ())}
         named = {rid for d in r.dois for rid in self.dois.get(d, ())}

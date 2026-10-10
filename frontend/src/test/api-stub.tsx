@@ -131,7 +131,7 @@ export const META: Schemas["MetaResponse"] = {
   query_version: "q1",
   tokenizer_version: "t1",
   values: {
-    venue: ["NeurIPS", "ICLR", "ICML"],
+    venue: ["NeurIPS", "ICLR", "ICML", "AAAI", "AIES", "FAccT", "IASEAI"],
     track: ["main", "datasets_benchmarks", "position", "workshop"],
     status: ["accepted", "rejected"],
   },

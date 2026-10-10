@@ -6,6 +6,8 @@ back-off, what is cached and how) stays in `test_fetch.py` and `test_openreview_
 from __future__ import annotations
 
 import json
+import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -23,6 +25,8 @@ from openproceedings.ingest.sources.http import (
     Response,
     RetriesExhausted,
     SourceError,
+    _xml_root,
+    canonical,
 )
 from openproceedings.ingest.sources.openreview_client import (
     Credentials,
@@ -32,7 +36,7 @@ from openproceedings.ingest.sources.openreview_client import (
 from scholarmend.cache import Cache
 
 from tests.unit.ingest.openreview_fakes import PASSWORD, USERNAME, FakeClock, json_response
-from tests.unit.ingest.proceedings_helpers import fetcher
+from tests.unit.ingest.proceedings_helpers import FakeTransport, fetcher, response
 
 HTML = b"<html><body>ok</body></html>"
 
@@ -173,3 +177,105 @@ def test_an_openreview_cache_written_by_scholarmends_cache_still_replays(tmp_pat
     assert client.get("/notes", {"id": "x"}) == entry and client.cached == 1
     [path] = tmp_path.rglob("*.json")
     assert json.loads(path.read_text()) == {"key": url, "payload": entry}
+
+
+OAI = "https://ojs.aaai.org/index.php/AAAI/oai?verb=ListRecords&metadataPrefix=oai_dc"
+OAI_BODY = '<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><ListRecords/></OAI-PMH>'
+WHOLE = f'<?xml version="1.0"?>{OAI_BODY}\n'
+CUT = WHOLE[:60]
+XML_HEADERS = {"content-type": "text/xml; charset=utf-8"}
+
+
+def _xml_fetcher(tmp_path: Path, body: str) -> tuple[Any, FakeTransport]:
+    t = FakeTransport({})
+    t.script[canonical(OAI, keep_query=True)] = [response(body, headers=XML_HEADERS)]  # the query names it
+    f, _ = fetcher(tmp_path, t, frozenset({"ojs.aaai.org"}), min_interval=0.0, attempts=2,
+                   accept="application/xml", expect="xml", keep_query=True)  # fmt: skip
+    return f, t
+
+
+def test_xml_page_is_kept_with_its_query(tmp_path: Path) -> None:
+    f, t = _xml_fetcher(tmp_path, WHOLE)
+    page = f.get(OAI)
+    assert page.ok and page.url == OAI  # the query names the resource: kept in the URL and the cache key
+    assert t.calls == [OAI]
+
+
+def test_truncated_xml_is_retried_then_refused(tmp_path: Path) -> None:
+    f, t = _xml_fetcher(tmp_path, CUT)
+    with pytest.raises(RetriesExhausted):
+        f.get(OAI)
+    assert len(t.calls) == 2
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        f'<?xml version="1.0"?><!-- c -->{OAI_BODY}',
+        f'<?xml version="1.0"?>\n<?xml-stylesheet href="x.xsl"?>\n{OAI_BODY}  \n',
+        f"  {OAI_BODY}",
+    ],
+)
+def test_xml_prolog_is_skipped_to_find_the_root(tmp_path: Path, body: str) -> None:
+    f, _ = _xml_fetcher(tmp_path, body)
+    assert f.get(OAI).ok
+
+
+def test_xml_with_another_closing_tag_is_not_whole(tmp_path: Path) -> None:
+    f, _ = _xml_fetcher(tmp_path, '<?xml version="1.0"?><OAI-PMH><ListRecords></ListRecords>')
+    with pytest.raises(RetriesExhausted):
+        f.get(OAI)
+
+
+def test_html_rule_unchanged_for_the_default_fetcher(tmp_path: Path) -> None:
+    url = "https://ojs.aaai.org/index.php/AAAI/issue/archive"
+    t = FakeTransport({url: response("<html><body>ok</body></html>")})
+    f, _ = fetcher(tmp_path, t, frozenset({"ojs.aaai.org"}), min_interval=0.0)
+    assert f.get(url).ok
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "\ufeff" + WHOLE,
+        '<oai:OAI-PMH xmlns:oai="urn:x"><oai:ListRecords/></oai:OAI-PMH>',
+        '<?xml version="1.0"?>' + "<?a b?>" * 50 + "<!-- c -->" * 50 + OAI_BODY,
+    ],
+)
+def test_xml_bom_prefixed_and_namespaced_and_long_prolog_are_whole(tmp_path: Path, body: str) -> None:
+    f, _ = _xml_fetcher(tmp_path, body)
+    assert f.get(OAI).ok
+
+
+@pytest.mark.parametrize("prolog", ["<?xml version='1.0'", "<!-- never closed"])
+def test_xml_unterminated_prolog_is_truncated(tmp_path: Path, prolog: str) -> None:
+    f, _ = _xml_fetcher(tmp_path, prolog + OAI_BODY)
+    with pytest.raises(RetriesExhausted):
+        f.get(OAI)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"<?a?>" * 800 + b"x",
+        b"<!--a-->" * 500 + b"x",
+        b"<?" + b"?" * 4000,
+        b"<?a?>" * 200_000 + b"x",  # 1 MB, far past the 4096-byte window
+    ],
+)
+def test_xml_root_scan_is_bounded_on_adversarial_prologs(body: bytes) -> None:
+    """Run in a daemon thread, so a scan that never returns (a backtracking pattern) fails here by name, fast,
+    instead of hanging the job until CI's timeout."""
+    found: list[bytes | None] = []
+    worker = threading.Thread(target=lambda: found.append(_xml_root(body)), daemon=True)
+    start = time.perf_counter()
+    worker.start()
+    worker.join(timeout=2)
+    assert not worker.is_alive(), "_xml_root did not return within 2 s"
+    assert found == [None] and time.perf_counter() - start < 0.5
+
+
+def test_xml_root_reads_only_the_first_4096_bytes() -> None:
+    """A root after 4096 bytes of prolog is not found: the window is what bounds the scan."""
+    assert _xml_root(b"<?a?>" * 800 + b"<OAI-PMH/>") == b"OAI-PMH"  # 4,000 bytes of prolog, then the root
+    assert _xml_root(b"<?a?>" * 1000 + b"<OAI-PMH/>") is None

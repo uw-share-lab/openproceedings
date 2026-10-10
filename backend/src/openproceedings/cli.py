@@ -2,7 +2,7 @@
 implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
 Implemented: `op ingest ris`, `op ingest openreview` (API v2, task-050; API v1, task-051),
-`op ingest iclr|neurips|pmlr` (TASK-096, task-052/053), `op snapshot build`, `op snapshot diff` (task-022), `op index build`
+`op ingest iclr|neurips|pmlr|ojs` (TASK-096, task-052/053), `op snapshot build`, `op snapshot diff` (task-022), `op index build`
 (task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
 task-024/030), `op export` (task-030), `op serve` (task-034), `op openapi` (task-040), `op record save` /
 `op record replay` (task-083) and `op index retire` (TASK-085). Results go to stdout; logs go to stderr; a
@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest = sub.add_parser(
         "ingest",
-        help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | openreview (spec 01)",
+        help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | ojs | openreview (spec 01)",
     )
     sources = ingest.add_subparsers(dest="source", metavar="<source>", required=True)
     ris = sources.add_parser(
@@ -185,6 +185,33 @@ def build_parser() -> argparse.ArgumentParser:
             else f"seconds between requests (default 1, at least {MIN_DELAY})",
         )  # fmt: skip
         crawl.set_defaults(run=_ingest_crawl)
+    from openproceedings.ingest import ojs_table  # the journals the table names are the --journal choices
+
+    ojs_parser = sources.add_parser(
+        "ojs",
+        help="harvest ojs.aaai.org journals (AAAI 2010+, AIES 2024+, IASEAI 2026+; ingest/ojs_sections.toml) "
+        "through OAI-PMH into <data-dir>/cache/ojs",
+    )
+    ojs_parser.add_argument(
+        "--journal", dest="journals", action="append", default=[], choices=sorted(ojs_table.TABLE.journals),
+        help="repeatable; default every journal",
+    )  # fmt: skip
+    ojs_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="read only each journal's first ListSets page; report what a crawl would fetch",
+    )
+    ojs_parser.add_argument("--offline", action="store_true", help="use the page cache only (no network)")
+    ojs_parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="re-fetch each chain's first page, every GetRecord, and any cached failure",
+    )
+    ojs_parser.add_argument(
+        "--delay", type=float, default=1.0,
+        help=f"seconds between requests (default 1, at least {MIN_DELAY}; the host is never paced under 3)",
+    )  # fmt: skip
+    ojs_parser.set_defaults(run=_ingest_ojs)
     for name, task in PLANNED_SOURCES.items():
         _stub(sources.add_parser(name, help=_stub_status(task)), f"ingest {name}", task)
 
@@ -567,6 +594,18 @@ def _ingest_crawl(ns: argparse.Namespace) -> int:
         run(years, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run, refresh=ns.refresh,
             min_interval=ns.delay)
     )  # fmt: skip
+    return 0
+
+
+def _ingest_ojs(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest.sources.crawl import ingest_ojs
+
+    if not math.isfinite(ns.delay) or ns.delay < MIN_DELAY:
+        raise _usage(f"--delay must be finite and at least {MIN_DELAY} seconds (politeness)")
+    if ns.dry_run and ns.offline:
+        raise _usage("--dry-run and --offline don't combine: a dry run reads the live first page")
+    _print(ingest_ojs(ns.journals, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
+                      refresh=ns.refresh, min_interval=ns.delay))  # fmt: skip
     return 0
 
 

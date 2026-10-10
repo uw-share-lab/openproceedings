@@ -18,6 +18,7 @@ import re
 import unicodedata
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from types import MappingProxyType
 from typing import Annotated, Any, Literal, Self
 from urllib.parse import urlparse
 
@@ -38,15 +39,17 @@ from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
 from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
-# 5: the `dblp` and `icml_site` sources and the `dblp-<key>` native id (TASK-205/206, decision-047);
+# 6: the AAAI, AIES, FAccT and IASEAI venues, five tracks, the `ojs` source and the `ojs-<article id>` native id
+# (decision-049); 5: the `dblp` and `icml_site` sources and the `dblp-<key>` native id (TASK-205/206, decision-047);
 # 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-029)
-RECORD_SCHEMA_VERSION = "5"
+RECORD_SCHEMA_VERSION = "6"
 # Sent with a record, never stored: computed from its fields, so a snapshot line never holds it (`record_line`)
 # and the shape above is unchanged (TASK-112). Output only: a dump that is validated again excludes it.
 DERIVED = frozenset({"venue_name"})
 
 Source = Literal[
-    "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ris",
+    "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ojs",
+    "ris",
 ]  # fmt: skip
 Presentation = Literal["oral", "spotlight", "poster"]
 ClaimField = Literal[
@@ -57,19 +60,23 @@ ClaimField = Literal[
     "twin", "invitation",
 ]  # fmt: skip
 
-_ID = re.compile(r"op:(neurips|iclr|icml):([0-9]{4}):(\S+)")
+_ID = re.compile(r"op:(neurips|iclr|icml|aaai|aies|facct|iaseai):([0-9]{4}):(\S+)")
 # Native ids (record-schema skill): an OpenReview forum id, or a proceedings form tied to its venue.
-PROCEEDINGS_NATIVE = {
-    "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), "ICML"),
+PROCEEDINGS_NATIVE: dict[str, tuple[re.Pattern[str], frozenset[str]]] = {
+    "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), frozenset({"ICML"})),
     # `-round1`/`-round2`: the 2021 D&B host, which numbers each round separately (urls.proceedings_native)
     "nips": (
         re.compile(rf"nips-[0-9a-f]{{32}}(?:-(?:{'|'.join(sorted(NEURIPS_DB_2021_ROUNDS))}))?"),
-        "NeurIPS",
+        frozenset({"NeurIPS"}),
     ),
-    "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), "ICLR"),
+    "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), frozenset({"ICLR"})),
     # ICML 1988-2012 from the pinned dblp release: the dblp key after `conf/icml/` (sources/dblp.py, decision-047)
-    "dblp": (re.compile(r"dblp-[A-Za-z0-9_-]+"), "ICML"),
+    "dblp": (re.compile(r"dblp-[A-Za-z0-9_-]+"), frozenset({"ICML"})),
+    # an ojs.aaai.org article id (`oai:ojs.aaai.org:article/<id>`), unique across its journals (sources/ojs.py)
+    "ojs": (re.compile(r"ojs-[0-9]+"), frozenset({"AAAI", "AIES", "IASEAI"})),
 }
+# tracks only one venue has (decision-049): IAAI and EAAI are printed in the AAAI volumes alone
+VENUE_ONLY_TRACKS: Mapping[str, str] = MappingProxyType({"iaai": "AAAI", "eaai": "AAAI"})
 # the years a `dblp-` id may name: ICML before PMLR (v28, 2013), so dblp and PMLR never hold one venue-year
 DBLP_YEARS = range(1988, 2013)
 
@@ -332,10 +339,10 @@ class PaperRecord(BaseModel):
         native = m.group(3)
         form = PROCEEDINGS_NATIVE.get(native.split("-", 1)[0])
         if form is not None:
-            pattern, venue = form
-            if not pattern.fullmatch(native) or venue != self.venue:
+            pattern, venues = form
+            if not pattern.fullmatch(native) or self.venue not in venues:
                 raise ValueError(
-                    f"native id {native!r} is not a valid {venue} proceedings id for {self.venue}"
+                    f"native id {native!r} is not a valid {'/'.join(sorted(venues))} proceedings id for {self.venue}"
                 )
             if native.startswith("dblp-") and self.year not in DBLP_YEARS:
                 raise ValueError(
@@ -347,6 +354,8 @@ class PaperRecord(BaseModel):
                 )
         elif not FORUM_ID.fullmatch(native):
             raise ValueError(f"native id {native!r} is neither an OpenReview forum id nor a proceedings id")
+        if (only := VENUE_ONLY_TRACKS.get(self.track)) is not None and only != self.venue:
+            raise ValueError(f"track {self.track!r} is only an {only} track, not {self.venue}'s")
         expected = content_hash(
             title=self.title,
             abstract=self.abstract,

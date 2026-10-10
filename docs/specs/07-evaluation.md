@@ -212,6 +212,29 @@ so cross-venue counts over those years compare two venues, not three. ICML 1988�
 which has no abstracts: only the years whose official ICML pages give abstracts have them (TASK-206), and every
 other record of those years is title-only, counted in the cell's missing abstracts. ICLR 2014–2016 are
 not gaps: their public archive listings supply accepted main-track records (TASK-096).
+**AAAI, AIES and IASEAI (decision-049, milestone A).** The index holds AAAI 2010–2026, AIES 2024–2025 and IASEAI
+2026 from ojs.aaai.org, every record `accepted` (published in the proceedings: the source lists no rejected paper),
+each venue-year a coverage cell with its real tracks (`main`, `student_abstract`, `consortium`, `demo`, `iaai`,
+`eaai`, `other`). AAAI's `main` is the section mapping of `ingest/ojs_sections.toml` (technical, special and Journal
+tracks, and the 2010–2014 topic sections), not a track AAAI itself names. **Six cells are gated**
+(`official_counts.py`, read 2026-10-09): AAAI 2013 (203), 2015 (539), 2018 (938) and 2019 (1,147) main, and AIES 2024
+(150) and 2025 (238) main, each the program chairs' own statement of accepted papers (a preface, an issue's
+front-matter description, the AI Magazine conference report, the AIES program), not a count of the listing the
+crawl reads. AAAI 2013's count includes its AI and Robotics special track, which is why the 2011 and 2013
+"Robotics Program" sections are `main`; AAAI 2013's gate row therefore pins that mapping ruling (the one gated row that
+depends on a section decision), so a failing 2013 cell is a reason to check the mapping before the crawl. The other cells are recorded, not gated: AAAI 2014, 2016 and 2017 state
+submissions only, and 2010–2012 and 2020–2026 have only aggregator figures, which are never a row; IASEAI 2026's
+front matter states 92 accepted research papers, but 35 of them are non-archival and unpublished on OJS, so 57
+indexed against 92 would fail the ±1% gate for a reason the index cannot repair. The research note classifies every
+venue-year (`docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md` §Official counts). Each OJS volume's listed
+count is also checked against the verified count in `ingest/ojs_sections.toml`, and a difference stops the crawl
+(`count_mismatch`, spec 01), so no snapshot holds a mismatched OJS listing: the report's listings section can name an OJS
+volume only for its skipped entries (AAAI 2026's `unavailable 1`), always with `count_ok` yes. One article the OAI list names, AAAI 39173, is served in no form; it is counted
+in AAAI 2026's listed 4,921 but is never a record (spec 01, `[[unavailable]]`).
+FAccT, AAAI 1980–2008 and AIES 2018–2023 are planned (milestones B and C of the
+[design](../plans/2026-10-09-new-venues-design.md)) and have no cells until built, which the report states as scope
+(a venue-year with no source is a reported gap, never a silent zero). Before milestone B, cross-venue counts compare
+venues over different year spans (AAAI from 2010, AIES from 2024, IASEAI 2026).
 The source of statuses indexed is spec 01's source table as `ingest/statuses.py` holds it (spec 01
 §Pipeline 5); the snapshot manifest records them per venue-year, and the missing abstracts and sources per
 cell (manifest format 2, TASK-082).

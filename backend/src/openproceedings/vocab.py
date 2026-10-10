@@ -9,7 +9,7 @@ from collections.abc import Iterable
 from typing import Literal, get_args
 
 # The types are the single source; the value tuples derive from them, so they can't drift apart.
-Venue = Literal["NeurIPS", "ICLR", "ICML"]
+Venue = Literal["NeurIPS", "ICLR", "ICML", "AAAI", "AIES", "FAccT", "IASEAI"]
 Track = Literal[
     "main",
     "datasets_benchmarks",
@@ -18,6 +18,11 @@ Track = Literal[
     "competition",
     "tiny_papers",
     "blogpost",
+    "student_abstract",  # AAAI and AIES student abstracts and posters (decision-049)
+    "consortium",  # AAAI doctoral and undergraduate consortia
+    "demo",  # AAAI demonstrations
+    "iaai",  # Innovative Applications of AI, printed in the AAAI volumes (AAAI only)
+    "eaai",  # Educational Advances in AI, printed in the AAAI volumes (AAAI only)
     "other",
     "unknown",
 ]
@@ -106,11 +111,21 @@ def crawl_dates_kind(
 # meeting (icml.cc calls 2026 the 43rd). It is the conference's name, not a proceedings title ("Advances in
 # Neural Information Processing Systems 36", "Proceedings of the 40th International Conference on Machine
 # Learning"), because an export also holds workshop, rejected and ICLR papers that no proceedings contain.
+# AAAI was held as the National Conference on AI from 1980; the table uses the name the conference has today.
+# AIES began in 2018. FAccT was held as FAT* in 2018-2020 and renamed for 2021. IASEAI first met in 2025,
+# though only its 2026 papers are published.
 type ConferenceTable = dict[str, tuple[str, tuple[tuple[int, str], ...]]]
 CONFERENCES: ConferenceTable = {
     "NeurIPS": ("Conference on Neural Information Processing Systems", ((1987, "NIPS"), (2018, "NeurIPS"))),
     "ICLR": ("International Conference on Learning Representations", ((2013, "ICLR"),)),
     "ICML": ("International Conference on Machine Learning", ((1988, "ICML"),)),
+    "AAAI": ("AAAI Conference on Artificial Intelligence", ((1980, "AAAI"),)),
+    "AIES": ("AAAI/ACM Conference on AI, Ethics, and Society", ((2018, "AIES"),)),
+    "FAccT": (
+        "ACM Conference on Fairness, Accountability, and Transparency",
+        ((2018, "FAT*"), (2021, "FAccT")),
+    ),
+    "IASEAI": ("International Association for Safe and Ethical AI Conference", ((2025, "IASEAI"),)),
 }
 
 

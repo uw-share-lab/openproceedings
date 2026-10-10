@@ -13,6 +13,7 @@ from hypothesis import assume, given
 from hypothesis import strategies as st
 from openproceedings.ingest.record import (
     DERIVED,
+    RECORD_SCHEMA_VERSION,
     Claim,
     PaperRecord,
     Urls,
@@ -423,12 +424,21 @@ VENUE_NAMES: dict[tuple[str, int], str] = {
     ("ICML", 2024): "International Conference on Machine Learning (ICML 2024)",
     ("ICML", 2025): "International Conference on Machine Learning (ICML 2025)",
     ("ICML", 2026): "International Conference on Machine Learning (ICML 2026)",
+    ("AAAI", 1980): "AAAI Conference on Artificial Intelligence (AAAI 1980)",
+    ("AAAI", 2026): "AAAI Conference on Artificial Intelligence (AAAI 2026)",
+    ("AIES", 2018): "AAAI/ACM Conference on AI, Ethics, and Society (AIES 2018)",
+    ("FAccT", 2018): "ACM Conference on Fairness, Accountability, and Transparency (FAT* 2018)",
+    ("FAccT", 2020): "ACM Conference on Fairness, Accountability, and Transparency (FAT* 2020)",
+    ("FAccT", 2021): "ACM Conference on Fairness, Accountability, and Transparency (FAccT 2021)",
+    ("IASEAI", 2026): "International Association for Safe and Ethical AI Conference (IASEAI 2026)",
 }
 
 
 @pytest.mark.parametrize(("venue", "year"), sorted(VENUE_NAMES))
 def test_venue_name_per_venue_year(venue: str, year: int) -> None:
-    native = {"NeurIPS": "nips-" + "a" * 32, "ICML": "pmlr-v1-x", "ICLR": "iilhN2MycO"}[venue]
+    native = {"NeurIPS": "nips-" + "a" * 32, "ICML": "pmlr-v1-x", "ICLR": "iilhN2MycO"}.get(
+        venue, "iilhN2MycO" if venue == "FAccT" else "ojs-28000"
+    )  # FAccT has no ojs source: its ids are OpenReview-style until its own source lands
     r = record(id=f"op:{venue.lower()}:{year}:{native}", venue=venue, year=year)
     assert r.venue_name == VENUE_NAMES[venue, year]
     assert r.model_dump(mode="json")["venue_name"] == VENUE_NAMES[venue, year]  # sent with the record
@@ -574,3 +584,48 @@ def test_a_claims_evidence_says_how_many_control_characters_were_replaced(
     evidence: str, replaced: int, said: str
 ) -> None:
     assert controls_evidence(evidence, replaced) == said
+
+
+# --- the `ojs` source, the `ojs-<article id>` native id, AAAI-only tracks, schema 6 (decision-049) ---
+
+
+def _ojs(
+    venue: str = "AAAI", year: int = 2024, track: str = "main", native: str = "ojs-28000"
+) -> PaperRecord:
+    return PaperRecord.build(
+        id=f"op:{venue.lower()}:{year}:{native}", title="A paper", abstract=None, authors=("A. Author",),
+        venue=venue, year=year, track=track, status="accepted",
+    )  # fmt: skip
+
+
+def test_schema_is_6() -> None:
+    assert RECORD_SCHEMA_VERSION == "6"
+
+
+@pytest.mark.parametrize(("venue", "year"), [("AAAI", 2010), ("AIES", 2024), ("IASEAI", 2026)])
+def test_ojs_native_id_is_valid_for_its_venues(venue: str, year: int) -> None:
+    assert _ojs(venue, year).native == "ojs-28000"
+
+
+@pytest.mark.parametrize(("venue", "year"), [("ICML", 2024), ("FAccT", 2024)])
+def test_ojs_native_id_is_refused_for_another_venue(venue: str, year: int) -> None:
+    with pytest.raises(ValidationError, match="not a valid"):
+        _ojs(venue, year)
+
+
+@pytest.mark.parametrize("native", ["ojs-", "ojs-12a", "ojs-1-2"])
+def test_malformed_ojs_native_id_is_refused(native: str) -> None:
+    with pytest.raises(ValidationError):
+        _ojs(native=native)
+
+
+@pytest.mark.parametrize("track", ["iaai", "eaai"])
+def test_iaai_and_eaai_are_aaai_only(track: str) -> None:
+    assert _ojs(track=track).track == track
+    with pytest.raises(ValidationError, match="only an AAAI track"):
+        _ojs("AIES", 2024, track=track)
+
+
+@pytest.mark.parametrize("track", ["student_abstract", "consortium", "demo"])
+def test_other_new_tracks_are_open_to_every_venue(track: str) -> None:
+    assert _ojs("AIES", 2025, track=track).track == track

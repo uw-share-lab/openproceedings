@@ -87,3 +87,82 @@ def test_a_capture_states_its_own_fetch_date_and_one_without_it_takes_the_defaul
     assert scrub.fixture({**capture, "date": "2026-10-05"})["_recorded"]["date"] == "2026-10-05"
     with pytest.raises(ValueError):
         scrub.fixture({**capture, "date": "5 October 2026"})
+
+
+OAI_PAGE = """<?xml version="1.0" encoding="UTF-8"?>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><ListRecords>
+<record><header><identifier>oai:ojs.aaai.org:article/43116</identifier><datestamp>2026-07-15T06:11:29Z</datestamp>
+<setSpec>IASEAI:IASEAI</setSpec></header><metadata>
+<oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<dc:title xml:lang="en-US">A Real Title &amp; More</dc:title>
+<dc:creator>Person, Real</dc:creator><dc:creator>Other, Real</dc:creator>
+<dc:subject xml:lang="en-US">real keyword</dc:subject>
+<dc:description xml:lang="en-US">A real abstract
+over two lines.</dc:description>
+<dc:publisher xml:lang="en-US">AAAI Press</dc:publisher>
+<dc:identifier>https://ojs.aaai.org/index.php/IASEAI/article/view/43116</dc:identifier>
+<dc:identifier>10.1609/iaseai.v2i1.43116</dc:identifier>
+<dc:source xml:lang="en-US">Proceedings of IASEAI Conference; Vol. 2 No. 1: IASEAI '26; 1-12</dc:source>
+</oai_dc:dc></metadata></record>
+<record><header status="deleted"><identifier>oai:ojs.aaai.org:article/42953</identifier>
+<datestamp>2026-07-15T06:11:29Z</datestamp><setSpec>IASEAI:IASEAI</setSpec></header></record>
+<resumptionToken expirationDate="2026-10-10T22:01:20Z" completeListSize="115" cursor="0">abc123</resumptionToken>
+</ListRecords></OAI-PMH>
+"""
+
+
+def test_an_oai_page_keeps_its_structure_and_loses_its_free_text() -> None:
+    capture = {
+        "url": "https://ojs.aaai.org/index.php/IASEAI/oai?verb=ListRecords&metadataPrefix=oai_dc",
+        "auth": False,
+        "status": 200,
+        "headers": {"Content-Type": "text/xml;charset=utf-8", "Set-Cookie": "OJSSID=secret"},
+        "body": OAI_PAGE,
+        "date": "2026-10-09",
+        "run": "manual op ingest ojs",
+    }
+    got = scrub.fixture(capture)
+    text = got["response"]["text"]
+    for private in ("A Real Title", "Person, Real", "Other, Real", "real keyword", "A real abstract"):
+        assert private not in text
+    for kept in (
+        "oai:ojs.aaai.org:article/43116",
+        "<setSpec>IASEAI:IASEAI</setSpec>",
+        'status="deleted"',
+        "AAAI Press",
+        "10.1609/iaseai.v2i1.43116",
+        "Vol. 2 No. 1: IASEAI '26; 1-12",
+        'completeListSize="115"',
+        ">abc123</resumptionToken>",
+        '<dc:title xml:lang="en-US">Synthetic title 1</dc:title>',
+        "<dc:creator>Author2, Synthetic</dc:creator><dc:creator>Author3, Synthetic</dc:creator>",
+    ):
+        assert kept in text
+    assert got["response"]["headers"] == {"content-type": "text/xml;charset=utf-8"}  # no cookie
+    assert got["_recorded"]["date"] == "2026-10-09"
+    from openproceedings.ingest.sources import ojs
+
+    records, token = ojs.parse_page(text)  # still a page the miner reads
+    assert [(r.article, r.deleted, r.volume) for r in records] == [(43116, False, 2), (42953, True, None)]
+    assert token == "abc123" and records[0].creators == ("Author2, Synthetic", "Author3, Synthetic")
+
+
+def test_an_oai_page_binding_dublin_core_to_another_prefix_is_refused() -> None:
+    other = OAI_PAGE.replace(
+        'xmlns:dc="http://purl.org/dc/elements/1.1/"', 'xmlns:d="http://purl.org/dc/elements/1.1/"'
+    )
+    assert other != OAI_PAGE
+    with pytest.raises(ValueError, match=r"prefix\(es\) \['d'\]"):
+        scrub.scrub_oai(other)
+
+
+def test_an_oai_page_binding_dublin_core_as_the_default_namespace_is_refused() -> None:
+    page = '<dc:title xmlns="http://purl.org/dc/elements/1.1/">Real title</dc:title>'
+    with pytest.raises(ValueError, match=r"prefix\(es\) \[''\]"):
+        scrub.scrub_oai(page)
+
+
+def test_a_self_closing_oai_element_is_left_alone_and_the_next_one_scrubbed() -> None:
+    page = "<dc:title/><dc:subject>x</dc:subject><dc:title>Real title</dc:title>"
+    out = scrub.scrub_oai(page)
+    assert out.startswith("<dc:title/>") and "Real title" not in out and out.count("</dc:title>") == 1

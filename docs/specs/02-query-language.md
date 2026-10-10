@@ -236,11 +236,11 @@ Rules:
 |---|---|---|
 | (none) | text | title OR abstract |
 | `title:` / `abstract:` | text | that field only |
-| `venue:` | filter | `NeurIPS`, `ICLR`, `ICML`. Case-insensitive, exact. |
+| `venue:` | filter | `NeurIPS`, `ICLR`, `ICML`, `AAAI`, `AIES`, `FAccT`, `IASEAI` (`vocab.VENUES`; decision-049). Case-insensitive, exact. A venue with no records yet (FAccT until milestone B) is a valid value that matches nothing. |
 | `year:` | filter | `2024`, `2020..2026` (inclusive) |
-| `track:` | filter | 01 taxonomy (`main`, `datasets_benchmarks`, `workshop`, …). `datasets_benchmarks` includes NeurIPS 2026's renamed `Evaluations_and_Datasets_Track`, and `position` includes the NeurIPS and ICML position-paper tracks (TASK-094) |
+| `track:` | filter | 01 taxonomy (`main`, `datasets_benchmarks`, `workshop`, `student_abstract`, `consortium`, `demo`, `iaai`, `eaai`, …; the last two are AAAI-only). `datasets_benchmarks` includes NeurIPS 2026's renamed `Evaluations_and_Datasets_Track`, and `position` includes the NeurIPS and ICML position-paper tracks (TASK-094) |
 | `status:` | filter | `accepted`, `rejected`, `withdrawn`, … |
-| `source:` | compat | Scholar-style. Mapped to `venue:` through an alias table ("neural information processing systems", "PMLR" → ICML *with a warning* because PMLR hosts other venues). Unknown values are errors, never silent substrings. |
+| `source:` | compat | Scholar-style. Mapped to `venue:` through an alias table ("neural information processing systems", "PMLR" → ICML *with a warning* because PMLR hosts other venues). Unknown values are errors, never silent substrings. The AAAI, AIES and IASEAI aliases are `aaai` and "association for the advancement of artificial intelligence" → AAAI, `aies` → AIES, `facct` → FAccT and `iaseai` → IASEAI; there is no `fat*` alias (the token contract reads `FAT*` as a wildcard stem). |
 
 ### Default filters
 
@@ -255,9 +255,22 @@ The UI toggles edit these same clauses; they are not a separate state.
   publishes every submission, and a floor for NeurIPS and ICML, which publish rejected papers only when
   the authors opt in (01 §Status handling). `status:(accepted OR rejected)` or removing the default brings
   them into the result set. The index covers each venue from its first year a source holds: NeurIPS from 1987, ICML from 1988,
-  ICLR from 2013 (decision-047, which superseded decision-013's 2013 floor); a year range is always a `year:`
+  ICLR from 2013, AAAI from 2010, AIES from 2024, IASEAI from 2026 (decisions 047 and 049; 047 superseded decision-013's 2013 floor); a year range is always a `year:`
   clause the user writes, never a default. Before 2013 only NeurIPS and ICML are indexed, so a search without
-  a `year:` clause compares venues over different year spans.
+  a `year:` clause compares venues over different year spans (AAAI from 2010, AIES from 2024 and IASEAI 2026 until
+  milestone B of the [new-venues design](../plans/2026-10-09-new-venues-design.md)).
+- **The tracks AAAI, AIES and IASEAI add are excluded by default** (decision-049, owner decision of 2026-10-09). The
+  default is unchanged, so `student_abstract`, `consortium`, `demo`, `iaai`, `eaai` and an AAAI `other` section are
+  not in a default result: each is indexed with its real track, and the exclusion accounting counts it in its
+  `track` bucket, as it counts `workshop`, `competition` and `tiny_papers`. One `track:` clause brings them back
+  (`track:(main OR iaai)`), and saved searches' canonical strings are unaffected. AAAI's special tracks, Journal
+  Track and AIES's and IASEAI's main papers are `main`, so a default search includes them. For these venues `main`
+  is the section mapping of `ingest/ojs_sections.toml` (technical, special and Journal tracks), not a track the
+  venue itself names, and four AAAI sections (NECTAR, What's Hot, Sister Conference, Spotlight) stay `other` by the owner's decision of 2026-10-10 (TASK-218; Short Papers 2010 is `main`; the research note has the table): a report
+  of a default AAAI search lists the excluded tracks with their counts (the `track` buckets are the records
+  removed before screening by automation, 03) and names the snapshot hash, which fixes that mapping. `track:iaai`
+  or `track:eaai` with any venue but AAAI (`venue:ICML track:eaai`) is valid and matches nothing: the two tracks
+  are AAAI-only, and the exclusion counts show 0.
 
 - **A default is recognised by its content, not by where it came from.** A top-level AND conjunct that
   exactly equals a default clause is treated as the automated default, whether the parser inserted it,

@@ -246,8 +246,8 @@ def test_a_year_the_venue_was_not_held_is_refused(venue: str, year: int) -> None
 
 
 def test_an_unknown_venue_has_its_own_message() -> None:
-    with pytest.raises(ValueError, match="no conference table for venue 'AAAI'"):
-        export.venue_name("AAAI", 2024)
+    with pytest.raises(ValueError, match="no conference table for venue 'AISTATS'"):
+        export.venue_name("AISTATS", 2024)
 
 
 def test_conference_eras_must_be_sorted() -> None:
@@ -307,6 +307,36 @@ def test_bibtex_cites_only_accepted_papers_as_inproceedings() -> None:
         words = status.replace("_", " ")  # `desk_rejected` in a note would break LaTeX
         assert e.fields["note"] == f"Submitted to {venue}, status: {words}. {PROVENANCE.line()}"
         assert e.fields["keywords"] == f"main, status:{status}"
+
+
+@pytest.mark.parametrize(
+    ("venue", "year", "track", "name"),
+    [
+        ("AAAI", 2012, "student_abstract", "AAAI Conference on Artificial Intelligence (AAAI 2012)"),
+        ("AAAI", 2010, "iaai", "AAAI Conference on Artificial Intelligence (AAAI 2010)"),
+        ("AIES", 2024, "main", "AAAI/ACM Conference on AI, Ethics, and Society (AIES 2024)"),
+        (
+            "IASEAI",
+            2026,
+            "main",
+            "International Association for Safe and Ethical AI Conference (IASEAI 2026)",
+        ),
+        ("FAccT", 2019, "main", "ACM Conference on Fairness, Accountability, and Transparency (FAT* 2019)"),
+        ("FAccT", 2021, "main", "ACM Conference on Fairness, Accountability, and Transparency (FAccT 2021)"),
+    ],
+)
+def test_the_new_venues_export_their_venue_string_and_only_the_track_tells_a_section_apart(
+    venue: str, year: int, track: str, name: str
+) -> None:
+    """decision-049, spec 04 §Venue string: one string per venue-year (FAccT's FAT* era included), so an AAAI
+    student abstract or IAAI paper reads like a main-track one but for its track keyword."""
+    record = {"id": f"op:{venue.lower()}:{year}:ojs-1", "title": "t", "authors": ["A B"], "venue": venue,
+              "year": year, "track": track, "status": "accepted"}  # fmt: skip
+    ris = "".join(export._ris([record], PROVENANCE))
+    (entry,) = parse_string("".join(export._bibtex([record], PROVENANCE)))
+    assert f"T2  - {name}\n" in ris and entry.fields["booktitle"] == name
+    assert entry.entry_type == "inproceedings"
+    assert f"KW  - {track}\n" in ris and entry.fields["keywords"] == f"{track}, status:accepted"
 
 
 def test_ris_t2_and_bibtex_booktitle_are_the_same_string() -> None:
@@ -1099,6 +1129,7 @@ def test_the_csv_columns_before_task_138_keep_their_positions() -> None:
         (Attribution("openreview_v2", "openreview", "https://openreview.net/forum?id=X"), "OpenReview https://openreview.net/forum?id=X"),
         (Attribution("neurips_proceedings", "neurips_proceedings", "https://proceedings.neurips.cc/p"), "NeurIPS Proceedings https://proceedings.neurips.cc/p"),
         (Attribution("ris", "iclr_proceedings", "https://proceedings.iclr.cc/p"), "ICLR Proceedings (via RIS import) https://proceedings.iclr.cc/p"),
+        (Attribution("ojs", "ojs", "https://ojs.aaai.org/index.php/AAAI/article/view/25561"), "AAAI Digital Library https://ojs.aaai.org/index.php/AAAI/article/view/25561"),
         (Attribution("ris", "pmlr", None), "PMLR (via RIS import)"),  # evidence on another site: named, unlinked
         (Attribution("ris", None, None), "an imported RIS file"),  # a route naming no known site
     ],

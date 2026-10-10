@@ -56,6 +56,8 @@ def self_url(native: str, year: int) -> str | None:
         return f"https://proceedings.mlr.press/{volume}/{key}.html"
     if prefix == "dblp":
         return f"https://dblp.org/rec/conf/icml/{rest}"
+    if prefix == "ojs":  # article ids are unique across the site's journals: any table journal names it
+        return f"https://ojs.aaai.org/index.php/AAAI/article/view/{rest}"
     return None
 
 
@@ -162,12 +164,13 @@ def test_a_decomposed_title_keys_as_its_composed_form(title: str, key: str) -> N
 
 def test_the_precedence_table_is_decision_005() -> None:
     text = ("openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site",
-            "ris")  # fmt: skip
+            "ojs", "ris")  # fmt: skip
     assert PRECEDENCE["status"] == (
         "iclr_archive",
         "neurips_proceedings",
         "pmlr",
         "dblp",  # decision-047: ICML 1988-2012, where no other source holds the venue-year
+        "ojs",  # decision-049: AAAI, AIES, IASEAI, where no other source holds the venue-year
         "openreview_v2",
         "openreview_v1",
         "ris",
@@ -1125,6 +1128,15 @@ def test_attribution_names_the_site_and_its_page(
     assert attribution(None, [claim], forum=forum, proceedings=proceedings, native=NATIVE) is None
 
 
+def test_an_ojs_abstract_is_credited_to_the_papers_article_page_not_the_oai_page() -> None:
+    """decision-049: the claim's url is the OAI ListRecords page (a token url that expires); the credit links the
+    record's numeric article url."""
+    article = "https://ojs.aaai.org/index.php/AAAI/article/view/25561"
+    oai = "https://ojs.aaai.org/index.php/AAAI/oai?verb=ListRecords&resumptionToken=abc"
+    got = attribution("T", [_abstract("ojs", "T", oai)], forum=None, proceedings=article, native="ojs-25561")
+    assert got == Attribution("ojs", "ojs", article)
+
+
 def _via(page: str) -> Claim:
     return _abstract("ris", "T", evidence=f"scholarmend:proceedings_page {page}")
 
@@ -1826,3 +1838,17 @@ def test_two_dblp_records_sharing_a_title_are_never_merged() -> None:
     result = dedup([a, b])
     assert sorted(r.id for r in result.records) == ["op:icml:2009:dblp-Smith09", "op:icml:2009:dblp-Smith09b"]
     assert not result.merges and result.conflicts
+
+
+def test_two_ojs_records_sharing_a_title_stay_apart_and_never_join_another_venue() -> None:
+    """decision-049: two ojs papers of one AAAI year with one title key are two proceedings ids (a conflicts.csv
+    `ambiguous_not_merged` row); an ojs AAAI paper and a PMLR ICML paper of the same year and title are two
+    venues, never compared."""
+    a = paper("ojs-101", "Trust in AI", source="ojs", venue="AAAI", year=2024)
+    b = paper("ojs-102", "trust in AI!", source="ojs", venue="AAAI", year=2024)
+    aies = paper("ojs-103", "Trust in AI", source="ojs", venue="AIES", year=2024)
+    icml = paper("pmlr-v235-key1", "Trust in AI", source="pmlr", venue="ICML", year=2024)
+    result = dedup([a, b, aies, icml])
+    assert sorted(r.id for r in result.records) == sorted(r.id for r in (a, b, aies, icml))
+    assert not result.merges
+    assert [(c.field, c.resolution) for c in result.conflicts] == [("title_key", "ambiguous_not_merged")]

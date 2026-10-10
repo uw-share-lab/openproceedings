@@ -158,7 +158,9 @@ ABSTRACT_SOURCE_DOC = (
 ORIGIN_DOC = (
     "The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` "
     "can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources). `icml_site`: an official ICML "
-    "conference page (live, or a pinned Internet Archive capture), for ICML 1988-2012 (decision-047)."
+    "conference page (live, or a pinned Internet Archive capture), for ICML 1988-2012 (decision-047). `ojs`: the "
+    "AAAI Digital Library (ojs.aaai.org), for AAAI, AIES and IASEAI; its url is the paper's own article page "
+    "(decision-049). Open set: new values may be added within /api/v1; handle a value you don't know."
 )
 
 ABSTRACT_NOTE_DOC = (

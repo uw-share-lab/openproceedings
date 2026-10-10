@@ -10,12 +10,13 @@
 import Link from "next/link";
 import { useCoverage } from "@/api/hooks";
 import type { Schemas } from "@/api/client";
+import { spanRange, yearSpans } from "./coverage-report";
 import { corpusWindow, count } from "./format";
 
-/** The venues with records, in the API's order (venue A–Z, as `/coverage` lists them). */
+/** Each venue with records and its first and last year, A–Z, in `/coverage`'s words (CV-7's `yearSpans`), so a
+ * reader sees on the home page that the venues cover different years (IASEAI one, AIES two). */
 function venues(coverage: Schemas["CoverageResponse"]): string[] {
-  // a Set keeps first-insertion order, so this keeps the API's order and drops only repeats, never a venue
-  return [...new Set(coverage.venue_years.map((vy) => vy.venue))];
+  return yearSpans(coverage.venue_years).map(spanRange);
 }
 
 export function CoverageLine() {

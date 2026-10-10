@@ -91,7 +91,7 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 | Skill | What it's for |
 |---|---|
 | [`openreview-api`](skills/openreview-api/SKILL.md) | How openproceedings talks to OpenReview |
-| [`openreview-venueids`](skills/openreview-venueids/SKILL.md) | Every known OpenReview content.venueid form for NeurIPS, ICLR and ICML (main, Datasets & Benchmarks, workshops including satellite-city paths, position, Tiny Papers, Blogposts, and the Rejected/Withdrawn/Desk_Rejected submission suffixes) with the track and status each maps to, plus the parsing rules, which forms were verified live (2026-09-27) and why a v1 venueid never gives status. |
+| [`openreview-venueids`](skills/openreview-venueids/SKILL.md) | Every known OpenReview content.venueid form for NeurIPS, ICLR and ICML (OpenReview hosts no AAAI, AIES or IASEAI 2026 papers: those come from ojs.aaai.org, so none of their venues has a venueid |
 | [`pmlr-proceedings`](skills/pmlr-proceedings/SKILL.md) | The PMLR (proceedings.mlr.press) source for ICML |
 | [`neurips-proceedings`](skills/neurips-proceedings/SKILL.md) | The proceedings.neurips.cc source |
 | [`record-schema`](skills/record-schema/SKILL.md) | The PaperRecord contract from spec 01 |
