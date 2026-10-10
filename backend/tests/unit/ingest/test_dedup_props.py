@@ -19,6 +19,8 @@ from openproceedings.ingest.dedup import (
     PROCEEDINGS_SOURCES,
     PROCEEDINGS_TRACKS,
     DedupResult,
+    _cluster,
+    _link,
     abstract_key,
     dedup,
     is_absence,
@@ -434,6 +436,26 @@ YIELD_TO_A_REPLACED_RIS_ABSTRACT = [
     paper(f"nips-{H[2]}", "Trust in AI", source="neurips_proceedings", year=2023, abstract=LONG),
 ]
 
+# Hypothesis example database (2026-10-10): an import titled like a note and a listing makes their title group
+# ambiguous (two proceedings ids), then step 3 merges it by abstract into a newer RIS row of another title, whose
+# title claim replaces its own; run again, the title group is the note and the listing alone, and they merge
+WORDS, TERMS = (" ".join(f"{w}{i}" for i in range(50)) for w in ("word", "term"))
+TITLE_LOST_TO_A_NEWER_RIS_ROW = [
+    imported(f"nips-{H[1]}", "Trust in Machines", year=2023, abstract=WORDS),
+    imported("AbCd1234", year=2023, abstract=WORDS, fetched=T1),
+    paper("EfGh5678", "Trust in Machines", year=2023, abstract=TERMS),
+    paper(f"nips-{H[2]}", "Trust in Machines", source="neurips_proceedings", year=2023, abstract=TERMS),
+]
+# the same through step 2 alone (dedup-auditor, 2026-10-10): a note's two RIS rows merge on its title, and the newer
+# row's title replaces the older's, which had made another note and a listing's title group hold two forum ids
+STEP2_ONLY = [
+    paper("EfGh5678", "Calibrated Trust", year=2023),
+    imported("EfGh5678", "Trust in Machines", year=2023, fetched=T0),
+    imported(f"nips-{H[1]}", "Calibrated Trust", year=2023, fetched=T1),
+    paper("IjKl9012", "Trust in Machines", year=2023),
+    paper(f"nips-{H[2]}", "Trust in Machines", source="neurips_proceedings", year=2023),
+]
+
 
 @given(pools)
 @example(TWO_PROCEEDINGS_IDS)
@@ -446,11 +468,15 @@ YIELD_TO_A_REPLACED_RIS_ABSTRACT = [
 @example(RIS_BRIDGE)
 @example(NOTE_BRIDGE)
 @example(YIELD_TO_A_REPLACED_RIS_ABSTRACT)
+@example(TITLE_LOST_TO_A_NEWER_RIS_ROW)
+@example(STEP2_ONLY)
 def test_idempotent(xs: list[PaperRecord]) -> None:
     once = dedup(xs)
     note(once)
     twice = dedup(once.records)
     assert twice.records == once.records
+    assert not [m for m in twice.merges if m.merged_id != m.survivor_id]  # no merge but each id's own copies
+    assert not _link([_cluster([r]) for r in once.records])[1]  # the forum link over the output links nothing
     # every row but the superseded-claim ones (the merged record no longer holds those claims) repeats
     stable = [c for c in once.conflicts if not c.resolution.startswith(("newest:", "tie:"))]
     assert [c for c in twice.conflicts if not c.resolution.startswith(("newest:", "tie:"))] == stable

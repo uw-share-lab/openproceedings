@@ -38,9 +38,11 @@ a review, a duplicate only shows in the hit count.
    import never merges with a record that is no listing by crawled evidence and is rejected, withdrawn or
    desk-rejected (a note, also one whose forum id's RIS row names a proceedings paper, or another import: a
    forum id's RIS row; decision-040).
-   Steps 2 and 3 then run again until step 3 merges nothing: an import merged with a newer RIS row of another
-   title loses its own title claim (one claim per source), so a title group it made ambiguous may now merge, as a
-   second run would merge it (a Hypothesis-found idempotence case, 2026-10-10).
+   The forum link and steps 2 and 3 then run again until a pass merges nothing, as a second run would. A merge
+   keeps one claim per field and source, so a RIS row's title can be lost: an import step 3 merges with a newer
+   RIS row of another title, or two RIS rows of one paper that step 2 merges under the newer row's title. A title
+   group the lost title made ambiguous may then merge (Hypothesis-found idempotence cases, 2026-10-10). Step 1 is
+   not repeated: every cluster after it has its own id, and a merge keeps the survivor's.
 
 `ris` is a route, not a publisher: each RIS row names its paper by a forum id or a proceedings id. So two
 candidates that share only `ris` are judged by those ids (at most one of each in a merged record), not refused
@@ -685,11 +687,15 @@ def _dedup(records: Iterable[PaperRecord]) -> DedupResult:
             Merge(rid, rid, rule, cluster.summary.native, r.venue, r.year, "+".join(sorted(_sources([r]))))
             for r in by_id[rid][1:]
         ]  # the same id twice: one row per extra copy, survivor_id == merged_id
-    # The forum link: one forum id (own or in a urls.forum claim) in the same venue and year, any title.
-    clusters, linked = _link(same_id)
-    merges += linked
-    # Steps 2 and 3 run again until step 3 merges nothing, as a second run would (the docstring's step 3).
+    # The forum link, step 2 and step 3 run again until a pass merges nothing, as a second run would: a merge keeps
+    # one claim per field and source, so it can drop a title (or a urls.forum) claim that kept a group apart. A pass
+    # that goes on has merged, which removes a cluster, so there are at most len(same_id) passes.
+    clusters = same_id
     while True:
+        before = len(clusters)
+        # The forum link: one forum id (own or in a urls.forum claim) in the same venue and year, any title.
+        clusters, found = _link(clusters)
+        merges += found
         # Step 2: (venue, year, title key) across sources.
         titled: dict[tuple[str, int, str], set[int]] = defaultdict(set)
         for ci, c in enumerate(clusters):
@@ -700,7 +706,7 @@ def _dedup(records: Iterable[PaperRecord]) -> DedupResult:
         # Step 3: an imported record that matched nothing, on (venue, year, abstract key).
         clusters, found = _join(clusters, _abstract_buckets(clusters), "abstract_venue_year")
         merges += found
-        if not found:
+        if len(clusters) == before:
             break
 
     out: list[PaperRecord] = []
@@ -918,7 +924,7 @@ def _join(
 
 
 def _link(same_id: Sequence[_Cluster]) -> tuple[list[_Cluster], list[Merge]]:
-    """The forum link: step-1 clusters naming one forum id (own or in a kept `urls.forum` claim) in one venue
+    """The forum link: clusters (step 1's, then each later pass's) naming one forum id (own or in a kept `urls.forum` claim) in one venue
     and year merge, whatever their titles, unless `_mergeable(linked=True)` refuses. One `forum_link` row per
     merged cluster, from its id to the survivor's. Sorted by id, so the input order never matters."""
     buckets: dict[tuple[str, int, str], set[int]] = defaultdict(set)

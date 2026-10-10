@@ -78,10 +78,13 @@ over-merge silently deletes a paper from someone's systematic review.
    in step 3, not `Guard` by its title; when step 3 can't take it, it stays apart with a `title_key` row. A
    partner keeping the abstract (main note + workshop version) keeps the merge; two RIS rows with one title and
    different abstracts still merge.
-   - **Steps 2 and 3 repeat until step 3 merges nothing.** An import step 3 merges with a newer RIS row of
-     another title loses its own title claim (one claim per source), so a title group it alone made ambiguous
-     (two proceedings ids) may now merge, and a second run would merge it (`TITLE_LOST_TO_A_NEWER_RIS_ROW`,
-     a Hypothesis-found idempotence case, 2026-10-10).
+   - **The forum link and steps 2 and 3 repeat until a pass merges nothing.** A merge keeps one claim per field
+     and source, so a RIS row's title can be lost: an import step 3 merges with a newer RIS row of another title,
+     or two RIS rows of one paper that step 2 merges under the newer row's title. A title group the lost title
+     alone made ambiguous (two proceedings ids, two forum ids) may then merge, and a second run would merge it
+     (`TITLE_LOST_TO_A_NEWER_RIS_ROW`, `STEP2_ONLY`: Hypothesis-found idempotence cases, 2026-10-10). The link
+     repeats too, since a merge can drop a `urls.forum` claim or change a track the same way; step 1 doesn't
+     (every cluster after it has its own id). Each pass that goes on removes a cluster, so the loop ends.
 
 Step 2 only runs **across sources**: the clusters' provenance source sets must be disjoint
 (OpenReview ↔ proceedings), **`ris` aside** (TASK-179): RIS is a route, each RIS row names its paper by a forum
@@ -267,8 +270,10 @@ the forum id, the native id, the linked forum id, the first shared title key or 
 (`sha256:<16 hex>`; recompute it with `dedup.shown_key(dedup.abstract_key(…))` on either side's abstract). Step-1 rows point from a cluster's id to
 itself (`survivor_id == merged_id`: one row per extra copy of that id); a `forum_link` row points from a
 linked cluster's id (the PMLR listing) to the forum id's; a `title_venue_year` row then points from the
-cluster id to the step-2 survivor, and an `abstract_venue_year` row from a step-2 cluster's id to the final
-survivor. So every input id is an output id or a `merged_id`, once per copy, and
+cluster id to the step-2 survivor, and an `abstract_venue_year` row from a step-2 cluster's id to the step-3
+survivor. The link and steps 2 and 3 repeat until a pass merges nothing, so a `forum_link`, `title_venue_year` or
+`abstract_venue_year` row's survivor may itself be merged in a later pass and be no output id: readers follow
+the chain. So every input id is an output id or a `merged_id`, once per copy, and
 following the `forum_link`, `title_venue_year` and `abstract_venue_year` rows from any `merged_id` reaches an output record
 (`snapshot.with_crawl_conflicts` follows them the same way).
 

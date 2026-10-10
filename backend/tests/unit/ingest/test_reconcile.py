@@ -12,19 +12,8 @@ from openproceedings.ingest.reconcile import Crawl, Key, Listing, crawled, recon
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources.common import ListingReport
 
-from tests.unit.ingest.test_dedup import (
-    T0,
-    T1,
-    T2,
-    H,
-    archive,
-    creative_listing,
-    creative_note,
-    imported,
-    nips,
-    paper,
-)
-from tests.unit.ingest.test_dedup_props import pools, records
+from tests.unit.ingest.test_dedup import T0, T1, T2, H, archive, creative_listing, creative_note, nips, paper
+from tests.unit.ingest.test_dedup_props import STEP2_ONLY, TITLE_LOST_TO_A_NEWER_RIS_ROW, pools, records
 
 LISTING = "https://proceedings.neurips.cc/paper_files/paper/2024"
 
@@ -359,24 +348,11 @@ NIGHTLY_154 = (
     crawl(source="iclr_archive", venue="ICLR", tracks=("main",)),
 )  # fmt: skip
 
-# Hypothesis example database (2026-10-10): an import titled like a note and a listing makes their title group
-# ambiguous (two proceedings ids), then step 3 merges it by abstract into a newer RIS row of another title, whose
-# title claim replaces its own; run again, the title group is the note and the listing alone, and they merge
-WORDS, TERMS = (" ".join(f"{w}{i}" for i in range(50)) for w in ("word", "term"))
-TITLE_LOST_TO_A_NEWER_RIS_ROW = (
-    [
-        imported(f"nips-{H[1]}", "Trust in Machines", year=2023, abstract=WORDS),
-        imported("AbCd1234", year=2023, abstract=WORDS, fetched=T1),
-        paper("EfGh5678", "Trust in Machines", year=2023, abstract=TERMS),
-        paper(f"nips-{H[2]}", "Trust in Machines", source="neurips_proceedings", year=2023, abstract=TERMS),
-    ],
-    {},
-)  # fmt: skip
-
 
 @given(shapes)
 @example(NIGHTLY_154)
-@example(TITLE_LOST_TO_A_NEWER_RIS_ROW)
+@example((TITLE_LOST_TO_A_NEWER_RIS_ROW, {}))
+@example((STEP2_ONLY, {}))
 def test_dedup_and_reconcile_again_change_nothing(shape: tuple[list[PaperRecord], dict[Key, Crawl]]) -> None:
     xs, crawls = shape
     once = run(xs, crawls)
