@@ -1,3 +1,5 @@
+import re
+from collections import Counter
 from datetime import date
 
 import pytest
@@ -67,6 +69,11 @@ def test_loader_type_checks(edit, message) -> None:
     ("edit", "message"),
     [
         (lambda s: s.replace('track = "main"', 'track = "mainn"'), "not a spec 01 track"),
+        # a spec 01 track no OJS section can be: two of them are in the default filter
+        (lambda s: s.replace('track = "main"', 'track = "position"'), "not an ojs.aaai.org track"),
+        (lambda s: s.replace('track = "main"', 'track = "datasets_benchmarks"'), "not an ojs.aaai.org track"),
+        (lambda s: s.replace('track = "main"', 'track = "unknown"'), "not an ojs.aaai.org track"),
+        (lambda s: s.replace('track = "main"', 'track = "workshop"'), "not an ojs.aaai.org track"),
         (lambda s: s.replace('venue = "AAAI"', 'venue = "AAAJ"'), "not one of"),
         (lambda s: s.replace('kind = "papers"', 'kind = "paper"'), "kind"),
         (lambda s: s.replace("papers = 70", "papers = 0"), "positive"),
@@ -108,6 +115,55 @@ def test_bad_rows_are_refused(edit, message) -> None:
 
 def test_the_shipped_table_loads() -> None:
     assert set(ojs_table.TABLE.journals) == {"AAAI", "AIES", "IASEAI"}
+
+
+def test_the_shipped_mapping_is_pinned_per_track_and_journal() -> None:
+    """Spec 01's row counts, per journal: a row whose track flips (a student abstract into `main`) fails here.
+    `main` 401 = AAAI 396 (the two Robotics Program rows, 2011 and 2013, are its AI and Robotics special track),
+    AIES 4, IASEAI 1; `other` 38, of which 8 rows (5 sections) await the owner (TASK-218)."""
+    rows: Counter[tuple[str, str]] = Counter()
+    for s in ojs_table.TABLE.sections.values():
+        rows[(s.journal, s.track or s.kind)] += 1
+    assert dict(rows) == {
+        ("AAAI", "main"): 396,
+        ("AIES", "main"): 4,
+        ("IASEAI", "main"): 1,
+        ("AAAI", "student_abstract"): 17,
+        ("AIES", "student_abstract"): 3,
+        ("AAAI", "consortium"): 20,
+        ("AAAI", "demo"): 13,
+        ("AAAI", "iaai"): 53,
+        ("AAAI", "eaai"): 52,
+        ("AAAI", "other"): 38,
+        ("AAAI", "front_matter"): 2,
+        ("AIES", "front_matter"): 1,
+        ("IASEAI", "front_matter"): 1,
+    }
+    assert sum(rows.values()) == 601
+
+
+_NOT_MAIN = re.compile(
+    r"student|demo|poster|doctoral|undergraduate|consortium|senior|faculty|iaai|eaai|sister|spotlight|hot|nectar"
+    r"|short papers",
+    re.IGNORECASE,
+)
+_LABEL_TRACK = [
+    (re.compile(r"\bIAAI\b"), "iaai"),
+    (re.compile(r"\bEAAI\b"), "eaai"),
+    (re.compile(r"student abstract", re.IGNORECASE), "student_abstract"),
+    (re.compile(r"doctoral|undergraduate consortium", re.IGNORECASE), "consortium"),
+    (re.compile(r"demonstration", re.IGNORECASE), "demo"),
+]
+
+
+def test_no_shipped_main_row_is_labelled_as_a_non_technical_section() -> None:
+    for (journal, volume, spec), s in ojs_table.TABLE.sections.items():
+        if s.track == "main":
+            assert not _NOT_MAIN.search(f"{s.label} {spec}"), (journal, volume, spec, s.label)
+        for label, track in _LABEL_TRACK:
+            if s.kind == "papers" and label.search(s.label):
+                assert s.track == track, (journal, volume, spec, s.label, s.track)
+                break
 
 
 UNAVAILABLE = """

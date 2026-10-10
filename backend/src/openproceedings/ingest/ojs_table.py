@@ -29,6 +29,9 @@ KINDS: tuple[str, ...] = get_args(Kind)
 _JOURNAL_COLUMNS = {"code", "venue", "year_offset", "verified", "source"}
 _SECTION_COLUMNS = {"journal", "volume", "set_spec", "kind", "track", "label", "papers", "verified", "source"}
 _UNAVAILABLE_COLUMNS = {"journal", "article", "set_spec", "volume", "reason", "verified", "source"}
+# the tracks an ojs.aaai.org section can be (the design's §Data model): never `datasets_benchmarks` or `position`
+# (default-filter tracks no OJS venue has), nor `workshop`, `competition`, `tiny_papers`, `blogpost` or `unknown`
+OJS_TRACKS: frozenset[str] = frozenset({"main", "student_abstract", "consortium", "demo", "iaai", "eaai", "other"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +129,8 @@ def _section(raw: Mapping[str, Any], journals: Mapping[str, Journal]) -> Section
     if kind == "papers":
         if not isinstance(track, str) or track not in TRACKS:
             raise ValueError(f"{where}: track {track!r} is not a spec 01 track")
+        if track not in OJS_TRACKS:
+            raise ValueError(f"{where}: track {track!r} is not an ojs.aaai.org track ({sorted(OJS_TRACKS)})")
         if (only := VENUE_ONLY_TRACKS.get(track)) is not None and only != journal.venue:
             raise ValueError(f"{where}: {track!r} is only an {only} track")
     venue_name(journal.venue, volume + journal.year_offset)  # a year the venue wasn't held is refused

@@ -8,7 +8,7 @@ description: The track and status enums from spec 01 with the source signal that
 ## `track`
 | Value | Accepted signals (any one, with its claim) | In default filter? |
 |---|---|---|
-| `main` | OJS (AAAI 2010+, AIES 2024+, IASEAI 2026): a section whose `ojs_sections.toml` row says `main` (the track comes from the record's section, never the OJS issue); venueid `<Org>.cc/<Y>/Conference`; a PMLR volume listed as `main` in the volume table (`ingest/pmlr_volumes.toml`); NeurIPS path `-Conference`; a token-less NeurIPS listing on `proceedings.neurips.cc` up to 2021 (host and year, `classify_neurips_listing`) | **yes** |
+| `main` | OJS (AAAI 2010+, AIES 2024+, IASEAI 2026): a section whose `ojs_sections.toml` row says `main` (the track comes from the record's section, never the OJS issue; a row may name only `ojs_table.OJS_TRACKS`, so no OJS section can be `position` or `datasets_benchmarks`); venueid `<Org>.cc/<Y>/Conference`; a PMLR volume listed as `main` in the volume table (`ingest/pmlr_volumes.toml`); NeurIPS path `-Conference`; a token-less NeurIPS listing on `proceedings.neurips.cc` up to 2021 (host and year, `classify_neurips_listing`) | **yes** |
 | `datasets_benchmarks` | venueid `NeurIPS.cc/<Y>/Track/Datasets_and_Benchmarks` or `…_Track`, and NeurIPS 2026's rename `NeurIPS.cc/2026/Evaluations_and_Datasets_Track` (TASK-094); NeurIPS path `Datasets_and_Benchmarks(_Track)` (≤2023 alias) | **yes** |
 | `position` | ICML position-paper track (venueid `ICML.cc/<Y>/Position_Paper_Track`, seen); the proceedings token `Position_Paper_Track` (seen); NeurIPS `NeurIPS.cc/<Y>/Position_Paper_Track` (2025+, verified live 2026-09-27; TASK-094) | **yes** |
 | `workshop` | any venueid segment `Workshop` or `Workshop_<City>`; a PMLR workshop volume | no |

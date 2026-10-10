@@ -502,13 +502,13 @@ papers = 7
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
 
-# owner review: 'Robotics Program' → other (the AAAI Robotics Program (papers alongside the robot exhibition))
+# 'Robotics Program' → main: the AI and Robotics special track (AAAI-13's preface counts it in the technical program)
 [[section]]
 journal = "AAAI"
 volume = 25
 set_spec = "AAAI:ROBOT"
 kind = "papers"
-track = "other"
+track = "main"
 label = "Robotics Program"
 papers = 8
 verified = 2026-10-09
@@ -921,13 +921,13 @@ papers = 25
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
 
-# owner review: 'Robotics Program' → other (the AAAI Robotics Program (papers alongside the robot exhibition))
+# 'Robotics Program' → main: the AI and Robotics special track (AAAI-13's preface counts it in the technical program)
 [[section]]
 journal = "AAAI"
 volume = 27
 set_spec = "AAAI:ROBOT"
 kind = "papers"
-track = "other"
+track = "main"
 label = "Robotics Program"
 papers = 11
 verified = 2026-10-09

@@ -220,13 +220,13 @@ volume, set), so a set used in several years has one row per year.
 
 | Track | Rows | Sections |
 |---|---|---|
-| `main` | 399 | AAAI technical tracks; "Technical Papers: …"; "Main Track: …"; "Main Technical Papers"; topic sections of 2010–2014 (Robotics, Knowledge Representation and Reasoning, …); special tracks (AI for Social Impact, Safe/Robust/Responsible AI, AI Alignment, the 2021 focus areas, the 2010–2016 special tracks); Journal Track; AIES full papers and main tracks; IASEAI Main Track |
+| `main` | 401 | AAAI technical tracks; "Technical Papers: …"; "Main Track: …"; "Main Technical Papers"; topic sections of 2010–2014 (Robotics, Knowledge Representation and Reasoning, …); special tracks (AI for Social Impact, Safe/Robust/Responsible AI, AI Alignment, the 2021 focus areas, the 2010–2016 special tracks, and the 2011 and 2013 "Robotics Program", AAAI-13's AI and Robotics special track); Journal Track; AIES full papers and main tracks; IASEAI Main Track |
 | `student_abstract` | 20 | Student abstracts, including "Pre-PhD Student Abstracts" (2013) |
 | `consortium` | 20 | Doctoral and undergraduate consortia |
 | `demo` | 13 | Demonstrations, including "Virtual Agent Demonstrations" (2015) |
 | `iaai` | 53 | IAAI sections |
 | `eaai` | 52 | EAAI sections |
-| `other` | 40 | Senior Member papers and presentations; "Senior Track" (2018); New Faculty Highlights; Emerging Trends; the owner-review rows below |
+| `other` | 38 | Senior Member papers and presentations; "Senior Track" (2018); New Faculty Highlights; Emerging Trends; the owner-review rows below |
 | `front_matter` | 4 | AAAI 2013 "Frontmatter"; AAAI 2023 "Errata" (errata notices, not papers; the owner ruled front matter); AIES 2024 and IASEAI 2026 "Frontmatter" |
 
 The `main` and `student_abstract` rows include AIES (4 main, 3 student-abstract rows) and IASEAI (1 main row).
@@ -235,7 +235,7 @@ Per year, AAAI's `main` count is:
 
 | Year | 2010 | 2011 | 2012 | 2013 | 2014 | 2015 | 2016 | 2017 | 2018 |
 |---|---|---|---|---|---|---|---|---|---|
-| `main` | 259 | 240 | 294 | 191 | 398 | 538 | 548 | 639 | 937 |
+| `main` | 259 | 248 | 294 | 202 | 398 | 538 | 548 | 639 | 937 |
 
 | Year | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 |
 |---|---|---|---|---|---|---|---|---|
@@ -253,12 +253,11 @@ count check.
 |---|---|---|---|
 | `AAAI:NECTAR` "New Scientific and Technical Advances in Research" | 2010, 2011 | 12 + 12 | digests of papers published at other conferences |
 | `AAAI:SHORT` "Short Papers" | 2010 | 3 | AAAI-10 short papers: posters, not a technical track |
-| `AAAI:ROBOT` "Robotics Program" | 2011, 2013 | 8 + 11 | the Robotics Program (papers alongside the robot exhibition) |
 | `AAAI:SPOT` "Spotlight" | 2012 | 17 | unclear what the section held |
 | `AAAI:HOT` "What's Hot Abstracts" | 2015–2017 | 8 + 9 + 7 | short abstracts summarising hot topics at other venues |
 | `AAAI:SIS` "Sister Conference Track" | 2020 | 15 | digests of papers from sister conferences |
 
-Each row (10 rows, 6 sections) carries an "owner review" comment in `ojs_sections.toml`. Moving one to another track is a one-line table
+Each row (8 rows, 5 sections) carries an "owner review" comment in `ojs_sections.toml`. Moving one to another track is a one-line table
 edit, with no code change.
 
 ## Official counts (spec 07 §C)
