@@ -234,11 +234,10 @@ in AAAI 2026's listed 4,921 but is never a record (spec 01, `[[unavailable]]`).
 **AAAI 1980–2008, AIES 2018–2023 and FAccT (decision-049, milestone B).** These venue-years are now coverage cells
 (AAAI 1980–2008's 23 held years, with no cell for 1981, 1985, 1989, 1995, 2001, 2003 or 2009 and the coverage page's
 "none in" list saying so; AIES 2018–2023; FAccT 2018–2026), and the report's database scope names where each comes from:
-the pinned dblp release for AAAI (4,730 records, none with an abstract), Crossref's records of the ACM proceedings
+the pinned dblp release for AAAI (4,709 records, none with an abstract), Crossref's records of the ACM proceedings
 for FAccT 2019–2026 and AIES 2018–2023, and, for FAccT, how many abstracts the official pages gave (2022 169 of 181,
-2025 206 of 206, 2026 298 of 314). AIES 2018–2023's cells are one `main` track each: Crossref carries no section data,
-so student abstracts and keynotes sit inside `main` there, where OJS labels student abstracts from 2024, which the
-scope line says. **None of these cells is gated, and no row was added to `official_counts.py`.** Each count is the
+2025 206 of 206, 2026 298 of 314). Crossref carries no section data, so AIES 2018–2023's student abstracts and keynotes
+are placed by page position (`student_abstract` cells and not-paper rows, TASK-224), which the scope line says. **None of these cells is gated, and no row was added to `official_counts.py`.** Each count is the
 proceedings' own contents (Crossref's DOIs, PMLR's index, dblp's keys) checked against the table in `ingest/`, which is
 the crawl stopping on a mismatch (spec 01 §Sources), not an independent statement of accepted papers, so these cells
 are `accepted` by construction (statuses indexed: `accepted`) and cannot show a missing paper: a `Δ —` is no

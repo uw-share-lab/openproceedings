@@ -89,9 +89,16 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
   - OpenAlex has abstracts for all 1,025 AIES works, which is the milestone C fallback.
 - **Crossref census (2026-10-10; §FAccT, "The ACM census", has the method and the windows).** The six
   proceedings hold 78, 91, 76, 114, 115 and 101 DOIs (575), the entry counts above exactly. All are
-  `proceedings-article`s with a title, an author and a `page`; none is a `[[not_paper]]` row, and every one is a
-  `main` record. `op ingest crossref` gave each `count_ok: true`.
-- **Entries of two pages or fewer: owner review (141; all stay `main` for now).** They fall into three kinds:
+  `proceedings-article`s with a title, an author and a `page`. `op ingest crossref` gave each `count_ok: true`.
+- **Entries of two pages or fewer (141), decided 2026-10-10 (TASK-224; the controller's ruling for the owner).** No
+  official table of contents was reachable (the ACM DL blocks bots, Crossref has no sections), so page position
+  is the only evidence. As built: the 18 front keynotes are `[[not_paper]]` rows of kind `keynote` (all below but
+  .3375839 and .3462443, which look like papers and stay `main`); each year's student abstract block is a
+  `[[section]]` page range, track `student_abstract` (2018 pp. 354–391: 19; 2019 pp. 521–560: 20; 2021 pp. 267–280:
+  7; 2022 pp. 890–920: 31; 2023 pp. 939–1012: 31, the 19 short entries and the 12 student entries of 3–6 pages
+  between them, since a range holds every work whose start page is in it and the taxonomy forbids page-count
+  rules); the 25 short entries in the paper sequence stay `main`. AIES 2018–2023 is then 557 records: 449 `main`,
+  108 `student_abstract`. The three kinds, as found:
   - *Invited or keynote abstracts at the front* (pages 1–7; probably keynotes, which would be `[[not_paper]]`
     rows of kind `keynote` if the owner agrees): 2018 3278721.3278805 (p. 1), .3278806 (p. 2); 2019
     3306618.3314225 (p. 1), .3314261 (pp. 3–4); 2020 3375627.3377142 (pp. 1–2), .3377139 (p. 3), .3377140 (p. 4),
@@ -108,9 +115,8 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
     .3278727, .3278746; 2019 3306618.3314227, .3314274; 2020 3375627.3375805, .3375809, .3375816, .3375818,
     .3375819, .3375821, .3375824, .3375853, .3375861, .3375867, .3375869; 2021 3461702.3462520, .3462534,
     .3462537, .3462577, .3462613; 2022 3514094.3534125, .3534151, .3534194.
-  Student abstracts from 2024 on are OJS's `student` track (`STU`, `A25-SA`), so the owner may want the same
-  track here; the table model has no track column (every Crossref record is `main`, decision-049), so that would
-  be a design change, not a row.
+  Student abstracts from 2024 on are OJS's `student` track (`STU`, `A25-SA`). The table gained a `[[section]]`
+  table (venue, year, page range, track, label, check date, source) for the same track here (TASK-224).
 
 ### IASEAI
 
@@ -188,7 +194,7 @@ days, 21–34 cursor pages of 1,000 works each), kept every DOI extending `10.11
 | AIES 2023 | 10.1145/3600211 | 2023-08-08 | 30,554 | 101 | 0 | 101 | 2023-08-01 – 08-15 |
 
 - **Totals:** FAccT 2019–2026 1,239 DOIs, 1,213 records (plus 17 from PMLR v81); AIES 2018–2023 575 DOIs, 575
-  records. Every count equals the 2026-10-09 entry count, so no row needed a correction. The session's "1,341
+  records at the census (557 since TASK-224's 18 keynote rows). Every count equals the 2026-10-09 entry count, so no row needed a correction. The session's "1,341
   DOIs" is not reproduced: no DOI outside the 1,239 extends a FAccT toc anywhere in the ±120-day windows. The 102
   were most likely another route's duplicates (OpenAlex's truncated or repeated DOIs); the session did not record
   them.
@@ -340,6 +346,9 @@ Records = papers − not-paper rows + workshop papers.
 | 2008 | `2008` | 356 | | | 356 |
 | **Total** | | **4,689** | **12** | **53** | **4,730** |
 
+Since TASK-225 and TASK-226 (2026-10-10) the not-paper rows are 33 (1990: 9, 1993: 2, 1996: 5, 1997: 3, 1998: 1,
+2000: 2 added), so the total is **4,709 records**; §AAAI 1993–2008 sections below gives the tracks.
+
 All keys are `conf/aaai/…`. The four split years (1986, 1991, 1994, 1996) each have two volumes, as the design
 said; 1990's single key is titled "2 Volumes". `op ingest dblp --venue AAAI --year 1980-2008` printed 23 listings, every
 one `count_ok: true`, and `not_held: [1981, 1985, 1989, 1995, 2001, 2003]` (2009 is outside the asked range).
@@ -371,8 +380,12 @@ proceedings key is dated 1980–2009, and none lacks a year.
 The census's title pattern also matched `LesperanceL90` ("Indexical Knowledge…") and `Domeshek91` ("Indexing
 Stories…"). Both are papers, and both stay papers. No entry under a main or workshop key lacks an author.
 
-**For owner review** (left as papers). Each of these may be a talk or panel abstract, but its title doesn't say so
-clearly enough to drop it:
+**For owner review** (left as papers by milestone B; decided 2026-10-10 by TASK-225 and TASK-226: the five
+"(Abstract)" entries are invited talks on the official contents pages and are `[[not_paper]]` rows, `ArkinF97`
+included, which the 1997 contents list under Invited Talks; `SelmanBDHMN96` and the eight 1990 statements are
+`[[not_paper]]` rows of kind `panel`; the 1993–94 video and demonstration abstracts are track `demo` by the
+contents' sections; `conf/aaai/1991w` stays excluded; `ChangN94`, which TASK-225 would have kept `main`, is in the
+1994 Student Abstracts and is `student_abstract`, since the official contents win). The candidates as found:
 - One-page "(Abstract)" entries that read like invited-talk abstracts:
   - `Feigenbaum93`, "Tiger in a Cage … (1993) - Abstract", p. 852;
   - `Simon93`, "Artificial Intelligence as an Experimental Science (Abstract)", p. 853;
@@ -393,8 +406,10 @@ clearly enough to drop it:
 **IAAI cross-check.** `gzip -dc … | grep -o '<crossref>conf/aaai/[^<]*</crossref>' | sort | uniq -c` gives, for every
 `conf/aaai/` key dated 1980–2008, exactly the census's `conf/aaai/`-keyed count. So the difference is **0 in every
 year**: no record keyed outside `conf/aaai/` (`conf/iaai/…`) crossrefs an AAAI volume before 2009. The volumes from
-1996 on name IAAI in their titles, but this release crossrefs no IAAI paper to them (the design's §Sources 2: IAAI
-has its own proceedings before 2010; `conf/iaai/` was not read here). IAAI before 2010 stays out of scope by design.
+1996 on name IAAI in their titles, but this release crossrefs no `conf/iaai/` paper to them (the design's §Sources 2: IAAI
+has its own proceedings before 2010; `conf/iaai/` was not read here). The IAAI papers printed *in* the AAAI volumes
+are keyed `conf/aaai/` and were read as AAAI `main`; since TASK-226 those of 2000–2008 are track `iaai` (§AAAI
+1993–2008 sections).
 
 **Other counts** (over the 4,758 inproceedings under keys dated 1980–2009):
 - 678 author occurrences (326 distinct names) carry a dblp homonym number, which `clean_author` drops.
@@ -624,6 +639,74 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
 - OpenAlex
 - the pinned dblp release `dblp-2026-10-03.xml.gz`
 
+## AAAI 1993–2008 sections (TASK-224/225/226, 2026-10-10)
+
+TASK-225's evidence found 767 AAAI main-track entries of 1993–2008 of two pages or fewer, mostly in trailing
+blocks. The official source for their sections is the AAAI Digital Library contents page
+`http://www.aaai.org/Library/AAAI/aaai<yy>contents.php`, read from Wayback copies of January 2013 (the live site no
+longer serves it), which gives each section heading and each paper's start page; the IAAI contents pages
+`.../Library/IAAI/iaai<yy>contents.php` give the IAAI papers 2000, 2004 and 2005 print in the AAAI volumes. Every
+dblp entry was joined to the contents by start page and title (762 of the 767 matched; the other five are named
+below), and each section became a `[[section]]` row of `dblp_aaai.toml`: a page range from the lowest dblp start
+page to the highest dblp end page of the entries the contents list in it.
+
+| Section (variants) | Track | Years | Records |
+|---|---|---|---|
+| Student Abstracts | `student_abstract` | 1994, 1996–2000, 2002, 2004–2008 | 399 |
+| (SIGART/AAAI) Doctoral Consortium | `consortium` | 1996–2000, 2002, 2004–2008 | 158 |
+| Video Abstracts (1993), Video Program (1994), Intelligent Systems Demonstrations | `demo` | 1993, 1994, 1999, 2000, 2002, 2004–2008 | 127 |
+| IAAI Deployed and Emerging Applications | `iaai` | 2000, 2002, 2004–2008 | 143 |
+| Robot Competition and Exhibition (Abstracts) | `other` | 1996, 1997, 1999, 2000, 2005–2007 | 64 |
+| Invited Talks, two pages or fewer | `[[not_paper]]`, kind `invited talk` | 1993, 1996–1998, 2000 | 12 removed |
+
+Rulings (2026-10-10, the controller for the owner): robot competition and exhibition entries are `other` (event
+reports, not system demos, as the 2010+ SPOT section); the 15 longer invited papers (1996: 6, 1997: 3, 2000: 6)
+stay `main` as full papers; the 2008 Short Papers section is a technical-program section and stays `main` (11), as
+does GaurJH97 (a full paper dblp gives only a start page). Invited-talk sections have no range (their short talks are rows; the 1997 contents print
+ArkinF97 at p. 748, dblp at 755). 2006 Student Abstracts starts at 1853 (AhmadiS06a's page; dblp's pages field is
+`1853-`).
+
+- **Weaker evidence, 2005.** `aaai05contents.php` has no demo or robot section in any capture (2006–2021). The
+  37 entries on pp. 1670–1744 are placed by aaai.org's own paper pages, `2005/isd05-NNN.php` (Intelligent Systems
+  Demonstrations, pp. 1670–1713) and `2005/rbc05-NNN.php` (Robot Competition and Exhibition, pp. 1716–1744): the
+  section comes from the file prefix only, which follows the page's `sa05-`/`dc05-` convention. Accepted, labelled
+  weaker in the table's comment.
+- **dblp page typos.** `BlackH06`'s pages `855-1856` (for 1855–1856) put it outside its range, so a `[[track]]` row
+  gives it `student_abstract`. `LimCKO00` (`1020-1015`) and `HanF08` (`1802-1893`) start inside their ranges and
+  need no row; `AhmadiS06a` (`1853-`) reads as start page 1853.
+- **Range-covered entries the contents don't list:** `BraunlKLM96` (p. 1351, robot abstracts), `Taylor96` (p. 1411,
+  student abstracts), `BarishKCMPS00` (pp. 980–987, IAAI 2000; the IAAI page skips from 973 to 988); `Murphy96`
+  is listed under a shorter title; `Hoz-WeissKWS02` is listed with a misprinted page (1174). The ranges also move
+  six entries of three pages or more that the contents list in the same sections (`NumaoTN02a`, `ZhouH02`,
+  `TaylorS06`, `ValenteJV06`, `Wang06`, `HanF08`).
+- **Unresolved.** `Sultanik05` (pp. 1628–1629) and `Thornton05` (pp. 1630–1631) sit between the last listed
+  student abstract and the Doctoral Consortium but are on no aaai.org page (Wayback holds `sa05-001`…`022` only);
+  they stay `main`. So does `WangL05` (pp. 1632–1635), four pages, in the same gap. The IAAI papers in the
+  1996–1999 volumes (blocks of 17–32 entries the AAAI contents pages don't list) stay `main`: their IAAI contents
+  pages were not read.
+
+**Result** (the replay test `backend/tests/unit/ingest/test_track_rules_replay.py` pins these counts over the
+pinned release): of the 4,689 main-volume entries, 33 are not-paper rows and 891 take a section's track, so AAAI
+1980–2008 is 4,709 records: 3,765 `main`, 399 `student_abstract`, 158 `consortium`, 127 `demo`, 143 `iaai`, 64
+`other`, 53 `workshop`. Per year:
+
+| Year | student_abstract | consortium | demo | iaai | other | not-paper rows added |
+|---|---|---|---|---|---|---|
+| 1990 | | | | | | 8 |
+| 1993 | | | 7 | | | 2 |
+| 1994 | 77 | | 6 | | | |
+| 1996 | 43 | 15 | | | 9 | 5 |
+| 1997 | 30 | 13 | | | 16 | 3 |
+| 1998 | 24 | 16 | | | | 1 |
+| 1999 | 29 | 16 | 17 | | 4 | |
+| 2000 | 38 | 12 | 12 | 18 | 2 | 2 |
+| 2002 | 17 | 13 | 10 | 18 | | |
+| 2004 | 17 | 12 | 21 | 24 | | |
+| 2005 | 22 | 16 | 22 | 18 | 15 | |
+| 2006 | 25 | 13 | 13 | 21 | 12 | |
+| 2007 | 42 | 17 | 9 | 22 | 6 | |
+| 2008 | 35 | 15 | 10 | 22 | | |
+
 ## Milestone B as built: the official FAccT abstracts and the totals (2026-10-10)
 
 The join is exact and one to one (`sources/facct_site.py`): 2022 and 2026 by exact title key, 2025 by DOI.
@@ -635,6 +718,6 @@ The join is exact and one to one (`sources/facct_site.py`): 2022 and 2026 by exa
 | 2026 | title | 325 | 314 | 298 | 27 (11 non-archival, 16 worded differently) | 16 |
 
 Totals as built: FAccT 1,230 records (1,239 ACM DOIs, minus 26 FAccT 2020 tutorial and CRAFT rows, plus 17 from PMLR
-v81); AIES 2018–2023 575 records; AAAI 1980–2008 4,730 records in 23 held years. Crossref carries no section data, so
-AIES 2018–2023's student abstracts and keynotes (141 entries of two pages or fewer, listed above) are in `main`, where
-from 2024 OJS labels student abstracts `student_abstract`.
+v81); AIES 2018–2023 575 records; AAAI 1980–2008 4,730 records in 23 held years. Since TASK-224/225/226: AIES
+2018–2023 557 records (449 `main`, 108 `student_abstract`), AAAI 1980–2008 4,709 records (3,765 `main`; §AAAI
+1993–2008 sections).

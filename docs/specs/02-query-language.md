@@ -264,10 +264,12 @@ The UI toggles edit these same clauses; they are not a separate state.
   not in a default result: each is indexed with its real track, and the exclusion accounting counts it in its
   `track` bucket, as it counts `workshop`, `competition` and `tiny_papers`. One `track:` clause brings them back
   (`track:(main OR iaai)`), and saved searches' canonical strings are unaffected. AAAI's special tracks, Journal
-  Track and AIES's and IASEAI's main papers are `main`, so a default search includes them. **AIES differs by era:**
-  2018–2023 comes from Crossref, which labels no section, so its student abstracts and keynotes are `main` and a
-  default search counts them, while 2024–2025's student abstracts (OJS-labelled) are `student_abstract` and excluded;
-  a `venue:AIES` report spanning both eras says so (spec 01 `main` row; the owner's decision is TASK-224). For these venues `main`
+  Track and AIES's and IASEAI's main papers are `main`, so a default search includes them. **AIES by era:**
+  2018–2023 comes from Crossref, which labels no section, so its student abstracts are `student_abstract` by a page
+  range per year and its keynotes are not-paper rows (TASK-224, inferred from page position), and 2024–2025's
+  student abstracts are `student_abstract` by their OJS section: a default search excludes both eras' alike
+  (spec 01 `main` and `student_abstract` rows). AAAI 1993–2008's student abstracts, doctoral consortium,
+  demonstrations, IAAI papers and robot abstracts likewise take their tracks from the official contents (TASK-226). For these venues `main`
   is the section mapping of `ingest/ojs_sections.toml` (technical, special and Journal tracks), not a track the
   venue itself names, and four AAAI sections (NECTAR, What's Hot, Sister Conference, Spotlight) stay `other` by the owner's decision of 2026-10-10 (TASK-218; Short Papers 2010 is `main`; the research note has the table): a report
   of a default AAAI search lists the excluded tracks with their counts (the `track` buckets are the records
