@@ -265,7 +265,9 @@ decisions of that plan, and these are where the build departs from, or settles, 
   instead (research note §The ACM census). FAccT 2020's 26 tutorial and CRAFT rows are `[[not_paper]]`.
 - **AIES 2018–2023 are all `main`**, as the design says: Crossref carries no section data, so student abstracts and
   keynotes (141 entries of two pages or fewer, listed in the research note for the owner) sit inside `main`, unlike
-  2024+, where OJS labels student abstracts. The coverage page's database scope says so.
+  2024+, where OJS labels student abstracts. The coverage page's database scope says so. *Superseded by decision-050:*
+  108 AIES 2018–2023 records are `student_abstract` by their page position and 18 keynotes are counted, not indexed
+  (557 records, 449 `main`).
 - **FAccT site:** the pages are read by `op ingest crossref` (there is no `op ingest facct-site`; spec 08's design
   target is folded into `crossref`). 2025 joins by DOI and 2022 and 2026 by exact title key, one to one, never fuzzy:
   169 of 181, 206 of 206 and 298 of 314 attach. The 2022 page's DOI links are never read (entry 295 links entry 314's).
