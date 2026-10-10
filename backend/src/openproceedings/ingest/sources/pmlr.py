@@ -189,6 +189,12 @@ def mine_volume(
             f"PMLR v{number}: not_papers {stale} are not on the index; correct pmlr_volumes.toml",
             reason="stale_not_paper",
         )
+    # `listed` is known now, so a count difference stops before any paper page is fetched (ICML keeps its warning)
+    if volume.venue != "ICML" and not report.count_ok:
+        raise MinerError(
+            f"PMLR v{number}: the index lists {report.listed} entries, the table verified {report.stated}",
+            reason="count_mismatch",
+        )
     records: list[PaperRecord] = []
     seen: set[str] = set()
     started = last = time.monotonic()
@@ -232,11 +238,6 @@ def mine_volume(
         if time.monotonic() - last >= PROGRESS_SECONDS:
             last = time.monotonic()
             log.info("pmlr_volume_progress", extra={"volume": number, "done": n, "of": len(entries)})
-    if volume.venue != "ICML" and not report.count_ok:  # ICML keeps its warning (planner decision)
-        raise MinerError(
-            f"PMLR v{number}: the index lists {report.listed} entries, the table verified {report.stated}",
-            reason="count_mismatch",
-        )
     log.info(
         "pmlr_volume_mined",
         extra={"volume": number, "year": volume.year, "listed": report.listed, "stated": report.stated,

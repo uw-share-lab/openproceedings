@@ -494,7 +494,7 @@ def test_a_not_paper_key_the_index_lacks_stops(tmp_path: Path, facct_table) -> N
     seed_v81(tmp_path, V81_INDEX.replace("preface18a", "other18a"))
     with pytest.raises(MinerError) as e:
         mine(tmp_path, 81)
-    assert e.value.reason in ("count_mismatch", "stale_not_paper")
+    assert e.value.reason == "stale_not_paper"
 
 
 def test_icml_is_untouched() -> None:
