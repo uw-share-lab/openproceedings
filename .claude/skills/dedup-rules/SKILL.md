@@ -83,8 +83,13 @@ over-merge silently deletes a paper from someone's systematic review.
      or two RIS rows of one paper that step 2 merges under the newer row's title. A title group the lost title
      alone made ambiguous (two proceedings ids, two forum ids) may then merge, and a second run would merge it
      (`TITLE_LOST_TO_A_NEWER_RIS_ROW`, `STEP2_ONLY`: Hypothesis-found idempotence cases, 2026-10-10). The link
-     repeats too, since a merge can drop a `urls.forum` claim or change a track the same way; step 1 doesn't
-     (every cluster after it has its own id). Each pass that goes on removes a cluster, so the loop ends.
+     repeats too, as a second run's would, though no case is known where a later pass links: step 2 and 3
+     partners name at most one forum id and one proceedings id between them, and every record names its own
+     native id, so a merge never takes an id out of a cluster's sets; a forum id's bucket in a later pass is a
+     merge of the first pass's members (plus, at most, proceedings ids they gained), and a link refused once
+     stays refused. A 60,000-example search over the property strategies (2026-10-10, the link run once against
+     in the loop) found no difference. Step 1 doesn't repeat (every cluster after it has its own id). Each pass
+     that goes on removes a cluster, so the loop ends.
 
 Step 2 only runs **across sources**: the clusters' provenance source sets must be disjoint
 (OpenReview ↔ proceedings), **`ris` aside** (TASK-179): RIS is a route, each RIS row names its paper by a forum

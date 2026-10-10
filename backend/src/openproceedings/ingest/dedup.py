@@ -688,8 +688,10 @@ def _dedup(records: Iterable[PaperRecord]) -> DedupResult:
             for r in by_id[rid][1:]
         ]  # the same id twice: one row per extra copy, survivor_id == merged_id
     # The forum link, step 2 and step 3 run again until a pass merges nothing, as a second run would: a merge keeps
-    # one claim per field and source, so it can drop a title (or a urls.forum) claim that kept a group apart. A pass
-    # that goes on has merged, which removes a cluster, so there are at most len(same_id) passes.
+    # one claim per field and source, so it can drop a title claim that kept a group apart. The link repeats with
+    # them, though no later pass is known to link: a step 2 or 3 merge never takes a forum or proceedings id out of
+    # a cluster (dedup-rules skill). A pass that goes on has merged, which removes a cluster, so there are at most
+    # len(same_id) passes.
     clusters = same_id
     while True:
         before = len(clusters)
