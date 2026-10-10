@@ -1203,3 +1203,7 @@ def test_a_rows_evidence_serialises_no_tree_per_row(
 ) -> None:
     few, many = _serialisations(monkeypatch, q, make, 2, cls), _serialisations(monkeypatch, q, make, 12, cls)
     assert few == many, f"{cls}: {few} serialisations for 2 rows, {many} for 12"
+
+
+def test_a_dblp_aaai_page_names_no_key() -> None:
+    assert proceedings_key("https://dblp.org/rec/conf/aaai/Smith90") is None

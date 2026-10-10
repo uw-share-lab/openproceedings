@@ -72,3 +72,19 @@ def test_bad_rows_are_refused(edit, message) -> None:
 
 def test_the_shipped_table_loads_and_records_the_years_aaai_was_not_held() -> None:
     assert dblp_aaai_table.TABLE.not_held == frozenset({1981, 1985, 1989, 2001, 2003, 2009})
+
+
+@pytest.mark.parametrize(
+    ("edit", "message"),
+    [
+        (lambda s: s.replace('proceedings = ["conf/aaai/1986-1", "conf/aaai/1986-2"]',
+                             'proceedings = ["conf/aaai/1986-1", "conf/aaai/1986-1"]'), "listed twice"),
+        (lambda s: s.replace('key = "conf/aaai/2006w"\nyear = 2006', 'key = "conf/aaai/2006w"\nyear = 2006.0'),
+         "a year the table holds"),
+        (lambda s: s.replace('key = "conf/aaai/Invited86"\nyear = 1986', 'key = "conf/aaai/Invited86"\nyear = 1986.0'),
+         "a year the table holds"),
+    ],
+)  # fmt: skip
+def test_a_repeated_proceedings_key_and_a_float_year_are_refused(edit, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        dblp_aaai_table.load(edit(GOOD))

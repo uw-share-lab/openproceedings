@@ -262,3 +262,35 @@ def test_ingest_ojs_oai_error_exits_nonzero_with_the_refresh_hint(
     argv = ["--data-dir", str(tmp_path), "ingest", "ojs", "--journal", "AAAI", "--offline"]
     assert cli.main(argv) != 0
     assert "--refresh" in capsys.readouterr().err
+
+
+def test_ingest_dblp_venue_aaai_dispatches_to_the_aaai_ingest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    seen: dict[str, object] = {}
+
+    def fake_aaai(years: object, cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(years=list(years), cache=cache, **kwargs)  # type: ignore[call-overload]
+        return {"aaai": True}
+
+    def fake_icml(years: object, cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(icml=list(years))  # type: ignore[call-overload]
+        return {"icml": True}
+
+    monkeypatch.setattr(crawl, "ingest_dblp_aaai", fake_aaai)
+    monkeypatch.setattr(crawl, "ingest_dblp", fake_icml)
+    base = ["--data-dir", str(tmp_path), "ingest", "dblp"]
+    assert cli.main([*base, "--venue", "AAAI", "--year", "1980-2008", "--offline"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"aaai": True}
+    assert seen["years"] == list(range(1980, 2009)) and seen["cache"] == tmp_path / "cache"
+    assert (seen["offline"], seen["dry_run"]) == (True, False)
+    assert cli.main([*base, "--year", "1990"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"icml": True} and seen["icml"] == [1990]
+
+
+def test_ingest_dblp_aaai_has_nothing_to_refresh(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    argv = ["--data-dir", str(tmp_path), "ingest", "dblp", "--venue", "AAAI", "--year", "1990", "--refresh"]
+    assert cli.main(argv) == 1  # a refusal of the user's own arguments (`_usage`), like every other one
+    assert "nothing to refresh" in capsys.readouterr().err

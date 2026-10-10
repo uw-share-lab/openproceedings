@@ -106,12 +106,14 @@ def names_native(url: str, native_id: str) -> bool:
 
 def native(url: str) -> str | None:
     """The proceedings native id a URL names (`proceedings_native`, `pmlr-v<N>-<key>` for an ICML volume,
-    `dblp-<key>` for an ICML record's dblp page, or `ojs-<id>` for an ojs.aaai.org article), or None."""
+    `dblp-<key>` for an ICML or AAAI (1980-2008) record's dblp page, or `ojs-<id>` for an ojs.aaai.org article), or None."""
     if proceedings(url) is not None:
         return proceedings_native(url)
     if (q := pmlr(url)) is not None and q[0] in ICML_PMLR_VOLUMES:
         return f"pmlr-v{q[0]}-{q[1]}"
     if (key := dblp_icml(url)) is not None:
+        return f"dblp-{key}"
+    if (key := dblp_aaai(url)) is not None:
         return f"dblp-{key}"
     if (article := ojs_article(url)) is not None:
         return f"ojs-{article}"
@@ -152,6 +154,18 @@ def dblp_icml(url: str) -> str | None:
     if parsed.scheme not in ("http", "https") or parsed.netloc.lower() != "dblp.org":
         return None
     m = _DBLP_REC.fullmatch(parsed.path)
+    return m.group(1) if m else None
+
+
+_DBLP_REC_AAAI = re.compile(r"/rec/conf/aaai/([A-Za-z0-9_-]+)(?:\.html)?")
+
+
+def dblp_aaai(url: str) -> str | None:
+    """The key after `conf/aaai/` of a dblp record page URL (AAAI 1980-2008; decision-049), or None."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.netloc.lower() != "dblp.org":
+        return None
+    m = _DBLP_REC_AAAI.fullmatch(parsed.path)
     return m.group(1) if m else None
 
 

@@ -1,11 +1,11 @@
-"""`op ingest iclr|neurips|pmlr|dblp|ojs`, and the one offline replay of every crawler that
+"""`op ingest iclr|neurips|pmlr|dblp|ojs` (`dblp --venue AAAI` too), and the one offline replay of every crawler that
 `op snapshot build` runs (spec 01 §CLI, §Pipeline).
 
 `ingest_*` crawls each listing into `<cache>/<source>/pages/` through `common.Crawls.ingest` (one run at a
 time per source: an exclusive lock on `<cache>/<source>/.lock`) and, when the whole listing is cached, writes
 its crawl marker. A dry run reads only the index pages (through the cache) and reports what a crawl would
 fetch; it writes no marker. `--offline` crawls from the cache alone. `replay_all` re-runs every marked crawl
-of every source (OpenReview API v2, then v1, then ICLR, NeurIPS, PMLR, dblp and OJS; `common.Crawls`) with no
+of every source (OpenReview API v2, then v1, then ICLR, NeurIPS, PMLR, dblp (ICML), OJS and dblp (AAAI); `common.Crawls`) with no
 transport at all, so a snapshot never fetches.
 """
 
@@ -16,6 +16,7 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
+from openproceedings.ingest import dblp_aaai_table
 from openproceedings.ingest.dblp_table import TABLE as DBLP_TABLE
 from openproceedings.ingest.dblp_table import Table as DblpTable
 from openproceedings.ingest.ojs_table import TABLE as OJS_TABLE
@@ -23,6 +24,7 @@ from openproceedings.ingest.ojs_table import Table as OjsTable
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources import (
     dblp,
+    dblp_aaai,
     iclr,
     icml_sites,
     neurips,
@@ -176,6 +178,37 @@ def ingest_dblp(
     return _output(reports, f, False)
 
 
+def ingest_dblp_aaai(
+    years: Iterable[int], cache: Path, *, offline: bool = False, dry_run: bool = False,
+    stream: StreamTransport | None = None, table: DblpTable = DBLP_TABLE, aaai: dblp_aaai_table.Table | None = None,
+) -> dict[str, Any]:  # fmt: skip
+    """AAAI years from the pinned dblp release (decision-049, milestone B): not-held years are skipped and named; a
+    dry run fetches nothing and says whether the release and AAAI's extract are on disk."""
+    aaai = aaai or dblp_aaai_table.TABLE
+    asked = sorted(set(years))
+    not_held = [y for y in asked if y in aaai.not_held]
+    wanted = [y for y in asked if y not in aaai.not_held]
+    if missing := [y for y in wanted if y not in aaai.years]:
+        span = f"{min(aaai.years)}-{max(aaai.years)}" if aaai.years else "no years yet"
+        raise MinerError(
+            f"AAAI {missing[0]}: dblp_aaai.toml covers AAAI {span} (OJS from 2010)", reason="no_year"
+        )
+    if dry_run:
+        return {"dry_run": True, "release_on_disk": dblp.release_on_disk(cache, table),
+                "extract_on_disk": dblp.AAAI_SLICE.path(cache, table).exists(), "years": wanted, "not_held": not_held}  # fmt: skip
+    extract = dblp.prepare_slices(
+        cache, None if offline else (stream or urllib_stream), table, (dblp.AAAI_SLICE,)
+    )["AAAI"]
+    dblp_aaai.check_extract(extract, aaai)
+    mined = DBLP_AAAI.ingest(
+        cache, wanted, lambda year: dblp_aaai.mine_year(year, extract, table=aaai),
+        lambda year, _: (str(year), {"source": dblp.SOURCE, "venue": "AAAI", "year": year, "release": table.release.doi}),
+    )  # fmt: skip
+    reports = [r for m in mined for r in m.reports]
+    log.info("dblp_aaai_ingested", extra={"years": len(reports), "not_held": len(not_held)})
+    return {"dry_run": False, "listings": [r.to_manifest() for r in reports], "not_held": not_held}
+
+
 # --- the one replay ----------------------------------------------------------------------------------------
 
 ICLR: Crawls[iclr.YearResult] = Crawls(
@@ -278,6 +311,28 @@ OJS: Crawls[ojs.JournalResult] = Crawls(
     lambda k: f"OJS {k[0]}", "op ingest ojs",
     lambda cache, k: ojs.mine_journal(k[0], ojs_fetcher(cache, offline=True)),
 )  # fmt: skip
+
+
+def _aaai_key(m: Mapping[str, Any]) -> tuple[Any, ...]:
+    if m["venue"] != "AAAI":
+        raise ValueError("not an AAAI marker")
+    return (int(m["year"]), str(m["release"]))
+
+
+def _replay_dblp_aaai(cache: Path, key: tuple[Any, ...]) -> dblp.YearResult:
+    """One marked AAAI year, from AAAI's extract alone; the pinned release (`DBLP_TABLE`, read at call time) must
+    be the marked one (guarantee 4). The year's count is checked again by `mine_year`."""
+    year, release = key
+    if release != DBLP_TABLE.release.doi:
+        raise MinerError(f"AAAI {year} was ingested from dblp release {release}, not the pinned "
+                         f"{DBLP_TABLE.release.doi}; re-run op ingest dblp --venue AAAI", reason="release_changed")  # fmt: skip
+    return dblp_aaai.mine_year(year, dblp.load_extract(cache, DBLP_TABLE, dblp.AAAI_SLICE))
+
+
+DBLP_AAAI: Crawls[dblp.YearResult] = Crawls(
+    lambda cache: cache / dblp.CACHE_DIR / "aaai-crawls", _aaai_key,
+    lambda k: f"AAAI {k[0]} (dblp)", "op ingest dblp --venue AAAI", _replay_dblp_aaai,
+)  # fmt: skip
 SOURCES: tuple[Crawls[Any], ...] = (
     openreview_v2.CRAWLS,
     openreview_v1.CRAWLS,
@@ -286,6 +341,7 @@ SOURCES: tuple[Crawls[Any], ...] = (
     PMLR,
     DBLP,
     OJS,
+    DBLP_AAAI,
 )
 
 

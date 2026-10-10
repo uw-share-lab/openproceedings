@@ -115,3 +115,14 @@ def test_ojs_article_names_exactly_the_tables_journals() -> None:
     assert (
         urls.ojs_article("https://ojs.aaai.org/index.php/AIMAG/article/view/7") is None
     )  # not a table journal
+
+
+@pytest.mark.parametrize(("url", "key"), [("https://dblp.org/rec/conf/aaai/Smith90", "Smith90"),
+    ("http://DBLP.org/rec/conf/aaai/Smith90.html", "Smith90"), ("https://dblp.org/rec/conf/icml/Smith90", None),
+    ("https://dblp.org/rec/conf/aaai/2006w", "2006w"), ("https://example.org/rec/conf/aaai/Smith90", None)])  # fmt: skip
+def test_dblp_aaai(url: str, key: str | None) -> None:
+    assert urls.dblp_aaai(url) == key
+
+
+def test_native_reads_an_aaai_dblp_page() -> None:
+    assert urls.native("https://dblp.org/rec/conf/aaai/Smith90") == "dblp-Smith90"

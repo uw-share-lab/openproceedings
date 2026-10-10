@@ -40,8 +40,8 @@ def test_unknown_journal_is_refused(tmp_path) -> None:
         crawl.ingest_ojs(["XYZ"], tmp_path, offline=True, table=TABLE)
 
 
-def test_ojs_is_replayed_last() -> None:
-    assert crawl.SOURCES[-1] is crawl.OJS
+def test_dblp_aaai_is_replayed_last() -> None:
+    assert crawl.SOURCES[-1] is crawl.DBLP_AAAI
 
 
 def _live(first: str, **kw):

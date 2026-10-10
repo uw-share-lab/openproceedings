@@ -127,6 +127,8 @@ def _year(raw: Mapping[str, Any], not_held: frozenset[int]) -> AaaiYear:
         or not all(isinstance(k, str) and _KEY.fullmatch(k) for k in keys)
     ):
         raise ValueError(f"dblp_aaai.toml {where}: proceedings must be conf/aaai/<key> strings")
+    if len(set(keys)) != len(keys):
+        raise ValueError(f"dblp_aaai.toml {where}: a proceedings key listed twice")
     _scalars(raw, where)
     return AaaiYear(year, tuple(keys), raw["papers"], str(raw["title"]), raw["verified"], str(raw["source"]))
 
@@ -167,7 +169,7 @@ def load(text: str, pins: dblp_table.Table | None = None) -> Table:
         where = f"workshop {r.get('key')!r}"
         _check(r, {"key", "year", "papers", "title", "verified", "source"}, where)
         key = _key(r, where)
-        if r["year"] not in years:
+        if type(r["year"]) is not int or r["year"] not in years:
             raise ValueError(f"dblp_aaai.toml {where}: a year the table holds")
         _scalars(r, where)
         if key in seen or key in workshops:
@@ -192,7 +194,7 @@ def load(text: str, pins: dblp_table.Table | None = None) -> Table:
         where = f"not_paper {r.get('key')!r}"
         _check(r, {"key", "year", "kind", "reason"}, where)
         key = _key(r, where)
-        if r["year"] not in years:
+        if type(r["year"]) is not int or r["year"] not in years:
             raise ValueError(f"dblp_aaai.toml {where}: a year the table holds")
         if r["kind"] not in NOT_PAPER_KINDS:
             raise ValueError(f"dblp_aaai.toml {where}: kind must be one of {sorted(NOT_PAPER_KINDS)}")

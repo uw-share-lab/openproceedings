@@ -142,9 +142,10 @@ def build_parser() -> argparse.ArgumentParser:
         ("iclr", "ICLR 2014-2016 accepted-paper archive pages (iclr.cc)"),
         ("neurips", "NeurIPS proceedings years (proceedings.neurips.cc; 2021 adds the D&B host)"),
         ("pmlr", "ICML years from PMLR (the volume in ingest/pmlr_volumes.toml)"),
-        ("dblp", "ICML 1988-2012 from the pinned dblp release (ingest/dblp_icml.toml; downloaded once from "
-                 "drops.dagstuhl.de, never dblp.org) with the abstracts the official ICML pages in "
-                 "ingest/icml_sites.toml give"),
+        ("dblp", "ICML 1988-2012 (--venue ICML, the default) or AAAI 1980-2008 (--venue AAAI) from the pinned "
+                 "dblp release (ingest/dblp_icml.toml, ingest/dblp_aaai.toml; downloaded once from "
+                 "drops.dagstuhl.de, never dblp.org); ICML with the abstracts the official ICML pages in "
+                 "ingest/icml_sites.toml give, AAAI with none"),
     ):  # fmt: skip
         dblp = name == "dblp"  # its own cache layout and flags' meaning (decision-047, spec 01 §CLI)
         crawl = sources.add_parser(
@@ -152,6 +153,11 @@ def build_parser() -> argparse.ArgumentParser:
             help=f"read {about} into <data-dir>/cache/dblp and <data-dir>/cache/icml_sites" if dblp
             else f"crawl {about} into <data-dir>/cache/{name}",
         )  # fmt: skip
+        if dblp:
+            crawl.add_argument(
+                "--venue", default="ICML", choices=("ICML", "AAAI"),
+                help="ICML 1988-2012 (default) or AAAI 1980-2008; both read the one pinned release",
+            )  # fmt: skip
         crawl.add_argument(
             "--year", dest="years", action="append", required=True, type=_years, metavar="YYYY[-YYYY]",
             help="a year or an inclusive range; repeatable",
@@ -578,6 +584,7 @@ def _ingest_openreview(ns: argparse.Namespace) -> int:
 
 
 def _ingest_crawl(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest.sources import crawl as crawl_module
     from openproceedings.ingest.sources.crawl import ingest_dblp, ingest_iclr, ingest_neurips, ingest_pmlr
 
     if not math.isfinite(ns.delay):
@@ -586,10 +593,21 @@ def _ingest_crawl(ns: argparse.Namespace) -> int:
         raise _usage(f"--delay must be at least {MIN_DELAY} seconds (politeness)")
     if ns.dry_run and ns.offline:
         raise _usage("--dry-run and --offline don't combine: a dry run reads the live index pages")
+    years = sorted({y for chunk in ns.years for y in chunk})
+    if ns.source == "dblp" and ns.venue == "AAAI":
+        if ns.refresh:
+            raise _usage(
+                "--refresh: nothing to refresh for AAAI (the release is pinned; no pages are fetched)"
+            )
+        _print(
+            crawl_module.ingest_dblp_aaai(
+                years, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run
+            )
+        )
+        return 0
     run = {"iclr": ingest_iclr, "neurips": ingest_neurips, "pmlr": ingest_pmlr, "dblp": ingest_dblp}[
         ns.source
     ]
-    years = sorted({y for chunk in ns.years for y in chunk})
     _print(
         run(years, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run, refresh=ns.refresh,
             min_interval=ns.delay)

@@ -477,10 +477,10 @@ def _record(year: int, tail: str, e: DblpEntry, extract: Extract, table: Table,
 PDF_HOSTS = frozenset({"icml.cc", "www.icml.cc"})
 
 
-def links(key: str, ee: Iterable[str]) -> dict[ClaimField, str]:
+def links(key: str, ee: Iterable[str], pdf_hosts: frozenset[str] = PDF_HOSTS) -> dict[ClaimField, str]:
     """`urls.proceedings`: the record's dblp page (`urls.dblp_record_url`, which names its native id, as dedup
     requires of a proceedings record; linked, never fetched); `urls.doi` from the first doi.org `ee`; `urls.pdf`
-    from the first PDF on a `PDF_HOSTS` host. Every other link is dropped."""
+    from the first PDF on a `pdf_hosts` host (`PDF_HOSTS`; AAAI passes none). Every other link is dropped."""
     out: dict[ClaimField, str] = {"urls.proceedings": urls.dblp_record_url(key)}
     for link in ee:
         if (m := _DOI_URL.match(link)) is not None:
@@ -490,7 +490,7 @@ def links(key: str, ee: Iterable[str]) -> dict[ClaimField, str]:
                 continue
             if doi:
                 out.setdefault("urls.doi", doi)
-        elif is_url(link) and (urlparse(link).hostname or "").lower() in PDF_HOSTS \
+        elif is_url(link) and (urlparse(link).hostname or "").lower() in pdf_hosts \
                 and urlparse(link).path.lower().endswith(".pdf"):  # fmt: skip
             out.setdefault("urls.pdf", link)
     return out

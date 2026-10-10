@@ -902,3 +902,19 @@ def test_the_scope_lines_say_each_venues_years_and_what_the_dblp_years_rest_on()
                           {("NeurIPS", 1987, "main"): own, ("NeurIPS", 1988, "main"): own})  # fmt: skip
     assert two.startswith(" 2 gated cells compare")
     assert _own_count_note(cov, {}) == ""
+
+
+def test_the_scope_names_each_dblp_venue_by_its_own_listings() -> None:
+    from openproceedings.eval.coverage_report import _scope
+
+    cov = {"venue_years": [{"venue": "AAAI", "year": 1986, "records": 1, "tracks": [{"track": "main"}]},
+                           {"venue": "ICML", "year": 1990, "records": 1, "tracks": [{"track": "main"}]}]}  # fmt: skip
+    doi = "https://doi.org/10.4230/dblp.xml.2026-10-03"
+    manifest = {"sources": {"dblp": {"listings": [
+        {"venue": "ICML", "year": 1990, "listing": doi, "records": 49},
+        {"venue": "AAAI", "year": 1986, "listing": doi, "records": 7},
+    ]}}}  # fmt: skip
+    text = "\n".join(_scope(cov, manifest))
+    assert "- ICML 1990–1990: from the pinned dblp snapshot release" in text and "ICML 1986" not in text
+    assert "- AAAI 1986–1986: from the pinned dblp snapshot release" in text and "decision-049" in text
+    assert "Its 7 records have no abstract (dblp holds none)." in text and "of its 49 records" in text
