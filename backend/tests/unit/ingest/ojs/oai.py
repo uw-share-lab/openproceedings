@@ -101,3 +101,22 @@ def get_record(record_xml: str) -> str:
 <OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><responseDate>2026-10-09T22:01:20Z</responseDate>
 <request verb="GetRecord">https://ojs.aaai.org/index.php/AAAI/oai</request><GetRecord>{record_xml}</GetRecord></OAI-PMH>
 """
+
+
+def inventory_of(*pages: str) -> str:
+    """The journal-wide ListIdentifiers page matching ListRecords `pages`: every header in order, a live article
+    once (as the server lists it)."""
+    from openproceedings.ingest.sources import ojs
+
+    headers: list[tuple[int, bool, str]] = []
+    live: set[int] = set()
+    for text in pages:
+        if "<ListRecords>" not in text:  # an error page lists nothing
+            continue
+        for r in ojs.parse_page(text)[0]:
+            if r.deleted:
+                headers.append((r.article, True, r.set_spec))
+            elif r.article not in live:
+                live.add(r.article)
+                headers.append((r.article, False, r.set_spec))
+    return identifiers_page(*headers)

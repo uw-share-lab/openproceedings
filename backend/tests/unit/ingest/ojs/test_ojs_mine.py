@@ -64,6 +64,7 @@ def _seed(tmp_path, *pages: str, times: tuple[datetime, ...] = ()) -> None:
     `t<i+1>`. The miner takes each record's section from its own header, not from the set it was listed under,
     so these chains may mix sections (the per-set tests below keep them apart)."""
     seed(tmp_path, "ojs", ojs.sets_url("AAAI"), oai.sets_page(SET), at=T0, keep_query=True)
+    seed(tmp_path, "ojs", ojs.ids_url("AAAI"), oai.inventory_of(*pages), at=T0, keep_query=True)
     for i, text in enumerate(pages):
         at = times[i] if times else T0
         url = ojs.oai_url("AAAI", set_spec=SET) if i == 0 else ojs.oai_url("AAAI", f"t{i}")
@@ -99,7 +100,7 @@ def test_two_pages_become_records_with_claims(tmp_path) -> None:
     )
     third = next(r for r in result.records if r.native == "ojs-28002")
     assert third.track == "iaai"
-    assert (result.deleted, result.front_matter, result.pages) == (1, 1, 2)
+    assert (result.deleted, result.front_matter, result.pages) == (1, 1, 3)  # the inventory page and two
     (report,) = result.reports
     assert (report.venue, report.year, report.volume, report.stated, report.listed, report.records) == (
         "AAAI",
@@ -175,7 +176,8 @@ def test_the_same_article_twice_is_counted_once(tmp_path) -> None:
         oai.page(oai.record(1), oai.record(2), oai.record(3, "AAAI:IAAI")),
     )
     result = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
-    assert len(result.records) == 3 and result.reports[0].skipped == {"duplicate": 1}
+    assert len(result.records) == 3 and not result.reports[0].skipped and result.duplicates == 1
+    assert result.reports[0].listed == 3 and result.reports[0].count_ok  # listed counts distinct articles
 
 
 def test_a_journal_without_a_row_is_refused(tmp_path) -> None:
@@ -211,10 +213,12 @@ def test_claims_carry_their_own_page_url_and_time(tmp_path) -> None:
 
 def test_refresh_fetches_only_the_first_page_again(tmp_path) -> None:
     _seed(tmp_path, oai.page(oai.record(1), token="t1"), oai.page(oai.record(2), oai.record(3, "AAAI:IAAI")))
-    sets, first = ojs.sets_url("AAAI"), ojs.oai_url("AAAI", set_spec=SET)
+    sets, first, inv = ojs.sets_url("AAAI"), ojs.oai_url("AAAI", set_spec=SET), ojs.ids_url("AAAI")
     transport = FakeTransport({})
     headers = {"content-type": "text/xml; charset=utf-8"}
+    pages = (oai.page(oai.record(1), token="t1"), oai.page(oai.record(2), oai.record(3, "AAAI:IAAI")))
     transport.script = {
+        canonical(inv, keep_query=True): [response(oai.inventory_of(*pages), headers=headers)],
         canonical(sets, keep_query=True): [response(oai.sets_page(SET), headers=headers)],
         canonical(first, keep_query=True): [response(oai.page(oai.record(1), token="t1"), headers=headers)],
     }
@@ -222,7 +226,7 @@ def test_refresh_fetches_only_the_first_page_again(tmp_path) -> None:
         PageCache(tmp_path / "ojs"), transport, hosts=ojs.HOSTS, min_interval=0, expect="xml", keep_query=True
     )
     result = ojs.mine_journal("AAAI", fetcher, refresh=True, table=TABLE)
-    assert transport.calls == [canonical(sets, keep_query=True), canonical(first, keep_query=True)]
+    assert transport.calls == [canonical(u, keep_query=True) for u in (inv, sets, first)]
     assert len(result.records) == 3
 
 

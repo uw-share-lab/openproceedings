@@ -261,10 +261,11 @@ def ingest_ojs(
     log.info("ojs_ingested", extra={"journals": len(wanted), "listings": len(reports), "requests": f.stats.network,
                                     "deleted": sum(m.deleted for m in mined),
                                     "front_matter": sum(m.front_matter for m in mined),
-                                    "unavailable": sum(m.unavailable for m in mined)})  # fmt: skip
+                                    "unavailable": sum(m.unavailable for m in mined),
+                                    "duplicates": sum(m.duplicates for m in mined)})  # fmt: skip
     out = _output(reports, f, False)
     out["journals"] = [{"journal": j, "pages": m.pages, "deleted": m.deleted, "front_matter": m.front_matter,
-                        "unavailable": m.unavailable}
+                        "unavailable": m.unavailable, "duplicates": m.duplicates, "recovered": m.recovered}
                        for j, m in zip(wanted, mined, strict=True)]  # fmt: skip
     return out
 

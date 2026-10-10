@@ -156,3 +156,13 @@ def test_a_live_record_with_the_pre_2020_identifier_stops() -> None:
     with pytest.raises(CrawlError, match=r"no ojs\.aaai\.org article id") as e:
         ojs.parse_page(oai.page(old))
     assert e.value.reason == "oai_unreadable"
+
+
+def test_a_set_spec_two_sections_share_keeps_both_names() -> None:
+    page = oai.sets_page("AAAI:EAAI-POS", "AAAI:X", names={"AAAI:EAAI-POS": "EAAI Poster Papers"}).replace(
+        "</ListSets>",
+        "<set><setSpec>AAAI:EAAI-POS</setSpec><setName>EAAI Symposium Poster Paper</setName></set>"
+        "<set><setSpec>AAAI:X</setSpec><setName>AAAI:X</setName></set></ListSets>",
+    )
+    sets, _ = ojs.parse_sets(page)
+    assert sets == {"AAAI:EAAI-POS": "EAAI Poster Papers | EAAI Symposium Poster Paper", "AAAI:X": "AAAI:X"}
