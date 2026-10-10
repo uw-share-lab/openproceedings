@@ -13,8 +13,8 @@ ICLR archive, NeurIPS proceedings and PMLR) fetches through `HttpClient`, and on
   (seconds or an HTTP date), else `ratelimit-reset` (seconds from now; never `x-ratelimit-reset`, an epoch),
   else an exponential back-off (`backoff[0] · 2^n`, capped at `backoff[1]`, plus jitter); so do a network
   error and a truncated 200 (an HTML page without `</html>`, an XML document not ending in its root's closing
-  tag, or JSON that doesn't parse; a page the caller asks to
-  judge by length, an Internet Archive capture whose original may never have had `</html>`, is truncated when its
+  tag, a text page shorter or longer than its stated `Content-Length`, or JSON that doesn't parse; a page the
+  caller asks to judge by length, an Internet Archive capture whose original may never have had `</html>`, is truncated when its
   body is not the `Content-Length` the response states, or, when it states none, by the closing-tag rule, logged
   as `truncated_no_length`; TASK-207). A spent budget
   (`ratelimit-remaining: 0` on a 200) waits for its reset. A wait past `max_wait` is capped or aborts the
@@ -275,7 +275,7 @@ class Policy:
 
     hosts: frozenset[str]
     accept: str = "text/html"
-    expect: Literal["html", "json", "xml"] = "html"  # how a truncated 200 is recognised (and retried)
+    expect: Literal["html", "json", "xml", "text"] = "html"  # how a truncated 200 is recognised (and retried)
     keep_query: bool = False  # does the query string name the resource (and the cache entry)?
     min_interval: float = 1.0
     attempts: int = 5
@@ -465,6 +465,12 @@ class HttpClient[T]:
         # int()'s digit limit) is no length, never a crash
         if by_length and stated.isascii() and stated.isdecimal() and len(stated) <= 19:
             return "truncated" if int(stated) != len(response.body) else None
+        if self.policy.expect == "text":
+            # a CSV has no closing tag: whole unless it states a length it doesn't have (the source's own row count
+            # is the guard when none is stated: facct_site checks each page's verified count)
+            if stated.isascii() and stated.isdecimal() and len(stated) <= 19:
+                return "truncated" if int(stated) != len(response.body) else None
+            return None
         if self.policy.expect == "html":
             if b"</html>" in response.body[-4096:].lower():
                 return None
@@ -626,12 +632,15 @@ class Fetcher(HttpClient[Page]):
         self, cache: ResponseCache[Page], transport: Transport | None, *, hosts: frozenset[str],
         min_interval: float = 1.0, attempts: int = 5, max_wait: float = 3600.0, timeout: float = 30.0,
         clock: Clock | None = None, accept: str = "text/html",
-        expect: Literal["html", "json", "xml"] = "html", keep_query: bool = False,
+        expect: Literal["html", "json", "xml", "text"] = "html", keep_query: bool = False,
+        user_agent: str | None = None,
     ) -> None:  # fmt: skip
         policy = replace(PROCEEDINGS, hosts=hosts, min_interval=min_interval, attempts=attempts,
                          max_wait=max_wait, timeout=timeout, accept=accept, expect=expect,
                          keep_query=keep_query)  # fmt: skip
         super().__init__(cache, transport, policy, clock)
+        # a source's own (Crossref's polite pool); it never reaches the cache, a log line or an error message
+        self.user_agent = user_agent or USER_AGENT
 
     def get(
         self, url: str, *, refresh: bool = False, keep_absent: bool = False, charset: str = "utf-8",
@@ -650,7 +659,7 @@ class Fetcher(HttpClient[Page]):
         return self.through_cache(url, fetch, refresh=refresh)
 
     def _page(self, url: str, default_charset: str = "utf-8", by_length: bool = False) -> Page:
-        request = Request("GET", url, {"User-Agent": USER_AGENT, "Accept": self.policy.accept})
+        request = Request("GET", url, {"User-Agent": self.user_agent, "Accept": self.policy.accept})
         resp = self.send(request, by_length=by_length)
         if resp.status == 200:
             content_type = resp.headers.get("content-type", "text/html; charset=utf-8")

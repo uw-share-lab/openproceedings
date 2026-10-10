@@ -16,6 +16,7 @@ import pytest
 from openproceedings.ingest.sources import iclr, neurips, pmlr
 from openproceedings.ingest.sources.common import CrawlError, MinerError
 from openproceedings.ingest.sources.http import (
+    USER_AGENT,
     CacheError,
     CacheMiss,
     FetchError,
@@ -279,3 +280,71 @@ def test_xml_root_reads_only_the_first_4096_bytes() -> None:
     """A root after 4096 bytes of prolog is not found: the window is what bounds the scan."""
     assert _xml_root(b"<?a?>" * 800 + b"<OAI-PMH/>") == b"OAI-PMH"  # 4,000 bytes of prolog, then the root
     assert _xml_root(b"<?a?>" * 1000 + b"<OAI-PMH/>") is None
+
+
+CROSSREF = "https://api.crossref.org/works/10.1145/3593013"
+JSON = {"content-type": "application/json"}
+
+
+def test_a_fetcher_sends_its_own_user_agent_and_never_stores_it(tmp_path: Path) -> None:
+    sent: list[dict[str, str]] = []
+
+    def transport(request: Request, timeout: float) -> Response:
+        sent.append(dict(request.headers))
+        return response('{"status": "ok"}', headers=JSON)
+
+    ua = "openproceedings/test (mailto:reviewer@example.org)"
+    f, _ = fetcher(tmp_path, transport, frozenset({"api.crossref.org"}), min_interval=0.0, accept="application/json",
+                   expect="json", user_agent=ua)  # fmt: skip
+    assert f.get(CROSSREF).ok
+    assert sent[0]["User-Agent"] == ua
+    assert all("reviewer@example.org" not in p.read_text() for p in tmp_path.rglob("*.json"))
+
+
+def test_a_source_user_agent_reaches_no_log_line_or_error(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    def transport(request: Request, timeout: float) -> Response:
+        return response("busy", status=503, headers=JSON)
+
+    ua = "openproceedings/test (mailto:reviewer@example.org)"
+    f, _ = fetcher(tmp_path, transport, frozenset({"api.crossref.org"}), min_interval=0.0, attempts=2,
+                   accept="application/json", expect="json", user_agent=ua)  # fmt: skip
+    with caplog.at_level("DEBUG"), pytest.raises(RetriesExhausted) as caught:
+        f.get(CROSSREF)
+    assert "reviewer@example.org" not in str(caught.value)
+    assert "reviewer@example.org" not in caplog.text
+    assert all("reviewer@example.org" not in p.read_text() for p in tmp_path.rglob("*") if p.is_file())
+
+
+def test_the_default_user_agent_is_unchanged(tmp_path: Path) -> None:
+    sent: list[dict[str, str]] = []
+
+    def transport(request: Request, timeout: float) -> Response:
+        sent.append(dict(request.headers))
+        return response("<html></html>")
+
+    f, _ = fetcher(tmp_path, transport, frozenset({"proceedings.mlr.press"}), min_interval=0.0)
+    f.get("https://proceedings.mlr.press/v81/")
+    assert sent[0]["User-Agent"] == USER_AGENT
+
+
+CSV_URL = "https://facctconference.org/static/docs/facct2026-final.csv"
+
+
+@pytest.mark.parametrize(
+    ("headers", "whole"),
+    [({"content-type": "text/csv"}, True), ({"content-type": "text/csv", "content-length": "9"}, True),
+     ({"content-type": "text/csv", "content-length": "99"}, False)],
+)  # fmt: skip
+def test_a_text_page_is_judged_by_its_stated_length(
+    tmp_path: Path, headers: dict[str, str], whole: bool
+) -> None:
+    t = FakeTransport({CSV_URL: response("a,b\n1,2\n\n", headers=headers)})  # 9 bytes
+    f, _ = fetcher(tmp_path, t, frozenset({"facctconference.org"}), min_interval=0.0, attempts=2,
+                   accept="text/csv", expect="text")  # fmt: skip
+    if whole:
+        assert f.get(CSV_URL).text.startswith("a,b")
+    else:
+        with pytest.raises(RetriesExhausted):
+            f.get(CSV_URL)

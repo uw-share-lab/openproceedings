@@ -9,7 +9,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from openproceedings.ingest.sources.http import Fetcher, Page, PageCache, Request, Response, canonical
+from openproceedings.ingest.sources.http import (
+    Fetcher,
+    Page,
+    PageCache,
+    Request,
+    Response,
+    Transport,
+    canonical,
+)
 
 HTTP = Path(__file__).parents[2] / "fixtures" / "http"
 T0 = datetime(2026, 9, 27, 12, 0, tzinfo=UTC)
@@ -98,7 +106,7 @@ class Clock:
 
 
 def fetcher(
-    cache: Path, transport: FakeTransport | None, hosts: frozenset[str], **kw: Any
+    cache: Path, transport: Transport | None, hosts: frozenset[str], **kw: Any
 ) -> tuple[Fetcher, Clock]:
     clock = Clock()
     f = Fetcher(PageCache(cache), transport, hosts=hosts, clock=clock, **kw)
