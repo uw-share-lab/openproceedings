@@ -99,6 +99,15 @@ def test_a_malformed_contact_stops_a_live_crawl_without_echoing_it(tmp_path, mon
     assert e.value.reason == "bad_contact" and "not an address" not in str(e.value)
 
 
+def test_an_explicit_malformed_mailto_stops_a_live_crawl_like_the_environment_one(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("CROSSREF_MAILTO", raising=False)
+    monkeypatch.setattr(crawl, "repo_dotenv", lambda: None)
+    with pytest.raises(crawl.MinerError) as e:
+        crawl.ingest_crossref([("FAccT", 2023)], tmp_path, transport=FakeTransport({}), table=TABLE,
+                              mailto="bad contact")  # fmt: skip
+    assert e.value.reason == "bad_contact" and "bad contact" not in str(e.value)
+
+
 def test_a_dry_run_reads_the_cache_only_and_writes_no_marker(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("CROSSREF_MAILTO", "not an address")  # a dry run never reads the contact
     _whole(tmp_path, api.work(D1), api.work(D2), api.work(NP), total=3)

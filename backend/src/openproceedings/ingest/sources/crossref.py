@@ -87,6 +87,7 @@ class Work:
     title: str | None
     authors: tuple[str, ...]
     page: str | None
+    unnamed_authors: int = 0  # author entries with no given name, family name or name: dropped
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,10 +146,12 @@ def parse_works(text: str) -> WorksPage:
         if not isinstance(item, dict) or not isinstance(item.get("DOI"), str) or not item["DOI"].strip():
             raise CrawlError("a Crossref work has no DOI", reason="crossref_unreadable")
         page = item.get("page")
+        raw = item.get("author") or []
+        names = tuple(n for a in raw if isinstance(a, dict) and (n := author_name(a)))
         works.append(Work(
             doi=item["DOI"].strip().lower(), type=str(item.get("type", "")), title=title_of(item),
-            authors=tuple(n for a in item.get("author") or [] if isinstance(a, dict) and (n := author_name(a))),
-            page=page if isinstance(page, str) else None))  # fmt: skip
+            authors=names, page=page if isinstance(page, str) else None,
+            unnamed_authors=len(raw) - len(names)))  # fmt: skip
     try:
         total = int(message["total-results"])
     except (KeyError, TypeError, ValueError) as e:
@@ -175,27 +178,34 @@ def contact(environ: Mapping[str, str], dotenv: Path | None) -> str | None:
     value = values.get(MAILTO_ENV, "").strip()
     if not value:
         return None
+    return valid_contact(value)
+
+
+def valid_contact(value: str) -> str:
+    """`value` if it is an e-mail address, else a `bad_contact` stop that never quotes it: the one check for the
+    environment's address and an explicit `mailto=`."""
     if not _EMAIL.fullmatch(value):
-        raise CrawlError(
-            f"{MAILTO_ENV} is set but is not an e-mail address: fix or unset it", reason="bad_contact"
-        )
+        raise CrawlError("the Crossref contact (CROSSREF_MAILTO or mailto) is set but is not an e-mail address: "
+                         "fix or unset it", reason="bad_contact")  # fmt: skip
     return value
 
 
 def user_agent(mailto: str | None) -> str:
-    return USER_AGENT if mailto is None else f"{USER_AGENT.removesuffix(')')}; mailto:{mailto})"
+    return USER_AGENT if mailto is None else f"{USER_AGENT.removesuffix(')')}; mailto:{valid_contact(mailto)})"
 
 
 @dataclass(kw_only=False)
 class CrossrefReport(ListingReport):
     """One ACM proceedings from Crossref: the shared listing counts, plus the works the window returned (every
-    prefix:10.1145 DOI, this proceedings' and others'), the cursor pages read, and the records with no author; for
+    prefix:10.1145 DOI, this proceedings' and others'), the cursor pages read, the records with no author and the
+    authors dropped for having no name (in the manifest only when above 0); for
     FAccT years with an official page (`facct_site`), the page's entries, the abstracts attached and why the rest
     weren't (listed in the manifest only when a page was read)."""
 
     window_works: int = 0
     pages: int = 0
     no_authors: int = 0
+    unnamed_authors: int = 0  # authors Crossref lists with no given name, family name or name: dropped
     sites: list[str] = field(default_factory=list)  # the official page read, as fetched
     site_entries: int = 0  # page entries with a title and a usable abstract
     abstract_attached: int = 0
@@ -207,6 +217,8 @@ class CrossrefReport(ListingReport):
     def to_manifest(self) -> dict[str, Any]:
         out = super().to_manifest() | {"window_works": self.window_works, "pages": self.pages,
                                        "no_authors": self.no_authors}  # fmt: skip
+        if self.unnamed_authors:
+            out["unnamed_authors"] = self.unnamed_authors
         if self.sites:
             out |= {"sites": list(self.sites), "site_entries": self.site_entries,
                     "abstract_attached": self.abstract_attached, "site_unmatched": self.site_unmatched,
@@ -324,6 +336,10 @@ def mine_proceedings(
         if doi in table.not_papers:
             report.skipped["not_paper"] += 1
             continue
+        if w.type != "proceedings-article":
+            raise CrawlError(f"Crossref {venue} {year}: {doi} has type {w.type!r}, not 'proceedings-article': name it "
+                             "in acm_proceedings.toml [[not_paper]] if it is no paper, else check "
+                             "Crossref", reason="unexpected_type")  # fmt: skip
         if w.title is None:
             raise CrawlError(f"Crossref {venue} {year}: {doi} has no title: name it in acm_proceedings.toml "
                              "[[not_paper]] if it is no paper, else check Crossref", reason="no_title")  # fmt: skip
@@ -345,6 +361,7 @@ def mine_proceedings(
             raise CrawlError(f"Crossref {venue} {year}: {doi} makes no valid record ({type(e).__name__})",
                              reason="invalid_record") from e  # fmt: skip
         report.no_authors += not record.authors
+        report.unnamed_authors += w.unnamed_authors
         records.append(record)
         report.count(record, None if record.abstract else "no_abstract", found.spaced if found else 0,
                      found.pdf_codes if found else 0)  # fmt: skip
@@ -357,9 +374,10 @@ def mine_proceedings(
                                                   "site_ambiguous": report.site_ambiguous,
                                                   "site_dropped": report.site_dropped,
                                                   "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
-    if report.no_authors:
+    if report.no_authors or report.unnamed_authors:
         log.warning("listing_attention", extra={"venue": venue, "year": year, "listing": report.listing,
-                                                "no_authors": report.no_authors})  # fmt: skip
+                                                "no_authors": report.no_authors,
+                                                "unnamed_authors": report.unnamed_authors})  # fmt: skip
     return ProceedingsResult(records, [report])
 
 
