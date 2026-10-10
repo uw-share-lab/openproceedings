@@ -108,13 +108,16 @@ class SiteAbstract:
 @dataclass(frozen=True, slots=True)
 class SiteYear:
     """What a year's page gave: the page as fetched, its join rule, its usable entries, its fetch time, and the rows
-    dropped for no title or no usable abstract."""
+    dropped for no title or no usable abstract. `dropped_titles` and `dropped_dois` are those rows' title keys and
+    DOIs: a dropped row still shares its key or DOI with a good one, which makes the good row ambiguous."""
 
     page: str
     join: str
     entries: list[SiteAbstract]
     fetched: list[datetime]
     dropped: int
+    dropped_titles: tuple[str, ...] = ()
+    dropped_dois: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,23 +277,31 @@ def read_year(
         raise CrawlError(f"FAccT {year}: {p.url} repeats an entry key", reason="site_duplicate_key")
     entries: list[SiteAbstract] = []
     dropped = 0
+    dropped_titles: list[str] = []
+    dropped_dois: list[str] = []
     for e in got:
         title = title_text(e.title)[0] if e.title else ""
         cleaned = clean_abstract(e.abstract)
         if not title or cleaned.text is None:
             dropped += 1
+            if title and (k := title_key(title)):
+                dropped_titles.append(k)
+            if e.doi:
+                dropped_dois.append(e.doi.lower())
             continue
         entries.append(SiteAbstract(e.key, title, e.doi, cleaned.text, cleaned.spaced, cleaned.pdf_codes, p.url,
                                     page.fetched_at, f"{p.url} row {e.key}"))  # fmt: skip
     log.info("facct_site_year_read", extra={"year": year, "entries": len(entries), "dropped": dropped,
                                             "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
-    return SiteYear(p.url, p.join, entries, [page.fetched_at], dropped)
+    return SiteYear(p.url, p.join, entries, [page.fetched_at], dropped, tuple(dropped_titles), tuple(dropped_dois))
 
 
 def match(papers: Sequence[tuple[str, str]], site: SiteYear) -> Matched:
     """Record DOI → the one entry joined to it, from `papers` (each record's DOI and title). By DOI: an entry with
     no DOI, or a DOI no record has, is unmatched; a DOI two entries share attaches nothing (ambiguous). By title: the
-    title key two entries or two records share attaches nothing (ambiguous); a key no record has is unmatched."""
+    title key two entries or two records share attaches nothing (ambiguous); a key no record has is unmatched. A row
+    dropped for no title or abstract still counts toward a shared DOI or title key: the good row beside it is
+    ambiguous, never unique."""
     by_doi: dict[str, SiteAbstract] = {}
     unmatched = ambiguous = 0
     if site.join == "doi":
@@ -301,7 +312,7 @@ def match(papers: Sequence[tuple[str, str]], site: SiteYear) -> Matched:
         for doi, group in groups.items():
             if doi is None or doi not in known:
                 unmatched += len(group)
-            elif len(group) > 1:
+            elif len(group) + site.dropped_dois.count(doi) > 1:
                 ambiguous += len(group)
             else:
                 by_doi[doi] = group[0]
@@ -316,7 +327,7 @@ def match(papers: Sequence[tuple[str, str]], site: SiteYear) -> Matched:
     for k, group in pages.items():
         if not k or k not in records:
             unmatched += len(group)
-        elif len(group) > 1 or len(records[k]) > 1:
+        elif len(group) + site.dropped_titles.count(k) > 1 or len(records[k]) > 1:
             ambiguous += len(group)
         else:
             by_doi[records[k][0]] = group[0]

@@ -99,6 +99,38 @@ def test_two_records_sharing_a_title_key_attach_nothing(tmp_path: Path) -> None:
     assert all(r.abstract is None for r in result.records) and result.reports[0].site_ambiguous == 1
 
 
+def test_a_row_dropped_for_no_abstract_still_makes_a_shared_title_key_ambiguous(tmp_path: Path) -> None:
+    _whole(tmp_path, api.work(D1, title="Fair Ranking"), api.work(D2, title="Other"), api.work(NP), total=3)
+    s = site(tmp_path, csv26(("1", "Fair Ranking", "A."), ("2", "FAIR ranking!", ""), ("3", "Other", "C.")))
+    assert s.dropped == 1 and len(s.entries) == 2
+    result = crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE, site=s)
+    assert next(x for x in result.records if x.urls.doi == D1).abstract is None
+    assert next(x for x in result.records if x.urls.doi == D2).abstract == "C."
+    assert (result.reports[0].site_ambiguous, result.reports[0].abstract_attached) == (1, 1)
+
+
+def test_a_row_dropped_for_no_abstract_still_makes_a_shared_doi_ambiguous() -> None:
+    entries = [facct_site.SiteAbstract("1", "Fair", D1, "A.", 0, 0, URL25, T, "e"),
+               facct_site.SiteAbstract("2", "x", D2, "B.", 0, 0, URL25, T, "e")]  # fmt: skip
+    s = facct_site.SiteYear(URL25, "doi", entries, [T], 1, (), (D1.lower(),))
+    got = facct_site.match([(D1, "Fair"), (D2, "x")], s)
+    assert set(got.by_doi) == {D2} and (got.unmatched, got.ambiguous) == (0, 1)
+
+
+def test_the_reader_keeps_a_dropped_rows_doi_for_the_doi_join(tmp_path: Path) -> None:
+    table = SITE_TABLE.replace(URL26, URL25).replace("facct2026_csv", "facct2025_csv").replace('"title"', '"doi"')
+    text = ("TYPE,ID,ABSTRACT,AUTHOR,TITLE,URL,URL-OLD\n"
+            f"archival,7,Official.,Synthetic Author,A title,https://doi.org/{D1},\n"
+            f"archival,8,,Synthetic Author,B title,https://doi.org/{D1.upper()},\n"
+            f"archival,9,Third.,Synthetic Author,C title,https://doi.org/{D2},\n")  # fmt: skip
+    seed(tmp_path, "facct_site", URL25, text)
+    f, _ = fetcher(tmp_path / "facct_site", None, facct_site.HOSTS, expect="text")
+    s = facct_site.read_year(2023, f, table=facct_site.load(table))
+    assert s is not None and (s.dropped, s.dropped_dois) == (1, (D1.lower(),))
+    got = facct_site.match([(D1, "A title"), (D2, "C title")], s)
+    assert set(got.by_doi) == {D2} and (got.unmatched, got.ambiguous) == (0, 1)
+
+
 def test_a_near_title_is_never_joined(tmp_path: Path) -> None:
     _whole(
         tmp_path,
