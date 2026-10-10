@@ -190,6 +190,11 @@ The "Recovered by GetRecord" column counts live inventory articles that no set r
      2026.
    - **Crossref does not have it.** `10.1609/aaai.v40i24.39173` and `…v40i25.39173` (the issues of its neighbours
      39128 and 39174) both answer 404, and `works?filter=prefix:10.1609&query=39173` returns only an unrelated work.
+   - **Nor does dblp, and it is no published paper.** The pinned dblp release (`10.4230/dblp.xml.2026-10-03`) lists
+     exactly 4,920 `10.1609/aaai.v40i…` DOIs, the AAAI 2026 issue pages' count, and none is 39173. A retry on
+     2026-10-10 still answered HTTP 500 for GetRecord and the article page. So 39173 is a broken OAI entry, not a
+     missing paper: every published AAAI 2026 paper is indexed. The `[[unavailable]]` row names it so the crawl
+     notices if the server ever serves it (`stale_unavailable_row`).
    - It is named in an `[[unavailable]]` row: volume 40 (inferred from its id and datestamp), counted in 2026's
      stated total (4,921 = 4,920 + 1) and never a record. A follow-up task tracks it.
 2. **Set names are not unique, and the server's `set=` filter matches case-blind to one section.**

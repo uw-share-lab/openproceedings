@@ -6685,6 +6685,6 @@ journal = "AAAI"
 article = 39173
 set_spec = "AAAI:APP"
 volume = 40
-reason = "HTTP 500 on ojs.aaai.org (every format and its article page) and absent from Crossref (404 for 10.1609/aaai.v40i24.39173 and v40i25) on 2026-10-09"
+reason = "HTTP 500 on ojs.aaai.org (every format and its article page; again on 2026-10-10), absent from Crossref (404 for 10.1609/aaai.v40i24.39173 and v40i25) and from the pinned dblp release (its 4,920 AAAI 2026 DOIs, the issue pages' count, exclude it): a broken OAI entry, not a published paper"
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
