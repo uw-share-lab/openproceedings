@@ -40,6 +40,13 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | ICLR proceedings / archive | `iclr-<hash>` from a proceedings path; for the official 2014–2016 archive, an OpenReview target keeps its forum id and any other target is `iclr-<sha256(canonical-target)[:32]>` |
 | RIS import | a venueid plus its forum id → the forum id; else the proceedings or PMLR form above, from scholarmend's `proceedings_url` / `pmlr_url` claim (`ingest/urls.py`). A record with neither is skipped and counted (`unresolved` / `no_id`), never given a minted id. |
 
+A new source ships two tests before its first real run: **self-naming** (every record it yields has a
+`urls.proceedings`/`pdf` claim that `urls.native()` reads back to its own native id: OJS public-id URLs such as
+`/article/view/1678-1679` did not, so `urls.proceedings` is built from the numeric article id) and
+**attribution** (`dedup.attribution` links each abstract to the paper's page, never to the listing or
+resumption-token URL it was fetched from). Unit tests passed without either; the snapshot build and the
+final review found them (AAAI 2013 #8500; `learnings/2026-10-10-ojs-oai-pmh-quirks-and-real-data-runs.md`).
+
 A forum id and a PMLR `pmlr-v<N>-<key>` name one paper in every venue and year; a `nips-` or `iclr-` hash names
 one only within its venue-year (TASK-067, measured: a NeurIPS hash is md5 of a per-year paper number, and
 1,281 name two to five papers each in the 2026-09-29 snapshot; ICLR proceedings hashes collided across years
