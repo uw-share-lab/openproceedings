@@ -17,6 +17,7 @@ const PAPER: Paper["paper"] = {
   abstract: "We study trust.",
   authors: ["Ada Lovelace", "Alan Turing"],
   venue: "ICLR",
+  abstract_kind: "official",
   venue_name: "International Conference on Learning Representations (ICLR 2024)",
   year: 2024,
   track: "main",

@@ -16,10 +16,10 @@ import hashlib
 import json
 import re
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from types import MappingProxyType
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal, Protocol, Self
 from urllib.parse import urlparse
 
 from pydantic import (
@@ -38,23 +38,45 @@ from pydantic import (
 from openproceedings.ingest import acm_table
 from openproceedings.ingest import volumes as _volumes
 from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
-from openproceedings.vocab import Status, Track, Venue, venue_name
+from openproceedings.vocab import AbstractKind, Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
-# 7: the `crossref` and `facct_site` sources, the `doi-<toc>.<n>` native id (FAccT, AIES), `dblp-` ids for AAAI
+# 8: the `openalex` source (abstract claims only, AAAI/AIES/FAccT) and the derived `abstract_kind` (decision-049,
+# milestone C); 7: the `crossref` and `facct_site` sources, the `doi-<toc>.<n>` native id (FAccT, AIES), `dblp-` ids for AAAI
 # 1980-2008, and the `pmlr-` native id widened from ICML to FAccT (v81) (decision-049, milestone B); 6: the AAAI,
 # AIES, FAccT and IASEAI venues, five tracks, the `ojs` source and the `ojs-<article id>` native id
 # (decision-049); 5: the `dblp` and `icml_site` sources and the `dblp-<key>` native id (TASK-205/206, decision-047);
 # 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-029)
-RECORD_SCHEMA_VERSION = "7"
+RECORD_SCHEMA_VERSION = "8"
 # Sent with a record, never stored: computed from its fields, so a snapshot line never holds it (`record_line`)
 # and the shape above is unchanged (TASK-112). Output only: a dump that is validated again excludes it.
-DERIVED = frozenset({"venue_name"})
+DERIVED = frozenset({"venue_name", "abstract_kind"})
 
 Source = Literal[
     "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ojs",
-    "crossref", "facct_site", "ris",
+    "crossref", "facct_site", "ris", "openalex",
 ]  # fmt: skip
+# the venues an OpenAlex abstract may fill (decision-049): never NeurIPS, ICLR or ICML (spec 01's rule), nor IASEAI
+OPENALEX_VENUES: frozenset[str] = frozenset({"AAAI", "AIES", "FAccT"})
+
+
+class _HoldsText(Protocol):
+    @property
+    def source(self) -> Any: ...
+    @property
+    def value(self) -> Any: ...
+
+
+def abstract_kind_of(abstract: str | None, claims: Iterable[_HoldsText]) -> AbstractKind:
+    """`none` without an abstract; `openalex` when at least one of the abstract claims holds its exact text and
+    every such claim is OpenAlex's; else `official` (a record without provenance, as fixtures are, included).
+    `claims` are abstract claims (a `Claim`, or the snapshot reader's raw view of one)."""
+    if abstract is None:
+        return "none"
+    held = {c.source for c in claims if c.value == abstract}
+    return "openalex" if held == {"openalex"} else "official"
+
+
 Presentation = Literal["oral", "spotlight", "poster"]
 ClaimField = Literal[
     "title", "abstract", "authors", "venue", "year", "track", "status", "presentation", "venue_id_raw",
@@ -301,6 +323,15 @@ class PaperRecord(BaseModel):
     def venue_name(self) -> str:
         return venue_name(self.venue, self.year)
 
+    @computed_field(  # type: ignore[prop-decorator]
+        description="Where the abstract came from: `official` (the venue's own source), `openalex` (OpenAlex's "
+        "fallback, only for AAAI, AIES and FAccT papers no official source gives one), or `none`. Derived from the "
+        "abstract's claims; never stored, never hashed. Open set."
+    )
+    @property
+    def abstract_kind(self) -> AbstractKind:
+        return abstract_kind_of(self.abstract, self.claims("abstract"))
+
     @field_validator("title")
     @classmethod
     def _title(cls, v: str) -> str:
@@ -345,6 +376,12 @@ class PaperRecord(BaseModel):
         if m.group(1) != self.venue.lower() or int(m.group(2)) != self.year:
             raise ValueError(f"id {self.id!r} disagrees with venue {self.venue} / year {self.year}")
         venue_name(self.venue, self.year)  # a year the venue wasn't held: refused here, never mid-export
+        for c in self.provenance:
+            if c.source == "openalex" and (c.field != "abstract" or self.venue not in OPENALEX_VENUES):
+                raise ValueError(
+                    f"an OpenAlex claim may only fill an abstract of an AAAI, AIES or FAccT record, not "
+                    f"{c.field} of {self.venue}"
+                )
         native = m.group(3)
         form = PROCEEDINGS_NATIVE.get(native.split("-", 1)[0])
         if form is not None:

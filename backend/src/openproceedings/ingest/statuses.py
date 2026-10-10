@@ -45,6 +45,9 @@ SOURCE_STATUSES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     # abstracts of some of them: published papers only (decision-049, milestone B)
     "crossref": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "facct_site": (ACCEPTED_ONLY, ACCEPTED_ONLY),
+    # AAAI, AIES and FAccT abstracts no official source gives (decision-049, milestone C): abstract claims only,
+    # never a status
+    "openalex": ((), ()),
     "ris": (EVERY_STATUS, ACCEPTED_ONLY),
 }
 if set(SOURCE_STATUSES) != set(get_args(Source)):  # a new claim source needs a row before it can build

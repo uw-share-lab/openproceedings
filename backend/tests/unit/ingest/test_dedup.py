@@ -167,7 +167,7 @@ def test_a_decomposed_title_keys_as_its_composed_form(title: str, key: str) -> N
 
 def test_the_precedence_table_is_decision_005() -> None:
     text = ("openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site",
-            "ojs", "crossref", "facct_site", "ris")  # fmt: skip
+            "ojs", "crossref", "facct_site", "ris", "openalex")  # fmt: skip
     assert PRECEDENCE["status"] == (
         "iclr_archive",
         "neurips_proceedings",

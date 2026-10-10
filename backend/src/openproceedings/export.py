@@ -104,6 +104,7 @@ ORIGIN_NAMES = {
     "ojs": "AAAI Digital Library",
     "crossref": "Crossref",
     "facct_site": "FAccT conference site",
+    "openalex": "OpenAlex",
 }
 _SOURCE = "abstract_source"  # the key `entries` adds to each record it hands a writer
 _WITHHELD = "abstract_withheld"  # likewise: True when the record's abstract is withheld

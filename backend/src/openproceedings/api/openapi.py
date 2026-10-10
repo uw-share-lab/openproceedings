@@ -29,7 +29,7 @@ from openproceedings.query.ast import FilterField, TextField
 from openproceedings.query.clauses import CLAUSE_REASONS
 from openproceedings.query.exact import SkipReason
 from openproceedings.search import NotCounted
-from openproceedings.vocab import Status, Track, Venue
+from openproceedings.vocab import AbstractKind, Status, Track, Venue
 
 # repo-relative; the snapshot sits with the contract tests that pin it
 SNAPSHOT = Path("backend/tests/contract/openapi.json")
@@ -165,6 +165,7 @@ OPEN_ENUMS: dict[str, frozenset[str]] = {
     "venue": frozenset(get_args(Venue)),
     "track": frozenset(get_args(Track)),
     "status": frozenset(get_args(Status)),
+    "abstract kind": frozenset(get_args(AbstractKind)),  # decision-049: a later fallback source adds one
     "presentation": frozenset(get_args(Presentation)),
     "claim source": frozenset(get_args(Source)),
     "abstract origin": frozenset(get_args(Origin)),  # TASK-134: the site an abstract came from

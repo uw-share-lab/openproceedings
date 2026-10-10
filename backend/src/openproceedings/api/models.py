@@ -161,7 +161,9 @@ ORIGIN_DOC = (
     "conference page (live, or a pinned Internet Archive capture), for ICML 1988-2012 (decision-047). `ojs`: the "
     "AAAI Digital Library (ojs.aaai.org), for AAAI, AIES and IASEAI; its url is the paper's own article page "
     "(decision-049). `crossref` and `facct_site`: FAccT and AIES (ACM proceedings via Crossref, the official FAccT "
-    "pages); the url is the paper's DOI link (decision-049). Open set: new values may be added within /api/v1; "
+    "pages); the url is the paper's DOI link (decision-049). `openalex`: an AAAI, AIES or FAccT abstract no "
+    "official source gives, filled from OpenAlex (decision-049); the url is the paper's own page, never OpenAlex's "
+    "API. Open set: new values may be added within /api/v1; "
     "handle a value you don't know."
 )
 

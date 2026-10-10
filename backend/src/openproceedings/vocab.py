@@ -27,11 +27,15 @@ Track = Literal[
     "unknown",
 ]
 Status = Literal["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"]
+# where a record's abstract came from (decision-049): an official source, OpenAlex's fallback, or none. Derived
+# from the abstract's claims (`record.abstract_kind_of`), never stored; an open set (a later fallback adds one)
+AbstractKind = Literal["official", "openalex", "none"]
 
 # canonical spelling, keyed by the lowercase form a query may use (`venue:` is case-insensitive)
 VENUES: dict[str, str] = {v.lower(): v for v in get_args(Venue)}
 TRACKS: tuple[str, ...] = get_args(Track)
 STATUSES: tuple[str, ...] = get_args(Status)
+ABSTRACT_KINDS: tuple[str, ...] = get_args(AbstractKind)
 # the searched fields (guarantee 2): every module that names them imports this one tuple
 TEXT_FIELDS: tuple[Literal["title", "abstract"], ...] = ("title", "abstract")
 QUERY_FILTER_FIELDS = (  # every filter field a query may name, incl. Scholar's `source:` (cf. ast.FILTER_FIELDS)

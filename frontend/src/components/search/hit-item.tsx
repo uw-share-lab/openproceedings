@@ -112,6 +112,7 @@ const ORIGIN_NAMES: Readonly<Record<string, string>> = {
   ojs: "AAAI Digital Library",
   crossref: "Crossref",
   facct_site: "FAccT conference site",
+  openalex: "OpenAlex",
 };
 
 type AbstractFrom = NonNullable<SearchHit["abstract_source"]>;

@@ -80,8 +80,10 @@ from openproceedings.query.normalize import normalize
 
 _TEXT: tuple[Source, ...] = (
     "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ojs",
-    "crossref", "facct_site", "ris",
+    "crossref", "facct_site", "ris", "openalex",
 )  # fmt: skip
+# OpenAlex last: it only fills an abstract no other source gives (decision-049); the fill runs after dedup
+# (`sources/openalex.apply`), so this order is the second guard
 _ACCEPTANCE: tuple[Source, ...] = (
     "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "ojs", "crossref", "openreview_v2", "openreview_v1",
     "ris",
@@ -235,6 +237,7 @@ Origin = Literal[
     "ojs",
     "crossref",
     "facct_site",
+    "openalex",
 ]
 _DIRECT_ORIGIN: dict[str, Origin] = {
     "openreview_v2": "openreview", "openreview_v1": "openreview", "neurips_proceedings": "neurips_proceedings",
@@ -245,6 +248,7 @@ _DIRECT_ORIGIN: dict[str, Origin] = {
     "ojs": "ojs",
     "crossref": "crossref",
     "facct_site": "facct_site",
+    "openalex": "openalex",
 }  # fmt: skip
 _SITE_ORIGIN: dict[str, Origin] = {
     "NeurIPS": "neurips_proceedings",
@@ -336,8 +340,8 @@ def attribution(
     if origin == "icml_site":  # a submission page's evidence says so (TASK-207); read here, never re-derived
         return Attribution(source, origin, claim.url, AS_SUBMITTED in (claim.evidence or ""))
     # each claim's url is an API page (an OAI token page, a Crossref work) or a listing of every paper (a FAccT
-    # CSV): credit the paper's own page, its urls.proceedings (the article page, the DOI link)
-    if origin in ("ojs", "crossref", "facct_site"):
+    # CSV, OpenAlex's API work URL): credit the paper's own page, its urls.proceedings (the article page, the DOI link)
+    if origin in ("ojs", "crossref", "facct_site", "openalex"):
         return Attribution(source, origin, proceedings)
     if origin is not None:
         return Attribution(source, origin, claim.url)

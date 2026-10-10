@@ -109,10 +109,11 @@ def test_every_claim_source_has_a_row() -> None:
             assert sc.unexpected_statuses([paper("SyntheticA1", source=source)]) == []
     # an official ICML page (TASK-206) or FAccT page claims only an abstract, on a dblp or Crossref record: it
     # answers no status
-    assert set(SOURCE_STATUSES) - set(PRECEDENCE["status"]) == {"icml_site", "facct_site"}
+    assert set(SOURCE_STATUSES) - set(PRECEDENCE["status"]) == {"icml_site", "facct_site", "openalex"}
     accepted = (("accepted",), ("accepted",))
     assert SOURCE_STATUSES["icml_site"] == SOURCE_STATUSES["dblp"] == accepted
     assert SOURCE_STATUSES["facct_site"] == SOURCE_STATUSES["crossref"] == accepted
+    assert SOURCE_STATUSES["openalex"] == ((), ())  # an abstract fill (milestone C): no status at all
 
 
 # --- the build ----------------------------------------------------------------------------------------------
