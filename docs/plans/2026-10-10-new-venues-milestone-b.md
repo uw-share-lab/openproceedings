@@ -4,7 +4,7 @@
 > superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fill the venue-years that milestone A left empty:
-- AAAI 1980–2008 (with no AAAI in 1981, 1985, 1989, 2001, 2003 or 2009), from the pinned dblp release;
+- AAAI 1980–2008 (with no AAAI in 1981, 1985, 1989, 1995, 2001, 2003 or 2009), from the pinned dblp release;
 - FAccT 2019–2026 and AIES 2018–2023, from Crossref's records of the ACM proceedings;
 - FAccT 2018 (FAT\*), from PMLR v81;
 - the official FAccT abstracts for 2022, 2025 and 2026, from facctconference.org.

@@ -485,7 +485,7 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
             f"{attached:,} with an abstract, each from an official FAccT page (only 2022, 2025 and 2026 have "
             "one); the rest are title-only"
             if venue == "FAccT"
-            else f"{attached:,} with an abstract (title-only); Crossref carries no section data, so student "
+            else "no abstracts (title-only); Crossref carries no section data, so student "
             "abstracts and keynotes are in `main` (OJS labels student abstracts from 2024)"
         )
         out.append(

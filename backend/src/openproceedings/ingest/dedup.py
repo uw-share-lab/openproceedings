@@ -923,19 +923,20 @@ def _join(
     return sorted(out, key=lambda c: c.id), merges
 
 
-def _link(same_id: Sequence[_Cluster]) -> tuple[list[_Cluster], list[Merge]]:
-    """The forum link: clusters (step 1's, then each later pass's) naming one forum id (own or in a kept `urls.forum` claim) in one venue
-    and year merge, whatever their titles, unless `_mergeable(linked=True)` refuses. One `forum_link` row per
-    merged cluster, from its id to the survivor's. Sorted by id, so the input order never matters."""
+def _link(before: Sequence[_Cluster]) -> tuple[list[_Cluster], list[Merge]]:
+    """The forum link: `before`, the clusters of step 1 (then of each later pass), that name one forum id (own or in
+    a kept `urls.forum` claim) in one venue and year merge, whatever their titles, unless `_mergeable(linked=True)`
+    refuses. One `forum_link` row per merged cluster, from its id to the survivor's. Sorted by id, so the input
+    order never matters."""
     buckets: dict[tuple[str, int, str], set[int]] = defaultdict(set)
-    for ci, c in enumerate(same_id):
+    for ci, c in enumerate(before):
         for fid in c.forum_ids:
             buckets[(c.summary.venue, c.summary.year, fid)].add(ci)
-    joined = _Clusters(len(same_id))
+    joined = _Clusters(len(before))
     linked_by: dict[int, str] = {}  # cluster → the forum id it linked on
     for (_, _, fid), cis in sorted(buckets.items()):
         ordered = sorted(cis)
-        if len(ordered) < 2 or _mergeable([same_id[ci] for ci in ordered], linked=True) is not None:
+        if len(ordered) < 2 or _mergeable([before[ci] for ci in ordered], linked=True) is not None:
             continue  # a refused link is reported by _refusals, against the output records
         for ci in ordered:
             joined.union(ordered[0], ci)
@@ -944,9 +945,9 @@ def _link(same_id: Sequence[_Cluster]) -> tuple[list[_Cluster], list[Merge]]:
     merges: list[Merge] = []
     for group in joined.groups():
         # a cluster naming two forum ids never links (_mergeable), so buckets can't chain; checked anyway
-        refused = len(group) > 1 and _mergeable([same_id[ci] for ci in group], linked=True) is not None
+        refused = len(group) > 1 and _mergeable([before[ci] for ci in group], linked=True) is not None
         for part in [[ci] for ci in group] if refused else [group]:
-            members = [same_id[ci] for ci in part]
+            members = [before[ci] for ci in part]
             if len(members) == 1:
                 clusters.append(members[0])
                 continue
@@ -954,9 +955,9 @@ def _link(same_id: Sequence[_Cluster]) -> tuple[list[_Cluster], list[Merge]]:
             cluster = _cluster([r for m in members for r in m.members], survivor)
             clusters.append(cluster)
             merges += [
-                Merge(survivor, same_id[ci].id, "forum_link", linked_by[ci], cluster.summary.venue,
-                      cluster.summary.year, "+".join(sorted(same_id[ci].sources)))
-                for ci in part if same_id[ci].id != survivor
+                Merge(survivor, before[ci].id, "forum_link", linked_by[ci], cluster.summary.venue,
+                      cluster.summary.year, "+".join(sorted(before[ci].sources)))
+                for ci in part if before[ci].id != survivor
             ]  # fmt: skip
     return sorted(clusters, key=lambda c: c.id), merges
 

@@ -41,7 +41,8 @@ from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
 # 7: the `crossref` and `facct_site` sources, the `doi-<toc>.<n>` native id (FAccT, AIES), `dblp-` ids for AAAI
-# 1980-2008 (decision-049, milestone B); 6: the AAAI, AIES, FAccT and IASEAI venues, five tracks, the `ojs` source and the `ojs-<article id>` native id
+# 1980-2008, and the `pmlr-` native id widened from ICML to FAccT (v81) (decision-049, milestone B); 6: the AAAI,
+# AIES, FAccT and IASEAI venues, five tracks, the `ojs` source and the `ojs-<article id>` native id
 # (decision-049); 5: the `dblp` and `icml_site` sources and the `dblp-<key>` native id (TASK-205/206, decision-047);
 # 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-029)
 RECORD_SCHEMA_VERSION = "7"

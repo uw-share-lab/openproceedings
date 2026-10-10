@@ -149,7 +149,7 @@ pinned by tests against recorded pages; an unlisted unit (section, key, volume, 
 - `ingest/acm_proceedings.toml`: per venue and year the proceedings DOI, the date window, the verified count and
   `[[not_paper]]` rows (FAccT 2020's tutorials and CRAFT sessions, listed by DOI). A count mismatch stops it.
 - Fields: title, authors in order, DOI, `urls.proceedings` the DOI link. No abstracts (Crossref holds none for
-  these venues; checked on all 1,341 FAccT DOIs and 18 sampled AIES DOIs).
+  these venues; checked on all 1,239 FAccT DOIs (the first count, 1,341, was not reproducible; see Milestone B as built) and 18 sampled AIES DOIs).
 
 ### 4. PMLR v81 — FAccT 2018
 - A row in `ingest/pmlr_volumes.toml` (venue `FAccT`, year 2018, track `main`, 17 papers; preface and two
@@ -270,8 +270,11 @@ decisions of that plan, and these are where the build departs from, or settles, 
   target is folded into `crossref`). 2025 joins by DOI and 2022 and 2026 by exact title key, one to one, never fuzzy:
   169 of 181, 206 of 206 and 298 of 314 attach. The 2022 page's DOI links are never read (entry 295 links entry 314's).
 - **Record schema 7** (decision-049): the `crossref` and `facct_site` sources, `doi-<toc>.<n>` ids (digits only) and
-  `dblp-` ids for AAAI. A dedup idempotence bug of TASK-179's step 3 that the milestone's Hypothesis runs found is
+  `dblp-` ids for AAAI, and the `pmlr-` native id widened from ICML to FAccT (v81). A dedup idempotence bug of TASK-179's step 3 that the milestone's Hypothesis runs found is
   fixed: the forum link and steps 2 and 3 repeat until a pass merges nothing.
 - **No official count rows** were added for these venue-years (spec 07 §C).
+- **Real data (2026-10-10):** snapshot 2026-10-10-21779e017036 (173,292 records; diff against milestone A's
+  2026-10-10-988e342c9c07 is +6,535 added, 0 changed, 0 removed), index 99c2e7ea2a0a, full parity 0 differences,
+  coverage --check PASS (77/78); ICML's dblp extract hash unchanged.
 
 Milestone C (OpenAlex and `abstract_kind`) is still planned, as above.

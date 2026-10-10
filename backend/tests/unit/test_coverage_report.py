@@ -926,13 +926,13 @@ def test_the_scope_says_what_the_crossref_years_rest_on_and_that_aies_has_no_sec
     cov = {"venue_years": [{"venue": "FAccT", "year": 2022, "records": 1, "tracks": [{"track": "main"}]}]}
     manifest = {"sources": {"crossref": {"listings": [
         {"venue": "AIES", "year": 2018, "records": 78},
-        {"venue": "AIES", "year": 2019, "records": 91},
+        {"venue": "AIES", "year": 2019, "records": 93},
         {"venue": "FAccT", "year": 2022, "records": 181, "abstract_attached": 169},
         {"venue": "FAccT", "year": 2023, "records": 153},
     ]}}}  # fmt: skip
     text = "\n".join(_scope(cov, manifest))
     assert (
-        "- AIES 2018–2019: from Crossref's records of the ACM proceedings (decision-049): 169 records, 0 with an"
+        "- AIES 2018–2019: from Crossref's records of the ACM proceedings (decision-049): 171 records, no abstracts (title-only);"
         in text
     )
     assert "Crossref carries no section data, so student abstracts and keynotes are in `main`" in text
