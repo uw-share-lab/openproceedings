@@ -293,7 +293,9 @@ def read_year(
                                     page.fetched_at, f"{p.url} row {e.key}"))  # fmt: skip
     log.info("facct_site_year_read", extra={"year": year, "entries": len(entries), "dropped": dropped,
                                             "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
-    return SiteYear(p.url, p.join, entries, [page.fetched_at], dropped, tuple(dropped_titles), tuple(dropped_dois))
+    return SiteYear(
+        p.url, p.join, entries, [page.fetched_at], dropped, tuple(dropped_titles), tuple(dropped_dois)
+    )
 
 
 def match(papers: Sequence[tuple[str, str]], site: SiteYear) -> Matched:

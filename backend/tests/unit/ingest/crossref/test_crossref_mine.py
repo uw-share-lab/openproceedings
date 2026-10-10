@@ -135,12 +135,16 @@ def test_a_work_with_no_title_stops_unless_a_not_paper_row_names_it(tmp_path: Pa
 
 def test_a_work_of_another_type_stops_unless_a_not_paper_row_names_it(tmp_path: Path) -> None:
     _whole(tmp_path, api.work(D1), api.work(D2, type_="proceedings"), api.work(NP, type_="other"), total=3)
-    with pytest.raises(CrawlError, match=D2) as e:  # NP is no article either, and is fine: a [[not_paper]] row
+    with pytest.raises(
+        CrawlError, match=D2
+    ) as e:  # NP is no article either, and is fine: a [[not_paper]] row
         crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE)
     assert e.value.reason == "unexpected_type"
 
 
-def test_an_author_with_no_name_is_dropped_and_counted_in_the_manifest_only_when_there_is_one(tmp_path: Path) -> None:
+def test_an_author_with_no_name_is_dropped_and_counted_in_the_manifest_only_when_there_is_one(
+    tmp_path: Path,
+) -> None:
     unnamed = {"sequence": "additional", "affiliation": []}
     _whole(tmp_path, api.work(D1, author=[{"given": "Jane", "family": "Doe"}, unnamed, {"name": " "}]),
            api.work(D2), api.work(NP), total=3)  # fmt: skip

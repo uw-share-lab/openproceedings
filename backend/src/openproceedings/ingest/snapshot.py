@@ -998,7 +998,9 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
     rekeyed = {
         i: new_by_native[g][0]
         for i in sorted(removed)
-        if (g := global_native(i)) is not None and gone_by_native[g] == 1 and len(new_by_native.get(g, [])) == 1
+        if (g := global_native(i)) is not None
+        and gone_by_native[g] == 1
+        and len(new_by_native.get(g, [])) == 1
     }
 
     def hashed_diff(x: PaperRecord, y: PaperRecord) -> list[str]:

@@ -118,7 +118,9 @@ def test_a_row_dropped_for_no_abstract_still_makes_a_shared_doi_ambiguous() -> N
 
 
 def test_the_reader_keeps_a_dropped_rows_doi_for_the_doi_join(tmp_path: Path) -> None:
-    table = SITE_TABLE.replace(URL26, URL25).replace("facct2026_csv", "facct2025_csv").replace('"title"', '"doi"')
+    table = (
+        SITE_TABLE.replace(URL26, URL25).replace("facct2026_csv", "facct2025_csv").replace('"title"', '"doi"')
+    )
     text = ("TYPE,ID,ABSTRACT,AUTHOR,TITLE,URL,URL-OLD\n"
             f"archival,7,Official.,Synthetic Author,A title,https://doi.org/{D1},\n"
             f"archival,8,,Synthetic Author,B title,https://doi.org/{D1.upper()},\n"

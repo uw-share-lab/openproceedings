@@ -191,7 +191,9 @@ def valid_contact(value: str) -> str:
 
 
 def user_agent(mailto: str | None) -> str:
-    return USER_AGENT if mailto is None else f"{USER_AGENT.removesuffix(')')}; mailto:{valid_contact(mailto)})"
+    return (
+        USER_AGENT if mailto is None else f"{USER_AGENT.removesuffix(')')}; mailto:{valid_contact(mailto)})"
+    )
 
 
 @dataclass(kw_only=False)

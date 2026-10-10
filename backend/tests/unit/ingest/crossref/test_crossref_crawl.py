@@ -99,7 +99,9 @@ def test_a_malformed_contact_stops_a_live_crawl_without_echoing_it(tmp_path, mon
     assert e.value.reason == "bad_contact" and "not an address" not in str(e.value)
 
 
-def test_an_explicit_malformed_mailto_stops_a_live_crawl_like_the_environment_one(tmp_path, monkeypatch) -> None:
+def test_an_explicit_malformed_mailto_stops_a_live_crawl_like_the_environment_one(
+    tmp_path, monkeypatch
+) -> None:
     monkeypatch.delenv("CROSSREF_MAILTO", raising=False)
     monkeypatch.setattr(crawl, "repo_dotenv", lambda: None)
     with pytest.raises(crawl.MinerError) as e:
