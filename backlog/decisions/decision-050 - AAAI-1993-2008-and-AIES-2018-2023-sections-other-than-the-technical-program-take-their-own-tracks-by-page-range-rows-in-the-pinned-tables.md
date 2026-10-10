@@ -20,25 +20,34 @@ forbids page-count heuristics, and some section entries are long); page-range ro
 ## Decision
 
 We give `dblp_aaai.toml` and `acm_proceedings.toml` a `[[section]]` table (year, page range, track, label, check
-date, source) and `dblp_aaai.toml` a `[[track]]` table for single keys dblp's page typos misplace: a main-key entry
+date, source) and `dblp_aaai.toml` a `[[track]]` table for single keys dblp's pages can't place: a main-key entry
 or ACM work whose start page is in a range takes the range's track, else `main`; not-paper rows win. Short invited
-talks, panels and keynotes become not-paper rows. The IAAI papers in the 1996–2008 volumes are `iaai`. Robot competition entries are `other`; full-length invited papers,
-2008's Short Papers and entries no official page lists stay `main`.
+talks, panels and keynotes become not-paper rows (counted, not indexed). The IAAI papers in the 1996–2008 volumes
+are `iaai`. Robot competition entries are `other`, and so are 2006–2008's NECTAR and Senior Member Papers, as the
+owner decided for the same sections from 2010 (TASK-218, `ojs_sections.toml`), so one section kind has one track in
+every year. Invited entries over two pages, 2008's Short Papers and entries no official page lists stay `main`. In a
+year or proceedings with section rows, an entry with no readable start page and no row stops the crawl
+(`unplaced_page`), so nothing falls to `main` unseen.
 
 ## Consequences
 
-AAAI 1980–2008: 979 entries move off `main` and 21 more are not-paper rows (4,709 records); AIES 2018–2023: 108
-move to `student_abstract` and 18 keynotes are not-paper rows (557 records); AIES `main` claims now name the pages they fall outside, so those 449 records change provenance only. Record content changes, so a new
-snapshot (and index) changes `snapshot_hash`; no schema, tokenizer or query version changes, and saved searches
-replay as `drifted`. Specs 00, 01, 02, 05, 07, the track-taxonomy skill and the research note describe the rules;
-`backend/tests/unit/ingest/test_track_rules_replay.py` pins the counts over the pinned data. A range holding no
-paper stops the crawl (`stale_section`). Revisit if an official AIES 2018–2023 table of contents becomes readable,
-or for 2005's Sultanik05, Thornton05 and WangL05 and 2000's BarishKCMPS00, which no official page places and which stay `main`.
+AAAI 1980–2008: 1,089 entries move off `main` and 21 more are not-paper rows (4,709 records: 3,567 `main`, 399
+`student_abstract`, 158 `consortium`, 127 `demo`, 232 `iaai`, 173 `other`, 53 `workshop`); AIES 2018–2023: 108 move to
+`student_abstract` and 18 keynotes are not-paper rows (557 records). AIES `main` claims in a proceedings with section
+rows now name the pages they fall outside, so those 377 records change provenance only (AIES 2020, which has no
+section row, keeps its decision-049 wording). Record content changes, so a new snapshot (and index) changes
+`snapshot_hash`; no schema, tokenizer or query version changes, and records saved on an index built from an earlier
+snapshot replay as `drifted`. Specs 00, 01, 02, 05, 07, the track-taxonomy and dedup-rules skills and the research
+note describe the rules; `backend/tests/unit/ingest/test_track_rules_replay.py` pins the counts over the pinned data;
+the coverage report's scope lines say which entries are counted but not indexed. A range holding no paper stops the
+crawl (`stale_section`). Revisit if an official AIES 2018–2023 table of contents becomes readable, or for 2005's
+Sultanik05, Thornton05 and WangL05, which no official page places and which stay `main`.
 
-Round 2 (controller rulings, 2026-10-10), recorded here because Backlog 1.53 can't edit a completed task, and
-TASK-224's and TASK-226's final summaries predate it:
-- AIES at 108 `student_abstract` is accepted, not ruling 1's 96: the contents-page range wins, as in ruling 3.
-- The IAAI papers of the 1996–1999 volumes are `iaai` by the IAAI contents pages (18, 32, 22, 17), making 231 `iaai`
-  and 979 moved AAAI entries (TASK-226's summary says 143 and 891). BarishKCMPS00 stays `main`: the 2000 IAAI
-  range is split around it, since no IAAI page lists it.
-- AIES `main` claims name the pages they fall outside: 449 provenance-only changes in the snapshot diff.
+Rulings recorded during review (the controller for the owner, 2026-10-10):
+- AIES at 108 `student_abstract` is accepted, not the first ruling's 96: the contents-page range wins.
+- The IAAI papers of the 1996–1999 volumes are `iaai` by the IAAI contents pages (18, 32, 22, 17).
+- BarishKCMPS00 is `iaai`: the IAAI-2000 page lists it first under Emerging Applications, printed without a page.
+- 2006–2008 NECTAR and Senior Member Papers are `other` (91 entries), and 2006's 18 AAAI Member Abstracts are `other`
+  by key rows, dblp giving them no pages.
+- 2005's demonstration and robot sections are on `aaai05contents.php`, without page numbers; the ranges come from the
+  entries' paper pages.

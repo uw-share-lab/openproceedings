@@ -6,7 +6,7 @@ title: >-
 status: Done
 assignee: []
 created_date: '2026-10-10 10:37'
-updated_date: '2026-10-10 15:20'
+updated_date: '2026-10-10 16:16'
 labels:
   - ingest
   - new-venues
@@ -36,10 +36,12 @@ Ruling 1 (controller for the owner, 2026-10-10): acm_proceedings.toml gains a [[
 
 <!-- SECTION:NOTES:BEGIN -->
 Built per ruling 1 with one deviation: 2023's range pp. 939-1012 holds 31 works (the 19 short ones plus 12 student entries of 3-6 pages between them), so 108 student_abstract, not 96: the ruling's mechanism is start-page ranges, the track taxonomy forbids page-count rules, and ruling 3 accepts range-caught longer entries for AAAI. 18 keynote not_paper rows; .3375839 and .3462443 stay main. Snapshot 2026-10-10-df9a9f8b2143 vs 2026-10-10-21779e017036: AIES 108 track changes, 18 removals, nothing else. Decision-050.
+
+Review rulings: 108 (not 96) is accepted, since the contents-page range wins, as in ruling 3. AIES main claims in sectioned proceedings name the pages they fall outside (377 provenance-only changes; AIES 2020 has no section row and keeps its wording). A sectioned proceedings' work with no readable start page now stops the crawl (unplaced_page). Snapshot 2026-10-10-9efa49481112.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-acm_proceedings.toml gained [[section]] rows (acm_table.py, crossref.py): AIES 2018-2023 student abstract blocks are student_abstract (108: 19/20/0/7/31/31), 18 keynotes not_paper (557 records). Verified by unit tests, test_track_rules_replay.py over the cached Crossref pages, and op snapshot diff (2026-10-10-df9a9f8b2143): only track changes and the 18 removals.
+acm_proceedings.toml gained [[section]] rows (acm_table.py, crossref.py): AIES 2018-2023 student abstract blocks are student_abstract (108: 19/20/0/7/31/31, all inferred from page position), 18 keynotes not_paper (557 records). Verified by unit tests, test_track_rules_replay.py over the cached Crossref pages, and op snapshot diff (2026-10-10-9efa49481112 vs 21779e017036): AIES 108 track changes, 18 removals, 377 provenance-only (the corrected main evidence).
 <!-- SECTION:FINAL_SUMMARY:END -->
