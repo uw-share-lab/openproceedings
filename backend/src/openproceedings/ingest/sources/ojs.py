@@ -433,17 +433,20 @@ def mine_journal(
             SOURCE, venue, table.year(journal, v), base, "primary", table.expected(journal, v), volume=v
         )
     result.reports = [reports[v] for v in sorted(reports)]
+    mismatched = [r for r in result.reports if not r.count_ok]
     for r in result.reports:
-        if not r.count_ok:
-            log.warning(
-                "listing_count_mismatch",
-                extra={"journal": journal, "volume": r.volume, "listed": r.listed, "stated": r.stated},
-            )
         if r.skipped:
             log.warning(
                 "listing_attention",
                 extra={"journal": journal, "volume": r.volume, "skipped": dict(r.skipped)},
             )
+    if mismatched:  # the stated count is the proceedings' own: a difference means the harvest or the table is wrong
+        said = "; ".join(f"v{r.volume} listed {r.listed}, stated {r.stated}" for r in mismatched)
+        raise CrawlError(
+            f"OJS {journal}: {len(mismatched)} volume(s) do not match the table's stated counts ({said}): "
+            "check the harvest and ojs_sections.toml before the crawl is trusted",
+            reason="count_mismatch",
+        )
     log.info(
         "ojs_journal_mined",
         extra={

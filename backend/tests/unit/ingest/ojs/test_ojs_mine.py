@@ -134,10 +134,11 @@ def test_record_without_a_volume_stops(tmp_path) -> None:
     assert e.value.reason == "oai_unreadable"
 
 
-def test_count_mismatch_is_reported_not_hidden(tmp_path) -> None:
+def test_a_short_volume_stops_the_crawl_naming_its_counts(tmp_path) -> None:
     _seed(tmp_path, oai.page(oai.record(1), oai.record(2, "AAAI:IAAI")))  # AISI has 1 of its 2
-    (report,) = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE).reports
-    assert not report.count_ok and (report.stated, report.listed) == (3, 2)
+    with pytest.raises(CrawlError, match=r"AAAI.*v34 listed 2, stated 3") as e:
+        ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
+    assert e.value.reason == "count_mismatch"
 
 
 def test_a_record_without_title_is_skipped_and_counted(tmp_path) -> None:
@@ -230,7 +231,7 @@ def test_refresh_fetches_only_the_first_page_again(tmp_path) -> None:
     assert len(result.records) == 3
 
 
-def test_a_listed_volume_the_harvest_never_showed_is_reported(tmp_path) -> None:
+def test_a_listed_volume_the_harvest_never_showed_stops_the_crawl(tmp_path) -> None:
     two = ojs_table.load(
         str(TABLE_TEXT)
         + """
@@ -247,10 +248,9 @@ source = "test"
 """
     )
     _seed(tmp_path, oai.page(oai.record(1), oai.record(2), oai.record(3, "AAAI:IAAI")))
-    reports = ojs.mine_journal("AAAI", _offline(tmp_path), table=two).reports
-    assert [r.volume for r in reports] == [34, 35]
-    assert reports[0].count_ok
-    assert (reports[1].year, reports[1].listed, reports[1].stated, reports[1].count_ok) == (2021, 0, 4, False)
+    with pytest.raises(CrawlError, match=r"1 volume\(s\).*v35 listed 0, stated 4") as e:
+        ojs.mine_journal("AAAI", _offline(tmp_path), table=two)
+    assert e.value.reason == "count_mismatch"
 
 
 def test_authors_evidence_says_what_was_done(tmp_path) -> None:
@@ -268,7 +268,7 @@ def test_authors_evidence_says_what_was_done(tmp_path) -> None:
 
 def test_a_public_id_record_names_itself_by_its_numeric_url(tmp_path) -> None:
     """AAAI 2013 #8500: dc:identifier and dc:relation use the public id `1678-1679`."""
-    _seed(tmp_path, oai.page(oai.record(8500, public_id="1678-1679"), oai.record(8501)))
+    _seed(tmp_path, oai.page(oai.record(8500, public_id="1678-1679"), oai.record(8501), oai.record(8502, "AAAI:IAAI")))
     result = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
     odd = next(r for r in result.records if r.native == "ojs-8500")
     assert odd.urls.proceedings == "https://ojs.aaai.org/index.php/AAAI/article/view/8500"
@@ -286,7 +286,7 @@ def test_a_public_id_record_names_itself_by_its_numeric_url(tmp_path) -> None:
 def test_a_public_id_record_passes_dedup_self_naming(tmp_path) -> None:
     from openproceedings.ingest.dedup import dedup
 
-    _seed(tmp_path, oai.page(oai.record(8500, public_id="1678-1679"), oai.record(8501)))
+    _seed(tmp_path, oai.page(oai.record(8500, public_id="1678-1679"), oai.record(8501), oai.record(8502, "AAAI:IAAI")))
     result = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
     out = dedup(result.records)  # raised "must name itself" before the numeric URL
-    assert {r.native for r in out.records} == {"ojs-8500", "ojs-8501"}
+    assert {r.native for r in out.records} == {"ojs-8500", "ojs-8501", "ojs-8502"}
