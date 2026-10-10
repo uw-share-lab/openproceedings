@@ -477,10 +477,17 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
     if aaai:
         held = sorted({int(x["year"]) for x in aaai})
         releases = sorted({str(x["listing"]) for x in aaai})
+        filled = sum(vy.get("abstract_openalex", 0) for vy in cov["venue_years"] if vy["venue"] == "AAAI")
+        no_abstract = (
+            "come with no abstract from dblp; where no official AAAI source gives one, OpenAlex's is filled in "
+            "(counted below)"
+            if filled
+            else "have no abstract (dblp holds none)"
+        )
         out.append(
             f"- AAAI {held[0]}–{held[-1]}: from the pinned dblp snapshot release {', '.join(releases)} (a "
             "bibliography read from one pinned file; decision-049). "
-            f"Its {sum(int(x['records']) for x in aaai):,} records have no abstract (dblp holds none). Each "
+            f"Its {sum(int(x['records']) for x in aaai):,} records {no_abstract}. Each "
             "record's track comes from the section the official AAAI contents page prints it in: student "
             "abstracts, the doctoral consortium, demonstrations, IAAI papers and the other non-technical "
             f"sections have their own tracks, which a default search leaves out.{_not_indexed(aaai, 'invited talks and panels')}"

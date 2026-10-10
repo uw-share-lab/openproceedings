@@ -110,7 +110,8 @@ def compute(engine: TantivyEngine, records: RecordFile, listed: Withheld = NONE)
 
 def _withhold_listed(data: dict[str, Any], records: RecordFile, listed: Withheld) -> None:
     """Count, in `data` (a `breakdown`), each id of `listed` the snapshot holds but didn't withhold as withheld,
-    and no longer as missing, official or OpenAlex's by its abstract's kind: one file read per such id (the list is short)."""
+    and no longer as missing, official or OpenAlex's by its abstract's kind: one file read per such id (the list
+    is short)."""
     rows = {(vy["venue"], vy["year"]): vy for vy in data["venue_years"]}
     for rid in sorted(listed - records.withheld):
         record = records.get(rid)

@@ -968,3 +968,25 @@ def test_the_scope_says_how_many_abstracts_are_openalex_s_only_when_there_are_an
         "`abstract_kind:openalex`." in text
     )
     assert "| 1 | 21 | 2 |" in row(text, "ICLR", 2013, "main")  # missing, official, OpenAlex
+
+
+def test_the_aaai_line_stops_saying_dblp_holds_no_abstract_once_openalex_filled_some() -> None:
+    from openproceedings.eval.coverage_report import _scope
+
+    doi = "https://doi.org/10.4230/dblp.xml.2026-10-03"
+    manifest = {
+        "sources": {"dblp": {"listings": [{"venue": "AAAI", "year": 1986, "listing": doi, "records": 7}]}}
+    }
+
+    def text(filled: int) -> str:
+        cov = {"venue_years": [{"venue": "AAAI", "year": 1986, "records": 7, "abstract_openalex": filled,
+                                "tracks": [{"track": "main"}]}]}  # fmt: skip
+        return "\n".join(_scope(cov, manifest))
+
+    assert "Its 7 records have no abstract (dblp holds none)." in text(0)
+    some = text(2)
+    assert (
+        "Its 7 records come with no abstract from dblp; where no official AAAI source gives one, OpenAlex's"
+        in some
+    )
+    assert "dblp holds none" not in some

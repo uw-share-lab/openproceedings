@@ -4,6 +4,7 @@ the per-track cells, statuses indexed and official counts of TASK-082."""
 from __future__ import annotations
 
 import copy
+from collections import Counter
 from collections.abc import Callable
 from datetime import date
 from fractions import Fraction
@@ -411,3 +412,90 @@ def test_an_inconsistent_openalex_count_is_refused(edit: Callable[[dict[str, Any
     edit(manifest)
     with pytest.raises(SnapshotError):
         breakdown(manifest, "s")
+
+
+class _Records:
+    """The `RecordFile` facts `api.coverage.compute` reads, derived from a manifest that agrees with its records."""
+
+    def __init__(self, manifest: dict[str, Any], held: dict[str, Any] | None = None) -> None:
+        from collections import Counter
+        from pathlib import Path
+
+        data = breakdown(manifest, "s", official={})
+        self.manifest = manifest
+        self.path = Path("/x/s/records.jsonl")
+        self.withheld: frozenset[str] = frozenset()
+        self._held = held or {}
+        vys = data["venue_years"]
+        self.cells = Counter(
+            {(v["venue"], v["year"], c["track"], c["status"]): c["count"] for v in vys for c in v["cells"]}
+        )
+        self.abstract_missing = Counter(
+            {(v["venue"], v["year"]): v["abstract_missing"] for v in vys if v["abstract_missing"]}
+        )
+        tracks = {(v["venue"], v["year"], t["track"]): t for v in vys for t in v["tracks"]}
+        self.track_missing = Counter({k: t["abstract_missing"] for k, t in tracks.items()})
+        self.track_sources = {k: set(t["sources"]) for k, t in tracks.items()}
+        self.abstract_withheld: Counter[tuple[str, int]] = Counter()
+        self.track_withheld: Counter[tuple[str, int, str]] = Counter()
+        self.abstract_openalex = Counter(
+            {(v["venue"], v["year"]): v["abstract_openalex"] for v in vys if v["abstract_openalex"]}
+        )
+        self.track_openalex = Counter(
+            {k: t["abstract_openalex"] for k, t in tracks.items() if t["abstract_openalex"]}
+        )
+        self._n = sum(self.cells.values())
+
+    def __len__(self) -> int:
+        return self._n
+
+    def get(self, rid: str) -> Any:
+        return self._held.get(rid)
+
+
+class _Engine:
+    index_version = "abc123def456"
+    tokenizer_version = "2"
+
+    def __init__(self, n: int) -> None:
+        self.ids = range(n)
+
+
+def test_a_per_track_openalex_count_that_disagrees_with_the_records_fails_the_load() -> None:
+    from openproceedings.api.coverage import compute
+
+    records = _Records(_with_openalex())
+    compute(_Engine(len(records)), records)  # type: ignore[arg-type]  # agrees: no error
+    records.track_openalex = Counter()  # the venue-year's count still agrees; only the track's does not
+    with pytest.raises(SnapshotError) as e:
+        compute(_Engine(len(records)), records)  # type: ignore[arg-type]
+    assert e.value.reason == "abstract_openalex_mismatch"
+
+
+def test_listing_one_openalex_and_one_official_id_moves_each_from_its_own_count() -> None:
+    from types import SimpleNamespace
+
+    from openproceedings.api.coverage import compute
+
+    held = {
+        "op:iclr:2024:a": SimpleNamespace(
+            venue="ICLR", year=2024, track="main", abstract="x", abstract_kind="openalex"
+        ),
+        "op:iclr:2024:b": SimpleNamespace(
+            venue="ICLR", year=2024, track="main", abstract="y", abstract_kind="official"
+        ),
+    }
+    manifest = _with_openalex()
+    manifest["abstract_openalex"] = {"ICLR": {"2024": 2}}
+    manifest["abstract_openalex_by_track"] = {"ICLR": {"2024": {"main": 2}}}
+    records = _Records(manifest, held)
+    out = compute(_Engine(len(records)), records, frozenset(held))  # type: ignore[arg-type]
+    [vy] = [v for v in out.venue_years if (v.venue, v.year) == ("ICLR", 2024)]
+    [main] = [t for t in vy.tracks if t.track == "main"]
+    for row in (main, vy, out.totals):
+        assert (row.abstract_withheld, row.abstract_openalex) == (2, 1)
+        assert (
+            row.abstract_official + row.abstract_openalex + row.abstract_missing + row.abstract_withheld
+            == row.records
+        )
+    assert (main.abstract_official, main.abstract_missing) == (0, 1)
