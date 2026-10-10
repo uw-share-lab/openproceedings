@@ -61,6 +61,10 @@ def test_render_reports_rates_per_venue_year_and_the_reproduction_command() -> N
     )
     text = oa.render(result, oa.Meta(snapshot="2026-10-11-abc", commit="0000000", seed=49, aaai_sample=1000))
     assert "| FAccT | 2025 | 6 | 3 (50.0%) | 1 (16.7%)" in text and "op eval openalex --offline" in text
+    assert "ACM's published version" in text and "`abstract_kind: openalex`" in text
+    aies = oa.render(oa.AuditResult(rows={("AIES", 2024): {"exact": 1}}), oa.Meta(snapshot="s", commit="c", seed=49,
+                                                                                aaai_sample=0))  # fmt: skip
+    assert "A note on FAccT" not in aies
 
 
 # --- the audit through a fetcher ----------------------------------------------------------------------------

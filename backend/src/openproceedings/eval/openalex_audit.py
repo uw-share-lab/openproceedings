@@ -372,6 +372,16 @@ text is then compared with the official one:
 Each rate is of the records compared in that row. No abstract text is quoted here; records are named by id."""
 
 
+_FACCT_NOTE = """\
+**A note on FAccT.** FAccT agrees far less often than AAAI or AIES, whose official abstracts come from ojs.aaai.org.
+FAccT's official abstracts come from the conference's own pages (`facct_site`). Most of FAccT's `similar` and
+`differs` cases are about the same length as the official text and mostly open with the same words, so they look
+like another version of the same abstract rather than noise: OpenAlex likely carries ACM's published version, not
+the conference site's text. A few are entirely different texts. An abstract the fill takes from OpenAlex is labelled
+`abstract_kind: openalex`, never `official`, so the label already tells a reader the text is OpenAlex's, which may be
+ACM's version rather than the site's."""
+
+
 def _table(result: AuditResult) -> list[str]:
     head = "| Venue | Year | Compared | " + " | ".join(f"`{o}`" for o in OUTCOMES) + " |"
     lines = [head, "|" + "---|" * (3 + len(OUTCOMES))]
@@ -495,6 +505,8 @@ def render(result: AuditResult, meta: Meta) -> str:
         f"for {near:,} ({_pct(near, n)}): together {exact + near:,} ({_pct(exact + near, n)}) would match every "
         "search exactly as the official abstract does.",
     ]
+    if any(venue == "FAccT" for venue, _ in result.rows):
+        lines += ["", _FACCT_NOTE]
     if result.title is not None:
         lines += ["", *_title_section(result.title, meta)]
     return "\n".join(lines) + "\n"
