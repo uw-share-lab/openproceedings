@@ -1130,6 +1130,9 @@ def test_the_csv_columns_before_task_138_keep_their_positions() -> None:
         (Attribution("neurips_proceedings", "neurips_proceedings", "https://proceedings.neurips.cc/p"), "NeurIPS Proceedings https://proceedings.neurips.cc/p"),
         (Attribution("ris", "iclr_proceedings", "https://proceedings.iclr.cc/p"), "ICLR Proceedings (via RIS import) https://proceedings.iclr.cc/p"),
         (Attribution("ojs", "ojs", "https://ojs.aaai.org/index.php/AAAI/article/view/25561"), "AAAI Digital Library https://ojs.aaai.org/index.php/AAAI/article/view/25561"),
+        # milestone B (decision-049): Crossref supplies no abstract today, so this credit is reachable by future data only
+        (Attribution("crossref", "crossref", "https://doi.org/10.1145/3593013.3594011"), "Crossref https://doi.org/10.1145/3593013.3594011"),
+        (Attribution("facct_site", "facct_site", "https://doi.org/10.1145/3593013.3594011"), "FAccT conference site https://doi.org/10.1145/3593013.3594011"),
         (Attribution("ris", "pmlr", None), "PMLR (via RIS import)"),  # evidence on another site: named, unlinked
         (Attribution("ris", None, None), "an imported RIS file"),  # a route naming no known site
     ],

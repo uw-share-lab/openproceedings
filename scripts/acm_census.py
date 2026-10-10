@@ -29,6 +29,7 @@ import re
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from openproceedings.ingest.acm_table import Proceedings
 from openproceedings.ingest.sources import crawl, crossref
@@ -100,7 +101,9 @@ def census(venue: str, year: int, doi: str, f: Any) -> dict[str, Any]:
                         "authors": len(item.get("author") or [])}  # fmt: skip
     isbn_totals = {}
     for isbn in isbns:
-        page = f.get(f"https://{crossref.HOST}/works?filter=prefix:10.1145,isbn:{isbn}&rows=0")
+        page = f.get(
+            f"https://{crossref.HOST}/works?filter=prefix:10.1145,isbn:{quote(isbn, safe='')}&rows=0"
+        )
         isbn_totals[isbn] = int(json.loads(page.text)["message"]["total-results"])
     dates = sorted(date.fromisoformat(w["published"]) for w in works.values() if w["published"])
     return {"venue": venue, "year": year, "doi": doi, "title": title, "isbn": isbn_totals,

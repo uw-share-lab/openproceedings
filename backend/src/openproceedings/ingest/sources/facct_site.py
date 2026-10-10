@@ -135,9 +135,10 @@ def _csv(text: str, columns: tuple[str, ...], *, key: str, title: str, abstract:
     """A FAccT CSV's rows. The header must be exactly `columns`. A byte-order mark, if any, is dropped and either
     line end is read (the csv module's own newline handling: a quoted field keeps its line breaks)."""
     reader = csv.DictReader(io.StringIO(text.removeprefix("\ufeff"), newline=""))
-    if tuple(reader.fieldnames or ()) != columns:
-        raise CrawlError(f"a FAccT CSV's columns are {reader.fieldnames}, not {list(columns)}: check facct_site.toml",
-                         reason="site_format")  # fmt: skip
+    if (got := tuple(reader.fieldnames or ())) != columns:
+        missing, extra = [c for c in columns if c not in got], [c for c in got if c not in columns]
+        raise CrawlError(f"a FAccT CSV's columns differ from facct_site.toml's (missing {missing}, extra {extra}, "
+                         "or out of order): check the table", reason="site_format")  # fmt: skip
     out = []
     for row in reader:
         if None in row or any(v is None for v in row.values()):

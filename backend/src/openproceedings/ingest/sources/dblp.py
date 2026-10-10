@@ -209,8 +209,9 @@ def write_extracts(
             "dtd_sha256": table.dtd.file.sha256, "fetched_at": extract.fetched_at.isoformat(),
             "entries": [e.to_json() for e in entries],
         })  # fmt: skip
+        # pass_ms: since the one pass began, so a later slice's value includes the earlier slices' writes
         log.info("dblp_extract_written", extra={"doi": extract.doi, "venue": s.venue, "entries": len(entries),
-                                                "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+                                                "pass_ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
         out[s.venue] = extract
     return out
 

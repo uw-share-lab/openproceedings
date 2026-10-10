@@ -353,9 +353,15 @@ class PaperRecord(BaseModel):
                 raise ValueError(
                     f"native id {native!r} is not a valid {'/'.join(sorted(venues))} proceedings id for {self.venue}"
                 )
-            if native.startswith("pmlr-") and self.venue != "ICML":
+            if native.startswith("pmlr-"):
                 number = int(native.split("-", 2)[1][1:])
-                if _volumes.PMLR_NATIVE_VOLUMES.get(number, ("", 0, ""))[:2] != (self.venue, self.year):
+                listed = _volumes.PMLR_NATIVE_VOLUMES.get(number)
+                if self.venue == "ICML":  # any ICML volume, as before; never another venue's (FAccT's v81)
+                    if listed is not None and listed[0] != "ICML":
+                        raise ValueError(
+                            f"native id {native!r} is not an ICML PMLR volume's (pmlr_volumes.toml)"
+                        )
+                elif (listed or ("", 0, ""))[:2] != (self.venue, self.year):
                     raise ValueError(
                         f"native id {native!r} is not a {self.venue} {self.year} PMLR volume's (pmlr_volumes.toml)"
                     )

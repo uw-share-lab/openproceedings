@@ -703,4 +703,6 @@ def test_a_faccts_pmlr_id_must_name_its_own_volume_and_year(monkeypatch) -> None
     for rid, year in (("op:facct:2018:pmlr-v28-x13", 2018), ("op:facct:2019:pmlr-v81-one18a", 2019)):
         with pytest.raises(ValidationError, match="PMLR volume"):
             _rec(rid, "FAccT", year)
-    assert _rec("op:icml:2013:pmlr-v999-x", "ICML", 2013)  # ICML's rule is unchanged
+    assert _rec("op:icml:2013:pmlr-v999-x", "ICML", 2013)  # any volume the table doesn't list, as before
+    with pytest.raises(ValidationError, match="ICML PMLR volume"):  # but never another venue's volume
+        _rec("op:icml:2018:pmlr-v81-one18a", "ICML", 2018)

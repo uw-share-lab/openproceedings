@@ -149,7 +149,8 @@ def same_paper(
     (TASK-067): linked to a listed id by `merges` ((survivor, merged) pairs, from any build: the same paper
     found twice), or by `twins` ((record, twin) pairs of `twin` claims: decision-029's two records of one
     paper, never merged, which a takedown follows too, TASK-163), or holding its globally unique native id
-    (`global_native`: the same paper rekeyed by a corrected venue or year), transitively. The list names one
+    (`global_native`: the same paper rekeyed by a corrected year, and venue except for a `dblp-` key, which is
+    venue-scoped), transitively. The list names one
     id; an older version may hold the paper under an id it had before, or as a duplicate a later build merged,
     and a newer one under the id it has now: each is withheld. A proceedings hash links nothing by itself: in
     another year it is another paper."""
