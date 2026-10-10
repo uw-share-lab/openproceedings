@@ -266,7 +266,7 @@ The UI toggles edit these same clauses; they are not a separate state.
   (`track:(main OR iaai)`), and saved searches' canonical strings are unaffected. AAAI's special tracks, Journal
   Track and AIES's and IASEAI's main papers are `main`, so a default search includes them. For these venues `main`
   is the section mapping of `ingest/ojs_sections.toml` (technical, special and Journal tracks), not a track the
-  venue itself names, and five AAAI sections (8 rows) are `other` pending the owner's review (TASK-218): a report
+  venue itself names, and four AAAI sections (NECTAR, What's Hot, Sister Conference, Spotlight) stay `other` by the owner's decision of 2026-10-10 (TASK-218; Short Papers 2010 is `main`; the research note has the table): a report
   of a default AAAI search lists the excluded tracks with their counts (the `track` buckets are the records
   removed before screening by automation, 03) and names the snapshot hash, which fixes that mapping. `track:iaai`
   or `track:eaai` with any venue but AAAI (`venue:ICML track:eaai`) is valid and matches nothing: the two tracks

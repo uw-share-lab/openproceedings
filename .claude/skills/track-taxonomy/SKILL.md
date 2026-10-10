@@ -19,7 +19,7 @@ description: The track and status enums from spec 01 with the source signal that
 | `consortium` | OJS sections of AAAI's doctoral and undergraduate consortia | no |
 | `demo` | OJS sections of AAAI's demonstration tracks | no |
 | `iaai`, `eaai` | OJS sections printed in the AAAI volumes for IAAI and EAAI; **AAAI only** (the record refuses them on another venue, `record.VENUE_ONLY_TRACKS`) | no |
-| `other` | a form that parses but isn't listed above (e.g. `Creative_AI_Track`, `Education_Program`); `venue_id_raw` kept. OJS: Senior Member presentations, New Faculty Highlights, Emerging Trends and the sections the design's mapping does not name (marked "owner review" in `ojs_sections.toml`). Of these only NeurIPS Creative AI is also in the proceedings, so only it merges with a listing (dedup-rules §Never merge, TASK-137) | no |
+| `other` | a form that parses but isn't listed above (e.g. `Creative_AI_Track`, `Education_Program`); `venue_id_raw` kept. OJS: Senior Member presentations, New Faculty Highlights, Emerging Trends and the sections the design's mapping does not name (marked "owner decision" in `ojs_sections.toml`). Of these only NeurIPS Creative AI is also in the proceedings, so only it merges with a listing (dedup-rules §Never merge, TASK-137) | no |
 | `unknown` | no trustworthy signal | no, but always counted on coverage |
 
 The OJS signal is a table row per journal, volume and OAI set (spec 01 §Sources OJS row; the mapping's reasoning is `docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md`). Exact venueid spellings are in `.claude/skills/openreview-venueids/SKILL.md`, and proceedings path

@@ -32,7 +32,7 @@ build.
 
 | `track` | Source signal |
 |---|---|
-| `main` | `<Venue>.cc/<Y>/Conference` (accepted), PMLR main ICML volume, NeurIPS main proceedings, a dblp ICML 1988–2012 main-conference proceedings key (`ingest/dblp_icml.toml`); OJS (AAAI 2010+, AIES 2024+, IASEAI 2026): a section whose `ojs_sections.toml` row says `main` (401 rows: AAAI technical, special and journal tracks (the 2011 and 2013 "Robotics Program" is AAAI-13's AI and Robotics special track), the 2010–2016 topic sections, AIES full papers and main tracks, IASEAI's Main Track) |
+| `main` | `<Venue>.cc/<Y>/Conference` (accepted), PMLR main ICML volume, NeurIPS main proceedings, a dblp ICML 1988–2012 main-conference proceedings key (`ingest/dblp_icml.toml`); OJS (AAAI 2010+, AIES 2024+, IASEAI 2026): a section whose `ojs_sections.toml` row says `main` (402 rows: AAAI technical, special and journal tracks (the 2011 and 2013 "Robotics Program" is AAAI-13's AI and Robotics special track), the 2010–2016 topic sections, AIES full papers and main tracks, IASEAI's Main Track) |
 | `datasets_benchmarks` | `NeurIPS.cc/<Y>/Track/Datasets_and_Benchmarks` (2021 as `…/Round1`, `…/Round2`; 2022–2023) or `NeurIPS.cc/<Y>/Datasets_and_Benchmarks_Track` (2024–2025); NeurIPS ≤2023 proceedings `Datasets_and_Benchmarks` aliased to `_Track` (scholarmend fix); 2021 on its own host (`datasets-benchmarks-proceedings.neurips.cc`, `-round1`/`-round2`). NeurIPS 2026 renamed the track `NeurIPS.cc/2026/Evaluations_and_Datasets_Track` (a live group; TASK-094 maps it here as the same track under a new name) |
 | `position` | `ICML.cc/<Y>/Position_Paper_Track` (2025+); `NeurIPS.cc/<Y>/Position_Paper_Track` (2025+, verified 2026-09-27; TASK-094). ICML 2024's position papers carry `ICML.cc/2024/Conference` with no marker, so they are `main` on OpenReview and `unknown` from PMLR v235 |
 | `workshop` | `<Venue>.cc/<Y>/Workshop/…`, including satellite paths like `Workshop_Mexico_City/…` |
@@ -51,7 +51,7 @@ The five tracks after `blogpost` arrived with record schema 6 (decision-049). OJ
 section (its OAI `setSpec`; an OJS *issue* is not a track), looked up per journal, volume and set in
 `ingest/ojs_sections.toml` (§Sources, OJS row); the table's track is the record's track, never inferred. Every
 track but `main` of these (and `datasets_benchmarks`, `position`) is outside the default track filter (spec 02
-§Default filters), so a default search leaves them out and counts them. The owner-review sections and the
+§Default filters), so a default search leaves them out and counts them. The sections the owner decided and the
 mapping's reasoning are in `docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md`.
 
 The rule is carried over from scholarmend: **only `content.venueid` on the submission note decides the track

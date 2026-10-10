@@ -221,7 +221,8 @@ tracks, and the 2010–2014 topic sections), not a track AAAI itself names. **Si
 (150) and 2025 (238) main, each the program chairs' own statement of accepted papers (a preface, an issue's
 front-matter description, the AI Magazine conference report, the AIES program), not a count of the listing the
 crawl reads. AAAI 2013's count includes its AI and Robotics special track, which is why the 2011 and 2013
-"Robotics Program" sections are `main`. The other cells are recorded, not gated: AAAI 2014, 2016 and 2017 state
+"Robotics Program" sections are `main`; AAAI 2013's gate row therefore pins that mapping ruling (the one gated row that
+depends on a section decision), so a failing 2013 cell is a reason to check the mapping before the crawl. The other cells are recorded, not gated: AAAI 2014, 2016 and 2017 state
 submissions only, and 2010–2012 and 2020–2026 have only aggregator figures, which are never a row; IASEAI 2026's
 front matter states 92 accepted research papers, but 35 of them are non-archival and unpublished on OJS, so 57
 indexed against 92 would fail the ±1% gate for a reason the index cannot repair. The research note classifies every

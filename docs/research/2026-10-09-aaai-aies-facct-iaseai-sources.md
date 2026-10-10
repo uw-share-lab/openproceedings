@@ -250,13 +250,13 @@ volume, set), so a set used in several years has one row per year.
 
 | Track | Rows | Sections |
 |---|---|---|
-| `main` | 401 | AAAI technical tracks; "Technical Papers: …"; "Main Track: …"; "Main Technical Papers"; topic sections of 2010–2014 (Robotics, Knowledge Representation and Reasoning, …); special tracks (AI for Social Impact, Safe/Robust/Responsible AI, AI Alignment, the 2021 focus areas, the 2010–2016 special tracks, and the 2011 and 2013 "Robotics Program", AAAI-13's AI and Robotics special track); Journal Track; AIES full papers and main tracks; IASEAI Main Track |
+| `main` | 402 | AAAI technical tracks; "Technical Papers: …"; "Main Track: …"; "Main Technical Papers"; topic sections of 2010–2014 (Robotics, Knowledge Representation and Reasoning, …); special tracks (AI for Social Impact, Safe/Robust/Responsible AI, AI Alignment, the 2021 focus areas, the 2010–2016 special tracks, and the 2011 and 2013 "Robotics Program", AAAI-13's AI and Robotics special track); Journal Track; AIES full papers and main tracks; IASEAI Main Track |
 | `student_abstract` | 20 | Student abstracts, including "Pre-PhD Student Abstracts" (2013) |
 | `consortium` | 20 | Doctoral and undergraduate consortia |
 | `demo` | 13 | Demonstrations, including "Virtual Agent Demonstrations" (2015) |
 | `iaai` | 53 | IAAI sections |
 | `eaai` | 52 | EAAI sections |
-| `other` | 38 | Senior Member papers and presentations; "Senior Track" (2018); New Faculty Highlights; Emerging Trends; the owner-review rows below |
+| `other` | 37 | Senior Member papers and presentations; "Senior Track" (2018); New Faculty Highlights; Emerging Trends; the owner-decision rows below (NECTAR, What's Hot, Sister Conference, Spotlight) |
 | `front_matter` | 4 | AAAI 2013 "Frontmatter"; AAAI 2023 "Errata" (errata notices, not papers; the owner ruled front matter); AIES 2024 and IASEAI 2026 "Frontmatter" |
 
 The `main` and `student_abstract` rows include AIES (4 main, 3 student-abstract rows) and IASEAI (1 main row).
@@ -265,7 +265,7 @@ Per year, AAAI's `main` count is:
 
 | Year | 2010 | 2011 | 2012 | 2013 | 2014 | 2015 | 2016 | 2017 | 2018 |
 |---|---|---|---|---|---|---|---|---|---|
-| `main` | 259 | 248 | 294 | 202 | 398 | 538 | 548 | 639 | 937 |
+| `main` | 262 | 248 | 294 | 202 | 398 | 538 | 548 | 639 | 937 |
 
 | Year | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 |
 |---|---|---|---|---|---|---|---|---|
@@ -289,6 +289,11 @@ matter by the controller's ruling (errata are no papers), so it is no record.
 | `AAAI:HOT` "What's Hot Abstracts" | 2015–2017 | 8 + 9 + 7 | other | summaries of hot topics at other venues |
 | `AAAI:SIS` "Sister Conference Track" | 2020 | 15 | other | digests of papers from sister conferences |
 | `AAAI:SPOT` "Spotlight" | 2012 | 17 | other | content unconfirmed (likely sub-area overview talks); revisit if the AAAI-12 programme shows otherwise |
+
+The "why" column is the owner's rationale. For NECTAR, What's Hot and Sister Conference it follows from the section
+names (inferred from the title; no section page or programme is recorded as opened here), and SPOT's content is
+unconfirmed. The only section labels checked against the live site are the two TASK-221 read (`AAAI:AI24-43`,
+`AIES:A25-SA`).
 
 Re-presented work stays out of the default search so it doesn't sit beside its original and inflate AAAI hit counts;
 `track:other` brings it back. Each row carries an "owner decision" comment in `ojs_sections.toml`.
