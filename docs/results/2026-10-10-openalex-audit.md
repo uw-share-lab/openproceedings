@@ -1,14 +1,14 @@
 # OpenAlex fidelity audit (2026-10-10)
 
 - Snapshot: `2026-10-10-9efa49481112`
-- Code: commit `2fc4cf8a1756`
+- Code: commit `6a7263e1b3ed`
 - Sample: seed 49; every record with an official abstract and a DOI of FAccT 2022, 2025, 2026; AIES 2024, 2025; and 1,000 of 25,124 such AAAI 2010+ records, drawn in id order. Title-route check: 1,061 attaches.
 - Date: 2026-10-10
 
 Reproduce (from the OpenAlex cache, no network):
 
 ```
-uv run op eval openalex --offline --snapshot 2026-10-10-9efa49481112 --seed 49 --aaai-sample 1000 --title-sample 1061 --date 2026-10-10
+uv run op eval openalex --offline --snapshot 2026-10-10-9efa49481112 --seed 49 --aaai-sample 1000 --title-sample 1061 --date 2026-10-10 --ruling 'Keep the exact title-key and year rule. The 9 flagged attaches are mostly OCR or spelling variants of the same author, and a surname rule would drop correct attaches; the residual wrong-attach risk is at most 2 of 1,061 (controller, 2026-10-10).'
 ```
 
 ## Method
@@ -60,7 +60,7 @@ Each rate is of the records compared in that row. No abstract text is quoted her
 | **All** | | **2,122** | 1,544 (72.8%) | 219 (10.3%) | 36 (1.7%) | 204 (9.6%) | 81 (3.8%) | 35 (1.6%) | 0 (0.0%) | 0 (0.0%) | 3 (0.1%) |
 
 Refusals: none.
-Works returned for a DOI the batch didn't ask for (not compared): 1.
+Works returned for a DOI the batch didn't ask for (not compared): 1; it is in no count above, so no figure changes.
 `differs` examples (the first 10 of 81): `op:facct:2022:doi-3531146.3533069`, `op:facct:2022:doi-3531146.3533070`, `op:facct:2022:doi-3531146.3533082`, `op:facct:2022:doi-3531146.3533083`, `op:facct:2022:doi-3531146.3533088`, `op:facct:2022:doi-3531146.3533089`, `op:facct:2022:doi-3531146.3533091`, `op:facct:2022:doi-3531146.3533092`, `op:facct:2022:doi-3531146.3533094`, `op:facct:2022:doi-3531146.3533097`.
 
 Of 2,122 records compared, OpenAlex's abstract is exact for 1,544 (72.8%) and near-exact for 219 (10.3%): together 1,763 (83.1%) would match every search exactly as the official abstract does.
@@ -83,7 +83,7 @@ AAAI 1980–2008 records have no DOI. The fill matches each one by exact title k
 - Authors: OpenAlex lists authors for 1,061 of 1,061; the first-author surname matches ours in 1,044; the lists share at least one surname in 1,052.
 - Pages: OpenAlex holds a first page for 1,054 of 1,061. Our records carry no page field, so pages can't be compared.
 
-**Verdict:** 1,052 agree (99.2%), 9 look wrong (0.8%), 0 can't be checked (no authors on one side) (0.0%). `agree`: the years match and the author lists share a surname (surnames compared without marks or case, dblp's homonym numbers dropped). `wrong`: OpenAlex lists authors and none of their surnames is any of ours.
+**Verdict:** 1,052 agree (99.2%), 9 look wrong (0.8%), 0 can't be checked (0.0%; no authors on one side). `agree`: the years match and the author lists share a surname (surnames compared without marks or case, dblp's homonym numbers dropped). `wrong`: OpenAlex lists authors and none of their surnames is any of ours.
 
 | Record | OpenAlex work | Our first-author surname | OpenAlex's first-author surname |
 |---|---|---|---|
@@ -97,7 +97,11 @@ AAAI 1980–2008 records have no DOI. The fill matches each one by exact title k
 | `op:aaai:1998:dblp-Pedersen98a` | `W2164604466` | pedersen | pederson |
 | `op:aaai:1998:dblp-TorreT98` | `W1838373937` | torre | toor |
 
-Rules that would exclude them (the fill rule is unchanged here; the choice is the controller's):
+7 of the 9 that look wrong have a first-author surname close to ours (a character ratio of at least 0.75): by the look of them, spelling or OCR variants of the same surname.
+
+Rules that would exclude them:
 
 - **Require at least one shared author surname:** excludes all 9 that look wrong, and also the 0 that can't be checked.
 - **Require a matching first-author surname:** excludes all 9 that look wrong, and also 8 that agree on another author and the 0 that can't be checked.
+
+**Ruling:** Keep the exact title-key and year rule. The 9 flagged attaches are mostly OCR or spelling variants of the same author, and a surname rule would drop correct attaches; the residual wrong-attach risk is at most 2 of 1,061 (controller, 2026-10-10).

@@ -598,6 +598,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--out", type=Path, help="the report's directory (default the repository's docs/results)"
     )
     oal.add_argument("--date", help="the report's date, YYYY-MM-DD (default today, UTC)")
+    oal.add_argument(
+        "--ruling", metavar="TEXT",
+        help="the decision taken on the title route's findings, printed in the report as given",
+    )  # fmt: skip
     oal.set_defaults(run=_eval_openalex)
     for name, task in PLANNED_EVALS.items():
         _stub(reports.add_parser(name, help=_stub_status(task)), f"eval {name}", task)
@@ -1253,7 +1257,8 @@ def _eval_openalex(ns: argparse.Namespace) -> int:
         result = oa.audit(picked, fetcher)
         result.title = oa.title_check(records, fetcher, seed=ns.seed, size=ns.title_sample)
     meta = oa.Meta(snapshot=snapshot.name, commit=_commit(), seed=ns.seed, aaai_sample=ns.aaai_sample, day=day,
-                   aaai_pool=oa.aaai_pool(records), title_sample=ns.title_sample)  # fmt: skip
+                   aaai_pool=oa.aaai_pool(records), title_sample=ns.title_sample,
+                   ruling=" ".join(ns.ruling.split()) if ns.ruling else None)  # fmt: skip
     path = out / f"{day.isoformat()}-openalex-audit.md"
     replaced = path.exists()
     storage.write_bytes(path, oa.render(result, meta).encode("utf-8"))

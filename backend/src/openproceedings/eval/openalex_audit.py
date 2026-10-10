@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import random
+import shlex
 import unicodedata
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -46,6 +47,7 @@ KINDS: tuple[Kind, ...] = get_args(Kind)
 # every outcome of one sampled record, in the report's column order
 OUTCOMES: tuple[str, ...] = (*KINDS, "no_abstract", "no_openalex", "refused", "duplicate")
 SIMILAR = 0.9  # token SequenceMatcher ratio at or above which a text is `similar`
+NEAR_SPELLING = 0.75  # character ratio at or above which two surnames look like variants of one
 AUDITED: Mapping[str, tuple[int, ...]] = {"FAccT": (2022, 2025, 2026), "AIES": (2024, 2025)}
 AAAI_FROM = 2010  # AAAI's OJS years with official abstracts and DOIs
 AAAI_SAMPLE = 1000
@@ -332,6 +334,9 @@ class Meta:
     day: date | None = None
     aaai_pool: int | None = None  # AAAI 2010+ records the sample is drawn from
     title_sample: int = TITLE_SAMPLE
+    ruling: str | None = (
+        None  # the decision taken on the title route's findings (`--ruling`), printed as given
+    )
 
     @property
     def command(self) -> str:
@@ -341,6 +346,8 @@ class Meta:
             words.append(f"--title-sample {self.title_sample}")
         if self.day is not None:
             words.append(f"--date {self.day.isoformat()}")
+        if self.ruling is not None:
+            words.append(f"--ruling {shlex.quote(self.ruling)}")
         return " ".join(words)
 
 
@@ -425,8 +432,8 @@ def _title_section(check: TitleCheck, meta: Meta) -> list[str]:
         "page field, so pages can't be compared.",
         "",
         f"**Verdict:** {len(agree):,} agree ({_pct(len(agree), len(s))}), {len(wrong):,} look wrong "
-        f"({_pct(len(wrong), len(s))}), {len(unverifiable):,} can't be checked (no authors on one side) "
-        f"({_pct(len(unverifiable), len(s))}). `agree`: the years match and the author lists share a surname "
+        f"({_pct(len(wrong), len(s))}), {len(unverifiable):,} can't be checked "
+        f"({_pct(len(unverifiable), len(s))}; no authors on one side). `agree`: the years match and the author lists share a surname "
         "(surnames compared without marks or case, dblp's homonym numbers dropped). `wrong`: OpenAlex lists "
         "authors and none of their surnames is any of ours.",
     ]
@@ -435,10 +442,16 @@ def _title_section(check: TitleCheck, meta: Meta) -> list[str]:
                   "|---|---|---|---|"]  # fmt: skip
         lines += [f"| `{a.record_id}` | `{a.work_id}` | {a.ours_first or '–'} | {a.theirs_first or '–'} |"
                   for a in wrong]  # fmt: skip
+        near = sum(_near_spelling(a) for a in wrong)
+        lines += ["", f"{near:,} of the {len(wrong):,} that look wrong have a first-author surname close to ours (a "
+                  f"character ratio of at least {NEAR_SPELLING}): by the look of them, spelling or OCR variants of "
+                  "the same surname."]  # fmt: skip
         first_also = sum(not a.first_match for a in agree)
         lines += [
             "",
-            "Rules that would exclude them (the fill rule is unchanged here; the choice is the controller's):",
+            "Rules that would exclude them:"
+            if meta.ruling
+            else "Rules that would exclude them (the fill rule is unchanged here; the choice is the controller's):",
             "",
             f"- **Require at least one shared author surname:** excludes all {len(wrong):,} that look wrong, and "
             f"also the {len(unverifiable):,} that can't be checked.",
@@ -447,7 +460,16 @@ def _title_section(check: TitleCheck, meta: Meta) -> list[str]:
         ]
     else:
         lines += ["", "No sampled attach looks wrong, so no rule change is indicated by this sample."]
+    if meta.ruling:
+        lines += ["", f"**Ruling:** {meta.ruling}"]
     return lines
+
+
+def _near_spelling(a: TitleAttach) -> bool:
+    """Whether the two first-author surnames look like variants of one (`NEAR_SPELLING`)."""
+    if a.ours_first is None or a.theirs_first is None:
+        return False
+    return SequenceMatcher(None, a.ours_first, a.theirs_first, autojunk=False).ratio() >= NEAR_SPELLING
 
 
 def render(result: AuditResult, meta: Meta) -> str:
@@ -489,7 +511,10 @@ def render(result: AuditResult, meta: Meta) -> str:
         + ".",
     ]
     if result.foreign:
-        lines.append(f"Works returned for a DOI the batch didn't ask for (not compared): {result.foreign:,}.")
+        lines.append(
+            f"Works returned for a DOI the batch didn't ask for (not compared): {result.foreign:,}; it is "
+            "in no count above, so no figure changes."
+        )
     if result.differs:
         shown = ", ".join(f"`{rid}`" for rid in result.differs[:DIFFERS_SHOWN])
         more = (

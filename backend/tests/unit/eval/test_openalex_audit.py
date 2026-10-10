@@ -25,6 +25,9 @@ from tests.unit.ingest.proceedings_helpers import FakeTransport, response
     ("A study of trust in models.", "A study of trust", "truncated"),
     (" ".join(["word"] * 50) + " end", " ".join(["word"] * 50) + " fin", "similar"),
     ("A study of trust.", "Something else entirely.", "differs"),
+    (" ".join(["w"] * 9) + " end", " ".join(["w"] * 9) + " fin", "similar"),  # ratio 0.9 exactly: similar
+    (" ".join(["w"] * 17) + " e1 e2", " ".join(["w"] * 17) + " f1 f2", "differs"),  # 34/38 ≈ 0.895, no prefix
+    ("A study of trust.", "!!! …", "differs"),  # OpenAlex's text has no search tokens
 ])  # fmt: skip
 def test_compare(official: str, other: str, kind: str) -> None:
     assert oa.compare(official, other) == kind
@@ -65,6 +68,12 @@ def test_render_reports_rates_per_venue_year_and_the_reproduction_command() -> N
     aies = oa.render(oa.AuditResult(rows={("AIES", 2024): {"exact": 1}}), oa.Meta(snapshot="s", commit="c", seed=49,
                                                                                 aaai_sample=0))  # fmt: skip
     assert "A note on FAccT" not in aies
+
+
+def test_render_says_what_a_foreign_work_means_for_the_figures() -> None:
+    text = oa.render(oa.AuditResult(rows={("AIES", 2024): {"exact": 1}}, foreign=1),
+                     oa.Meta(snapshot="s", commit="c", seed=49, aaai_sample=0))  # fmt: skip
+    assert "didn't ask for (not compared): 1; it is in no count above, so no figure changes." in text
 
 
 # --- the audit through a fetcher ----------------------------------------------------------------------------
@@ -197,6 +206,28 @@ def test_the_title_check_names_an_attach_whose_authors_disagree(tmp_path: Path) 
                                                                  aaai_sample=0))  # fmt: skip
     assert "op:aaai:1990:dblp-JonesK90" in text and "W2" in text
     assert "first-author surname" in text
+    assert "the choice is the controller's)" in text and "**Ruling:**" not in text
+    assert "can't be checked (0.0%; no authors on one side)" in text and ") (" not in text
+    ruled = oa.render(oa.AuditResult(rows={}, title=check), oa.Meta(
+        snapshot="s", commit="c", seed=49, aaai_sample=0, ruling="Keep the exact title-key and year rule."))  # fmt: skip
+    assert "**Ruling:** Keep the exact title-key and year rule." in ruled
+    assert "controller's" not in ruled
+    assert (
+        "--ruling 'Keep the exact title-key and year rule.'" in ruled
+    )  # the reproduction command carries it
+
+
+def test_the_title_section_counts_wrong_attaches_whose_surname_is_a_near_spelling() -> None:
+    attach = lambda ours, theirs: oa.TitleAttach(  # noqa: E731
+        record_id=f"op:aaai:1990:dblp-{ours}", work_id="W1", year_ok=True, ours_first=ours, theirs_first=theirs,
+        shared=0, theirs=1, pages=False, verdict="wrong")  # fmt: skip
+    check = oa.TitleCheck(attached=3, candidates=3, refused={},
+                          sampled=(attach("kender", "render"), attach("elliot", "elliott"), attach("vempaty", "rao")))  # fmt: skip
+    text = oa.render(
+        oa.AuditResult(rows={}, title=check), oa.Meta(snapshot="s", commit="c", seed=49, aaai_sample=0)
+    )
+    assert ("2 of the 3 that look wrong have a first-author surname close to ours (a character ratio of at least "
+            "0.75): by the look of them, spelling or OCR variants of the same surname.") in text  # fmt: skip
 
 
 def test_the_title_check_calls_a_work_with_no_authors_unverifiable(tmp_path: Path) -> None:
