@@ -1126,6 +1126,15 @@ def test_attribution_names_the_site_and_its_page(
     assert attribution(None, [claim], forum=forum, proceedings=proceedings, native=NATIVE) is None
 
 
+def test_an_ojs_abstract_is_credited_to_the_papers_article_page_not_the_oai_page() -> None:
+    """decision-049: the claim's url is the OAI ListRecords page (a token url that expires); the credit links the
+    record's numeric article url."""
+    article = "https://ojs.aaai.org/index.php/AAAI/article/view/25561"
+    oai = "https://ojs.aaai.org/index.php/AAAI/oai?verb=ListRecords&resumptionToken=abc"
+    got = attribution("T", [_abstract("ojs", "T", oai)], forum=None, proceedings=article, native="ojs-25561")
+    assert got == Attribution("ojs", "ojs", article)
+
+
 def _via(page: str) -> Claim:
     return _abstract("ris", "T", evidence=f"scholarmend:proceedings_page {page}")
 

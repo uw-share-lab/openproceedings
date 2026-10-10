@@ -1099,6 +1099,7 @@ def test_the_csv_columns_before_task_138_keep_their_positions() -> None:
         (Attribution("openreview_v2", "openreview", "https://openreview.net/forum?id=X"), "OpenReview https://openreview.net/forum?id=X"),
         (Attribution("neurips_proceedings", "neurips_proceedings", "https://proceedings.neurips.cc/p"), "NeurIPS Proceedings https://proceedings.neurips.cc/p"),
         (Attribution("ris", "iclr_proceedings", "https://proceedings.iclr.cc/p"), "ICLR Proceedings (via RIS import) https://proceedings.iclr.cc/p"),
+        (Attribution("ojs", "ojs", "https://ojs.aaai.org/index.php/AAAI/article/view/25561"), "AAAI Digital Library https://ojs.aaai.org/index.php/AAAI/article/view/25561"),
         (Attribution("ris", "pmlr", None), "PMLR (via RIS import)"),  # evidence on another site: named, unlinked
         (Attribution("ris", None, None), "an imported RIS file"),  # a route naming no known site
     ],
