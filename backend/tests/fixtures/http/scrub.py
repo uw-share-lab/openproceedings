@@ -495,7 +495,8 @@ _OAI_FREE_TEXT = re.compile(
     r"<dc:(title|creator|contributor|description|subject)\b([^>/]*)>(.*?)</dc:\1>", re.S
 )
 _DC_NAMESPACE = "http://purl.org/dc/elements/1.1/"
-_XMLNS = re.compile(r"""xmlns:([A-Za-z_][\w.-]*)\s*=\s*["']([^"']*)["']""")
+# `xmlns="…"` (no prefix) binds a default namespace: the empty prefix, also not `dc`
+_XMLNS = re.compile(r"""xmlns(?::([A-Za-z_][\w.-]*))?\s*=\s*["']([^"']*)["']""")
 
 
 def scrub_oai(page: str) -> str:
@@ -503,7 +504,9 @@ def scrub_oai(page: str) -> str:
     creator keeps OJS's `Last, First` shape, which the miner turns around. ValueError for a page that binds the
     Dublin Core namespace to a prefix other than `dc`: its values would be kept as captured (fail closed)."""
     if others := sorted({p for p, ns in _XMLNS.findall(page) if ns == _DC_NAMESPACE and p != "dc"}):
-        raise ValueError(f"the page binds Dublin Core to the prefix(es) {others}, not dc: scrub it by hand")
+        raise ValueError(
+            f"the page binds Dublin Core to the prefix(es) {others} ('' = default), not dc: scrub it by hand"
+        )
     c = _Counter()
 
     def replacement(m: re.Match[str]) -> str:

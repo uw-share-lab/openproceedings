@@ -156,6 +156,12 @@ def test_an_oai_page_binding_dublin_core_to_another_prefix_is_refused() -> None:
         scrub.scrub_oai(other)
 
 
+def test_an_oai_page_binding_dublin_core_as_the_default_namespace_is_refused() -> None:
+    page = '<dc:title xmlns="http://purl.org/dc/elements/1.1/">Real title</dc:title>'
+    with pytest.raises(ValueError, match=r"prefix\(es\) \[''\]"):
+        scrub.scrub_oai(page)
+
+
 def test_a_self_closing_oai_element_is_left_alone_and_the_next_one_scrubbed() -> None:
     page = "<dc:title/><dc:subject>x</dc:subject><dc:title>Real title</dc:title>"
     out = scrub.scrub_oai(page)

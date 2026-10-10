@@ -5,6 +5,8 @@ by GetRecord; an article returned twice is kept once (two different copies stop 
 serves is `unavailable` (named in the table, or the crawl stops); the cached failure makes the offline replay take
 the same path."""
 
+import threading
+
 import pytest
 from openproceedings.ingest import ojs_table
 from openproceedings.ingest.sources import ojs, ojs_harvest
@@ -277,24 +279,46 @@ def test_a_resumption_token_that_repeats_stops_the_chain(tmp_path, chain: str) -
         script = _cycle(ojs.sets_url("AAAI"), ojs.sets_url("AAAI", "T"), oai.sets_page("AAAI:APP", token="T"))
         run = lambda f: ojs.list_sets("AAAI", f)  # noqa: E731
     f, transport = _live(tmp_path, script)
-    with pytest.raises(CrawlError, match="resumptionToken repeats an earlier page") as e:
-        run(f)
-    assert e.value.reason == "token_cycle"
+    # run in a daemon thread: a chain that never stops (the cached page is served again) fails here by name, in 2 s
+    outcome: list[BaseException | None] = []
+
+    def attempt() -> None:
+        try:
+            run(f)
+            outcome.append(None)
+        except BaseException as exc:
+            outcome.append(exc)
+
+    worker = threading.Thread(target=attempt, daemon=True)
+    worker.start()
+    worker.join(timeout=2)
+    assert not worker.is_alive(), f"the {chain} chain did not stop on a repeated resumption token within 2 s"
+    (error,) = outcome
+    assert isinstance(error, CrawlError) and "resumptionToken repeats an earlier page" in str(error)
+    assert error.reason == "token_cycle"
     assert sum("resumptionToken=T" in c for c in transport.calls) == 1  # T's page fetched once: never a loop
 
 
-def test_the_harvest_logs_a_start_a_heartbeat_and_each_fallback_once(tmp_path, caplog) -> None:
+def test_the_harvest_logs_a_start_a_heartbeat_and_each_fallback_once(tmp_path, caplog, monkeypatch) -> None:
+    seen: list[ojs_harvest.Progress] = []
+    of = ojs_harvest.Progress.of
+    monkeypatch.setattr(
+        ojs_harvest.Progress, "of", classmethod(lambda cls, j, f: seen.append(of(j, f)) or seen[-1])
+    )
     transport = FakeTransport({})
     transport.script = _script()
     f, _clock = fetcher(
         tmp_path / "ojs", transport, ojs.HOSTS, min_interval=20, expect="xml", keep_query=True
     )
     with caplog.at_level("DEBUG", logger="openproceedings.ingest.sources"):
-        ojs.mine_journal("AAAI", f, table=FULL)
+        result = ojs.mine_journal("AAAI", f, table=FULL)
+    (progress,) = seen
+    assert progress.pages == result.pages  # every chain's page, the gap reads included, reports one beat step
     lines = {r.getMessage(): r for r in caplog.records}
     assert lines["ojs_journal_started"].__dict__["offline"] is False
     beats = [r for r in caplog.records if r.getMessage() == "ojs_journal_progress"]
     assert beats and all(r.__dict__["journal"] == "AAAI" and r.__dict__["pages"] > 0 for r in beats)
+    assert len(beats) <= result.pages * 20 / 30 + 1  # paced at 20 s a page: a beat per page would exceed this
     assert {r.__dict__["step"] for r in beats} <= {"inventory", "sets", "fallback", "gaps"}
     (fallback,) = [r for r in caplog.records if r.getMessage() == "ojs_set_fallback"]
     assert fallback.levelname == "WARNING"

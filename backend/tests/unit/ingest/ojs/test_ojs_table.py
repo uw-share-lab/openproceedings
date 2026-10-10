@@ -140,11 +140,23 @@ def test_the_shipped_mapping_is_pinned_per_track_and_journal() -> None:
         ("IASEAI", "front_matter"): 1,
     }
     assert sum(rows.values()) == 601
+    # the papers per track, so two rows whose tracks are swapped cannot pass on row counts alone
+    papers: Counter[str | None] = Counter()
+    for s in ojs_table.TABLE.sections.values():
+        if (s.journal, s.volume) == ("AAAI", 24):
+            papers[s.track] += s.papers
+    assert dict(papers) == {
+        "main": 262,
+        "student_abstract": 24,
+        "iaai": 23,
+        "other": 15,
+        "eaai": 9,
+    }  # AAAI 2010
 
 
 # 2010's `Short Papers` is main (refereed AAAI-10 technical papers; owner decision 2026-10-10, TASK-218), so not here
 _NOT_MAIN = re.compile(
-    r"student|demo|poster|doctoral|undergraduate|consortium|senior|faculty|iaai|eaai|sister|spotlight|hot|nectar",
+    r"student|demo|poster|doctoral|undergraduate|consortium|senior|faculty|iaai|eaai|sister|spotlight|hot|nectar|emerging|bridge|blue sky|summar",
     re.IGNORECASE,
 )
 _LABEL_TRACK = [
