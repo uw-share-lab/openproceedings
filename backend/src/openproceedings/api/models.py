@@ -160,7 +160,8 @@ ORIGIN_DOC = (
     "can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources). `icml_site`: an official ICML "
     "conference page (live, or a pinned Internet Archive capture), for ICML 1988-2012 (decision-047). `ojs`: the "
     "AAAI Digital Library (ojs.aaai.org), for AAAI, AIES and IASEAI; its url is the paper's own article page "
-    "(decision-049). Open set: new values may be added within /api/v1; handle a value you don't know."
+    "(decision-049). `crossref` and `facct_site`: FAccT and AIES (ACM proceedings via Crossref, the official FAccT "
+    "pages); the url is the paper's DOI link (decision-049). Open set: new values may be added within /api/v1; handle a value you don't know."
 )
 
 ABSTRACT_NOTE_DOC = (

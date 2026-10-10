@@ -164,13 +164,14 @@ def test_a_decomposed_title_keys_as_its_composed_form(title: str, key: str) -> N
 
 def test_the_precedence_table_is_decision_005() -> None:
     text = ("openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site",
-            "ojs", "ris")  # fmt: skip
+            "ojs", "crossref", "facct_site", "ris")  # fmt: skip
     assert PRECEDENCE["status"] == (
         "iclr_archive",
         "neurips_proceedings",
         "pmlr",
         "dblp",  # decision-047: ICML 1988-2012, where no other source holds the venue-year
         "ojs",  # decision-049: AAAI, AIES, IASEAI, where no other source holds the venue-year
+        "crossref",  # decision-049: FAccT 2019+, AIES 2018-2023
         "openreview_v2",
         "openreview_v1",
         "ris",
@@ -1852,3 +1853,18 @@ def test_two_ojs_records_sharing_a_title_stay_apart_and_never_join_another_venue
     assert sorted(r.id for r in result.records) == sorted(r.id for r in (a, b, aies, icml))
     assert not result.merges
     assert [(c.field, c.resolution) for c in result.conflicts] == [("title_key", "ambiguous_not_merged")]
+
+
+@pytest.mark.parametrize(
+    ("source", "url"),
+    [("crossref", "https://api.crossref.org/works/10.1145/3593013.3594011"),
+     ("facct_site", "https://facctconference.org/static/docs/facct2025-final.csv")],
+)  # fmt: skip
+def test_an_acm_abstract_is_credited_to_the_doi_link_never_an_api_or_listing_url(
+    source: str, url: str
+) -> None:
+    doi = "https://doi.org/10.1145/3593013.3594011"
+    got = attribution(
+        "T", [_abstract(source, "T", url)], forum=None, proceedings=doi, native="doi-3593013.3594011"
+    )
+    assert got == Attribution(source, source, doi)

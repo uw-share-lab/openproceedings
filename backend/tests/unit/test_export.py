@@ -231,7 +231,7 @@ def test_every_crawlable_year_has_one_venue_name() -> None:
     from openproceedings.ingest.record import DBLP_YEARS
     from openproceedings.ingest.sources import neurips
 
-    first = {"NeurIPS": neurips.FIRST_YEAR, "ICLR": 2013, "ICML": DBLP_YEARS[0]}
+    first = {"NeurIPS": neurips.FIRST_YEAR, "ICLR": 2013, "ICML": DBLP_YEARS["ICML"][0]}
     for venue in ("NeurIPS", "ICLR", "ICML"):
         for year in range(first[venue], 2027):
             name = export.venue_name(venue, year)

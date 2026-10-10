@@ -41,6 +41,10 @@ SOURCE_STATUSES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "icml_site": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     # AAAI 2010+, AIES 2024+, IASEAI 2026+ from ojs.aaai.org: published papers only (decision-049)
     "ojs": (ACCEPTED_ONLY, ACCEPTED_ONLY),
+    # FAccT 2019+ and AIES 2018-2023 from Crossref's ACM proceedings records, and the official FAccT pages'
+    # abstracts of some of them: published papers only (decision-049, milestone B)
+    "crossref": (ACCEPTED_ONLY, ACCEPTED_ONLY),
+    "facct_site": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "ris": (EVERY_STATUS, ACCEPTED_ONLY),
 }
 if set(SOURCE_STATUSES) != set(get_args(Source)):  # a new claim source needs a row before it can build

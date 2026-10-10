@@ -12,7 +12,9 @@ import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
 from openproceedings.ingest.record import (
+    DBLP_YEARS,
     DERIVED,
+    DOI_YEARS,
     RECORD_SCHEMA_VERSION,
     Claim,
     PaperRecord,
@@ -598,10 +600,6 @@ def _ojs(
     )  # fmt: skip
 
 
-def test_schema_is_6() -> None:
-    assert RECORD_SCHEMA_VERSION == "6"
-
-
 @pytest.mark.parametrize(("venue", "year"), [("AAAI", 2010), ("AIES", 2024), ("IASEAI", 2026)])
 def test_ojs_native_id_is_valid_for_its_venues(venue: str, year: int) -> None:
     assert _ojs(venue, year).native == "ojs-28000"
@@ -629,3 +627,58 @@ def test_iaai_and_eaai_are_aaai_only(track: str) -> None:
 @pytest.mark.parametrize("track", ["student_abstract", "consortium", "demo"])
 def test_other_new_tracks_are_open_to_every_venue(track: str) -> None:
     assert _ojs("AIES", 2025, track=track).track == track
+
+
+def _rec(rid: str, venue: str, year: int, track: str = "main") -> PaperRecord:
+    return PaperRecord.build(id=rid, title="A paper", abstract=None, authors=("A. Author",), venue=venue,
+                             year=year, track=track, status="accepted")  # fmt: skip
+
+
+def test_schema_is_7() -> None:
+    assert RECORD_SCHEMA_VERSION == "7"
+
+
+@pytest.mark.parametrize(
+    ("venue", "year"), [("FAccT", 2019), ("FAccT", 2026), ("AIES", 2018), ("AIES", 2023)]
+)
+def test_doi_native_id_is_valid_for_the_acm_venue_years(venue: str, year: int) -> None:
+    r = _rec(f"op:{venue.lower()}:{year}:doi-3593013.3594011", venue, year)
+    assert r.native == "doi-3593013.3594011" and r.forum_id is None
+
+
+@pytest.mark.parametrize(("venue", "year"), [("ICML", 2023), ("AAAI", 2023), ("AIES", 2024), ("FAccT", 2018)])
+def test_doi_native_id_is_refused_outside_its_venue_years(venue: str, year: int) -> None:
+    with pytest.raises(ValidationError, match="not a valid"):
+        _rec(f"op:{venue.lower()}:{year}:doi-3593013.3594011", venue, year)
+
+
+@pytest.mark.parametrize(
+    "native",
+    ["doi-", "doi-3593013", "doi-3593013.", "doi-3593013.3594011a", "doi-3593013.359.4011", "doi-x.1"],
+)
+def test_malformed_doi_native_id_is_refused(native: str) -> None:
+    with pytest.raises(ValidationError):
+        _rec(f"op:facct:2023:{native}", "FAccT", 2023)
+
+
+@pytest.mark.parametrize(
+    ("venue", "year", "ok"),
+    [("AAAI", 1980, True), ("AAAI", 2008, True), ("AAAI", 2009, False), ("AAAI", 2010, False),
+     ("ICML", 1988, True), ("ICML", 2012, True), ("ICML", 2013, False)],
+)  # fmt: skip
+def test_dblp_ids_are_icml_1988_2012_and_aaai_1980_2008(venue: str, year: int, ok: bool) -> None:
+    rid = f"op:{venue.lower()}:{year}:dblp-Smith90"
+    if ok:
+        assert _rec(rid, venue, year).native == "dblp-Smith90"
+    else:
+        with pytest.raises(ValidationError, match="dblp ids are"):
+            _rec(rid, venue, year)
+
+
+def test_dblp_ids_are_refused_for_another_venue() -> None:
+    with pytest.raises(ValidationError, match="not a valid"):
+        _rec("op:aies:2018:dblp-Smith18", "AIES", 2018)
+
+
+def test_the_year_tables_name_their_venues() -> None:
+    assert set(DBLP_YEARS) == {"ICML", "AAAI"} and set(DOI_YEARS) == {"AIES", "FAccT"}
