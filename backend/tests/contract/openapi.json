@@ -1057,6 +1057,8 @@
                 "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
                 "enum": [
                   "track_changed",
+                  "status_changed",
+                  "filter_changed",
                   "not_in_index",
                   "still_eligible"
                 ],
@@ -1066,12 +1068,52 @@
                 "type": "null"
               }
             ],
-            "description": "Why the replay no longer matches a removed paper (null on an added one), judged on the index the replay ran on. `track_changed`: that index holds it on a track the search's `track:` clauses (the default included) don't admit, e.g. moved to `iaai`. `not_in_index`: that index doesn't hold it (it left the corpus, or is counted as not a paper). `still_eligible`: held on a track the search admits, so its title, abstract or another field no longer matches.",
+            "description": "Why the replay no longer matches a removed paper (null on an added one), judged on the index the replay ran on against the replayed query's top-level filter clauses (the defaults included), track first, then status, then any other field. `track_changed`: held on a track those clauses don't admit, e.g. moved to `iaai`. `status_changed`: held with a status they don't admit, e.g. now `withdrawn`. `filter_changed`: held, but another filter (`failed_filter`: `venue`, `year` or `abstract_kind`) no longer admits it. `not_in_index`: that index doesn't hold it (it left the corpus, or is counted as not a paper). `still_eligible`: every filter admits it, so its title, abstract or another searched field no longer matches.",
             "title": "Cause"
+          },
+          "failed_filter": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "venue",
+                  "year",
+                  "track",
+                  "status",
+                  "abstract_kind"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The filter field a removed paper now fails: `track` for `track_changed`, `status` for `status_changed`, the field for `filter_changed`; null otherwise.",
+            "title": "Failed Filter"
           },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "accepted",
+                  "rejected",
+                  "withdrawn",
+                  "desk_rejected",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its status on the index the replay ran on; null when that index doesn't hold it.",
+            "title": "Status"
           },
           "title": {
             "anyOf": [
@@ -1118,7 +1160,9 @@
           "id",
           "title",
           "track",
-          "cause"
+          "status",
+          "cause",
+          "failed_filter"
         ],
         "title": "DiffEntry",
         "type": "object"
@@ -3280,8 +3324,16 @@
       "RemovalCauses": {
         "description": "How many of the whole removed list (not just the page) have each cause; every cause, 0 included.",
         "properties": {
+          "filter_changed": {
+            "title": "Filter Changed",
+            "type": "integer"
+          },
           "not_in_index": {
             "title": "Not In Index",
+            "type": "integer"
+          },
+          "status_changed": {
+            "title": "Status Changed",
             "type": "integer"
           },
           "still_eligible": {
@@ -3295,6 +3347,8 @@
         },
         "required": [
           "track_changed",
+          "status_changed",
+          "filter_changed",
           "not_in_index",
           "still_eligible"
         ],
@@ -5553,7 +5607,7 @@
     },
     "/api/v1/records/{id}/diff": {
       "get": {
-        "description": "The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each\nlist is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A\ntitle comes from the index the replay ran on, null if it doesn't hold the paper. Each removed paper also\nhas its track there and its cause, and `removed_causes` counts the causes over the whole list (TASK-227;\nthe counts go on the access line too, never a title). A refused replay compared nothing: empty lists,\nnull totals and `removed_causes`.",
+        "description": "The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each\nlist is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A\ntitle comes from the index the replay ran on, null if it doesn't hold the paper. Each entry also has its\ntrack and status there, each removed one its cause and failed filter, and `removed_causes` counts the\ncauses over the whole list (`removals`, cheap enough to run per page: a bitmap read per id; TASK-227;\nthe counts go on the access line too, never a title). A refused replay compared nothing: empty lists,\nnull totals and `removed_causes`.",
         "operationId": "get_record_diff",
         "parameters": [
           {

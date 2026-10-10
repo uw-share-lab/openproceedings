@@ -102,6 +102,8 @@ ANNOTATIONS = (
     # a record's diff (`GET /records/{id}/diff`, api/records.py; TASK-227): its removed papers' causes, counted
     # over the whole list; never an id or a title
     "removed_track_changed",
+    "removed_status_changed",
+    "removed_filter_changed",
     "removed_not_in_index",
     "removed_still_eligible",
 )

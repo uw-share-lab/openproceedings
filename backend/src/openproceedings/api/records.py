@@ -79,7 +79,7 @@ from openproceedings.records import (
     RECORDS_DIR,
     PinnedLoader,
     RecordStore,
-    RemovalCause,
+    Removal,
     Replay,
     SearchRecord,
     freeze,
@@ -333,8 +333,9 @@ def get_record_diff(
 ) -> RecordDiff:
     """The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each
     list is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A
-    title comes from the index the replay ran on, null if it doesn't hold the paper. Each removed paper also
-    has its track there and its cause, and `removed_causes` counts the causes over the whole list (TASK-227;
+    title comes from the index the replay ran on, null if it doesn't hold the paper. Each entry also has its
+    track and status there, each removed one its cause and failed filter, and `removed_causes` counts the
+    causes over the whole list (`removals`, cheap enough to run per page: a bitmap read per id; TASK-227;
     the counts go on the access line too, never a title). A refused replay compared nothing: empty lists,
     null totals and `removed_causes`."""
     record = stored_record(request, id)
@@ -343,12 +344,16 @@ def get_record_diff(
     removed = list(result.removed[offset : offset + limit]) if result.removed is not None else []
     wanted = [*added, *removed]
     shown = result.engine.display(wanted) if wanted else {}
-    why = removals(result)  # None exactly when `result.removed` is (refused), and then `removed` is empty
+    # None exactly when `result.removed` is (refused), and then `removed` is empty. A bitmap read per removed id,
+    # no document decoded, so the whole-list tally is cheap enough to compute on every page
+    why = removals(result)
     tally = removal_tally(why) if why is not None else None
     if tally is not None:
         annotate(
             request,
             removed_track_changed=tally["track_changed"],
+            removed_status_changed=tally["status_changed"],
+            removed_filter_changed=tally["filter_changed"],
             removed_not_in_index=tally["not_in_index"],
             removed_still_eligible=tally["still_eligible"],
         )
@@ -365,20 +370,23 @@ def get_record_diff(
         added_total=len(result.added) if result.added is not None else None,
         removed_total=len(result.removed) if result.removed is not None else None,
         added=[_entry(i, shown, None) for i in added],
-        removed=[_entry(i, shown, why[i].cause) for i in removed if why is not None],
+        removed=[_entry(i, shown, why[i]) for i in removed if why is not None],
         membership_identical=result.membership_identical,
         removed_causes=RemovalCauses(**tally) if tally is not None else None,
     )
 
 
-def _entry(i: str, shown: dict[str, dict[str, Any]], cause: RemovalCause | None) -> DiffEntry:
-    """One diff entry: its title and track from the replaying index's display record (null when not held)."""
+def _entry(i: str, shown: dict[str, dict[str, Any]], why: Removal | None) -> DiffEntry:
+    """One diff entry: its title, track and status from the replaying index's display record (null when not
+    held), and for a removed one its cause and the filter it now fails."""
     r = shown.get(i)
     return DiffEntry(
         id=i,
         title=str(r["title"]) if r is not None else None,
         track=r["track"] if r is not None else None,
-        cause=cause,
+        status=r["status"] if r is not None else None,
+        cause=why.cause if why is not None else None,
+        failed_filter=why.field if why is not None else None,
     )
 
 

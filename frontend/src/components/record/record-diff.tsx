@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useId, useState } from "react";
 import { outcomeOf } from "@/api/outcome";
 import type { components } from "@/api/schema";
-import { trackDisplay } from "@/components/paper-badges";
+import { statusWords, trackDisplay } from "@/components/paper-badges";
 import { useApi } from "@/components/providers";
 import { button, FailureNotice } from "../export/export-notice";
 
@@ -25,6 +25,12 @@ function causeWords(e: Entry): string | null {
   switch (e.cause) {
     case "track_changed":
       return `moved to the ${trackDisplay(e.track ?? "unknown").short} track (not in this search's tracks)`;
+    case "status_changed":
+      return `its status is now ${statusWords(e.status ?? "unknown")} (not in this search's statuses)`;
+    case "filter_changed":
+      return e.failed_filter === null
+        ? "no longer passes one of this search's filters"
+        : `no longer passes this search's ${e.failed_filter}: filter`;
     case "still_eligible":
       return "no longer matches the query (its title, abstract or details changed)";
     default:
@@ -37,7 +43,9 @@ function causesLine(total: number, t: Causes): string {
   const n = (k: number) => k.toLocaleString("en-US");
   return (
     `Of the ${n(total)} removed: ${n(t.track_changed)} moved to a track this search doesn't include · ` +
-    `${n(t.not_in_index)} no longer in the index · ${n(t.still_eligible)} no longer matching the query.`
+    `${n(t.status_changed)} with a status this search doesn't include · ${n(t.filter_changed)} failing another ` +
+    `of its filters · ${n(t.not_in_index)} no longer in the index · ${n(t.still_eligible)} no longer matching ` +
+    "the query."
   );
 }
 

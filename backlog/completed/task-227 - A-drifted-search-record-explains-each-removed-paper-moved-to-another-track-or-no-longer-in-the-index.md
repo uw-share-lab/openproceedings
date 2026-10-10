@@ -6,7 +6,7 @@ title: >-
 status: Done
 assignee: []
 created_date: '2026-10-10 16:33'
-updated_date: '2026-10-10 19:13'
+updated_date: '2026-10-10 19:35'
 labels:
   - api
   - frontend
@@ -38,10 +38,12 @@ From the fix/aaai-aies-tracks review gate (review-methodologist S1, 2026-10-10).
 
 <!-- SECTION:NOTES:BEGIN -->
 Additive: DiffEntry gains track (its track on the replaying index, also on added entries) and cause (null on an added entry) rather than a RemovedEntry subtype, because the additive-contract checker counts a changed items $ref as breaking. removal cause is an OPEN enum. Eligibility = passing the effective query's top-level track: clauses (the default included), decided by tantivy_engine.passes (renamed from _passes). A status change on an admitted track reads still_eligible. Verified: full backend suite (8765 passed), npm test --workspace frontend (4932 passed), make lint, make tooling, make openapi clean, make e2e on 8100/3100 (67 passed).
+
+Fix round 1 (review I-1, M-1..M-3): causes are now track_changed, status_changed, filter_changed (with failed_filter), not_in_index, still_eligible: the first top-level filter clause (defaults included) the paper's values fail, track then status then the rest. DiffEntry gains status and failed_filter. Values come from TantivyEngine.filter_values, the per-value document bitmaps at each id's ord (Tantivy's Python binding can't read text fast columns, so not the ord-style fast read). status:* doesn't parse, so the all-statuses test row writes the five statuses.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-GET /records/{id}/diff now says why each removed paper is gone, judged on the replaying index: track_changed (with its current track), not_in_index, or still_eligible, plus removed_causes counted over the whole list; the record page's diff shows each cause in plain language and the tally line (copy RC-14a). ids_hash, replay status and existing fields are unchanged; the cause is a stored-field read, no index field. Tests: a contract test replaying on a second index where one paper moved to IAAI, one left and one no longer matches; unit tests for removal_cause and the tally; a real drift case in record-fixture.json and Vitest for the diff view. Verified with the full backend suite, the frontend suite, make lint and e2e on the alternate ports.
+GET /records/{id}/diff now says why each removed paper is gone, judged on the replaying index: not_in_index, or the first top-level filter (defaults included) it now fails: track_changed, status_changed, filter_changed (naming the field in failed_filter); else still_eligible. Each entry has its track and status; removed_causes counts all five causes over the whole list. The record page's diff shows each cause in plain language and the tally line (copy RC-14a). ids_hash, replay status and existing fields are unchanged; values come from the index's value bitmaps, no index field. Tests: a contract test replaying on a second index where papers moved track, left, were withdrawn, lost their official abstract and stopped matching; unit rows for the cause function and the tally; a real drift case in record-fixture.json and Vitest for the diff view. Verified with the full backend suite, the frontend suite, make lint and e2e on the alternate ports.
 <!-- SECTION:FINAL_SUMMARY:END -->

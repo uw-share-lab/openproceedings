@@ -381,16 +381,23 @@ class TantivyEngine:
         query = tantivy.Query.term_set_query(self.index.schema, "id", ids)
         return {r["id"]: r for r in map(self._display, self.hits(query))}
 
-    def tracks(self, ids: list[str]) -> dict[str, str]:
-        """The track of each of `ids` the index holds, by id (an id it doesn't hold is left out): a stored-field
-        read, nothing else of the document is decoded (a drifted record's removed papers, TASK-227)."""
-        if not ids:
+    def filter_values(self, ids: list[str]) -> dict[str, dict[str, str | int]]:
+        """Each held id's value in every filter field (`combo`: venue, year, track, status, and abstract_kind on
+        schema 4), by id; an id the index doesn't hold is left out (a drifted record's removed papers, TASK-227).
+        Read from the per-value document bitmaps (`_value_masks`, built once from the indexed values and kept)
+        at each id's `ord`: no stored document is decoded and no search runs. Tantivy's Python binding reads only
+        numeric fast columns, so the text fields can't be read the way `ids_of` reads `ord`."""
+        table = self._ord_table()
+        ords = {i: table[i] for i in ids if i in table}
+        if not ords:
             return {}
-        query = tantivy.Query.term_set_query(self.index.schema, "id", ids)
-        out: dict[str, str] = {}
-        for address in self.hits(query):
-            doc = self.searcher.doc(address)
-            out[str(doc.get_first("id"))] = str(doc.get_first("track"))
+        masks = self._value_masks()
+        out: dict[str, dict[str, str | int]] = {}
+        for i, o in ords.items():
+            bit = 1 << o
+            out[i] = {
+                f: next(v for v, m in values if m & bit) for f, values in zip(self.combo, masks, strict=True)
+            }
         return out
 
     def _display(self, address: tantivy.DocAddress) -> dict[str, Any]:
@@ -794,14 +801,19 @@ class TantivyEngine:
     def id_set(self, ids: list[str]) -> tantivy.Query:
         """The documents with these ids, as a verified clause names them (`Compiler.exact`): a term set on the
         indexed `ord` (each id's position in `ids.txt`, which is in id order; TASK-167)."""
-        table = self._ords  # one read (task-080); built whole, then stored with one assignment
-        if table is None:
-            table = {i: at for at, i in enumerate(self.ids)}
-            self._ords = table  # a race only builds the same table twice
+        table = self._ord_table()
         ords = [table.get(i, -1) for i in ids]
         if -1 in ords:
             raise EngineInternalError(DiagnosticCode.API_INTERNAL, "a verified id is not in the index")
         return tantivy.Query.term_set_query(self.index.schema, "ord", ords)
+
+    def _ord_table(self) -> dict[str, int]:
+        """id → ord, built on first use, then kept (see `__init__`)."""
+        table = self._ords  # one read (task-080); built whole, then stored with one assignment
+        if table is None:
+            table = {i: at for at, i in enumerate(self.ids)}
+            self._ords = table  # a race only builds the same table twice
+        return table
 
     def hits(self, query: tantivy.Query) -> list[tantivy.DocAddress]:
         limit = max(1, self.searcher.num_docs)

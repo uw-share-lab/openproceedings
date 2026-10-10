@@ -45,9 +45,10 @@ Every replay returns **HTTP 200** with a `status`:
 | Same `index_version` and `query_version`, but `ids_hash` or `excluded` differ | `mismatch` | This breaks guarantee 4: log at ERROR with code `API_REPLAY_MISMATCH` and treat it as a Must bug. Never report it as `drifted`. The record page shows "do not cite" (05) |
 
 The diff behind `drifted` is `GET /api/v1/records/{id}/diff`: added and removed ids (with titles), and
-which `index_version` inputs changed. Each removed id also has its `track` on the replaying index and a
-`cause` (`track_changed`, `not_in_index`, `still_eligible`; `records.removals`, a stored-field read, never an
-index field), and `removed_causes` tallies them over the whole list (TASK-227; spec 04 §Search records). An export pinned to a `mismatch` record (`/export?record_id=`) is
+which `index_version` inputs changed. Each entry also has its `track` and `status` on the replaying index,
+and each removed one a `cause` (`track_changed`, `status_changed`, `filter_changed` with `failed_filter`,
+`not_in_index`, `still_eligible`: the first top-level filter it now fails, track then status then the rest;
+`records.removals`, a read of the index's value bitmaps, never an index field), and `removed_causes` tallies them over the whole list (TASK-227; spec 04 §Search records). An export pinned to a `mismatch` record (`/export?record_id=`) is
 refused with 409 `API_RECORD_MISMATCH` (spec 04 §Error handling).
 
 **A withheld replay** (decision-010, round 3): a canonical with more position-verified clauses than

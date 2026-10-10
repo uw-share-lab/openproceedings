@@ -144,8 +144,8 @@ time was debited after the fact (`RateLimit`; never wall time, which other reque
 `dropped`, `not_in_index`, `added`, `compare_ms` (wall time it held its slot), `compare_cost_ms` (what is
 debited: the file's arrival plus the work's CPU) and `compare_tokens`. Never a title, a venue string or a file
 name from the uploaded file (none is sent; a test greps every line for them). A record's `/diff` adds its
-removal causes, counts only (TASK-227): `removed_track_changed`, `removed_not_in_index`,
-`removed_still_eligible`. The served index's match table
+removal causes, counts only (TASK-227): `removed_track_changed`, `removed_status_changed`,
+`removed_filter_changed`, `removed_not_in_index`, `removed_still_eligible`. The served index's match table
 logs `match_index_built` (INFO: `index_version`, `records`, `ms`) once per served index, or `match_index_failed`
 (ERROR: `index_version`, `error`, `ms`, `reason` when there is one, `frames` for an unexpected type); each
 comparison refused after it is a state on the access line (`busy: match_index_failed`), not another ERROR. A facet worker

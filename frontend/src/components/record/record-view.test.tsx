@@ -63,12 +63,41 @@ function api(c: RecordCase, replay: Response | ((call: Call) => Response) = json
         added_total: 2,
         removed_total: 1,
         added: [
-          { id: "op:iclr:2024:new1", title: "A new paper", track: "main", cause: null },
-          { id: "op:iclr:2024:new2", title: null, track: null, cause: null },
+          {
+            id: "op:iclr:2024:new1",
+            title: "A new paper",
+            track: "main",
+            status: "accepted",
+            cause: null,
+            failed_filter: null,
+          },
+          {
+            id: "op:iclr:2024:new2",
+            title: null,
+            track: null,
+            status: null,
+            cause: null,
+            failed_filter: null,
+          },
         ],
-        removed: [{ id: "op:iclr:2023:old1", title: "An old paper", track: "main", cause: "still_eligible" }],
+        removed: [
+          {
+            id: "op:iclr:2023:old1",
+            title: "An old paper",
+            track: "main",
+            status: "accepted",
+            cause: "still_eligible",
+            failed_filter: null,
+          },
+        ],
         membership_identical: false,
-        removed_causes: { track_changed: 0, not_in_index: 0, still_eligible: 1 },
+        removed_causes: {
+          track_changed: 0,
+          status_changed: 0,
+          filter_changed: 0,
+          not_in_index: 0,
+          still_eligible: 1,
+        },
         verified_clauses: 0,
       });
     }
@@ -266,38 +295,52 @@ describe("drifted (design R2, R5)", () => {
     expect(diff?.query.get("limit")).toBe("50");
   });
 
-  it("says why each removed paper left, and tallies the causes over the whole list (TASK-227)", async () => {
-    const c = copy(DRIFT);
+  /** Renders the drift case (its `/diff` as given) and opens the diff; the Removed region. */
+  async function openDrift(c: typeof DRIFT) {
     const handler = api(c);
     renderWithApi(<RecordView id={c.stored.record.record_id} />, (call) =>
       call.path.endsWith("/diff") ? json(c.diff) : handler(call),
     );
-    fireEvent.click(await screen.findByRole("button", { name: /See the 0 added and 3 removed papers/ }));
-    const removed = await screen.findByRole("region", { name: "Removed (3)" });
+    const n = c.diff.removed_total ?? 0;
+    fireEvent.click(
+      await screen.findByRole("button", { name: new RegExp(`See the 0 added and ${n} removed papers`) }),
+    );
+    return screen.findByRole("region", { name: `Removed (${n})` });
+  }
+
+  /** The list item of the drift case's first removed paper with `cause`. */
+  function itemOf(region: HTMLElement, c: typeof DRIFT, cause: string): HTMLElement {
+    const e = c.diff.removed.find((x) => x.cause === cause);
+    if (e === undefined) throw new Error(`no ${cause} paper in the fixture`);
+    const item = within(region).getAllByRole("listitem")[c.diff.removed.indexOf(e)];
+    if (item === undefined) throw new Error(`no list item for the ${cause} paper`);
+    return item;
+  }
+
+  it("says why each removed paper left, and tallies the causes over the whole list (TASK-227)", async () => {
+    const c = copy(DRIFT);
+    const removed = await openDrift(c);
     const t = c.diff.removed_causes;
     if (t === null) throw new Error("the fixture's diff has no causes");
-    expect(within(removed).getByText(/^Of the 3 removed:/).textContent).toBe(
-      `Of the 3 removed: ${t.track_changed} moved to a track this search doesn't include · ${t.not_in_index} ` +
-        `no longer in the index · ${t.still_eligible} no longer matching the query.`,
+    const n = c.diff.removed_total;
+    expect(within(removed).getByText(/^Of the \d+ removed:/).textContent).toBe(
+      `Of the ${n} removed: ${t.track_changed} moved to a track this search doesn't include · ` +
+        `${t.status_changed} with a status this search doesn't include · ${t.filter_changed} failing another ` +
+        `of its filters · ${t.not_in_index} no longer in the index · ${t.still_eligible} no longer matching the query.`,
     );
-    const items = within(removed).getAllByRole("listitem");
-    const byId = (cause: string) => {
-      const e = c.diff.removed.find((x) => x.cause === cause);
-      if (e === undefined) throw new Error(`no ${cause} paper in the fixture`);
-      const item = items[c.diff.removed.indexOf(e)];
-      if (item === undefined) throw new Error(`no list item for the ${cause} paper`);
-      return item;
-    };
-    const moved = byId("track_changed");
+    const moved = itemOf(removed, c, "track_changed");
     expect(within(moved).getByRole("link").getAttribute("href")).toMatch(/^\/paper\//);
     expect(moved.textContent).toMatch(/ — moved to the IAAI track \(not in this search's tracks\)$/);
-    const gone = byId("not_in_index");
+    expect(itemOf(removed, c, "status_changed").textContent).toMatch(
+      / — its status is now withdrawn \(not in this search's statuses\)$/,
+    );
+    const gone = itemOf(removed, c, "not_in_index");
     expect(within(gone).queryByRole("link")).toBeNull();
     expect(gone.textContent).toBe(
       `${c.diff.removed.find((x) => x.cause === "not_in_index")?.id} — no longer in index ${c.diff.index_version} ` +
         "(left the corpus, or now counted as not a paper)",
     );
-    expect(byId("still_eligible").textContent).toMatch(
+    expect(itemOf(removed, c, "still_eligible").textContent).toMatch(
       / — no longer matches the query \(its title, abstract or details changed\)$/,
     );
   });
@@ -307,12 +350,22 @@ describe("drifted (design R2, R5)", () => {
     const moved = c.diff.removed.find((x) => x.cause === "track_changed");
     if (moved === undefined) throw new Error("no track_changed paper in the fixture");
     Object.assign(moved, { track: "student_abstract" });
-    const handler = api(c);
-    renderWithApi(<RecordView id={c.stored.record.record_id} />, (call) =>
-      call.path.endsWith("/diff") ? json(c.diff) : handler(call),
-    );
-    fireEvent.click(await screen.findByRole("button", { name: /See the 0 added and 3 removed papers/ }));
+    await openDrift(c);
     expect(await screen.findByText(/moved to the student_abstract track/)).toBeTruthy();
+  });
+
+  it("names the filter a paper now fails, and a status in words", async () => {
+    const c = copy(DRIFT);
+    const reworded = c.diff.removed.find((x) => x.cause === "still_eligible");
+    const withdrawn = c.diff.removed.find((x) => x.cause === "status_changed");
+    if (reworded === undefined || withdrawn === undefined) throw new Error("the fixture lacks a cause");
+    Object.assign(reworded, { cause: "filter_changed", failed_filter: "abstract_kind" });
+    Object.assign(withdrawn, { status: "desk_rejected" });
+    const removed = await openDrift(c);
+    expect(itemOf(removed, c, "filter_changed").textContent).toMatch(
+      / — no longer passes this search's abstract_kind: filter$/,
+    );
+    expect(itemOf(removed, c, "status_changed").textContent).toMatch(/ — its status is now desk rejected \(/);
   });
 
   it("says membership-identical on +0 / −0", async () => {

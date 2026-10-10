@@ -815,33 +815,76 @@ def test_the_cli_says_the_scholar_dates_zone(store: RecordStore, kind: str, line
 
 
 # --- a drifted record's removed papers: each one's cause (TASK-227) --------------------------------------
+ALL_STATUSES = (
+    "status:(accepted OR rejected OR withdrawn OR desk_rejected OR unknown)"  # `status:*` doesn't parse
+)
+
+
+def held(**over: str | int) -> dict[str, str | int]:
+    """A paper's filter values on the replaying index: a default-eligible AAAI paper unless overridden."""
+    return {
+        "venue": "AAAI",
+        "year": 2024,
+        "track": "main",
+        "status": "accepted",
+        "abstract_kind": "none",
+        **over,
+    }
+
+
 @pytest.mark.parametrize(
-    ("q", "track", "cause"),
+    ("q", "values", "cause", "field"),
     [
-        ("trust", None, "not_in_index"),  # absent from the replaying index, whatever the query
-        ("trust", "iaai", "track_changed"),  # the default track filter doesn't admit it
-        ("trust", "student_abstract", "track_changed"),
-        ("trust", "main", "still_eligible"),  # on a default track: its text or abstract changed
-        ("trust", "position", "still_eligible"),
-        ("trust AND track:(main OR iaai)", "iaai", "still_eligible"),  # the reader's own tracks decide
-        ("trust AND track:(main OR iaai)", "demo", "track_changed"),
-        ("trust NOT track:workshop", "demo", "still_eligible"),  # a negated track clause
-        ("trust NOT track:workshop", "workshop", "track_changed"),
-        ("trust AND track:main AND track:(main OR demo)", "demo", "track_changed"),  # every clause applies
-        ("trust OR track:demo", "demo", "track_changed"),  # nested only: the default still applies on top
-        ("trust OR track:demo", "main", "still_eligible"),
+        ("trust", None, "not_in_index", None),  # absent from the replaying index, whatever the query
+        ("trust", held(track="iaai"), "track_changed", "track"),  # the default track filter doesn't admit it
+        ("trust", held(track="student_abstract"), "track_changed", "track"),
+        ("trust", held(), "still_eligible", None),  # every filter passes: its text or abstract changed
+        ("trust", held(track="position"), "still_eligible", None),
+        ("trust AND track:(main OR iaai)", held(track="iaai"), "still_eligible", None),  # the reader's tracks
+        ("trust AND track:(main OR iaai)", held(track="demo"), "track_changed", "track"),
+        ("trust NOT track:workshop", held(track="demo"), "still_eligible", None),  # a negated track clause
+        ("trust NOT track:workshop", held(track="workshop"), "track_changed", "track"),
+        ("trust AND track:main AND track:(main OR demo)", held(track="demo"), "track_changed", "track"),
+        ("trust OR track:demo", held(track="demo"), "track_changed", "track"),  # nested: the default applies
+        ("trust OR track:demo", held(), "still_eligible", None),
+        # status is a default clause too (review I-1): withdrawn, rejected, desk_rejected fail it
+        ("trust", held(status="withdrawn"), "status_changed", "status"),
+        ("trust", held(status="desk_rejected"), "status_changed", "status"),
+        (f"trust {ALL_STATUSES}", held(status="withdrawn"), "still_eligible", None),  # the reader's statuses
+        ("trust NOT status:rejected", held(status="withdrawn"), "still_eligible", None),
+        ("trust NOT status:rejected", held(status="rejected"), "status_changed", "status"),
+        ("trust", held(track="iaai", status="withdrawn"), "track_changed", "track"),  # track takes precedence
+        # any other top-level filter that now fails is `filter_changed`, naming the field
+        ("trust abstract_kind:official", held(abstract_kind="openalex"), "filter_changed", "abstract_kind"),
+        ("trust abstract_kind:official", held(abstract_kind="official"), "still_eligible", None),
+        (
+            "trust abstract_kind:official",
+            held(abstract_kind="none", status="rejected"),
+            "status_changed",
+            "status",
+        ),
+        ("trust year:2020..2023", held(), "filter_changed", "year"),
+        ("trust venue:AIES", held(), "filter_changed", "venue"),
     ],
 )
-def test_removal_cause(q: str, track: str | None, cause: str) -> None:
+def test_removal_cause(q: str, values: dict[str, str | int] | None, cause: str, field: str | None) -> None:
     parsed = parse(q, "native", TOKENIZER_VERSION)
-    assert records.removal_cause(track, records.track_clauses(parsed)) == cause
+    assert parsed.errors == []
+    assert records.removal_cause(values, records.filter_clauses(parsed)) == (cause, field)
 
 
 def test_removal_tally_counts_every_cause_zero_included() -> None:
     found = {
-        "a": records.Removal("iaai", "track_changed"),
-        "b": records.Removal(None, "not_in_index"),
-        "c": records.Removal("demo", "track_changed"),
+        "a": records.Removal("iaai", "accepted", "track_changed", "track"),
+        "b": records.Removal(None, None, "not_in_index", None),
+        "c": records.Removal("demo", "accepted", "track_changed", "track"),
+        "d": records.Removal("main", "withdrawn", "status_changed", "status"),
     }
-    assert records.removal_tally(found) == {"track_changed": 2, "not_in_index": 1, "still_eligible": 0}
+    assert records.removal_tally(found) == {
+        "track_changed": 2,
+        "status_changed": 1,
+        "filter_changed": 0,
+        "not_in_index": 1,
+        "still_eligible": 0,
+    }
     assert list(records.removal_tally({})) == list(records.REMOVAL_CAUSES)

@@ -51,6 +51,17 @@ def test_the_drift_case_has_every_removal_cause() -> None:
     body = json.loads(OUT.read_text(encoding="utf-8"))["drift"]
     assert body["replayed"]["replay"]["status"] == "drifted"
     diff = body["diff"]
-    assert sorted(x["cause"] for x in diff["removed"]) == ["not_in_index", "still_eligible", "track_changed"]
-    assert diff["removed_causes"] == {"track_changed": 1, "not_in_index": 1, "still_eligible": 1}
-    assert {x["track"] for x in diff["removed"]} == {"iaai", None, "main"}
+    assert sorted(x["cause"] for x in diff["removed"]) == [
+        "not_in_index",
+        "status_changed",
+        "still_eligible",
+        "track_changed",
+    ]
+    assert diff["removed_causes"] == {
+        "track_changed": 1,
+        "status_changed": 1,
+        "filter_changed": 0,
+        "not_in_index": 1,
+        "still_eligible": 1,
+    }
+    assert {x["status"] for x in diff["removed"]} == {"accepted", "withdrawn", None}

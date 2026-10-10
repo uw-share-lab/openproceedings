@@ -579,12 +579,22 @@ class DiffEntry(Model):
     track: Track | None = Field(  # TASK-227: additive
         description="Its track on the index the replay ran on; null when that index doesn't hold it."
     )
+    status: Status | None = Field(  # TASK-227: additive
+        description="Its status on the index the replay ran on; null when that index doesn't hold it."
+    )
     cause: RemovalCause | None = Field(  # TASK-227: additive
         description="Why the replay no longer matches a removed paper (null on an added one), judged on the "
-        "index the replay ran on. `track_changed`: that index holds it on a track the search's `track:` clauses (the "
-        "default included) don't admit, e.g. moved to `iaai`. `not_in_index`: that index doesn't hold it (it "
-        "left the corpus, or is counted as not a paper). `still_eligible`: held on a track the search admits, "
-        "so its title, abstract or another field no longer matches."
+        "index the replay ran on against the replayed query's top-level filter clauses (the defaults included), "
+        "track first, then status, then any other field. `track_changed`: held on a track those clauses don't "
+        "admit, e.g. moved to `iaai`. `status_changed`: held with a status they don't admit, e.g. now "
+        "`withdrawn`. `filter_changed`: held, but another filter (`failed_filter`: `venue`, `year` or "
+        "`abstract_kind`) no longer admits it. `not_in_index`: that index doesn't hold it (it left the corpus, "
+        "or is counted as not a paper). `still_eligible`: every filter admits it, so its title, abstract or "
+        "another searched field no longer matches."
+    )
+    failed_filter: FilterField | None = Field(  # TASK-227: additive
+        description="The filter field a removed paper now fails: `track` for `track_changed`, `status` for "
+        "`status_changed`, the field for `filter_changed`; null otherwise."
     )
 
 
@@ -592,6 +602,8 @@ class RemovalCauses(Model):
     """How many of the whole removed list (not just the page) have each cause; every cause, 0 included."""
 
     track_changed: int
+    status_changed: int
+    filter_changed: int
     not_in_index: int
     still_eligible: int
 

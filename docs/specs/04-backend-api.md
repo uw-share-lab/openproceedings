@@ -105,7 +105,7 @@ reviews without the UI.
 | `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` (with `mode` at most `native`) → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; with `record_id`, exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if that index is gone, 409 `API_RECORD_MISMATCH` if its replay is a `mismatch`) |
 | `POST` | `/records` | Freezes a search as an immutable **search record** → 201 `{record_id, page}` plus the three versions, with `Location: /api/v1/records/<record_id>`; an optional `index_version` pins the save to the index the search was shown on (409 otherwise) |
 | `GET` | `/records/{id}` | The stored record, plus a replay check (see below); `replay=false` for the stored record alone |
-| `GET` | `/records/{id}/diff` | For a record of any status: added and removed ids (with titles; each removed one with its track and cause, and a per-cause tally, TASK-227), paged, and which `index_version` inputs changed (empty unless `drifted`) |
+| `GET` | `/records/{id}/diff` | For a record of any status: added and removed ids (with titles, tracks and statuses; each removed one with its cause, and a per-cause tally, TASK-227), paged, and which `index_version` inputs changed (empty unless `drifted`) |
 | `POST` | `/compare` | `q, mode` and a RIS file as the body → which of the file's papers the query's result keeps, drops (and why) and adds, and which the index doesn't hold (§Comparing with a RIS file; TASK-177). Off unless the operator turned it on |
 | `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date, what kind its window is and whether its counts are citable; per venue-year the statuses indexed, per venue × year × track the spec 07 §C cell (official count, delta, gate) |
 | `GET` | `/meta` | Current and servable `index_version`s, the field names and the venue, track and status vocabularies (these feed the UI's autocomplete), and this instance's query `limits`; `limits.compare` holds `POST /compare`'s caps, or null when comparisons are off |
@@ -1009,23 +1009,29 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   `IndexState.pinned` (§Implementation notes, pinned indexes: the LRU, the remembered refusals and the log
   level per reason).
 - **`GET /records/{id}/diff?offset=&limit=`** answers `{…versions, record_id, status, recorded_index_version,
-  refused, changed, offset, limit, added_total, removed_total, added: [{id, title, track, cause}], removed:
-  [{id, title, track, cause}], membership_identical, removed_causes}` for any status. Each list is the page `[offset,
-  offset + limit)` of its id-sorted list (`limit` 0–200, default 50; out of range is 422 `API_BAD_PARAM`, never
-  clamped); the totals are always in full. A title comes from the index the replay ran on, null when it doesn't
-  hold the paper. A refused replay has empty lists and null totals and `removed_causes`.
+  refused, changed, offset, limit, added_total, removed_total, added: [entry], removed: [entry],
+  membership_identical, removed_causes}` for any status, each entry `{id, title, track, status, cause,
+  failed_filter}`. Each list is the page `[offset, offset + limit)` of its id-sorted list (`limit` 0–200,
+  default 50; out of range is 422 `API_BAD_PARAM`, never clamped); the totals are always in full. A title,
+  track and status come from the index the replay ran on, null when it doesn't hold the paper. A refused replay
+  has empty lists and null totals and `removed_causes`.
   - **Why each paper was removed (TASK-227, additive).** Judged on the index the replay ran on (the served
-    one, or the record's own when pinned), by a stored-field read of the removed ids
-    (`TantivyEngine.tracks`; no index field): `track` is the paper's track there (null when it isn't held; an
-    added paper has one too) and `cause`, null on an added paper, is `not_in_index` (not held: it left the corpus, or is counted as not a paper, e.g. a talk after
-    decision-050), `track_changed` (held on a track the effective query's top-level `track:` clauses, the
-    default included, don't admit, e.g. moved to `iaai` or `student_abstract`), or `still_eligible` (held on a
-    track the search admits, so its title, abstract or another field no longer matches). An open set.
-    `removed_causes` `{track_changed, not_in_index, still_eligible}` counts the whole removed list, not the
-    page, every cause present. The cause is a function of the replay's removed set, so `ids_hash`, the status
-    and every other field are unchanged (guarantee 4). `records.removals`/`removal_cause` are the one
-    implementation. The access line carries the three counts (`removed_track_changed`,
-    `removed_not_in_index`, `removed_still_eligible`), never an id or a title.
+    one, or the record's own when pinned), from each removed id's filter values there
+    (`TantivyEngine.filter_values`: the index's per-value document bitmaps at the id's `ord`, no stored
+    document decoded, no index field). `cause`, null on an added paper, is `not_in_index` (not held: it left
+    the corpus, or is counted as not a paper, e.g. a talk after decision-050); else the first of the replayed
+    query's top-level filter clauses (the defaults included) that its values fail, decided as the compiled
+    query decides a filter, track first, then status, then the other fields in filter order: `track_changed`
+    (e.g. moved to `iaai` or `student_abstract`), `status_changed` (e.g. now `withdrawn`, `rejected` or
+    `desk_rejected` under the default `status:accepted`), `filter_changed` (a `venue:`, `year:` or
+    `abstract_kind:` limit no longer admits it); `still_eligible` when every filter admits it, so its title,
+    abstract or another searched field no longer matches. An open set. `failed_filter` is the field that
+    failed (`track`, `status`, or the `filter_changed` field), else null. `removed_causes` `{track_changed,
+    status_changed, filter_changed, not_in_index, still_eligible}` counts the whole removed list, not the page,
+    every cause present (cheap per page: a bitmap read per id). The cause is a function of the replay's removed
+    set, so `ids_hash`, the status and every other field are unchanged (guarantee 4).
+    `records.removals`/`removal_cause` are the one implementation. The access line carries the five counts
+    (`removed_<cause>`), never an id or a title.
 - **For `/export?record_id=` (task-036)**: `api.records.stored_record(request, record_id)` (422/404) and
   `refuse_mismatch(request, record, engine)` (409 `API_RECORD_MISMATCH` on a `mismatch` replay), which
   `/export` calls after pinning the record's index (the only production callers; the `require_citable` and
@@ -1203,7 +1209,8 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     held a comparison slot, the file arriving included), `compare_cost_ms` (what of it is debited: the file's
     arrival counted `compare_upload_weight` times, plus the work's CPU) and `compare_tokens` (that, in
     tokens), a record diff's removal causes (`/diff` only, counted over its whole removed list, TASK-227:
-    `removed_track_changed`, `removed_not_in_index`, `removed_still_eligible`; never an id or a title),
+    `removed_track_changed`, `removed_status_changed`, `removed_filter_changed`, `removed_not_in_index`,
+    `removed_still_eligible`; never an id or a title),
     `verify_cpu_ms` (the verifying thread's CPU in those holds), `verify_tokens` (what that CPU time was
     debited; absent likewise), and `code`, the error
     envelope's code, on every refusal (the body cap's 413, the rate limit's 429, a routing 404, `API_BUSY`, …)

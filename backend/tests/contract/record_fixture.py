@@ -6,9 +6,9 @@ For each query in `RECORDS`: the `POST /records` 201 body, `GET /records/{id}?re
 and `GET /records/{id}` (with its replay), and `POST /parse` of the record's `canonical` and of its
 `identification_query` (the methods text reads the default and limit clauses from the first and the
 all-negative case from the second). For each query in `SEARCHES`: `GET /search` and `POST /parse` of it (the
-export menu's status and track warnings). `drift` (TASK-227) is one record saved on a four-paper AAAI index
-and replayed on a second one where one paper moved to the IAAI track, one left the index and one no longer
-matches: its stored read, its drifted replay and its `/diff`, so the diff view's causes and tally are the
+export menu's status and track warnings). `drift` (TASK-227) is one record saved on a five-paper AAAI index
+and replayed on a second one where one paper moved to the IAAI track, one left the index, one was withdrawn and
+one no longer matches: its stored read, its drifted replay and its `/diff`, so the diff view's causes and tally are the
 API's. A record id is random and `searched_at` is the clock, so both are
 replaced with fixed values (`FIXED_IDS`, `FIXED_SEARCHED_AT`) everywhere they appear.
 
@@ -53,14 +53,18 @@ DRIFT_ID = "RecDrift0001"
 _AAAI = {"venue": "AAAI", "year": 2024}
 DRIFT_BEFORE = [
     Rec("fx:0001", "Trust in deployed models", None, **_AAAI),
-    Rec("fx:0002", "Trust calibration, withdrawn", None, **_AAAI),
+    Rec("fx:0002", "Trust calibration, now a talk", None, **_AAAI),
     Rec("fx:0003", "Trust and reliance in teams", None, **_AAAI),
     Rec("fx:0004", "Trust repair after errors", None, **_AAAI),
+    Rec("fx:0005", "Trust signals, withdrawn", None, **_AAAI),
 ]
-DRIFT_AFTER = [  # fx:0001 moved to IAAI; fx:0002 left the index; fx:0003 no longer says "trust"
+# fx:0001 moved to IAAI; fx:0002 left the index (a not-paper row now); fx:0003 no longer says "trust"; fx:0005
+# was withdrawn
+DRIFT_AFTER = [
     Rec("fx:0001", "Trust in deployed models", None, track="iaai", **_AAAI),
     Rec("fx:0003", "Reliance in teams", None, **_AAAI),
     Rec("fx:0004", "Trust repair after errors", None, **_AAAI),
+    Rec("fx:0005", "Trust signals, withdrawn", None, status="withdrawn", **_AAAI),
 ]
 
 # name → (q, mode): the export menu's warnings

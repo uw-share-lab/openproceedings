@@ -112,6 +112,8 @@ def annotate(
     not_in_index: int | None = None,
     added: int | None = None,
     removed_track_changed: int | None = None,
+    removed_status_changed: int | None = None,
+    removed_filter_changed: int | None = None,
     removed_not_in_index: int | None = None,
     removed_still_eligible: int | None = None,
 ) -> None:
@@ -132,6 +134,8 @@ def annotate(
         ("not_in_index", not_in_index),
         ("added", added),
         ("removed_track_changed", removed_track_changed),
+        ("removed_status_changed", removed_status_changed),
+        ("removed_filter_changed", removed_filter_changed),
         ("removed_not_in_index", removed_not_in_index),
         ("removed_still_eligible", removed_still_eligible),
     ):

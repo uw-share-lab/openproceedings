@@ -213,8 +213,9 @@ export interface paths {
          * Get Record Diff
          * @description The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each
          *     list is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A
-         *     title comes from the index the replay ran on, null if it doesn't hold the paper. Each removed paper also
-         *     has its track there and its cause, and `removed_causes` counts the causes over the whole list (TASK-227;
+         *     title comes from the index the replay ran on, null if it doesn't hold the paper. Each entry also has its
+         *     track and status there, each removed one its cause and failed filter, and `removed_causes` counts the
+         *     causes over the whole list (`removals`, cheap enough to run per page: a bitmap read per id; TASK-227;
          *     the counts go on the access line too, never a title). A refused replay compared nothing: empty lists,
          *     null totals and `removed_causes`.
          */
@@ -697,11 +698,21 @@ export interface components {
         DiffEntry: {
             /**
              * Cause
-             * @description Why the replay no longer matches a removed paper (null on an added one), judged on the index the replay ran on. `track_changed`: that index holds it on a track the search's `track:` clauses (the default included) don't admit, e.g. moved to `iaai`. `not_in_index`: that index doesn't hold it (it left the corpus, or is counted as not a paper). `still_eligible`: held on a track the search admits, so its title, abstract or another field no longer matches.
+             * @description Why the replay no longer matches a removed paper (null on an added one), judged on the index the replay ran on against the replayed query's top-level filter clauses (the defaults included), track first, then status, then any other field. `track_changed`: held on a track those clauses don't admit, e.g. moved to `iaai`. `status_changed`: held with a status they don't admit, e.g. now `withdrawn`. `filter_changed`: held, but another filter (`failed_filter`: `venue`, `year` or `abstract_kind`) no longer admits it. `not_in_index`: that index doesn't hold it (it left the corpus, or is counted as not a paper). `still_eligible`: every filter admits it, so its title, abstract or another searched field no longer matches.
              */
-            cause: ("track_changed" | "not_in_index" | "still_eligible") | null;
+            cause: ("track_changed" | "status_changed" | "filter_changed" | "not_in_index" | "still_eligible") | null;
+            /**
+             * Failed Filter
+             * @description The filter field a removed paper now fails: `track` for `track_changed`, `status` for `status_changed`, the field for `filter_changed`; null otherwise.
+             */
+            failed_filter: ("venue" | "year" | "track" | "status" | "abstract_kind") | null;
             /** Id */
             id: string;
+            /**
+             * Status
+             * @description Its status on the index the replay ran on; null when that index doesn't hold it.
+             */
+            status: ("accepted" | "rejected" | "withdrawn" | "desk_rejected" | "unknown") | null;
             /** Title */
             title: string | null;
             /**
@@ -1479,8 +1490,12 @@ export interface components {
          * @description How many of the whole removed list (not just the page) have each cause; every cause, 0 included.
          */
         RemovalCauses: {
+            /** Filter Changed */
+            filter_changed: number;
             /** Not In Index */
             not_in_index: number;
+            /** Status Changed */
+            status_changed: number;
             /** Still Eligible */
             still_eligible: number;
             /** Track Changed */
