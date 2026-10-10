@@ -7,7 +7,9 @@ User-Agent names a contact (Crossref's polite pool), without it the plain repo U
 the address is in the User-Agent only, never a URL, a cache entry, a claim, a log line or an exception. The cursor
 is opaque and never a claim's url: a claim's url is the work's own API URL, and `dedup.attribution` credits the
 DOI link. A cursor expires within minutes, so a chain that is not whole in the cache restarts from `cursor=*`; the
-replay follows the cached chain offline. The fields: no abstracts, which `select` leaves out.
+replay follows the cached chain offline. The fields: no abstracts, which `select` leaves out. FAccT's abstracts
+come from the official conference pages instead (`facct_site`), joined here to the records by DOI or by exact title
+key, one to one (`mine_proceedings(..., site=)`).
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ import logging
 import re
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -33,10 +35,17 @@ from openproceedings.ingest.record import (
     ClaimValue,
     PaperRecord,
     Source,
+    controls_evidence,
     title_evidence,
     title_text,
 )
-from openproceedings.ingest.sources.common import CrawlError, ListingReport, record_from_claims
+from openproceedings.ingest.sources import facct_site
+from openproceedings.ingest.sources.common import (
+    CrawlError,
+    ListingReport,
+    pdf_codes_evidence,
+    record_from_claims,
+)
 from openproceedings.ingest.sources.http import USER_AGENT, Fetcher, Page
 from openproceedings.ingest.sources.openreview_client import read_dotenv
 from openproceedings.logs import elapsed_ms
@@ -180,15 +189,28 @@ def user_agent(mailto: str | None) -> str:
 @dataclass(kw_only=False)
 class CrossrefReport(ListingReport):
     """One ACM proceedings from Crossref: the shared listing counts, plus the works the window returned (every
-    prefix:10.1145 DOI, this proceedings' and others'), the cursor pages read, and the records with no author."""
+    prefix:10.1145 DOI, this proceedings' and others'), the cursor pages read, and the records with no author; for
+    FAccT years with an official page (`facct_site`), the page's entries, the abstracts attached and why the rest
+    weren't (listed in the manifest only when a page was read)."""
 
     window_works: int = 0
     pages: int = 0
     no_authors: int = 0
+    sites: list[str] = field(default_factory=list)  # the official page read, as fetched
+    site_entries: int = 0  # page entries with a title and a usable abstract
+    abstract_attached: int = 0
+    # entries no record joins (no DOI, a DOI no record has, or a title key no record has)
+    site_unmatched: int = 0
+    site_ambiguous: int = 0  # entries whose DOI or title key two entries, or two records, share
+    site_dropped: int = 0  # page rows with no title or no usable abstract
 
     def to_manifest(self) -> dict[str, Any]:
         out = super().to_manifest() | {"window_works": self.window_works, "pages": self.pages,
                                        "no_authors": self.no_authors}  # fmt: skip
+        if self.sites:
+            out |= {"sites": list(self.sites), "site_entries": self.site_entries,
+                    "abstract_attached": self.abstract_attached, "site_unmatched": self.site_unmatched,
+                    "site_ambiguous": self.site_ambiguous, "site_dropped": self.site_dropped}  # fmt: skip
         return dict(sorted(out.items()))
 
 
@@ -247,9 +269,12 @@ def harvest(row: Proceedings, fetcher: Fetcher, *, refresh: bool = False) -> lis
 
 
 def mine_proceedings(
-    venue: str, year: int, fetcher: Fetcher, *, refresh: bool = False, table: acm_table.Table | None = None
-) -> ProceedingsResult:
-    """One ACM proceedings' records from Crossref, with the table's count checked (a mismatch stops the crawl)."""
+    venue: str, year: int, fetcher: Fetcher, *, refresh: bool = False, table: acm_table.Table | None = None,
+    site: facct_site.SiteYear | None = None,
+) -> ProceedingsResult:  # fmt: skip
+    """One ACM proceedings' records from Crossref, with the table's count checked (a mismatch stops the crawl).
+    With `site` (a FAccT year's official page), each record takes the abstract of the one page entry joined to it
+    (`facct_site.match`: by DOI, or by a title key that entry and record alone share); the rest are counted."""
     started = time.monotonic()
     table = table or acm_table.TABLE
     row = table.proceedings.get((venue, year))
@@ -293,7 +318,7 @@ def mine_proceedings(
     ):
         raise CrawlError(f"Crossref {venue} {year}: acm_proceedings.toml's not_paper rows {', '.join(stale)} are not "
                          "in the harvest: check the window and the table", reason="stale_not_paper")  # fmt: skip
-    records: list[PaperRecord] = []
+    kept: list[tuple[str, Work, Page]] = []
     for doi in sorted(seen, key=lambda d: int((acm_table.paper_doi(d) or ("", "0"))[1])):
         page, w = seen[doi]
         if doi in table.not_papers:
@@ -302,17 +327,35 @@ def mine_proceedings(
         if w.title is None:
             raise CrawlError(f"Crossref {venue} {year}: {doi} has no title: name it in acm_proceedings.toml "
                              "[[not_paper]] if it is no paper, else check Crossref", reason="no_title")  # fmt: skip
+        kept.append((doi, w, page))
+    matched = None
+    if site is not None:
+        matched = facct_site.match([(doi, title_text(w.title or "")[0]) for doi, w, _ in kept], site)
+        report.sites = [site.page]
+        report.site_entries = len(site.entries)
+        report.site_dropped = site.dropped
+        report.site_unmatched, report.site_ambiguous = matched.unmatched, matched.ambiguous
+        report.fetched += site.fetched
+    records: list[PaperRecord] = []
+    for doi, w, page in kept:
+        found = matched.by_doi.get(doi) if matched is not None else None
         try:
-            record = _record(row, w, page)
+            record = _record(row, w, page, found, site.join if site is not None else None)
         except (ValidationError, ValueError) as e:
             raise CrawlError(f"Crossref {venue} {year}: {doi} makes no valid record ({type(e).__name__})",
                              reason="invalid_record") from e  # fmt: skip
         report.no_authors += not record.authors
         records.append(record)
-        report.count(record, "no_abstract")
+        report.count(record, None if record.abstract else "no_abstract", found.spaced if found else 0,
+                     found.pdf_codes if found else 0)  # fmt: skip
+    report.abstract_attached = sum(r.abstract is not None for r in records)
     log.info("crossref_proceedings_mined", extra={"venue": venue, "year": year, "listed": report.listed,
                                                   "records": report.records, "window_works": report.window_works,
-                                                  "pages": report.pages,
+                                                  "pages": report.pages, "abstract_attached": report.abstract_attached,
+                                                  "site_entries": report.site_entries,
+                                                  "site_unmatched": report.site_unmatched,
+                                                  "site_ambiguous": report.site_ambiguous,
+                                                  "site_dropped": report.site_dropped,
                                                   "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     if report.no_authors:
         log.warning("listing_attention", extra={"venue": venue, "year": year, "listing": report.listing,
@@ -320,8 +363,10 @@ def mine_proceedings(
     return ProceedingsResult(records, [report])
 
 
-def _record(row: Proceedings, w: Work, page: Page) -> PaperRecord:
-    """The record of one Crossref work: every claim at the work's own API URL (never a cursor page)."""
+def _record(row: Proceedings, w: Work, page: Page, found: facct_site.SiteAbstract | None = None,
+            join: str | None = None) -> PaperRecord:  # fmt: skip
+    """The record of one Crossref work: every claim at the work's own API URL (never a cursor page), and the
+    official page's abstract when `found` (its claim at the page as fetched; `join` says how it was joined)."""
     where = f"Crossref work {w.doi} in proceedings {row.doi} (acm_proceedings.toml {row.venue} {row.year})"
     claims: list[Claim] = []
 
@@ -339,4 +384,9 @@ def _record(row: Proceedings, w: Work, page: Page) -> PaperRecord:
         claim("authors", w.authors, f"{where}: author, in Crossref's order")
     claim("urls.doi", w.doi, where)
     claim("urls.proceedings", f"https://doi.org/{w.doi}", where)
+    if found is not None:
+        how = "DOI" if join == "doi" else "its title key, the record’s alone"
+        claims.append(Claim(field="abstract", value=found.abstract, source=facct_site.SOURCE, url=found.url,
+                            fetched_at=found.fetched_at, evidence=pdf_codes_evidence(controls_evidence(
+                                f"{found.evidence}; joined to {w.doi} by {how}", found.spaced), found.pdf_codes)))  # fmt: skip
     return record_from_claims(f"op:{row.venue.lower()}:{row.year}:doi-{w.doi.split('/', 1)[1]}", claims)

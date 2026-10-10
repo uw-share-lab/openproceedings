@@ -123,3 +123,34 @@ def test_the_contact_never_reaches_the_cache_or_an_error(tmp_path, monkeypatch) 
     assert e.value.reason == "count_mismatch" and "reviewer@example.org" not in str(e.value)
     assert all("reviewer@example.org" not in p.read_text() for p in tmp_path.rglob("*") if p.is_file())
     assert not (tmp_path / "crossref" / "crawls").exists()  # no marker for a stopped crawl
+
+
+def test_the_ingest_and_the_replay_attach_the_same_official_abstract(tmp_path, monkeypatch) -> None:
+    from openproceedings.ingest.sources import facct_site
+
+    from tests.unit.ingest.crossref.test_facct_site import SITE_TABLE, URL26, csv26
+    from tests.unit.ingest.proceedings_helpers import seed
+
+    monkeypatch.setattr(facct_site, "TABLE", facct_site.load(SITE_TABLE))
+    _whole(tmp_path, api.work(D1, title="Fair Ranking"), api.work(D2), api.work(NP), total=3)
+    seed(
+        tmp_path,
+        "facct_site",
+        URL26,
+        csv26(("1", "Fair Ranking", "Official."), ("2", "x", "y"), ("3", "z", "w")),
+    )
+    out = crawl.ingest_crossref([("FAccT", 2023)], tmp_path, offline=True, table=TABLE)
+    (listing,) = out["listings"]
+    assert (listing["sites"], listing["abstract_attached"], listing["site_unmatched"]) == ([URL26], 1, 2)
+    (replayed,) = crawl.CROSSREF.replay(tmp_path)
+    r = next(x for x in replayed.records if x.urls.doi == D1)
+    assert r.abstract == "Official." and r.claims("abstract")[0].url == URL26
+    assert replayed.reports[0].to_manifest() == listing
+
+
+def test_aies_never_reads_the_facct_site(tmp_path, monkeypatch) -> None:
+    from openproceedings.ingest.sources import facct_site
+
+    calls: list[int] = []
+    monkeypatch.setattr(facct_site, "read_year", lambda y, *a, **k: calls.append(y))
+    assert crawl._facct_site("AIES", 2023, None) is None and calls == []  # type: ignore[arg-type]

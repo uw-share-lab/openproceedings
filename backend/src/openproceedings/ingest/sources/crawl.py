@@ -27,6 +27,7 @@ from openproceedings.ingest.sources import (
     crossref,
     dblp,
     dblp_aaai,
+    facct_site,
     iclr,
     icml_sites,
     neurips,
@@ -350,13 +351,30 @@ def crossref_fetcher(cache: Path, *, offline: bool, transport: Transport | None 
                    keep_query=True, user_agent=agent)  # fmt: skip
 
 
+def facct_site_fetcher(cache: Path, *, offline: bool, transport: Transport | None = None,
+                       min_interval: float = DEFAULT_INTERVAL) -> Fetcher:  # fmt: skip
+    """facctconference.org's fetcher. Its CSVs are served as `application/octet-stream`, so the Accept header ends
+    in `*/*` and the body is read as text whatever its type; a CSV has no closing tag, so `expect="text"` judges it
+    whole unless it states a length it doesn't have (the table's row count is the guard)."""
+    live = None if offline else (transport or urllib_transport)
+    return Fetcher(PageCache(cache / facct_site.CACHE_DIR), live, hosts=facct_site.HOSTS,
+                   min_interval=max(min_interval, facct_site.MIN_INTERVAL),
+                   accept="text/csv, text/html, */*;q=0.1", expect="text")  # fmt: skip
+
+
+def _facct_site(venue: str, year: int, f: Fetcher, *, refresh: bool = False) -> facct_site.SiteYear | None:
+    """A FAccT year's official page (`facct_site.TABLE`), or None (AIES; a FAccT year with no page)."""
+    return facct_site.read_year(year, f, refresh=refresh) if venue == "FAccT" else None
+
+
 def ingest_crossref(
     keys: Iterable[tuple[str, int]], cache: Path, *, offline: bool = False, dry_run: bool = False,
     refresh: bool = False, transport: Transport | None = None, min_interval: float = DEFAULT_INTERVAL,
     table: acm_table.Table | None = None, mailto: str | None = None,
 ) -> dict[str, Any]:  # fmt: skip
     """Crawl each (venue, year) ACM proceedings of `acm_proceedings.toml` from Crossref into the cache. A dry run
-    reads nothing live (no network, no contact) and says what is cached; it writes no marker."""
+    reads nothing live (no network, no contact) and says what is cached; it writes no marker. A FAccT year with an
+    official page (`facct_site.toml`) reads that page too, for its abstracts."""
     table = table or acm_table.TABLE
     wanted = sorted(set(keys)) or sorted(table.proceedings)
     for v, y in wanted:
@@ -372,20 +390,23 @@ def ingest_crossref(
     f = crossref_fetcher(
         cache, offline=offline, transport=transport, min_interval=min_interval, mailto=mailto
     )
+    sf = facct_site_fetcher(cache, offline=offline, transport=transport, min_interval=min_interval)
     mined = CROSSREF.ingest(
-        cache, wanted, lambda k: crossref.mine_proceedings(*k, f, refresh=refresh, table=table),
+        cache, wanted, lambda k: crossref.mine_proceedings(*k, f, refresh=refresh, table=table,
+                                                            site=_facct_site(*k, sf, refresh=refresh)),
         lambda k, _: (f"{k[0]}-{k[1]}", {"source": crossref.SOURCE, "venue": k[0], "year": k[1]}),
     )  # fmt: skip
     reports = [r for m in mined for r in m.reports]
     log.info("crossref_ingested", extra={"proceedings": len(wanted), "listings": len(reports),
-                                         "requests": f.stats.network})  # fmt: skip
+                                         "requests": f.stats.network, "site_requests": sf.stats.network})  # fmt: skip
     return _output(reports, f, False)
 
 
 CROSSREF: Crawls[crossref.ProceedingsResult] = Crawls(
     lambda cache: crawls_dir(cache, crossref.CACHE_DIR), lambda m: (str(m["venue"]), int(m["year"])),
     lambda k: f"Crossref {k[0]} {k[1]}", "op ingest crossref",
-    lambda cache, k: crossref.mine_proceedings(k[0], k[1], crossref_fetcher(cache, offline=True)),
+    lambda cache, k: crossref.mine_proceedings(k[0], k[1], crossref_fetcher(cache, offline=True),
+                                               site=_facct_site(k[0], k[1], facct_site_fetcher(cache, offline=True))),
 )  # fmt: skip
 SOURCES: tuple[Crawls[Any], ...] = (
     openreview_v2.CRAWLS,
