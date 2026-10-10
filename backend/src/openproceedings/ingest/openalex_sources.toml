@@ -1,0 +1,11 @@
+# OpenAlex listing table (AAAI 1980-2008, the DOI-less dblp years; decision-049, milestone C). Data, not code:
+# `ingest/openalex_table.py` loads and checks it, and no other module holds an OpenAlex source id. Rows arrive with
+# the live census (Task 12); until then the listing route has no row and matches nothing.
+#
+# [[listing]] columns (one per venue and year)
+#   venue        AAAI (AIES and FAccT records carry DOIs: the DOI route reaches them)
+#   year         a held year of record.DBLP_YEARS["AAAI"] (1980-2008)
+#   source_ids   the OpenAlex source ids (`S…`) under which OpenAlex files that year's proceedings (per era)
+#   works        the works OpenAlex listed for the row when verified; a crawl that finds another count stops
+#   verified     the date the row was checked live
+#   source       where the check is recorded
