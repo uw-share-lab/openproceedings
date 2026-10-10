@@ -41,7 +41,7 @@ NAACL, CHI and CSCW remain out of scope for now.
 
 - `RECORD_SCHEMA_VERSION` 5 → 6 (five new track values, four new venues, the `ojs` claim source, the `ojs-`
   native id), then 6 → 7 in milestone B (the `crossref` and `facct_site` claim sources, the `doi-<toc>.<n>` native id,
-  `dblp-` ids for AAAI 1980–2008). The corpus grows from about 141k to about 172k records over three milestones.
+  `dblp-` ids for AAAI 1980–2008). The corpus grows from about 141k to about 173k records (173,292 after milestone B's build).
 - **Milestone A (built):** vocab, record schema 6, the `ojs` source (`sources/ojs.py`, `ojs_harvest.py`,
   `ojs_table.py` with `ojs_sections.toml`, `op ingest ojs`), the HTTP layer's XML responses and the research
   note. It brings AAAI 2010–2026 (25,126 records; 25,128 before the 2023 Errata were ruled front matter), AIES 2024–2025 (449) and IASEAI 2026 (57) from

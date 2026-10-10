@@ -36,7 +36,9 @@ venues.
   and an OpenAlex fallback for abstracts no official source holds (labelled, with an `abstract_kind:` filter).
   Until a venue-year is built it is absent from the index and the coverage page, which says so (copy deck CV-7).
   Most records of AAAI 1980-2008 and of FAccT 2019-2021, 2023 and 2024 and AIES 2018-2023 have a title and no
-  abstract until then.
+  abstract until milestone C's labelled OpenAlex fallback, and some will stay without one; the coverage page and
+  the home page name these venue-years (copy deck CV-8). AIES 2018-2023's student abstracts and keynotes are
+  `main` (Crossref labels no section), so a default search counts them, unlike AIES 2024+'s `student_abstract`.
 - Content: title and abstract, plus metadata (authors, venue, year, track, acceptance status, links).
 - Search: exact-token Boolean search with phrases, proximity, explicit wildcards, field scopes, and
   filters written inside the query itself.

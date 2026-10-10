@@ -850,8 +850,9 @@ def test_the_scope_lines_say_each_venues_years_and_what_the_dblp_years_rest_on()
     def vy(venue: str, year: int, records: int = 1) -> dict[str, Any]:
         return {"venue": venue, "year": year, "records": records, "tracks": [{"track": "main"}]}
 
-    cov = {"venue_years": [vy("ICLR", 2013), vy("ICML", 1988), vy("ICML", 2026), vy("NeurIPS", 1987),
-                           vy("NeurIPS", 2026), vy("ICLR", 2012, records=0), vy("IASEAI", 2026)]}  # fmt: skip
+    cov = {"venue_years": [vy("ICLR", 2013), *(vy("ICML", y) for y in range(1988, 2027)), vy("NeurIPS", 1987),
+                           vy("NeurIPS", 2026), vy("ICLR", 2012, records=0), vy("IASEAI", 2026),
+                           *(vy("AAAI", y) for y in (1980, 1982, 1983, 1984, 1986))]}  # fmt: skip
     doi = "https://doi.org/10.4230/dblp.xml.2026-10-03"
     manifest = {"sources": {"dblp": {"listings": [
         {"year": 1988, "listing": doi, "records": 49},
@@ -860,7 +861,8 @@ def test_the_scope_lines_say_each_venues_years_and_what_the_dblp_years_rest_on()
     ]}}}  # fmt: skip
     years, icml = _scope(cov, manifest)
     assert years == (
-        "- Years indexed: IASEAI 2026 · ICLR 2013 · ICML 1988–2026 · NeurIPS 1987–2026 (the venues start in different years)"
+        "- Years indexed: AAAI 1980–1986 (none in 1981, 1985) · IASEAI 2026 · ICLR 2013 · ICML 1988–2026 · "
+        f"NeurIPS 1987–2026 (none in {', '.join(map(str, range(1988, 2026)))}) (the venues start in different years)"
     )
     assert (
         "ICML 1988–2012: from the pinned dblp snapshot release https://doi.org/10.4230/dblp.xml.2026-10-03"

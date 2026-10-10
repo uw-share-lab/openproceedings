@@ -240,7 +240,9 @@ for FAccT 2019–2026 and AIES 2018–2023, and, for FAccT, how many abstracts t
 so student abstracts and keynotes sit inside `main` there, where OJS labels student abstracts from 2024, which the
 scope line says. **None of these cells is gated, and no row was added to `official_counts.py`.** Each count is the
 proceedings' own contents (Crossref's DOIs, PMLR's index, dblp's keys) checked against the table in `ingest/`, which is
-the crawl stopping on a mismatch (spec 01 §Sources), not an independent statement of accepted papers; no official
+the crawl stopping on a mismatch (spec 01 §Sources), not an independent statement of accepted papers, so these cells
+are `accepted` by construction (statuses indexed: `accepted`) and cannot show a missing paper: a `Δ —` is no
+agreement; no official
 accepted-paper statement was read for these years (aaai.org states none for 1980–2008; facctconference.org lists
 accepted papers without a stated count, and its 2025 and 2026 lists hold non-archival papers the proceedings don't,
 217 and 325 rows against 206 and 314 DOIs), so even a stated figure would likely be a definition mismatch with our

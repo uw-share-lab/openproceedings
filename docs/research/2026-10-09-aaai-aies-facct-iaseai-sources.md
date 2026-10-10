@@ -412,15 +412,18 @@ project's position is decision-018 (README §Abstracts on a public instance).
 | Source | Stated licence | Checked |
 |---|---|---|
 | ojs.aaai.org (AAAI, AIES, IASEAI) | `dc:rights` "Copyright (c) <year> …"; no open licence | 2026-10-09, in every record read |
-| ACM DL (FAccT 2019–2026) | none found for metadata or abstracts (the DL answers 403; ACM is open access since 2026-01-01, which covers the papers, not a metadata licence) | 2026-10-09 |
-| facctconference.org CSVs | none found | 2026-10-09 *(page not recorded; unverified here)* |
+| ACM DL (FAccT 2019–2026, AIES 2018–2023) | none found for metadata or abstracts (the DL answers 403; ACM is open access since 2026-01-01, which covers the papers, not a metadata licence) | 2026-10-09 |
+| facctconference.org CSVs and the 2022 page | none found. Milestone B stores and shows their abstracts (2022, 2025, 2026) | 2026-10-09 *(page not recorded; unverified here)*; 2026-10-10: not re-read (the review had no network) |
+| Crossref (FAccT 2019–2026, AIES 2018–2023) | not read: milestone B takes titles, authors and DOIs from it and no abstract (it holds none for these DOIs) | not checked (2026-10-10, no network in the review) |
+| PMLR v81 (FAccT 2018) | PMLR's CC BY 4.0, as README states for its volumes (known from ICML 2017, v70); v81's own page not read for it | 2026-10-10 *(v81 unverified)* |
+| the pinned dblp release | CC0, as spec 01 records for the Dagstuhl DROPS release (titles, no abstracts; decision-047, and AAAI 1980–2008 in milestone B) | spec 01's record of the release page; not re-read 2026-10-10 |
 | OpenAlex (milestone C fallback) | not checked in this task (OpenAlex documents its data as CC0; re-check before milestone C stores any abstract) | not checked |
-| Crossref | not checked in this task (it holds no FAccT abstract, so none would be taken from it) | not checked |
-| the pinned dblp release | not checked in this task; decision-047 covers it (titles, no abstracts) | not checked |
 
 **Index versus fixtures.** The live index stores and shows an OJS abstract with its attribution ("AAAI Digital
 Library") and a link to the paper's own page on ojs.aaai.org, never the full text, on decision-018's fair-dealing
-basis, as for the other non-CC sources. Committed test fixtures are different: their titles, authors and abstracts
+basis, as for the other non-CC sources. Since milestone B it does the same for the official FAccT abstracts of 2022,
+2025 and 2026: each is shown with its attribution ("FAccT conference site") and a link to the paper's DOI, on the
+same basis, since no licence for them was found. Committed test fixtures are different: their titles, authors and abstracts
 are synthetic (decision-004), so no copyrighted text is in the repository.
 
 ## The census: how it was taken

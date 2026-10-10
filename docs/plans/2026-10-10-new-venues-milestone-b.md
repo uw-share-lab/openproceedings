@@ -2233,7 +2233,7 @@ git commit -m "feat: op ingest crossref (FAccT, AIES): the cursor chain restarts
 
 ### Task 8: Census A: the dblp AAAI rows from the pinned release (local, no network)
 
-The controller runs this. It reads the release already on disk; it fetches nothing. Data dir: `OP=/Users/jeevanparmar/school/Research/Ferguson/openproceedings/data`.
+The controller runs this. It reads the release already on disk; it fetches nothing. Data dir: `OP=<main checkout>/data`.
 
 **Files:**
 - Create: `scripts/dblp_aaai_census.py` (read-only helper)
@@ -2713,7 +2713,7 @@ git commit -m "docs: specs, decision-049, README, skills and copy for AAAI 1980-
 
 ### Task 12: Real-data verification, then the closing workflow
 
-The controller runs this in the foreground (agents stall on background runs). `export OP_DATA_DIR=/Users/jeevanparmar/school/Research/Ferguson/openproceedings/data`. That data dir is outside the worktree. `CROSSREF_MAILTO` must be set in `.env`.
+The controller runs this in the foreground (agents stall on background runs). `export OP_DATA_DIR=<main checkout>/data`. That data dir is outside the worktree. `CROSSREF_MAILTO` must be set in `.env`.
 
 - [ ] **Step 1: ICML's extract hash before**:
 
@@ -2789,8 +2789,8 @@ uv run op eval coverage --index <new index_version> --check
   5. Push; `/open-pr` into `dev`; `gh pr merge <n> --auto`.
 
 ### Critical Files for Implementation
-- /Users/jeevanparmar/school/Research/Ferguson/openproceedings-wt-new-venues/backend/src/openproceedings/ingest/record.py
-- /Users/jeevanparmar/school/Research/Ferguson/openproceedings-wt-new-venues/backend/src/openproceedings/ingest/sources/dblp.py
-- /Users/jeevanparmar/school/Research/Ferguson/openproceedings-wt-new-venues/backend/src/openproceedings/ingest/sources/crawl.py
-- /Users/jeevanparmar/school/Research/Ferguson/openproceedings-wt-new-venues/backend/src/openproceedings/ingest/urls.py
-- /Users/jeevanparmar/school/Research/Ferguson/openproceedings-wt-new-venues/backend/src/openproceedings/ingest/dedup.py
+- <repo>/backend/src/openproceedings/ingest/record.py
+- <repo>/backend/src/openproceedings/ingest/sources/dblp.py
+- <repo>/backend/src/openproceedings/ingest/sources/crawl.py
+- <repo>/backend/src/openproceedings/ingest/urls.py
+- <repo>/backend/src/openproceedings/ingest/dedup.py

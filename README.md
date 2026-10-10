@@ -75,7 +75,7 @@ authoritative):
 (OpenReview, the NeurIPS proceedings, PMLR or the AAAI Digital Library) with a link to it, and names a takedown contact. Private, local
 and development deployments may leave the contact out. For the 2024+ conferences, OpenReview's terms dedicate
 the abstracts under CC0, and PMLR grants CC BY 4.0 (known from ICML 2017, v70). The other years, and
-AAAI, AIES, FAccT and IASEAI (ojs.aaai.org states AAAI copyright and no open licence; ACM papers carry mixed CC and ACM licences), rest on
+AAAI, AIES, FAccT and IASEAI (ojs.aaai.org states AAAI copyright and no open licence; for ACM's papers, open access since 2026-01-01, no metadata or abstract licence was found, and the ACM Digital Library refuses automated reads; the research note §Licence posture), rest on
 Canadian fair dealing alone. Consulting the University of Waterloo copyright office before launch is
 recommended, not a gate
 ([decision-018](backlog/decisions/decision-018%20-%20The-public-instance-serves-every-abstract-with-attribution-and-a-source-link-and-a-takedown-contact-on-public-instances-TASK-063.md),
@@ -136,7 +136,7 @@ uv run op ingest dblp --year 1988-2012                     # ICML before 2013: t
 uv run op ingest openreview --venue ICLR --years 2013-2025 # also NeurIPS 2021-2025, ICML 2023-2025
 uv run op ingest dblp --venue AAAI --year 1980-2008        # AAAI before 2010: the same pinned dblp release (no new download), 23 held years, nothing fetched but the release
 uv run op ingest pmlr --venue FAccT --year 2018            # FAccT 2018 (FAT*): PMLR v81, 20 pages
-uv run op ingest crossref                                  # FAccT 2019+ and AIES 2018-2023 from Crossref (43 requests on the first run, a second apart) and the official FAccT pages for 2022, 2025, 2026; CROSSREF_MAILTO in .env is optional
+uv run op ingest crossref                                  # FAccT 2019+ and AIES 2018-2023 from Crossref (about 40 requests on the first run, each proceedings' record and its cursor pages, a second apart) and the official FAccT pages for 2022, 2025, 2026; CROSSREF_MAILTO in .env is optional
 uv run op ingest ojs                                       # AAAI 2010+, AIES 2024+, IASEAI 2026 (decision-049; about 590 OAI pages for AAAI (589 in the first full harvest) and fewer for AIES and IASEAI, at least 3 s each; --journal AAAI|AIES|IASEAI for one)
 ```
 #### Import an existing Google Scholar RIS collection

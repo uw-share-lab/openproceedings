@@ -36,7 +36,7 @@ below about milestone C (OpenAlex, `abstract_kind`) is the plan, not built.
 | AIES | 2024–2025 (Vol. 7–8) | ojs.aaai.org OAI-PMH, journal `AIES` | official | 170, 279 (excl. front matter) |
 | AIES | 2026 | not yet published (Malmö, 12–14 Oct 2026) | — | — |
 | FAccT | 2018 (FAT*) | PMLR v81 (built) | official (PMLR page) | **17 as built** (preface and two keynotes excluded) |
-| FAccT | 2019–2026 | Crossref, ACM proceedings DOIs 10.1145/3287560, 3351095, 3442188, 3531146, 3593013, 3630106, 3715275, 3805689 (built) | official from facctconference.org for 2022 (169 of 181), 2025 (206 of 206), 2026 (298 of 314); else OpenAlex; else `null` | 41, 95 (26 tutorial/CRAFT rows excluded: 69), 82, 181, 153, 167, 206, 314 = 1,239 DOIs, **1,213 as built**; with 2018, **FAccT is 1,230 records** |
+| FAccT | 2019–2026 | Crossref, ACM proceedings DOIs 10.1145/3287560, 3351095, 3442188, 3531146, 3593013, 3630106, 3715275, 3805689 (built) | official from facctconference.org for 2022 (169 of 181), 2025 (206 of 206), 2026 (298 of 314); else OpenAlex (its FAccT coverage figures in the research note are unverified: query not recorded); else `null` | 41, 95 (26 tutorial/CRAFT rows excluded: 69), 82, 181, 153, 167, 206, 314 = 1,239 DOIs, **1,213 as built**; with 2018, **FAccT is 1,230 records** |
 | IASEAI | 2026 (Vol. 2) | ojs.aaai.org OAI-PMH, journal `IASEAI` | official | 57 archival (35 non-archival have no findable listing) |
 | IASEAI | 2027 | OpenReview `IASEAI.org/2027/Conference` once decisions (20 Nov 2026) are public | official (OpenReview) | — (follow-up task) |
 
