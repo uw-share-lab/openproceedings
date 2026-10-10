@@ -1027,7 +1027,7 @@ export interface components {
             abstract: string | null;
             /**
              * Abstract Kind
-             * @description Where the abstract came from: `official` (the venue's own source), `openalex` (OpenAlex's fallback, only for AAAI, AIES and FAccT papers no official source gives one), or `none`. Derived from the abstract's claims; never stored, never hashed. Open set. Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @description Where the abstract came from: `official` (the venue's own source), `openalex` (OpenAlex's fallback, only for AAAI, AIES and FAccT papers no official source gives one), or `none`. Derived from the abstract's claims; never stored, never hashed. Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             readonly abstract_kind: "official" | "openalex" | "none";

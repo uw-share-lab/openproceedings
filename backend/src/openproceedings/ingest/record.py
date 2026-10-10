@@ -326,7 +326,7 @@ class PaperRecord(BaseModel):
     @computed_field(  # type: ignore[prop-decorator]
         description="Where the abstract came from: `official` (the venue's own source), `openalex` (OpenAlex's "
         "fallback, only for AAAI, AIES and FAccT papers no official source gives one), or `none`. Derived from the "
-        "abstract's claims; never stored, never hashed. Open set."
+        "abstract's claims; never stored, never hashed."
     )
     @property
     def abstract_kind(self) -> AbstractKind:

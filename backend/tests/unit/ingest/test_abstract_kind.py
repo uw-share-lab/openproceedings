@@ -81,10 +81,17 @@ def test_the_official_abstract_wins_whatever_the_claim_order(order: list[str]) -
     assert PRECEDENCE["abstract"][-1] == "openalex"
 
 
-@pytest.mark.parametrize(("venue", "year", "rid"), [("ICML", 2005, "op:icml:2005:dblp-Smith05"),
-                                                     ("IASEAI", 2026, "op:iaseai:2026:ojs-40000")])  # fmt: skip
-def test_an_openalex_claim_is_refused_outside_aaai_aies_and_facct(venue: str, year: int, rid: str) -> None:
-    claims = [_claim(f, v, "dblp" if venue == "ICML" else "ojs") for f, v in (
+# every venue outside OPENALEX_VENUES: the three spec 01 forbids, and IASEAI (whose abstracts are all official)
+@pytest.mark.parametrize(("venue", "year", "rid", "source"), [
+    ("NeurIPS", 2024, "op:neurips:2024:AbCd1234", "openreview_v2"),
+    ("ICLR", 2024, "op:iclr:2024:AbCd1234", "openreview_v2"),
+    ("ICML", 2003, "op:icml:2003:dblp-MannorRG03", "dblp"),  # a pre-2013 ICML key (`conf/icml/MannorRG03`)
+    ("IASEAI", 2026, "op:iaseai:2026:ojs-40000", "ojs"),
+])  # fmt: skip
+def test_an_openalex_claim_is_refused_outside_aaai_aies_and_facct(
+    venue: str, year: int, rid: str, source: str
+) -> None:
+    claims = [_claim(f, v, source) for f, v in (
         ("title", "A Paper"), ("venue", venue), ("year", year), ("track", "main"), ("status", "accepted"))]  # fmt: skip
     with pytest.raises((ValidationError, ValueError), match="OpenAlex"):
         resolve(rid, [*claims, _openalex()])
