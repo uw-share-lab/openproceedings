@@ -694,15 +694,17 @@ def test_messages_quote_at_most_40_characters_of_input() -> None:
         "title:(abstract:" + w + ")",
         "source:" + w,
     ]
+    # the longest message has a fixed text (the `source:` list) around one clipped quote of the input: its length
+    # with a two-character input quoted, minus those two characters, plus the clip's width, bounds every message
+    probe = next(
+        d for d in parse("source:qq", "scholar").errors if d.code is DiagnosticCode.FIELD_UNKNOWN_VALUE
+    )
+    bound = len(probe.message) - len("qq") + len(clip("x" * 1000))
     for q in inputs:
         for mode in ("native", "scholar"):
             result = parse(q[:2000], mode)  # type: ignore[arg-type]
             for d in result.errors + result.warnings + result.translations:
-                assert len(d.message) < 600, (
-                    q[:20],
-                    d.code,
-                    len(d.message),
-                )  # longest fixed text: the source list
+                assert len(d.message) <= bound, (q[:20], d.code, len(d.message), bound)
 
 
 def test_parsing_is_linear_in_the_query_length() -> None:

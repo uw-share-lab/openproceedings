@@ -15,7 +15,7 @@ describe("trackDisplay", () => {
   });
 
   it("shows a track it doesn't know as it came", () => {
-    expect(trackDisplay("consortium")).toEqual({ short: "consortium", long: "consortium" });
+    expect(trackDisplay("nonesuch")).toEqual({ short: "nonesuch", long: "nonesuch" });
   });
 });
 

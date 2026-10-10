@@ -541,7 +541,8 @@ class _Parser:
         if name == "source":
             self.error(
                 DiagnosticCode.FIELD_COMPAT_ONLY,
-                f"`{clip(tok.text)}` is Google Scholar syntax — write `venue:NeurIPS`, `venue:ICLR`, `venue:ICML`, `venue:AAAI`, `venue:AIES`, `venue:FAccT` or `venue:IASEAI` "
+                f"`{clip(tok.text)}` is Google Scholar syntax — write `venue:NeurIPS`, `venue:ICLR`, `venue:ICML`, "
+                "`venue:AAAI`, `venue:AIES`, `venue:FAccT` or `venue:IASEAI` "
                 "(Scholar-mode input translates it automatically).",
                 tok.start,
                 tok.end,
