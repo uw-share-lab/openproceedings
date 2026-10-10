@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import re
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, unquote, urlencode, urlparse, urlunparse
 
+from openproceedings.ingest import acm_table
 from openproceedings.ingest import volumes as _volumes
 from openproceedings.ingest.classify import NEURIPS_DB_2021_HOST, NEURIPS_DB_2021_ROUNDS
 from openproceedings.ingest.ojs_table import TABLE as OJS_TABLE
@@ -106,7 +107,8 @@ def names_native(url: str, native_id: str) -> bool:
 
 def native(url: str) -> str | None:
     """The proceedings native id a URL names (`proceedings_native`, `pmlr-v<N>-<key>` for an ingested PMLR volume (ICML, FAccT 2018),
-    `dblp-<key>` for an ICML or AAAI (1980-2008) record's dblp page, or `ojs-<id>` for an ojs.aaai.org article), or None."""
+    `dblp-<key>` for an ICML or AAAI (1980-2008) record's dblp page, `ojs-<id>` for an ojs.aaai.org article, or
+    `doi-<toc>.<n>` for a listed ACM paper's doi.org link), or None."""
     if proceedings(url) is not None:
         return proceedings_native(url)
     if (q := pmlr(url)) is not None and q[0] in _volumes.PMLR_NATIVE_VOLUMES:
@@ -117,7 +119,28 @@ def native(url: str) -> str | None:
         return f"dblp-{key}"
     if (article := ojs_article(url)) is not None:
         return f"ojs-{article}"
+    if (doi := acm_doi(url)) is not None:
+        return "doi-" + doi.split("/", 1)[1]
     return None
+
+
+_DOI_HOSTS = frozenset({"doi.org", "dx.doi.org"})
+
+
+def acm_doi(url: str) -> str | None:
+    """The ACM paper DOI a doi.org link names (`10.1145/<toc>.<n>`, lower-case), when its proceedings are a row of
+    acm_proceedings.toml (FAccT, AIES; decision-049), else None. Only doi.org: the DOI is the paper's name."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.netloc.lower() not in _DOI_HOSTS:
+        return None
+    doi = unquote(parsed.path.removeprefix("/"))
+    if doi != doi.strip():
+        return None
+    doi = doi.lower()
+    parts = acm_table.paper_doi(doi)
+    if parts is None or acm_table.TABLE.by_toc(parts[0]) is None:
+        return None
+    return doi
 
 
 _OJS_HOST = "ojs.aaai.org"

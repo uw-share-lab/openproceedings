@@ -1219,3 +1219,14 @@ def test_proceedings_key_reads_a_facct_v81_url_from_the_venue_tagged_map(monkeyp
         2018,
         "pmlr-v81-one18a",
     )
+
+
+def test_proceedings_key_of_an_acm_doi_link(monkeypatch) -> None:
+    from openproceedings.ingest import acm_table
+
+    from tests.unit.ingest.crossref import api
+
+    url = "https://doi.org/10.1145/3593013.3594011"
+    assert proceedings_key(url) is None  # the shipped table lists no proceedings yet
+    monkeypatch.setattr(acm_table, "TABLE", acm_table.load(api.TABLE_TEXT))
+    assert proceedings_key(url) == ("FAccT", 2023, "doi-3593013.3594011")

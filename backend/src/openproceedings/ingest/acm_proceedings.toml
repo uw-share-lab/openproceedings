@@ -1,0 +1,18 @@
+# ACM proceedings table (FAccT 2019+, AIES 2018-2023; decision-049). Data, not code: `ingest/acm_table.py` loads and
+# checks it, and no other module holds an ACM proceedings DOI. Rows arrive with the live census (Task 9).
+#
+# [[proceedings]] columns (one per venue and year)
+#   venue         FAccT | AIES
+#   year          the conference year (FAccT 2019 on; AIES 2018-2023)
+#   doi           the proceedings DOI, `10.1145/<toc>` (digits only); a paper's DOI extends it: `10.1145/<toc>.<n>`
+#   title         the proceedings title, as Crossref gives it
+#   window_from   first publication date Crossref's `/works` is asked for (the window rule: the proceedings'
+#   window_until  own dates, widened to include every DOI that extends `doi`; `window_from <= window_until`)
+#   dois          every DOI extending `doi` found in the window, `[[not_paper]]` rows included
+#   verified      the date the row was checked live
+#   source        where the check is recorded
+#
+# [[not_paper]] columns (a DOI counted in `dois`, never a record)
+#   doi           `10.1145/<toc>.<n>`, whose proceedings is a row above
+#   kind          tutorial | craft session | keynote | panel | front matter
+#   reason        what the entry is, for the reader
