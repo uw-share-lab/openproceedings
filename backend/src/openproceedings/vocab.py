@@ -21,7 +21,7 @@ Track = Literal[
     "student_abstract",  # AAAI and AIES student abstracts and posters (decision-049)
     "consortium",  # AAAI doctoral and undergraduate consortia
     "demo",  # AAAI demonstrations
-    "iaai",  # Innovative Applications of AI, printed in the AAAI volumes (AAAI only)
+    "iaai",  # Innovative Applications of Artificial Intelligence, printed in the AAAI volumes (AAAI only)
     "eaai",  # Educational Advances in AI, printed in the AAAI volumes (AAAI only)
     "other",
     "unknown",

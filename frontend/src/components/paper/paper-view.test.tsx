@@ -423,7 +423,7 @@ describe("fetchedText", () => {
 
 describe("Track expansions (TASK-223)", () => {
   it.each([
-    ["iaai", "IAAI (Innovative Applications of AI)"],
+    ["iaai", "IAAI (Innovative Applications of Artificial Intelligence)"],
     ["eaai", "EAAI (Educational Advances in AI)"],
   ] as const)("prints the %s expansion as visible text beside the badge", async (track, shown) => {
     draw(

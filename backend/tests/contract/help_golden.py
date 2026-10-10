@@ -338,7 +338,7 @@ def build() -> dict[str, Any]:
 # Track values whose acronym the help page spells out beside the value (TASK-223). The frontend's track badge
 # (`paper-badges.tsx`) uses the same words; a frontend test holds the two together.
 TRACK_EXPANSIONS: dict[str, str] = {
-    "iaai": "Innovative Applications of AI",
+    "iaai": "Innovative Applications of Artificial Intelligence",
     "eaai": "Educational Advances in AI",
 }
 

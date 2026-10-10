@@ -38,7 +38,7 @@
     "abstract_kind": ["official", "openalex", "none"]
   },
   "track_expansions": {
-    "iaai": "Innovative Applications of AI",
+    "iaai": "Innovative Applications of Artificial Intelligence",
     "eaai": "Educational Advances in AI"
   },
   "defaults": [
