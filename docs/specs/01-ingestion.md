@@ -14,7 +14,7 @@ build.
 |---|---|---|
 | `id` | str | Stable ID `op:<venue>:<year>:<native>`, e.g. `op:iclr:2024:iilhN2MycO`. `native` is the OpenReview forum ID, or `pmlr-v202-<key>` (ICML) / `dblp-<key>` (ICML 1988–2012: the dblp key after `conf/icml/`, e.g. `dblp-SzitaL09`; decision-047) / `nips-<hash>` (NeurIPS; `nips-<hash>-round1`/`-round2` on the 2021 Datasets and Benchmarks host: the suffix is the link's round token, because that host numbers each round and the main track separately, so its hash alone can name three papers; a D&B link without a round, or dated other than 2021, gets no id (miner `no_round`, RIS `unresolved`), never a bare `nips-<hash>`; `urls.proceedings_native` is the one rule) / `iclr-<hash>` (ICLR) for proceedings-only papers / `ojs-<article id>` (AAAI, AIES and IASEAI, from ojs.aaai.org; the id is unique across its journals, so the native id never names two papers; decision-049) / `doi-<toc>.<n>` (FAccT 2019 on and AIES 2018–2023, from Crossref: the ACM paper DOI `10.1145/<toc>.<n>` without its prefix, digits only on both sides, e.g. `op:facct:2023:doi-3593013.3594011`; `record.DOI_YEARS` bounds the years, the record check ties the toc to the `acm_proceedings.toml` row of the record's own venue and year, and a DOI is unique everywhere). A `dblp-<key>` id is also AAAI 1980–2008's (the key after `conf/aaai/`, e.g. `op:aaai:1986:dblp-Darden86`; `record.DBLP_YEARS` bounds the years per venue, and an ICML and an AAAI key can coincide, so a takedown names a dblp id with its venue, `aaai:dblp-<key>`), and FAccT 2018's is `pmlr-v81-<key>` (PMLR v81; the record check ties a non-ICML `pmlr-` id to the volume of its own venue and year). `record.PROCEEDINGS_NATIVE` ties each form to its venues. |
 | `title` | str | Raw, whitespace-collapsed. No control character: the record refuses one, and every importer replaces each with a space first (§Pipeline 2, TASK-180, decision-036). Normalization for search happens in 03, not here. The snapshot build caps it at 1,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
-| `abstract` | str \| null | Raw, whitespace-collapsed. From OpenReview, else the proceedings page, else (ICML 1988–2012 only, decision-047) an official ICML conference page that the table `ingest/icml_sites.toml` names, live or as a pinned Internet Archive capture, attached by exact title key (§Sources, ICML sites row); every importer replaces each control character with a space (§Pipeline 2, TASK-188, decision-044), though the model does not refuse one. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. The snapshot build caps it at 20,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
+| `abstract` | str \| null | Raw, whitespace-collapsed. From OpenReview, else the proceedings page, else (ICML 1988–2012 only, decision-047) an official ICML conference page that the table `ingest/icml_sites.toml` names, live or as a pinned Internet Archive capture, attached by exact title key (§Sources, ICML sites row); every importer replaces each control character with a space (§Pipeline 2, TASK-188, decision-044), though the model does not refuse one. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. Never a lone UTF-16 surrogate: every source refuses that abstract claim and counts it as `abstract_surrogate` (§Pipeline 2, TASK-229). The snapshot build caps it at 20,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
 | `authors` | list[str] | Display order. |
 | `venue` | enum | `NeurIPS` \| `ICLR` \| `ICML` \| `AAAI` \| `AIES` \| `FAccT` \| `IASEAI` (`vocab.VENUES`; decision-049). Extensible. `RECORD_SCHEMA_VERSION` is 7 since milestone B: the `crossref` and `facct_site` sources, the `doi-<toc>.<n>` native id, `dblp-` ids for AAAI 1980–2008, and the `pmlr-` native id widened from ICML to FAccT (PMLR v81, 2018; decision-049; 6 added the four venues, five tracks and the `ojs` source). Every venue has a source: AAAI 1980–2008 comes from the pinned dblp release and 2010+ from OJS (none was held in 1981, 1985, 1989, 1995, 2001, 2003 or 2009), AIES 2018–2023 from Crossref and 2024+ from OJS, FAccT 2018 from PMLR v81 and 2019+ from Crossref (plus the official abstracts of 2022, 2025 and 2026), IASEAI 2026 from OJS. OpenAlex's abstract fallback is milestone C ([design](../plans/2026-10-09-new-venues-design.md)). |
 | `year` | int | Conference year, not the arXiv year. A year before the venue was held under its name (NeurIPS 1987, ICLR 2013, ICML 1988, AAAI 1980, AIES 2018, FAccT 2018, IASEAI 2025; `vocab.CONFERENCES`) is refused. |
@@ -321,6 +321,35 @@ the OJS, AAAI 1980–2008, Crossref and FAccT site rows on 2026-10-09 and 2026-1
    words: the extractor's fragments such as an author's name, kept, since dropping text is a guess, and counted),
    each listed in the manifest only when above 0. No page of 2013 on holds either, so no record of the
    2026-10-05 snapshot changes.
+   **Lone UTF-16 surrogates in an abstract (TASK-229).** JSON can carry a lone surrogate (`"\ud800"`, U+D800–U+DFFF
+   on its own), which no record may hold (`record._utf8`, `record.lone_surrogate`). Every source has one rule for
+   it: **the abstract claim is refused, the paper is kept on its title with no abstract from that source, and the
+   source's report counts it as `abstract_surrogate`** (listed in a manifest only when above 0; a DEBUG
+   `abstract_surrogate_refused` line names the source and the record or page row, never the text). The crawl
+   never stops for it and the abstract is never silently missing (decision-036's "nothing is silent"). Where the
+   rule lives, per source:
+
+   | Source | Where | Counted as | Before TASK-229 |
+   |---|---|---|---|
+   | OpenReview API v2 and v1 | `openreview_v2._abstract` | `abstract_surrogate` in the crawl report (records only, like `abstract_control_characters`) | the response-cache write raised `UnicodeEncodeError`: the crawl stopped |
+   | PMLR, NeurIPS | `common.clean_abstract` → `missing_reason` | `abstract_surrogate`, of `abstract_missing`, in the listing report | the whole paper skipped as `invalid` |
+   | OJS (AAAI, AIES, IASEAI) | `common.clean_abstract` | `abstract_surrogate`, of `abstract_missing` | the whole paper skipped as `invalid` |
+   | Official ICML pages (dblp, ICML 1988–2012) | `common.clean_abstract` in `icml_sites.read_year` | `site_surrogate`, of `site_dropped`, in the dblp year report | the whole paper skipped as `invalid` |
+   | Official FAccT pages (Crossref) | `common.clean_abstract` in `facct_site.read_year` | `site_surrogate`, of `site_dropped`, in the Crossref report | `invalid_record`: the crawl stopped |
+   | RIS import | `ris._abstract` | `abstract_surrogate` in the import report; the next claim in source order is taken, as for an empty one | the import stopped |
+   | OpenAlex fill | `common.clean_abstract` in `openalex.abstract_of` | `refused["abstract_surrogate"]` in the fill report | `abstract_unusable` (milestone C, before release) |
+   | ICLR archive, dblp AAAI, Crossref (its own works) | no abstract | n/a | n/a |
+
+   **Reachability.** Only JSON sources can deliver one: OpenReview, OpenAlex, Crossref and the RIS importer's
+   `resolved.json`. Every page is decoded strictly (`undecodable`), an HTML reference to a surrogate decodes to
+   U+FFFD (`&#xD800;`, the HTML standard), and expat refuses one in XML (`oai_unreadable`), so the proceedings,
+   official-page and OJS sources meet the rule only through the shared step. The OpenReview response cache holds
+   the parsed payload: an entry holding a lone surrogate is written as ASCII JSON, escaped as it came
+   (`http.ResponseCache.put`), so the rule sees it on the crawl and on every replay; every other entry's bytes are
+   unchanged. **Titles keep their behaviour**, which is loud in every source: a lone surrogate in a title makes
+   the record invalid, so PMLR, NeurIPS, OJS and dblp skip the paper as `invalid` (counted, in their attention
+   WARNING), and OpenReview, Crossref and RIS stop. An official page's title only joins an abstract to a record,
+   so one there leaves the row unmatched (`site_unmatched`). No valid text changes, so no snapshot does.
 3. **Classify.** Derive `track`, `status` and `presentation` using the rules above. Every classification
    records its evidence claim.
 4. **Deduplicate.** The same paper appears on OpenReview and in the proceedings (NeurIPS, ICML 2023+).

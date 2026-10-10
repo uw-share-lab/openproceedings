@@ -61,11 +61,12 @@ from openproceedings.ingest.record import (
     Urls,
     abstract_text,
     controls_evidence,
+    lone_surrogate,
     title_controls_replaced,
     title_evidence,
     title_text,
 )
-from openproceedings.ingest.sources.common import CrawlError, Crawls, Report
+from openproceedings.ingest.sources.common import CrawlError, Crawls, Report, log_surrogate
 from openproceedings.ingest.sources.http import CacheMiss, Heartbeat
 from openproceedings.ingest.sources.openreview_client import OpenReviewClient
 from openproceedings.logs import elapsed_ms
@@ -133,6 +134,7 @@ class CrawlReport(Report):
     abstract_missing: int = 0
     title_control_characters: int = 0  # records whose title had a control character replaced (decision-036)
     abstract_control_characters: int = 0  # records whose abstract had one replaced (decision-044, TASK-199)
+    abstract_surrogate: int = 0  # records whose abstract was refused for a lone UTF-16 surrogate (TASK-229)
     track_status: dict[str, Counter[str]] = field(default_factory=dict)
     would_fetch: list[str] = field(default_factory=list)  # dry run: the uncached requests met first
 
@@ -166,6 +168,7 @@ class CrawlReport(Report):
                 if self.abstract_control_characters
                 else {}
             ),
+            **({"abstract_surrogate": self.abstract_surrogate} if self.abstract_surrogate else {}),
             "track_status": {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())},
             "crawl_window": self.crawl_window(),
         }
@@ -197,17 +200,32 @@ def _strings(value: Any) -> tuple[str, ...]:
     return tuple(v for v in value if isinstance(v, str) and v.strip()) if isinstance(value, list) else ()
 
 
-def _abstract(value: Any) -> tuple[str | None, str, int]:
+def _abstract(value: Any) -> tuple[str | None, str, int, bool]:
     """A note's abstract and its claim's evidence (both API versions): whitespace collapsed (as the RIS importer
     does, so claims from both sources compare) and a control character a space (`record.abstract_text`,
-    decision-044), the evidence saying how many, and that count (the crawl's, TASK-199). None when empty or
-    snippet-shaped (`…` at an end), which the record refuses; the paper is kept on its title."""
+    decision-044), the evidence saying how many, that count (the crawl's, TASK-199), and whether it was refused for
+    a lone UTF-16 surrogate (JSON's `"\\ud800"`, which no record may hold; the crawl counts it as
+    `abstract_surrogate`, TASK-229). None when empty, snippet-shaped (`…` at an end) or refused, which the record
+    refuses; the paper is kept on its title."""
     if not isinstance(value, str):
-        return None, "content.abstract", 0
+        return None, "content.abstract", 0, False
     abstract, replaced = abstract_text(value)
+    if lone_surrogate(abstract):
+        return None, "content.abstract", 0, True
     if not abstract or abstract.startswith("…") or abstract.endswith("…"):
-        return None, "content.abstract", 0
-    return abstract, controls_evidence("content.abstract", replaced), replaced
+        return None, "content.abstract", 0, False
+    return abstract, controls_evidence("content.abstract", replaced), replaced, False
+
+
+def _count_surrogates(
+    surrogate: set[str], records: Mapping[str, PaperRecord], venue: str, year: int, source: str
+) -> int:
+    """How many of the notes whose abstract was refused for a lone surrogate became records (TASK-229), one
+    `abstract_surrogate_refused` WARNING each (both API versions; a note dropped as a duplicate isn't counted)."""
+    ids = sorted(rid for n in surrogate if (rid := f"op:{venue.lower()}:{year}:{n}") in records)
+    for rid in ids:
+        log_surrogate(source, rid)
+    return len(ids)
 
 
 def _title(value: Any, forum: str) -> tuple[str | None, str]:
@@ -231,11 +249,13 @@ def note_record(
     fetched_at: datetime,
     unmapped: set[str] | None = None,
     spaced: set[str] | None = None,
+    surrogate: set[str] | None = None,
 ) -> PaperRecord | str:
     """The record for one listed note, or the reason it is skipped (one of SKIP_REASONS). An accepted,
     non-workshop note whose `content.venue` its venue-year's presentation table lacks gets `presentation`
     null and its forum id added to `unmapped`; a note whose abstract lost a control character has its forum id
-    added to `spaced` (the crawl counts both, of the notes that became records)."""
+    added to `spaced`, and one whose abstract was refused for a lone surrogate to `surrogate` (the crawl counts each,
+    of the notes that became records)."""
     forum, nid = note.get("forum"), note.get("id")
     if not isinstance(nid, str) or nid != forum:
         return "not_submission"  # only the submission note speaks for the paper (zkNCWtw2fd)
@@ -265,9 +285,11 @@ def note_record(
             log.debug("openreview_presentation_unmapped", extra={"forum": nid})  # the string may be free text
             if unmapped is not None:
                 unmapped.add(nid)
-    abstract, abstract_evidence, abstract_spaced = _abstract(_value(content, "abstract"))
+    abstract, abstract_evidence, abstract_spaced, refused = _abstract(_value(content, "abstract"))
     if abstract_spaced and spaced is not None:
         spaced.add(nid)
+    if refused and surrogate is not None:
+        surrogate.add(nid)
     authors, keywords = _strings(_value(content, "authors")), _strings(_value(content, "keywords"))
     pdf_path = _value(content, "pdf")
     urls = Urls(
@@ -436,6 +458,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     records: dict[str, PaperRecord] = {}
     unmapped: set[str] = set()  # forum ids whose presentation string isn't in the table
     spaced: set[str] = set()  # forum ids whose abstract lost a control character (the importer's own count)
+    surrogate: set[str] = set()  # forum ids whose abstract was refused for a lone surrogate (TASK-229)
     progress = Progress(log, client, report.api, venue, year, page_size, lambda: {
         "notes_read": report.notes_read, "imported": len(records), "skipped": sum(report.skipped.values())})  # fmt: skip
 
@@ -456,7 +479,17 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
                 continue
             try:
                 _listing(
-                    client, vid, venue, year, report, records, unmapped, spaced, page_size, progress.tick
+                    client,
+                    vid,
+                    venue,
+                    year,
+                    report,
+                    records,
+                    unmapped,
+                    spaced,
+                    surrogate,
+                    page_size,
+                    progress.tick,
                 )
             except CacheMiss as e:
                 missed(e)
@@ -470,6 +503,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     report.title_control_characters = sum(title_controls_replaced(r) > 0 for r in records.values())
     # never read back from the evidence (TASK-199): the importer's own count, of the notes that became records
     report.abstract_control_characters = sum(f"op:{venue.lower()}:{year}:{n}" in records for n in spaced)
+    report.abstract_surrogate = _count_surrogates(surrogate, records, venue, year, SOURCE)
     incompatible = client.incompatible - purged  # this crawl's share of the client's count
     log.info("openreview_crawl_finished",
              extra={"api": report.api, "venue": venue, "year": year, "complete": report.complete, "groups": len(report.groups),
@@ -490,8 +524,8 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
 
 
 def _listing(client: OpenReviewClient, vid: str, venue: str, year: int, report: CrawlReport,
-             records: dict[str, PaperRecord], unmapped: set[str], spaced: set[str], page_size: int,
-             tick: Callable[[], None]) -> None:  # fmt: skip
+             records: dict[str, PaperRecord], unmapped: set[str], spaced: set[str], surrogate: set[str],
+             page_size: int, tick: Callable[[], None]) -> None:  # fmt: skip
     """Page through one venueid's notes into `records`, checking the listing is consistent; `tick()` before
     each note (the crawl's heartbeat)."""
     params = {"content.venueid": vid, "sort": "number:asc"}
@@ -523,6 +557,7 @@ def _listing(client: OpenReviewClient, vid: str, venue: str, year: int, report: 
                 fetched_at=fetched_at,
                 unmapped=unmapped,
                 spaced=spaced,
+                surrogate=surrogate,
             )
             report.notes_read += 1
             if isinstance(got, str):

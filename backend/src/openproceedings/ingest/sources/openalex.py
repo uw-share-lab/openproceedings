@@ -13,7 +13,8 @@ Two routes, both through the shared HTTP layer (`http.py`), one request at a tim
   only by exact title key with exactly one candidate on each side; a listing whose count differs from the table's
   stops the crawl.
 Refusals, never a best guess: an inverted index with a gap, two words at one position or any other shape
-(`rebuild`); an abstract that cleaning leaves empty or a snippet (`abstract_unusable`, `abstract_of`); an answer
+(`rebuild`); an abstract that cleaning leaves empty or a snippet (`abstract_unusable`, `abstract_of`), or that holds
+a lone UTF-16 surrogate (`abstract_surrogate`, the shared refusal of `common.clean_abstract`, TASK-229); an answer
 that is not a work list (`CrawlError`, `openalex_unreadable`, whose message never quotes the body).
 
 The extract: a crawl keeps each work's raw `abstract_inverted_index` (`Work.inverted`), writes a content-addressed
@@ -54,10 +55,12 @@ from openproceedings.ingest.caps import cap_record
 from openproceedings.ingest.dedup import DedupResult, title_key
 from openproceedings.ingest.record import OPENALEX_VENUES, Claim, PaperRecord, Source, controls_evidence
 from openproceedings.ingest.sources.common import (
+    SURROGATE,
     Cleaned,
     CrawlError,
     Report,
     clean_abstract,
+    log_surrogate,
     pdf_codes_evidence,
     read_markers,
     write_marker,
@@ -153,19 +156,13 @@ def rebuild(inverted: object) -> Rebuilt:
 
 def abstract_of(work: Work) -> tuple[Cleaned | None, str | None]:
     """The work's abstract as a record may hold it (`common.clean_abstract`: controls, the `…` snippet rule,
-    placeholders; the caps apply when the record is built), or None with why (`rebuild`'s refusal, or
-    `abstract_unusable`); (None, None) when OpenAlex has no abstract."""
+    placeholders, a lone surrogate), or None with why (`rebuild`'s refusal, the shared step's `abstract_surrogate`,
+    or `abstract_unusable`); (None, None) when OpenAlex has no abstract. The caps apply when the record is built."""
     rebuilt = rebuild(work.inverted)
     if rebuilt.text is None:
         return None, rebuilt.refused
-    try:
-        rebuilt.text.encode("utf-8")
-    except (
-        UnicodeEncodeError
-    ):  # a lone surrogate (JSON's `\ud800`), which no record may hold (`record._utf8`)
-        return None, "abstract_unusable"
     cleaned = clean_abstract(rebuilt.text)
-    return (cleaned, None) if cleaned.text is not None else (None, "abstract_unusable")
+    return (cleaned, None) if cleaned.text is not None else (None, cleaned.refused or "abstract_unusable")
 
 
 def bare_doi(value: object) -> str | None:
@@ -330,7 +327,7 @@ def write_extract(cache: Path, lookups: Iterable[Lookup]) -> str:
     there with those bytes is left as it is; the old extracts are never rewritten. Returns the sha256."""
     ordered = [_lookup_json(lk) for lk in sorted(lookups, key=lambda lk: lk.url)]
     # ASCII with escapes: a lone surrogate OpenAlex sent (JSON `\ud800`) is kept as it came, never a crash on
-    # encoding; the fill refuses it (`abstract_unusable`)
+    # encoding; the fill refuses it (`abstract_surrogate`)
     body = json.dumps({"format": EXTRACT_FORMAT, "lookups": ordered}, sort_keys=True, separators=(",", ":"),
                       ensure_ascii=True).encode("ascii")  # fmt: skip
     sha = hashlib.sha256(body).hexdigest()
@@ -689,6 +686,8 @@ def fill(
                 report.attached_title += 1
         if refusal:
             report.refused[refusal] += 1
+            if refusal == SURROGATE:
+                log_surrogate(SOURCE, r.id)
         out.append(attached)
     return out, report
 

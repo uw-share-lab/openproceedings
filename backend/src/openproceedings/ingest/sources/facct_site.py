@@ -48,7 +48,7 @@ from urllib.parse import urlparse
 
 from openproceedings.ingest.dedup import title_key
 from openproceedings.ingest.record import Source, title_text
-from openproceedings.ingest.sources.common import CrawlError, clean_abstract
+from openproceedings.ingest.sources.common import SURROGATE, CrawlError, clean_abstract, log_surrogate
 from openproceedings.ingest.sources.html import Element, node_text, parse
 from openproceedings.ingest.sources.http import Fetcher
 from openproceedings.logs import elapsed_ms
@@ -118,6 +118,7 @@ class SiteYear:
     dropped: int
     dropped_titles: tuple[str, ...] = ()
     dropped_dois: tuple[str, ...] = ()
+    surrogate: int = 0  # of dropped: rows whose abstract was refused for a lone UTF-16 surrogate (TASK-229)
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,11 +281,15 @@ def read_year(
     dropped = 0
     dropped_titles: list[str] = []
     dropped_dois: list[str] = []
+    surrogate = 0
     for e in got:
         title = title_text(e.title)[0] if e.title else ""
         cleaned = clean_abstract(e.abstract)
         if not title or cleaned.text is None:
             dropped += 1
+            if cleaned.refused == SURROGATE:
+                surrogate += 1
+                log_surrogate(SOURCE, f"{p.url} row {e.key}")
             if title and (k := title_key(title)):
                 dropped_titles.append(k)
             if e.doi:
@@ -295,7 +300,14 @@ def read_year(
     log.info("facct_site_year_read", extra={"year": year, "entries": len(entries), "dropped": dropped,
                                             "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     return SiteYear(
-        p.url, p.join, entries, [page.fetched_at], dropped, tuple(dropped_titles), tuple(dropped_dois)
+        p.url,
+        p.join,
+        entries,
+        [page.fetched_at],
+        dropped,
+        tuple(dropped_titles),
+        tuple(dropped_dois),
+        surrogate,
     )
 
 

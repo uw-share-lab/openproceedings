@@ -21,7 +21,8 @@ ICLR archive, NeurIPS proceedings and PMLR) fetches through `HttpClient`, and on
   crawl (`cap_waits`). Any other response is returned for the source to judge; retries are bounded.
 - **Cache.** `ResponseCache`: one JSON file per canonical URL under `<root>/[<subdir>/]<sha256[:2]>/<sha256>.json`,
   naming its URL, written atomically (`storage.write_json`), so a crash never leaves half an entry and a crawl
-  resumes where it stopped. A codec shapes the entry, so each source's on-disk layout is unchanged: the
+  resumes where it stopped. An entry holding a lone surrogate (JSON's `"\\ud800"`) is written as ASCII JSON,
+  escaped as it came, never a crash (TASK-229). A codec shapes the entry, so each source's on-disk layout is unchanged: the
   proceedings' fixture-shaped pages (`PageCodec`), OpenReview's `{key, payload}` documents. A client without a
   transport reads the cache only; a miss is `CacheMiss`, never a network call. The entry's fetch time is what
   every claim built from it carries.
@@ -350,7 +351,13 @@ class ResponseCache[T]:
         return entry
 
     def put(self, entry: T) -> None:
-        storage.write_json(self.path(self.codec.key(entry)), self.codec.encode(entry))
+        path, document = self.path(self.codec.key(entry)), self.codec.encode(entry)
+        try:
+            storage.write_json(path, document)
+        except UnicodeEncodeError:  # nothing written yet: encoding comes first
+            # a lone surrogate a JSON API sent (`"\\ud800"`; OpenReview's entries hold the parsed payload): kept as
+            # it came, escaped, so the source's own rule sees it (TASK-229). Every other entry's bytes are unchanged.
+            storage.write_json(path, document, ensure_ascii=True)
 
 
 # --- the client --------------------------------------------------------------------------------------------

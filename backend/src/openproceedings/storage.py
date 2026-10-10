@@ -133,10 +133,12 @@ def place(tmp: Path, target: Path, same: Callable[[Path], bool]) -> bool:
     return True
 
 
-def write_json(path: Path, data: object) -> None:
+def write_json(path: Path, data: object, *, ensure_ascii: bool = False) -> None:
     """One JSON file written atomically (`write_bytes`): sorted keys, one-space indent, UTF-8, a trailing
-    newline."""
-    write_bytes(path, (json.dumps(data, ensure_ascii=False, sort_keys=True, indent=1) + "\n").encode("utf-8"))
+    newline. `ensure_ascii` escapes every non-ASCII character (`\\uXXXX`), so text UTF-8 can't encode (a lone
+    surrogate) is written as it came."""
+    text = json.dumps(data, ensure_ascii=ensure_ascii, sort_keys=True, indent=1) + "\n"
+    write_bytes(path, text.encode("utf-8"))
 
 
 def write_bytes(path: Path, body: bytes) -> None:

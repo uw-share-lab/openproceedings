@@ -127,7 +127,11 @@ re-checks it. Never use `model_construct` on a record: it skips every check. Loa
 lists and strings).
 
 Every string field (title, abstract, authors, keywords, venue_id_raw, urls, and a claim's value, url and
-evidence) must be valid Unicode (no lone surrogates), so a snapshot can always be written. A title has
+evidence) must be valid Unicode (no lone surrogates), so a snapshot can always be written. An abstract claim
+holding one (JSON's `"\ud800"`) is refused before the record is built, in every source: the paper is kept on its
+title and the source's report counts `abstract_surrogate` (`site_surrogate` for an official page's row;
+`common.clean_abstract`, `openreview_v2._abstract`, `ris._abstract`; TASK-229, spec 01 §Pipeline 2). A title
+holding one still makes the record invalid. A title has
 no control characters (every importer replaces each with a space before building the record,
 `record.title_text`, and says so in the title claim's evidence, `record.title_evidence`; TASK-180,
 decision-036). Every importer gives an abstract the same rule (`record.abstract_text`, its claim's evidence

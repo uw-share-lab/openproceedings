@@ -290,7 +290,7 @@ def _record(
     matches = parsed is not None and titles_match(title, parsed.title)
     cleaned = clean_abstract(parsed.abstract) if parsed is not None and matches else Cleaned(None)
     abstract = cleaned.text
-    missing = missing_reason(page.ok, matches, abstract)
+    missing = missing_reason(page.ok, matches, abstract, cleaned.refused)
     if abstract is not None:
         evidence = pdf_codes_evidence(
             controls_evidence("div#abstract (citation_title matches the listing)", cleaned.spaced),

@@ -115,6 +115,7 @@ from openproceedings.ingest.sources.openreview_v2 import (
     SKIP_REASONS,
     Progress,
     _abstract,
+    _count_surrogates,
     _pages,
     _strings,
     _title,
@@ -383,6 +384,7 @@ class CrawlReport(Report):
     abstract_missing: int = 0
     title_control_characters: int = 0  # records whose title had a control character replaced (decision-036)
     abstract_control_characters: int = 0  # records whose abstract had one replaced (decision-044, TASK-199)
+    abstract_surrogate: int = 0  # records whose abstract was refused for a lone UTF-16 surrogate (TASK-229)
     authors_split: int = 0  # `content.authors` split by the count-checked rule (decision-019)
     authors_unsplit_ids: list[str] = field(default_factory=list)  # the refused notes' forum ids
     authors_unsplit: int = (
@@ -428,6 +430,7 @@ class CrawlReport(Report):
                 if self.abstract_control_characters
                 else {}
             ),
+            **({"abstract_surrogate": self.abstract_surrogate} if self.abstract_surrogate else {}),
             "authors_split": self.authors_split,
             "authors_unsplit": self.authors_unsplit,
             # listed only when there are any, so a crawl with none keeps its manifest shape
@@ -701,11 +704,11 @@ def _authors_evidence(raw: Any, count: int | None, how: AuthorsHow, names: Seque
 
 def note_record(
     ad: Adapter, listing: Listing, note: Mapping[str, Any], listing_page: Page, read_forum: ForumReader,
-    report: CrawlReport | None = None, spaced: set[str] | None = None,
+    report: CrawlReport | None = None, spaced: set[str] | None = None, surrogate: set[str] | None = None,
 ) -> PaperRecord | str:  # fmt: skip
     """The record for one listed note, or the reason it is skipped (one of V1_SKIP_REASONS). A note whose
     abstract lost a control character has its forum id added to `spaced` (the crawl counts those that became
-    records, TASK-199)."""
+    records, TASK-199), and one whose abstract was refused for a lone surrogate to `surrogate` (TASK-229)."""
     nid = note.get("id")
     if not isinstance(nid, str) or nid != note.get("forum"):
         return "not_submission"
@@ -720,9 +723,11 @@ def note_record(
         return verdict
     venue, year = ad.venue, ad.year
     rid = f"op:{venue.lower()}:{year}:{nid}"
-    abstract, abstract_evidence, abstract_spaced = _abstract(content.get("abstract"))
+    abstract, abstract_evidence, abstract_spaced, refused = _abstract(content.get("abstract"))
     if abstract_spaced and spaced is not None:
         spaced.add(nid)
+    if refused and surrogate is not None:
+        surrogate.add(nid)
     raw_authors = content.get("authors")
     count = author_count(content)
     authors, authors_how = split_authors(raw_authors, count)
@@ -799,6 +804,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     numbers: dict[str, object] = {}  # record id → its note's `number`, for rule 5
     silent: set[str] = set()  # records whose note carries no status evidence (rule 5's silent twin)
     spaced: set[str] = set()  # forum ids whose abstract lost a control character (the importer's own count)
+    surrogate: set[str] = set()  # forum ids whose abstract was refused for a lone surrogate (TASK-229)
     listed: dict[str, Listed] = {}  # record id → its listing and `_bibtex` forum, for the twin links (rule 6)
     # heartbeats count `imported` before rule 5's collapse, which runs after the listings: NeurIPS 2021's last
     # heartbeat can show up to 3,020 imported where the finished line says 2,720
@@ -841,6 +847,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
                 progress.tick,
                 listed,
                 spaced,
+                surrogate,
             )
         except CacheMiss as e:
             if not dry_run:
@@ -889,6 +896,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     report.title_control_characters = sum(title_controls_replaced(r) > 0 for r in records.values())
     # never read back from the evidence (TASK-199): the importer's own count, of the notes still records here
     report.abstract_control_characters = sum(f"op:{venue.lower()}:{year}:{n}" in records for n in spaced)
+    report.abstract_surrogate = _count_surrogates(surrogate, records, venue, year, SOURCE)
     report.conflicts.sort()
     incompatible = client.incompatible - purged  # this crawl's share of the client's count
     log.info("openreview_crawl_finished",
@@ -928,7 +936,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
 def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: CrawlReport,
              records: dict[str, PaperRecord], numbers: dict[str, object], silent: set[str],
              read_forum: ForumReader, page_size: int, tick: Callable[[], None],
-             listed: dict[str, Listed], spaced: set[str]) -> None:  # fmt: skip
+             listed: dict[str, Listed], spaced: set[str], surrogate: set[str]) -> None:  # fmt: skip
     """Page through one invitation's notes into `records` (and the silent ones' ids into `silent`), checking the
     listing is consistent (v1 sends `count` on every page); `tick()` before each note (the crawl's heartbeat)."""
     seen: set[str] = set()
@@ -952,7 +960,7 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
             if not isinstance(note, Mapping):
                 report.skipped["invalid"] += 1
                 continue
-            got = note_record(ad, listing, note, page, read_forum, report, spaced)
+            got = note_record(ad, listing, note, page, read_forum, report, spaced, surrogate)
             if isinstance(got, str):
                 report.skipped[got] += 1
                 log.debug("openreview_note_skipped", extra={"forum": note.get("id"), "reason": got})

@@ -135,11 +135,19 @@ _REHASH = "rehash"  # validation-context key: only `build` and `model_copy` set 
 _HASH_PLACEHOLDER = "0" * 64
 
 
-def _utf8(v: str) -> str:
+def lone_surrogate(text: str) -> bool:
+    """Whether `text` holds a lone UTF-16 surrogate (U+D800-U+DFFF on its own, as JSON's `"\\ud800"` decodes), which
+    no record may hold (`_utf8`). A pair JSON escaped (`"\\ud83d\\ude00"`) decodes to one code point and is valid."""
     try:
-        v.encode("utf-8")
-    except UnicodeEncodeError as e:  # a lone surrogate
-        raise ValueError("text must be valid Unicode (no lone surrogates)") from e
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return True
+    return False
+
+
+def _utf8(v: str) -> str:
+    if lone_surrogate(v):
+        raise ValueError("text must be valid Unicode (no lone surrogates)")
     return v
 
 

@@ -200,7 +200,7 @@ def test_a_lone_surrogate_from_openalex_is_kept_in_the_extract_and_refused_at_th
     assert extract is not None and extract.lookups == (lookup,)
     r = rec("op:facct:2023:doi-3593013.3594011", "FAccT", 2023, doi=D1)
     (out,), report = openalex.fill([r], ext(*extract.lookups), TABLE)
-    assert out.abstract is None and report.refused == {"abstract_unusable": 1}
+    assert out.abstract is None and report.refused == {"abstract_surrogate": 1}
 
 
 def test_a_doi_batch_that_overflows_its_page_is_split_in_half_until_it_fits(tmp_path) -> None:

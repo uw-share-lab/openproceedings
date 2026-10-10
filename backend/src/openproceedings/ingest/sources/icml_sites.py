@@ -40,7 +40,7 @@ from urllib.parse import urlparse
 
 from openproceedings.ingest.dedup import AS_SUBMITTED
 from openproceedings.ingest.record import Source, title_text
-from openproceedings.ingest.sources.common import CrawlError, clean_abstract
+from openproceedings.ingest.sources.common import SURROGATE, CrawlError, clean_abstract, log_surrogate
 from openproceedings.ingest.sources.html import Element, collapse, node_text, parse, text_of, unescape
 from openproceedings.ingest.sources.http import Fetcher, FetchError, Heartbeat, Page
 
@@ -132,6 +132,8 @@ class SiteYear:
     # entries with a title and abstract text that leave no title or no usable abstract (empty; for 1997 and 1998
     # also a submission with no `Abstract` heading)
     dropped: int = 0
+    # of dropped: entries whose abstract was refused for a lone UTF-16 surrogate (`clean_abstract`, TASK-229)
+    surrogate: int = 0
     # 1997/1998 abstracts withheld whole: a contact detail, or no field ends them (TASK-207)
     withheld: int = 0
     # the year's pages are submissions (`SUBMISSION_PARSERS`): its abstracts are as submitted
@@ -603,6 +605,9 @@ def read_year(
                                             _evidence(page), cleaned.pdf_codes))  # fmt: skip
         else:
             out.dropped += 1
+            if cleaned.refused == SURROGATE:
+                out.surrogate += 1
+                log_surrogate(SOURCE, page.url)
     log.info("icml_site_year_read", extra={
         "year": year, "pages": len(out.pages), "entries": len(out.entries), "unjoined": out.unjoined,
         "dropped": out.dropped, "withheld": out.withheld, "ms": round((fetcher.clock.monotonic() - started) * 1000, 1)})  # fmt: skip

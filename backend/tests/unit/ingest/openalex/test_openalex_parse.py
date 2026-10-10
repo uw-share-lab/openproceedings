@@ -66,11 +66,12 @@ def test_hygiene_is_every_abstracts(text: str, kept: str | None) -> None:
     assert refused == (None if kept else "abstract_unusable")
 
 
-def test_a_lone_surrogate_abstract_is_unusable_not_a_crash() -> None:
-    """JSON can carry a lone surrogate (`"\\ud800"`), which no record may hold (`record._utf8`): refused here."""
+def test_a_lone_surrogate_abstract_is_refused_not_a_crash() -> None:
+    """JSON can carry a lone surrogate (`"\\ud800"`), which no record may hold (`record._utf8`): refused by the
+    shared step under its own name (TASK-229)."""
     text = '{"meta": {"count": 1}, "results": [{"id": "W1", "abstract_inverted_index": {"a\\ud800": [0]}}]}'
     (w,) = openalex.parse_works(text).works
-    assert openalex.abstract_of(w) == (None, "abstract_unusable")
+    assert openalex.abstract_of(w) == (None, "abstract_surrogate")
 
 
 def test_abstract_of_passes_rebuild_refusals_and_absence_through() -> None:

@@ -428,7 +428,8 @@ def mine_journal(
             )
             return
         records.append(record)
-        report.count(record, None if record.abstract else "no_abstract", cleaned.spaced, cleaned.pdf_codes)
+        missing = None if record.abstract else cleaned.refused or "no_abstract"
+        report.count(record, missing, cleaned.spaced, cleaned.pdf_codes)
 
     # imported here, not at the top: ojs_harvest imports this module
     from openproceedings.ingest.sources.ojs_harvest import harvest_journal

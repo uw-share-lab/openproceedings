@@ -89,7 +89,8 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   `abstract_missing`, the `site_*` counts, `abstract_control_characters`, `abstract_pdf_codes`, `abstract_short`),
   and `dblp_ingested` (`years`, `requests`, `cached`). Never a line per item.
 - **Record-level anomalies are DEBUG** (`openreview_unknown_track`, `openreview_v1_unmapped`,
-  `openreview_v1_conflict`, `openreview_v1_twin_outcome`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `openreview_presentation_unmapped`, `openreview_title_control_characters` (forum and count, never the title), `neurips_record_invalid`,
+  `abstract_surrogate_refused` (the source and the record id or page row, never the text; TASK-229; each report
+  counts them as `abstract_surrogate` or `site_surrogate`), `openreview_v1_conflict`, `openreview_v1_twin_outcome`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `openreview_presentation_unmapped`, `openreview_title_control_characters` (forum and count, never the title), `neurips_record_invalid`,
   `pmlr_record_invalid`, `dblp_record_invalid` (the dblp key and the error type), and per cache entry `openreview_cache_incompatible`, a purged pre-projection entry,
   which a crawl reports as `cache_incompatible`). Each listing or crawl logs **at most one aggregate WARNING**
   with the counts
