@@ -291,6 +291,14 @@ describe("the header", () => {
     );
   });
 
+  it("says '1 abstract from OpenAlex' for a single one (CV-2)", () => {
+    const c = copy();
+    c.totals.abstract_openalex = 1;
+    render(<CoverageReport coverage={c} />);
+    expect(document.body.textContent).toContain(" · 1 abstract from OpenAlex");
+    expect(document.body.textContent).not.toContain("1 abstracts from OpenAlex");
+  });
+
   it("explains OpenAlex abstracts under the table, at the anchor the label links to (CV-8)", () => {
     render(<CoverageReport coverage={COVERAGE} />);
     const note = document.getElementById("openalex")!;

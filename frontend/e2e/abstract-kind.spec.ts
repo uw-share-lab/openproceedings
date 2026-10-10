@@ -30,9 +30,13 @@ test("the Abstract field follows Status, and ticking Official alone writes abstr
 
   await openalex.click();
   await expect(page).toHaveURL(/abstract_kind/);
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("q"))
+    .toContain("abstract_kind:(none OR official)");
   await expect(abstract.getByRole("checkbox", { name: /^No abstract\s*,/ })).toBeEnabled();
   await expect(abstract.getByRole("checkbox", { name: /^OpenAlex\s*,/ })).not.toBeChecked();
   await abstract.getByRole("checkbox", { name: /^No abstract\s*,/ }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toContain("abstract_kind:(official)");
   const editor = page.getByRole("textbox", { name: "Query" });
   await expect(editor).toContainText("abstract_kind:(official)");
   await expect(abstract.getByRole("checkbox", { name: /^Official\s*,/ })).toBeChecked();

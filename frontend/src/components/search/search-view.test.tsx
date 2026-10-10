@@ -463,6 +463,27 @@ describe("Limits you wrote", () => {
   });
 });
 
+describe("a written abstract_kind: clause", () => {
+  it("counts as one written limit on the Filters button", async () => {
+    const q = "trust abstract_kind:(official)";
+    await setup(
+      stateOf({ q }),
+      handler({
+        parse: (text) =>
+          json(
+            parsed(text, {
+              filters: {
+                ...unrestricted(text),
+                abstract_kind: clause("abstract_kind", [6, 30], ["official"]),
+              },
+            }),
+          ),
+      }),
+    );
+    expect(screen.getByRole("button", { name: "Filters (1 active)" })).toBeTruthy();
+  });
+});
+
 describe("filter sidebar (spec 05 §4; W13)", () => {
   it("labels each option with its facet count; checked = the clause admits it; (default) on track and status", async () => {
     await setup();
