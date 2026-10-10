@@ -30,7 +30,6 @@ from openproceedings.engine.compile import (
     Expansions,
     combine,
     conjuncts,
-    id_set,
     verified_clauses,
     verifies,
     wildcards,
@@ -212,11 +211,10 @@ class TantivyEngine:
         self.index = open_index(path)
         self.searcher = self.index.searcher()
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
-        # what this index's schema differs in (`SERVED_SCHEMAS`): schema 3 indexes `ord`, so a verified clause
-        # names its ids as a u64 term set; a schema-2 index (one a record may pin) keeps the term set on the text
-        # `id` it was served with (TASK-167, `id_set`)
+        # what this index's schema differs in (`SERVED_SCHEMAS`); every served schema indexes `ord`, so a verified
+        # clause names its ids as a u64 term set (TASK-167, `id_set`)
         self.form: SchemaForm = SERVED_SCHEMAS[manifest["schema_version"]]
-        if self.form.ord_indexed and not _indexes_ord(self.index.schema, self.searcher):
+        if not _indexes_ord(self.index.schema, self.searcher):
             # a manifest that names a schema its files don't have: refused here, not query by query
             raise IndexUnservable(
                 DiagnosticCode.API_INTERNAL,
@@ -244,11 +242,6 @@ class TantivyEngine:
         # entered around each cold position verification (`Compiler.gate`); the API sets its own, which
         # bounds how many run at once (spec 04 §Rate limit)
         self.verification_gate: Callable[[], AbstractContextManager[object]] = nullcontext
-
-    @property
-    def ord_indexed(self) -> bool:
-        """Whether this index names a verified clause's ids by the indexed `ord` (schema 3) or the text `id`."""
-        return self.form.ord_indexed
 
     @property
     def universe(self) -> frozenset[str]:
@@ -735,10 +728,7 @@ class TantivyEngine:
     # --- reading the index ---------------------------------------------------------------------------
     def id_set(self, ids: list[str]) -> tantivy.Query:
         """The documents with these ids, as a verified clause names them (`Compiler.exact`): a term set on the
-        indexed `ord` (schema 3; each id's position in `ids.txt`, which is in id order), or on the text `id`
-        for a schema-2 index. The same documents either way; Tantivy resolves the u64 set faster (TASK-167)."""
-        if not self.form.ord_indexed:
-            return id_set(self.index.schema, ids)
+        indexed `ord` (each id's position in `ids.txt`, which is in id order; TASK-167)."""
         table = self._ords  # one read (task-080); built whole, then stored with one assignment
         if table is None:
             table = {i: at for at, i in enumerate(self.ids)}

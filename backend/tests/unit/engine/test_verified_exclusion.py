@@ -4,8 +4,8 @@ superset of the verified ids, so either form matches exactly the verified ids, a
 where the term set added 0.0: the scores are the same floats. Tantivy re-resolves an id term set on every
 search, so a clause most of whose candidates hold it was the warm search's main cost (`main-2-pop`).
 
-Every case runs on both served schemas (TASK-167): a schema-3 index names the ids as a u64 term set on `ord`
-(`TantivyEngine.id_set`), a schema-2 one as a term set on the text `id`, with the same matches and scores."""
+Every case runs on each served schema; a verified clause names its ids as a u64 term set on `ord`
+(`TantivyEngine.id_set`, TASK-167)."""
 
 from __future__ import annotations
 
@@ -41,9 +41,7 @@ CORPUS = [
 
 @pytest.fixture(scope="module", params=list(SERVED_SCHEMAS))
 def small(tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest) -> TantivyEngine:
-    engine = tantivy_of(CORPUS, tmp_path_factory.mktemp("exclusion"), request.param)
-    assert engine.ord_indexed == (request.param != "2")
-    return engine
+    return tantivy_of(CORPUS, tmp_path_factory.mktemp("exclusion"), request.param)
 
 
 @pytest.fixture(scope="module", params=list(SERVED_SCHEMAS))
