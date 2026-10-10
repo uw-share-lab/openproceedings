@@ -3,8 +3,10 @@ and its bytes (guarantee 4). Synthetic records in the release's framing (decisio
 
 from __future__ import annotations
 
+import dataclasses
 import gzip
 import hashlib
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -91,6 +93,21 @@ def test_the_icml_extract_is_the_same_bytes_whether_or_not_aaai_shares_the_pass(
         == tmp_path / "dblp" / "extract" / "aaai" / f"{table.release.file.sha256}.json"
     )
     assert dblp.load_extract(tmp_path, table, dblp.AAAI_SLICE) == both["AAAI"]
+
+
+# sha256 of the ICML extract origin/dev's writer (5f147e32, `write_extract` before slices existed) wrote from GZ_FULL
+# and its DTD, with `fetched_at` 2026-10-10T00:00:00+00:00: computed once from a `git archive 5f147e32` copy on
+# 2026-10-10. A change to the extract's format, keys or order fails here (guarantee 4: ICML's bytes are unchanged).
+PRE_SLICE_ICML_SHA256 = "c6611859a5709add4569b599c35d5696e6a2a9a23d3c613467303c8eff1f2590"
+
+
+def test_the_icml_extract_is_byte_identical_to_the_pre_slice_writers(tmp_path: Path) -> None:
+    table, rel, dtd = on_disk(tmp_path)
+    fixed = dataclasses.replace(rel, fetched_at=datetime(2026, 10, 10, tzinfo=UTC))
+    dblp.write_extracts(tmp_path, fixed, dtd, table, dblp.SLICES)
+    path = dblp.extract_path(tmp_path, table)
+    assert path == tmp_path / "dblp" / "extract" / f"{table.release.file.sha256}.json"
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == PRE_SLICE_ICML_SHA256
 
 
 def test_prepare_slices_reads_the_release_once_for_every_missing_slice(tmp_path: Path, monkeypatch) -> None:
