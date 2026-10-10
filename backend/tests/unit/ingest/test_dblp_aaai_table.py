@@ -71,7 +71,8 @@ def test_bad_rows_are_refused(edit, message) -> None:
 
 
 def test_the_shipped_table_loads_and_records_the_years_aaai_was_not_held() -> None:
-    assert dblp_aaai_table.TABLE.not_held == frozenset({1981, 1985, 1989, 2001, 2003, 2009})
+    # 1995 too: the 12th conference is 1994 and the 13th 1996 (the census, docs/research/2026-10-09-...-sources.md)
+    assert dblp_aaai_table.TABLE.not_held == frozenset({1981, 1985, 1989, 1995, 2001, 2003, 2009})
 
 
 @pytest.mark.parametrize(
@@ -88,3 +89,16 @@ def test_the_shipped_table_loads_and_records_the_years_aaai_was_not_held() -> No
 def test_a_repeated_proceedings_key_and_a_float_year_are_refused(edit, message) -> None:
     with pytest.raises(ValueError, match=message):
         dblp_aaai_table.load(edit(GOOD))
+
+
+# the 2026-10-10 census of release 10.4230/dblp.xml.2026-10-03: inproceedings under the main keys, 1980-2008
+CENSUS_MAIN = 4689
+
+
+def test_the_shipped_table_covers_every_year_1980_to_2009() -> None:
+    t = dblp_aaai_table.TABLE
+    assert set(t.years) | t.not_held == set(range(1980, 2010)) and not set(t.years) & t.not_held
+    assert sorted(t.years) == [1980, 1982, 1983, 1984, 1986, 1987, 1988, *range(1990, 1995), *range(1996, 2001),
+                               2002, *range(2004, 2009)]  # fmt: skip
+    assert all(len(t.years[y].proceedings) == 2 for y in (1986, 1991, 1994, 1996))
+    assert sum(y.papers for y in t.years.values()) == CENSUS_MAIN  # the census total, written in as a literal

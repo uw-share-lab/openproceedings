@@ -8,6 +8,7 @@ It records four things:
 - the ojs.aaai.org census and its reconciliation;
 - two server quirks the harvest had to handle;
 - the section-to-track decisions, including the sections left for the owner to review.
+- the dblp census behind `dblp_aaai.toml` (AAAI 1980–2008, 2026-10-10).
 
 Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 retry and the dblp check are
 2026-10-10, and say so).
@@ -57,7 +58,8 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
   quirk 2).
 - **Pre-2010** is not on OJS. The aaai.org library pages redirect to WordPress pages with no abstracts, and
   aaai.org's robots.txt sets `Crawl-delay: 43200`. Milestone B takes AAAI 1980–2008 from the pinned dblp release:
-  `conf/aaai/<year>` 1980–2026, with no AAAI in 1981, 1985, 1989, 2001, 2003 or 2009. Its main keys total 28,802,
+  `conf/aaai/<year>` 1980–2026, with no AAAI in 1981, 1985, 1989, 1995, 2001, 2003 or 2009 (1995 was found by the
+  2026-10-10 census; see §AAAI 1980–2008 (dblp)). Its main keys total 28,802,
   and its workshop keys (`2015ethics`, `2017w`, `2021safeai`, …) total 2,368. From 2014 dblp matches OJS closely:
   2026 has 4,920 in both.
 
@@ -139,6 +141,113 @@ relies on it (TASK-214 builds it).
   counts (206, 317) differ from the ACM entries (206, 314) and the CSV rows (217, 325); the difference was not
   itemised.
 - ACM has been fully open access since 2026-01-01. No metadata or abstract licence was found.
+
+## AAAI 1980–2008 (dblp)
+
+Read 2026-10-10 from the pinned release `10.4230/dblp.xml.2026-10-03` (sha256 `20e45961…e969`, already on disk;
+nothing was fetched) by `scripts/dblp_aaai_census.py`. The census wrote only AAAI's extract
+(`<cache>/dblp/extract/aaai/<sha256>.json`). ICML's extract hashed
+`c2086904b5ac1783ee4cf58877512b60d5e42e1199150bd8d4fc1979be2e0168` before and after (unchanged; guarantee 4).
+`backend/src/openproceedings/ingest/dblp_aaai.toml` holds the rows below.
+
+**Not held.** The release has no `conf/aaai/` proceedings key dated 1981, 1985, 1989, **1995**, 2001, 2003 or 2009.
+The design and the milestone B plan listed six years and missed 1995. The meetings' ordinals in dblp's own titles
+settle it: 1994 is the 12th National Conference and 1996 the 13th (IJCAI-95 met in Montreal). So `not_held` has
+seven years, and AAAI 1980–2008 has 23 held years, not 24.
+
+**Per-year counts.** `papers` is the inproceedings crossref'ing the year's main key(s), not-paper rows included.
+Records = papers − not-paper rows + workshop papers.
+
+| Year | Main key(s) | Main papers | Not-paper rows | Workshop papers | Records |
+|---|---|---|---|---|---|
+| 1980 | `1980` | 95 | | | 95 |
+| 1982 | `1982` | 104 | | | 104 |
+| 1983 | `1983` | 92 | | | 92 |
+| 1984 | `1984` | 69 | | | 69 |
+| 1986 | `1986-1` (120), `1986-2` (79) | 199 | 11 | | 188 |
+| 1987 | `1987` | 149 | | | 149 |
+| 1988 | `1988` | 150 | | | 150 |
+| 1990 | `1990` | 174 | 1 | | 173 |
+| 1991 | `1991-1` (80), `1991-2` (64) | 144 | | | 144 |
+| 1992 | `1992` | 134 | | | 134 |
+| 1993 | `1993` | 135 | | | 135 |
+| 1994 | `1994-1` (129), `1994-2` (173) | 302 | | | 302 |
+| 1996 | `1996-1` (132), `1996-2` (157) | 289 | | 16 (`1996w1`) | 305 |
+| 1997 | `1997` | 213 | | 37 (`1997ca` 24, `1997w6` 13) | 250 |
+| 1998 | `1998` | 206 | | | 206 |
+| 1999 | `1999` | 193 | | | 193 |
+| 2000 | `2000` | 233 | | | 233 |
+| 2002 | `2002` | 180 | | | 180 |
+| 2004 | `2004` | 194 | | | 194 |
+| 2005 | `2005` | 325 | | | 325 |
+| 2006 | `2006` | 385 | | | 385 |
+| 2007 | `2007` | 368 | | | 368 |
+| 2008 | `2008` | 356 | | | 356 |
+| **Total** | | **4,689** | **12** | **53** | **4,730** |
+
+All keys are `conf/aaai/…`. The four split years (1986, 1991, 1994, 1996) each have two volumes, as the design
+said; 1990's single key is titled "2 Volumes". `op ingest dblp --venue AAAI --year 1980-2008` printed 23 listings, every
+one `count_ok: true`, and `not_held: [1981, 1985, 1989, 1995, 2001, 2003]` (2009 is outside the asked range).
+
+**Workshops.** These three keys are each titled "(Collected) Papers from the 1996/1997 AAAI Workshop", and their papers
+are track `workshop`:
+- `conf/aaai/1996w1`, Agent Modeling (1996): 16 papers;
+- `conf/aaai/1997ca`, Constraints & Agents (1997): 24 papers;
+- `conf/aaai/1997w6`, Deep Blue Versus Kasparov (1997): 13 papers.
+
+**Excluded.** `conf/aaai/1991w` is excluded. It is *Intelligent Multimedia Interfaces*, which dblp dates 1993. Its
+title calls it "an outgrowth of the AAAI Workshop on Intelligent Multimedia Interfaces, Anaheim, 1991". That makes it
+an edited book, not the workshop's proceedings, and reading it as a workshop would file 1991 work under AAAI 1993.
+It holds 16 inproceedings, and the 1991 listing counts them under `excluded_proceedings`. No other `conf/aaai/`
+proceedings key is dated 1980–2009, and none lacks a year.
+
+**Not-paper rows** (12; counted in their year's listing, never records). Each title says what it is:
+
+| Key (`conf/aaai/…`) | Year | Kind | Why |
+|---|---|---|---|
+| `Darden86` | 1986 | invited talk | "Invited Talk: …", pp. 1146–1147 |
+| `Hendrix86` | 1986 | invited talk | "Invited Talk: …", p. 1148 |
+| `McDermottH86` | 1986 | panel | "… (Panel)", p. 1149 |
+| `SolowayBMRS86`, `Winston86`, `FriedlandMS86`, `HartGRW86`, `AikinsHMSS86`, `FehlingAAGLM86` | 1986 | panel | "Panel: …" / "President's Panel: …", all p. 1150 |
+| `KaczmarekNBHMWWW86` | 1986 | panel | "Panel: …", p. 1151 |
+| `NechesFKMP86` | 1986 | panel | "Panel: …", p. 1153 |
+| `Dumais90` | 1990 | panel | "Panel: User Modeling and User Interfaces", the chair's two-page introduction |
+
+The census's title pattern also matched `LesperanceL90` ("Indexical Knowledge…") and `Domeshek91` ("Indexing
+Stories…"). Both are papers, and both stay papers. No entry under a main or workshop key lacks an author.
+
+**For owner review** (left as papers). Each of these may be a talk or panel abstract, but its title doesn't say so
+clearly enough to drop it:
+- One-page "(Abstract)" entries that read like invited-talk abstracts:
+  - `Feigenbaum93`, "Tiger in a Cage … (1993) - Abstract", p. 852;
+  - `Simon93`, "Artificial Intelligence as an Experimental Science (Abstract)", p. 853;
+  - `Abarbanel96`, "The BOEING 777 … (Abstract)", p. 1589;
+  - `Wellman97`, "Market-Oriented Programming (Abstract)", p. 774;
+  - `ArkinF97`, "The AAAI-97 Mobile Robot Competion … (Abstract)", p. 755.
+  ICML's table marks entries of this shape as invited talks, but AAAI's titles don't name them as talks.
+- `SelmanBDHMN96`, "Challenge Problems for Artificial Intelligence (Panel Statements)", pp. 1340–1345: six pages of
+  panelists' statements.
+- The 1990 panelists' short statements:
+  - `Hollan90`, `McKeown90` and `Jones90` follow `Dumais90`'s user-modeling panel, pp. 1137–1141;
+  - `Balzer90`, `Fikes90`, `Fox90`, `McDermott90` and `Soloway90` are an AI-and-software-engineering set, pp. 1123–1134.
+- `conf/aaai/1991w`: the owner may prefer to read it as a 1991 workshop rather than exclude it. The table can't file
+  it under 1991, because dblp dates the key 1993.
+- One-page video and demonstration abstracts, such as 1993 pp. 856–857 and 1994 pp. 1506–1507. They are short
+  entries of a non-paper program, but each describes a system and has authors.
+
+**IAAI cross-check.** `gzip -dc … | grep -o '<crossref>conf/aaai/[^<]*</crossref>' | sort | uniq -c` gives, for every
+`conf/aaai/` key dated 1980–2008, exactly the census's `conf/aaai/`-keyed count. So the difference is **0 in every
+year**: no record keyed outside `conf/aaai/` (`conf/iaai/…`) crossrefs an AAAI volume before 2009. The volumes from
+1996 on name IAAI in their titles, but this release crossrefs no IAAI paper to them (the design's §Sources 2: IAAI
+has its own proceedings before 2010; `conf/iaai/` was not read here). IAAI before 2010 stays out of scope by design.
+
+**Other counts** (over the 4,758 inproceedings under keys dated 1980–2009):
+- 678 author occurrences (326 distinct names) carry a dblp homonym number, which `clean_author` drops.
+- No key fails `dblp.NATIVE`.
+- No entry has a `publtype`.
+- **No entry has a DOI `ee`**, so every AAAI 1980–2008 record has `urls.doi` empty. Milestone C's OpenAlex fill
+  must match these records by title.
+- No inproceedings dated 1980–2009 crossrefs a missing proceedings key.
 
 ## Licence posture
 

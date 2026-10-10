@@ -11,4 +11,296 @@
 # [[not_paper]] an entry under a main or workshop key that is no paper (an invited talk, a panel): counted in its
 #               year's listing, never a record
 # dblp's conf/aaai/ keys dated 2010 or later are never read: ojs.aaai.org holds those years (ojs_sections.toml).
-not_held = [1981, 1985, 1989, 2001, 2003, 2009]
+#
+# Census of the pinned release taken 2026-10-10 (`scripts/dblp_aaai_census.py`; the research note's §AAAI 1980-2008
+# (dblp)). The meetings' ordinals confirm the gaps: the 12th conference is 1994 and the 13th 1996, so no AAAI was
+# held in 1995 (IJCAI-95 met in Montreal), as in 1981, 1985, 1989, 2001 and 2003 (IJCAI in North America) and 2009.
+# A split year's title is its first volume's.
+not_held = [1981, 1985, 1989, 1995, 2001, 2003, 2009]
+
+[[year]]
+year = 1980
+proceedings = ["conf/aaai/1980"]
+papers = 95
+title = "Proceedings of the 1st Annual National Conference on Artificial Intelligence, Stanford University, CA, USA, August 18-21, 1980."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1982
+proceedings = ["conf/aaai/1982"]
+papers = 104
+title = "Proceedings of the National Conference on Artificial Intelligence, Pittsburgh, PA, USA, August 18-20, 1982."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1983
+proceedings = ["conf/aaai/1983"]
+papers = 92
+title = "Proceedings of the National Conference on Artificial Intelligence, Washington, D.C., USA, August 22-26, 1983."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1984
+proceedings = ["conf/aaai/1984"]
+papers = 69
+title = "Proceedings of the National Conference on Artificial Intelligence. Austin, TX, USA, August 6-10, 1984."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1986
+proceedings = ["conf/aaai/1986-1", "conf/aaai/1986-2"]
+papers = 199
+title = "Proceedings of the 5th National Conference on Artificial Intelligence. Philadelphia, PA, USA, August 11-15, 1986. Volume 1: Science."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1987
+proceedings = ["conf/aaai/1987"]
+papers = 149
+title = "Proceedings of the 6th National Conference on Artificial Intelligence. Seattle, WA, USA, July 1987."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1988
+proceedings = ["conf/aaai/1988"]
+papers = 150
+title = "Proceedings of the 7th National Conference on Artificial Intelligence, St. Paul, MN, USA, August 21-26, 1988."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1990
+proceedings = ["conf/aaai/1990"]
+papers = 174
+title = "Proceedings of the 8th National Conference on Artificial Intelligence. Boston, Massachusetts, USA, July 29 - August 3, 1990, 2 Volumes."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1991
+proceedings = ["conf/aaai/1991-1", "conf/aaai/1991-2"]
+papers = 144
+title = "Proceedings of the 9th National Conference on Artificial Intelligence, Anaheim, CA, USA, July 14-19, 1991, Volume 1."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1992
+proceedings = ["conf/aaai/1992"]
+papers = 134
+title = "Proceedings of the 10th National Conference on Artificial Intelligence, San Jose, CA, USA, July 12-16, 1992."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1993
+proceedings = ["conf/aaai/1993"]
+papers = 135
+title = "Proceedings of the 11th National Conference on Artificial Intelligence. Washington, DC, USA, July 11-15, 1993."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1994
+proceedings = ["conf/aaai/1994-1", "conf/aaai/1994-2"]
+papers = 302
+title = "Proceedings of the 12th National Conference on Artificial Intelligence, Seattle, WA, USA, July 31 - August 4, 1994, Volume 1."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1996
+proceedings = ["conf/aaai/1996-1", "conf/aaai/1996-2"]
+papers = 289
+title = "Proceedings of the Thirteenth National Conference on Artificial Intelligence and Eighth Innovative Applications of Artificial Intelligence Conference, AAAI 96, IAAI 96, Portland, Oregon, USA, August 4-8, 1996, Volume 1."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1997
+proceedings = ["conf/aaai/1997"]
+papers = 213
+title = "Proceedings of the Fourteenth National Conference on Artificial Intelligence and Ninth Innovative Applications of Artificial Intelligence Conference, AAAI 97, IAAI 97, July 27-31, 1997, Providence, Rhode Island, USA."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1998
+proceedings = ["conf/aaai/1998"]
+papers = 206
+title = "Proceedings of the Fifteenth National Conference on Artificial Intelligence and Tenth Innovative Applications of Artificial Intelligence Conference, AAAI 98, IAAI 98, July 26-30, 1998, Madison, Wisconsin, USA."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 1999
+proceedings = ["conf/aaai/1999"]
+papers = 193
+title = "Proceedings of the Sixteenth National Conference on Artificial Intelligence and Eleventh Conference on Innovative Applications of Artificial Intelligence, July 18-22, 1999, Orlando, Florida, USA."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 2000
+proceedings = ["conf/aaai/2000"]
+papers = 233
+title = "Proceedings of the Seventeenth National Conference on Artificial Intelligence and Twelfth Conference on on Innovative Applications of Artificial Intelligence, July 30 - August 3, 2000, Austin, Texas, USA."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 2002
+proceedings = ["conf/aaai/2002"]
+papers = 180
+title = "Proceedings of the Eighteenth National Conference on Artificial Intelligence and Fourteenth Conference on Innovative Applications of Artificial Intelligence, July 28 - August 1, 2002, Edmonton, Alberta, Canada."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 2004
+proceedings = ["conf/aaai/2004"]
+papers = 194
+title = "Proceedings of the Nineteenth National Conference on Artificial Intelligence, Sixteenth Conference on Innovative Applications of Artificial Intelligence, July 25-29, 2004, San Jose, California, USA"
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 2005
+proceedings = ["conf/aaai/2005"]
+papers = 325
+title = "Proceedings, The Twentieth National Conference on Artificial Intelligence and the Seventeenth Innovative Applications of Artificial Intelligence Conference, July 9-13, 2005, Pittsburgh, Pennsylvania, USA"
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 2006
+proceedings = ["conf/aaai/2006"]
+papers = 385
+title = "Proceedings, The Twenty-First National Conference on Artificial Intelligence and the Eighteenth Innovative Applications of Artificial Intelligence Conference, July 16-20, 2006, Boston, Massachusetts, USA"
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 2007
+proceedings = ["conf/aaai/2007"]
+papers = 368
+title = "Proceedings of the Twenty-Second AAAI Conference on Artificial Intelligence, July 22-26, 2007, Vancouver, British Columbia, Canada"
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[year]]
+year = 2008
+proceedings = ["conf/aaai/2008"]
+papers = 356
+title = "Proceedings of the Twenty-Third AAAI Conference on Artificial Intelligence, AAAI 2008, Chicago, Illinois, USA, July 13-17, 2008"
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[workshop]]
+key = "conf/aaai/1996w1"
+year = 1996
+papers = 16
+title = "Agent Modeling, Papers from the 1996 AAAI Workshop"
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[workshop]]
+key = "conf/aaai/1997ca"
+year = 1997
+papers = 24
+title = "Constraints & Agents: Collected Papers from the 1997 AAAI Workshop, Providence, RI, USA, July 27, 1997."
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[workshop]]
+key = "conf/aaai/1997w6"
+year = 1997
+papers = 13
+title = "Deep Blue Versus Kasparov: The Significance for Artificial Intelligence, Collected Papers from the 1997 AAAI Workshop"
+verified = 2026-10-10
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# dblp dates this edited book 1993, though the workshop it grew from met in 1991; it is not a workshop's own
+# proceedings, and reading it as a workshop would file 1991 work under AAAI 1993 (left for the owner to review)
+[[excluded]]
+key = "conf/aaai/1991w"
+year = 1993
+reason = "an edited book (Intelligent Multimedia Interfaces, 1993), an outgrowth of the 1991 AAAI workshop, not its proceedings; dblp dates it 1993"
+
+[[not_paper]]
+key = "conf/aaai/Darden86"
+year = 1986
+kind = "invited talk"
+reason = "an invited-talk summary (pp. 1146-1147, titled \"Invited Talk: ...\")"
+
+[[not_paper]]
+key = "conf/aaai/Hendrix86"
+year = 1986
+kind = "invited talk"
+reason = "a one-page invited-talk summary (p. 1148, titled \"Invited Talk: ...\")"
+
+[[not_paper]]
+key = "conf/aaai/McDermottH86"
+year = 1986
+kind = "panel"
+reason = "a one-page panel summary (p. 1149, titled \"... (Panel)\")"
+
+[[not_paper]]
+key = "conf/aaai/SolowayBMRS86"
+year = 1986
+kind = "panel"
+reason = "a panel listing (p. 1150, titled \"Panel: ...\")"
+
+[[not_paper]]
+key = "conf/aaai/Winston86"
+year = 1986
+kind = "panel"
+reason = "a panel listing (p. 1150, titled \"President's Panel: ...\")"
+
+[[not_paper]]
+key = "conf/aaai/FriedlandMS86"
+year = 1986
+kind = "panel"
+reason = "a panel listing (p. 1150, titled \"Panel: ...\")"
+
+[[not_paper]]
+key = "conf/aaai/HartGRW86"
+year = 1986
+kind = "panel"
+reason = "a panel listing (p. 1150, titled \"Panel: ...\")"
+
+[[not_paper]]
+key = "conf/aaai/AikinsHMSS86"
+year = 1986
+kind = "panel"
+reason = "a panel listing (p. 1150, titled \"Panel: ...\")"
+
+[[not_paper]]
+key = "conf/aaai/FehlingAAGLM86"
+year = 1986
+kind = "panel"
+reason = "a panel listing (p. 1150, titled \"Panel: ...\")"
+
+[[not_paper]]
+key = "conf/aaai/KaczmarekNBHMWWW86"
+year = 1986
+kind = "panel"
+reason = "a one-page panel summary (p. 1151, titled \"Panel: ...\")"
+
+[[not_paper]]
+key = "conf/aaai/NechesFKMP86"
+year = 1986
+kind = "panel"
+reason = "a one-page panel summary (p. 1153, titled \"Panel: ...\")"
+
+[[not_paper]]
+key = "conf/aaai/Dumais90"
+year = 1990
+kind = "panel"
+reason = "the panel chair's introduction (pp. 1135-1136, titled \"Panel: ...\"); the panelists' statements stay papers"
