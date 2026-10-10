@@ -93,7 +93,8 @@ source = "test"
 
 
 @pytest.mark.parametrize(("page", "start"), [("354-355", 354), ("7", 7), ("1-1", 1), (None, None), ("", None),
-                                             ("e1-e5", None), ("12-", 12)])  # fmt: skip
+                                             ("e1-e5", None), ("12-", 12),
+                                             ("1" * 5000, None)])  # fmt: skip
 def test_start_page_reads_crossrefs_page_field(page, start) -> None:
     assert acm_table.start_page(page) == start
 

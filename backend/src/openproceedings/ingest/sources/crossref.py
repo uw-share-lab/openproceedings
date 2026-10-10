@@ -356,14 +356,19 @@ def mine_proceedings(
         report.fetched += site.fetched
     records: list[PaperRecord] = []
     used: set[acm_table.Section] = set()
+    sectioned = any((s.venue, s.year) == (venue, year) for s in table.sections)
     for doi, w, page in kept:
         found = matched.by_doi.get(doi) if matched is not None else None
         section = table.section(venue, year, w.page)
         if section is not None:
             used.add(section)
+        elif sectioned and acm_table.start_page(w.page) is None:
+            raise CrawlError(f"Crossref {venue} {year}: {doi} has no readable start page ({(w.page or '')[:40]!r}), so "
+                             "no acm_proceedings.toml section can place it: check Crossref, or name it in "
+                             "[[not_paper]]", reason="unplaced_page")  # fmt: skip
         try:
             record = _record(row, w, page, found, site.join if site is not None else None, section,
-                             sectioned=any((s.venue, s.year) == (venue, year) for s in table.sections))  # fmt: skip
+                             sectioned=sectioned)  # fmt: skip
         except (ValidationError, ValueError) as e:
             raise CrawlError(f"Crossref {venue} {year}: {doi} makes no valid record ({type(e).__name__})",
                              reason="invalid_record") from e  # fmt: skip
@@ -380,6 +385,7 @@ def mine_proceedings(
     log.info("crossref_proceedings_mined", extra={"venue": venue, "year": year, "listed": report.listed,
                                                   "records": report.records, "window_works": report.window_works,
                                                   "pages": report.pages, "abstract_attached": report.abstract_attached,
+                                                  "tracks": dict(sorted(report.tracks.items())),
                                                   "site_entries": report.site_entries,
                                                   "site_unmatched": report.site_unmatched,
                                                   "site_ambiguous": report.site_ambiguous,

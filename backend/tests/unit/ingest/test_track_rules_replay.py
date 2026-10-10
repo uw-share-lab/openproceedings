@@ -21,13 +21,13 @@ AAAI_MOVED = {
     1997: {"consortium": 13, "iaai": 32, "other": 16, "student_abstract": 30},
     1998: {"consortium": 16, "iaai": 22, "student_abstract": 24},
     1999: {"consortium": 16, "demo": 17, "iaai": 17, "other": 4, "student_abstract": 29},
-    2000: {"consortium": 12, "demo": 12, "iaai": 17, "other": 2, "student_abstract": 38},
+    2000: {"consortium": 12, "demo": 12, "iaai": 18, "other": 2, "student_abstract": 38},
     2002: {"consortium": 13, "demo": 10, "iaai": 18, "student_abstract": 17},
     2004: {"consortium": 12, "demo": 21, "iaai": 24, "student_abstract": 17},
     2005: {"consortium": 16, "demo": 22, "iaai": 18, "other": 15, "student_abstract": 22},
-    2006: {"consortium": 13, "demo": 13, "iaai": 21, "other": 12, "student_abstract": 25},
-    2007: {"consortium": 17, "demo": 9, "iaai": 22, "other": 6, "student_abstract": 42},
-    2008: {"consortium": 15, "demo": 10, "iaai": 22, "student_abstract": 35},
+    2006: {"consortium": 13, "demo": 13, "iaai": 21, "other": 77, "student_abstract": 25},
+    2007: {"consortium": 17, "demo": 9, "iaai": 22, "other": 26, "student_abstract": 42},
+    2008: {"consortium": 15, "demo": 10, "iaai": 22, "other": 24, "student_abstract": 35},
 }
 # milestone B's not-paper rows (1986's invited talks and panels, 1990's panel chair)
 AAAI_NOT_PAPER_BEFORE = {
@@ -74,8 +74,8 @@ def test_the_aaai_rules_move_and_drop_exactly_the_counted_entries() -> None:
             moved.setdefault(year, Counter())[track] += 1
     assert {y: dict(c) for y, c in moved.items()} == AAAI_MOVED
     assert removed == AAAI_NOT_PAPER_BEFORE | AAAI_REMOVED
-    assert len(AAAI_REMOVED) == 21 and sum(sum(c.values()) for c in moved.values()) == 979
-    assert kept == 4689 - 33 - 979  # the census less every not-paper row and every moved entry
+    assert len(AAAI_REMOVED) == 21 and sum(sum(c.values()) for c in moved.values()) == 1089
+    assert kept == 4689 - 33 - 1089  # the census less every not-paper row and every moved entry
 
 
 def test_the_aaai_rows_the_rulings_name() -> None:
@@ -111,7 +111,6 @@ def test_the_aaai_rows_the_rulings_name() -> None:
         "Sultanik05",
         "Thornton05",
         "WangL05",
-        "BarishKCMPS00",
     ):
         assert track(key, *entries[key]) == "main", key
 
@@ -136,3 +135,35 @@ def test_the_aies_rules_move_and_drop_exactly_the_counted_works() -> None:
     # the two front-of-volume entries that look like papers stay main
     for doi in ("10.1145/3375627.3375839", "10.1145/3461702.3462443"):
         assert doi not in t.not_papers
+
+
+def test_the_review_round_rows() -> None:
+    """BarishKCMPS00 is on the IAAI-2000 page (printed without a page), 2006-2008's NECTAR and Senior Member sections
+    are `other` as from 2010 (TASK-218), and 2006's 18 AAAI Member Abstracts, which dblp gives no pages, are `other`
+    by key rows."""
+    t = dblp_aaai_table.TABLE
+    entries = {k: (y, p) for y, k, _c, p in _aaai()["entries"]}
+    assert t.main_track("conf/aaai/BarishKCMPS00", *entries["BarishKCMPS00"])[0] == "iaai"
+    members = [
+        k for k, row in t.tracks.items() if row.reason.startswith("listed under AAAI Member Abstracts")
+    ]
+    assert len(members) == 18 and all(entries[k.removeprefix("conf/aaai/")][1] is None for k in members)
+    assert all(t.main_track(k, 2006, None)[0] == "other" for k in members)
+    nectar = [
+        s for s in t.sections if "ectar" in s.label or "NECTAR" in s.label or "Senior Member" in s.label
+    ]
+    assert [(s.year, s.first, s.last, s.track) for s in nectar] == [
+        (2006, 1508, 1556, "other"), (2006, 1557, 1699, "other"), (2007, 1597, 1605, "other"),
+        (2007, 1606, 1683, "other"), (2008, 1509, 1588, "other"), (2008, 1590, 1614, "other")]  # fmt: skip
+
+
+def test_every_range_starts_on_a_real_entry() -> None:
+    """Each range's first page is the start page of an entry of its year, so an off-by-one edge can't pass unseen."""
+    starts = {(y, dblp_aaai_table.start_page(p)) for y, _k, _c, p in _aaai()["entries"]}
+    missing = [
+        (s.year, s.first, s.label) for s in dblp_aaai_table.TABLE.sections if (s.year, s.first) not in starts
+    ]
+    assert missing == []
+    works = json.loads((PINNED / "aies-2018-2023-pages.json").read_text(encoding="utf-8"))["works"]
+    aies = {(int(y), acm_table.start_page(page)) for y, rows in works.items() for _doi, page in rows}
+    assert [(s.year, s.first) for s in acm_table.TABLE.sections if (s.year, s.first) not in aies] == []

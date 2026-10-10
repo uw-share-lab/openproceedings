@@ -5,10 +5,12 @@ between requests and whose pages give no abstracts. dblp lists them under `conf/
 1996 in two volumes). The release is the one ICML reads (`dblp_table.TABLE`'s pin), read in the same streaming pass
 into AAAI's own extract (`dblp.AAAI_SLICE`). `dblp_aaai_table.TABLE` names each year's main-conference keys, the
 workshop keys (track `workshop`), the `[[not_paper]]` entries (counted, never records), the years AAAI was not
-held, and the official contents' sections (`[[section]]` page ranges and `[[track]]` key rows, TASK-226): a main-key
-entry in one takes its track (student abstracts, doctoral consortium, demonstrations, IAAI, other), else `main`. A `conf/aaai/` proceedings key dated 1980-2009 the table doesn't classify, a not-held year dblp holds a key
-for, a row whose key the release lacks, or a count that differs from the table's stops the ingest, and the count
-check runs again in every replay. dblp's AAAI keys of 2010 on are never read: the extract holds them, but a record
+held, and the official contents' sections (`[[section]]` page ranges and `[[track]]` key rows, decision-050): a
+main-key entry in one takes its track (student abstracts, doctoral consortium, demonstrations, IAAI, other), else
+`main`. A `conf/aaai/` proceedings key dated 1980-2009 the table doesn't classify, a not-held year dblp holds a key
+for, a row whose key the release lacks, a count that differs from the table's, a section range that holds no paper,
+or a main-key entry of a year with sections that has no readable start page and no row (`unplaced_page`) stops the
+ingest, and these checks run again in every replay. dblp's AAAI keys of 2010 on are never read: the extract holds them, but a record
 is made only from a key the table lists, and the table's years end at 2008. Fields as for ICML (`dblp.py`):
 title without dblp's closing period, authors without homonym numbers, `urls.doi` from a DOI `ee`, `urls.proceedings`
 the dblp record page (linked, never fetched). No abstracts. Every record is `accepted`.
@@ -137,6 +139,7 @@ def mine_year(year: int, extract: Extract, *, table: Table | None = None) -> Yea
     records: list[PaperRecord] = []
     seen: set[str] = set()
     used: set[Section] = set()
+    sectioned = any(s.year == year for s in table.sections)
     for e, track in listed:
         tail = e.key[len(PREFIX) :]
         if not NATIVE.fullmatch(tail):
@@ -154,6 +157,10 @@ def mine_year(year: int, extract: Extract, *, table: Table | None = None) -> Yea
                 track, rule = table.main_track(e.key, year, e.fields.get("pages"))
                 if isinstance(rule, Section):
                     used.add(rule)
+                elif rule is None and sectioned and start_page(e.fields.get("pages")) is None:
+                    raise CrawlError(f"AAAI {year}: {e.key} has no readable start page ({e.fields.get('pages')!r}), so "
+                                     "no dblp_aaai.toml section can place it: give it a [[track]] or [[not_paper]] "
+                                     "row", reason="unplaced_page")  # fmt: skip
             try:
                 record = _record(year, tail, e, track, extract, table, rule)
             except (ValidationError, ValueError) as err:
@@ -165,7 +172,8 @@ def mine_year(year: int, extract: Extract, *, table: Table | None = None) -> Yea
         raise CrawlError(f"AAAI {year}: dblp_aaai.toml's section {stale[0].label!r} pp. {stale[0].first}-{stale[0].last} "
                          f"holds no paper of release {extract.doi}: check the table", reason="stale_section")  # fmt: skip
     log.info("dblp_aaai_year_mined", extra={"year": year, "listed": report.listed, "stated": report.stated,
-                                            "records": report.records,
+                                            "records": report.records, "tracks": dict(sorted(report.tracks.items())),
+                                            "skipped": dict(sorted(skipped.items())),
                                             "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     return YearResult(records, [report])
 

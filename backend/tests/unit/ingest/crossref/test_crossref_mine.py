@@ -342,3 +342,21 @@ def test_a_proceedings_with_no_section_row_keeps_its_main_claim(tmp_path: Path) 
         f"Crossref work {D1} in proceedings {ROW.doi} (acm_proceedings.toml FAccT 2023): every paper of the "
         "proceedings is main (decision-049)",
     )
+
+
+@pytest.mark.parametrize("page", [None, "354\u2013355", "e12", "1" * 5000])
+def test_a_work_a_sectioned_proceedings_cannot_place_stops(
+    tmp_path: Path, monkeypatch, page: str | None
+) -> None:
+    table = acm_table.load(api.TABLE_TEXT + _SECTION)
+    monkeypatch.setattr(acm_table, "TABLE", table)
+    _whole(tmp_path, api.work(D1, page=page), api.work(D2, page="900-901"), api.work(NP, page="902"), total=3)
+    with pytest.raises(CrawlError, match=D1) as e:
+        crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=table)
+    assert e.value.reason == "unplaced_page"
+
+
+def test_an_unreadable_page_in_an_unsectioned_proceedings_is_main(tmp_path: Path) -> None:
+    _whole(tmp_path, api.work(D1, page="1" * 5000), api.work(D2, page=None), api.work(NP), total=3)
+    records = crossref.mine_proceedings("FAccT", 2023, _offline(tmp_path), table=TABLE).records
+    assert [r.track for r in records] == ["main", "main"]

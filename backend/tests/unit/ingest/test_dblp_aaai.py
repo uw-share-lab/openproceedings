@@ -186,13 +186,12 @@ _PAGED = "".join(
 )  # fmt: skip
 
 
-def paged(tmp_path: Path, text: str):
-    gz = test_dblp_slices.gzip.compress(
-        (test_dblp_slices.HEAD + test_dblp_slices.FULL.replace("</dblp>\n", _PAGED + "</dblp>\n")).encode(
-            "latin-1"
-        ),
-        mtime=0,
-    )
+def paged(tmp_path: Path, text: str, main06_pages: str | None = "10-15"):
+    body = test_dblp_slices.FULL.replace("</dblp>\n", _PAGED + "</dblp>\n")
+    if main06_pages is not None:  # the synthetic release gives Main06 no pages; a sectioned year needs one
+        body = body.replace("<title>Synthetic main paper.</title>",
+                            f"<title>Synthetic main paper.</title><pages>{main06_pages}</pages>")  # fmt: skip
+    gz = test_dblp_slices.gzip.compress((test_dblp_slices.HEAD + body).encode("latin-1"), mtime=0)
     table, rel, dtd = on_disk(tmp_path, gz)
     aaai = dblp_aaai_table.load(text.replace("papers = 1\ntitle = \"Synthetic AAAI 2006\"",
                                              "papers = 5\ntitle = \"Synthetic AAAI 2006\""), pins=table)  # fmt: skip
@@ -230,3 +229,21 @@ def test_a_track_row_must_name_a_main_entry_of_its_year(tmp_path: Path, key: str
     with pytest.raises(CrawlError, match="track row") as e:
         dblp_aaai.check_extract(extract, aaai)
     assert e.value.reason == "table_mismatch"
+
+
+@pytest.mark.parametrize("pages", [None, "I-IV", "1" * 5000])
+def test_an_entry_a_sectioned_year_cannot_place_stops_the_year(tmp_path: Path, pages: str | None) -> None:
+    aaai, extract = paged(tmp_path, GOOD + SECTIONS, main06_pages=pages)
+    with pytest.raises(CrawlError, match="Main06") as e:
+        dblp_aaai.mine_year(2006, extract, table=aaai)
+    assert e.value.reason == "unplaced_page"
+    # a key row places it, and a year with no section rows reads it as main
+    row = '\n[[track]]\nkey = "conf/aaai/Main06"\nyear = 2006\ntrack = "other"\nreason = "r"\nverified = 2026-10-10\nsource = "s"\n'
+    aaai, extract = paged(tmp_path / "b", GOOD + SECTIONS + row, main06_pages=pages)
+    assert {r.native: r.track for r in dblp_aaai.mine_year(2006, extract, table=aaai).records}[
+        "dblp-Main06"
+    ] == "other"
+    aaai, extract = paged(tmp_path / "c", GOOD, main06_pages=pages)
+    assert {r.native: r.track for r in dblp_aaai.mine_year(2006, extract, table=aaai).records}[
+        "dblp-Main06"
+    ] == "main"

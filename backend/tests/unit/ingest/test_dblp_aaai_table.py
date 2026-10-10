@@ -134,7 +134,8 @@ source = "test contents page"
 @pytest.mark.parametrize(
     ("pages", "start"),
     [("1425-1426", 1425), ("856", 856), ("1853-", 1853), ("855-1856", 855), (None, None), ("", None),
-     ("I-XV", None), ("12-13, 15", None), ("-5", None)],
+     ("I-XV", None), ("12-13, 15", None), ("-5", None), ("1" * 5000, None), ("12-" + "3" * 5000, None),
+     ("123456789-123456790", 123456789), ("1234567890", None)],
 )  # fmt: skip
 def test_start_page_reads_dblps_page_field(pages, start) -> None:
     assert dblp_aaai_table.start_page(pages) == start
@@ -155,6 +156,12 @@ def test_a_main_entry_takes_its_track_row_then_its_section_then_main() -> None:
         "student_abstract",
         t.tracks["conf/aaai/Typo06"],
     )
+    # a track row beats a range of another track, and is read only in its own year
+    assert t.main_track("conf/aaai/Typo06", 2006, "1905-1906") == (
+        "student_abstract",
+        t.tracks["conf/aaai/Typo06"],
+    )
+    assert t.main_track("conf/aaai/Typo06", 2005, "855-1856") == ("main", None)
     assert dblp_aaai_table.load(GOOD).main_track("conf/aaai/A06", 2006, "1853") == ("main", None)
 
 
@@ -165,6 +172,7 @@ _TRACK_ROW = 'key = "conf/aaai/Typo06"\nyear = 2006\ntrack = "student_abstract"'
     ("edit", "message"),
     [
         (lambda s: s.replace("pages = [1904, 1930]", "pages = [1900, 1930]"), "overlaps"),
+        (lambda s: s.replace("pages = [1904, 1930]", "pages = [1903, 1930]"), "overlaps"),  # touching at one page
         (lambda s: s.replace("pages = [1904, 1930]", "pages = [1930, 1904]"), r"first <= last"),
         (lambda s: s.replace("pages = [1904, 1930]", "pages = [0, 1930]"), "positive"),
         (lambda s: s.replace("pages = [1904, 1930]", "pages = [1904]"), r"\[first, last\]"),

@@ -365,8 +365,9 @@ year = 1990
 kind = "panel"
 reason = "a panelist's statement in the 1990 user-modelling panel chaired by Dumais90 (pp. 1140-1141; TASK-225)"
 
-# --- AAAI 1993-2008: the official contents' invited talks of two pages or fewer (TASK-226). The longer invited papers
-# in the same sections (1996: 6, 1997: 3, 2000: 6) stay main: they are full papers.
+# --- AAAI 1993-2008: the official contents' invited talks of two pages or fewer (TASK-226). Invited entries of more
+# than two pages stay main: they are full papers (e.g. Kambhampati96a, Hinton00, Epstein99, Geffner02, DomingosKPRS06,
+# Walsh07).
 
 [[not_paper]]
 key = "conf/aaai/Feigenbaum93"
@@ -567,21 +568,13 @@ label = "Student Abstracts"
 verified = 2026-10-10
 source = "https://web.archive.org/web/20130118002324/http://www.aaai.org/Library/AAAI/aaai99contents.php"
 
-# IAAI 2000 in two ranges: BarishKCMPS00 (pp. 980-987) is on no IAAI page (it skips from p. 973 to 988), so it stays
-# main (round 2 ruling)
+# IAAI 2000: BarishKCMPS00 (pp. 980-987) is the first Emerging Applications entry on the IAAI page, printed without a
+# page number
 [[section]]
 year = 2000
-pages = [937, 978]
+pages = [937, 1059]
 track = "iaai"
 label = "IAAI-2000 Deployed and Emerging Applications"
-verified = 2026-10-10
-source = "https://web.archive.org/web/20131004120945/http://www.aaai.org/Library/IAAI/iaai00contents.php"
-
-[[section]]
-year = 2000
-pages = [988, 1059]
-track = "iaai"
-label = "IAAI-2000 Emerging Applications"
 verified = 2026-10-10
 source = "https://web.archive.org/web/20131004120945/http://www.aaai.org/Library/IAAI/iaai00contents.php"
 
@@ -705,25 +698,25 @@ label = "Doctoral Consortium"
 verified = 2026-10-10
 source = "https://web.archive.org/web/20130118001834/http://www.aaai.org/Library/AAAI/aaai05contents.php"
 
-# weaker evidence (TASK-226 ruling): aaai05contents.php has no demo or robot section in any capture; the range is
-# the contiguous pages of aaai.org's isd05-NNN / rbc05-NNN paper pages, the section read from the file prefix
+# aaai05contents.php lists this section and every one of its entries, but prints no page numbers for them; the
+# range is the contiguous pages of the entries' own aaai.org paper pages (isd05-001 to isd05-022)
 [[section]]
 year = 2005
 pages = [1670, 1713]
 track = "demo"
 label = "Intelligent Systems Demonstrations"
 verified = 2026-10-10
-source = "https://web.archive.org/web/2013/http://www.aaai.org/Library/AAAI/2005/isd05-NNN.php (file prefix isd05; section absent from aaai05contents.php)"
+source = "https://web.archive.org/web/20130118001834/http://www.aaai.org/Library/AAAI/aaai05contents.php (section and entries, no pages); pages from the paper pages, e.g. https://web.archive.org/web/20130312180408/http://www.aaai.org/Library/AAAI/2005/isd05-002.php"
 
-# weaker evidence (TASK-226 ruling): aaai05contents.php has no demo or robot section in any capture; the range is
-# the contiguous pages of aaai.org's isd05-NNN / rbc05-NNN paper pages, the section read from the file prefix
+# aaai05contents.php lists this section and every one of its entries, but prints no page numbers for them; the
+# range is the contiguous pages of the entries' own aaai.org paper pages (rbc05-001 to rbc05-015)
 [[section]]
 year = 2005
 pages = [1716, 1744]
 track = "other"
-label = "Robot Competition and Exhibition"
+label = "Mobile Robot Competition and Exhibition"
 verified = 2026-10-10
-source = "https://web.archive.org/web/2013/http://www.aaai.org/Library/AAAI/2005/rbc05-NNN.php (file prefix rbc05; section absent from aaai05contents.php)"
+source = "https://web.archive.org/web/20130118001834/http://www.aaai.org/Library/AAAI/aaai05contents.php (section and entries, no pages); pages from the paper pages, e.g. https://web.archive.org/web/20130312181902/http://www.aaai.org/Library/AAAI/2005/rbc05-001.php"
 
 [[section]]
 year = 2006
@@ -873,6 +866,57 @@ label = "IAAI-99 Deployed and Emerging Applications"
 verified = 2026-10-10
 source = "https://web.archive.org/web/20120605045227/http://www.aaai.org/Library/IAAI/iaai99contents.php"
 
+# NECTAR and Senior Member sections 2006-2008: `other`, as the owner decided for the same sections from 2010
+# (TASK-218, ojs_sections.toml): digests of work published elsewhere, and senior members' presentations
+
+[[section]]
+year = 2006
+pages = [1508, 1556]
+track = "other"
+label = "Senior Member Papers"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[section]]
+year = 2006
+pages = [1557, 1699]
+track = "other"
+label = "New Scientific and Technical Advances in Research (Nectar) Papers"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[section]]
+year = 2007
+pages = [1597, 1605]
+track = "other"
+label = "Senior Member Papers"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117223503/http://www.aaai.org/Library/AAAI/aaai07contents.php"
+
+[[section]]
+year = 2007
+pages = [1606, 1683]
+track = "other"
+label = "New Scientific and Technical Advances in Research Papers (NECTAR)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117223503/http://www.aaai.org/Library/AAAI/aaai07contents.php"
+
+[[section]]
+year = 2008
+pages = [1509, 1588]
+track = "other"
+label = "Nectar Papers"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130118002504/http://www.aaai.org/Library/AAAI/aaai08contents.php"
+
+[[section]]
+year = 2008
+pages = [1590, 1614]
+track = "other"
+label = "Senior Member Papers"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130118002504/http://www.aaai.org/Library/AAAI/aaai08contents.php"
+
 # --- AAAI 1993-2008: entries dblp's pages can't place in their section
 
 [[track]]
@@ -880,5 +924,152 @@ key = "conf/aaai/BlackH06"
 year = 2006
 track = "student_abstract"
 reason = "listed under Student Abstracts in the AAAI-06 contents, p. 1855; dblp's pages '855-1856' are a typo for 1855-1856, so no range holds it"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+# AAAI 2006's "AAAI Member Abstracts" (aaai06-368 to aaai06-385): dblp gives them no pages, so no range can hold
+# them; `other`, a section the mapping doesn't name
+
+[[track]]
+key = "conf/aaai/AndreevskaiaB06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/BrooksAEKMS06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/BulitkoL06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/ClotetR06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/ItoKH06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/KinnebrewSBS06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/LovellS06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/Namasivayam06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/Niitsuma06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/Pearce06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/QuennessonII06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/SabinG06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/SilverP06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/Sloman06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/SoutchanskiPM06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/VardeRRBMS06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/WagstaffBD06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
+verified = 2026-10-10
+source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"
+
+[[track]]
+key = "conf/aaai/YanerG06"
+year = 2006
+track = "other"
+reason = "listed under AAAI Member Abstracts in the AAAI-06 contents (dblp has no pages)"
 verified = 2026-10-10
 source = "https://web.archive.org/web/20130117070935/http://www.aaai.org/Library/AAAI/aaai06contents.php"

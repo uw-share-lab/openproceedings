@@ -24,6 +24,10 @@ from importlib.resources import files
 from types import MappingProxyType
 from typing import Any
 
+from openproceedings.ingest.page_ranges import checked_range, overlaps
+from openproceedings.ingest.page_ranges import (
+    start_page as start_page,
+)  # re-exported: the sources read pages here
 from openproceedings.vocab import venue_name
 
 VENUES: frozenset[str] = frozenset({"AIES", "FAccT"})
@@ -37,13 +41,6 @@ _NOT_PAPER = {"doi", "kind", "reason"}
 _SECTION = {"venue", "year", "pages", "track", "label", "verified", "source"}
 # the tracks a section row may give (never `main`, nor `iaai`/`eaai`, which are AAAI's alone)
 SECTION_TRACKS = frozenset({"student_abstract", "consortium", "demo", "other"})
-_START = re.compile(r"([0-9]+)(?:-[0-9]*)?")  # Crossref `page`: "354-355", "7", "1-1"
-
-
-def start_page(page: str | None) -> int | None:
-    """The start page of a Crossref `page` field ("354-355" → 354, "7" → 7), else None."""
-    m = _START.fullmatch(page or "")
-    return int(m.group(1)) if m else None
 
 
 def paper_doi(doi: str) -> tuple[str, str] | None:
@@ -193,14 +190,7 @@ def load(text: str) -> Table:
         _check(raw, _SECTION, where)
         if (raw["venue"], raw["year"]) not in rows:
             raise ValueError(f"{where}: no proceedings row for that venue and year")
-        pages = raw["pages"]
-        if (
-            not isinstance(pages, list)
-            or len(pages) != 2
-            or not all(type(p) is int and p > 0 for p in pages)
-            or pages[0] > pages[1]
-        ):
-            raise ValueError(f"{where}: pages must be [first, last], positive, first <= last")
+        first, last = checked_range(raw["pages"], where)
         if raw["track"] not in SECTION_TRACKS:
             raise ValueError(f"{where}: track must be one of {sorted(SECTION_TRACKS)}")
         for column in ("label", "source"):
@@ -208,9 +198,9 @@ def load(text: str) -> Table:
                 raise ValueError(f"{where}: {column} must be a non-empty string")
         if type(raw["verified"]) is not date:
             raise ValueError(f"{where}: verified must be a date")
-        sec = Section(raw["venue"], raw["year"], pages[0], pages[1], raw["track"], raw["label"], raw["verified"],
+        sec = Section(raw["venue"], raw["year"], first, last, raw["track"], raw["label"], raw["verified"],
                       raw["source"])  # fmt: skip
-        if any((s.venue, s.year) == (sec.venue, sec.year) and s.first <= sec.last and sec.first <= s.last
+        if any((s.venue, s.year) == (sec.venue, sec.year) and overlaps((s.first, s.last), (first, last))
                for s in sections):  # fmt: skip
             raise ValueError(f"{where}: overlaps another section of {sec.venue} {sec.year}")
         sections.append(sec)

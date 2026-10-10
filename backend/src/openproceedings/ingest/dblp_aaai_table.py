@@ -33,6 +33,10 @@ from typing import Any
 
 from openproceedings.ingest import dblp_table
 from openproceedings.ingest.dblp_table import Pinned
+from openproceedings.ingest.page_ranges import checked_range, overlaps
+from openproceedings.ingest.page_ranges import (
+    start_page as start_page,
+)  # re-exported: the sources read pages here
 from openproceedings.ingest.record import DBLP_YEARS
 from openproceedings.vocab import venue_name
 
@@ -45,13 +49,6 @@ NOT_PAPER_KINDS = frozenset({"invited talk", "panel", "front matter", "tutorial 
 _TABLES = {"not_held", "year", "workshop", "excluded", "not_paper", "section", "track"}
 # the tracks a section or track row may give: the official contents' sections other than the technical program
 SECTION_TRACKS = frozenset({"student_abstract", "consortium", "demo", "iaai", "other"})
-_START = re.compile(r"([0-9]+)(?:-[0-9]*)?")  # dblp `pages`: "856", "1425-1426", or "1853-" with no end page
-
-
-def start_page(pages: str | None) -> int | None:
-    """The start page of a dblp `pages` field ("1425-1426" → 1425, "856" → 856, "1853-" → 1853), else None."""
-    m = _START.fullmatch(pages or "")
-    return int(m.group(1)) if m else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,19 +203,12 @@ def _sections(rows: list[Mapping[str, Any]], years: Mapping[int, AaaiYear]) -> t
         _check(r, {"year", "pages", "track", "label", "verified", "source"}, where)
         if type(r["year"]) is not int or r["year"] not in years:
             raise ValueError(f"dblp_aaai.toml {where}: a year the table holds")
-        pages = r["pages"]
-        if (
-            not isinstance(pages, list)
-            or len(pages) != 2
-            or not all(type(p) is int and p > 0 for p in pages)
-            or pages[0] > pages[1]
-        ):
-            raise ValueError(f"dblp_aaai.toml {where}: pages must be [first, last], positive, first <= last")
+        first, last = checked_range(r["pages"], f"dblp_aaai.toml {where}")
         if not isinstance(r["label"], str) or not r["label"]:
             raise ValueError(f"dblp_aaai.toml {where}: a label")
         _provenance(r, where)
-        row = Section(r["year"], pages[0], pages[1], r["track"], r["label"], r["verified"], r["source"])
-        if clash := next((s for s in out if s.year == row.year and s.first <= row.last and row.first <= s.last),
+        row = Section(r["year"], first, last, r["track"], r["label"], r["verified"], r["source"])
+        if clash := next((s for s in out if s.year == row.year and overlaps((s.first, s.last), (first, last))),
                          None):  # fmt: skip
             raise ValueError(
                 f"dblp_aaai.toml {where}: overlaps {row.year}'s pages {[clash.first, clash.last]}"
