@@ -19,6 +19,16 @@
 #   verified     the date the row was checked live
 #   source       where the check is recorded
 #
+# [[unavailable]] columns (an article the OAI list names that the server cannot serve: every OAI form and its
+# article page answer HTTP 5xx; it is listed in its volume, never a record; an unnamed one stops the crawl)
+#   journal      a journal code above
+#   article      the OJS article id
+#   set_spec     its OAI setSpec (from ListIdentifiers)
+#   volume       the volume whose section row counts it (that row must exist)
+#   reason       what was seen
+#   verified     the date it was checked live
+#   source       where the check is recorded
+#
 # A volume or section missing from this table stops the crawl. Section rows arrive with the live census.
 
 [[journal]]

@@ -56,11 +56,18 @@ def _offline(tmp_path) -> Fetcher:
     return Fetcher(PageCache(tmp_path / "ojs"), None, hosts=ojs.HOSTS, expect="xml", keep_query=True)
 
 
+SET = "AAAI:AISI"
+
+
 def _seed(tmp_path, *pages: str, times: tuple[datetime, ...] = ()) -> None:
-    """Seed a token chain: page i links to page i+1 by token `t<i+1>`."""
+    """Seed a ListSets page naming one set and that set's token chain: page i links to page i+1 by token
+    `t<i+1>`. The miner takes each record's section from its own header, not from the set it was listed under,
+    so these chains may mix sections (the per-set tests below keep them apart)."""
+    seed(tmp_path, "ojs", ojs.sets_url("AAAI"), oai.sets_page(SET), at=T0, keep_query=True)
     for i, text in enumerate(pages):
         at = times[i] if times else T0
-        seed(tmp_path, "ojs", ojs.oai_url("AAAI", None if i == 0 else f"t{i}"), text, at=at, keep_query=True)
+        url = ojs.oai_url("AAAI", set_spec=SET) if i == 0 else ojs.oai_url("AAAI", f"t{i}")
+        seed(tmp_path, "ojs", url, text, at=at, keep_query=True)
 
 
 def test_two_pages_become_records_with_claims(tmp_path) -> None:
@@ -196,7 +203,7 @@ def test_claims_carry_their_own_page_url_and_time(tmp_path) -> None:
     result = ojs.mine_journal("AAAI", _offline(tmp_path), table=TABLE)
     one = next(r for r in result.records if r.native == "ojs-1")
     three = next(r for r in result.records if r.native == "ojs-3")
-    assert {(c.url, c.fetched_at) for c in one.provenance} == {(ojs.oai_url("AAAI"), T0)}
+    assert {(c.url, c.fetched_at) for c in one.provenance} == {(ojs.oai_url("AAAI", set_spec=SET), T0)}
     assert {(c.url, c.fetched_at) for c in three.provenance} == {(ojs.oai_url("AAAI", "t1"), T2)}
     assert three.urls.pdf == "https://ojs.aaai.org/index.php/AAAI/article/view/3/7003"
     assert result.reports[0].fetched == [T0, T2]  # one volume over two pages: both times
@@ -204,17 +211,18 @@ def test_claims_carry_their_own_page_url_and_time(tmp_path) -> None:
 
 def test_refresh_fetches_only_the_first_page_again(tmp_path) -> None:
     _seed(tmp_path, oai.page(oai.record(1), token="t1"), oai.page(oai.record(2), oai.record(3, "AAAI:IAAI")))
-    first = ojs.oai_url("AAAI")
+    sets, first = ojs.sets_url("AAAI"), ojs.oai_url("AAAI", set_spec=SET)
     transport = FakeTransport({})
     headers = {"content-type": "text/xml; charset=utf-8"}
     transport.script = {
-        canonical(first, keep_query=True): [response(oai.page(oai.record(1), token="t1"), headers=headers)]
+        canonical(sets, keep_query=True): [response(oai.sets_page(SET), headers=headers)],
+        canonical(first, keep_query=True): [response(oai.page(oai.record(1), token="t1"), headers=headers)],
     }
     fetcher = Fetcher(
         PageCache(tmp_path / "ojs"), transport, hosts=ojs.HOSTS, min_interval=0, expect="xml", keep_query=True
     )
     result = ojs.mine_journal("AAAI", fetcher, refresh=True, table=TABLE)
-    assert transport.calls == [canonical(first, keep_query=True)]
+    assert transport.calls == [canonical(sets, keep_query=True), canonical(first, keep_query=True)]
     assert len(result.records) == 3
 
 

@@ -28,7 +28,9 @@ def test_offline_ingest_writes_a_marker_and_replay_rebuilds_the_same_records(tmp
 def test_dry_run_writes_no_marker(tmp_path) -> None:
     _seed(tmp_path, oai.page(oai.record(1), oai.record(2), oai.record(3, "AAAI:IAAI")))
     out = crawl.ingest_ojs(["AAAI"], tmp_path, offline=True, dry_run=True, table=TABLE)
-    assert out["journals"] == [{"journal": "AAAI", "first_page_cached": True, "more_pages": False}]
+    assert out["journals"] == [
+        {"journal": "AAAI", "first_page_cached": True, "sets_on_first_page": 1, "more_pages": False}
+    ]
     assert not (tmp_path / "ojs" / "crawls").exists() or not list((tmp_path / "ojs" / "crawls").iterdir())
 
 
@@ -43,16 +45,18 @@ def test_ojs_is_replayed_last() -> None:
 
 def _live(first: str, **kw):
     transport = FakeTransport({})
-    transport.script = {canonical(ojs.oai_url("AAAI"), keep_query=True): [response(first, **kw)]}
+    transport.script = {canonical(ojs.sets_url("AAAI"), keep_query=True): [response(first, **kw)]}
     return transport
 
 
 def test_live_dry_run_fetches_only_the_first_page_and_caches_it(tmp_path) -> None:
     transport = _live(
-        oai.page(oai.record(1), token="t1"), headers={"content-type": "text/xml; charset=utf-8"}
+        oai.sets_page("AAAI:AISI", token="s1"), headers={"content-type": "text/xml; charset=utf-8"}
     )
     out = crawl.ingest_ojs(["AAAI"], tmp_path, dry_run=True, transport=transport, table=TABLE)
-    assert out["journals"] == [{"journal": "AAAI", "first_page_cached": False, "more_pages": True}]
+    assert out["journals"] == [
+        {"journal": "AAAI", "first_page_cached": False, "sets_on_first_page": 1, "more_pages": True}
+    ]
     assert (out["requests"], len(transport.calls)) == (1, 1)
     assert (tmp_path / "ojs").exists() and list((tmp_path / "ojs").rglob("*.*"))
     assert not (tmp_path / "ojs" / "crawls").exists()

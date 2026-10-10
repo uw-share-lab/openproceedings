@@ -5,6 +5,9 @@ A capture is taken by a person in a manual research or `op ingest` run, never by
 `"run"` and `"date"` (the day the response was fetched, when it isn't `RECORDED`). This module has no
 network code: it only rewrites captures.
 
+An OAI-PMH response (ojs.aaai.org) keeps its whole XML structure; only its free-text Dublin Core values
+(titles, creators, contributors, abstracts, subjects) become synthetic (`scrub_oai`).
+
 What a fixture keeps real: ids, forum ids, numbers, venueids, venue strings, decisions and
 recommendations, invitations, signatures that name a group, dates, pagination fields, the status code and
 the rate-limit and content-type headers, and the HTML structure the adapters parse. What it replaces with
@@ -483,6 +486,41 @@ def scrub_html(url: str, page: str) -> tuple[str, str | None]:
     return page, note
 
 
+# The Dublin Core elements of an OAI-PMH record that hold free text (ojs.aaai.org, `oai_dc`). Everything else
+# stays real: headers (identifiers, datestamps, setSpecs, deleted status), dc:identifier (URLs, DOIs), dc:source
+# (journal, volume, issue, pages), dc:relation, dc:date, dc:type, dc:format, dc:language, dc:rights, dc:publisher,
+# resumption tokens and their attributes.
+_OAI_FREE_TEXT = re.compile(
+    r"<dc:(title|creator|contributor|description|subject)\b([^>]*)>(.*?)</dc:\1>", re.S
+)
+
+
+def scrub_oai(page: str) -> str:
+    """An OAI-PMH response with every free-text Dublin Core value synthetic, its element and attributes kept. A
+    creator keeps OJS's `Last, First` shape, which the miner turns around."""
+    c = _Counter()
+
+    def replacement(m: re.Match[str]) -> str:
+        name, attrs, value = m.group(1), m.group(2), m.group(3)
+        if not value.strip():
+            return m.group(0)
+        n = c.next()
+        text = {
+            "title": f"Synthetic title {n}",
+            "creator": f"Author{n}, Synthetic",
+            "contributor": f"Synthetic contributor {n}",
+            "description": f"Synthetic abstract text {n}.",
+            "subject": f"synthetic keyword {n}",
+        }[name]
+        return f"<dc:{name}{attrs}>{text}</dc:{name}>"
+
+    return _OAI_FREE_TEXT.sub(replacement, page)
+
+
+def _is_oai(url: str, content_type: str) -> bool:
+    return "xml" in content_type and "/oai?" in url
+
+
 def fixture(capture: dict[str, Any]) -> dict[str, Any]:
     url = capture["url"]
     headers = {k.lower(): v for k, v in capture["headers"].items() if k.lower().startswith(KEEP_HEADERS)}
@@ -492,6 +530,8 @@ def fixture(capture: dict[str, Any]) -> dict[str, Any]:
     if "json" in headers.get("content-type", ""):
         body, trimmed = scrub_json(url, json.loads(text), capture.get("keep_ids"))
         response["json"] = body
+    elif _is_oai(url, headers.get("content-type", "")):
+        response["text"] = scrub_oai(text)
     else:
         page, trimmed = scrub_html(url, text)
         response["text"] = page

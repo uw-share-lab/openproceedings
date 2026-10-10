@@ -104,8 +104,13 @@ Every claim records source, URL, fetch time and evidence. Every table is data lo
 pinned by tests against recorded pages; an unlisted unit (section, key, volume, DOI prefix) stops the crawl.
 
 ### 1. `sources/ojs.py` — ojs.aaai.org (AAAI 2010+, AIES 2024+, IASEAI 2026+)
-- OAI-PMH `ListRecords`, `metadataPrefix=oai_dc`, per journal (`/index.php/{AAAI,AIES,IASEAI}/oai`), following
-  `resumptionToken`. robots.txt disallows only `/cache/`; the server is slow (2–3 s a page), so pacing is
+- OAI-PMH `ListRecords`, `metadataPrefix=oai_dc`, per journal (`/index.php/{AAAI,AIES,IASEAI}/oai`) and per set
+  (the journal's own sets from `ListSets`, `set=<spec>`), following `resumptionToken`. Per set because one record
+  the server can't render makes its whole page answer HTTP 500 and ends the chain (AAAI article 39173, found
+  2026-10-09, hid 2,785 records of the journal-wide chain). A set page that fails with 5xx after every retry falls
+  back to the set's `ListIdentifiers` plus `GetRecord` per unreached article. An article whose `GetRecord` also
+  fails is `unavailable`: named in a `[[unavailable]]` table row, it is listed in its volume and never a record, and
+  an unnamed one stops the crawl. The failure is cached as its status, so the offline replay takes the same path. robots.txt disallows only `/cache/`; the server is slow (2–3 s a page), so pacing is
   conservative.
 - Fields: `dc:title`; `dc:creator` in order; `dc:description` → abstract; the 10.1609 DOI → `urls.doi`; the
   article and PDF links; `dc:source` → volume and issue. Year from the volume (AAAI: volume − 1986; AIES:

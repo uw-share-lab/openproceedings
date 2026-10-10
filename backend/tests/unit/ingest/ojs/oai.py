@@ -60,3 +60,44 @@ def error(code: str) -> str:
 <OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><responseDate>2026-10-09T22:01:20Z</responseDate>
 <request>https://ojs.aaai.org/index.php/AAAI/oai</request><error code="{code}">message</error></OAI-PMH>
 """
+
+
+def sets_page(*specs: str, token: str | None = None, names: dict[str, str] | None = None) -> str:
+    """A ListSets page naming `specs` (names default to the spec)."""
+    names = names or {}
+    sets = "".join(
+        f"<set><setSpec>{escape(s)}</setSpec><setName>{escape(names.get(s, s))}</setName></set>"
+        for s in specs
+    )
+    rt = (
+        "" if token is None else f'<resumptionToken completeListSize="0" cursor="0">{token}</resumptionToken>'
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><responseDate>2026-10-09T22:01:20Z</responseDate>
+<request verb="ListSets">https://ojs.aaai.org/index.php/AAAI/oai</request><ListSets>{sets}{rt}</ListSets></OAI-PMH>
+"""
+
+
+def identifiers_page(*headers: tuple[int, bool, str], token: str | None = None) -> str:
+    """A ListIdentifiers page of (article, deleted, setSpec) headers."""
+    body = "".join(
+        f"<header{' status="deleted"' if d else ''}><identifier>oai:ojs.aaai.org:article/{a}</identifier>"
+        f"<datestamp>2026-07-15T06:11:29Z</datestamp><setSpec>{s}</setSpec></header>"
+        for a, d, s in headers
+    )
+    rt = (
+        "" if token is None else f'<resumptionToken completeListSize="0" cursor="0">{token}</resumptionToken>'
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><responseDate>2026-10-09T22:01:20Z</responseDate>
+<request verb="ListIdentifiers">https://ojs.aaai.org/index.php/AAAI/oai</request>
+<ListIdentifiers>{body}{rt}</ListIdentifiers></OAI-PMH>
+"""
+
+
+def get_record(record_xml: str) -> str:
+    """A GetRecord response holding one `record(...)`."""
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><responseDate>2026-10-09T22:01:20Z</responseDate>
+<request verb="GetRecord">https://ojs.aaai.org/index.php/AAAI/oai</request><GetRecord>{record_xml}</GetRecord></OAI-PMH>
+"""

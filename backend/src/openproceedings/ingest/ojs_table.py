@@ -6,7 +6,9 @@ import error, never a best guess. An OJS issue is not a track (AAAI 2026 has 48 
 an issue may mix IAAI, EAAI and student abstracts), so the track comes from the record's section (its OAI
 `setSpec`, one per record), and set names change by year (`ML-I`, `ML-I-23`; `AI24-n` and `AI26-n` mean different
 tracks), so every row names its volume. A record whose volume or section has no row stops the crawl
-(`sources/ojs.py`). `front_matter` rows (prefaces, indexes) are counted, never records.
+(`sources/ojs.py`). `front_matter` rows (prefaces, indexes) are counted, never records. `unavailable` rows name
+the articles the server cannot serve at all: each is listed in its volume (its section row counts it) but never a
+record, and an unnamed one stops the crawl.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ Kind = Literal["papers", "front_matter"]
 KINDS: tuple[str, ...] = get_args(Kind)
 _JOURNAL_COLUMNS = {"code", "venue", "year_offset", "verified", "source"}
 _SECTION_COLUMNS = {"journal", "volume", "set_spec", "kind", "track", "label", "papers", "verified", "source"}
+_UNAVAILABLE_COLUMNS = {"journal", "article", "set_spec", "volume", "reason", "verified", "source"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,9 +54,24 @@ class Section:
 
 
 @dataclass(frozen=True, slots=True)
+class Unavailable:
+    """An article the OAI list names that ojs.aaai.org cannot serve in any form (HTTP 5xx after every retry):
+    listed in its volume, never a record (`sources/ojs.py`'s fallback). An unnamed one stops the crawl."""
+
+    journal: str
+    article: int
+    set_spec: str
+    volume: int  # the volume whose stated count includes it (its section row must exist)
+    reason: str  # what was seen, for the reader
+    verified: date
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
 class Table:
     journals: Mapping[str, Journal]
     sections: Mapping[tuple[str, int, str], Section]
+    unavailable: Mapping[tuple[str, int], Unavailable] = MappingProxyType({})
 
     def year(self, journal: str, volume: int) -> int:
         return volume + self.journals[journal].year_offset
@@ -115,6 +133,25 @@ def _section(raw: Mapping[str, Any], journals: Mapping[str, Journal]) -> Section
                    raw["source"])  # fmt: skip
 
 
+def _unavailable(raw: Mapping[str, Any], sections: Mapping[tuple[str, int, str], Section]) -> Unavailable:
+    where = f"ojs_sections.toml unavailable {raw.get('journal')!r} article {raw.get('article')!r}"
+    _check(raw, _UNAVAILABLE_COLUMNS, _UNAVAILABLE_COLUMNS, where)
+    for column in ("journal", "set_spec", "reason"):
+        if not isinstance(raw[column], str) or not raw[column]:
+            raise ValueError(f"{where}: {column} must be a non-empty string")
+    for column in ("article", "volume"):
+        if type(raw[column]) is not int or raw[column] <= 0:
+            raise ValueError(f"{where}: {column} must be a positive integer")
+    section = sections.get((raw["journal"], raw["volume"], raw["set_spec"]))
+    if section is None or section.kind != "papers":
+        raise ValueError(
+            f"{where}: no papers section row for {raw['journal']} v{raw['volume']} {raw['set_spec']} "
+            "(its stated count must include the article)"
+        )
+    return Unavailable(raw["journal"], raw["article"], raw["set_spec"], raw["volume"], raw["reason"],
+                       raw["verified"], raw["source"])  # fmt: skip
+
+
 def load(text: str) -> Table:
     data = tomllib.loads(text)
     journals: dict[str, Journal] = {}
@@ -128,7 +165,15 @@ def load(text: str) -> Table:
         if key in sections:
             raise ValueError(f"ojs_sections.toml: section {key} is listed twice")
         sections[key] = s
-    return Table(MappingProxyType(journals), MappingProxyType(dict(sorted(sections.items()))))
+    unavailable: dict[tuple[str, int], Unavailable] = {}
+    for u in (_unavailable(r, sections) for r in data.get("unavailable", [])):
+        if (u.journal, u.article) in unavailable:
+            raise ValueError(
+                f"ojs_sections.toml: unavailable article {u.journal} {u.article} is listed twice"
+            )
+        unavailable[(u.journal, u.article)] = u
+    return Table(MappingProxyType(journals), MappingProxyType(dict(sorted(sections.items()))),
+                 MappingProxyType(unavailable))  # fmt: skip
 
 
 TABLE: Table = load(files("openproceedings.ingest").joinpath("ojs_sections.toml").read_text(encoding="utf-8"))

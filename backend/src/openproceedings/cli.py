@@ -197,7 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     ojs_parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="read only each journal's first page; report what a crawl would fetch",
+        help="read only each journal's first ListSets page; report what a crawl would fetch",
     )
     ojs_parser.add_argument("--offline", action="store_true", help="use the page cache only (no network)")
     ojs_parser.add_argument(

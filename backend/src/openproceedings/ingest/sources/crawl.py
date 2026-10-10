@@ -228,8 +228,8 @@ def ingest_ojs(
     journals: Iterable[str], cache: Path, *, offline: bool = False, dry_run: bool = False, refresh: bool = False,
     transport: Transport | None = None, min_interval: float = DEFAULT_INTERVAL, table: OjsTable = OJS_TABLE,
 ) -> dict[str, Any]:  # fmt: skip
-    """Harvest each ojs.aaai.org journal (AAAI, AIES, IASEAI; `ojs_table`) into the cache through OAI-PMH. A dry
-    run fetches at most each journal's first page and writes no marker."""
+    """Harvest each ojs.aaai.org journal (AAAI, AIES, IASEAI; `ojs_table`) into the cache through OAI-PMH, set by
+    set. A dry run fetches at most each journal's first ListSets page and writes no marker."""
     wanted = sorted(set(journals)) or sorted(table.journals)
     for j in wanted:
         if j not in table.journals:
@@ -238,16 +238,17 @@ def ingest_ojs(
     if dry_run:
         plans = []
         for j in wanted:
-            url = ojs.oai_url(j)
+            url = ojs.sets_url(j)
             cached = f.is_cached(url)  # before the get, which caches the page
             first = f.get(url)
             if not first.ok:
                 raise MinerError(f"{url} answered HTTP {first.status}", reason="no_listing")
-            _records, token = ojs.parse_page(first.text)
+            sets, token = ojs.parse_sets(first.text)
             plans.append(
                 {
                     "journal": j,
                     "first_page_cached": cached,
+                    "sets_on_first_page": sum(1 for s in sets if s.startswith(f"{j}:")),
                     "more_pages": token is not None,
                 }
             )
@@ -259,9 +260,11 @@ def ingest_ojs(
     reports = [r for m in mined for r in m.reports]
     log.info("ojs_ingested", extra={"journals": len(wanted), "listings": len(reports), "requests": f.stats.network,
                                     "deleted": sum(m.deleted for m in mined),
-                                    "front_matter": sum(m.front_matter for m in mined)})  # fmt: skip
+                                    "front_matter": sum(m.front_matter for m in mined),
+                                    "unavailable": sum(m.unavailable for m in mined)})  # fmt: skip
     out = _output(reports, f, False)
-    out["journals"] = [{"journal": j, "pages": m.pages, "deleted": m.deleted, "front_matter": m.front_matter}
+    out["journals"] = [{"journal": j, "pages": m.pages, "deleted": m.deleted, "front_matter": m.front_matter,
+                        "unavailable": m.unavailable}
                        for j, m in zip(wanted, mined, strict=True)]  # fmt: skip
     return out
 

@@ -108,3 +108,43 @@ def test_bad_rows_are_refused(edit, message) -> None:
 
 def test_the_shipped_table_loads() -> None:
     assert set(ojs_table.TABLE.journals) == {"AAAI", "AIES", "IASEAI"}
+
+
+UNAVAILABLE = """
+[[unavailable]]
+journal = "AAAI"
+article = 39173
+set_spec = "AAAI:AISI"
+volume = 34
+reason = "HTTP 500 in every form"
+verified = 2026-10-09
+source = "x"
+"""
+
+
+def test_an_unavailable_row_loads() -> None:
+    u = ojs_table.load(GOOD + UNAVAILABLE).unavailable[("AAAI", 39173)]
+    assert (u.set_spec, u.volume, u.reason) == ("AAAI:AISI", 34, "HTTP 500 in every form")
+    assert ojs_table.load(GOOD).unavailable == {}
+
+
+@pytest.mark.parametrize(
+    ("edit", "message"),
+    [
+        (lambda s: s.replace('set_spec = "AAAI:AISI"\nvolume = 34\nreason', 'set_spec = "AAAI:NEW"\nvolume = 34\nreason'),
+         "no papers section row"),
+        (lambda s: s.replace('source = "x"', 'source = "x"\nextra = 1'), "unknown columns"),
+        (lambda s: s.replace("article = 39173", "article = 0"), "article must be a positive integer"),
+        (lambda s: s.replace('reason = "HTTP 500 in every form"', 'reason = ""'), "reason must be"),
+        (lambda s: s + s, "listed twice"),
+    ],
+)  # fmt: skip
+def test_bad_unavailable_rows_are_refused(edit, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        ojs_table.load(GOOD + edit(UNAVAILABLE))
+
+
+def test_an_unavailable_row_must_point_at_a_papers_section() -> None:
+    fm = UNAVAILABLE.replace('set_spec = "AAAI:AISI"', 'set_spec = "AAAI:FMT"')
+    with pytest.raises(ValueError, match="no papers section row"):
+        ojs_table.load(GOOD + fm)

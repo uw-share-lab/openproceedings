@@ -110,7 +110,14 @@ class CacheMiss(FetchError):
 
 
 class RetriesExhausted(FetchError):
+    """Every attempt failed. `status` is the last attempt's HTTP status (a 429 or a 5xx), None when it got no
+    response or a truncated 200: a source may treat a persistent 5xx as the server's stable answer (ojs.py)."""
+
     reason = "retries_exhausted"
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class HTTPRefused(FetchError):
@@ -411,7 +418,7 @@ class HttpClient[T]:
         for attempt in range(policy.attempts):
             self._pace()
             started = time.monotonic()
-            response, hint = None, None
+            response, hint, last_status = None, None, None
             try:
                 response = self.transport(request, policy.timeout)
             except TransportError as e:
@@ -434,6 +441,7 @@ class HttpClient[T]:
                     raise FetchError(f"{url}: body over {policy.max_body} bytes", reason="too_large")
                 if response.status == 429 or response.status >= 500:
                     why, hint = f"http_{response.status}", retry_after(response.headers, self.clock.now())
+                    last_status = response.status
                 elif response.status == 200 and (cut := self._truncated(response, by_length)):
                     why = cut
                 else:
@@ -445,7 +453,8 @@ class HttpClient[T]:
                 self._wait(self._bounded(wait, url, why) + (0.0 if hint is None else policy.hint_pad), url, why,
                            attempt + 1)  # fmt: skip
         raise RetriesExhausted(
-            f"{url}: gave up after {policy.attempts} attempts; re-run later (cached responses are not fetched again)"
+            f"{url}: gave up after {policy.attempts} attempts; re-run later (cached responses are not fetched again)",
+            status=last_status,
         )
 
     def _truncated(self, response: Response, by_length: bool = False) -> str | None:
