@@ -46,6 +46,16 @@ claim source, `aaai_library`.
   aaai.org page (the dblp `ee`), never the archive's copy; the claim's url is the capture and its evidence names the
   `ee`, the timestamp and the digest. The `ee` links are AAAI's own canonical URLs for the papers and are kept as
   the attribution, though on AAAI's 2023 site they may now redirect or be dead.
+- **A redirected capture** (the controller's ruling, 2026-10-10, after the live harvest stopped at row 374 on a 302:
+  the CDX lists some captures as 200 that `id_` replay redirects to another timestamp, a revisit or warc-dedup
+  record) is handled deterministically, never followed blindly and never a silent fallback. At most one redirect is
+  followed, and only to `https://web.archive.org/web/<14-digit timestamp>id_/<the same page>` (http/https and `www.`
+  normalised, the same path), its host checked by the shared client; its bytes attach only when they hash to the
+  row's pinned digest (the same content, deduplicated), cached under the row's capture key and counted
+  `redirected_same`. Other bytes, another URL or host, a second redirect or no `Location` record the row as
+  unavailable: the 3xx is kept in the cache like a 404/410, so the build knows it offline, and it is counted
+  `capture_redirect` on the INFO and attention lines. A redirect never stops the harvest, which is complete with such
+  rows; the fill counts them, never `not_cached`.
 
 ## Consequences
 

@@ -271,3 +271,31 @@ def test_a_verify_callback_that_refuses_keeps_the_page_out_of_the_cache(tmp_path
     page = f.get(url, verify=lambda p: False)
     assert page.ok and PageCache(tmp_path).get(canonical(url)) is None
     assert f.get(url, verify=lambda p: True).ok and PageCache(tmp_path).get(canonical(url)) == page
+
+
+def test_a_redirect_callback_judges_a_3xx_and_fetch_never_hops_or_caches(tmp_path: Path) -> None:
+    """`get(redirect=)` hands a 3xx (with its Location) to the source, which returns the page to keep: a 200 it
+    vouches for, or the 3xx as a stable answer; both are cached. Without it a 3xx is still `HTTPRefused`.
+    `fetch` is one live request, never cached, and a 3xx there is refused, never followed."""
+    from openproceedings.ingest.sources.http import HTTPRefused
+
+    hosts = frozenset({"web.archive.org"})
+    url, there = "https://web.archive.org/web/1/x", "https://web.archive.org/web/2/x"
+    moved = Response(302, {"location": there}, b"")
+    script = {url: moved, there: Response(200, {"content-type": "text/html"}, b"<html>x</html>")}
+    f, _ = fetcher(tmp_path, FakeTransport(script), hosts, min_interval=0)
+    with pytest.raises(HTTPRefused):
+        f.get(url)
+    seen: list[str] = []
+
+    def follow(at: str, resp: Response) -> Page:
+        seen.append(resp.headers["location"])
+        return Page(at, resp.status, "", T1)
+
+    page = f.get(url, redirect=follow)
+    assert seen == [there] and page.status == 302 and PageCache(tmp_path).get(canonical(url)) == page
+    assert f.fetch(there).ok and PageCache(tmp_path).get(canonical(there)) is None
+    with pytest.raises(HTTPRefused):
+        f.fetch(url)
+    with pytest.raises(FetchError, match="not on"):
+        f.fetch("https://www.aaai.org/x")

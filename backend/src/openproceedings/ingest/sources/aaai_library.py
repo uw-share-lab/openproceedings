@@ -12,12 +12,21 @@ nothing but `web.archive.org` is ever fetched (`HOSTS`), never aaai.org itself.
   time, `MIN_INTERVAL` apart, into `<cache>/aaai_library/pages` through the shared HTTP layer, read as exact bytes
   (`Fetcher.get(exact_bytes=)`). A body whose SHA-1 is not the row's digest stops (`digest_mismatch`): no other capture
   is ever tried in its place. A capture the archive answers 404/410 is kept as such and counted (`capture_missing`).
+  **A redirect** (the CDX lists a 200 that `id_` replay answers with a 3xx to another timestamp: a revisit or
+  warc-dedup record; `follow_redirect`): at most one is followed, and only when its `Location` is
+  `https://web.archive.org/web/<14 digits>id_/<the row's own page>` (http or https, with or without `www.`, the same
+  path, no query; `same_capture`), the target's host checked again by `HttpClient.check`. Its bytes attach only when
+  they hash to the row's digest (the same content, deduplicated): cached under the row's own capture key and
+  counted `capture_redirected_same`. Anything else (other bytes, another page or host, no `Location`, a second
+  redirect, a target the archive refuses) is kept in the cache as the row's 3xx, `capture_redirect`, so the build
+  knows it offline. A redirect never stops the harvest and is never a silent fallback.
   When every row is cached, the marker `<cache>/aaai_library/crawls/aaai_library.json` says so.
 - **The fill** (`op snapshot build`, `apply`): after dedup and reconcile and before the OpenAlex fill and takedowns,
   offline. Each AAAI 1980-2008 dblp record (`op:aaai:<year>:dblp-<tail>`) is joined to the row of its dblp key
   `conf/aaai/<tail>`, which is exact; its capture is read from the cache, its digest checked again, and the abstract
   attached as an `aaai_library` claim. So an AAAI page's abstract fills the record before OpenAlex can, and an
-  OpenAlex abstract never displaces it (precedence: after `ojs`, before `ris` and `openalex`).
+  OpenAlex abstract never displaces it (precedence: after `ojs`, before `ris` and `openalex`). A row kept as a 404/410
+  is `capture_missing` and one kept as a 3xx `capture_redirect`: counted, and the harvest is complete with them.
 
 The page (`parse_page`): `<div id="abstract"><h1>TITLE</h1><p><i>AUTHORS</i></p><p>ABSTRACT</p>…`, then the
 `Subjects:` / `Submitted:` paragraphs and the copyright line. The abstract is the paragraphs after the authors' up to
@@ -42,6 +51,7 @@ import hashlib
 import logging
 import re
 import time
+import urllib.parse
 from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
@@ -71,8 +81,10 @@ from openproceedings.ingest.sources.http import (
     CacheMiss,
     Fetcher,
     Heartbeat,
+    HTTPRefused,
     Page,
     PageCache,
+    Response,
     Transport,
     urllib_transport,
 )
@@ -92,12 +104,22 @@ MARKER_FORMAT = "1"
 _PLACEHOLDER = re.compile(r"none\s*[-–—:]", re.IGNORECASE)  # `None - 2 page paper is an abstract`
 _STOP = ("subjects:", "submitted:")  # the paragraphs after the abstract
 _META_CHARSET = re.compile(rb"<meta\b[^>]{0,300}?charset\s*=\s*[\"']?([A-Za-z0-9_.:-]{1,40})", re.IGNORECASE)
+_CAPTURE_PATH = re.compile(
+    r"/web/[0-9]{14}id_/(https?://.+)"
+)  # an `id_` capture's path: the original after it
 _HEAD = 4096  # bytes searched for the `<meta>` charset
 _LATIN = frozenset(
     {"iso-8859-1", "iso8859-1", "latin1", "latin-1", "windows-1252", "cp1252", "us-ascii", "ascii"}
 )
 # the refusals worth a WARNING (`aaai_library_attention`): a page that is not what the table says it is
-_ATTENTION = ("capture_missing", "layout_unknown", "undecodable", "title_mismatch", SURROGATE)
+_ATTENTION = (
+    "capture_missing",
+    "capture_redirect",
+    "layout_unknown",
+    "undecodable",
+    "title_mismatch",
+    SURROGATE,
+)
 
 
 # --- the bytes ----------------------------------------------------------------------------------------------
@@ -265,12 +287,80 @@ def _verified(row: Row) -> Callable[[Page], bool]:
     return ok
 
 
-def get(fetcher: Fetcher, row: Row, *, refresh: bool = False) -> Page:
-    """A row's capture, through the cache: exact bytes, judged whole by its stated length, a 404/410 kept. A fetched
-    200 is stored only when its bytes hash to the row's digest (`Fetcher.get(verify=)`), so a bad answer never stays
-    in the cache; the caller's `check_digest` then refuses it (`digest_mismatch`)."""
+def _page_of(url: str) -> tuple[str, str, str] | None:
+    """An aaai.org page URL as compared: (host without `www.` or a default port, path, query); http and https alike."""
+    p = urllib.parse.urlparse(url)
+    if p.scheme not in ("http", "https") or not p.netloc:
+        return None
+    host = p.netloc.lower().removesuffix(":80").removesuffix(":443").removeprefix("www.")
+    return host, p.path, p.query
+
+
+def same_capture(location: str, row: Row) -> str | None:
+    """The archive URL a redirect's `location` names (resolved against the row's capture) when it is another `id_`
+    capture of the row's own page: `https://web.archive.org/web/<14 digits>id_/<url>`, the original the row's `url`
+    up to http/https, `www.` and a default port, with the same path and no query or fragment; else None."""
+    if not location:
+        return None
+    target = urllib.parse.urljoin(row.capture, location.strip())
+    p = urllib.parse.urlparse(target)
+    if p.scheme not in ("http", "https") or p.netloc.lower() != HOST or p.params or p.query or p.fragment:
+        return None
+    m = _CAPTURE_PATH.fullmatch(p.path)
+    if m is None or _page_of(m.group(1)) != _page_of(row.url):
+        return None
+    return target
+
+
+def follow_redirect(
+    fetcher: Fetcher, row: Row, outcomes: Counter[str] | None = None
+) -> Callable[[str, Response], Page]:
+    """What a 3xx for the row's capture becomes (`Fetcher.get(redirect=)`): the target's page, under the row's own
+    capture URL, when `same_capture` names one and its bytes hash to the row's digest (`capture_redirected_same`);
+    else the 3xx itself, kept as the row's answer (`capture_redirect`). One hop at most: `Fetcher.fetch` refuses a
+    second redirect, and checks the target's host. Each outcome is counted in `outcomes` and logged (no body)."""
+
+    def follow(url: str, response: Response) -> Page:
+        target = same_capture(response.headers.get("location", ""), row)
+        page: Page | None = None
+        if target is not None:
+            try:
+                page = fetcher.fetch(target, by_length=True, exact_bytes=True)
+            except (
+                HTTPRefused
+            ):  # a second redirect, or a refusal: not the pinned capture, never followed further
+                page = None
+        if page is not None and page.ok and _verified(row)(page):
+            outcome, kept = (
+                "capture_redirected_same",
+                Page(url, 200, page.text, page.fetched_at, page.content_type),
+            )
+        else:
+            outcome = "capture_redirect"
+            kept = Page(
+                url, response.status, "", fetcher.clock.now(), response.headers.get("content-type", "")
+            )
+        if outcomes is not None:
+            outcomes[outcome] += 1
+        log.info("aaai_library_capture_redirected", extra={"key": row.key, "status": response.status,
+                                                           "outcome": outcome, "followed": target is not None})  # fmt: skip
+        return kept
+
+    return follow
+
+
+def get(fetcher: Fetcher, row: Row, *, refresh: bool = False, outcomes: Counter[str] | None = None) -> Page:
+    """A row's capture, through the cache: exact bytes, judged whole by its stated length, a 404/410 kept, a 3xx
+    judged by `follow_redirect` (the target's verified bytes, or the 3xx kept). A fetched 200 is stored only when its
+    bytes hash to the row's digest (`Fetcher.get(verify=)`), so a bad answer never stays in the cache; the caller's
+    `check_digest` then refuses it (`digest_mismatch`)."""
     return fetcher.get(row.capture, refresh=refresh, keep_absent=True, by_length=True, exact_bytes=True,
-                       verify=_verified(row))  # fmt: skip
+                       verify=_verified(row), redirect=follow_redirect(fetcher, row, outcomes))  # fmt: skip
+
+
+def is_redirect(page: Page) -> bool:
+    """A row kept as the archive's 3xx (`capture_redirect`)."""
+    return 300 <= page.status < 400
 
 
 @dataclass
@@ -278,35 +368,43 @@ class Harvest:
     pages: int = 0
     fetched: int = 0  # from the network this run
     missing: int = 0  # the archive answered 404/410 (`capture_missing`)
+    redirect: int = 0  # rows kept as a 3xx: a redirect not to the pinned bytes (`capture_redirect`)
+    redirected_same: int = 0  # this run: a redirect followed to the pinned bytes (`capture_redirected_same`)
 
 
 def harvest(table: Table, fetcher: Fetcher, *, refresh: bool = False) -> Harvest:
-    """Every row's capture into the cache, in key order, each digest checked as it arrives; then the marker, when
-    the fetcher is live or offline and every row was there. A progress line at most every 30 s."""
+    """Every row's capture into the cache, in key order, each digest checked as it arrives (a 404/410 counted
+    `missing`, a redirect judged by `follow_redirect` and never stopping it); then the marker, when the fetcher is
+    live or offline and every row was there. A progress line at most every 30 s."""
     out = Harvest()
     started = time.monotonic()
     beat = Heartbeat(fetcher.clock.monotonic)
     rows = list(table.pages.values())
     log.info("aaai_library_harvest_started", extra={"pages": len(rows), "offline": fetcher.offline})
+    outcomes: Counter[str] = Counter()
     for row in rows:
         before = fetcher.stats.network
-        page = get(fetcher, row, refresh=refresh)
+        page = get(fetcher, row, refresh=refresh, outcomes=outcomes)
         out.pages += 1
         out.fetched += fetcher.stats.network > before
         if page.ok:
             check_digest(page, row)
+        elif is_redirect(page):
+            out.redirect += 1
         else:
             out.missing += 1
         if beat.due():
             log.info("aaai_library_harvest_progress", extra={"done": out.pages, "of": len(rows),
                                                              "requests": fetcher.stats.network,
                                                              "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+    out.redirected_same = outcomes["capture_redirected_same"]
     return out  # the end line is the command's (`aaai_library_ingested`)
 
 
 def write_done(cache: Path, table: Table, done: Harvest) -> None:
     write_marker(cache / CACHE_DIR / "crawls", MARKER, {"source": SOURCE, "format": MARKER_FORMAT,
                                                         "pages": done.pages, "missing": done.missing,
+                                                        "redirect": done.redirect,
                                                         "verified": table.verified.isoformat(),
                                                         "table": table.sha256})  # fmt: skip
 
@@ -396,7 +494,8 @@ def fill(
 ) -> tuple[list[PaperRecord], FillReport]:
     """Attach each AAAI 1980-2008 dblp record's page abstract, in record id order, from the cache alone (`fetcher`
     is offline). A row whose capture is not cached stops (`not_cached`), and so does a digest mismatch; every other
-    refusal is counted, never forced. A record whose abstract a source ranked before aaai_library gave keeps it
+    refusal is counted, never forced (a row kept as a 404/410 is `capture_missing`, one kept as a 3xx
+    `capture_redirect`). A record whose abstract a source ranked before aaai_library gave keeps it
     (`official_won`); one only a source ranked after it gave (ris) takes the page's (`replaced`)."""
     table = table or aaai_library_table.TABLE
     report = FillReport(source=SOURCE, pages=len(table.pages))
@@ -424,7 +523,7 @@ def fill(
         cleaned: Cleaned | None = None
         how, score = None, 0.0
         if not page.ok:
-            refusal = "capture_missing"
+            refusal = "capture_redirect" if is_redirect(page) else "capture_missing"
         else:
             parsed = read(page, row)
             if parsed.refused is None:

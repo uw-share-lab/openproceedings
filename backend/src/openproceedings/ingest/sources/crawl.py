@@ -491,12 +491,19 @@ def ingest_aaai_library(
     with storage.exclusive(cache / aaai_library.CACHE_DIR):
         done = aaai_library.harvest(table, f, refresh=refresh)
         aaai_library.write_done(cache, table, done)
-    if done.missing:  # captures the archive answers 404/410: worth a look, once per run (logging-standards)
-        log.warning("aaai_library_attention", extra={"capture_missing": done.missing})
-    log.info("aaai_library_ingested", extra={"pages": done.pages, "missing": done.missing,
+    # captures the archive answers 404/410, or redirects away from the pinned bytes: worth a look, once per run
+    # (logging-standards)
+    attention = {
+        k: n for k, n in (("capture_missing", done.missing), ("capture_redirect", done.redirect)) if n
+    }
+    if attention:
+        log.warning("aaai_library_attention", extra=attention)
+    log.info("aaai_library_ingested", extra={"pages": done.pages, "missing": done.missing, "redirect": done.redirect,
+                                             "redirected_same": done.redirected_same,
                                              "requests": f.stats.network, "cached": f.stats.cached,
                                              "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     return {"dry_run": False, "pages": done.pages, "fetched": done.fetched, "missing": done.missing,
+            "redirect": done.redirect, "redirected_same": done.redirected_same,
             "requests": f.stats.network, "cached": f.stats.cached}  # fmt: skip
 
 

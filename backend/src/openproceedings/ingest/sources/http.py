@@ -658,6 +658,7 @@ class Fetcher(HttpClient[Page]):
     def get(
         self, url: str, *, refresh: bool = False, keep_absent: bool = False, charset: str = "utf-8",
         by_length: bool = False, exact_bytes: bool = False, verify: Callable[[Page], bool] | None = None,
+        redirect: Callable[[str, Response], Page] | None = None,
     ) -> Page:  # fmt: skip
         """The page at `url`: from the cache unless `refresh`, else fetched (and cached when it is a 200, or a
         404/410 with `keep_absent`). Offline, a miss raises instead of fetching. `charset` decodes a body whose
@@ -667,19 +668,35 @@ class Fetcher(HttpClient[Page]):
         as ISO-8859-1 whatever the response names, so `text.encode("latin-1")` is the body byte for byte: for a
         source that checks a digest of the bytes and decodes them itself (an archived aaai.org page, TASK-232). `verify`
         judges a freshly fetched 200 before it is stored: a falsy answer returns the page uncached, so one bad answer
-        never stays in the cache (the caller then refuses it); a cached page is returned as it is, unjudged."""
+        never stays in the cache (the caller then refuses it); a cached page is returned as it is, unjudged.
+        `redirect` judges a 3xx (otherwise `HTTPRefused`): it is called with the canonical URL and the response
+        (its `location` header) and returns the page to keep for that URL, cached either way: a 200 the source
+        vouches for (still judged by `verify`), or a 3xx kept as the URL's stable answer. This layer never follows a
+        redirect itself (an Internet Archive capture replayed from another timestamp, TASK-232)."""
 
         def fetch(canonical_url: str) -> tuple[Page, bool]:
-            page = self._page(canonical_url, charset, by_length, exact_bytes)
+            page = self._page(canonical_url, charset, by_length, exact_bytes, redirect)
             if page.ok and verify is not None and not verify(page):
                 return page, False
-            return page, page.ok or (keep_absent and page.status in _ABSENT)
+            kept_redirect = redirect is not None and _is_redirect(page.status)
+            return page, page.ok or (keep_absent and page.status in _ABSENT) or kept_redirect
 
         return self.through_cache(url, fetch, refresh=refresh)
 
-    def _page(
-        self, url: str, default_charset: str = "utf-8", by_length: bool = False, exact_bytes: bool = False
+    def fetch(
+        self, url: str, *, charset: str = "utf-8", by_length: bool = False, exact_bytes: bool = False
     ) -> Page:
+        """One live request for `url` (`check`ed against the hosts), never read from or written to the cache: a 200
+        or a 404/410 as a `Page`; a 3xx is `HTTPRefused`, never followed. For a source that judges what a
+        redirect's target holds before keeping anything (`get(redirect=)`). Offline, a `CacheMiss`."""
+        if self.transport is None:
+            raise CacheMiss(url)
+        return self._page(self.check(url), charset, by_length, exact_bytes)
+
+    def _page(
+        self, url: str, default_charset: str = "utf-8", by_length: bool = False, exact_bytes: bool = False,
+        redirect: Callable[[str, Response], Page] | None = None,
+    ) -> Page:  # fmt: skip
         request = Request(
             "GET", url, {**self._headers, "User-Agent": self.user_agent, "Accept": self.policy.accept}
         )
@@ -696,7 +713,13 @@ class Fetcher(HttpClient[Page]):
             return Page(url, 200, text, self.clock.now(), content_type)
         if resp.status in _ABSENT:
             return Page(url, resp.status, "", self.clock.now(), resp.headers.get("content-type", ""))
+        if redirect is not None and _is_redirect(resp.status):
+            return redirect(url, resp)
         raise HTTPRefused(url, resp.status)
+
+
+def _is_redirect(status: int) -> bool:
+    return 300 <= status < 400
 
 
 # --- progress lines -----------------------------------------------------------------------------------------

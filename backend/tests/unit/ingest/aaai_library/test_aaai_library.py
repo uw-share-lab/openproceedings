@@ -450,7 +450,8 @@ def test_the_command_caches_every_capture_then_marks_the_harvest_and_a_dry_run_w
     seed(tmp_path, rows[0], body(FIXTURES[rows[0].key]))
     seed(tmp_path, rows[1], body(FIXTURES[rows[1].key]))
     out = crawl.ingest_aaai_library(tmp_path, offline=True, table=table)
-    assert out == {"dry_run": False, "pages": 2, "fetched": 0, "missing": 0, "requests": 0, "cached": 2}
+    assert out == {"dry_run": False, "pages": 2, "fetched": 0, "missing": 0, "redirect": 0, "redirected_same": 0,
+                   "requests": 0, "cached": 2}  # fmt: skip
     assert json.loads(marker.read_text())["pages"] == 2
     assert crawl.ingest_aaai_library(tmp_path, dry_run=True, table=table)["to_fetch"] == 0
 
@@ -537,3 +538,143 @@ def test_a_near_title_attaches_counted_with_its_score_and_logged_without_titles(
     assert events["aaai_library_attention"].__dict__["title_near"] == 1
     logged = " ".join(str(r.__dict__) for r in caplog.records)
     assert "Optimi" not in logged and "Learning" not in logged
+
+
+# --- a pinned capture the archive redirects (the controller's ruling, 2026-10-10) ------------------------------------
+#
+# The CDX can list a capture as a 200 that `id_` replay answers with a 302 to another timestamp (a revisit or
+# warc-dedup record). At most one redirect is followed, only to another `id_` capture of the same page, and only its
+# bytes hashing to the row's digest attach; anything else is recorded `capture_redirect`, and the harvest goes on.
+
+PAGE = "www.aaai.org/Library/AAAI/1984/aaai84-047.php"
+OTHER_TS = "20191209073055"
+
+
+def _moved(location: str, status: int = 302) -> Response:
+    return Response(status, {"location": location, "content-type": "text/plain"}, b"")
+
+
+def _live(tmp_path: Path, script: dict[str, Response]) -> tuple[FakeTransport, a.Fetcher]:
+    transport = FakeTransport(script)
+    f = a.fetcher(tmp_path, offline=False, transport=transport)
+    f.clock = Clock()
+    return transport, f
+
+
+def test_a_redirect_to_the_same_page_with_the_pinned_bytes_attaches_counted(tmp_path: Path) -> None:
+    row = row_for("conf/aaai/Araya84")
+    data = body(FIXTURES[row.key])
+    target = f"https://web.archive.org/web/{OTHER_TS}id_/https://aaai.org/Library/AAAI/1984/aaai84-047.php"
+    transport, f = _live(tmp_path, {row.capture: _moved(target), target: Response(200, {}, data)})
+    done = a.harvest(table_of(row), f)
+    assert (done.pages, done.redirected_same, done.redirect, done.missing) == (1, 1, 0, 0)
+    assert transport.calls == [row.capture, target]
+    cached = PageCache(tmp_path / a.CACHE_DIR).get(row.capture)  # under the row's own capture key
+    assert cached is not None and cached.ok and a.body_of(cached) == data
+    (out,), report = a.fill([record(row.key)], a.fetcher(tmp_path, offline=True), table_of(row))
+    assert out.abstract is not None and report.attached == 1 and not report.refused
+
+
+def test_a_redirect_to_the_same_page_with_other_bytes_is_capture_redirect(tmp_path: Path) -> None:
+    row = row_for("conf/aaai/Araya84")
+    target = f"https://web.archive.org/web/{OTHER_TS}id_/http://{PAGE}"
+    other = body(FIXTURES[row.key]) + b"<!-- another capture -->"
+    _, f = _live(tmp_path, {row.capture: _moved(target), target: Response(200, {}, other)})
+    done = a.harvest(table_of(row), f)
+    assert (done.pages, done.redirected_same, done.redirect) == (1, 0, 1)
+    cached = PageCache(tmp_path / a.CACHE_DIR).get(row.capture)
+    assert cached is not None and not cached.ok and cached.status == 302 and cached.text == ""
+    assert PageCache(tmp_path / a.CACHE_DIR).get(target) is None  # the other bytes are never stored
+    (out,), report = a.fill([record(row.key)], a.fetcher(tmp_path, offline=True), table_of(row))
+    assert out.abstract is None and report.refused == {"capture_redirect": 1} and report.attached == 0
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        f"https://web.archive.org/web/{OTHER_TS}id_/http://www.aaai.org/Library/AAAI/1984/aaai84-048.php",  # another page
+        f"https://web.archive.org/web/{OTHER_TS}id_/http://www.aaai.org/Library/AAAI/1984/aaai84-047.php?x=1",
+        f"https://web.archive.org/web/{OTHER_TS}id_/http://www.example.org/Library/AAAI/1984/aaai84-047.php",
+        f"https://web.archive.org/web/{OTHER_TS}/http://{PAGE}",  # not an `id_` capture: a rewritten page
+        f"https://web.archive.org/web/2019id_/http://{PAGE}",  # not a 14-digit timestamp
+        f"https://example.org/web/{OTHER_TS}id_/http://{PAGE}",  # another host
+        f"http://{PAGE}",  # aaai.org itself
+        "",  # no Location at all
+    ],
+)
+def test_a_redirect_anywhere_else_is_capture_redirect_and_never_followed(
+    tmp_path: Path, location: str
+) -> None:
+    row = row_for("conf/aaai/Araya84")
+    response = _moved(location) if location else Response(302, {}, b"")
+    transport, f = _live(tmp_path, {row.capture: response})
+    done = a.harvest(table_of(row), f)
+    assert (done.redirected_same, done.redirect) == (0, 1)
+    assert transport.calls == [row.capture]  # nothing else was fetched
+    cached = PageCache(tmp_path / a.CACHE_DIR).get(row.capture)
+    assert cached is not None and cached.status == 302
+
+
+def test_a_chain_of_two_redirects_is_capture_redirect(tmp_path: Path) -> None:
+    row = row_for("conf/aaai/Araya84")
+    first = f"https://web.archive.org/web/{OTHER_TS}id_/http://{PAGE}"
+    second = f"https://web.archive.org/web/20200101000000id_/http://{PAGE}"
+    script = {row.capture: _moved(first), first: _moved(second, 301),
+              second: Response(200, {}, body(FIXTURES[row.key]))}  # fmt: skip
+    transport, f = _live(tmp_path, script)
+    done = a.harvest(table_of(row), f)
+    assert (done.redirected_same, done.redirect) == (0, 1)
+    assert transport.calls == [row.capture, first]  # one hop at most: the second is never followed
+    assert PageCache(tmp_path / a.CACHE_DIR).get(row.capture).status == 302  # type: ignore[union-attr]
+
+
+def test_a_relative_location_resolves_against_the_archive(tmp_path: Path) -> None:
+    row = row_for("conf/aaai/Araya84")
+    target = f"https://web.archive.org/web/{OTHER_TS}id_/http://{PAGE}"
+    transport, f = _live(tmp_path, {row.capture: _moved(f"/web/{OTHER_TS}id_/http://{PAGE}"),
+                                    target: Response(200, {}, body(FIXTURES[row.key]))})  # fmt: skip
+    assert a.harvest(table_of(row), f).redirected_same == 1 and transport.calls == [row.capture, target]
+
+
+def test_the_harvest_goes_on_past_a_redirect_marks_and_replays_offline_with_the_same_counts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    keys = ("conf/aaai/Araya84", "conf/aaai/DetermanB98", "conf/aaai/KimuraSN07")
+    same, moved, plain = rows = [row_for(k) for k in keys]
+    same_to = f"https://web.archive.org/web/{OTHER_TS}id_/http://{PAGE}"
+    script = {same.capture: _moved(same_to), same_to: Response(200, {}, body(FIXTURES[same.key])),
+              moved.capture: _moved("https://web.archive.org/web/20190101000000id_/http://www.aaai.org/"),
+              plain.capture: Response(200, {}, body(FIXTURES[plain.key]))}  # fmt: skip
+    table = table_of(*rows)
+    monkeypatch.setattr(aaai_library_table, "TABLE", table)
+    with caplog.at_level(logging.INFO):
+        out = crawl.ingest_aaai_library(
+            tmp_path, transport=FakeTransport(script), min_interval=0, table=table
+        )
+    assert out == {"dry_run": False, "pages": 3, "fetched": 3, "missing": 0, "redirect": 1,
+                   "redirected_same": 1, "requests": 4, "cached": 0}  # fmt: skip
+    marker = json.loads((tmp_path / "aaai_library" / "crawls" / "aaai_library.json").read_text())
+    assert (marker["pages"], marker["missing"], marker["redirect"]) == (3, 0, 1)
+    events = {r.getMessage(): r for r in caplog.records}
+    assert events["aaai_library_ingested"].__dict__["redirect"] == 1
+    assert events["aaai_library_ingested"].__dict__["redirected_same"] == 1
+    assert events["aaai_library_attention"].levelno == logging.WARNING
+    assert events["aaai_library_attention"].__dict__["capture_redirect"] == 1
+    records = DedupResult(
+        (record(same.key), record(moved.key, year=1998), record(plain.key, year=2007)), (), ()
+    )
+    _, (live,) = a.apply(records, tmp_path)
+    assert live.attached == 2 and live.refused == {"capture_redirect": 1}
+    caplog.clear()
+    # offline, from the cache alone: the harvest completes with the redirected row, and the fill is the same
+    again = crawl.ingest_aaai_library(tmp_path, offline=True, table=table)
+    assert (again["pages"], again["redirect"], again["requests"]) == (3, 1, 0)
+    assert crawl.ingest_aaai_library(tmp_path, dry_run=True, table=table)["to_fetch"] == 0
+    with caplog.at_level(logging.INFO):
+        _, (replayed,) = a.apply(records, tmp_path)
+    assert replayed.to_manifest() == live.to_manifest()
+    events = {r.getMessage(): r for r in caplog.records}
+    assert events["aaai_library_filled"].__dict__["refused"] == {"capture_redirect": 1}
+    assert events["aaai_library_attention"].__dict__["capture_redirect"] == 1
