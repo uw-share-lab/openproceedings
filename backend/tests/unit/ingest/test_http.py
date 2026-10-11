@@ -466,7 +466,9 @@ def test_a_deeply_nested_openreview_answer_is_an_unexpected_shape(tmp_path: Path
 
 
 @pytest.mark.parametrize("field", ["content", "top"])
-def test_a_public_note_nested_under_the_decoders_depth_is_an_unexpected_shape(tmp_path: Path, field: str) -> None:
+def test_a_public_note_nested_under_the_decoders_depth_is_an_unexpected_shape(
+    tmp_path: Path, field: str
+) -> None:
     """600 deep parses (`json.loads` allows it) but the public projection's deepcopy recurses deeper per level: a
     typed refusal, never a raw RecursionError, and nothing cached."""
     deep = "[" * 600 + "1" + "]" * 600
