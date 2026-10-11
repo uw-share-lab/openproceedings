@@ -133,6 +133,7 @@ jobs:
     env:
       OP_EARLY_FAILURES: "1"
       OP_DIFFERENTIAL_SHARDS: ${{ strategy.job-total }}
+      OP_DIFFERENTIAL_SHARD: ${{ matrix.shard }}  # its share: the shares add up to exactly 50,000
       SEED: ${{ github.run_id }}${{ matrix.shard }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -140,9 +141,9 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
-      - name: Differential suite, 1/12 of 50,000 examples (50-89 min a shard at 8 in 38141281560, so ~35-60)
+      - name: Differential suite, 1/12 of 50,000 examples, 4,166 or 4,167 (50-89 min a shard at 8 in 38141281560)
         run: |
-          echo "rerun: OP_DIFFERENTIAL_SHARDS=$OP_DIFFERENTIAL_SHARDS uv run --locked pytest -v --hypothesis-profile=nightly --hypothesis-seed=$SEED backend/tests/differential"
+          echo "rerun: OP_DIFFERENTIAL_SHARDS=$OP_DIFFERENTIAL_SHARDS OP_DIFFERENTIAL_SHARD=$OP_DIFFERENTIAL_SHARD uv run --locked pytest -v --hypothesis-profile=nightly --hypothesis-seed=$SEED backend/tests/differential"
           status=0
           timeout --signal=INT --kill-after=2m 110m uv run --locked pytest -v --hypothesis-profile=nightly \
             --hypothesis-seed="$SEED" --hypothesis-show-statistics backend/tests/differential || status=$?
@@ -194,8 +195,8 @@ jobs:
   # 2026-10-09/10 (37943547380, 38056534247) 997 mutants, 83 a shard, ran past 140 min in 3 shards: every
   # mutant ran all 13 case tables (a result every ~100 s, 4 mutants at once). mutate.py now runs the tables
   # that name a mutant's file first and stops at the first failure (about a third of the CPU time on those
-  # logs; the verdicts are the same), and stops a hung table at 10x its baseline (TIMEOUT, killed), so 12
-  # shards have room again.
+  # logs; the verdicts are the same), and stops a table past 10x its baseline (TIMEOUT, killed, only if it
+  # hangs again alone), so 12 shards have room again.
   # A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min (its
   # unchecked mutants would go unchecked). Shard 1's first step checks every mutant's pattern still exists, in
   # seconds; a stale mutant also fails its own shard.

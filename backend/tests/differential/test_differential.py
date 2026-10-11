@@ -9,7 +9,7 @@ held to the oracle in `tests/unit/engine/test_served_schemas.py` (TASK-167). Tre
 weighted up, and stems at the 200-expansion cap's edge (`cap_records()`, 20 records added to the corpus the
 engines search, 5,020 in all, both parts hash-pinned: `qca*` expands to 199 terms, `qcb*` to 200, `qcc*` to 201
 and is refused; TASK-057). 200 examples per PR (`pr` profile); 50,000 in total in the nightly workflow's own
-`differential` job (`nightly`: 12 independent runs of ~4,167, each with its own seed; TASK-057).
+`differential` job (`nightly`: 12 independent runs, eight of 4,167 and four of 4,166, each with its own seed; TASK-057).
 
 Saving a counterexample: every failure message ends with `regression: <the shrunk AST as JSON>`. Add
 `{"ast": <that JSON>, "note": "<what broke>"}` to `differential-regressions.json`, which
@@ -165,18 +165,44 @@ def expected_facets(
 
 
 # The nightly `differential` job splits the profile's examples across parallel jobs (TASK-057): with
-# OP_DIFFERENTIAL_SHARDS=n, each job runs 1/n of them under its own `--hypothesis-seed`.
+# OP_DIFFERENTIAL_SHARDS=n, job OP_DIFFERENTIAL_SHARD=i (0 <= i < n) runs its share under its own
+# `--hypothesis-seed`, and the n shares add up to exactly the profile's examples.
 SHARDS = int(os.environ.get("OP_DIFFERENTIAL_SHARDS", "1"))
+SHARD = int(os.environ.get("OP_DIFFERENTIAL_SHARD", "0"))
 assert SHARDS >= 1, "OP_DIFFERENTIAL_SHARDS is a positive count of jobs"
+assert 0 <= SHARD < SHARDS, "OP_DIFFERENTIAL_SHARD is this job's index, 0 <= i < OP_DIFFERENTIAL_SHARDS"
+
+
+def shard_examples(total: int, shards: int, index: int) -> int:
+    """Shard `index`'s share of `total` examples: the quotient, plus one for each of the first `total % shards`
+    shards, so the shares add up to `total` exactly."""
+    return total // shards + (index < total % shards)
+
+
+EXAMPLES = max(1, shard_examples(settings().max_examples, SHARDS, SHARD))
 
 
 # the oracle over 5k records, every sort and the facets per example: no per-example deadline
-@settings(deadline=None, max_examples=max(1, settings().max_examples // SHARDS))
+@settings(deadline=None, max_examples=EXAMPLES)
 # every filter field is drawn, but the 5k corpus holds no `openalex` record (NeurIPS, ICLR and ICML only), so
 # `abstract_kind:openalex` is always empty here; every kind meets the oracle in `test_abstract_kind_index.py`
 @given(ast=engine_asts(cap_vocab()))
 def test_tantivy_agrees_with_the_oracle(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     agree(engines, ast)
+
+
+def test_the_shards_cover_exactly_the_profiles_examples() -> None:
+    """The nightly shards run exactly the profile's total between them (50,000, not 12 x 4,166 = 49,992), the
+    remainder one each to the first shards, so no two differ by more than one; and this job runs its share."""
+    for total in (1, 11, 200, 2_000, 50_000):
+        for shards in range(1, 14):
+            sizes = [shard_examples(total, shards, i) for i in range(shards)]
+            assert sum(sizes) == total and max(sizes) - min(sizes) <= 1, (total, shards, sizes)
+            assert sizes == sorted(sizes, reverse=True)
+    assert [shard_examples(50_000, 12, i) for i in (0, 7, 8, 11)] == [4_167, 4_167, 4_166, 4_166]
+    assert max(1, shard_examples(settings().max_examples, SHARDS, SHARD)) == EXAMPLES
+    for prop in (test_tantivy_agrees_with_the_oracle, test_group_counts_agree_with_the_oracle):
+        assert prop._hypothesis_internal_use_settings.max_examples == EXAMPLES, prop.__name__  # type: ignore[attr-defined]
 
 
 def test_saved_regressions_still_agree(engines: tuple[ReferenceEngine, TantivyEngine]) -> None:
@@ -236,7 +262,7 @@ def grouped_asts(draw: st.DrawFn) -> Node:
 
 
 # up to nine trees through the oracle per example: no per-example deadline; sharded as the agreement property
-@settings(deadline=None, max_examples=max(1, settings().max_examples // SHARDS))
+@settings(deadline=None, max_examples=EXAMPLES)
 @given(tree=grouped_asts())
 def test_group_counts_agree_with_the_oracle(
     engines: tuple[ReferenceEngine, TantivyEngine], tree: Node
