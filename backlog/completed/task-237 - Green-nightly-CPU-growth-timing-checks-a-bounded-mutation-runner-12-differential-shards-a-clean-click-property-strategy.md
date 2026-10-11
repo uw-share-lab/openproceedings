@@ -3,10 +3,10 @@ id: TASK-237
 title: >-
   Green nightly: CPU-growth timing checks, a bounded mutation runner, 12
   differential shards, a clean click-property strategy
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-11 17:29'
-updated_date: '2026-10-11 17:29'
+updated_date: '2026-10-11 20:06'
 labels:
   - ci
   - tests
@@ -22,5 +22,11 @@ Release readiness for v0.3.0 (spec 08 §Release step 1): no scheduled nightly pa
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A nightly run on the release candidate passes every job
+- [x] #1 A nightly run on the release candidate passes every job
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The release candidate's nightly (run 38162202807 on dev b454f9b3, after PR #137) passed every job: CPU-growth timing checks, the bounded mutation runner and 12 differential shards.
+<!-- SECTION:FINAL_SUMMARY:END -->

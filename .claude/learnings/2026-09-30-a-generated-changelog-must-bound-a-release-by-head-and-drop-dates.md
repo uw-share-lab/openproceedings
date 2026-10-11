@@ -133,3 +133,7 @@ a dated decision clarification rather than silently rewriting the earlier accept
 
 ## Addendum — 2026-10-06 (0.2.0)
 - **Without the back-merge, tag only a `main` sha whose own push run is green.** Decision-046 turned off `main`'s "require up to date", so a PR into `main` can merge on checks run against an older `main`, and the tagged tree may never have been tested as such; the 0.2.0 release security review raised it. Spec 08 step 6 now checks the required checks on `main`'s push run for the exact sha before `gh release create`. Evidence: `docs/results/2026-10-06-release-preparation.md` §2.
+
+## Addendum — 2026-10-11 (0.3.0)
+- **Read the nightly's history, not just its last run.** No scheduled nightly had passed since 2026-10-07: the 10-08, 10-09 and 10-10 runs failed (timing-sensitive linear-time tests, mutation shards past their time limit, and one property counterexample), and nothing flagged it because the nightly gates no merge. Readiness dispatched `nightly.yml` on the exact `dev` head and fixed those failures before the promotion.
+- **`bench` is not a merge-queue required check.** PR #134 merged with `bench` red, and its fix went as PR #135, so readiness reads `bench` on the last PR into `dev`, not only the queue's required checks.
