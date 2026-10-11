@@ -504,6 +504,10 @@ class HttpClient[T]:
             json.loads(response.body)
         except ValueError:
             return "truncated"
+        except RecursionError:
+            # nested past the decoder's depth: complete bytes, not a cut-off body, so never retried; the source's
+            # own parser refuses it with its typed error (`crossref_unreadable`, `openalex_unreadable`, ...)
+            return None
         return None
 
     def _pace(self) -> None:
@@ -551,7 +555,7 @@ def error_name(response: Response) -> str | None:
     """An API's error `name` (`ValidationError`, `NotFoundError`), never its message (it may quote input)."""
     try:
         name = json.loads(response.body).get("name")
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError, RecursionError):
         return None
     return name if isinstance(name, str) and name.isidentifier() else None
 

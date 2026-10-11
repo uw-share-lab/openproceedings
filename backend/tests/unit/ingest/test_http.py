@@ -416,3 +416,73 @@ def test_a_transport_error_quoting_the_header_stays_out_of_the_error(tmp_path: P
     with pytest.raises(RetriesExhausted) as e:
         f.get(OPENALEX)
     assert "sk-test-secret" not in str(e.value) + caplog.text
+
+
+# --- a deeply nested JSON body (json.loads raises RecursionError, not ValueError) ----------------------------------
+
+NESTED = ("[" * 100_000 + "]" * 100_000).encode()
+NESTED_JSON = {"content-type": "application/json"}
+
+
+def test_a_deeply_nested_json_body_is_whole_to_the_transport_layer_and_crossref_refuses_it(tmp_path: Path) -> None:
+    from openproceedings.ingest.sources import crawl, crossref
+
+    url = "https://api.crossref.org/works"
+    t = FakeTransport({url: Response(200, NESTED_JSON, NESTED, "")})
+    f = crawl.crossref_fetcher(tmp_path, offline=False, transport=t, min_interval=0, mailto=None)
+    page = f.get(url)  # never a raw RecursionError out of send(), and never retried
+    assert page.ok and len(t.calls) == 1
+    with pytest.raises(CrawlError) as e:
+        crossref.parse_works(page.text)
+    assert e.value.reason == "crossref_unreadable"
+
+
+def test_a_deeply_nested_json_body_reaches_openalex_whose_parser_refuses_it(tmp_path: Path) -> None:
+    from openproceedings.ingest.sources import crawl, openalex
+
+    url = "https://api.openalex.org/works"
+    t = FakeTransport({url: Response(200, NESTED_JSON, NESTED, "")})
+    f = crawl.openalex_fetcher(tmp_path, offline=False, transport=t, min_interval=0)
+    page = f.get(url)
+    assert page.ok and len(t.calls) == 1
+    with pytest.raises(CrawlError) as e:
+        openalex.parse_works(page.text)
+    assert e.value.reason == "openalex_unreadable"
+
+
+def test_a_deeply_nested_openreview_answer_is_an_unexpected_shape(tmp_path: Path) -> None:
+    def transport(request: Request, timeout: float) -> Response:
+        if request.method == "POST":
+            return json_response({"token": "tok"}, headers={"content-type": "application/json"})
+        return Response(200, NESTED_JSON, NESTED, "")
+
+    c, get, _ = openreview(tmp_path, transport)
+    with pytest.raises(FetchError) as e:
+        get()
+    assert e.value.reason == "unexpected_shape"
+
+
+def test_a_deeply_nested_openreview_login_answer_is_a_refused_login(tmp_path: Path) -> None:
+    def transport(request: Request, timeout: float) -> Response:
+        return Response(200, NESTED_JSON, NESTED, "")
+
+    _, get, _ = openreview(tmp_path, transport)
+    with pytest.raises(OpenReviewAuthError):
+        get()
+
+
+@pytest.mark.parametrize("status", [400, 404])
+def test_a_deeply_nested_error_body_has_no_error_name(tmp_path: Path, status: int) -> None:
+    from openproceedings.ingest.sources.http import error_name
+
+    assert error_name(Response(status, NESTED_JSON, NESTED, "")) is None
+
+    def transport(request: Request, timeout: float) -> Response:
+        if request.method == "POST":
+            return json_response({"token": "tok"}, headers={"content-type": "application/json"})
+        return Response(status, NESTED_JSON, NESTED, "")
+
+    _, get, _ = openreview(tmp_path, transport)
+    with pytest.raises(HTTPRefused) as e:
+        get()
+    assert e.value.status == status

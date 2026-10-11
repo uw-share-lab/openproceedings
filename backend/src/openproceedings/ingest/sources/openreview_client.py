@@ -87,6 +87,15 @@ _STATUS_LIST = ("/Submission", "/Rejected_Submission", "/Withdrawn_Submission", 
 _YEAR = re.compile(r"\.cc/(\d{4})(?:/|$)")
 
 
+def _json(body: bytes) -> Any:
+    """A 200 body `HttpClient._truncated` already found whole; one nested past the decoder's depth (which it lets
+    through, never retried) is None here, so the caller refuses it as not an object."""
+    try:
+        return json.loads(body)
+    except RecursionError:
+        return None
+
+
 def listing_kind(url: str) -> tuple[str, int | None]:
     """What a cached API v2 GET lists (a `TTL` key) and the venue-year it names (None if it names none)."""
     parts = urlsplit(url)
@@ -401,7 +410,7 @@ class OpenReviewClient(HttpClient[Entry]):
         response = self.send(request)
         token = None
         if response.status == 200 and is_json(response):
-            data = json.loads(response.body)
+            data = _json(response.body)
             token = data.get("token") if isinstance(data, dict) else None
         if isinstance(token, str) and token and not _TOKEN.fullmatch(token):
             # never sent: a CR/LF header makes http.client raise a ValueError quoting `Bearer <token>`
@@ -433,7 +442,7 @@ class OpenReviewClient(HttpClient[Entry]):
                 continue
             if response.status != 200:
                 raise HTTPRefused(url, response.status, error_name(response))
-            data = json.loads(response.body)
+            data = _json(response.body)
             if not isinstance(data, dict):
                 raise FetchError(f"OpenReview answered {url} with JSON that is not an object",
                                  reason="unexpected_shape")  # fmt: skip
