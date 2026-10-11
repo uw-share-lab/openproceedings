@@ -1122,8 +1122,8 @@ hours) and the rebuild were run after review (2026-10-11); the counts:
 
 - Harvest: 4,607 pages pinned, 0 missing, 1 unavailable because its capture redirects (`capture_redirect`).
 - Snapshot `2026-10-11-93c2937e2f29` (173,253 records), index `b4f335e07e70`: `aaai_library` attached 4,536 of 4,709
-  candidates (126 `title_near`), refusing `title_mismatch` 43, `layout_unknown` 23, `undecodable` 3 and
-  `capture_redirect` 1; the capture window is 2016-05-05 to 2022-12-29. So 96.3% of AAAI 1980–2008 records have AAAI's
+  candidates (126 `title_near`), refusing `title_mismatch` 43, `layout_unknown` 23, `undecodable` 3,
+  `capture_redirect` 1 and `no_abstract` 1; the capture window is 2016-05-05 to 2022-12-29. So 96.3% of AAAI 1980–2008 records have AAAI's
   own abstract.
 - OpenAlex then fills only what is left: 1,117 abstracts (1,098 by DOI and 19 by title; AAAI 21, AIES 557, FAccT 539),
   with `official_won` 1,305 and refused `doi_duplicate` 1, `inverted_gap` 2, `no_abstract` 10, `title_ambiguous` 1,

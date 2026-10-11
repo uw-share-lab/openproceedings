@@ -75,7 +75,7 @@ NAACL, CHI and CSCW remain out of scope for now.
     consultation, TASK-135), not a CC0 one. The label and the filter let a review exclude them.
   - **Fidelity:** OpenAlex agrees with the official abstract (exact or near-exact) for 83.1% of 2,122 records audited,
     almost always for AAAI and AIES and far less for FAccT, where it likely carries ACM's published version; every
-    title-route attach for AAAI 1980–2008 was checked (1,052 of 1,061 agree; the exact title-key rule stands).
+    title-route attach for AAAI 1980–2008 was checked: on the final snapshot the route attaches 19 and 18 agree (2026-10-11 report); the earlier 2026-10-10 report checked 1,061, of which 1,052 agree. The exact title-key rule stands.
     `docs/results/2026-10-11-openalex-audit.md` (final snapshot; the 2026-10-10 report is the earlier one); spec 07 §G.
   - **As built, first rebuild (2026-10-10; superseded by the final rebuild below).** Extract sha256 `7fea58b983252594b9ad3fb4788022f81b64adf579ce9cee129abf91a9c5c49c` (5,808
     candidates, 49 lookups, 3,005 works). Snapshot `2026-10-10-22a339940466` (173,253 records), which differs from

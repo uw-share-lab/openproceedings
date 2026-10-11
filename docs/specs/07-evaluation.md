@@ -399,7 +399,7 @@ It feeds nothing: it writes no extract, touches no snapshot and gates nothing, a
   texts; several with one text are compared once). Every rate is of the records compared in its row, and the report
   quotes no abstract text: records are named by id.
 - **The title route.** AAAI 1980–2008 has no DOI, so the fill matches by exact title key and year in the listing
-  (spec 01). The fill is replayed over the cached listings and **every** title-route attach (1,061) is checked
+  (spec 01). The fill is replayed over the cached listings and **every** title-route attach (1,061 in the 2026-10-10 run, before `aaai_library`; 19 on the final snapshot) is checked
   against OpenAlex's authors for the work (one request per 50 works): the years must match (they do by
   construction) and the author lists must share a surname (surnames compared without marks or case, dblp's
   homonym numbers and Jr./II suffixes dropped, `Last, First` handled); `agree`, `wrong` (OpenAlex lists authors and
@@ -420,11 +420,13 @@ ACM's published version of an abstract, not the conference site's text (a few ar
 abstract the fill takes from OpenAlex is labelled `abstract_kind: openalex`, never `official`, which already tells
 a reader it is OpenAlex's, possibly ACM's version; the label is how a review excludes them.
 
-**The title route's result.** 1,052 of 1,061 attaches agree (99.2%); 9 look wrong (0.8%), none is unverifiable.
+**The title route's result, 2026-10-10 run (before `aaai_library`).** 1,052 of 1,061 attaches agree (99.2%); 9 look wrong (0.8%), none is unverifiable.
 Seven of the nine are spelling or OCR variants of the same surname (for example kender/render, pentland/pentlaud), so
 a surname rule would mostly drop correct attaches (requiring a shared surname excludes exactly the 9; requiring the
 first author to match also excludes 8 that agree on another author). **Ruling (controller, 2026-10-10): keep the exact
 title-key and year rule**; the residual wrong-attach risk is about 2 of 1,061 (an estimate: the audit's Caveats).
+
+**The final result** ([2026-10-11 report](../results/2026-10-11-openalex-audit.md), after `aaai_library` took most AAAI 1980–2008 abstracts): the title route attaches 19 and 18 agree; the 1 other is an OCR variant (`nournai`/`nourani`). The ruling stands.
 
 ## Error handling
 

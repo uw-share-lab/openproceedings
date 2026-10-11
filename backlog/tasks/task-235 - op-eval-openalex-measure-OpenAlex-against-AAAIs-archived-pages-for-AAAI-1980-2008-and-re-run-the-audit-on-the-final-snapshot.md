@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-11 05:08'
-updated_date: '2026-10-11 09:22'
+updated_date: '2026-10-11 10:00'
 labels:
   - eval
   - new-venues
@@ -24,7 +24,7 @@ The OpenAlex audit (docs/results/2026-10-10-openalex-audit.md) compares OpenAlex
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 op eval openalex reports, for AAAI 1980-2008 records with both an aaai_library abstract and an OpenAlex work, the exact, near-exact and differs rates, with tests
-- [ ] #2 The audit is re-run on the final snapshot and docs/results, spec 07 §G and the coverage page's linked audit cite it
+- [x] #2 The audit is re-run on the final snapshot and docs/results, spec 07 §G and the coverage page's linked audit cite it
 <!-- AC:END -->
 
 ## Implementation Notes

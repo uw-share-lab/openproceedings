@@ -81,7 +81,7 @@ the census), if AAAI publishes these abstracts on its new site, or if AAAI asks 
 
 The harvest pinned 4,607 pages: 0 missing, 1 unavailable because its capture redirects (`capture_redirect`). The
 real build (snapshot `2026-10-11-93c2937e2f29`, index `b4f335e07e70`) attached 4,536 of 4,709 candidates, 126 of them
-`title_near`; it refused 43 `title_mismatch`, 23 `layout_unknown`, 3 `undecodable` and 1 `capture_redirect`. The
+`title_near`; it refused 43 `title_mismatch`, 23 `layout_unknown`, 3 `undecodable`, 1 `capture_redirect` and 1 `no_abstract`. The
 captures used are dated 2016-05-05 to 2022-12-29. Against the snapshot before milestone C
 (`2026-10-10-9efa49481112`), 4,536 records went `none` → `official`, so 173 AAAI 1980–2008 records are left for
 OpenAlex's fill (19 by title). The refusal counts above answer the sample's completeness question: 96.3% of the

@@ -310,8 +310,8 @@ build departs from, or settles, this design:
 - **Licence.** OpenAlex's data is CC0 with no personal-use carve-out, but it ships no plaintext abstracts, so a rebuilt
   abstract is served on the publisher-abstract posture (decision-018, the takedown list, TASK-135), not a CC0 one.
 - **Counts (the real build, 2026-10-11, after `aaai_library`).** `aaai_library` fills first: of the 4,709 AAAI 1980–2008
-  records it attached 4,536 (126 by `title_near`), refusing 43 `title_mismatch`, 23 `layout_unknown`, 3 `undecodable`
-  and 1 `capture_redirect`. That leaves 1,272 records with no abstract after every official source: 1,099 with a DOI
+  records it attached 4,536 (126 by `title_near`), refusing 43 `title_mismatch`, 23 `layout_unknown`, 3 `undecodable`,
+  1 `capture_redirect` and 1 `no_abstract`. That leaves 1,272 records with no abstract after every official source: 1,099 with a DOI
   (AIES 2018–2023: 557, FAccT 2019–2024 and 2026: 540, AAAI 2020: 2) and 173 AAAI 1980–2008. OpenAlex fills 1,117:
   1,098 by DOI (a duplicate DOI with differing texts refuses one record in FAccT 2021; AIES 2019's is the cited
   `duplicate_chosen`) and 19 by title; it refuses 155 (`doi_duplicate` 1, `inverted_gap` 2, `no_abstract` 10,
