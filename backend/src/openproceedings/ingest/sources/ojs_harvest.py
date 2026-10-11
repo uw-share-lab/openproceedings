@@ -16,10 +16,10 @@ from dataclasses import dataclass, field
 from openproceedings.ingest.sources.common import CrawlError
 from openproceedings.ingest.sources.http import Fetcher, Heartbeat, Page, RetriesExhausted
 from openproceedings.ingest.sources.ojs import (
+    Chain,
     OaiRecord,
     ids_url,
     journal_sets,
-    next_token,
     oai_url,
     parse_identifiers,
     parse_page,
@@ -89,7 +89,7 @@ def harvest_set(
     progress = progress or Progress.of(journal, fetcher)
     seen: set[int] = set()
     token: str | None = None
-    tokens: set[str] = set()
+    chain = Chain()
     while True:
         url = oai_url(journal, token, set_spec=set_spec)
         page = _get(fetcher, url, refresh=refresh and token is None)
@@ -101,7 +101,7 @@ def harvest_set(
         h.pages += 1
         progress.page("sets")
         entries, token = parse_page(page.text)
-        token = next_token(tokens, token, url)
+        token = chain.follow(token, url, len(entries))
         for e in entries:
             if not e.deleted:
                 h.live.append((page, e))
@@ -117,7 +117,7 @@ def _fallback(
     h.fallback = True
     before, pages = len(h.live), h.pages
     token: str | None = None
-    tokens: set[str] = set()
+    chain = Chain()
     while True:
         url = ids_url(journal, token, set_spec=h.set_spec)
         page = fetcher.get(url, refresh=refresh and token is None)
@@ -126,7 +126,7 @@ def _fallback(
         h.pages += 1
         progress.page("fallback")
         headers, token = parse_identifiers(page.text)
-        token = next_token(tokens, token, url)
+        token = chain.follow(token, url, len(headers))
         for e in headers:
             if e.deleted or e.article in seen:
                 continue
@@ -158,7 +158,7 @@ def inventory(
     progress = progress or Progress.of(journal, fetcher)
     headers: list[OaiRecord] = []
     token: str | None = None
-    tokens: set[str] = set()
+    chain = Chain()
     pages = 0
     while True:
         url = ids_url(journal, token)
@@ -168,7 +168,7 @@ def inventory(
         pages += 1
         progress.page("inventory")
         found, token = parse_identifiers(page.text)
-        token = next_token(tokens, token, url)
+        token = chain.follow(token, url, len(found))
         headers += found
         if token is None:
             return headers, pages

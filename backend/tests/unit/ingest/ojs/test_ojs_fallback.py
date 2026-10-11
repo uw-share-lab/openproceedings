@@ -327,3 +327,76 @@ def test_the_harvest_logs_a_start_a_heartbeat_and_each_fallback_once(tmp_path, c
     }  # fmt: skip
     failed = [r for r in caplog.records if r.getMessage() == "ojs_page_failed"]
     assert failed and all(r.levelname == "DEBUG" for r in failed)  # counted in the set's line, not one each
+
+
+# --- a chain that never ends (a new token on every page) stops past a ceiling ------------------------------------
+class _Endless:
+    """A server whose every list page names a new resumption token, one deleted header (or one set) a page, stating
+    `completeListSize` `size` (0: none stated, as OJS's own form does when it doesn't know). With `fail_records`,
+    every ListRecords page answers HTTP 500 (the set falls back to ListIdentifiers)."""
+
+    def __init__(self, size: int, *, fail_records: bool = False) -> None:
+        self.size, self.fail_records, self.n = size, fail_records, 0
+        self.calls: list[str] = []
+
+    def __call__(self, request, timeout):
+        url = request.url
+        self.calls.append(url)
+        if "verb=ListRecords" in url and self.fail_records:
+            return response("", status=500, headers=XML)
+        self.n += 1
+        token, article = f"tok{self.n}", 1000 + self.n
+        if "verb=ListIdentifiers" in url:
+            text = oai.identifiers_page((article, True, "AAAI:APP"), token=token, size=self.size)
+        elif "verb=ListRecords" in url:
+            text = oai.page(oai.deleted(article, "AAAI:APP"), token=token, size=self.size)
+        else:
+            text = oai.sets_page(f"AAAI:S{self.n}", token=token, size=self.size)
+        return response(text, headers=XML)
+
+
+@pytest.mark.parametrize("chain", ["inventory", "set", "fallback", "sets"])
+@pytest.mark.parametrize(("size", "pages"), [(3, 13), (0, 25)], ids=["stated", "unstated"])
+def test_a_chain_that_never_ends_stops_past_its_ceiling(tmp_path, monkeypatch, chain: str, size: int,
+                                                         pages: int) -> None:  # fmt: skip
+    # stated: ceil(3 / 1 a page) + a margin of 10 pages; unstated: the constant ceiling, kept small here
+    monkeypatch.setattr(ojs, "MAX_CHAIN_PAGES", 25)
+    server = _Endless(size, fail_records=chain == "fallback")
+    f, _clock = fetcher(tmp_path / "ojs", server, ojs.HOSTS, min_interval=0, expect="xml", keep_query=True)
+    run = {
+        "inventory": lambda: ojs_harvest.inventory("AAAI", f),
+        "set": lambda: ojs_harvest.harvest_set("AAAI", "AAAI:APP", f),
+        "fallback": lambda: ojs_harvest.harvest_set("AAAI", "AAAI:APP", f),
+        "sets": lambda: ojs.list_sets("AAAI", f),
+    }[chain]
+    outcome: list[BaseException | None] = []
+
+    def attempt() -> None:
+        try:
+            run()
+            outcome.append(None)
+        except BaseException as exc:
+            outcome.append(exc)
+
+    worker = threading.Thread(target=attempt, daemon=True)
+    worker.start()
+    worker.join(timeout=5)
+    assert not worker.is_alive(), f"the {chain} chain did not stop on an endless token chain within 5 s"
+    (error,) = outcome
+    assert isinstance(error, CrawlError) and error.reason == "chain_too_long"
+    verb = "ListSets" if chain == "sets" else "ListIdentifiers" if chain in ("inventory", "fallback") else "ListRecords"
+    assert sum(f"verb={verb}" in c for c in server.calls) == pages  # exactly the ceiling's pages, never one more
+
+
+def test_a_chain_within_its_stated_size_is_read_whole(tmp_path) -> None:
+    """The ceiling is past `completeListSize` / page size: a chain of exactly that many pages is never refused."""
+    script = {
+        _key(ojs.ids_url("AAAI")): [response(oai.identifiers_page(
+            (1, False, "AAAI:APP"), (2, False, "AAAI:APP"), token="a", size=5), headers=XML)],
+        _key(ojs.ids_url("AAAI", "a")): [response(oai.identifiers_page(
+            (3, False, "AAAI:APP"), (4, False, "AAAI:APP"), token="b", size=5), headers=XML)],
+        _key(ojs.ids_url("AAAI", "b")): [response(oai.identifiers_page((5, False, "AAAI:APP")), headers=XML)],
+    }  # fmt: skip
+    f, _t = _live(tmp_path, script)
+    headers, pages = ojs_harvest.inventory("AAAI", f)
+    assert [h.article for h in headers] == [1, 2, 3, 4, 5] and pages == 3
