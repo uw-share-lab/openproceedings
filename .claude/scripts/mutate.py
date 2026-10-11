@@ -7,10 +7,19 @@
     python3 .claude/scripts/mutate.py --match glob # only mutants whose label contains "glob"
     python3 .claude/scripts/mutate.py --shard 2/8  # every 8th selected mutant from the 2nd (nightly CI runs 1/12..12/12)
     python3 .claude/scripts/mutate.py --list       # print the selected mutants' labels; run nothing
+    python3 .claude/scripts/mutate.py --table-timeout 5  # a table past 5 s is a hang (default: 10x its baseline, >= 60 s)
 
 Mutants live in .claude/scripts/mutants/*.json as {label, file, old, new[, equivalent]}: `old` is replaced
 by `new` once in `file`. A mutant marked "equivalent" is expected to survive (documented reason in the
 label). A mutant whose `old` text no longer exists fails the run — update it, so the list never rots.
+
+A mutant is killed when any case table fails; the first failure decides it. So each mutant runs, first, the
+tables that name its file (its name, or its stem as a word, in the table or a helper beside it that the table
+names), then the rest only if those all pass, and a phase stops as soon as one table fails. The verdict is the
+same as running every table (a survivor runs them all); only the time differs: about a third of it on the
+nightly logs, where every mutant ran all 13 tables and four 12-way shards ran past 140 min (TASK-171 rerun).
+A table that runs past its timeout under a mutant has hung (an infinite loop): the mutant is TIMEOUT, which
+counts as killed, as in other mutation tools, and the table is stopped, so one hang never stalls a shard.
 This is THE way to mutation-test here; don't hand-roll a serial loop (review round 3: ~33 min serial vs ~5
 min parallel). Standard: .claude/skills/testing-standards/SKILL.md and .claude/agents/qa-auditor.md.
 """
@@ -18,12 +27,17 @@ min parallel). Standard: .claude/skills/testing-standards/SKILL.md and .claude/a
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
+import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -54,13 +68,104 @@ def copy_tree(dest: Path) -> None:
         os.symlink(ROOT / ".venv", dest / ".venv")
 
 
-def failing_tables(tree: Path) -> list[str]:
-    def run(t: str) -> str | None:
-        r = subprocess.run(["bash", str(tree / t)], capture_output=True, text=True, env=ENV)
-        return None if r.returncode == 0 else Path(t).name
+TIMEOUT_FACTOR, TIMEOUT_FLOOR = 10, 60.0  # a table's timeout under a mutant: 10x its baseline, at least 60 s
+LIVE: set[subprocess.Popen[bytes]] = set()  # every running table, stopped on the way out (Ctrl-C, timeout)
+LIVE_LOCK = threading.Lock()
+STOPPING = threading.Event()  # interrupted: every worker stops its tables and starts no more
 
-    with ThreadPoolExecutor(max_workers=len(TABLES)) as ex:
-        return [x for x in ex.map(run, TABLES) if x]
+
+def stop(p: subprocess.Popen[bytes]) -> None:
+    """Stop a table and everything it started (its own process group): TERM, so its EXIT trap removes its
+    temporary files, then, 2 s later, KILL whatever is left in the group."""
+    with contextlib.suppress(OSError):
+        os.killpg(p.pid, signal.SIGTERM)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        p.wait(2)
+    with contextlib.suppress(OSError):  # the group can outlive its leader
+        os.killpg(p.pid, signal.SIGKILL)
+    p.wait()
+
+
+def run_tables(
+    tree: Path, tables: list[str], timeouts: dict[str, float] | None = None
+) -> tuple[list[str], list[str], dict[str, float]]:
+    """Run `tables` in parallel against `tree`: the ones that failed and the ones past their timeout (stopped),
+    as table names, and each finished table's wall time. With `timeouts`, the first failure or timeout stops
+    the rest (one is enough to kill a mutant); without, every table runs to the end (the baseline)."""
+    started = time.monotonic()
+    procs: dict[str, subprocess.Popen[bytes]] = {}
+    failed: list[str] = []
+    hung: list[str] = []
+    took: dict[str, float] = {}
+    try:
+        for t in tables:
+            p = subprocess.Popen(
+                ["bash", str(tree / t)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=ENV,
+                start_new_session=True,  # its own process group, so stop() reaches what it started
+            )
+            procs[t] = p
+            with LIVE_LOCK:
+                LIVE.add(p)
+        running = dict(procs)
+        while running and not STOPPING.is_set() and not (timeouts is not None and (failed or hung)):
+            time.sleep(0.05)
+            now = time.monotonic()
+            for t, p in list(running.items()):
+                if (rc := p.poll()) is not None:
+                    del running[t]
+                    took[t] = now - started
+                    if rc != 0:
+                        failed.append(Path(t).name)
+                elif timeouts is not None and now - started > timeouts[t]:
+                    del running[t]
+                    stop(p)
+                    hung.append(Path(t).name)
+    finally:
+        for p in procs.values():
+            if p.poll() is None:
+                stop(p)
+            with LIVE_LOCK:
+                LIVE.discard(p)
+    return failed, hung, took
+
+
+_TABLE_TEXT: dict[str, str] = {}
+
+
+def table_text(t: str) -> str:
+    """A table's text, with the text of every helper beside it that it names (dependabot_cases.py)."""
+    if t not in _TABLE_TEXT:
+        path = ROOT / t
+        text = path.read_text(errors="replace")
+        for helper in sorted(path.parent.iterdir()):
+            if helper.is_file() and helper.suffix != ".sh" and helper.name in text:
+                text += helper.read_text(errors="replace")
+        _TABLE_TEXT[t] = text
+    return _TABLE_TEXT[t]
+
+
+def first_tables(file: str) -> list[str]:
+    """The tables that name `file`: its name, or its stem as a word (`cmdparse`, imported by name). Only an
+    order: a mutant these all pass still runs every other table."""
+    path = Path(file)
+    stem = re.compile(r"(?<![\w.-])" + re.escape(path.stem) + r"(?![\w-])")
+    return [t for t in TABLES if path.name in table_text(t) or stem.search(table_text(t))]
+
+
+def killing_tables(tree: Path, file: str, timeouts: dict[str, float]) -> tuple[list[str], list[str]]:
+    """The tables that fail and the tables that hang with `tree`'s mutant in `file`: those that name the file
+    first, then the rest only if none of those failed (module docstring). Both empty: it survived."""
+    first = first_tables(file)
+    rest = [t for t in TABLES if t not in first]
+    failed: list[str] = []
+    hung: list[str] = []
+    for phase in (first, rest):
+        if phase and not (failed or hung):
+            failed, hung, _ = run_tables(tree, phase, timeouts)
+    return failed, hung
 
 
 def changed_files() -> set[str]:
@@ -89,13 +194,28 @@ def shard(mutants: list[dict], i: int, n: int) -> list[dict]:
     return mutants[i - 1 :: n]
 
 
+def interrupted(_signum: int, _frame: object) -> None:
+    """SIGINT (Ctrl-C, CI's `timeout --signal=INT`) and SIGTERM (a nested run stopped by an outer one's
+    timeout) unwind the run, so its tables stop too; set for SIGINT as well, since a shell starts a background
+    job with SIGINT ignored."""
+    raise KeyboardInterrupt
+
+
 def main() -> None:
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, interrupted)
     ap = argparse.ArgumentParser()
     ap.add_argument("--changed", action="store_true")
     ap.add_argument("--jobs", type=int, default=min(8, os.cpu_count() or 4))
     ap.add_argument("--match", help="only mutants whose label contains this text (case-insensitive)")
     ap.add_argument("--shard", help="i/n: run only shard i of n of the selected mutants (1 <= i <= n)")
     ap.add_argument("--list", action="store_true", help="print the selected mutants' labels and exit")
+    ap.add_argument(
+        "--table-timeout",
+        type=float,
+        help=f"seconds before a table counts as hung (default: {TIMEOUT_FACTOR}x its baseline, at least "
+        f"{TIMEOUT_FLOOR:.0f} s)",
+    )
     a = ap.parse_args()
     mutants = [
         m
@@ -128,12 +248,16 @@ def main() -> None:
     try:
         base = work / "baseline"
         copy_tree(base)
-        if bad := failing_tables(base):
+        bad, _, took = run_tables(base, TABLES)
+        if bad:
             sys.exit(f"baseline is not green ({bad}) — fix the tables before mutation-testing")
         shutil.rmtree(base)
+        timeouts = {t: a.table_timeout or max(TIMEOUT_FLOOR, TIMEOUT_FACTOR * took[t]) for t in TABLES}
 
         def one(item: tuple[int, dict]) -> tuple[dict, str, list[str]]:
             i, m = item
+            if STOPPING.is_set():
+                return m, "STOPPED", []
             tree = work / f"m{i}"
             copy_tree(tree)
             p = tree / m["file"]
@@ -142,25 +266,36 @@ def main() -> None:
                 shutil.rmtree(tree)
                 return m, "STALE", []
             p.write_text(text.replace(m["old"], m["new"], 1))
-            bad = failing_tables(tree)
+            failed, hung = killing_tables(tree, m["file"], timeouts)
             shutil.rmtree(tree)
-            return m, ("KILLED" if bad else "SURVIVED"), bad
+            status = "TIMEOUT" if hung and not failed else "KILLED" if failed else "SURVIVED"
+            return m, status, failed + [f"{h} hung" for h in hung]
 
         problems = 0
-        with ThreadPoolExecutor(max_workers=a.jobs) as ex:
+        ex = ThreadPoolExecutor(max_workers=a.jobs)
+        try:
             for m, status, bad in ex.map(one, enumerate(mutants)):
                 equivalent = m.get("equivalent", False)
-                ok = status == "KILLED" or (status == "SURVIVED" and equivalent)
+                ok = status in ("KILLED", "TIMEOUT") or (status == "SURVIVED" and equivalent)
                 problems += not ok
                 mark = "ok  " if ok else "FAIL"
                 print(
                     f"  {mark} {status:8} {m['label']}" + (f"  ({', '.join(bad)})" if bad else ""), flush=True
                 )
+        except BaseException:  # Ctrl-C or CI's timeout (SIGINT): stop now, not after the queued mutants
+            STOPPING.set()
+            ex.shutdown(wait=False, cancel_futures=True)
+            raise
+        ex.shutdown()
         print(
             f"{len(mutants)} mutants: {problems} problem(s) (survivors not marked equivalent, or stale patterns)"
         )
         sys.exit(1 if problems else 0)
     finally:
+        with LIVE_LOCK:
+            live = list(LIVE)
+        for p in live:  # interrupted (Ctrl-C, CI's timeout): no table outlives the run
+            stop(p)
         shutil.rmtree(work, ignore_errors=True)
 
 
