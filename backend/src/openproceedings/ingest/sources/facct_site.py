@@ -134,7 +134,18 @@ class Matched:
 def _csv(text: str, columns: tuple[str, ...], *, key: str, title: str, abstract: str,
          doi_from: str | None = None) -> list[Entry]:  # fmt: skip
     """A FAccT CSV's rows. The header must be exactly `columns`. A byte-order mark, if any, is dropped and either
-    line end is read (the csv module's own newline handling: a quoted field keeps its line breaks)."""
+    line end is read (the csv module's own newline handling: a quoted field keeps its line breaks). A CSV the
+    reader can't read (`csv.Error`: a field over its 131,072-character limit, among others) is `site_format`, its
+    rows never quoted."""
+    try:
+        return _csv_rows(text, columns, key=key, title=title, abstract=abstract, doi_from=doi_from)
+    except csv.Error as e:
+        raise CrawlError("a FAccT CSV can't be read as CSV (a field over the reader's limit, or a malformed "
+                         "quote): check the page", reason="site_format") from e  # fmt: skip
+
+
+def _csv_rows(text: str, columns: tuple[str, ...], *, key: str, title: str, abstract: str,
+              doi_from: str | None) -> list[Entry]:  # fmt: skip
     reader = csv.DictReader(io.StringIO(text.removeprefix("\ufeff"), newline=""))
     if (got := tuple(reader.fieldnames or ())) != columns:
         missing, extra = [c for c in columns if c not in got], [c for c in got if c not in columns]

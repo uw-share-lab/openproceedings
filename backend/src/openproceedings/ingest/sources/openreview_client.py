@@ -87,6 +87,15 @@ _STATUS_LIST = ("/Submission", "/Rejected_Submission", "/Withdrawn_Submission", 
 _YEAR = re.compile(r"\.cc/(\d{4})(?:/|$)")
 
 
+def _json(body: bytes) -> Any:
+    """A 200 body `HttpClient._truncated` already found whole; one nested past the decoder's depth (which it lets
+    through, never retried) is None here, so the caller refuses it as not an object."""
+    try:
+        return json.loads(body)
+    except RecursionError:
+        return None
+
+
 def listing_kind(url: str) -> tuple[str, int | None]:
     """What a cached API v2 GET lists (a `TTL` key) and the venue-year it names (None if it names none)."""
     parts = urlsplit(url)
@@ -263,6 +272,17 @@ def _public_projection(url: str, data: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _projected(url: str, data: Mapping[str, Any]) -> dict[str, Any]:
+    """`_public_projection`, except that an answer nested deep enough for its copy to pass the recursion limit (it
+    parsed, under the decoder's depth, but `copy.deepcopy` takes more frames a level) is refused, never cached."""
+    try:
+        return _public_projection(url, data)
+    except RecursionError:
+        raise OpenReviewPublicDataError(
+            f"OpenReview's answer to GET {url} is nested too deep to copy", reason="unexpected_shape"
+        ) from None
+
+
 def _is_pre_projection_cache(path: Path, url: str) -> bool:
     """Whether a cache file is the old, otherwise-valid raw-response layout (and only that layout)."""
     try:
@@ -368,7 +388,7 @@ class OpenReviewClient(HttpClient[Entry]):
                 "url": url,
                 "fetched_at": self.clock.now().astimezone(UTC).isoformat(),
                 "headers": {k: response.headers[k] for k in KEPT_HEADERS if k in response.headers},
-                "json": _public_projection(url, data),
+                "json": _projected(url, data),
                 "public_projection": PUBLIC_PROJECTION,
             }
             return entry, True
@@ -401,7 +421,7 @@ class OpenReviewClient(HttpClient[Entry]):
         response = self.send(request)
         token = None
         if response.status == 200 and is_json(response):
-            data = json.loads(response.body)
+            data = _json(response.body)
             token = data.get("token") if isinstance(data, dict) else None
         if isinstance(token, str) and token and not _TOKEN.fullmatch(token):
             # never sent: a CR/LF header makes http.client raise a ValueError quoting `Bearer <token>`
@@ -433,7 +453,7 @@ class OpenReviewClient(HttpClient[Entry]):
                 continue
             if response.status != 200:
                 raise HTTPRefused(url, response.status, error_name(response))
-            data = json.loads(response.body)
+            data = _json(response.body)
             if not isinstance(data, dict):
                 raise FetchError(f"OpenReview answered {url} with JSON that is not an object",
                                  reason="unexpected_shape")  # fmt: skip

@@ -27,7 +27,10 @@ the failure itself is in the cache: a crawl is replayed offline by following the
 cached failure sends the replay down the same fallback, and the replay fetches nothing and gives the same records.
 `--refresh` fetches each chain's first page (and a cached failure) again. OJS tokens are opaque and expire after
 24 h: a resumed crawl whose next token the server no longer knows gets `badResumptionToken`, which stops the crawl
-with what to do (`--refresh` starts the chains again).
+with what to do (`--refresh` starts the chains again). Every chain is bounded (`Chain`): a token that repeats an
+earlier page stops it (`token_cycle`), and so does a chain longer than its ceiling (`chain_too_long`): the stated
+`completeListSize` over the largest page seen, plus `CHAIN_MARGIN` pages, or `MAX_CHAIN_PAGES` when no size is
+stated, so a server that names a new token on every page never loops for ever.
 
 A record's article id is its native id (`ojs-<id>`), its section (`setSpec`) and volume (`dc:source`'s
 `Vol. N No. M`) name its table row, which gives the track and the year (`ojs_table`); a volume or section the table
@@ -96,6 +99,11 @@ _OLD_DELETED = re.compile(r"oai:ojs\.pkp\.sfu\.ca:article/([0-9]+)")
 _VOLUME = re.compile(r";\s*Vol\.\s*([0-9]+)\s+No\.\s*[0-9]+")
 _DOI = re.compile(r"10\.1609/\S+")
 _EMPTY_LIST = "noRecordsMatch"  # an OAI-PMH error code that means an empty list, not a failure
+# A chain's page ceiling (`Chain`): with a stated `completeListSize`, ceil(size / largest page) + CHAIN_MARGIN; with
+# none, MAX_CHAIN_PAGES, which also caps the stated-size ceiling (AAAI's longest chain, the inventory, is 53 pages of
+# 500: 26,185 headers; 10,000 pages at 3 s is 8 h)
+CHAIN_MARGIN = 10
+MAX_CHAIN_PAGES = 10_000
 
 
 def _list_url(verb: str, journal: str, token: str | None, set_spec: str | None) -> str:
@@ -193,10 +201,26 @@ def _listing(text: str, verb: str, empty: frozenset[str] = frozenset({_EMPTY_LIS
     return listing
 
 
-def _token(listing: ET.Element) -> str | None:
+class Token(str):
+    """A resumption token (compared and hashed as its text) with the chain's stated `completeListSize`: None when
+    the server states none, 0, or no plain number of at most 9 digits."""
+
+    complete: int | None
+
+    def __new__(cls, value: str, complete: int | None = None) -> Token:
+        token = super().__new__(cls, value)
+        token.complete = complete
+        return token
+
+
+def _token(listing: ET.Element) -> Token | None:
     node = listing.find(f"{_OAI}resumptionToken")
     token = (node.text or "").strip() if node is not None else ""
-    return token or None
+    if not token or node is None:
+        return None
+    size = node.get("completeListSize", "").strip()
+    stated = int(size) if size.isascii() and size.isdecimal() and len(size) <= 9 and int(size) > 0 else None
+    return Token(token, stated)
 
 
 def _header(header: ET.Element | None) -> OaiRecord:
@@ -278,18 +302,48 @@ def sets_url(journal: str, token: str | None = None) -> str:
     return base if token is None else f"{base}&resumptionToken={quote(token, safe='')}"
 
 
-def next_token(seen: set[str], token: str | None, url: str) -> str | None:
-    """`token`, the next page of a chain, after checking that the chain has not followed it before. A page that
-    names its own token, or any A→B→A cycle, would otherwise loop for ever, and once cached at no cost in network
-    or pacing, so every later offline replay and snapshot build would hang too (`openreview_v2._pages` refuses
-    the same): `CrawlError` `token_cycle`."""
-    if token is not None:
-        if token in seen:
+class Chain:
+    """One resumption-token chain's bounds, checked before each next page is followed (`follow`).
+
+    - **Cycle.** A page that names its own token, or any A→B→A cycle, would loop for ever, and once cached at no
+      cost in network or pacing, so every later offline replay and snapshot build would hang too
+      (`openreview_v2._pages` refuses the same): `CrawlError` `token_cycle`.
+    - **Length.** A server that names a new token on every page (on empty pages, say) never cycles: past its
+      ceiling the chain stops, `CrawlError` `chain_too_long`. The ceiling is the largest `completeListSize` stated
+      over the largest page seen, rounded up, plus `CHAIN_MARGIN` pages (capped at `MAX_CHAIN_PAGES`), or
+      `MAX_CHAIN_PAGES` when no size is stated or no page has held an item."""
+
+    def __init__(self) -> None:
+        self.seen: set[str] = set()
+        self.pages = 0
+        self.per_page = 0  # the most items one page held
+        self.complete: int | None = None
+
+    def ceiling(self) -> int:
+        if self.complete is None or self.per_page == 0:
+            return MAX_CHAIN_PAGES
+        return min(-(-self.complete // self.per_page) + CHAIN_MARGIN, MAX_CHAIN_PAGES)
+
+    def follow(self, token: str | None, url: str, items: int) -> str | None:
+        """`token`, the next page of a chain, after the page at `url` holding `items` items was read."""
+        self.pages += 1
+        self.per_page = max(self.per_page, items)
+        if token is None:
+            return None
+        if token in self.seen:
             raise CrawlError(
                 f"{url}: resumptionToken repeats an earlier page of the chain", reason="token_cycle"
             )
-        seen.add(token)
-    return token
+        self.seen.add(token)
+        if isinstance(token, Token) and token.complete is not None:
+            self.complete = max(self.complete or 0, token.complete)
+        if self.pages >= (ceiling := self.ceiling()):
+            raise CrawlError(
+                f"{url}: the resumptionToken chain is still going after {self.pages} pages, past its ceiling of "
+                f"{ceiling} (completeListSize {self.complete}, at most {self.per_page} a page): check the server",
+                reason="chain_too_long",
+            )
+        return token
 
 
 def parse_sets(text: str) -> tuple[dict[str, str], str | None]:
@@ -311,13 +365,13 @@ def list_sets(journal: str, fetcher: Fetcher, *, refresh: bool = False) -> dict[
     is paginated). The harvest walks each of the journal's own sets; the names label the table's rows."""
     sets: dict[str, str] = {}
     token: str | None = None
-    tokens: set[str] = set()
+    chain = Chain()
     while True:
         page = fetcher.get(sets_url(journal, token), refresh=refresh and token is None)
         if not page.ok:
             raise CrawlError(f"{page.url} answered HTTP {page.status}", reason="no_listing")
         found, token = parse_sets(page.text)
-        token = next_token(tokens, token, page.url)
+        token = chain.follow(token, page.url, len(found))
         for spec, name in found.items():  # a spec two sections share (AAAI's EAAI-POS): both names, kept
             sets[spec] = name if sets.get(spec, name) == name else f"{sets[spec]} | {name}"
         if token is None:

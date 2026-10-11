@@ -300,3 +300,24 @@ def test_the_fetcher_takes_a_csv_served_as_octet_stream(tmp_path: Path) -> None:
         seen and "*/*" in seen[0]
     )  # a server that answers octet-stream is never refused by the Accept header
     assert f.policy.min_interval == facct_site.MIN_INTERVAL and f.policy.hosts == facct_site.HOSTS
+
+
+def _oversize() -> str:
+    """A CSV whose one abstract is over the csv module's 131,072-character field limit (`csv.Error`)."""
+    return csv26(("1", "x", "y" * 140_000), ("2", "z", "w"), ("3", "q", "r"))
+
+
+def test_a_csv_field_over_the_reader_limit_stops_as_site_format_offline(tmp_path: Path) -> None:
+    with pytest.raises(CrawlError) as e:
+        site(tmp_path, _oversize())  # offline replay of a cached page
+    assert e.value.reason == "site_format"
+    assert "yyyy" not in str(e.value)  # the row is never quoted
+
+
+def test_a_csv_field_over_the_reader_limit_stops_as_site_format_live(tmp_path: Path) -> None:
+    t = FakeTransport({URL26: response(_oversize(), headers={"content-type": "application/octet-stream"})})
+    f = crawl.facct_site_fetcher(tmp_path, offline=False, transport=t, min_interval=0)
+    with pytest.raises(CrawlError) as e:
+        facct_site.read_year(2023, f, table=facct_site.load(SITE_TABLE))
+    assert e.value.reason == "site_format"
+    assert "yyyy" not in str(e.value)
