@@ -66,7 +66,9 @@ def error(code: str) -> str:
 """
 
 
-def sets_page(*specs: str, token: str | None = None, names: dict[str, str] | None = None, size: int = 0) -> str:
+def sets_page(
+    *specs: str, token: str | None = None, names: dict[str, str] | None = None, size: int = 0
+) -> str:
     """A ListSets page naming `specs` (names default to the spec)."""
     names = names or {}
     sets = "".join(
@@ -74,7 +76,9 @@ def sets_page(*specs: str, token: str | None = None, names: dict[str, str] | Non
         for s in specs
     )
     rt = (
-        "" if token is None else f'<resumptionToken completeListSize="{size}" cursor="0">{token}</resumptionToken>'
+        ""
+        if token is None
+        else f'<resumptionToken completeListSize="{size}" cursor="0">{token}</resumptionToken>'
     )
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><responseDate>2026-10-09T22:01:20Z</responseDate>
@@ -90,7 +94,9 @@ def identifiers_page(*headers: tuple[int, bool, str], token: str | None = None, 
         for a, d, s in headers
     )
     rt = (
-        "" if token is None else f'<resumptionToken completeListSize="{size}" cursor="0">{token}</resumptionToken>'
+        ""
+        if token is None
+        else f'<resumptionToken completeListSize="{size}" cursor="0">{token}</resumptionToken>'
     )
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><responseDate>2026-10-09T22:01:20Z</responseDate>

@@ -384,8 +384,16 @@ def test_a_chain_that_never_ends_stops_past_its_ceiling(tmp_path, monkeypatch, c
     assert not worker.is_alive(), f"the {chain} chain did not stop on an endless token chain within 5 s"
     (error,) = outcome
     assert isinstance(error, CrawlError) and error.reason == "chain_too_long"
-    verb = "ListSets" if chain == "sets" else "ListIdentifiers" if chain in ("inventory", "fallback") else "ListRecords"
-    assert sum(f"verb={verb}" in c for c in server.calls) == pages  # exactly the ceiling's pages, never one more
+    verb = (
+        "ListSets"
+        if chain == "sets"
+        else "ListIdentifiers"
+        if chain in ("inventory", "fallback")
+        else "ListRecords"
+    )
+    assert (
+        sum(f"verb={verb}" in c for c in server.calls) == pages
+    )  # exactly the ceiling's pages, never one more
 
 
 def test_a_chain_within_its_stated_size_is_read_whole(tmp_path) -> None:

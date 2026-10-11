@@ -69,7 +69,9 @@ def test_a_page_that_is_not_a_work_list_stops(text: str) -> None:
 NESTED = "[" * 100_000 + "]" * 100_000  # json.loads raises RecursionError, not ValueError
 
 
-@pytest.mark.parametrize("parse", [crossref.parse_works, crossref.parse_proceedings], ids=["works", "proceedings"])
+@pytest.mark.parametrize(
+    "parse", [crossref.parse_works, crossref.parse_proceedings], ids=["works", "proceedings"]
+)
 @pytest.mark.parametrize("text", [NESTED, '{"a": ' * 100_000 + "1" + "}" * 100_000], ids=["array", "object"])
 def test_a_deeply_nested_answer_is_unreadable_never_a_raw_recursion_error(parse, text: str) -> None:
     with pytest.raises(CrawlError) as e:

@@ -424,7 +424,9 @@ NESTED = ("[" * 100_000 + "]" * 100_000).encode()
 NESTED_JSON = {"content-type": "application/json"}
 
 
-def test_a_deeply_nested_json_body_is_whole_to_the_transport_layer_and_crossref_refuses_it(tmp_path: Path) -> None:
+def test_a_deeply_nested_json_body_is_whole_to_the_transport_layer_and_crossref_refuses_it(
+    tmp_path: Path,
+) -> None:
     from openproceedings.ingest.sources import crawl, crossref
 
     url = "https://api.crossref.org/works"
@@ -456,7 +458,7 @@ def test_a_deeply_nested_openreview_answer_is_an_unexpected_shape(tmp_path: Path
             return json_response({"token": "tok"}, headers={"content-type": "application/json"})
         return Response(200, NESTED_JSON, NESTED, "")
 
-    c, get, _ = openreview(tmp_path, transport)
+    _, get, _ = openreview(tmp_path, transport)
     with pytest.raises(FetchError) as e:
         get()
     assert e.value.reason == "unexpected_shape"
