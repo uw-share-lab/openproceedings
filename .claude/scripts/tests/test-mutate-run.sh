@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Case table for how mutate.py runs a mutant (nightly mutate shards ran past 140 min, 2026-10-09/10): the tables
 # that name the mutated file run first and the rest only if they all pass; a failure stops the rest of its phase;
-# a survivor runs every table; a table that hangs is stopped at its timeout and the mutant is TIMEOUT (killed).
+# a survivor runs every table; a table that hangs is stopped at its timeout and, if it hangs again alone, the
+# mutant is TIMEOUT (killed); the timeout is 10x a table's baseline, at least 60 s, and a --table-timeout under
+# 10x a baseline is refused (it would make a slow survivor a kill); an interrupt stops the queued mutants too.
 # A fixture repo of tiny tables, each logging its start to $MUT_LOG, so the table takes seconds.
 # Mutants in .claude/scripts/mutants/mutate.json. Usage: ./test-mutate-run.sh
 set -u
@@ -37,6 +39,13 @@ echo "t-a-slow \$root" >> "\$MUT_LOG"
 if grep -q SLOW "\$root/src/a.txt"; then sleep $SLOW; echo "t-a-slow-end \$root" >> "\$MUT_LOG"; fi
 true
 EOF
+# t-once names a.txt: with `ONCE` in it, hangs the first time only (a table slowed once, by load)
+cat > "$R/.claude/hooks/tests/t-once.sh" <<EOF
+root="\$(cd "\$(dirname "\$0")/../../.." && pwd)"
+echo "t-once \$root" >> "\$MUT_LOG"
+if grep -q ONCE "\$root/src/a.txt" && [ ! -e "\$MUT_LOG.once" ]; then : > "\$MUT_LOG.once"; sleep $NAP; fi
+true
+EOF
 # t-other names neither file (it spells the hidden one in pieces): fails when `kappa` is gone from it
 cat > "$R/.claude/scripts/tests/t-other.sh" <<'EOF'
 root="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -69,7 +78,38 @@ cat > "$R/.claude/scripts/mutants/m.json" <<'EOF'
  {"label": "m-hangs", "file": "src/a.txt", "old": "alpha", "new": "HANG alpha"},
  {"label": "m-slow", "file": "src/a.txt", "old": "alpha", "new": "SLOW alpha"},
  {"label": "m-stem", "file": "src/widget.py", "old": "def run", "new": "def ran"},
- {"label": "m-helper", "file": "src/helped.txt", "old": "mu", "new": "nu"}
+ {"label": "m-helper", "file": "src/helped.txt", "old": "mu", "new": "nu"},
+ {"label": "m-once", "file": "src/a.txt", "old": "gamma", "new": "ONCE gamma"},
+ {"label": "m-int-1", "file": "src/a.txt", "old": "alpha", "new": "SLOW alpha"},
+ {"label": "m-int-2", "file": "src/a.txt", "old": "gamma", "new": "delta"}
+]
+EOF
+
+# A second fixture, whose mutate.py has a 1 s floor so a timeout derived from a baseline shows: t-b takes 0.5 s
+# (10x: 5 s), and 2.5 s with `SLOW2`, past the floor but well under 10x its baseline: slow, not hung
+R2="$TMP/r2"
+mkdir -p "$R2/.claude/scripts/mutants" "$R2/.claude/hooks/tests" "$R2/src"
+sed -E 's/^(TIMEOUT_FACTOR, TIMEOUT_FLOOR = [0-9]+, )[0-9.]+/\11.0/' "$SRC/.claude/scripts/mutate.py" \
+  > "$R2/.claude/scripts/mutate.py"
+printf 'beta\n' > "$R2/src/b.txt"
+cat > "$R2/.claude/hooks/tests/t-b.sh" <<'EOF'
+root="$(cd "$(dirname "$0")/../../.." && pwd)"
+sleep 0.5
+if grep -q SLOW2 "$root/src/b.txt"; then sleep 2; fi
+if grep -q LATE "$root/src/b.txt"; then sleep 2; exit 1; fi
+grep -q beta "$root/src/b.txt"
+EOF
+# t-q names b.txt: fast (its timeout is the 1 s floor), and with `QONCE` hangs the first time only, which stops
+# t-b mid-run: t-b must run again once the hang is not confirmed
+cat > "$R2/.claude/hooks/tests/t-q.sh" <<EOF
+root="\$(cd "\$(dirname "\$0")/../../.." && pwd)"
+if grep -q QONCE "\$root/src/b.txt" && [ ! -e "\$MUT_LOG.once" ]; then : > "\$MUT_LOG.once"; sleep $NAP; fi
+true
+EOF
+cat > "$R2/.claude/scripts/mutants/m.json" <<'EOF'
+[
+ {"label": "m-bslow", "file": "src/b.txt", "old": "beta", "new": "beta SLOW2"},
+ {"label": "m-bonce", "file": "src/b.txt", "old": "beta", "new": "beta QONCE LATE"}
 ]
 EOF
 
@@ -81,7 +121,9 @@ run() {  # run <label match> [args...]: the result line and exit status in $line
   local m="$1"; shift
   : > "$TMP/log"
   local t0; t0=$(date +%s)
-  MUT_LOG="$TMP/log" python3 "$R/.claude/scripts/mutate.py" --jobs 2 --match "$m" "$@" > "$TMP/out" 2>&1; rc=$?
+  rm -f "$TMP/log.once"
+  MUT_LOG="$TMP/log" python3 "${ROOTDIR:-$R}/.claude/scripts/mutate.py" --jobs 2 --match "$m" "$@" > "$TMP/out" 2>&1
+  rc=$?
   secs=$(( $(date +%s) - t0 ))
   line=$(grep -E '^  (ok  |FAIL) ' "$TMP/out" | sed -E 's/ +/ /g; s/^ //')
 }
@@ -130,13 +172,33 @@ got=$(grep -c '^t-a-slow-end ' "$TMP/log")
 check "stopped: the slow table never finished" "$got" "0"
 
 echo "== a hang is stopped at its timeout, and killed"
-run m-hangs --table-timeout 2
+run m-hangs --table-timeout 5
 check "hang: exit 0" "$rc" "0"
 check "hang: the line" "$line" "ok TIMEOUT m-hangs (t-a.sh hung)"
-got=$([ "$secs" -lt 20 ] && echo yes || echo "no ($secs s)")
+got=$([ "$secs" -lt 30 ] && echo yes || echo "no ($secs s)")
 check "hang: answered at the timeout, not the sleep" "$got" "yes"
 got=$(pgrep -f "sleep $NAP" > /dev/null && echo "still running" || echo gone)
 check "hang: the table's own children are stopped too" "$got" "gone"
+
+echo "== a hang is a kill only if it hangs again alone"
+run m-once --table-timeout 5
+check "hung once: exit 1" "$rc" "1"
+check "hung once: the line" "$line" "FAIL SURVIVED m-once"
+
+echo "== the timeout is derived from each table's baseline"
+run m-slow
+check "slow under the 60 s floor (10x its baseline is less): exit 1" "$rc" "1"
+check "slow under the 60 s floor: the line" "$line" "FAIL SURVIVED m-slow"
+ROOTDIR="$R2" run m-bslow
+check "slow past the floor, under 10x its baseline: exit 1" "$rc" "1"
+check "slow past the floor, under 10x its baseline: the line" "$line" "FAIL SURVIVED m-bslow"
+ROOTDIR="$R2" run m-bonce
+check "a hang not confirmed: the tables it stopped run again" "$line" "ok KILLED m-bonce (t-b.sh)"
+ROOTDIR="$R2" run m-bslow --table-timeout 1
+check "a --table-timeout under 10x a baseline: exit 2" "$rc" "2"
+check "a --table-timeout under 10x a baseline: no mutant judged" "$line" ""
+got=$(grep -c 'under 10x the baseline of t-b.sh' "$TMP/out")
+check "a --table-timeout under 10x a baseline: says which table" "$got" "1"
 
 echo "== interrupted (Ctrl-C, or CI's timeout; TERM from an outer run's timeout): it stops now, and its tables"
 for sig in INT TERM; do
@@ -154,6 +216,17 @@ for sig in INT TERM; do
   got=$(pgrep -f "sleep $SLOW" > /dev/null && echo "still running" || echo gone)
   check "$sig: the slow table was stopped" "$got" "gone"
 done
+
+echo "== interrupted with mutants queued: none of them starts"
+: > "$TMP/log"
+MUT_LOG="$TMP/log" python3 "$R/.claude/scripts/mutate.py" --jobs 1 --match m-int > "$TMP/out" 2>&1 &
+pid=$!
+for _ in $(seq 1 100); do grep -q '^t-a-slow .*/m0$' "$TMP/log" 2>/dev/null && break; sleep 0.1; done
+kill -INT "$pid"
+wait "$pid"
+sleep 1
+got=$(grep -c '/m1$' "$TMP/log")
+check "INT, --jobs 1: the queued mutant's tables never start" "$got" "0"
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

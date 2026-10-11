@@ -7,7 +7,8 @@
     python3 .claude/scripts/mutate.py --match glob # only mutants whose label contains "glob"
     python3 .claude/scripts/mutate.py --shard 2/8  # every 8th selected mutant from the 2nd (nightly CI runs 1/12..12/12)
     python3 .claude/scripts/mutate.py --list       # print the selected mutants' labels; run nothing
-    python3 .claude/scripts/mutate.py --table-timeout 5  # a table past 5 s is a hang (default: 10x its baseline, >= 60 s)
+    python3 .claude/scripts/mutate.py --table-timeout 900  # a table past 900 s is a hang (default: 10x its baseline,
+                                                           # >= 60 s; refused under 10x any table's baseline)
 
 Mutants live in .claude/scripts/mutants/*.json as {label, file, old, new[, equivalent]}: `old` is replaced
 by `new` once in `file`. A mutant marked "equivalent" is expected to survive (documented reason in the
@@ -18,8 +19,11 @@ tables that name its file (its name, or its stem as a word, in the table or a he
 names), then the rest only if those all pass, and a phase stops as soon as one table fails. The verdict is the
 same as running every table (a survivor runs them all); only the time differs: about a third of it on the
 nightly logs, where every mutant ran all 13 tables and four 12-way shards ran past 140 min (TASK-171 rerun).
-A table that runs past its timeout under a mutant has hung (an infinite loop): the mutant is TIMEOUT, which
-counts as killed, as in other mutation tools, and the table is stopped, so one hang never stalls a shard.
+A table that runs past its timeout under a mutant has hung (an infinite loop): it is stopped, so one hang never
+stalls a shard, and run again alone; if it hangs again the mutant is TIMEOUT, which counts as killed, as in other
+mutation tools, and if not, that run's verdict stands (a table slowed by the other jobs is not a hang). The
+timeout is 10x the table's own baseline time, at least 60 s, so only a far slower table is a hang; a
+--table-timeout under 10x any table's baseline is refused (exit 2), since it would make a slow survivor a kill.
 This is THE way to mutation-test here; don't hand-roll a serial loop (review round 3: ~33 min serial vs ~5
 min parallel). Standard: .claude/skills/testing-standards/SKILL.md and .claude/agents/qa-auditor.md.
 """
@@ -155,6 +159,20 @@ def first_tables(file: str) -> list[str]:
     return [t for t in TABLES if path.name in table_text(t) or stem.search(table_text(t))]
 
 
+def run_phase(tree: Path, tables: list[str], timeouts: dict[str, float]) -> tuple[list[str], list[str]]:
+    """`run_tables` with every hang confirmed: a table that hung is run again alone, and only a second hang
+    stands; if it passes, the tables the hang stopped run again too (module docstring)."""
+    failed, hung, took = run_tables(tree, tables, timeouts)
+    if failed or not hung:
+        return failed, hung
+    again = [t for t in tables if Path(t).name in hung]
+    failed, hung, _ = run_tables(tree, again, timeouts)
+    if failed or hung:
+        return failed, hung
+    left = [t for t in tables if t not in took and t not in again]
+    return run_phase(tree, left, timeouts) if left else ([], [])
+
+
 def killing_tables(tree: Path, file: str, timeouts: dict[str, float]) -> tuple[list[str], list[str]]:
     """The tables that fail and the tables that hang with `tree`'s mutant in `file`: those that name the file
     first, then the rest only if none of those failed (module docstring). Both empty: it survived."""
@@ -164,8 +182,24 @@ def killing_tables(tree: Path, file: str, timeouts: dict[str, float]) -> tuple[l
     hung: list[str] = []
     for phase in (first, rest):
         if phase and not (failed or hung):
-            failed, hung, _ = run_tables(tree, phase, timeouts)
+            failed, hung = run_phase(tree, phase, timeouts)
     return failed, hung
+
+
+def table_timeouts(took: dict[str, float], explicit: float | None) -> dict[str, float]:
+    """Each table's timeout: `explicit`, or 10x its baseline and at least 60 s. An explicit one under 10x any
+    table's baseline exits 2: a survivor that table is merely slow for would count as killed."""
+    if explicit is not None:
+        for t in TABLES:
+            if explicit < TIMEOUT_FACTOR * took[t]:
+                print(
+                    f"--table-timeout {explicit:g} s is under {TIMEOUT_FACTOR}x the baseline of {Path(t).name} "
+                    f"({took[t]:.1f} s): a slow survivor would count as killed",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+        return dict.fromkeys(TABLES, explicit)
+    return {t: max(TIMEOUT_FLOOR, TIMEOUT_FACTOR * took[t]) for t in TABLES}
 
 
 def changed_files() -> set[str]:
@@ -214,7 +248,7 @@ def main() -> None:
         "--table-timeout",
         type=float,
         help=f"seconds before a table counts as hung (default: {TIMEOUT_FACTOR}x its baseline, at least "
-        f"{TIMEOUT_FLOOR:.0f} s)",
+        f"{TIMEOUT_FLOOR:.0f} s; refused under {TIMEOUT_FACTOR}x any table's baseline)",
     )
     a = ap.parse_args()
     mutants = [
@@ -252,7 +286,7 @@ def main() -> None:
         if bad:
             sys.exit(f"baseline is not green ({bad}) — fix the tables before mutation-testing")
         shutil.rmtree(base)
-        timeouts = {t: a.table_timeout or max(TIMEOUT_FLOOR, TIMEOUT_FACTOR * took[t]) for t in TABLES}
+        timeouts = table_timeouts(took, a.table_timeout)
 
         def one(item: tuple[int, dict]) -> tuple[dict, str, list[str]]:
             i, m = item

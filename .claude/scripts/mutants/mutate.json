@@ -140,8 +140,8 @@
  {
   "label": "mutate run: --table-timeout ignored",
   "file": ".claude/scripts/mutate.py",
-  "old": "t: a.table_timeout or max(",
-  "new": "t: max("
+  "old": "        return dict.fromkeys(TABLES, explicit)",
+  "new": "        return {t: max(TIMEOUT_FLOOR, TIMEOUT_FACTOR * took[t]) for t in TABLES}"
  },
  {
   "label": "mutate run: stop() signals the table but not what it started",
@@ -166,5 +166,70 @@
   "file": ".claude/scripts/mutate.py",
   "old": "for sig in (signal.SIGINT, signal.SIGTERM):",
   "new": "for sig in (signal.SIGINT,):"
+ },
+ {
+  "label": "mutate run: a --table-timeout under 10x a baseline accepted (a slow survivor counts as killed)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "            if explicit < TIMEOUT_FACTOR * took[t]:",
+  "new": "            if False:"
+ },
+ {
+  "label": "mutate run: a hang not confirmed alone (a table slowed once by load is a kill)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    if failed or not hung:\n        return failed, hung\n    again",
+  "new": "    if True:\n        return failed, hung\n    again"
+ },
+ {
+  "label": "mutate run: after an unconfirmed hang, the tables it stopped never run again",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    return run_phase(tree, left, timeouts) if left else ([], [])",
+  "new": "    return [], []"
+ },
+ {
+  "label": "mutate run: no 60 s floor (a slow survivor at 10x a tiny baseline is a kill)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "TIMEOUT_FACTOR, TIMEOUT_FLOOR = 10, 60.0",
+  "new": "TIMEOUT_FACTOR, TIMEOUT_FLOOR = 10, 0.0"
+ },
+ {
+  "label": "mutate run: the timeout is the floor only, not 10x the baseline",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    return {t: max(TIMEOUT_FLOOR, TIMEOUT_FACTOR * took[t]) for t in TABLES}",
+  "new": "    return dict.fromkeys(TABLES, TIMEOUT_FLOOR)"
+ },
+ {
+  "label": "mutate run: interrupted, a queued mutant still runs (no early return) - equivalent, defence in depth: cancel_futures drops the queued mutants before they start (row: INT, --jobs 1)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "            if STOPPING.is_set():\n                return m, \"STOPPED\", []\n",
+  "new": "",
+  "equivalent": true
+ },
+ {
+  "label": "mutate run: interrupted, STOPPING never set - equivalent, defence in depth: the outer finally stops every live table, so each worker's loop sees them end, and cancel_futures drops the queue (rows: INT/TERM)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "            STOPPING.set()\n            ex.shutdown(",
+  "new": "            ex.shutdown(",
+  "equivalent": true
+ },
+ {
+  "label": "mutate run: interrupted, the queued mutants not cancelled - equivalent, defence in depth: a queued mutant finds STOPPING set and returns before copying or starting anything (row: INT, --jobs 1)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "ex.shutdown(wait=False, cancel_futures=True)",
+  "new": "ex.shutdown(wait=False)",
+  "equivalent": true
+ },
+ {
+  "label": "mutate run: interrupted, the running tables not stopped on the way out - equivalent, defence in depth: each worker's loop sees STOPPING within 50 ms and its own finally stops its tables (rows: INT/TERM)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        for p in live:  # interrupted (Ctrl-C, CI's timeout): no table outlives the run\n            stop(p)\n",
+  "new": "        for p in live:  # interrupted (Ctrl-C, CI's timeout): no table outlives the run\n            pass\n",
+  "equivalent": true
+ },
+ {
+  "label": "mutate run: the table loop ignores STOPPING - equivalent, defence in depth: the outer finally stops every live table, which the loop then sees end (rows: INT/TERM)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        while running and not STOPPING.is_set() and not",
+  "new": "        while running and not",
+  "equivalent": true
  }
 ]
