@@ -418,7 +418,9 @@ class HttpClient[T]:
                  extra={"url": url, "age_s": round(age), "ttl_s": round(ttl)})  # fmt: skip
         return True
 
-    def send(self, request: Request, *, by_length: bool = False) -> Response:
+    def send(
+        self, request: Request, *, by_length: bool = False, whole: Callable[[bytes], bool] | None = None
+    ) -> Response:
         """One request, paced, retried on 429, 5xx, a network error and a truncated 200 (`_truncated`; with
         `by_length`, judged by the stated `Content-Length` when there is one); any other response is returned for
         the source to judge."""
@@ -452,7 +454,7 @@ class HttpClient[T]:
                 if response.status == 429 or response.status >= 500:
                     why, hint = f"http_{response.status}", retry_after(response.headers, self.clock.now())
                     last_status = response.status
-                elif response.status == 200 and (cut := self._truncated(response, by_length)):
+                elif response.status == 200 and (cut := self._truncated(response, by_length, whole)):
                     why = cut
                 else:
                     if response.status == 200:
@@ -467,9 +469,14 @@ class HttpClient[T]:
             status=last_status,
         )
 
-    def _truncated(self, response: Response, by_length: bool = False) -> str | None:
+    def _truncated(
+        self, response: Response, by_length: bool = False, whole: Callable[[bytes], bool] | None = None
+    ) -> str | None:
         """Why a 200 is not whole (`truncated`; `truncated_no_length` for a page judged by length that states none
-        and lacks `</html>` too), or None when it is."""
+        and lacks `</html>` too), or None when it is. `whole` lets a source vouch for the exact bytes (an archived
+        capture whose pinned digest they match, TASK-232): those bytes are whole whatever else is missing."""
+        if whole is not None and whole(response.body):
+            return None
         stated = response.headers.get("content-length", "").strip()
         # a capture's bytes are fixed: whole when all there. A length that isn't 1-19 ASCII digits (`²`, or past
         # int()'s digit limit) is no length, never a crash
@@ -658,7 +665,7 @@ class Fetcher(HttpClient[Page]):
     def get(
         self, url: str, *, refresh: bool = False, keep_absent: bool = False, charset: str = "utf-8",
         by_length: bool = False, exact_bytes: bool = False, verify: Callable[[Page], bool] | None = None,
-        redirect: Callable[[str, Response], Page] | None = None,
+        redirect: Callable[[str, Response], Page] | None = None, whole: Callable[[bytes], bool] | None = None,
     ) -> Page:  # fmt: skip
         """The page at `url`: from the cache unless `refresh`, else fetched (and cached when it is a 200, or a
         404/410 with `keep_absent`). Offline, a miss raises instead of fetching. `charset` decodes a body whose
@@ -672,10 +679,11 @@ class Fetcher(HttpClient[Page]):
         `redirect` judges a 3xx (otherwise `HTTPRefused`): it is called with the canonical URL and the response
         (its `location` header) and returns the page to keep for that URL, cached either way: a 200 the source
         vouches for (still judged by `verify`), or a 3xx kept as the URL's stable answer. This layer never follows a
-        redirect itself (an Internet Archive capture replayed from another timestamp, TASK-232)."""
+        redirect itself (an Internet Archive capture replayed from another timestamp, TASK-232). `whole` vouches
+        for a fetched 200's exact bytes when no length or closing tag can (`send`, `_truncated`)."""
 
         def fetch(canonical_url: str) -> tuple[Page, bool]:
-            page = self._page(canonical_url, charset, by_length, exact_bytes, redirect)
+            page = self._page(canonical_url, charset, by_length, exact_bytes, redirect, whole)
             if page.ok and verify is not None and not verify(page):
                 return page, False
             kept_redirect = redirect is not None and _is_redirect(page.status)
@@ -684,23 +692,24 @@ class Fetcher(HttpClient[Page]):
         return self.through_cache(url, fetch, refresh=refresh)
 
     def fetch(
-        self, url: str, *, charset: str = "utf-8", by_length: bool = False, exact_bytes: bool = False
-    ) -> Page:
+        self, url: str, *, charset: str = "utf-8", by_length: bool = False, exact_bytes: bool = False,
+        whole: Callable[[bytes], bool] | None = None,
+    ) -> Page:  # fmt: skip
         """One live request for `url` (`check`ed against the hosts), never read from or written to the cache: a 200
         or a 404/410 as a `Page`; a 3xx is `HTTPRefused`, never followed. For a source that judges what a
         redirect's target holds before keeping anything (`get(redirect=)`). Offline, a `CacheMiss`."""
         if self.transport is None:
             raise CacheMiss(url)
-        return self._page(self.check(url), charset, by_length, exact_bytes)
+        return self._page(self.check(url), charset, by_length, exact_bytes, whole=whole)
 
     def _page(
         self, url: str, default_charset: str = "utf-8", by_length: bool = False, exact_bytes: bool = False,
-        redirect: Callable[[str, Response], Page] | None = None,
+        redirect: Callable[[str, Response], Page] | None = None, whole: Callable[[bytes], bool] | None = None,
     ) -> Page:  # fmt: skip
         request = Request(
             "GET", url, {**self._headers, "User-Agent": self.user_agent, "Accept": self.policy.accept}
         )
-        resp = self.send(request, by_length=by_length)
+        resp = self.send(request, by_length=by_length, whole=whole)
         if resp.status == 200:
             content_type = resp.headers.get("content-type", "text/html; charset=utf-8")
             charset = m.group(1) if (m := _CHARSET.search(content_type)) else default_charset

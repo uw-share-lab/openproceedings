@@ -157,6 +157,26 @@ def test_a_capture_judged_by_length_is_whole_without_a_closing_html_tag(
         }
 
 
+def test_a_capture_with_no_length_is_whole_when_its_source_vouches_for_its_bytes(
+    tmp_path: Path, caplog
+) -> None:
+    """An archived page served with no Content-Length and no closing </html> (aaai07-001, TASK-232) is whole when
+    `whole` vouches for its exact bytes (a pinned digest); otherwise it is still `truncated_no_length`."""
+    body = "<html><body><p>an old page that never closed its tags"
+    t = FakeTransport({URL: response(body, headers={"content-type": "text/html"})})
+    f, _ = fetcher(tmp_path / "ok", t, HOSTS, min_interval=0)
+    assert f.get(URL, by_length=True, whole=lambda b: b == body.encode()).text == body
+    assert len(t.calls) == 1
+    t = FakeTransport({URL: response(body, headers={"content-type": "text/html"})})
+    f, _ = fetcher(tmp_path / "no", t, HOSTS, min_interval=0)
+    caplog.clear()
+    with caplog.at_level(logging.WARNING), pytest.raises(RetriesExhausted):
+        f.get(URL, by_length=True, whole=lambda b: False)
+    assert {getattr(r, "why", None) for r in caplog.records if r.getMessage() == "crawl_retry_wait"} == {
+        "truncated_no_length"
+    }
+
+
 def test_query_strings_and_fragments_are_dropped() -> None:
     assert canonical("http://PROCEEDINGS.mlr.press/v28/x.html?utm_source=chatgpt.com#abs") == (
         "https://proceedings.mlr.press/v28/x.html"

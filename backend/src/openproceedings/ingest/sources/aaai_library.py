@@ -326,7 +326,8 @@ def follow_redirect(
         page: Page | None = None
         if target is not None:
             try:
-                page = fetcher.fetch(target, by_length=True, exact_bytes=True)
+                page = fetcher.fetch(target, by_length=True, exact_bytes=True,
+                                     whole=lambda body: digest(body) == row.digest)  # fmt: skip
             except (
                 HTTPRefused
             ):  # a second redirect, or a refusal: not the pinned capture, never followed further
@@ -356,7 +357,8 @@ def get(fetcher: Fetcher, row: Row, *, refresh: bool = False, outcomes: Counter[
     bytes hash to the row's digest (`Fetcher.get(verify=)`), so a bad answer never stays in the cache; the caller's
     `check_digest` then refuses it (`digest_mismatch`)."""
     return fetcher.get(row.capture, refresh=refresh, keep_absent=True, by_length=True, exact_bytes=True,
-                       verify=_verified(row), redirect=follow_redirect(fetcher, row, outcomes))  # fmt: skip
+                       verify=_verified(row), redirect=follow_redirect(fetcher, row, outcomes),
+                       whole=lambda body: digest(body) == row.digest)  # fmt: skip
 
 
 def is_redirect(page: Page) -> bool:
