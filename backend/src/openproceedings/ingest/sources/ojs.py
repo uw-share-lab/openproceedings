@@ -100,7 +100,8 @@ _VOLUME = re.compile(r";\s*Vol\.\s*([0-9]+)\s+No\.\s*[0-9]+")
 _DOI = re.compile(r"10\.1609/\S+")
 _EMPTY_LIST = "noRecordsMatch"  # an OAI-PMH error code that means an empty list, not a failure
 # A chain's page ceiling (`Chain`): with a stated `completeListSize`, ceil(size / largest page) + CHAIN_MARGIN; with
-# none, MAX_CHAIN_PAGES (AAAI's longest chain, the inventory, is about 262 pages of 100; 10,000 pages at 3 s is 8 h)
+# none, MAX_CHAIN_PAGES, which also caps the stated-size ceiling (AAAI's longest chain, the inventory, is 53 pages of
+# 500: 26,185 headers; 10,000 pages at 3 s is 8 h)
 CHAIN_MARGIN = 10
 MAX_CHAIN_PAGES = 10_000
 

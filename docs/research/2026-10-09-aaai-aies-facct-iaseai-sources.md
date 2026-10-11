@@ -22,7 +22,7 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
 - **Access.** robots.txt disallows only `/cache/` and sets no crawl delay. The server takes 2–3 s a page, and the
   harvest paces at least 3 s between requests. OAI-PMH runs at `/index.php/{AAAI,AIES,IASEAI}/oai`.
   - `Identify` gives earliest datestamp 2020-06-02 and `deletedRecord` persistent.
-  - Formats: `oai_dc`, `marcxml`, `jats`, `rfc1807`, `oai_marc`. Pages hold 100 records, and resumption tokens
+  - Formats: `oai_dc`, `marcxml`, `jats`, `rfc1807`, `oai_marc`. `ListRecords` pages hold 100 records, `ListIdentifiers` pages 500, and resumption tokens
     expire after 24 h.
 - **Record shape.**
   - `dc:creator` is "Last, First".
