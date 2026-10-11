@@ -398,8 +398,12 @@ export function SyntaxHelp({
             <code className={CODE}>status:</code> <Values values={data.values.status} />
           </li>
           <li>
-            <code className={CODE}>abstract_kind:</code> <Values values={data.values.abstract_kind} /> (on
-            indexes built since schema 4)
+            <code className={CODE}>abstract_kind:</code> <Values values={data.values.abstract_kind} />. It
+            keeps or drops whole papers: <code className={CODE}>abstract_kind:official</code> drops a paper
+            whose abstract is OpenAlex&apos;s even when its title matches (to keep those, write{" "}
+            <code className={CODE}>(term abstract_kind:official) OR title:term</code>). An index built before
+            abstract kinds existed doesn&apos;t hold them yet, so a saved search pinned to one refuses the
+            filter: run it on the current index.
           </li>
         </ul>
         <p>Values take no wildcards or quotes; join several with OR inside parentheses.</p>

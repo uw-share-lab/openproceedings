@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { Schemas } from "@/api/client";
+import { blobUrl, REPO_PATH } from "@/lib/repo";
 import { CopyButton } from "./copy-button";
 import { ALL_SOURCES, corpusWindow, kindWindowText, count, minuteUtc, percent, signed } from "./format";
 
@@ -213,12 +214,14 @@ function Official({ track }: { track: Track }) {
   );
 }
 
-/** A citation with each URL in it a link and the rest as text (a citation may name two pages, or a repo path). */
-function Citation({ text }: { text: string }) {
+/** A citation with each URL in it a link and the rest as text (a citation may name two pages, or a repo path). A
+ * repo path (`docs/…/x.md`) is a link to its page in the public repository (gate C round 1): a bare path can't be
+ * opened from a public instance. */
+export function Citation({ text }: { text: string }) {
   return (
     <>
       {text.split(/(https?:\/\/[^\s)]+)/).map((part, i) => {
-        if (i % 2 === 0) return part;
+        if (i % 2 === 0) return <RepoPaths key={i} text={part} />;
         // sentence punctuation after a URL belongs to the sentence, not the link
         const url = part.replace(/[.,;:]+$/, "");
         return (
@@ -234,17 +237,38 @@ function Citation({ text }: { text: string }) {
   );
 }
 
-/** Why an ungated cell has no official count to gate on, under its track's row (TASK-222, copy deck CV-9). */
+/** Text with each repository path in it a link to the file on the default branch, the rest as it is. */
+function RepoPaths({ text }: { text: string }) {
+  const parts = text.split(new RegExp(REPO_PATH.source, "g"));
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 0 ? (
+          part
+        ) : (
+          <a key={i} className="underline underline-offset-4" href={blobUrl(part)}>
+            {part}
+          </a>
+        ),
+      )}
+    </>
+  );
+}
+
+/** Why an ungated cell has no official count to gate on, under its track's row (TASK-222, copy deck CV-9). The
+ * sentence starts with the track, so a screen reader arriving at the row knows whose note it is, and the source
+ * says when it was read, as an official count's does (gate C round 1). */
 function GateNote({ track }: { track: Track }) {
   if (track.gate_note === null) return null;
   return (
     <tr>
       <td colSpan={5} className="px-2 pb-1 text-left text-xs text-muted-foreground">
-        Not gated: {track.gate_note}.
+        <span className="font-mono">{track.track}</span> not gated: {track.gate_note}.
         {track.gate_note_citation ? (
           <>
             {" "}
             Source: <Citation text={track.gate_note_citation} />
+            {track.gate_note_accessed ? `, read ${track.gate_note_accessed}` : ""}
           </>
         ) : null}
       </td>
@@ -380,22 +404,70 @@ const COLUMNS = [
   "Unknown status",
 ] as const;
 
-/** Under the table, the anchor an OpenAlex abstract's label links to (copy CV-8, RH-20, PA-12; decision-049). */
-function OpenAlexExplanation() {
+/** The OpenAlex fidelity audit (spec 07 §G), linked in the repository. */
+export const OPENALEX_AUDIT = blobUrl("docs/results/2026-10-10-openalex-audit.md");
+
+/** The venues OpenAlex can fill (decision-049), in this order. */
+const OPENALEX_VENUES = ["AAAI", "AIES", "FAccT"] as const;
+
+/** Each fillable venue's OpenAlex abstracts in this snapshot, from the API's per-venue-year counts; only those
+ * with any. */
+function openalexByVenue(venueYears: readonly VenueYear[]): string[] {
+  return OPENALEX_VENUES.flatMap((venue) => {
+    const n = venueYears
+      .filter((vy) => vy.venue === venue)
+      .reduce((sum, vy) => sum + vy.abstract_openalex, 0);
+    return n > 0 ? [`${venue} ${count(n)}`] : [];
+  });
+}
+
+/** Under the table, the anchor an OpenAlex abstract's label links to (copy CV-8, RH-20, PA-12; decision-049; the
+ * controller's rulings of gate C round 1): which venues OpenAlex can fill and that it fills only papers with no
+ * official abstract in the index, this snapshot's counts from the API (never years written into the page), that a
+ * publisher may publish an official abstract the index doesn't hold, how far the text can differ (the audit,
+ * linked; no figure here), and that `abstract_kind:official` drops the whole paper. Focusable, so following the
+ * label lands on it. */
+function OpenAlexExplanation({ coverage }: { coverage: Coverage }) {
+  const venues = openalexByVenue(coverage.venue_years);
   return (
-    <p id="openalex" className="text-sm text-muted-foreground">
-      OpenAlex abstracts fill AAAI, AIES and FAccT papers whose official source publishes no abstract: AAAI
-      before 2010, AIES 2018–2023, and FAccT papers without one on the conference site. OpenAlex is an open
-      catalogue that gathers abstracts from publishers and repositories, so its text can differ from the
-      published one. Each is labelled, and <code className="font-mono">abstract_kind:official</code> leaves
-      them out of a search.
+    <p id="openalex" tabIndex={-1} className="text-sm text-muted-foreground">
+      OpenAlex can fill an abstract only for AAAI, AIES and FAccT, and only for a paper this index holds no
+      official abstract for.{" "}
+      {venues.length === 0
+        ? "No abstract in this snapshot is OpenAlex's."
+        : `In this snapshot: ${venues.join("; ")}.`}{" "}
+      OpenAlex is an open catalogue that gathers abstracts from publishers and repositories. ACM or another
+      publisher may publish an official abstract for such a paper that this index does not hold, and
+      OpenAlex&apos;s text can differ from the published one, sometimes substantially; how often varies by
+      venue (
+      <a className="underline underline-offset-4" href={OPENALEX_AUDIT}>
+        the OpenAlex audit
+      </a>
+      ). Each is labelled. <code className="font-mono">abstract_kind:official</code> drops the whole paper
+      from a search, including papers that matched on their title; to keep those, search{" "}
+      <code className="font-mono">(term abstract_kind:official) OR title:term</code>.
     </p>
   );
+}
+
+/** After the report is drawn, the element the URL's `#hash` names is scrolled to and focused (gate C round 1): the
+ * page draws after a client fetch, so the browser's own jump finds nothing (`/coverage#openalex`, the OpenAlex
+ * label's target). */
+function useHashTarget() {
+  useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (!id) return;
+    const target = document.getElementById(id);
+    if (target === null) return;
+    target.scrollIntoView?.({ block: "start" });
+    target.focus({ preventScroll: true });
+  }, []);
 }
 
 /** The whole `/coverage` report for one `GET /coverage` answer. Every number is an API field (design C1). */
 export function CoverageReport({ coverage }: { coverage: Coverage }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  useHashTarget();
   // venue A–Z, then newest year first (design C1); the API orders by venue, then year ascending
   const rows = [...coverage.venue_years].sort((a, b) =>
     a.venue === b.venue ? b.year - a.year : a.venue < b.venue ? -1 : 1,
@@ -507,7 +579,7 @@ export function CoverageReport({ coverage }: { coverage: Coverage }) {
           </tbody>
         </table>
       </div>
-      <OpenAlexExplanation />
+      <OpenAlexExplanation coverage={coverage} />
     </div>
   );
 }

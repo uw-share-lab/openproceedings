@@ -202,7 +202,8 @@ describe("a submission-time abstract (TASK-210, PA-11)", () => {
 });
 
 describe("an OpenAlex abstract (decision-049, PA-12)", () => {
-  const LABEL = "Abstract via OpenAlex: no official source publishes one for this paper.";
+  const LABEL =
+    "Abstract via OpenAlex: this index holds no official abstract for this paper. OpenAlex's text can differ from the published one.";
 
   it("labels it right under the text, OpenAlex linking to the coverage page's explanation", async () => {
     draw(

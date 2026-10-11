@@ -184,9 +184,11 @@ export function AbstractNote({ note }: { note: string | null }) {
 /** The coverage page's explanation of OpenAlex abstracts (copy CV-8), which the label links to. */
 export const OPENALEX_ANCHOR = "/coverage#openalex";
 
-/** An abstract filled from OpenAlex because no official source publishes one (copy RH-20, PA-12; decision-049):
- * "Abstract via OpenAlex: no official source publishes one for this paper.", the word OpenAlex a link to the
- * coverage page's explanation. Nothing for any other kind (`official`, `none`, or one this code doesn't know). */
+/** An abstract filled from OpenAlex because the index holds no official one (copy RH-20, PA-12; decision-049; the
+ * controller's ruling of gate C round 1, since the venue itself may publish one the index can't read): "Abstract via
+ * OpenAlex: this index holds no official abstract for this paper. OpenAlex's text can differ from the published
+ * one.", the word OpenAlex a link to the coverage page's explanation. Nothing for any other kind (`official`,
+ * `none`, or one this code doesn't know). */
 export function OpenAlexNote({ kind }: { kind: string }) {
   if (kind !== "openalex") return null;
   return (
@@ -195,7 +197,8 @@ export function OpenAlexNote({ kind }: { kind: string }) {
       <Link href={OPENALEX_ANCHOR} className="inline-flex min-h-6 items-center underline underline-offset-4">
         OpenAlex
       </Link>
-      : no official source publishes one for this paper.
+      : this index holds no official abstract for this paper. OpenAlex&apos;s text can differ from the
+      published one.
     </p>
   );
 }

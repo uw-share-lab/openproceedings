@@ -323,8 +323,8 @@ describe("drifted (design R2, R5)", () => {
     const t = c.diff.removed_causes;
     if (t === null) throw new Error("the fixture's diff has no causes");
     const n = c.diff.removed_total;
-    expect(within(removed).getByText(/^Of the \d+ removed:/).textContent).toBe(
-      `Of the ${n} removed: ${t.track_changed} moved to a track this search doesn't include · ` +
+    expect(within(removed).getByText(/^Removed papers by cause/).textContent).toBe(
+      `Removed papers by cause (${n} in all): ${t.track_changed} moved to a track this search doesn't include · ` +
         `${t.status_changed} with a status this search doesn't include · ${t.filter_changed} failing another ` +
         `of its filters · ${t.not_in_index} no longer in the index · ${t.still_eligible} no longer matching the query.`,
     );

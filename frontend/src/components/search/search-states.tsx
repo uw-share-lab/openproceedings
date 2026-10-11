@@ -9,9 +9,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { Failure } from "@/api/outcome";
 import { plural } from "@/editor/diagnostics";
+import { REPO_URL } from "@/lib/repo";
 
 /** Where "Report it" goes: the issue form, with the code and the time, never the query (W10). */
-export const ISSUES_URL = "https://github.com/uw-share-lab/openproceedings/issues/new";
+export const ISSUES_URL = `${REPO_URL}/issues/new`;
 
 export function reportHref(code: string, at: Date): string {
   const params = new URLSearchParams({

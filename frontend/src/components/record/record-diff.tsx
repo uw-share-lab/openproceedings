@@ -38,11 +38,12 @@ function causeWords(e: Entry): string | null {
   }
 }
 
-/** The removed list's causes in one line, counted over the whole list (RC-14a). */
+/** The removed list's causes in one line, counted over the whole list (RC-14a), worded so that one removed paper
+ * reads as well as many (gate C round 1). */
 function causesLine(total: number, t: Causes): string {
   const n = (k: number) => k.toLocaleString("en-US");
   return (
-    `Of the ${n(total)} removed: ${n(t.track_changed)} moved to a track this search doesn't include · ` +
+    `Removed papers by cause (${n(total)} in all): ${n(t.track_changed)} moved to a track this search doesn't include · ` +
     `${n(t.status_changed)} with a status this search doesn't include · ${n(t.filter_changed)} failing another ` +
     `of its filters · ${n(t.not_in_index)} no longer in the index · ${n(t.still_eligible)} no longer matching ` +
     "the query."

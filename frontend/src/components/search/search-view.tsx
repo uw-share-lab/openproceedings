@@ -31,6 +31,7 @@ import {
   type Sort,
 } from "@/lib/search-state";
 import { fieldWarning, type FieldWarning } from "@/lib/export";
+import { openalexHits } from "@/lib/methods-text";
 import { CompareRecords } from "../compare/compare-records";
 import { CopyButton } from "../copy-button";
 import { ExportMenu } from "../export/export-menu";
@@ -354,6 +355,11 @@ function ResultsBody({
           return w === null ? [] : [w];
         })
       : null;
+  // how many results have an OpenAlex abstract, for the save panel's methods text (gate C round 1)
+  const openalex =
+    current && parse.filters !== null
+      ? openalexHits(response.facets.abstract_kind, (parse.filters as ParsedFilters).abstract_kind)
+      : null;
   const zero = total === 0;
   return (
     <div className={dim ? "opacity-60" : undefined}>
@@ -391,6 +397,7 @@ function ResultsBody({
               indexVersion={response.index_version}
               total={total}
               disabledReason={offReason}
+              openalex={openalex}
             />
             <CompareRecords
               q={shownState.q}

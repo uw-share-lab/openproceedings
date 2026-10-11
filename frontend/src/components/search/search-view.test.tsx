@@ -590,8 +590,8 @@ describe("filter sidebar (spec 05 §4; W13)", () => {
       handler({ search: () => json(body({ facets: { ...body().facets, abstract_kind: kinds } })) }),
     );
     const legends = [...document.querySelectorAll("fieldset > legend")].map((l) => l.textContent);
-    expect(legends).toEqual(["Venue", "Year", "Track (default)", "Status (default)", "Abstract"]);
-    const group = screen.getByRole("group", { name: "Abstract" });
+    expect(legends).toEqual(["Venue", "Year", "Track (default)", "Status (default)", "Abstract source"]);
+    const group = screen.getByRole("group", { name: "Abstract source" });
     expect(within(group).getByRole("checkbox", { name: "OpenAlex, 7 papers" })).toHaveProperty(
       "checked",
       true,
@@ -615,7 +615,7 @@ describe("filter sidebar (spec 05 §4; W13)", () => {
 
   it("hides the Abstract fieldset on an index without the field (facets.abstract_kind null)", async () => {
     await setup();
-    expect(screen.queryByRole("group", { name: "Abstract" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Abstract source" })).toBeNull();
     expect(screen.queryByRole("checkbox", { name: /^OpenAlex/ })).toBeNull();
   });
 

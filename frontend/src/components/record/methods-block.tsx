@@ -10,7 +10,16 @@ import { citabilityCaution, methodsText, type SearchRecord } from "@/lib/methods
 import { CopyButton } from "../copy-button";
 import { useRecordParses } from "./use-record";
 
-export function MethodsBlock({ record, url }: { record: SearchRecord; url: string }) {
+export function MethodsBlock({
+  record,
+  url,
+  openalex = null,
+}: {
+  record: SearchRecord;
+  url: string;
+  /** Results with an OpenAlex abstract, when the caller has the search response (`openalexHits`); else null. */
+  openalex?: number | null;
+}) {
   const headingId = useId();
   const caution = citabilityCaution(record);
   const parses = useRecordParses(caution === null ? record : null);
@@ -33,6 +42,7 @@ export function MethodsBlock({ record, url }: { record: SearchRecord; url: strin
         parseCanonical: parses.canonical,
         parseIdentification: parses.identification,
         url,
+        openalex,
       })
     : null;
   return (

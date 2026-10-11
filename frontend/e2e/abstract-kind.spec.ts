@@ -19,9 +19,9 @@ test("the Abstract field follows Status, and ticking Official alone writes abstr
     "Year",
     "Track (default)",
     "Status (default)",
-    "Abstract",
+    "Abstract source",
   ]);
-  const abstract = sidebar.getByRole("group", { name: "Abstract" });
+  const abstract = sidebar.getByRole("group", { name: "Abstract source" });
   const official = abstract.getByRole("checkbox", { name: /^Official\s*, [\d,]+ papers$/ });
   const openalex = abstract.getByRole("checkbox", { name: /^OpenAlex\s*, [\d,]+ papers$/ });
   const none = abstract.getByRole("checkbox", { name: /^No abstract\s*, [\d,]+ papers$/ });

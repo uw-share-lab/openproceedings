@@ -60,7 +60,8 @@ describe("an OpenAlex abstract (decision-049, RH-20)", () => {
     const label = within(article).getByText(
       (_, el) =>
         el?.tagName === "P" &&
-        el.textContent === "Abstract via OpenAlex: no official source publishes one for this paper.",
+        el.textContent ===
+          "Abstract via OpenAlex: this index holds no official abstract for this paper. OpenAlex's text can differ from the published one.",
     );
     expect(label.previousElementSibling).toBe(attribution(article));
     expect(within(label).getByRole("link", { name: "OpenAlex" }).getAttribute("href")).toBe(

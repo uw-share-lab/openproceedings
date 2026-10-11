@@ -2,7 +2,7 @@
 
 /**
  * The filter sidebar (spec 05 §4; design W5 "Sidebar", W13; copy SB-1–12). Venue, Year, Track, Status, and
- * Abstract on an index that counts it (schema 4; decision-049): every option is a real checkbox labelled with its facet count, checked when the field's clause admits it, and a
+ * Abstract source on an index that counts it (schema 4; decision-049): every option is a real checkbox labelled with its facet count, checked when the field's clause admits it, and a
  * click is a reducer action that rewrites `q` (guarantee 3). Clauses come from `/parse`'s `filters` for the
  * searched query; counts from `/search`'s `facets`. A control that can't act is `aria-disabled` (still
  * focusable) and described by the reason (`blockOf`), never refused after the click.
@@ -43,10 +43,10 @@ const FIELD_TITLE: Record<ValueField | "year", string> = {
   year: "Year",
   track: "Track",
   status: "Status",
-  abstract_kind: "Abstract",
+  abstract_kind: "Abstract source",
 };
 
-/** How the Abstract field shows its values (copy SB-12); a value this code doesn't know (an open set,
+/** How the Abstract source field shows its values (copy SB-12); a value this code doesn't know (an open set,
  * decision-009) is shown as it came. */
 const ABSTRACT_KIND_LABELS: Readonly<Record<string, string>> = {
   official: "Official",

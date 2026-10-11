@@ -282,7 +282,9 @@ describe("an ungated cell's note (TASK-222, CV-9)", () => {
     const [first] = vy.tracks;
     Object.assign(first!, {
       gate_note: "the list counts a different set of papers",
-      gate_note_citation: "https://example.org/list (linked from https://example.org/conf/) and notes.md",
+      gate_note_citation:
+        "https://example.org/list (linked from https://example.org/conf/) and docs/research/notes.md §Counts",
+      gate_note_accessed: "2026-10-10",
     });
     render(<CoverageReport coverage={data} />);
     fireEvent.click(
@@ -293,15 +295,22 @@ describe("an ungated cell's note (TASK-222, CV-9)", () => {
     });
     const rows = within(official).getAllByRole("row");
     expect(rows[1]!.querySelector("th")?.textContent).toBe(first!.track);
+    // the track first, for a screen reader arriving at the row; the read date, as an official count's (gate C)
     expect(rows[2]!.textContent).toBe(
-      "Not gated: the list counts a different set of papers. Source: " +
-        "https://example.org/list (linked from https://example.org/conf/) and notes.md",
+      `${first!.track} not gated: the list counts a different set of papers. Source: ` +
+        "https://example.org/list (linked from https://example.org/conf/) and docs/research/notes.md §Counts, " +
+        "read 2026-10-10",
     );
+    // a repo path opens on the public repository (gate C round 1)
     expect(
       within(rows[2]!)
         .getAllByRole("link")
         .map((a) => a.getAttribute("href")),
-    ).toEqual(["https://example.org/list", "https://example.org/conf/"]);
+    ).toEqual([
+      "https://example.org/list",
+      "https://example.org/conf/",
+      "https://github.com/uw-share-lab/openproceedings/blob/dev/docs/research/notes.md",
+    ]);
   });
 
   it("adds no row for a track without a note", () => {
@@ -315,7 +324,7 @@ describe("an ungated cell's note (TASK-222, CV-9)", () => {
       name: `${vy.venue} ${vy.year}: accepted records against the official count`,
     });
     expect(within(official).getAllByRole("row")).toHaveLength(vy.tracks.length + 1);
-    expect(official.textContent).not.toMatch(/Not gated:/);
+    expect(official.textContent).not.toMatch(/not gated:/);
   });
 });
 
@@ -416,19 +425,53 @@ describe("the header", () => {
   });
 
   it("explains OpenAlex abstracts under the table, at the anchor the label links to (CV-8)", () => {
-    render(<CoverageReport coverage={COVERAGE} />);
+    const data = copy();
+    data.venue_years.forEach((vy) => (vy.abstract_openalex = 0));
+    // two AAAI years summed, one FAccT year; AIES has none, so it isn't named
+    Object.assign(data.venue_years[0]!, { venue: "AAAI", year: 1990, abstract_openalex: 1200 });
+    Object.assign(data.venue_years[1]!, { venue: "AAAI", year: 1991, abstract_openalex: 34 });
+    Object.assign(data.venue_years[2]!, { venue: "FAccT", year: 2022, abstract_openalex: 5 });
+    const counts = "AAAI 1,234; FAccT 5";
+    render(<CoverageReport coverage={data} />);
     const note = document.getElementById("openalex")!;
     expect(note.tagName).toBe("P");
     expect(note.textContent).toBe(
-      "OpenAlex abstracts fill AAAI, AIES and FAccT papers whose official source publishes no abstract: " +
-        "AAAI before 2010, AIES 2018–2023, and FAccT papers without one on the conference site. OpenAlex is " +
-        "an open catalogue that gathers abstracts from publishers and repositories, so its text can differ " +
-        "from the published one. Each is labelled, and abstract_kind:official leaves them out of a search.",
+      "OpenAlex can fill an abstract only for AAAI, AIES and FAccT, and only for a paper this index holds no " +
+        `official abstract for. In this snapshot: ${counts}. OpenAlex is an open catalogue that gathers ` +
+        "abstracts from publishers and repositories. ACM or another publisher may publish an official abstract " +
+        "for such a paper that this index does not hold, and OpenAlex's text can differ from the published one, " +
+        "sometimes substantially; how often varies by venue (the OpenAlex audit). Each is labelled. " +
+        "abstract_kind:official drops the whole paper from a search, including papers that matched on their " +
+        "title; to keep those, search (term abstract_kind:official) OR title:term.",
     );
     expect(within(note).getByText("abstract_kind:official").tagName).toBe("CODE");
+    expect(within(note).getByRole("link", { name: "the OpenAlex audit" }).getAttribute("href")).toBe(
+      "https://github.com/uw-share-lab/openproceedings/blob/dev/docs/results/2026-10-10-openalex-audit.md",
+    );
+    expect(note.getAttribute("tabindex")).toBe("-1"); // the label's target takes focus
     const region = screen.getByRole("region", { name: "Coverage table" });
     // under the table: after its region
     expect(region.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says no abstract is OpenAlex's when the snapshot has none, and names no year (gate C round 1)", () => {
+    const data = copy();
+    data.venue_years.forEach((vy) => (vy.abstract_openalex = 0));
+    render(<CoverageReport coverage={data} />);
+    const text = document.getElementById("openalex")!.textContent ?? "";
+    expect(text).toContain("No abstract in this snapshot is OpenAlex's.");
+    expect(text).not.toMatch(/\d/);
+  });
+
+  it("calls an archive source's window its copies' capture dates, never a crawl (gate C round 1)", () => {
+    const data = copy();
+    const captures = { from: "2016-03-01T12:00:00Z", to: "2022-06-01T08:00:00Z" };
+    data.snapshot.crawl_dates = { ...data.snapshot.crawl_dates, aaai_library: captures };
+    data.snapshot.crawl_dates_kind = { ...data.snapshot.crawl_dates_kind, aaai_library: "archive_captures" };
+    render(<CoverageReport coverage={data} />);
+    expect(document.body.textContent).toContain(
+      "aaai_library: Internet Archive copies captured 2016-03-01 to 2022-06-01",
+    );
   });
 
   it("says Crawled for a crawl and drops the citability note for a citable snapshot", () => {
@@ -485,8 +528,7 @@ describe("no hard-coded numbers (TASK-045 AC1)", () => {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const numbers: string[] = [];
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      // CV-8's OpenAlex explanation names fixed years of the sources' design (AAAI before 2010, AIES
-      // 2018–2023), not counts: the spec gives them in its words
+      // CV-8's OpenAlex counts are sums of the API's per-venue-year counts (tested above), not served as such
       if (node.parentElement?.closest("#openalex")) continue;
       numbers.push(...(node.textContent?.match(/\d[\d,]*/g) ?? []));
     }
@@ -579,5 +621,35 @@ describe("the years indexed per venue (copy deck CV-7, decision-047)", () => {
     ];
     render(<CoverageReport coverage={c} />);
     expect(screen.getByText(/^Years indexed:/).textContent).toBe("Years indexed: ICLR 2020 · ICML 2020");
+  });
+});
+
+describe("following a link to a part of the page (gate C round 1)", () => {
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
+  it("scrolls to and focuses the element the URL's hash names once the report is drawn", () => {
+    window.history.replaceState(null, "", "/coverage#openalex");
+    const scrolled: Element[] = [];
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    try {
+      render(<CoverageReport coverage={COVERAGE} />);
+    } finally {
+      Element.prototype.scrollIntoView = before;
+    }
+    const target = document.getElementById("openalex")!;
+    expect(scrolled).toEqual([target]);
+    expect(document.activeElement).toBe(target);
+  });
+
+  it("moves nothing without a hash, or for one the page doesn't hold", () => {
+    render(<CoverageReport coverage={COVERAGE} />);
+    expect(document.activeElement).toBe(document.body);
+    cleanup();
+    window.history.replaceState(null, "", "/coverage#nowhere");
+    render(<CoverageReport coverage={COVERAGE} />);
+    expect(document.activeElement).toBe(document.body);
   });
 });

@@ -9,6 +9,7 @@ import {
   citabilityCaution,
   clausesOf,
   methodsText,
+  openalexHits,
   removedBuckets,
   type SearchRecord,
 } from "./methods-text";
@@ -368,5 +369,38 @@ describe("the crawl window and the citability caution", () => {
     );
     r.identification_citable = true;
     expect(citabilityCaution(r)).toBeNull();
+  });
+});
+
+describe("how many results rest on OpenAlex text (gate C round 1)", () => {
+  const facet = { official: 40, openalex: 12, none: 3 };
+  const every = { negated: false, values: ["official", "openalex", "none"] };
+
+  it("is the facet's OpenAlex count when the clause admits it, 0 when it leaves it out", () => {
+    expect(openalexHits(facet, every)).toBe(12);
+    expect(openalexHits(facet, { negated: false, values: ["official"] })).toBe(0);
+    expect(openalexHits({ official: 1 }, every)).toBe(0);
+  });
+
+  it("is unknown on a schema-3 index (no facet) or for a clause that isn't one value list", () => {
+    expect(openalexHits(null, every)).toBeNull();
+    expect(openalexHits(undefined, every)).toBeNull();
+    expect(openalexHits(facet, { negated: true, values: ["openalex"] })).toBeNull();
+    expect(openalexHits(facet, { negated: false, values: null })).toBeNull();
+    expect(openalexHits(facet, null)).toBeNull();
+  });
+
+  it("adds one sentence when some results' abstracts are OpenAlex's, and none otherwise", () => {
+    const c = RECORDS.limits;
+    const { record, canonical, identification } = citable(c);
+    const input = { record, parseCanonical: canonical, parseIdentification: identification, url: URL };
+    const plain = methodsText(input);
+    const records = `${record.total.toLocaleString("en-US")} ${record.total === 1 ? "record" : "records"}`;
+    const sentence = `12 of the ${records} have abstracts supplied by OpenAlex (\`abstract_kind:openalex\`), not by the venue.`;
+    const withCount = methodsText({ ...input, openalex: 12 });
+    expect(withCount).toContain(` ${sentence} Cross-source duplicates were merged`);
+    expect(withCount.replace(`${sentence} `, "")).toBe(plain);
+    expect(methodsText({ ...input, openalex: 0 })).toBe(plain);
+    expect(methodsText({ ...input, openalex: null })).toBe(plain);
   });
 });

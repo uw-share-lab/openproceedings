@@ -170,6 +170,27 @@ export interface MethodsInput {
   readonly parseIdentification: ParseResponse | null;
   /** The record page's full URL. */
   readonly url: string;
+  /**
+   * How many of the search's results have an abstract from OpenAlex (`openalexHits`, from the search response's
+   * `facets.abstract_kind`; gate C round 1), or `null`/absent when it isn't known (a schema-3 index, or the record
+   * page, which has no search response): the sentence is then left out.
+   */
+  readonly openalex?: number | null;
+}
+
+/**
+ * How many results have an OpenAlex abstract, from a search response's `facets.abstract_kind` and `/parse`'s report
+ * of the query's `abstract_kind:` clause: facets are disjunctive, so an admitted value's count is its count in the
+ * result set, and a value the clause leaves out has none there. `null` when it can't be told: no facet (a schema-3
+ * index), or a clause that isn't one value list (negated, nested, written twice).
+ */
+export function openalexHits(
+  facet: Readonly<Record<string, number>> | null | undefined,
+  clause: { readonly negated: boolean; readonly values: readonly string[] | null } | null | undefined,
+): number | null {
+  if (facet === null || facet === undefined || clause === null || clause === undefined) return null;
+  if (clause.negated || clause.values === null) return null;
+  return clause.values.includes("openalex") ? (facet.openalex ?? 0) : 0;
 }
 
 /** Whether `/parse` said the identification string is all-negative (read under the record's query version). */
@@ -182,7 +203,13 @@ export function allNegative(record: SearchRecord, parse: ParseResponse | null): 
 }
 
 /** The methods text (spec 05 §Components 8). */
-export function methodsText({ record, parseCanonical, parseIdentification, url }: MethodsInput): string {
+export function methodsText({
+  record,
+  parseCanonical,
+  parseIdentification,
+  url,
+  openalex = null,
+}: MethodsInput): string {
   const clauses = clausesOf(record, parseCanonical);
   const window = builtFrom(record);
   const idq = record.identification_query;
@@ -234,6 +261,13 @@ export function methodsText({ record, parseCanonical, parseIdentification, url }
     sentences.push(`${filters} removed ${num(removed)} of them before screening${itemised}; ${unclassified}`);
   }
 
+  if (openalex !== null && openalex > 0) {
+    // the share of the searched abstract text that is OpenAlex's, not the venue's (gate C round 1)
+    sentences.push(
+      `${num(openalex)} of the ${count(record.total, "record", "records")} have abstracts supplied by OpenAlex ` +
+        "(`abstract_kind:openalex`), not by the venue.",
+    );
+  }
   sentences.push(
     "Cross-source duplicates were merged at ingest, before indexing (merge counts, and look-alike pairs kept " +
       "apart by track or venue-year, are in the search record).",

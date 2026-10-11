@@ -187,13 +187,17 @@ describe("the sections", () => {
 });
 
 describe("Filters: abstract_kind: (decision-049)", () => {
-  it("lists the golden's abstract kinds, noting the indexes that hold them", () => {
+  it("lists the golden's abstract kinds, says it drops whole papers, and names no schema (gate C round 1)", () => {
     page();
     const items = [...document.getElementById("filters")!.querySelectorAll("li")].map((li) => li.textContent);
     const row = items.find((t) => t?.startsWith("abstract_kind:"));
     expect(row).toBe(
-      `abstract_kind: ${golden.values.abstract_kind.join(", ")} (on indexes built since schema 4)`,
+      `abstract_kind: ${golden.values.abstract_kind.join(", ")}. It keeps or drops whole papers: ` +
+        "abstract_kind:official drops a paper whose abstract is OpenAlex's even when its title matches (to keep " +
+        "those, write (term abstract_kind:official) OR title:term). An index built before abstract kinds existed " +
+        "doesn't hold them yet, so a saved search pinned to one refuses the filter: run it on the current index.",
     );
+    expect(row).not.toMatch(/schema/);
     cleanup();
     const changed = structuredClone(golden);
     changed.values.abstract_kind = ["official", "openalex", "none", "future_kind"];
