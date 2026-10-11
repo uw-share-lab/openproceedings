@@ -491,6 +491,8 @@ def ingest_aaai_library(
     with storage.exclusive(cache / aaai_library.CACHE_DIR):
         done = aaai_library.harvest(table, f, refresh=refresh)
         aaai_library.write_done(cache, table, done)
+    if done.missing:  # captures the archive answers 404/410: worth a look, once per run (logging-standards)
+        log.warning("aaai_library_attention", extra={"capture_missing": done.missing})
     log.info("aaai_library_ingested", extra={"pages": done.pages, "missing": done.missing,
                                              "requests": f.stats.network, "cached": f.stats.cached,
                                              "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip

@@ -397,7 +397,10 @@ class PaperRecord(BaseModel):
                     f"{c.field} of {self.venue}"
                 )
             if c.source == "aaai_library" and (
-                c.field != "abstract" or self.venue != "AAAI" or not m.group(3).startswith("dblp-")
+                c.field != "abstract"
+                or self.venue != "AAAI"
+                or self.year not in DBLP_YEARS["AAAI"]
+                or not m.group(3).startswith("dblp-")
             ):
                 raise ValueError(
                     f"an aaai_library claim may only give the abstract of an AAAI 1980-2008 dblp record, not "

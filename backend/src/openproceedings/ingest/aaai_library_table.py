@@ -16,6 +16,7 @@ page (no port, query or fragment, no `..`): the fetcher is never pointed anywher
 
 from __future__ import annotations
 
+import hashlib
 import re
 import tomllib
 from collections.abc import Mapping
@@ -58,6 +59,7 @@ class Table:
     verified: date
     source: str
     pages: Mapping[str, Page]  # by dblp key
+    sha256: str = ""  # of the toml's UTF-8 bytes: the harvest's marker names it, and a build refuses another
 
 
 def is_library_url(url: str) -> bool:
@@ -104,7 +106,8 @@ def load(text: str) -> Table:
         if page.key in pages:
             raise ValueError(f"aaai_library.toml: {page.key} is listed twice")
         pages[page.key] = page
-    return Table(verified, source, MappingProxyType(dict(sorted(pages.items()))))
+    sha = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return Table(verified, source, MappingProxyType(dict(sorted(pages.items()))), sha)
 
 
 TABLE = load(files("openproceedings.ingest").joinpath("aaai_library.toml").read_text(encoding="utf-8"))

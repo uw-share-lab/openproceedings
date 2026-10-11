@@ -197,6 +197,19 @@ def test_the_harvest_fetches_each_exact_capture_from_the_archive_only_and_paced(
     assert (again.pages, again.fetched) == (2, 0)
 
 
+def test_a_non_ascii_capture_is_cached_byte_for_byte(tmp_path: Path) -> None:
+    """The harvest keeps the exact bytes of a capture with UTF-8 and Windows-1252 bytes, whatever the response names."""
+    real = row_for("conf/aaai/Araya84")
+    data = body(FIXTURES[real.key]).replace(b"synthetic3 ", "café “q” ".encode() + b"\x92 ", 1)
+    row = aaai_library_table.Page(real.key, real.url, real.timestamp, a.digest(data), real.length)
+    script = {row.capture: Response(200, {"content-type": "text/html; charset=UTF-8"}, data)}
+    f = a.fetcher(tmp_path, offline=False, transport=FakeTransport(script))
+    f.clock = Clock()
+    a.harvest(table_of(row), f)
+    cached = PageCache(tmp_path / a.CACHE_DIR).get(row.capture)
+    assert cached is not None and a.body_of(cached) == data
+
+
 def test_the_fetcher_refuses_aaai_org_itself(tmp_path: Path) -> None:
     f = a.fetcher(tmp_path, offline=False, transport=FakeTransport({}))
     with pytest.raises(FetchError) as e:
@@ -214,7 +227,11 @@ def test_a_digest_mismatch_stops_the_harvest_and_a_missing_capture_is_counted(tm
     with pytest.raises(CrawlError) as e:
         a.harvest(table_of(wrong), f)
     assert e.value.reason == "digest_mismatch"
-    done = a.harvest(table_of(good, gone), f, refresh=True)
+    assert not f.is_cached(
+        good.capture
+    )  # verified before it is stored: one bad answer never poisons the cache
+    assert PageCache(tmp_path / a.CACHE_DIR).get(good.capture) is None
+    done = a.harvest(table_of(good, gone), f)
     assert (done.pages, done.missing) == (2, 1)
     with pytest.raises(CacheMiss):
         a.harvest(table_of(row_for("conf/aaai/Lifschitz08")), a.fetcher(tmp_path, offline=True))
@@ -332,6 +349,7 @@ def test_apply_after_a_harvest_fills_reports_and_logs_its_refusals(
     a.write_done(tmp_path, table, a.Harvest(pages=2))
     marker = json.loads((tmp_path / "aaai_library" / "crawls" / "aaai_library.json").read_text())
     assert marker["source"] == "aaai_library" and marker["format"] == a.MARKER_FORMAT
+    assert marker["table"] == table.sha256
     result = DedupResult(
         (record("conf/aaai/Araya84"), record("conf/aaai/KimuraSN07", "Wrong", year=2007)), (), ()
     )
@@ -339,12 +357,39 @@ def test_apply_after_a_harvest_fills_reports_and_logs_its_refusals(
         filled, (report,) = a.apply(result, tmp_path)
     assert [r.abstract is not None for r in filled.records] == [True, False]
     assert report.to_manifest() == {"pages": 2, "candidates": 2, "no_page": 0, "attached": 1, "replaced": 0,
-                                    "official_won": 0, "rows_unmatched": 0, "refused": {"title_mismatch": 1}}  # fmt: skip
+                                    "official_won": 0, "rows_unmatched": 0, "title_near": 0, "near": [],
+                                    "refused": {"title_mismatch": 1}}  # fmt: skip
     events = {r.getMessage(): r for r in caplog.records}
     assert events["aaai_library_filled"].__dict__["refused"] == {"title_mismatch": 1}
     assert events["aaai_library_attention"].levelno == logging.WARNING
     assert events["aaai_library_attention"].__dict__["title_mismatch"] == 1
     assert not any("synthetic" in r.getMessage() for r in caplog.records)
+
+
+def test_the_shipped_table_carries_the_sha256_of_its_toml() -> None:
+    import hashlib
+    from importlib.resources import files
+
+    text = files("openproceedings.ingest").joinpath("aaai_library.toml").read_text(encoding="utf-8")
+    assert aaai_library_table.TABLE.sha256 == hashlib.sha256(text.encode("utf-8")).hexdigest()
+    assert aaai_library_table.load(text + "\n").sha256 != aaai_library_table.TABLE.sha256
+
+
+@pytest.mark.parametrize("named", ["0" * 64, None])
+def test_a_marker_for_another_table_or_none_is_a_stale_harvest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, named: str | None
+) -> None:
+    """A marker naming another table's sha256, or none (one written before the field existed), is `harvest_stale`."""
+    table = _cache_with(tmp_path, "conf/aaai/Araya84")
+    monkeypatch.setattr(aaai_library_table, "TABLE", table)
+    body_ = {"source": "aaai_library", "format": a.MARKER_FORMAT, "pages": 1}
+    if named is not None:
+        body_["table"] = named
+    (tmp_path / "aaai_library" / "crawls").mkdir(parents=True)
+    (tmp_path / "aaai_library" / "crawls" / "aaai_library.json").write_text(json.dumps(body_))
+    with pytest.raises(CrawlError, match="re-run op ingest aaai-library") as e:
+        a.apply(DedupResult((record("conf/aaai/Araya84"),), (), ()), tmp_path)
+    assert e.value.reason == "harvest_stale"
 
 
 def test_an_unreadable_marker_stops_the_build(tmp_path: Path) -> None:
@@ -364,6 +409,7 @@ def test_an_unreadable_marker_stops_the_build(tmp_path: Path) -> None:
         ("op:aaai:1984:dblp-Araya84", "AAAI", 1984, "title"),  # not an abstract
         ("op:icml:1990:dblp-Araya84", "ICML", 1990, "abstract"),  # not AAAI
         ("op:aaai:2020:ojs-1", "AAAI", 2020, "abstract"),  # not a dblp record
+        ("op:aaai:2020:dblp-Late20", "AAAI", 2020, "abstract"),  # a dblp-shaped id past 2008
     ],
 )
 def test_the_record_refuses_an_aaai_library_claim_outside_its_scope(
@@ -407,3 +453,87 @@ def test_the_command_caches_every_capture_then_marks_the_harvest_and_a_dry_run_w
     assert out == {"dry_run": False, "pages": 2, "fetched": 0, "missing": 0, "requests": 0, "cached": 2}
     assert json.loads(marker.read_text())["pages"] == 2
     assert crawl.ingest_aaai_library(tmp_path, dry_run=True, table=table)["to_fetch"] == 0
+
+
+def test_the_command_warns_when_captures_are_missing(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    row, gone = row_for("conf/aaai/Araya84"), row_for("conf/aaai/KimuraSN07")
+    seed(tmp_path, row, body(FIXTURES[row.key]))
+    seed(tmp_path, gone, b"", status=404)
+    with caplog.at_level(logging.INFO):
+        out = crawl.ingest_aaai_library(tmp_path, offline=True, table=table_of(row, gone))
+    assert out["missing"] == 1
+    (warning,) = [r for r in caplog.records if r.getMessage() == "aaai_library_attention"]
+    assert warning.levelno == logging.WARNING and warning.__dict__["capture_missing"] == 1
+
+
+# --- the title guard (controller ruling, fix round 1) ------------------------------------------------------------
+
+
+def test_title_similarity_is_one_minus_levenshtein_over_the_longer_key() -> None:
+    assert (
+        a.levenshtein("kitten", "sitting") == 3
+        and a.levenshtein("", "abc") == 3
+        and a.levenshtein("ab", "ab") == 0
+    )
+    assert a.title_similarity("Abcdefghijklmnopqrst", "abcdefghijklmnopqrst") == 1.0
+    assert a.title_similarity("abcdefghijklmnopqrst", "abcdefghijklmnopqrsX") == pytest.approx(0.95)
+    assert a.title_similarity("abcdefghi", "abcdefghX") == pytest.approx(1 - 1 / 9)
+
+
+@pytest.mark.parametrize(
+    ("record_title", "page_title", "verdict"),
+    [
+        ("An Optimization Approach", "An optimization approach", ("exact", 1.0)),
+        ("abcdefghijklmnopqrst", "abcdefghijklmnopqrsX", ("near", 0.95)),
+        ("abcdefghi", "abcdefghX", (None, 0.889)),  # 0.89 < 0.9: refused
+        (
+            "Learning Control Policies Part 1",
+            "Learning Control Policies Part 2",
+            (None, 0.969),
+        ),  # digits differ
+        ("Planning in 1987 Domains", "Planning in 1987 Domain", ("near", 0.958)),
+    ],
+)
+def test_the_title_verdict(record_title: str, page_title: str, verdict: tuple[str | None, float]) -> None:
+    how, score = a.title_verdict(record_title, page_title)
+    assert (how, round(score, 3)) == verdict
+
+
+def _page_with(title: str) -> bytes:
+    return (f'<html><head><meta charset="utf-8"></head><body><div id="abstract"><h1><a href="x.pdf">{title}</a></h1>'
+            '<p class="left"><i>An Author</i></p><p>An abstract long enough to be kept by the shared cleaning.</p>'
+            "</div></body></html>").encode()  # fmt: skip
+
+
+def test_a_near_title_attaches_counted_with_its_score_and_logged_without_titles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    keys = ("conf/aaai/Araya84", "conf/aaai/DetermanB98")
+    pages = {keys[0]: _page_with("An Optimization Approach for Using Contextual Information In Computer Vision"),
+             keys[1]: _page_with("Learning Control Policies Part 2")}  # fmt: skip
+    rows = [row_for(k, pages[k]) for k in keys]
+    for r in rows:
+        seed(tmp_path, r, pages[r.key])
+    table = table_of(*rows)
+    monkeypatch.setattr(aaai_library_table, "TABLE", table)
+    a.write_done(tmp_path, table, a.Harvest(pages=2))
+    records = (record(keys[0], "An Optimisation Approach for Using Contextual Information in Conputer Vision"),
+               record(keys[1], "Learning Control Policies Part 1", year=1998))  # fmt: skip
+    with caplog.at_level(logging.INFO):
+        filled, (report,) = a.apply(DedupResult(records, (), ()), tmp_path)
+    assert [r.abstract is not None for r in filled.records] == [True, False]
+    near = filled.records[0].claims("abstract")[0]
+    assert "title near" in (near.evidence or "")
+    manifest = report.to_manifest()
+    assert manifest["attached"] == 1 and manifest["title_near"] == 1
+    assert manifest["near"] == [{"id": records[0].id, "score": 0.974}]
+    assert manifest["refused"] == {"title_mismatch": 1}
+    events = {r.getMessage(): r for r in caplog.records}
+    assert events["aaai_library_filled"].__dict__["title_near"] == 1
+    assert events["aaai_library_attention"].__dict__["title_near"] == 1
+    logged = " ".join(str(r.__dict__) for r in caplog.records)
+    assert "Optimi" not in logged and "Learning" not in logged

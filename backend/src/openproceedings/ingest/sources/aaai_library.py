@@ -24,8 +24,9 @@ The page (`parse_page`): `<div id="abstract"><h1>TITLE</h1><p><i>AUTHORS</i></p>
 the first that is none of them; entities are decoded and whitespace collapsed (2007's pages break lines inside it).
 The bytes are decoded by the charset the page's own `<meta>` names (UTF-8, or ISO-8859-1 read as Windows-1252), UTF-8
 when it names none (`decode`). Refusals, each counted, never forced: a page with another layout (`layout_unknown`) or
-bytes its charset can't decode (`undecodable`); a title whose key (`dedup.title_key`, `common.titles_match`) is not the
-record's (`title_mismatch`): the page is another paper's, or one title has a typo, and either way it is not attached;
+bytes its charset can't decode (`undecodable`); a title neither equal to the record's by key (`dedup.title_key`,
+`common.titles_match`) nor near it (similarity, 1 − Levenshtein / the longer key, at least `NEAR_TITLE`, with the same
+digit tokens; counted `title_near` and listed with its score; `title_verdict`) is `title_mismatch`;
 a placeholder (`None - 2 page paper is an abstract`), an empty text or one under `MIN_CHARS` characters after the
 shared cleaning (`no_abstract`); a lone surrogate (`abstract_surrogate`, `common.clean_abstract`).
 
@@ -42,7 +43,7 @@ import logging
 import re
 import time
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, ClassVar
@@ -51,7 +52,7 @@ from openproceedings.ingest import aaai_library_table
 from openproceedings.ingest.aaai_library_table import Page as Row
 from openproceedings.ingest.aaai_library_table import Table
 from openproceedings.ingest.caps import cap_record
-from openproceedings.ingest.dedup import PRECEDENCE, DedupResult
+from openproceedings.ingest.dedup import PRECEDENCE, DedupResult, title_key
 from openproceedings.ingest.record import DBLP_YEARS, Claim, PaperRecord, Source, controls_evidence
 from openproceedings.ingest.sources.common import (
     SURROGATE,
@@ -84,6 +85,7 @@ CACHE_DIR = "aaai_library"  # <data>/cache/aaai_library
 HOST = "web.archive.org"
 HOSTS = frozenset({HOST})  # never aaai.org (decision-051)
 MIN_INTERVAL = 3.0  # seconds between requests, one at a time: the Internet Archive's polite pace
+NEAR_TITLE = 0.9  # the least title similarity a page's abstract attaches at (decision-051)
 MIN_CHARS = 40  # an abstract shorter than this after cleaning is no abstract (a placeholder, a fragment)
 MARKER = "aaai_library"  # <cache>/aaai_library/crawls/aaai_library.json: every row's capture is cached
 MARKER_FORMAT = "1"
@@ -196,6 +198,45 @@ def abstract_of(parsed: Parsed) -> tuple[Cleaned | None, str | None]:
     return cleaned, None
 
 
+def levenshtein(a: str, b: str) -> int:
+    """The edit distance of two strings (insertions, deletions, substitutions, each 1): the two-row dynamic program."""
+    if len(a) < len(b):
+        a, b = b, a
+    previous = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        current = [i]
+        for j, cb in enumerate(b, 1):
+            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (ca != cb)))
+        previous = current
+    return previous[-1]
+
+
+def title_similarity(one: str, other: str) -> float:
+    """1 − Levenshtein / the longer length, over the two titles' keys (`dedup.title_key`); 1.0 for two empty keys."""
+    a, b = title_key(one), title_key(other)
+    longest = max(len(a), len(b))
+    return 1.0 if longest == 0 else 1 - levenshtein(a, b) / longest
+
+
+def _digit_tokens(title: str) -> list[str]:
+    return [t for t in title_key(title).split() if any(c.isdigit() for c in t)]
+
+
+def title_verdict(record_title: str, page_title: str | None) -> tuple[str | None, float]:
+    """Whether the page is the record's paper by its title (decision-051, the controller's ruling of fix round 1):
+    `exact` when the title keys agree (`common.titles_match`); else `near` when their similarity is at least
+    `NEAR_TITLE` (dblp's OCR typos: `Optimisation … Conputer`) and their digit tokens are the same (`Part 1` is never
+    `Part 2`, whatever the score); else None (`title_mismatch`). Returns the verdict and the similarity."""
+    if not page_title:
+        return None, 0.0
+    if titles_match(record_title, page_title):
+        return "exact", 1.0
+    score = title_similarity(record_title, page_title)
+    if score >= NEAR_TITLE and _digit_tokens(record_title) == _digit_tokens(page_title):
+        return "near", score
+    return None, score
+
+
 def read(page: Page, row: Row) -> Parsed:
     """A cached capture's page: the digest checked (`check_digest`, which stops on a mismatch), then decoded and
     parsed."""
@@ -216,9 +257,20 @@ def fetcher(cache: Path, *, offline: bool, transport: Transport | None = None,
     )
 
 
+def _verified(row: Row) -> Callable[[Page], bool]:
+    def ok(page: Page) -> bool:
+        body = body_of(page)
+        return body is not None and digest(body) == row.digest
+
+    return ok
+
+
 def get(fetcher: Fetcher, row: Row, *, refresh: bool = False) -> Page:
-    """A row's capture, through the cache: exact bytes, judged whole by its stated length, a 404/410 kept."""
-    return fetcher.get(row.capture, refresh=refresh, keep_absent=True, by_length=True, exact_bytes=True)
+    """A row's capture, through the cache: exact bytes, judged whole by its stated length, a 404/410 kept. A fetched
+    200 is stored only when its bytes hash to the row's digest (`Fetcher.get(verify=)`), so a bad answer never stays
+    in the cache; the caller's `check_digest` then refuses it (`digest_mismatch`)."""
+    return fetcher.get(row.capture, refresh=refresh, keep_absent=True, by_length=True, exact_bytes=True,
+                       verify=_verified(row))  # fmt: skip
 
 
 @dataclass
@@ -255,11 +307,15 @@ def harvest(table: Table, fetcher: Fetcher, *, refresh: bool = False) -> Harvest
 def write_done(cache: Path, table: Table, done: Harvest) -> None:
     write_marker(cache / CACHE_DIR / "crawls", MARKER, {"source": SOURCE, "format": MARKER_FORMAT,
                                                         "pages": done.pages, "missing": done.missing,
-                                                        "verified": table.verified.isoformat()})  # fmt: skip
+                                                        "verified": table.verified.isoformat(),
+                                                        "table": table.sha256})  # fmt: skip
 
 
-def harvested(cache: Path) -> bool:
-    """Whether a harvest finished (its marker): False, no fill. A marker of another format is `crawl_file_invalid`."""
+def harvested(cache: Path, table: Table | None = None) -> bool:
+    """Whether a harvest finished (its marker): False, no fill. A marker of another format is `crawl_file_invalid`;
+    one naming another table's sha256, or none (a marker written before it named one), is `harvest_stale`: the
+    table changed since that harvest."""
+    table = table or aaai_library_table.TABLE
     marker = cache / CACHE_DIR / "crawls" / f"{MARKER}.json"
     if not marker.exists():
         return False
@@ -267,6 +323,9 @@ def harvested(cache: Path) -> bool:
     if not found or found.get("source") != SOURCE or found.get("format") != MARKER_FORMAT:
         raise CrawlError("the aaai_library crawl marker is unreadable; run op ingest aaai-library",
                          reason="crawl_file_invalid")  # fmt: skip
+    if found.get("table") != table.sha256:
+        raise CrawlError("the aaai_library harvest was made for another aaai_library.toml (or names none); re-run op "
+                         "ingest aaai-library", reason="harvest_stale")  # fmt: skip
     return True
 
 
@@ -284,6 +343,10 @@ class FillReport(Report):
     replaced: int = 0  # of attached: an abstract only a source ranked after aaai_library (ris) gave, replaced
     official_won: int = 0  # a page abstract, but the record's own abstract is from a source ranked before it
     rows_unmatched: int = 0  # rows naming no record of the build
+    title_near: int = (
+        0  # of attached: by a near title (`title_verdict`), each listed in `near` with its score
+    )
+    near: list[tuple[str, float]] = field(default_factory=list)  # (record id, score), in id order
     refused: Counter[str] = field(default_factory=Counter)
 
     manifest_key: ClassVar[str] = "fills"
@@ -291,7 +354,9 @@ class FillReport(Report):
     def to_manifest(self) -> dict[str, Any]:
         return {"pages": self.pages, "candidates": self.candidates, "no_page": self.no_page,
                 "attached": self.attached, "replaced": self.replaced, "official_won": self.official_won,
-                "rows_unmatched": self.rows_unmatched, "refused": dict(sorted(self.refused.items()))}  # fmt: skip
+                "rows_unmatched": self.rows_unmatched, "title_near": self.title_near,
+                "near": [{"id": rid, "score": score} for rid, score in self.near],
+                "refused": dict(sorted(self.refused.items()))}  # fmt: skip
 
 
 def key_of(record: PaperRecord) -> str | None:
@@ -311,10 +376,14 @@ def _outranked(record: PaperRecord) -> bool:
     return bool(held) and all(_RANK.index(s) > _RANK.index(SOURCE) for s in held)
 
 
-def _attach(r: PaperRecord, row: Row, page: Page, cleaned: Cleaned) -> PaperRecord:
+def _attach(
+    r: PaperRecord, row: Row, page: Page, cleaned: Cleaned, *, near: float | None = None
+) -> PaperRecord:
     assert cleaned.text is not None
     evidence = (f"AAAI's paper page {row.url} (the dblp ee of {row.key}), Internet Archive capture {row.timestamp}, "
                 f"SHA-1 {row.digest}; joined by dblp key")  # fmt: skip
+    if near is not None:
+        evidence += f"; title near, similarity {near:.3f} (decision-051)"
     claim = Claim(field="abstract", value=cleaned.text, source=SOURCE, url=row.capture, fetched_at=page.fetched_at,
                   evidence=pdf_codes_evidence(controls_evidence(evidence, cleaned.spaced), cleaned.pdf_codes))  # fmt: skip
     # `model_copy` re-validates every field (record.py): the aaai_library guard (an AAAI 1980-2008 dblp record's
@@ -353,11 +422,14 @@ def fill(
         report.fetched.append(page.fetched_at)
         refusal: str | None = None
         cleaned: Cleaned | None = None
+        how, score = None, 0.0
         if not page.ok:
             refusal = "capture_missing"
         else:
             parsed = read(page, row)
-            if parsed.refused is None and not titles_match(r.title, parsed.title):
+            if parsed.refused is None:
+                how, score = title_verdict(r.title, parsed.title)
+            if parsed.refused is None and how is None:
                 refusal = "title_mismatch"
             else:
                 cleaned, refusal = abstract_of(parsed)
@@ -369,7 +441,10 @@ def fill(
         elif r.abstract is None or _outranked(r):
             report.replaced += r.abstract is not None
             report.attached += 1
-            out.append(_attach(r, row, page, cleaned))
+            if how == "near":
+                report.title_near += 1
+                report.near.append((r.id, round(score, 3)))
+            out.append(_attach(r, row, page, cleaned, near=score if how == "near" else None))
         else:
             report.official_won += 1
             out.append(r)
@@ -385,13 +460,15 @@ def apply(
     result and its one fill report, after its INFO line (`aaai_library_filled`, every refusal by reason) and, when a
     page was not what the table says it is, one WARNING (`aaai_library_attention`)."""
     started = time.monotonic()
-    if not harvested(cache):
+    if not harvested(cache, table):
         return result, []
     records, report = fill(result.records, fetcher(cache, offline=True), table)
-    counts = {"candidates": report.candidates, "attached": report.attached, "replaced": report.replaced,
+    counts = {"candidates": report.candidates, "attached": report.attached, "title_near": report.title_near,
+              "replaced": report.replaced,
               "official_won": report.official_won, "no_page": report.no_page,
               "rows_unmatched": report.rows_unmatched, "refused": dict(sorted(report.refused.items()))}  # fmt: skip
     log.info("aaai_library_filled", extra={**counts, "ms": elapsed_ms(started, time.monotonic)})
-    if attention := {k: report.refused[k] for k in _ATTENTION if report.refused[k]}:
-        log.warning("aaai_library_attention", extra=attention)
+    attention = {k: report.refused[k] for k in _ATTENTION if report.refused[k]}
+    if attention or report.title_near:
+        log.warning("aaai_library_attention", extra={**attention, "title_near": report.title_near})
     return replace(result, records=tuple(sorted(records, key=lambda r: r.id))), [report]

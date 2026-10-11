@@ -30,8 +30,12 @@ claim source, `aaai_library`.
 - **Each record is pinned to one capture** by URL, timestamp and SHA-1 digest in `ingest/aaai_library.toml`: the
   latest text/html 200 capture before 2023-01-01, else the earliest. Bytes with another digest are refused
   (`digest_mismatch`), at harvest and again at every build; no other capture is ever read in its place.
-- **The join is exact**: the record's dblp key, through the `ee` dblp itself gives. The page's `<h1>` title must have
-  the record's title key too, or the abstract is refused (`title_mismatch`); placeholders (`None - 2 page paper is an
+- **The join is exact**: the record's dblp key, through the `ee` dblp itself gives. The page's `<h1>` title is checked
+  too (the controller's ruling, review round 1, refined by the reviewer): the abstract attaches when the two title
+  keys (`dedup.title_key`) are equal; else when their similarity, 1 − Levenshtein distance / the longer key's length,
+  is at least 0.9, counted `title_near` and listed in the fill report with the record id and its score (dblp's OCR
+  typos, `Optimisation … Conputer`, score about 0.97); never when their digit tokens differ (`Part 1` against `Part
+  2`), whatever the score; otherwise it is refused (`title_mismatch`). Placeholders (`None - 2 page paper is an
   abstract`), empty texts and texts under 40 characters are `no_abstract`. Every refusal is counted.
 - **Precedence**: after `ojs`, before `crossref`, `facct_site`, `ris` and `openalex`. The fill runs after dedup and
   reconcile and before the OpenAlex fill and takedowns, so an AAAI page's abstract fills a record first, OpenAlex
@@ -40,7 +44,8 @@ claim source, `aaai_library`.
 - **Copyright and attribution**: the text is AAAI's copyright, served on the same posture as the ojs.aaai.org
   abstracts already served (decision-018, the takedown list, TASK-135). The attribution names AAAI and links the
   aaai.org page (the dblp `ee`), never the archive's copy; the claim's url is the capture and its evidence names the
-  `ee`, the timestamp and the digest.
+  `ee`, the timestamp and the digest. The `ee` links are AAAI's own canonical URLs for the papers and are kept as
+  the attribution, though on AAAI's 2023 site they may now redirect or be dead.
 
 ## Consequences
 
@@ -50,7 +55,8 @@ but AAAI and any record but a dblp one. `op ingest aaai-library` caches the capt
 (`sources.aaai_library.fills`). Record content changes, so a new snapshot and index change `snapshot_hash`, and
 records saved on an earlier index replay as `drifted`. 100 records have no `ee` at all and two pages have no capture:
 they stay as they are (OpenAlex's, or `none`). dblp's titles carry OCR typos the pages don't (2 of the 15 sampled
-pages: `Optimisation`/`Optimization`, `Programrning`), so a share of pages will be refused as `title_mismatch` until a
-ruling says otherwise. Revisit if the archive withdraws captures (the build stops on a missing or changed one: re-run
+pages: `Optimisation`/`Optimization`, `Programrning`), so the near-title rule above attaches those and counts them (`title_near`).
+The harvest's marker names the sha256 of `aaai_library.toml`; a build refuses a marker for another table, or one that
+names none (`harvest_stale`: re-run `op ingest aaai-library`). Revisit if the archive withdraws captures (the build stops on a missing or changed one: re-run
 the census), if AAAI publishes these abstracts on its new site, or if AAAI asks for them to be taken down.
 

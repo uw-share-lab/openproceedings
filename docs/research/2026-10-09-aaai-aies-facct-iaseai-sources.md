@@ -1064,7 +1064,13 @@ and abstract words, the HTML structure, the placeholder and the `Subjects:`/`Sub
 **The title check.** The page's `<h1>` must have the record's title key. dblp's titles carry OCR typos the pages
 don't: 2 of the 15 sampled pages fail the check for that reason alone (aaai80-016, dblp `Optimisation … Conputer` vs
 the page's `Optimization … Computer`; aaai93-015, dblp `Programrning`). So expect roughly a tenth of the pages to be
-refused as `title_mismatch` in the first build; the harvest's fill report counts them, for an owner ruling.
+refused under an exact rule. The controller's ruling (fix round 1, decision-051): a page also attaches when the two
+title keys' similarity (1 − Levenshtein / the longer) is at least 0.9 and their digit tokens agree (aaai80-016 scores
+0.974); those attaches are counted `title_near` and listed by record id with their score.
+
+**The attribution links.** A record's attribution links its dblp `ee`, AAAI's own canonical URL for the paper. On
+AAAI's 2023 site those URLs may now redirect or be dead; they are kept, because they are AAAI's own, and the claim's
+evidence names the capture that was read.
 
 **As built.** `ingest/aaai_library.toml` + `aaai_library_table.py`, `sources/aaai_library.py`, `op ingest
 aaai-library`, the `aaai_library` claim source (record schema 9; after `ojs`, before `openalex`), filled after dedup and

@@ -261,3 +261,13 @@ def test_exact_bytes_keeps_the_body_one_to_one_whatever_charset_the_response_nam
     )
     with pytest.raises(FetchError, match="not utf-8"):
         f.get(url)  # without it, the named charset still decides
+
+
+def test_a_verify_callback_that_refuses_keeps_the_page_out_of_the_cache(tmp_path: Path) -> None:
+    """TASK-232: `get(verify=)` judges a fetched 200 before it is stored; a refused page is returned, never cached."""
+    url = "https://web.archive.org/web/20081121081132id_/http://www.aaai.org/Library/AAAI/1980/aaai80-001.php"
+    ok = Response(200, {"content-type": "text/html"}, b"<html>x</html>")
+    f, _ = fetcher(tmp_path, FakeTransport({url: ok}), frozenset({"web.archive.org"}), min_interval=0)
+    page = f.get(url, verify=lambda p: False)
+    assert page.ok and PageCache(tmp_path).get(canonical(url)) is None
+    assert f.get(url, verify=lambda p: True).ok and PageCache(tmp_path).get(canonical(url)) == page

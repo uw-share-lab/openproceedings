@@ -1028,6 +1028,46 @@ def test_build_fills_aaai_pages_before_openalex_after_reconcile(
     assert manifest["sources"]["openalex"] == {"fills": [{"ran": True}]}
 
 
+def test_build_fills_an_aaai_page_abstract_and_a_takedown_withholds_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TASK-232: a build fills an AAAI 1980-2008 dblp record from its cached capture (official), and a takedown of
+    that id withholds the filled abstract from records.jsonl."""
+    from openproceedings.ingest import aaai_library_table
+    from openproceedings.ingest.sources import aaai_library
+
+    from tests.unit.ingest.aaai_library.test_aaai_library import (
+        FIXTURES,
+        body,
+        record,
+        row_for,
+        seed,
+        table_of,
+    )
+
+    cache = tmp_path / "cache"
+    key = "conf/aaai/Araya84"
+    row = row_for(key)
+    seed(cache, row, body(FIXTURES[key]))
+    table = table_of(row)
+    monkeypatch.setattr(aaai_library_table, "TABLE", table)
+    aaai_library.write_done(cache, table, aaai_library.Harvest(pages=1))
+    rec = record(key)
+    monkeypatch.setattr(snap, "load_sources", lambda _cache: ([rec], [], []))
+
+    result = build(cache, tmp_path / "snapshots", BUILT)
+    filled = load_records(result.path)[rec.id]
+    assert filled.abstract is not None and filled.abstract_kind == "official"
+    assert {c.source for c in filled.claims("abstract")} == {"aaai_library"}
+    manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["sources"]["aaai_library"]["fills"][0]["attached"] == 1
+
+    withheld = build(cache, tmp_path / "withheld", BUILT, takedowns=frozenset({rec.id}))
+    gone = load_records(withheld.path)[rec.id]
+    assert gone.abstract is None and gone.abstract_kind == "none"
+    assert filled.abstract not in (withheld.path / "records.jsonl").read_text(encoding="utf-8")
+
+
 # --- abstract_kind (decision-049) ----------------------------------------------------------------------------
 
 
