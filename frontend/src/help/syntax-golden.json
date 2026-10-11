@@ -392,7 +392,7 @@
       "mode": "native",
       "example": "trust abstract_kind:openalex",
       "display": null,
-      "message": "This index (0123456789ab) doesn't hold abstract kinds yet; it was built before they existed. Search the current index, or remove the `abstract_kind:` filter.",
+      "message": "This index (0123456789ab) doesn't record each paper's abstract source yet; it was built before it was recorded. Search the current index, or remove the `abstract_kind:` filter.",
       "fix": "trust",
       "note": "The message names the index the search ran on; this one names an example index. Only an older index, pinned by a saved search, lacks the field."
     },

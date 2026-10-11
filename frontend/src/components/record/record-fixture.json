@@ -95,7 +95,8 @@
           "identified_total": 420,
           "unclassified_total": 85
         },
-        "replay": null
+        "replay": null,
+        "openalex_abstracts": 0
       },
       "replayed": {
         "index_version": "f1a54bcc9508",
@@ -215,7 +216,8 @@
           "membership_identical": true,
           "identified_total": 420,
           "unclassified_total": 85
-        }
+        },
+        "openalex_abstracts": 0
       },
       "parse_canonical": {
         "index_version": "f1a54bcc9508",
@@ -577,7 +579,8 @@
           "identified_total": 715,
           "unclassified_total": 152
         },
-        "replay": null
+        "replay": null,
+        "openalex_abstracts": 0
       },
       "replayed": {
         "index_version": "f1a54bcc9508",
@@ -695,7 +698,8 @@
           "membership_identical": true,
           "identified_total": 715,
           "unclassified_total": 152
-        }
+        },
+        "openalex_abstracts": 0
       },
       "parse_canonical": {
         "index_version": "f1a54bcc9508",
@@ -919,7 +923,8 @@
           "identified_total": 478,
           "unclassified_total": 103
         },
-        "replay": null
+        "replay": null,
+        "openalex_abstracts": 0
       },
       "replayed": {
         "index_version": "f1a54bcc9508",
@@ -1037,7 +1042,8 @@
           "membership_identical": true,
           "identified_total": 478,
           "unclassified_total": 103
-        }
+        },
+        "openalex_abstracts": 0
       },
       "parse_canonical": {
         "index_version": "f1a54bcc9508",
@@ -1276,7 +1282,8 @@
           "identified_total": 59,
           "unclassified_total": 11
         },
-        "replay": null
+        "replay": null,
+        "openalex_abstracts": 0
       },
       "replayed": {
         "index_version": "f1a54bcc9508",
@@ -1384,7 +1391,8 @@
           "membership_identical": true,
           "identified_total": 59,
           "unclassified_total": 11
-        }
+        },
+        "openalex_abstracts": 0
       },
       "parse_canonical": {
         "index_version": "f1a54bcc9508",
@@ -1724,7 +1732,8 @@
           "identified_total": 239,
           "unclassified_total": 50
         },
-        "replay": null
+        "replay": null,
+        "openalex_abstracts": 0
       },
       "replayed": {
         "index_version": "f1a54bcc9508",
@@ -1862,7 +1871,8 @@
           "membership_identical": true,
           "identified_total": 239,
           "unclassified_total": 50
-        }
+        },
+        "openalex_abstracts": 0
       },
       "parse_canonical": {
         "index_version": "f1a54bcc9508",
@@ -3212,7 +3222,8 @@
         "identified_total": 5,
         "unclassified_total": 0
       },
-      "replay": null
+      "replay": null,
+      "openalex_abstracts": null
     },
     "replayed": {
       "index_version": "ab3972d6f469",
@@ -3323,7 +3334,8 @@
         "membership_identical": false,
         "identified_total": 3,
         "unclassified_total": 0
-      }
+      },
+      "openalex_abstracts": null
     },
     "parse_canonical": {
       "index_version": "ab3972d6f469",

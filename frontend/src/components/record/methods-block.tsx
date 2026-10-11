@@ -17,7 +17,7 @@ export function MethodsBlock({
 }: {
   record: SearchRecord;
   url: string;
-  /** Results with an OpenAlex abstract, when the caller has the search response (`openalexHits`); else null. */
+  /** The record GET's `openalex_abstracts`: its ids with an OpenAlex abstract on its own index; else null. */
   openalex?: number | null;
 }) {
   const headingId = useId();

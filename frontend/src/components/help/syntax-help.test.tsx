@@ -194,8 +194,8 @@ describe("Filters: abstract_kind: (decision-049)", () => {
     expect(row).toBe(
       `abstract_kind: ${golden.values.abstract_kind.join(", ")}. It keeps or drops whole papers: ` +
         "abstract_kind:official drops a paper whose abstract is OpenAlex's even when its title matches (to keep " +
-        "those, write (term abstract_kind:official) OR title:term). An index built before abstract kinds existed " +
-        "doesn't hold them yet, so a saved search pinned to one refuses the filter: run it on the current index.",
+        "those, write (term abstract_kind:official) OR title:term). An index built before the abstract source was " +
+        "recorded doesn't hold it, so a saved search pinned to one refuses the filter: run it on the current index.",
     );
     expect(row).not.toMatch(/schema/);
     cleanup();

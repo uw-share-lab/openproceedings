@@ -1,8 +1,10 @@
 /**
  * The methods text a search record generates (spec 05 §Components 8, verbatim; design §Methods text rules;
- * prisma-reporting skill). Pure: every number is a field of the record the API sent (`identified_total`,
- * `excluded`, `unclassified_total`, `total`), read, never added up; every clause is the server's `/parse`
- * report of the record's `canonical`, sliced from it, never a parse on the client.
+ * prisma-reporting skill). Pure: every number comes from the record the API sent (`identified_total`,
+ * `excluded`, `unclassified_total`, `total`) or is derived on the server from the record's own ids on its own
+ * index (the record GET's `openalex_abstracts`, gate C round 2), read, never added up and never taken from a search
+ * response, so the save panel and the record page write the same text for one record; every clause is the
+ * server's `/parse` report of the record's `canonical`, sliced from it, never a parse on the client.
  *
  * `methodsText` is only called for a citable record (`citabilityCaution` is null) whose replay isn't a
  * `mismatch`; the record page and the save panel check both first.
@@ -171,26 +173,11 @@ export interface MethodsInput {
   /** The record page's full URL. */
   readonly url: string;
   /**
-   * How many of the search's results have an abstract from OpenAlex (`openalexHits`, from the search response's
-   * `facets.abstract_kind`; gate C round 1), or `null`/absent when it isn't known (a schema-3 index, or the record
-   * page, which has no search response): the sentence is then left out.
+   * How many of the record's ids have an abstract from OpenAlex: the record GET's `openalex_abstracts` (derived
+   * from the record's ids on its own index; gate C round 2), or `null`/absent when it isn't known (a schema-3
+   * index, or the record's index isn't loaded): the sentence is then left out.
    */
   readonly openalex?: number | null;
-}
-
-/**
- * How many results have an OpenAlex abstract, from a search response's `facets.abstract_kind` and `/parse`'s report
- * of the query's `abstract_kind:` clause: facets are disjunctive, so an admitted value's count is its count in the
- * result set, and a value the clause leaves out has none there. `null` when it can't be told: no facet (a schema-3
- * index), or a clause that isn't one value list (negated, nested, written twice).
- */
-export function openalexHits(
-  facet: Readonly<Record<string, number>> | null | undefined,
-  clause: { readonly negated: boolean; readonly values: readonly string[] | null } | null | undefined,
-): number | null {
-  if (facet === null || facet === undefined || clause === null || clause === undefined) return null;
-  if (clause.negated || clause.values === null) return null;
-  return clause.values.includes("openalex") ? (facet.openalex ?? 0) : 0;
 }
 
 /** Whether `/parse` said the identification string is all-negative (read under the record's query version). */

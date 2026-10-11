@@ -70,8 +70,6 @@ export interface SaveRecordProps {
   readonly total: number;
   /** Why saving is off (a dirty draft, stale results), or `null`. */
   readonly disabledReason: string | null;
-  /** The search's results with an OpenAlex abstract (`openalexHits`), for the methods text; null when unknown. */
-  readonly openalex?: number | null;
 }
 
 type Created = Schemas["RecordCreated"];
@@ -365,7 +363,6 @@ function SaveRecordInner({
   indexVersion,
   total,
   disabledReason,
-  openalex = null,
   controller,
 }: SaveRecordProps & { controller: SaveController }) {
   const { phase } = controller;
@@ -439,8 +436,6 @@ function SaveRecordInner({
           record={shownSaved.record}
           shownIndex={shownSaved.request.indexVersion}
           shownTotal={shownSaved.request.total}
-          // the count is the shown search's: only for the record of that same search
-          openalex={requestKey(shownSaved.request) === requestKey(shownRequest) ? openalex : null}
         />
       )}
       {visibleTerminal?.kind === "index_moved" && (
@@ -586,14 +581,11 @@ function Saved({
   record,
   shownIndex,
   shownTotal,
-  openalex,
 }: {
   created: Created;
   record: RecordOutcome | null;
   shownIndex: string;
   shownTotal: number;
-  /** The shown search's results with an OpenAlex abstract; null when unknown or for another search. */
-  openalex: number | null;
 }) {
   const origin = useOrigin();
   const heading = useRef<HTMLHeadingElement>(null);
@@ -648,7 +640,9 @@ function Saved({
           Open record page <span aria-hidden="true">▸</span>
         </Link>
       </p>
-      {data !== null && !mismatch && <MethodsBlock record={data.record} url={url} openalex={openalex} />}
+      {data !== null && !mismatch && (
+        <MethodsBlock record={data.record} url={url} openalex={data.openalex_abstracts} />
+      )}
     </section>
   );
 }

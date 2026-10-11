@@ -435,7 +435,7 @@ function OpenAlexExplanation({ coverage }: { coverage: Coverage }) {
       official abstract for.{" "}
       {venues.length === 0
         ? "No abstract in this snapshot is OpenAlex's."
-        : `In this snapshot: ${venues.join("; ")}.`}{" "}
+        : `OpenAlex abstracts in this snapshot: ${venues.join("; ")}.`}{" "}
       OpenAlex is an open catalogue that gathers abstracts from publishers and repositories. ACM or another
       publisher may publish an official abstract for such a paper that this index does not hold, and
       OpenAlex&apos;s text can differ from the published one, sometimes substantially; how often varies by
@@ -455,7 +455,12 @@ function OpenAlexExplanation({ coverage }: { coverage: Coverage }) {
  * label's target). */
 function useHashTarget() {
   useEffect(() => {
-    const id = decodeURIComponent(window.location.hash.slice(1));
+    let id: string;
+    try {
+      id = decodeURIComponent(window.location.hash.slice(1));
+    } catch {
+      return; // a malformed hash (`#%`, a truncated link) is ignored: no scroll, no error (gate C round 2)
+    }
     if (!id) return;
     const target = document.getElementById(id);
     if (target === null) return;

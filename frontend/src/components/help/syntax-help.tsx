@@ -402,7 +402,7 @@ export function SyntaxHelp({
             keeps or drops whole papers: <code className={CODE}>abstract_kind:official</code> drops a paper
             whose abstract is OpenAlex&apos;s even when its title matches (to keep those, write{" "}
             <code className={CODE}>(term abstract_kind:official) OR title:term</code>). An index built before
-            abstract kinds existed doesn&apos;t hold them yet, so a saved search pinned to one refuses the
+            the abstract source was recorded doesn&apos;t hold it, so a saved search pinned to one refuses the
             filter: run it on the current index.
           </li>
         </ul>

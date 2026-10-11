@@ -191,7 +191,9 @@ export interface paths {
          * Get Record
          * @description The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless
          *     `include=ids`; `/export?record_id=` streams the papers themselves. With `replay=false`, the stored record
-         *     alone (`replay` null; the top-level versions are the served index's).
+         *     alone (`replay` null; the top-level versions are the served index's). `openalex_abstracts` is derived from
+         *     the record's ids on its own index when this request has that index (`OpenAlexCounts`): the replay's
+         *     engine, or with `replay=false` the served one (nothing else is loaded).
          */
         get: operations["get_record"];
         put?: never;
@@ -1481,6 +1483,11 @@ export interface components {
         RecordResponse: {
             /** Index Version */
             index_version: string;
+            /**
+             * Openalex Abstracts
+             * @description How many of the record's own saved ids have an abstract from OpenAlex (`abstract_kind` `openalex`) on the record's own `index_version`, read per id from that index (the built kind, as the filter and facet read it). Derived, not stored: the same for the same record ids and index. Null when that index has no `abstract_kind` (schema 3) or isn't loaded for this request: with a replay, when the replay didn't run on the record's own index; with `replay=false`, when the served index isn't the record's. The methods text's OpenAlex sentence (spec 05) reads this value only.
+             */
+            openalex_abstracts: number | null;
             /** Query Version */
             query_version: string;
             record: components["schemas"]["SearchRecord"];

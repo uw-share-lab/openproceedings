@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Schemas } from "@/api/client";
 import { CoverageReport, yearSpans } from "./coverage-report";
 import fixture from "./coverage-fixture.json";
@@ -437,7 +437,7 @@ describe("the header", () => {
     expect(note.tagName).toBe("P");
     expect(note.textContent).toBe(
       "OpenAlex can fill an abstract only for AAAI, AIES and FAccT, and only for a paper this index holds no " +
-        `official abstract for. In this snapshot: ${counts}. OpenAlex is an open catalogue that gathers ` +
+        `official abstract for. OpenAlex abstracts in this snapshot: ${counts}. OpenAlex is an open catalogue that gathers ` +
         "abstracts from publishers and repositories. ACM or another publisher may publish an official abstract " +
         "for such a paper that this index does not hold, and OpenAlex's text can differ from the published one, " +
         "sometimes substantially; how often varies by venue (the OpenAlex audit). Each is labelled. " +
@@ -651,5 +651,21 @@ describe("following a link to a part of the page (gate C round 1)", () => {
     window.history.replaceState(null, "", "/coverage#nowhere");
     render(<CoverageReport coverage={COVERAGE} />);
     expect(document.activeElement).toBe(document.body);
+  });
+
+  it("ignores a malformed hash: no scroll, no focus, and the report still draws (gate C round 2)", () => {
+    const scroll = vi.fn();
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    for (const hash of ["#%E0%A4%A", "#%"]) {
+      window.history.replaceState(null, "", `/coverage${hash}`);
+      render(<CoverageReport coverage={COVERAGE} />);
+      expect(document.getElementById("openalex")).not.toBeNull();
+      expect(document.activeElement).toBe(document.body);
+      cleanup();
+    }
+    expect(scroll).not.toHaveBeenCalled();
+    Element.prototype.scrollIntoView = before;
+    window.history.replaceState(null, "", "/coverage");
   });
 });
