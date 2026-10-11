@@ -133,3 +133,8 @@ a dated decision clarification rather than silently rewriting the earlier accept
 
 ## Addendum — 2026-10-06 (0.2.0)
 - **Without the back-merge, tag only a `main` sha whose own push run is green.** Decision-046 turned off `main`'s "require up to date", so a PR into `main` can merge on checks run against an older `main`, and the tagged tree may never have been tested as such; the 0.2.0 release security review raised it. Spec 08 step 6 now checks the required checks on `main`'s push run for the exact sha before `gh release create`. Evidence: `docs/results/2026-10-06-release-preparation.md` §2.
+
+## Addendum — 2026-10-11 (0.3.0)
+- **Under a Node older than `.nvmrc`, bump the lockfile's workspace version by hand.** npm 10.8.2 on Node 20 again dropped optional packages' `libc` fields when run with `--package-lock-only`; the release kept only the `"version"` line of the `frontend` workspace entry.
+- **The scheduled nightly can predate the candidate.** The 07:17 UTC nightly ran before milestone C merged, so readiness dispatched `nightly.yml` on the exact `dev` head (`gh workflow run nightly.yml --ref dev`) and waited for it.
+- **`bench` is not a merge-queue required check.** PR #134 merged with `bench` red, and its fix went as PR #135, so readiness reads `bench` on the last PR into `dev`, not only the queue's required checks.
