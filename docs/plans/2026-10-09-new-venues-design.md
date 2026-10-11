@@ -331,7 +331,9 @@ build departs from, or settles, this design:
     synthetic 80k corpus (`docs/results/2026-10-11-bench.md`) `main-3-sources` is **110.7 ms, over the budget**: it is
     65 ms without group counts, so the excess is TASK-176's counting, not schema 4. Schema 4's own regression, a fifth
     combo field multiplying every group-count aggregation, was found by that benchmark and fixed in `566cafcd`.
-    Follow-up: TASK-230.
+    Follow-up: TASK-230, done: a counting job now shares its trees with a helper on the other counting worker, and
+    every synthetic 80k first page is within budget (`main-3-sources` 69.9 ms, worst `main-2-pop` 74.2 ms; the real
+    corpus's worst 67.7 ms; both reports regenerated at `ab2de11b`).
   - **Left for the owner or later:** a review of the fill's refusals (TASK-231) and another source for the 3,648
     AAAI 1980–2008 records still without an abstract (TASK-232).
 - **The audit** (`op eval openalex`, spec 07 §G, `docs/results/2026-10-10-openalex-audit.md`): over 2,122 records with

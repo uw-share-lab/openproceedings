@@ -262,14 +262,20 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
 - **Milestone C, as measured (index `9977ed00669f`: schema 4, tokenizer 3, 173,253 documents; parity over the full
   corpus found 0 differences in 212,911 terms and 340,773 phrases).**
   - **Real corpus** (`docs/results/2026-10-10-bench-group-counts.md`, a 1-minute load under 5 at the start and the
-    end): every Trust-Evals string's first page with its group counts is within the 100 ms budget, the worst being
-    `main-2-pop` at p95 76.5 ms. This is the citable group-count report TASK-220 asked for.
-  - **Synthetic 80k** (`docs/results/2026-10-11-bench.md`, load 2.6 at the start and 2.8 at the end): the first page's
-    p95 ranges from 8.4 ms to 110.7 ms. **`main-3-sources` at 110.7 ms is over the 100 ms budget, and this section
-    does not claim otherwise.** Without group counts the same page is 65 ms, so the excess is the group counting
-    TASK-176 added (six counted trees run one after another on one worker, each broad tree costing 15-20 ms), not
-    index schema 4. It is also a harness effect in part: the report process keeps the 80k corpus resident, which makes
-    full garbage collections frequent. The real corpus does not show it. Follow-up: TASK-230.
+    end; regenerated for TASK-230 at commit `ab2de11b`): every Trust-Evals string's first page with its group counts
+    is within the 100 ms budget, the worst being `main-2-pop` at p95 67.7 ms (76.5 ms before TASK-230). This is the
+    citable group-count report TASK-220 asked for.
+  - **Synthetic 80k** (`docs/results/2026-10-11-bench.md`, load 4.4 at the start and 4.0 at the end, commit
+    `ab2de11b`): every first page's p95 is within the 100 ms budget, from 7.4 ms (`llm-as-judge`) to 74.2 ms
+    (`main-2-pop`); `main-3-sources` is 69.9 ms. It was 110.7 ms, over budget, after schema 4's fix below: its six
+    counted trees ran one after another on one counting worker (about 90 ms, each broad tree 15-30 ms of Tantivy
+    query evaluation), longer than the page itself (65 ms), so the counting job was the request's critical path.
+    TASK-230 shares a counting job's trees with a helper on the other counting worker (04 §SearchResponse `groups`,
+    Cost): the counts are the same, the wall time is the page's. It also sets a bitmap's bytes without a Python
+    loop, halving the GIL-held work a concurrent page waits on (`main-2-pop`, whose shared verified clause takes the
+    bitwise path, 96.1 → 74.2 ms). Full garbage collections were not the cause: with the corpus resident, as the
+    report holds it, one runs about once in 200 first pages, under the p95, so neither the report nor the API
+    freezes the collector (the milestone's perf report).
   - **Schema 4's own regression, found and fixed.** A fifth nested level in the facet combo multiplied every
     aggregation that read the combo: `counts` aggregated each tree's base over the whole combo although a count sums
     only the combos passing its trees' top-level filters. On the synthetic corpus, where abstract presence is random
