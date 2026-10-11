@@ -33,7 +33,7 @@ from openproceedings.query.parser import parse
 
 from tests.fixtures.corpus.synthetic_5k import records, vocab
 from tests.golden.test_trust_evals import STRINGS
-from tests.strategies import SCHEMA_3_FIELDS, SPAN, engine_asts, filters
+from tests.strategies import SPAN, engine_asts, filters
 from tests.unit.engine.test_exclusions import tantivy_of
 
 RECORDS = list(records())
@@ -155,11 +155,10 @@ def test_a_group_alone_is_the_query_without_the_other_groups() -> None:
 @st.composite
 def grouped_asts(draw: st.DrawFn) -> Node:
     """An AND of several trees (each a group, a leave-out, or a filter clause) and extra top-level filters."""
-    # the fields a schema-3 index holds (it refuses `abstract_kind:`, test_abstract_kind_filter.py)
-    parts: list[Node] = draw(st.lists(engine_asts(vocab(), SCHEMA_3_FIELDS), min_size=1, max_size=4))
+    # every filter field, `abstract_kind:` included: these engines are schema 4
+    parts: list[Node] = draw(st.lists(engine_asts(vocab()), min_size=1, max_size=4))
     parts += [
-        Not(span=SPAN, child=f) if draw(st.booleans()) else f
-        for f in draw(st.lists(filters(SCHEMA_3_FIELDS), max_size=3))
+        Not(span=SPAN, child=f) if draw(st.booleans()) else f for f in draw(st.lists(filters(), max_size=3))
     ]
     if len(parts) == 1:
         return parts[0]
@@ -1374,6 +1373,46 @@ def test_a_helpers_failure_is_raised_however_late_its_tree_is_marked_done() -> N
         finishes(lambda: shared.counted(a_thread))
 
 
+def test_the_lowest_index_failed_trees_error_is_raised_after_the_helpers_tree_is_done() -> None:
+    """Gate C round 1: the helper fails tree 0 while the caller fails tree 1. The caller waits for the helper's
+    tree before raising, and raises tree 0's error, the lowest index, whichever failed first."""
+    helper_in = threading.Event()
+    caller_failed = threading.Event()
+
+    def count(i: int) -> int:
+        if i == 0:  # the helper's
+            helper_in.set()
+            assert caller_failed.wait(5)
+            time.sleep(0.05)
+            raise RuntimeError("tree 0")
+        caller_failed.set()
+        raise RuntimeError(f"tree {i}")
+
+    def helper_first(job: Any) -> None:
+        a_thread(job)
+        assert helper_in.wait(5)  # the helper holds tree 0 before the caller takes any
+
+    shared = _Shared(4, count)
+    with pytest.raises(RuntimeError, match="tree 0"):
+        finishes(lambda: shared.counted(helper_first))
+    assert set(shared.errors) == {0, 1} and shared.next == 2  # nobody took tree 2 or 3 after the failures
+
+
+def test_a_failed_tree_stops_both_threads_taking_another() -> None:
+    """Gate C round 1: once a tree fails, neither thread takes another (`_Shared.stop`); the count callable is
+    never asked for a tree after the failed one."""
+    asked: list[int] = []
+
+    def count(i: int) -> int:
+        asked.append(i)
+        raise RuntimeError("tree broke")
+
+    shared = _Shared(5, count)
+    with pytest.raises(RuntimeError, match="tree broke"):
+        finishes(lambda: shared.counted(lambda job: job(lambda: False)))  # the helper runs first, inline
+    assert asked == [0]
+
+
 def test_a_spread_count_with_a_tree_left_uncounted_is_an_internal_error() -> None:
     """The backstop: should a tree end up neither counted nor failed, the call refuses rather than answer 0."""
     shared = _Shared(2, lambda i: 7)
@@ -1441,6 +1480,37 @@ def test_a_search_spreads_its_counting_over_both_counting_workers(tmp_path: Any)
     assert got.groups is not None
     assert got.groups.counts == expected_pairs(reference, split(parsed.effective_ast))
     assert len({name for name in seen if name.startswith("op-groups")}) == 2
+
+
+def test_a_queued_helper_is_cancelled_once_the_jobs_counts_are_in(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gate C round 1: the other counting worker is busy, so the helper's job stays queued; the counting job
+    finishes every tree itself and then cancels it (`_alone`), so it never runs."""
+    from concurrent.futures import Future
+
+    engine = tantivy_of(RECORDS, tmp_path)
+    reference = ReferenceEngine(RECORDS)
+    ast = parse(SPREAD_QUERY).effective_ast
+    assert ast is not None
+    found = split(ast)
+    queued: list[Future[None]] = []
+    ran: list[Any] = []
+
+    def start(job: Any, **_kw: Any) -> Future[None]:
+        f: Future[None] = Future()  # pending: no worker has taken it
+        f.add_done_callback(lambda done: ran.append(job) if not done.cancelled() else None)
+        queued.append(f)
+        return f
+
+    monkeypatch.setattr(search, "_start", start)
+    engine.faceted.clear()
+    pairs = finishes(lambda: search._alone(engine, found, Scope(), threading.Event(), spread=True))
+    trees = [*map(found.alone, found.groups), *map(found.without, found.groups)]
+    totals = [len(reference.match_ids(t)) for t in trees]
+    n = len(found.groups)
+    assert pairs == tuple(zip(totals[:n], totals[n:], strict=True))
+    assert len(queued) == 1 and queued[0].cancelled() and ran == []
 
 
 def test_a_recount_in_the_caller_is_never_spread(

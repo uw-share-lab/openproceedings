@@ -1953,4 +1953,4 @@ def test_abstract_kind_on_a_schema_3_index_is_a_422(tmp_path: Path) -> None:
     (tmp_path / "indexes" / "current").symlink_to(version)
     with app_of(tmp_path) as client:
         e = error(post(client, the_file(), f"{Q} abstract_kind:openalex"), 422, "FIELD_NOT_INDEXED")
-    assert "schema 4" in e["message"] and version in e["message"]
+    assert "built before they existed" in e["message"] and version in e["message"]

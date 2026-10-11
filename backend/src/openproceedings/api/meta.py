@@ -15,7 +15,6 @@ from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import CompareLimits, Limits, MetaResponse, Vocabularies, versions
 from openproceedings.api.state import IndexState
 from openproceedings.ingest.caps import MAX_TITLE
-from openproceedings.query.ast import FILTER_FIELDS
 from openproceedings.query.parser import MAX_DEPTH, MAX_QUERY_LENGTH
 from openproceedings.vocab import ABSTRACT_KINDS, STATUSES, TEXT_FIELDS, TRACKS, VENUES
 
@@ -30,7 +29,9 @@ def get_meta(request: Request, engine: EngineDep, served: ServedDep) -> MetaResp
         **versions(engine.index_version, engine.tokenizer_version),
         index_versions=state.available(engine),
         text_fields=list(TEXT_FIELDS),
-        filter_fields=list(FILTER_FIELDS),
+        # the served index's own (a schema-3 index holds no `abstract_kind`), so autocomplete never offers a field
+        # every route would refuse (FIELD_NOT_INDEXED); `values` is the grammar's whole vocabulary
+        filter_fields=list(engine.filter_fields),
         values=Vocabularies.model_validate(
             {
                 "venue": list(VENUES.values()),

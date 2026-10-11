@@ -398,9 +398,34 @@ def test_the_openalex_fill_logs_each_refusal_reason(tmp_path: Path, caplog: pyte
 
     openalex.write_extract(tmp_path, (doi_lookup(api.work("W1", D1, raw={"a\ud800": [0]}), requested=(D1,)),))
     r = rec("op:facct:2023:doi-3593013.3594011", "FAccT", 2023, doi=D1)
-    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest"):
         openalex.apply(DedupResult((r,), (), ()), tmp_path)
     assert line(caplog, "openalex_filled")["refused"] == {"abstract_surrogate": 1}
+    [got] = refusals(caplog)  # the per-record DEBUG line: source and record id, never the text
+    assert (got.__dict__["source"], got.__dict__["record"]) == ("openalex", r.id)
+    assert no_line(caplog, "openalex_attention")  # a surrogate is counted, not an operator's action
+
+
+def test_the_aaai_library_fill_logs_its_surrogate_refusal_at_debug(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The archived page's abstract holds a lone surrogate: refused, counted, and one DEBUG line naming the
+    record (gate C round 1)."""
+    from openproceedings.ingest.sources import aaai_library
+
+    from tests.unit.ingest.aaai_library.test_aaai_library import _cache_with, record
+
+    table = _cache_with(tmp_path, "conf/aaai/Araya84")
+    text = "A text with a lone surrogate \ud800 that is otherwise long enough to keep."
+    monkeypatch.setattr(
+        aaai_library, "read", lambda _page, _row: aaai_library.Parsed("Synthetic title 1", text)
+    )
+    r = record("conf/aaai/Araya84")
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest"):
+        (out,), report = aaai_library.fill([r], aaai_library.fetcher(tmp_path, offline=True), table)
+    assert out.abstract is None and report.refused == {"abstract_surrogate": 1}
+    [got] = refusals(caplog)
+    assert (got.__dict__["source"], got.__dict__["record"]) == ("aaai_library", r.id)
 
 
 def test_openalex_refuses_it_under_the_shared_name() -> None:

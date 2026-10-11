@@ -80,11 +80,10 @@ from openproceedings.records import (
     PinnedLoader,
     RecordStore,
     Removal,
+    RemovalMemo,
     Replay,
     SearchRecord,
     freeze,
-    removal_tally,
-    removals,
     replay,
     valid_record_id,
 )
@@ -181,6 +180,9 @@ class Records:
     store: RecordStore
     pinned: PinnedLoader  # `IndexState.pinned(v).engine`
     saves: SaveCeiling
+    removed: RemovalMemo = field(
+        default_factory=RemovalMemo
+    )  # each drifted record's removal causes, per index
 
 
 def install(app: FastAPI, config: ApiConfig, state: IndexState) -> None:
@@ -335,8 +337,8 @@ def get_record_diff(
     list is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A
     title comes from the index the replay ran on, null if it doesn't hold the paper. Each entry also has its
     track and status there, each removed one its cause and failed filter, and `removed_causes` counts the
-    causes over the whole list (`removals`, cheap enough to run per page: a bitmap read per id; TASK-227;
-    the counts go on the access line too, never a title). A refused replay compared nothing: empty lists,
+    causes over the whole list (`removals`, TASK-227: a byte read per id per filter field, worked out once
+    per record and index and kept, `RemovalMemo`; the counts go on the access line too, never a title). A refused replay compared nothing: empty lists,
     null totals and `removed_causes`."""
     record = stored_record(request, id)
     result, clauses = _replayed(request, engine, record)
@@ -344,10 +346,10 @@ def get_record_diff(
     removed = list(result.removed[offset : offset + limit]) if result.removed is not None else []
     wanted = [*added, *removed]
     shown = result.engine.display(wanted) if wanted else {}
-    # None exactly when `result.removed` is (refused), and then `removed` is empty. A bitmap read per removed id,
-    # no document decoded, so the whole-list tally is cheap enough to compute on every page
-    why = removals(result)
-    tally = removal_tally(why) if why is not None else None
+    # None exactly when `result.removed` is (refused), and then `removed` is empty. Worked out once per record and
+    # index (`RemovalMemo`), so later pages of a long removed list don't repeat it
+    found = _records(request).removed.get(record.record_id, result)
+    why, tally = found if found is not None else (None, None)
     if tally is not None:
         annotate(
             request,

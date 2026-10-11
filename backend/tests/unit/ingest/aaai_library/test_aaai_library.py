@@ -263,6 +263,14 @@ def test_the_fill_attaches_the_page_abstract_by_dblp_key_credited_to_the_aaai_pa
     assert att is not None and (att.source, att.origin, att.url) == ("aaai_library", "aaai_library", row.url)
     assert (report.candidates, report.attached, report.no_page, report.rows_unmatched) == (1, 1, 0, 0)
     assert report.fetched == [T]
+    # the text's date is the capture's (gate C round 1): the manifest's `capture_window`, not the harvest's fetch
+    captured = datetime.strptime(row.timestamp, "%Y%m%d%H%M%S").replace(tzinfo=UTC)
+    assert report.captured() == [captured]
+    from openproceedings.ingest.sources.common import sources_manifest
+
+    entry = sources_manifest([report])["aaai_library"]
+    assert entry["capture_window"] == {"from": captured.isoformat(), "to": captured.isoformat()}
+    assert entry["crawl_window"] == {"from": T.isoformat(), "to": T.isoformat()}
 
 
 def test_refusals_are_counted_and_never_attached(tmp_path: Path) -> None:
@@ -497,6 +505,14 @@ def test_title_similarity_is_one_minus_levenshtein_over_the_longer_key() -> None
             (None, 0.969),
         ),  # digits differ
         ("Planning in 1987 Domains", "Planning in 1987 Domain", ("near", 0.958)),
+        ("abcdefghij", "abcdefghiX", ("near", 0.9)),  # exactly the bound: kept (`>=`)
+        # a token holding a digit among letters is a digit token too: `2a` is never `2b`, `3rd` never `4th`
+        ("Planning Part 2a", "Planning Part 2b", (None, 0.938)),
+        (
+            "Planning Under Uncertainty: the 3rd Study",
+            "Planning Under Uncertainty: the 4th Study",
+            (None, 0.925),
+        ),
     ],
 )
 def test_the_title_verdict(record_title: str, page_title: str, verdict: tuple[str | None, float]) -> None:
@@ -678,3 +694,14 @@ def test_the_harvest_goes_on_past_a_redirect_marks_and_replays_offline_with_the_
     events = {r.getMessage(): r for r in caplog.records}
     assert events["aaai_library_filled"].__dict__["refused"] == {"capture_redirect": 1}
     assert events["aaai_library_attention"].__dict__["capture_redirect"] == 1
+
+
+def test_an_abstract_held_by_sources_on_both_sides_of_it_is_not_outranked() -> None:
+    """`_outranked` asks that every claim holding the abstract rank after aaai_library: one ranked before it (dblp)
+    beside one ranked after it (ris) keeps the abstract (gate C round 1: `all`, not `any`)."""
+    text = "An abstract two sources gave."
+    both = record("conf/aaai/Araya84", abstract=(text, "ris"))
+    claim = Claim(field="abstract", value=text, source="dblp", fetched_at=T, evidence="t")
+    mixed = resolve(both.id, [*both.provenance, claim])[0]
+    assert {c.source for c in mixed.claims("abstract")} == {"ris", "dblp"}
+    assert a._outranked(both) and not a._outranked(mixed)

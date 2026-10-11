@@ -258,3 +258,49 @@ def test_an_oversized_extract_is_refused_unread(tmp_path, monkeypatch) -> None:
     with pytest.raises(CrawlError) as e:
         openalex.load_extract(tmp_path)
     assert e.value.reason == "crawl_file_invalid" and sha
+
+
+def test_the_harvest_logs_a_start_line_and_a_progress_line_at_most_every_30_seconds(tmp_path, caplog) -> None:
+    """logging-standards §Crawl lines (gate C round 1): a start line, then progress on the fetcher's clock, never
+    per item; the end line is the command's."""
+    from openproceedings.ingest.sources.http import canonical
+
+    from tests.unit.ingest.proceedings_helpers import Clock
+
+    dois = [f"10.1145/3593013.{3594011 + i}" for i in range(openalex.BATCH + 1)]  # two batches
+    recs = [rec(f"op:facct:2023:doi-3593013.{3594011 + i}", "FAccT", 2023, doi=d) for i, d in enumerate(dois)]
+    t = FakeTransport({})
+    for chunk in (dois[: openalex.BATCH], dois[openalex.BATCH :]):
+        t.script[canonical(openalex.doi_url(sorted(chunk)), keep_query=True)] = [
+            response(api.page(), headers=api.JSON)
+        ]
+    f = crawl.openalex_fetcher(tmp_path, offline=False, transport=t, min_interval=0)
+    clock = Clock()
+    f.clock = clock
+    real_get = f.get
+
+    def slow_get(url, **kw):
+        clock.t += 31  # each request a 31 s wait: every one is past the heartbeat
+        return real_get(url, **kw)
+
+    f.get = slow_get  # type: ignore[method-assign]
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest"):
+        openalex.harvest(recs, f, table=openalex_table_empty())
+    [start] = [r for r in caplog.records if r.getMessage() == "openalex_harvest_started"]
+    assert (start.__dict__["batches"], start.__dict__["listings"], start.__dict__["offline"]) == (2, 0, False)
+    beats = [r.__dict__ for r in caplog.records if r.getMessage() == "openalex_harvest_progress"]
+    assert [(b["done"], b["of"]) for b in beats] == [(1, 2), (2, 2)]
+
+
+def test_an_ingest_with_a_doi_no_filter_can_carry_warns_once(tmp_path, monkeypatch, caplog) -> None:
+    odd = "10.1145/3593013.3594012"
+    monkeypatch.setattr(openalex, "queryable", lambda d: d != odd)
+    r = rec("op:facct:2023:doi-3593013.3594011", "FAccT", 2023, doi=D1)
+    monkeypatch.setattr(crawl, "replay_all", lambda cache: ([r, rec("op:facct:2023:doi-3593013.3594012", "FAccT",
+                                                                    2023, doi=odd)], []))  # fmt: skip
+    t = FakeTransport({})
+    _seed_doi_batch(t, api.work("W1", D1, text="An OpenAlex abstract."))
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest"):
+        crawl.ingest_openalex(tmp_path, transport=t, min_interval=0, table=openalex_table_empty())
+    [warning] = [r for r in caplog.records if r.getMessage() == "openalex_attention"]
+    assert warning.levelno == logging.WARNING and warning.__dict__["doi_unqueryable"] == 1

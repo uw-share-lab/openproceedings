@@ -226,3 +226,19 @@ def test_a_document_with_no_value_in_a_field_omits_that_field(
     monkeypatch.setattr(engine, "_masks", cleared)
     got = engine.filter_values([i])
     assert set(got[i]) == set(engine.combo) - {"track"}
+
+
+@pytest.mark.parametrize("which", [0, 1], ids=["schema3", "schema4"])
+def test_filter_values_read_by_the_value_index_equal_the_bitmap_reads(pair: Pair, which: int) -> None:
+    """`_value_index` (one byte per document per field, gate C round 1) gives exactly what ANDing each value's
+    bitmap gives; a field with more values than a byte numbers (None) is read from the bitmaps."""
+    engine = pair[which]
+    ids = random.Random(5).sample(engine.ids, 80)
+    fast = engine.filter_values(ids)
+    masks = engine._value_masks()
+    engine._index = (masks, (None,) * len(engine.combo))  # every field by the bitmaps
+    try:
+        assert engine.filter_values(ids) == fast
+    finally:
+        engine._index = None
+    assert engine.filter_values(ids) == fast  # rebuilt

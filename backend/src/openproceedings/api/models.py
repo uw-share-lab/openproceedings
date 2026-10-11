@@ -726,8 +726,13 @@ class MetaResponse(Versioned):
         "code can't open (another tokenizer, schema or Tantivy version) or one currently refused is left out"
     )
     text_fields: list[TextField]
-    filter_fields: list[FilterField]
-    values: Vocabularies
+    filter_fields: list[FilterField] = Field(
+        description="the filter fields the served index holds, in canonical order: `abstract_kind` only on an index "
+        "built since it existed (a query naming a field it lacks is 422 `FIELD_NOT_INDEXED`)"
+    )
+    values: Vocabularies = Field(
+        description="each filter field's whole vocabulary, as the query grammar accepts it"
+    )
     limits: Limits
 
 

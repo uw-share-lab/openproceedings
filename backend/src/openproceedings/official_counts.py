@@ -33,12 +33,6 @@ class OfficialCount:
 # (venue, year, track) → its official accepted count
 type OfficialTable = dict[tuple[str, int, str], OfficialCount]
 OFFICIAL_ACCEPTED: OfficialTable = {
-    ("AAAI", 2010, "main"): OfficialCount(
-        262,
-        "papers counted on AAAI's own accepted-paper list (the AAAI-10 papers page on aaai.org, archived): 202 in the main technical track, short papers included, plus 60 in the five special tracks (AI and Bioinformatics, AI and the Web, Challenges in AI, Integrated Intelligence, Physically Grounded AI); Nectar and senior member papers excluded",
-        "https://web.archive.org/web/20100830185521/http://www.aaai.org/Conferences/AAAI/2010/aaai10papers.php",
-        date(2026, 10, 10),
-    ),
     ("AAAI", 2012, "main"): OfficialCount(
         292,
         "papers counted on AAAI's own accepted-paper list (the AAAI-12 accepted-papers PDF on aaai.org): 220 main technical, poster-only full papers included, plus 26 AI and the Web, 11 Cognitive Systems, 21 Computational Sustainability and AI, and 14 Robotics",
@@ -50,12 +44,6 @@ OFFICIAL_ACCEPTED: OfficialTable = {
         "papers accepted for publication in the proceedings from the 690 technical-program submissions, the four special tracks included (AI and the Web, Cognitive Systems, Computational Sustainability, AI and Robotics); late-breaking papers and spotlights excluded",
         "https://ojs.aaai.org/index.php/AAAI/article/view/8512 (AAAI-13 preface)",
         date(2026, 10, 9),
-    ),
-    ("AAAI", 2014, "main"): OfficialCount(
-        398,
-        "papers counted on AAAI's own accepted-paper list (the AAAI-14 accepted-papers page on aaai.org, archived), in its 22 AAAI technical categories; IAAI, EAAI, doctoral consortium and student abstracts excluded",
-        "https://web.archive.org/web/20150906033202/http://www.aaai.org/Conferences/AAAI/2014/aaai14accepts.php",
-        date(2026, 10, 10),
     ),
     ("AAAI", 2015, "main"): OfficialCount(
         539,
@@ -555,14 +543,32 @@ _NOT_FOUND = (
     "this main track also holds the special tracks"
 )
 
+# a list counts as independent of the proceedings only when it is evidently made before them, a pre-camera-ready
+# list that says so (the controller's ruling, gate C round 1); an archived page captured after publication is not
+_AFTER = (
+    "AAAI's own {list} lists {n} papers, but its only archived copy was captured on {captured}, after the "
+    "proceedings were published, and nothing on it says it was made before them; like AAAI 2016's list it may be "
+    "derived from the proceedings, so a gate on it could check the proceedings against themselves"
+)
+
 # (venue, year, track) → why that ungated cell has no official count; `docs/results/coverage-sources.md`
 # §Ungated cells with a note is the cited copy, and `tests/unit/test_official_counts.py` keeps the two equal
 UNGATED_NOTES: dict[tuple[str, int, str], UngatedNote] = {
+    ("AAAI", 2010, "main"): UngatedNote(
+        _AFTER.format(list="AAAI-10 papers page", n="262", captured="2010-08-30"),
+        "https://web.archive.org/web/20100830185521/http://www.aaai.org/Conferences/AAAI/2010/aaai10papers.php",
+        date(2026, 10, 11),
+    ),
     ("AAAI", 2011, "main"): UngatedNote(
         "AAAI's own accepted-paper list has 240 papers and leaves out the Robotics Program; the index's main track "
         "holds 248, those 240 plus the 8 Robotics Program papers, so the list counts a different set of papers",
         "https://web.archive.org/web/20120605015434/http://www.aaai.org/Conferences/AAAI/2011/aaai11accepts.php",
         date(2026, 10, 10),
+    ),
+    ("AAAI", 2014, "main"): UngatedNote(
+        _AFTER.format(list="AAAI-14 accepted-papers page", n="398", captured="2015-09-06"),
+        "https://web.archive.org/web/20150906033202/http://www.aaai.org/Conferences/AAAI/2014/aaai14accepts.php",
+        date(2026, 10, 11),
     ),
     ("AAAI", 2016, "main"): UngatedNote(
         "AAAI's own accepted-paper list matches the proceedings section by section, so it appears to be derived from "

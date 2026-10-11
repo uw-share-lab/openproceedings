@@ -52,6 +52,18 @@ def test_search_naming_abstract_kind_on_a_schema_3_index_is_422(tmp_path: Path) 
     assert version in got.json()["error"]["message"]
 
 
+def test_meta_advertises_only_the_filter_fields_the_served_index_holds(tmp_path: Path) -> None:
+    """Gate C round 1: autocomplete reads `/meta`'s `filter_fields`, so a served schema-3 index never offers
+    `abstract_kind:`, which every route would refuse; `values` stays the grammar's vocabulary."""
+    for schema, fields in (("3", ["venue", "year", "track", "status"]), (None, ["venue", "year", "track", "status",
+                                                                                "abstract_kind"])):  # fmt: skip
+        app, _ = _app(tmp_path / (schema or "4"), schema, PLAIN)
+        with TestClient(app) as client:
+            meta = client.get("/api/v1/meta").json()
+        assert meta["filter_fields"] == fields
+        assert meta["values"]["abstract_kind"] == ["official", "openalex", "none"]
+
+
 def test_schema_3_facets_say_abstract_kind_null(tmp_path: Path) -> None:
     app, _ = _app(tmp_path, "3", PLAIN)
     with TestClient(app) as client:

@@ -1,7 +1,9 @@
 """The OpenAlex fill (decision-049): replayed from the pinned extract after dedup, only into a null abstract of
 an AAAI, AIES or FAccT record; DOI exact or one-to-one title key; refusals counted, never forced."""
 
+import logging
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from openproceedings.ingest import openalex_table
@@ -306,3 +308,23 @@ def test_a_chosen_work_with_no_usable_abstract_is_refused_with_why_never_another
     lookup = doi_lookup(api.work("W1", D1, text="Other text."), api.work("W2", D1, raw={"a": [1]}))
     (out,), report = openalex.fill([r], ext(lookup), openalex_table.load(CHOICE))
     assert out.abstract is None and report.refused == {"inverted_gap": 1} and report.duplicate_chosen == 0
+
+
+def test_apply_warns_once_when_the_operator_must_re_run_the_crawl(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Gate C round 1: `openalex_attention`, one aggregate WARNING with counts only, when a candidate went
+    unqueried or its listing row changed since the crawl (re-run `op ingest openalex`); none otherwise."""
+    from openproceedings.ingest.dedup import DedupResult
+
+    unasked = rec("op:aies:2019:doi-3306618.3314200", "AIES", 2019, doi="10.1145/3306618.3314200")
+    openalex.write_extract(tmp_path, ())
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest"):
+        openalex.apply(DedupResult((unasked,), (), ()), tmp_path)
+    [warning] = [r for r in caplog.records if r.getMessage() == "openalex_attention"]
+    assert warning.levelno == logging.WARNING and warning.__dict__["not_queried"] == 1
+    assert "listing_stale" not in warning.__dict__ and unasked.id not in str(warning.__dict__)
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest"):
+        openalex.apply(DedupResult((), (), ()), tmp_path)
+    assert not [r for r in caplog.records if r.getMessage() == "openalex_attention"]

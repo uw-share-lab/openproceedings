@@ -71,9 +71,12 @@ class _HoldsText(Protocol):
 ABSTRACT_KIND_DOC = (
     "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the "
     "proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or "
-    "FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` "
-    "filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from "
-    "`abstract_source`, the claim the abstract came from."
+    "FAccT paper no official source gives one), or `none` (no abstract, or one withheld: `abstract_withheld` "
+    "tells the two apart). The `abstract_kind:` filter and the `abstract_kind` facet use the kind the index "
+    "was built with, so a takedown listed after the build shows `none` on the hit without changing which "
+    "searches match it or how the facet counts it, until the next build (TASK-136). Derived from the "
+    "abstract's claims; never stored in the record, never hashed. Distinct from `abstract_source`, the claim "
+    "the abstract came from."
 )  # the one wording of a hit's and a paper's field
 
 

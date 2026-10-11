@@ -12,7 +12,8 @@ import zlib
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from openproceedings import records
@@ -591,6 +592,28 @@ def test_a_claim_window_narrower_than_the_fetch_window_saves_a_record_like_cover
     assert facts.crawl_dates == crawl_dates(manifest)
 
 
+def test_an_archive_sources_window_is_its_capture_dates_like_coverage(data_dir: Path) -> None:
+    """Gate C round 1: `aaai_library` reads Internet Archive copies, so its window in a record is the range of their
+    capture times (`capture_window`, kind `archive_captures`), not when the harvest fetched them, as
+    `/coverage` shows it."""
+    from openproceedings.coverage import breakdown, crawl_dates
+
+    path = data_dir / "snapshots" / "snap" / "manifest.json"
+    harvest = {"from": "2026-10-10T00:00:00+00:00", "to": "2026-10-11T00:00:00+00:00"}
+    captures = {"from": "2016-03-01T12:00:00+00:00", "to": "2022-06-01T08:00:00+00:00"}
+    edit(path, sources={"openreview_v2": {"crawl_window": OWN_WINDOW},
+                        "aaai_library": {"fills": [], "crawl_window": harvest, "capture_window": captures}},
+         crawl_windows={"aaai_library": harvest})  # fmt: skip
+    facts = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+    assert facts.crawl_dates["aaai_library"] == captures
+    assert facts.crawl_dates_kind["aaai_library"] == "archive_captures"
+    assert facts.crawl_dates_kind["openreview_v2"] == "crawl"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    assert facts.crawl_dates == crawl_dates(manifest)
+    served = breakdown(manifest, "snap")["snapshot"]
+    assert served["crawl_dates_kind"] == facts.crawl_dates_kind
+
+
 @pytest.mark.parametrize("where", ["sources", "crawl_windows"])
 def test_a_source_named_star_is_refused_in_either_map(data_dir: Path, where: str) -> None:
     """`*` is the corpus-wide key, so no source may take it, as `coverage.crawl_dates` refuses too."""
@@ -865,6 +888,13 @@ def held(**over: str | int) -> dict[str, str | int]:
         ),
         ("trust year:2020..2023", held(), "filter_changed", "year"),
         ("trust venue:AIES", held(), "filter_changed", "venue"),
+        # a field the replaying index has no value for (schema 3 holds no abstract_kind) fails nothing
+        (
+            "trust abstract_kind:official",
+            {k: v for k, v in held().items() if k != "abstract_kind"},
+            "still_eligible",
+            None,
+        ),
     ],
 )
 def test_removal_cause(q: str, values: dict[str, str | int] | None, cause: str, field: str | None) -> None:
@@ -888,3 +918,66 @@ def test_removal_tally_counts_every_cause_zero_included() -> None:
         "still_eligible": 0,
     }
     assert list(records.removal_tally({})) == list(records.REMOVAL_CAUSES)
+
+
+class _CountingEngine:
+    """A replaying engine that counts `filter_values` calls (the memo's work)."""
+
+    def __init__(self, index_version: str) -> None:
+        self.index_version = index_version
+        self.calls = 0
+
+    def filter_values(self, ids: list[str]) -> dict[str, dict[str, str | int]]:
+        self.calls += 1
+        return {i: held() for i in ids}
+
+
+def _replay_on(engine: _CountingEngine, removed: tuple[str, ...] | None) -> records.Replay:
+    parsed = parse("trust", "native", TOKENIZER_VERSION)
+    return cast(records.Replay, SimpleNamespace(engine=engine, parsed=parsed, removed=removed))
+
+
+def test_the_removal_memo_works_out_a_records_causes_once_per_index() -> None:
+    """Gate C round 1: `GET /records/{id}/diff` pages a long removed list; the causes are worked out once per
+    (record id, index_version), the same answer every page, and again on another index."""
+    memo = records.RemovalMemo()
+    one, two = _CountingEngine("aaaaaaaaaaaa"), _CountingEngine("bbbbbbbbbbbb")
+    first = memo.get("rec", _replay_on(one, ("x", "y")))
+    assert memo.get("rec", _replay_on(one, ("x", "y"))) == first and one.calls == 1
+    assert first is not None and first[1]["still_eligible"] == 2
+    memo.get("rec", _replay_on(two, ("x", "y")))
+    memo.get("other", _replay_on(one, ("x",)))
+    assert two.calls == 1 and one.calls == 2
+    assert memo.get("rec", _replay_on(one, None)) is None  # refused: nothing compared, nothing kept
+
+
+def test_the_removal_memo_is_bounded_by_the_ids_it_holds() -> None:
+    memo = records.RemovalMemo(max_ids=3)
+    engine = _CountingEngine("aaaaaaaaaaaa")
+    memo.get("a", _replay_on(engine, ("1", "2")))
+    memo.get("b", _replay_on(engine, ("3",)))
+    memo.get("a", _replay_on(engine, ("1", "2")))  # a used last: b goes first
+    memo.get("c", _replay_on(engine, ("4",)))
+    assert engine.calls == 3
+    memo.get("a", _replay_on(engine, ("1", "2")))
+    assert engine.calls == 3  # a kept
+    memo.get("b", _replay_on(engine, ("3",)))
+    assert engine.calls == 4  # b was dropped
+    big = ("5", "6", "7", "8")
+    assert memo.get("d", _replay_on(engine, big)) is not None
+    memo.get("d", _replay_on(engine, big))
+    assert engine.calls == 6  # larger than the bound: answered, never kept
+
+
+def test_filter_clauses_of_a_single_node_tree() -> None:
+    """An effective tree that is one node, not an `And` (the defaults always make one today): a lone filter is
+    its one clause, a lone term has none."""
+    from openproceedings.query.ast import Filter, Term
+
+    lone = Filter(field="track", values=("main",), span=(0, 10))
+    assert records.filter_clauses(cast(Any, SimpleNamespace(effective_ast=lone))) == (lone,)
+    assert (
+        records.filter_clauses(cast(Any, SimpleNamespace(effective_ast=Term(token="trust", span=(0, 5)))))
+        == ()
+    )
+    assert records.filter_clauses(cast(Any, SimpleNamespace(effective_ast=None))) == ()

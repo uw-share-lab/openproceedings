@@ -53,7 +53,7 @@ from urllib.parse import quote
 
 from openproceedings import storage
 from openproceedings.ingest import openalex_table
-from openproceedings.ingest.caps import cap_record
+from openproceedings.ingest.caps import MAX_ABSTRACT, cap_record
 from openproceedings.ingest.dedup import DedupResult, title_key
 from openproceedings.ingest.record import OPENALEX_VENUES, Claim, PaperRecord, Source, controls_evidence
 from openproceedings.ingest.sources.common import (
@@ -67,6 +67,7 @@ from openproceedings.ingest.sources.common import (
     read_markers,
     write_marker,
 )
+from openproceedings.ingest.sources.http import Heartbeat
 from openproceedings.ingest.sources.openreview_client import read_dotenv
 from openproceedings.logs import elapsed_ms
 
@@ -88,6 +89,10 @@ KEY_ENV = "OPENALEX_API_KEY"
 MAX_POSITIONS = (
     25_000  # more words than any abstract under caps.MAX_ABSTRACT characters: refused, not allocated
 )
+MAX_KEY = (
+    200  # characters of one inverted-index key after the whitespace collapse (the real extract's longest: 72)
+)
+MAX_TEXT = MAX_ABSTRACT  # characters a rebuilt abstract may reach (the real extract's longest: about 9,500)
 MAX_ANSWER = 64_000_000  # characters of one answer (a full page is a few MB): a larger one is refused unread
 MAX_CURSOR = 2048
 _DOI = re.compile(r"10\.[0-9]{1,9}(?:\.[0-9]{1,9}){0,8}/\S{1,1000}")
@@ -123,7 +128,7 @@ class WorksPage:
 @dataclass(frozen=True, slots=True)
 class Rebuilt:
     text: str | None
-    refused: str | None  # inverted_gap | inverted_conflict | inverted_unreadable
+    refused: str | None  # inverted_gap | inverted_conflict | inverted_unreadable | inverted_oversize
 
 
 def rebuild(inverted: object) -> Rebuilt:
@@ -133,13 +138,16 @@ def rebuild(inverted: object) -> Rebuilt:
     with each whitespace run as one space and none at its edges (`"one.\r\n\r\nTwo"` → `one. Two`); an empty or
     whitespace-only key is refused (TASK-231, owner ruling 2026-10-10). The same word listed twice at one position
     is kept once. A position at or past `MAX_POSITIONS`, or more entries than that in all, is refused before
-    anything is built from it."""
+    anything is built from it. So is a key longer than `MAX_KEY`, or a text whose running length (`len(word) + 1`
+    per position) passes `MAX_TEXT` (`inverted_oversize`): a short answer naming one long key at many positions
+    is refused before the join, never assembled (gate C round 1)."""
     if inverted is None:
         return Rebuilt(None, None)
     if not isinstance(inverted, dict) or not inverted:
         return Rebuilt(None, "inverted_unreadable")
     at: dict[int, str] = {}
     entries = 0
+    length = 0
     for key, positions in inverted.items():
         word = _SPACE.sub(" ", key).strip() if isinstance(key, str) else ""
         if not word or not isinstance(positions, list) or not positions:
@@ -147,6 +155,11 @@ def rebuild(inverted: object) -> Rebuilt:
         entries += len(positions)
         if entries > MAX_POSITIONS:
             return Rebuilt(None, "inverted_unreadable")
+        length += (len(word) + 1) * len(
+            positions
+        )  # an upper bound: a word listed twice at one position counts twice
+        if len(word) > MAX_KEY or length - 1 > MAX_TEXT:
+            return Rebuilt(None, "inverted_oversize")
         for p in positions:
             if type(p) is not int or not 0 <= p < MAX_POSITIONS:
                 return Rebuilt(None, "inverted_unreadable")
@@ -546,13 +559,33 @@ def harvest(
     table (`listing_url`, cursor paged). A batch that is not HTTP 200 stops (`no_listing`), and so does one whose
     `meta.count` is more than twice the batch (the filter was misread). A batch matching more works than its page
     holds (several works for its DOIs) is split in half, first half first, down to one DOI (`doi_lookups`); one
-    DOI that still overflows a page stops (`doi_batch_incomplete`): no work is dropped unseen."""
+    DOI that still overflows a page stops (`doi_batch_incomplete`): no work is dropped unseen. A start line
+    (`openalex_harvest_started`) and a progress line at most every 30 s (`openalex_harvest_progress`); the end
+    line is the command's (`openalex_ingested`)."""
     table = table or openalex_table.TABLE
     out: list[Lookup] = []
     batches, _ = doi_batches(records)
+    rows = list(table.listings.values())
+    of = len(batches) + len(rows)
+    started = time.monotonic()
+    beat = Heartbeat(fetcher.clock.monotonic)
+    log.info("openalex_harvest_started", extra={"batches": len(batches), "listings": len(rows),
+                                                "offline": fetcher.offline})  # fmt: skip
+    done = 0
+
+    def progress() -> None:
+        if beat.due():
+            log.info("openalex_harvest_progress", extra={"done": done, "of": of, "requests": fetcher.stats.network,
+                                                         "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+
     for chunk in batches:
         out += doi_lookups(chunk, fetcher, refresh=refresh)
-    out += [listing_lookup(row, fetcher, refresh=refresh) for row in table.listings.values()]
+        done += 1
+        progress()
+    for row in rows:
+        out.append(listing_lookup(row, fetcher, refresh=refresh))
+        done += 1
+        progress()
     return tuple(out)
 
 
@@ -739,4 +772,10 @@ def apply(result: DedupResult, cache: Path) -> tuple[DedupResult, list[FillRepor
                                        "refused": dict(sorted(report.refused.items())),
                                        "not_queried": report.not_queried,
                                        "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+    # what the operator acts on (re-run `op ingest openalex`): a candidate the extract never asked about, or one
+    # whose listing row changed since the crawl; one aggregate WARNING, counts only
+    attention = {k: v for k, v in (("listing_stale", report.refused["listing_stale"]),
+                                   ("not_queried", report.not_queried)) if v}  # fmt: skip
+    if attention:
+        log.warning("openalex_attention", extra={"extract": extract.sha256, **attention})
     return replace(result, records=tuple(sorted(records, key=lambda r: r.id))), [report]

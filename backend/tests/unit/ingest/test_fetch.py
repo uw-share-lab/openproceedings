@@ -299,3 +299,16 @@ def test_a_redirect_callback_judges_a_3xx_and_fetch_never_hops_or_caches(tmp_pat
         f.fetch(url)
     with pytest.raises(FetchError, match="not on"):
         f.fetch("https://www.aaai.org/x")
+
+
+@pytest.mark.parametrize(
+    "url", ["https://www.aaai.org/x", "http://web.archive.org.evil/x", "ftp://web.archive.org/x"]
+)
+def test_fetch_refuses_a_url_off_its_hosts_before_any_request(tmp_path: Path, url: str) -> None:
+    """`Fetcher.fetch` is a general API (gate C round 1): a URL off the fetcher's hosts, or not http(s), is a
+    `FetchError` (`off_host`) and the transport is never called."""
+    transport = FakeTransport({})
+    f, _ = fetcher(tmp_path, transport, frozenset({"web.archive.org"}), min_interval=0)
+    with pytest.raises(FetchError) as e:
+        f.fetch(url)
+    assert e.value.reason == "off_host" and transport.calls == []

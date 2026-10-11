@@ -104,9 +104,12 @@ def test_aaai_main_is_gated_or_noted_from_2010_on() -> None:
     list) or a note saying why not (TASK-219's ruling, 2026-10-10)."""
     gated = {y for v, y, t in OFFICIAL_ACCEPTED if v == "AAAI" and t == "main"}
     noted = {y for v, y, t in UNGATED_NOTES if v == "AAAI" and t == "main"}
-    assert gated == {2010, 2012, 2013, 2014, 2015, 2017, 2018, 2019, 2020, 2021}
-    assert noted == {2011, 2016, 2022, 2023, 2024, 2025, 2026}
-    for year in (2010, 2012, 2014, 2017, 2020, 2021):  # list counts say so, and name AAAI's list
+    assert gated == {2012, 2013, 2015, 2017, 2018, 2019, 2020, 2021}
+    # 2010 and 2014: lists captured only after publication are not evidently independent (gate C round 1)
+    assert noted == {2010, 2011, 2014, 2016, 2022, 2023, 2024, 2025, 2026}
+    for year in (2010, 2014):
+        assert "captured" in UNGATED_NOTES[("AAAI", year, "main")].note
+    for year in (2012, 2017, 2020, 2021):  # list counts say so, and name AAAI's list
         assert "counted" in OFFICIAL_ACCEPTED[("AAAI", year, "main")].counts
         assert "AAAI's own" in OFFICIAL_ACCEPTED[("AAAI", year, "main")].counts
 

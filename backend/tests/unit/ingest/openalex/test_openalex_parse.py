@@ -3,6 +3,7 @@ import logging
 from datetime import date
 
 import pytest
+from openproceedings.ingest import caps
 from openproceedings.ingest.openalex_table import Listing
 from openproceedings.ingest.sources import openalex
 from openproceedings.ingest.sources.common import CrawlError
@@ -66,6 +67,30 @@ def test_rebuild_refuses_more_entries_than_any_abstract_has_words() -> None:
     )
     assert openalex.rebuild({"a": [openalex.MAX_POSITIONS]}) == openalex.Rebuilt(None, "inverted_unreadable")
     assert openalex.rebuild({"a": [openalex.MAX_POSITIONS - 1]}) == openalex.Rebuilt(None, "inverted_gap")
+
+
+def test_rebuild_refuses_an_overlong_key_before_building_anything() -> None:
+    """A key longer than any word (`MAX_KEY`) is refused as `inverted_oversize`, measured after the whitespace
+    collapse; one at the bound is read."""
+    at_bound = "a" * openalex.MAX_KEY
+    assert openalex.rebuild({at_bound: [0]}) == openalex.Rebuilt(at_bound, None)
+    assert openalex.rebuild({at_bound + "a": [0]}) == openalex.Rebuilt(None, "inverted_oversize")
+    assert openalex.rebuild({"a" + " " * 500 + "b": [0]}) == openalex.Rebuilt("a b", None)
+
+
+def test_rebuild_refuses_text_longer_than_any_abstract_before_joining_it() -> None:
+    """The security probe, reduced (gate C round 1): one long key at many positions once rebuilt to 200M
+    characters from a 139 KB answer. The running total of `len(word) + 1` per position is checked against
+    `caps.MAX_ABSTRACT` before the join, so the text is never assembled."""
+    word = "w" * openalex.MAX_KEY
+    n = caps.MAX_ABSTRACT // (openalex.MAX_KEY + 1) + 1  # one position past the bound
+    assert openalex.rebuild({word: list(range(n))}) == openalex.Rebuilt(None, "inverted_oversize")
+    fits = caps.MAX_ABSTRACT // (openalex.MAX_KEY + 1)
+    assert openalex.rebuild({word: list(range(fits))}).text is not None
+    # the probe's shape: a 10,000-character key at 20,000 positions (the key alone is past MAX_KEY)
+    assert openalex.rebuild({"x" * 10_000: list(range(20_000))}) == openalex.Rebuilt(
+        None, "inverted_oversize"
+    )
 
 
 def test_no_inverted_index_is_no_abstract_not_a_refusal() -> None:

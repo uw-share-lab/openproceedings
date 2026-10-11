@@ -44,7 +44,7 @@ from pydantic import TypeAdapter
 from tests.corpus import Rec
 from tests.fixtures.corpus.synthetic_5k import CAP_STEMS, cap_records, cap_vocab, records
 from tests.golden.test_tantivy_200 import as_paper
-from tests.strategies import SCHEMA_3_FIELDS, SPAN, engine_asts, filters
+from tests.strategies import SPAN, engine_asts, filters
 from tests.unit.engine.test_exclusions import tantivy_of
 
 REGRESSIONS = Path(__file__).parent / "differential-regressions.json"
@@ -169,7 +169,7 @@ assert SHARDS >= 1, "OP_DIFFERENTIAL_SHARDS is a positive count of jobs"
 
 # the oracle over 5k records, every sort and the facets per example: no per-example deadline
 @settings(deadline=None, max_examples=max(1, settings().max_examples // SHARDS))
-@given(ast=engine_asts(cap_vocab(), SCHEMA_3_FIELDS))  # a schema-3 index refuses `abstract_kind:`
+@given(ast=engine_asts(cap_vocab()))  # every filter field, `abstract_kind:` included: the engine is schema 4
 def test_tantivy_agrees_with_the_oracle(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     agree(engines, ast)
 
@@ -223,10 +223,9 @@ def grouped_asts(draw: st.DrawFn) -> Node:
     """An AND of several trees (each a concept group, a leave-out or a filter clause) and extra top-level
     filters: the queries whose groups `search.run` counts (as `tests/unit/test_group_counts.py` draws them,
     here over the cap-edge vocabulary too)."""
-    parts: list[Node] = draw(st.lists(engine_asts(cap_vocab(), SCHEMA_3_FIELDS), min_size=1, max_size=4))
+    parts: list[Node] = draw(st.lists(engine_asts(cap_vocab()), min_size=1, max_size=4))
     parts += [
-        Not(span=SPAN, child=f) if draw(st.booleans()) else f
-        for f in draw(st.lists(filters(SCHEMA_3_FIELDS), max_size=3))
+        Not(span=SPAN, child=f) if draw(st.booleans()) else f for f in draw(st.lists(filters(), max_size=3))
     ]
     return parts[0] if len(parts) == 1 else And(span=SPAN, children=tuple(draw(st.permutations(parts))))
 

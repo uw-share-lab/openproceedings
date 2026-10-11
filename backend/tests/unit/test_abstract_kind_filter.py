@@ -92,7 +92,9 @@ def test_a_schema_3_engine_refuses_abstract_kind_on_every_entry_point(tmp_path: 
         with pytest.raises(EngineInputError) as refused:
             call()
         assert refused.value.code == DiagnosticCode.FIELD_NOT_INDEXED
-        assert "schema 4" in str(refused.value) and engine.index_version in str(refused.value)
+        assert "built before they existed" in str(refused.value) and engine.index_version in str(
+            refused.value
+        )
     assert http_status(DiagnosticCode.FIELD_NOT_INDEXED) == 422
 
 

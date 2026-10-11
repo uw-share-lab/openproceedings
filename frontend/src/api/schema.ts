@@ -215,8 +215,8 @@ export interface paths {
          *     list is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A
          *     title comes from the index the replay ran on, null if it doesn't hold the paper. Each entry also has its
          *     track and status there, each removed one its cause and failed filter, and `removed_causes` counts the
-         *     causes over the whole list (`removals`, cheap enough to run per page: a bitmap read per id; TASK-227;
-         *     the counts go on the access line too, never a title). A refused replay compared nothing: empty lists,
+         *     causes over the whole list (`removals`, TASK-227: a byte read per id per filter field, worked out once
+         *     per record and index and kept, `RemovalMemo`; the counts go on the access line too, never a title). A refused replay compared nothing: empty lists,
          *     null totals and `removed_causes`.
          */
         get: operations["get_record_diff"];
@@ -872,7 +872,7 @@ export interface components {
             abstract: string | null;
             /**
              * Abstract Kind
-             * @description Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @description Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld: `abstract_withheld` tells the two apart). The `abstract_kind:` filter and the `abstract_kind` facet use the kind the index was built with, so a takedown listed after the build shows `none` on the hit without changing which searches match it or how the facet counts it, until the next build (TASK-136). Derived from the abstract's claims; never stored in the record, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             abstract_kind: "official" | "openalex" | "none";
@@ -974,7 +974,10 @@ export interface components {
         };
         /** MetaResponse */
         MetaResponse: {
-            /** Filter Fields */
+            /**
+             * Filter Fields
+             * @description the filter fields the served index holds, in canonical order: `abstract_kind` only on an index built since it existed (a query naming a field it lacks is 422 `FIELD_NOT_INDEXED`)
+             */
             filter_fields: ("venue" | "year" | "track" | "status" | "abstract_kind")[];
             /** Index Version */
             index_version: string;
@@ -990,6 +993,7 @@ export interface components {
             text_fields: ("title" | "abstract")[];
             /** Tokenizer Version */
             tokenizer_version: string;
+            /** @description each filter field's whole vocabulary, as the query grammar accepts it */
             values: components["schemas"]["Vocabularies"];
         };
         /**
@@ -1073,7 +1077,7 @@ export interface components {
             abstract: string | null;
             /**
              * Abstract Kind
-             * @description Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @description Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld: `abstract_withheld` tells the two apart). The `abstract_kind:` filter and the `abstract_kind` facet use the kind the index was built with, so a takedown listed after the build shows `none` on the hit without changing which searches match it or how the facet counts it, until the next build (TASK-136). Derived from the abstract's claims; never stored in the record, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             readonly abstract_kind: "official" | "openalex" | "none";

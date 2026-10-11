@@ -62,6 +62,11 @@ class Report:
     def crawl_window(self) -> dict[str, str] | None:
         return window(self.fetched)
 
+    def captured(self) -> list[datetime]:
+        """When the text this report attached was captured, for a source that reads an archive's copies
+        (`aaai_library`: the Internet Archive capture times of the pages it attached); empty for a live crawl."""
+        return []
+
     def to_manifest(self) -> dict[str, Any]:
         raise NotImplementedError
 
@@ -73,7 +78,9 @@ def window(fetched: Iterable[datetime]) -> dict[str, str] | None:
 
 def sources_manifest(reports: Iterable[Report]) -> dict[str, Any]:
     """manifest.json's `sources` entries for the crawlers: per source, its reports under the report type's
-    `manifest_key` (`crawls`, `listings`) and, when any crawl fetched something, its `crawl_window`."""
+    `manifest_key` (`crawls`, `listings`) and, when any crawl fetched something, its `crawl_window`; for a source
+    that reads archived copies, the range of their capture times too (`capture_window`, which `/coverage` and a
+    search record show for that source instead of when the copies were fetched; gate C round 1)."""
     grouped: dict[str, list[Report]] = {}
     for r in reports:
         grouped.setdefault(r.source, []).append(r)
@@ -82,6 +89,8 @@ def sources_manifest(reports: Iterable[Report]) -> dict[str, Any]:
         entry: dict[str, Any] = {mine[0].manifest_key: [r.to_manifest() for r in mine]}
         if span := window(t for r in mine for t in r.fetched):
             entry["crawl_window"] = span
+        if captured := window(t for r in mine for t in r.captured()):
+            entry["capture_window"] = captured
         out[source] = entry
     return out
 

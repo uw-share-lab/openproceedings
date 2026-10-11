@@ -1554,7 +1554,7 @@
             "title": "Abstract"
           },
           "abstract_kind": {
-            "description": "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "description": "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld: `abstract_withheld` tells the two apart). The `abstract_kind:` filter and the `abstract_kind` facet use the kind the index was built with, so a takedown listed after the build shows `none` on the hit without changing which searches match it or how the facet counts it, until the next build (TASK-136). Derived from the abstract's claims; never stored in the record, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.",
             "enum": [
               "official",
               "openalex",
@@ -1783,6 +1783,7 @@
       "MetaResponse": {
         "properties": {
           "filter_fields": {
+            "description": "the filter fields the served index holds, in canonical order: `abstract_kind` only on an index built since it existed (a query naming a field it lacks is 422 `FIELD_NOT_INDEXED`)",
             "items": {
               "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
               "enum": [
@@ -1833,7 +1834,8 @@
             "type": "string"
           },
           "values": {
-            "$ref": "#/components/schemas/Vocabularies"
+            "$ref": "#/components/schemas/Vocabularies",
+            "description": "each filter field's whole vocabulary, as the query grammar accepts it"
           }
         },
         "required": [
@@ -2129,7 +2131,7 @@
             "title": "Abstract"
           },
           "abstract_kind": {
-            "description": "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "description": "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld: `abstract_withheld` tells the two apart). The `abstract_kind:` filter and the `abstract_kind` facet use the kind the index was built with, so a takedown listed after the build shows `none` on the hit without changing which searches match it or how the facet counts it, until the next build (TASK-136). Derived from the abstract's claims; never stored in the record, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.",
             "enum": [
               "official",
               "openalex",
@@ -5637,7 +5639,7 @@
     },
     "/api/v1/records/{id}/diff": {
       "get": {
-        "description": "The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each\nlist is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A\ntitle comes from the index the replay ran on, null if it doesn't hold the paper. Each entry also has its\ntrack and status there, each removed one its cause and failed filter, and `removed_causes` counts the\ncauses over the whole list (`removals`, cheap enough to run per page: a bitmap read per id; TASK-227;\nthe counts go on the access line too, never a title). A refused replay compared nothing: empty lists,\nnull totals and `removed_causes`.",
+        "description": "The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each\nlist is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A\ntitle comes from the index the replay ran on, null if it doesn't hold the paper. Each entry also has its\ntrack and status there, each removed one its cause and failed filter, and `removed_causes` counts the\ncauses over the whole list (`removals`, TASK-227: a byte read per id per filter field, worked out once\nper record and index and kept, `RemovalMemo`; the counts go on the access line too, never a title). A refused replay compared nothing: empty lists,\nnull totals and `removed_causes`.",
         "operationId": "get_record_diff",
         "parameters": [
           {

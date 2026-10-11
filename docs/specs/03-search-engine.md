@@ -194,11 +194,11 @@ index_version = sha256( snapshot_hash, TOKENIZER_VERSION, SCHEMA_VERSION, rankin
 Indexes live at `data/indexes/<index_version>/`, are immutable, and several can be kept. The API serves one
 as "current" and can load a pinned older version to replay a search record.
 
-As built (TASK-167, SCHEMA_VERSION 3): new indexes index `ord`, and a position-verified clause names its ids
+As built (TASK-167, SCHEMA_VERSION 3, since raised to 4, below): new indexes index `ord`, and a position-verified clause names its ids
 as a u64 term set on `ord` rather than on the text `id`. While schema 2 was served, `index.SERVED_SCHEMAS`
 mapped each served `schema_version` to its `SchemaForm`, and a schema-2 index kept the text-`id` path, so a record
 pinned to one still replayed `reproduced` on it (guarantee 4); both gave the same ids and the same float scores
-for every query. Schema 2 is now retired (below), and `SERVED_SCHEMAS` holds only "3".
+for every query. Schema 2 is now retired (below), and `SERVED_SCHEMAS` holds "3" and "4".
 
 Measured (`docs/results/2026-10-02-exclusions-and-verified-forms.md`, old and new alternated, load 30–155):
 
@@ -229,7 +229,10 @@ its own: (venue, year, track, status), plus `abstract_kind` on schema 4 (the mod
 refuses a query naming `abstract_kind:` (`FIELD_NOT_INDEXED`, 422). Its display records derive the kind from the
 stored abstract (`none` or `official`), which is exact because a schema-3 build refuses a record whose abstract
 is OpenAlex's (`IndexBuildError`, "needs index schema 4"). The combo memo's budget (`MAX_FACET_COMBOS`) triples to
-300,000, since a base can have up to three times schema 3's combos. On schema 4, `op index parity` also checks that
+300,000, since a base can have up to three times schema 3's combos: the number of bases memoised stays about the
+same. A memoised five-field combo with its count is about 204 bytes (measured, gate C round 1), so a full `faceted`
+memo is about 61 MB per engine (about 18 MB at schema 3's 100,000); with the default `pinned_indexes` of 4 the API's
+worst case for this memo is about 300 MB, against about 90 MB before. Size a host for it. On schema 4, `op index parity` also checks that
 each document's stored `abstract_kind` equals its record's. On a corpus both can hold, the two schemas give the
 same ids, float scores and shared-field facets (`test_served_schemas.py`), and a record saved on a schema-3 index
 replays `reproduced` after the schema-4 build (`test_records.py`).
@@ -275,15 +278,16 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
     loop, halving the GIL-held work a concurrent page waits on (`main-2-pop`, whose shared verified clause takes the
     bitwise path, 96.1 → 74.2 ms). Full garbage collections were not the cause: with the corpus resident, as the
     report holds it, one runs about once in 200 first pages, under the p95, so neither the report nor the API
-    freezes the collector (the milestone's perf report).
+    freezes the collector (`docs/results/2026-10-11-perf-regression.md`).
   - **Schema 4's own regression, found and fixed.** A fifth nested level in the facet combo multiplied every
     aggregation that read the combo: `counts` aggregated each tree's base over the whole combo although a count sums
     only the combos passing its trees' top-level filters. On the synthetic corpus, where abstract presence is random
     per record, a counted base went from 1,080 combos to 1,250-1,722 and `main-3-sources` from 74.9 ms (before group
     counts) to 632.8 ms p95. The real corpus hid it, because `abstract_kind` follows venue there. Commit `566cafcd`
     makes `counts` aggregate only the fields its trees filter on (facets still aggregate the whole combo, since
-    `abstract_kind` is a facet), with membership and counts unchanged. The bisect and numbers are in the milestone's
-    perf report (`.superpowers/sdd/2026-10-10-new-venues-milestone-c/perf-report.md`, not committed).
+    `abstract_kind` is a facet), with membership and counts unchanged. The bisect, the profiles and the two-search
+    measurement are in `docs/results/2026-10-11-perf-regression.md`, which also records that dev was already about
+    121 ms p50 on the 80k first page after TASK-176/197 (the 2026-10-02 80k report predates group counts).
 - A wildcard expansion of up to 200 terms: under 50 ms.
 - **Group counts, as measured (TASK-197, closing decision-039's exception):** every Trust-Evals string's cold
   first page (the facet memo forgotten) with its group counts is within the 100 ms search budget on index

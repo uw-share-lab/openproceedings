@@ -23,17 +23,21 @@ program with its four special tracks, one of them AI and Robotics, which is why 
 sections map to `main`. AAAI 2015's report says 539 papers were "selected … and presented" from the main technical
 and topical tracks' submissions; the row reads that as the accepted count (the weakest of the six).
 
-Six more AAAI `main` rows, read on 2026-10-10, are **counts of AAAI's own published accepted-paper list**, not a
+Four more AAAI `main` rows, read on 2026-10-10, are **counts of AAAI's own published accepted-paper list**, not a
 stated figure: for these years no AAAI document states an accepted count (prefaces, conference pages and press
-releases give submissions only). They are AAAI 2010 (262), 2012 (292), 2014 (398), 2017 (637), 2020 (1,614) and
-2021 (1,696), 84 rows in all. Each row's "what it counts" says "counted" and names the list. A list count backs a
-row only when the list is independent of the OJS proceedings the crawl reads (a pre-camera-ready list or an
-aaai.org page of the time) and its definition is our `main` cell (the controller's ruling for the owner,
-2026-10-10). Their deltas on snapshot `2026-10-10-9efa49481112` are 0, +2 (0.68%), 0, +2 (0.31%), −4 (0.25%) and
-−2 (0.12%).
+releases give submissions only). They are AAAI 2012 (292), 2017 (637), 2020 (1,614) and 2021 (1,696), 82 rows in
+all. Each row's "what it counts" says "counted" and names the list. A list counts as independent of the OJS
+proceedings the crawl reads only when it is evidently made before them, that is, a pre-camera-ready list that says
+so, and its definition must be our `main` cell (the controller's rulings for the owner, 2026-10-10 and gate C round
+1, 2026-10-11). AAAI 2010's and 2014's lists (262 and 398, both equal to the index) were rows until gate C round 1;
+their only archived copies were captured after the proceedings were published (2010-08-30 and 2015-09-06), the
+reason AAAI 2016's list was refused, so they are now ungated cells with a note. Deltas of the four on snapshot
+`2026-10-10-9efa49481112`: +2 (0.68%), +2 (0.31%), −4 (0.25%) and −2 (0.12%); the post-rebuild coverage report
+restates them on its snapshot.
 
 The other AAAI `main` cells and IASEAI 2026 are reported, not gated, each with a note in §Ungated cells with a
-note: AAAI 2011's list leaves out the Robotics Program the cell holds (240 against 248); AAAI 2016's list matches
+note: AAAI 2010's and 2014's lists survive only as copies captured after publication; AAAI 2011's list leaves out
+the Robotics Program the cell holds (240 against 248); AAAI 2016's list matches
 the proceedings section by section, so it appears to be derived from them and would check nothing; AAAI 2022–2026
 have only the chairs' notification emails quoted elsewhere and aggregator figures, which are never a row and seem
 to count the main technical track alone; and IASEAI 2026 states 92 accepted papers of which only the 57 archival
@@ -97,10 +101,8 @@ skipped NeurIPS 2021, because its D&B listing states no count, so no NeurIPS 202
 
 | venue | year | track | official_accepted | what it counts | source (URL or citation) | accessed |
 |---|---|---|---|---|---|---|
-| AAAI | 2010 | main | 262 | papers counted on AAAI's own accepted-paper list (the AAAI-10 papers page on aaai.org, archived): 202 in the main technical track, short papers included, plus 60 in the five special tracks (AI and Bioinformatics, AI and the Web, Challenges in AI, Integrated Intelligence, Physically Grounded AI); Nectar and senior member papers excluded | https://web.archive.org/web/20100830185521/http://www.aaai.org/Conferences/AAAI/2010/aaai10papers.php | 2026-10-10 |
 | AAAI | 2012 | main | 292 | papers counted on AAAI's own accepted-paper list (the AAAI-12 accepted-papers PDF on aaai.org): 220 main technical, poster-only full papers included, plus 26 AI and the Web, 11 Cognitive Systems, 21 Computational Sustainability and AI, and 14 Robotics | https://aaai.org/wp-content/uploads/2023/01/aaai12accepted-papers.pdf (linked from https://aaai.org/conference/aaai/aaai12/) | 2026-10-10 |
 | AAAI | 2013 | main | 203 | papers accepted for publication in the proceedings from the 690 technical-program submissions, the four special tracks included (AI and the Web, Cognitive Systems, Computational Sustainability, AI and Robotics); late-breaking papers and spotlights excluded | https://ojs.aaai.org/index.php/AAAI/article/view/8512 (AAAI-13 preface) | 2026-10-09 |
-| AAAI | 2014 | main | 398 | papers counted on AAAI's own accepted-paper list (the AAAI-14 accepted-papers page on aaai.org, archived), in its 22 AAAI technical categories; IAAI, EAAI, doctoral consortium and student abstracts excluded | https://web.archive.org/web/20150906033202/http://www.aaai.org/Conferences/AAAI/2014/aaai14accepts.php | 2026-10-10 |
 | AAAI | 2015 | main | 539 | papers selected from the 1,991 main technical and topical track submissions and presented (AI Magazine conference report); student abstracts, IAAI, demos and the doctoral consortium excluded | https://ojs.aaai.org/index.php/aimagazine/article/view/2606/2500 (submissions: https://ojs.aaai.org/index.php/AAAI/issue/view/304) | 2026-10-09 |
 | AAAI | 2017 | main | 637 | papers counted on AAAI's own accepted-paper list (the AAAI-17 accepted-papers PDF on aaai.org): 599 main technical plus 38 in three special tracks (Cognitive Systems, Computational Sustainability, Integrated Systems) | https://aaai.org/wp-content/uploads/2023/01/aaai17accepted-papers.pdf (linked from https://aaai.org/conference/aaai/aaai17/aaai-17-program-overview/) | 2026-10-10 |
 | AAAI | 2018 | main | 938 | original research publications in the proceedings, selected from 3,800 well-formed submissions (acceptance rate 24.7%); student abstracts, IAAI and EAAI excluded | https://ojs.aaai.org/index.php/AAAI/issue/view/301 | 2026-10-09 |
@@ -192,7 +194,9 @@ failing one takes its cause in `coverage-causes.toml`.
 
 | venue | year | track | why it is not gated | source (URL or citation) | accessed |
 |---|---|---|---|---|---|
+| AAAI | 2010 | main | AAAI's own AAAI-10 papers page lists 262 papers, but its only archived copy was captured on 2010-08-30, after the proceedings were published, and nothing on it says it was made before them; like AAAI 2016's list it may be derived from the proceedings, so a gate on it could check the proceedings against themselves | https://web.archive.org/web/20100830185521/http://www.aaai.org/Conferences/AAAI/2010/aaai10papers.php | 2026-10-11 |
 | AAAI | 2011 | main | AAAI's own accepted-paper list has 240 papers and leaves out the Robotics Program; the index's main track holds 248, those 240 plus the 8 Robotics Program papers, so the list counts a different set of papers | https://web.archive.org/web/20120605015434/http://www.aaai.org/Conferences/AAAI/2011/aaai11accepts.php | 2026-10-10 |
+| AAAI | 2014 | main | AAAI's own AAAI-14 accepted-papers page lists 398 papers, but its only archived copy was captured on 2015-09-06, after the proceedings were published, and nothing on it says it was made before them; like AAAI 2016's list it may be derived from the proceedings, so a gate on it could check the proceedings against themselves | https://web.archive.org/web/20150906033202/http://www.aaai.org/Conferences/AAAI/2014/aaai14accepts.php | 2026-10-11 |
 | AAAI | 2016 | main | AAAI's own accepted-paper list matches the proceedings section by section, so it appears to be derived from them; a gate on it would check the proceedings against themselves | https://ojs.aaai.org/index.php/AAAI/issue/view/303 (the proceedings the list matches; docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts) | 2026-10-10 |
 | AAAI | 2022 | main | no official accepted count was found: the only figure, 1,349, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
 | AAAI | 2023 | main | no official accepted count was found: the only figure, 1,721, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
@@ -322,7 +326,7 @@ the official main-track counts above, so these cells are now ordinary ±1% gate 
 2026: NeurIPS 2026 has no row because its main conference is not public yet. The index holds its workshop
 submissions and 95 Creative_AI_Track notes (track `other`, status `unknown`), neither gated.
 
-AAAI 2011, 2016 and 2022–2026 main and IASEAI 2026 main have no row (above; each has a note in §Ungated cells with a note); AAAI's and AIES's
+AAAI 2010, 2011, 2014, 2016 and 2022–2026 main and IASEAI 2026 main have no row (above; each has a note in §Ungated cells with a note); AAAI's and AIES's
 other tracks (`student_abstract`, `consortium`, `demo`, `iaai`, `eaai`, `other`) are not gated.
 
 Other tracks are reported on the coverage page but not gated (spec 07 §C), so they have no rows here. These

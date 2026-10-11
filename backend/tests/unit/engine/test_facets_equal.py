@@ -24,7 +24,7 @@ from openproceedings.query.parser import parse
 from tests.bench.test_bench import trust_evals
 from tests.fixtures.corpus.synthetic_5k import records, vocab
 from tests.golden.test_trust_evals import STRINGS
-from tests.strategies import SCHEMA_3_FIELDS, SPAN, engine_asts, filters
+from tests.strategies import SPAN, engine_asts, filters
 from tests.unit.engine.facets_before import facets_before
 from tests.unit.engine.test_exclusions import tantivy_of
 
@@ -52,11 +52,10 @@ class Before:
 
 @st.composite
 def filtered_asts(draw: st.DrawFn) -> Node:
-    # the fields a schema-3 index holds (it refuses `abstract_kind:`, test_abstract_kind_filter.py)
-    tree = draw(engine_asts(vocab(), SCHEMA_3_FIELDS))
+    # every filter field, `abstract_kind:` included: the engine is schema 4
+    tree = draw(engine_asts(vocab()))
     extra = [
-        Not(span=SPAN, child=f) if draw(st.booleans()) else f
-        for f in draw(st.lists(filters(SCHEMA_3_FIELDS), max_size=4))
+        Not(span=SPAN, child=f) if draw(st.booleans()) else f for f in draw(st.lists(filters(), max_size=4))
     ]
     if not extra:
         return tree

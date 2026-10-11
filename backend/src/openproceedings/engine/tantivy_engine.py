@@ -54,6 +54,8 @@ BASE_COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
 # a document's facet values, in this order: what every filter and facet depends on (task-086). Schema 4's; an
 # engine's own is `self.combo` (its `filter_fields`: schema 3's lacks `abstract_kind`)
 COMBO: tuple[str, ...] = (*BASE_COMBO, "abstract_kind")
+# what a filter field's values are called in `admit`'s refusal (FIELD_NOT_INDEXED), for a reader who never sees a schema
+_NOT_INDEXED: dict[str, str] = {"abstract_kind": "abstract kinds"}
 # what `counts` aggregates when none of its trees has a top-level filter: one field, its combos summed whole
 UNFILTERED: tuple[str, ...] = ("status",)
 # a document's values of the aggregated fields (`facets`' `over`; all of the engine's combo unless narrowed), in that order:
@@ -191,8 +193,11 @@ class TantivyEngine:
     # index, ~5 MB on 80k): it is cleared once the weights charged to it since its last clear pass its budget.
     # Weights, in ids/terms (~60 bytes each as Python strings): a verified clause, its ids + 1; an expansion,
     # its terms + 1 (an over-cap count, 1); a compiled query, `Compiled.held` + 1 (the ids and terms inside its
-    # Tantivy query: each verified clause's ids once for the list `Compiled.ids` keeps, plus whichever id list its query holds, the ids or the candidates that failed, none when none failed (TASK-076); plus the copies `Compiled.conjuncts` keeps, TASK-197; plus its explain lines); a base's facet combos, their number + 1. So ≲ 30 + 30 + 6 + a few MB per
-    # engine, and the API holds the served engine plus `pinned_indexes` more. Every memo is checked before each
+    # Tantivy query: each verified clause's ids once for the list `Compiled.ids` keeps, plus whichever id list its query holds, the ids or the candidates that failed, none when none failed (TASK-076); plus the copies `Compiled.conjuncts` keeps, TASK-197; plus its explain lines); a base's facet combos, their number + 1. So ≲ 30 + 30 + 6 MB for
+    # the first three, plus `faceted`'s: a memoised five-field combo with its count is about 204 bytes (measured,
+    # gate C round 1; a year above 256 is its own int object), so a full `faceted` is about 61 MB (about 18 MB at
+    # schema 3's 100,000), about 130 MB per engine in all; the API holds the served engine plus `pinned_indexes`
+    # more (4 by default: about 300 MB of `faceted` at worst, against about 90 MB before schema 4). Every memo is checked before each
     # entry is stored and charged right after (`verified` clause by clause, inside a compile: `_store_verified`),
     # so it exceeds its budget by at most one entry per thread storing concurrently (each thread's check may
     # predate the others' charges), never more; a single compile, however many verified clauses it has,
@@ -204,8 +209,9 @@ class TantivyEngine:
     MAX_VERIFIED_IDS = 500_000
     MAX_EXPANDED_TERMS = 100_000
     # `faceted`: a base's (venue, year, track, status, abstract_kind) combos, + 1: up to three times schema 3's.
-    # Measured: 352 combos per base on the 173k corpus (index 99c2e7ea2a0a, schema 3), so three kinds stay far
-    # below this budget.
+    # Measured: 352 combos per base on the 173k corpus (index 99c2e7ea2a0a, schema 3); a base has up to three
+    # times as many at schema 4, so tripling the budget keeps the number of bases memoised about the same (about
+    # 95 bases of 1,056 combos), at about 61 MB when full (see above).
     MAX_FACET_COMBOS = 300_000
 
     def __init__(self, path: Path) -> None:
@@ -240,7 +246,7 @@ class TantivyEngine:
                 "build a new index",
                 reason="schema_version_mismatch",
             )
-        # id → ord (its position in `ids.txt`), built on the first verified clause a schema-3 compile names
+        # id → ord (its position in `ids.txt`), built on the first verified clause a compile names
         # (`id_set`), then kept: one dict entry per record (a few MB at 80k), never changed after
         self._ords: dict[str, int] | None = None
         # each facet field's values (`combo` order), each with the bitmap of the documents (by ord) that have it, built
@@ -248,6 +254,11 @@ class TantivyEngine:
         # values × documents / 8 bytes (~0.5 MB at 133k documents and 30 values; it grows with the index's facet
         # values, e.g. more track values, TASK-130)
         self._masks: tuple[tuple[tuple[str | int, int], ...], ...] | None = None
+        # each combo field's value number per document, from `_masks`, built on the first `filter_values` and kept
+        # (`_value_index`): documents bytes per field
+        self._index: tuple[tuple[tuple[tuple[str | int, int], ...], ...], tuple[bytes | None, ...]] | None = (
+            None
+        )
         self.compiled: dict[str, Compiled] = {}  # per tree (bounded), see compile()
         self.verified: Verified = {}  # position-verified clauses, per engine
         # each wildcard's terms, or just the count of an over-cap one
@@ -305,8 +316,10 @@ class TantivyEngine:
         if missing:
             raise EngineInputError(
                 DiagnosticCode.FIELD_NOT_INDEXED,
-                f"`{missing[0]}:` needs index schema 4, and index {self.index_version} is schema "
-                f"{self.schema_version}: search the current index, or remove the `{missing[0]}:` filter.",
+                # in the reader's words, not the schema's (gate C round 1): only `abstract_kind` can be missing
+                f"This index ({self.index_version}) doesn't hold {_NOT_INDEXED.get(missing[0], missing[0])} "
+                f"yet; it was built before they existed. Search the current index, or remove the "
+                f"`{missing[0]}:` filter.",
             )
 
     def search(self, ast: Node, *, sort: str = "relevance", offset: int = 0, limit: int = 50) -> SearchResult:
@@ -398,16 +411,47 @@ class TantivyEngine:
         if not ords:
             return {}
         masks = self._value_masks()
+        index = self._value_index(masks)
         out: dict[str, dict[str, str | int]] = {}
         for i, o in ords.items():
-            bit = 1 << o
-            found = {
-                f: next((v for v, m in values if m & bit), None)
-                for f, values in zip(self.combo, masks, strict=True)
-            }
-            # a field the document has no value in is left out, never a StopIteration
-            out[i] = {f: v for f, v in found.items() if v is not None}
+            found: dict[str, str | int] = {}
+            for f, values, at in zip(self.combo, masks, index, strict=True):
+                if at is not None:  # O(1): the value's position + 1 at the document's ord, 0 for none
+                    k = at[o]
+                    if k:
+                        found[f] = values[k - 1][0]
+                    continue
+                bit = 1 << o  # a field with more values than a byte numbers: each value's bitmap, in turn
+                v = next((v for v, m in values if m & bit), None)
+                if v is not None:  # a field the document has no value in is left out, never a StopIteration
+                    found[f] = v
+            out[i] = found
         return out
+
+    def _value_index(self, masks: tuple[tuple[tuple[str | int, int], ...], ...]) -> tuple[bytes | None, ...]:
+        """Per `combo` field, one byte per document (by ord): the position + 1 of its value in `masks`, 0 when it
+        has none, so `filter_values` reads a document's value in O(1) instead of ANDing every value's N-bit
+        bitmap (gate C round 1: about 60 µs an id at 173k documents before). Built once from the bitmaps, by
+        translating each bitmap's base-2 digits to its value's number and ORing them (a document has at most one
+        value per field), then kept: documents bytes per field (~0.9 MB for five fields at 173k). A field with
+        more values than a byte numbers (255) gets None and is read from the bitmaps."""
+        kept = self._index  # one read; it names the bitmaps it was built from
+        if kept is not None and kept[0] is masks:
+            return kept[1]
+        n = len(self.ids)
+        built: list[bytes | None] = []
+        for values in masks:
+            if len(values) > 255:
+                built.append(None)
+                continue
+            acc = 0
+            for k, (_v, m) in enumerate(values, start=1):
+                digits = format(m, f"0{n}b")[::-1].encode("ascii")  # ord order, b"0"/b"1"
+                acc |= int.from_bytes(digits.translate(_DIGIT_TO[k]), "little")
+            built.append(acc.to_bytes(n, "little"))
+        index = tuple(built)
+        self._index = (masks, index)  # one assignment; a race only builds the same index twice
+        return index
 
     def _display(self, address: tantivy.DocAddress) -> dict[str, Any]:
         doc = self.searcher.doc(address).to_dict()
@@ -992,6 +1036,8 @@ class _Parts:
 
 
 _BINARY_DIGITS = bytes.maketrans(b"\x00\x01", b"01")  # a document's byte in `_bitmap` → its bit's digit
+# `_value_index`: a bitmap's digit → 0, or the value's number k (1..255) where the bit is set
+_DIGIT_TO = tuple(bytes.maketrans(b"01", bytes((0, k))) for k in range(256))
 
 # `counts`' `spread`: given the helper's job, starts it on another thread (or drops it); the job takes a `yielding`
 # callable, asked before each tree it would take
@@ -1040,11 +1086,15 @@ class _Shared:
                 self.run(i)
 
     def counted(self, spread: Spread) -> list[int]:
-        """Every tree's count: the helper offered, the caller taking trees until none is left, then waiting for
-        any the helper is still counting (the rest of that tree). The lowest-index tree's error is raised."""
+        """Every tree's count: the helper offered, the caller taking trees until none is left or one fails, then
+        waiting for any the helper is still counting (the rest of that tree). Of every failed tree, the caller's
+        own included, the lowest-index tree's error is raised, once no taken tree is still running."""
         spread(self.helper)
         while (i := self.take()) is not None:
-            self.run(i)
+            try:
+                self.run(i)
+            except BaseException:  # kept in `errors` by `run`, raised below once the helper's tree is done
+                break
         for done in self.done[: self.next]:  # a tree taken is counted or failed, so set, soon
             done.wait()
         if self.errors:

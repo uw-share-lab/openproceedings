@@ -1019,10 +1019,22 @@ def test_build_fills_aaai_pages_before_openalex_after_reconcile(
 
         return apply
 
+    from openproceedings.ingest import snapshot as snap
+
+    def recorded(name: str, real: Any) -> Any:
+        def call(*args: Any, **kwargs: Any) -> Any:
+            order.append(name)
+            return real(*args, **kwargs)
+
+        return call
+
     monkeypatch.setattr(aaai_library, "apply", fake("aaai_library"))
     monkeypatch.setattr(openalex, "apply", fake("openalex"))
+    monkeypatch.setattr(snap, "reconcile", recorded("reconcile", snap.reconcile))
+    monkeypatch.setattr(snap, "withhold", recorded("withhold", snap.withhold))
     result = build(cache, tmp_path / "snapshots", BUILT)
-    assert order == ["aaai_library", "openalex"]
+    # a reorder of `build` fails here: the fills after reconcile, AAAI's pages first, takedowns last
+    assert order == ["reconcile", "aaai_library", "openalex", "withhold"]
     manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["sources"]["aaai_library"] == {"fills": [{"ran": True}]}
     assert manifest["sources"]["openalex"] == {"fills": [{"ran": True}]}

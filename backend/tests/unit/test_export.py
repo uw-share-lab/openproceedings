@@ -1345,3 +1345,31 @@ def test_a_withheld_record_the_snapshot_lacks_is_still_an_internal_error() -> No
                 "ris", [PMLR_RECORD], PROVENANCE, sources={}, withheld=frozenset({PMLR_RECORD["id"]})
             )
         )  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("source", "words"),
+    [
+        # TASK-232: the aaai.org page the archive copy was of, never the capture
+        (Attribution("aaai_library", "aaai_library", "http://www.aaai.org/Library/AAAI/1984/aaai84-047.php"),
+         "AAAI http://www.aaai.org/Library/AAAI/1984/aaai84-047.php"),
+        # decision-049 milestone C: OpenAlex, linking the paper's own page
+        (Attribution("openalex", "openalex", "https://doi.org/10.1145/3593013.3594011"),
+         "OpenAlex https://doi.org/10.1145/3593013.3594011"),
+    ],
+)  # fmt: skip
+def test_the_new_abstract_origins_are_credited_byte_for_byte_in_every_format(
+    source: Attribution, words: str
+) -> None:
+    """Gate C round 1: the credit line of an `aaai_library` and an `openalex` abstract, pinned per format (RIS `N1`,
+    BibTeX `abstract_source`, the CSV source columns, JSONL `abstract_source`)."""
+    assert export.credit(source) == words
+    assert f"N1  - Abstract source: {words}\nN1  - {PROVENANCE.line()}\nER  - \n" in attributed_export(
+        "ris", PMLR_RECORD, source
+    )
+    assert f"  abstract_source = {{{words}}},\n" in attributed_export("bibtex", PMLR_RECORD, source)
+    assert attributed_export("csv", PMLR_RECORD, source).endswith(
+        f",{source.source},{source.origin},{source.url},false,,,,\r\n"
+    )
+    (obj,) = [json.loads(x) for x in attributed_export("jsonl", PMLR_RECORD, source).splitlines()]
+    assert obj["abstract_source"] == {"source": source.source, "origin": source.origin, "url": source.url}

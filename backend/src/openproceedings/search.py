@@ -490,7 +490,8 @@ def _yield() -> bool:
     """A helper's `yielding` (`TantivyEngine.counts`' `spread`): another search's counting job is waiting for a
     worker, so the helper takes no further tree. Other searches' counting then waits on a helper for at most
     the tree it is counting: one collection, or on the bitwise path one per conjunct of that tree not yet
-    collected (none answered `busy` in TASK-230's two-search measurement)."""
+    collected (none answered `busy` in TASK-230's two-search measurement,
+    `docs/results/2026-10-11-perf-regression.md`)."""
     return _WAITING[0] > 0
 
 

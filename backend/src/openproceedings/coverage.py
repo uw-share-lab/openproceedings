@@ -94,7 +94,20 @@ def crawl_dates(manifest: Mapping[str, Any]) -> dict[str, dict[str, str]]:
         if isinstance(entry, Mapping) and "crawl_window" in entry:
             dates[source] = _window(entry["crawl_window"])
     dates.update({source: _window(window) for source, window in sorted(claims.items())})
+    dates.update(
+        {source: _window(w) for source, w in captured_windows(manifest).items()}
+    )  # the text's dates win
     return dates
+
+
+def captured_windows(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Each source entry's `capture_window` (an archive's capture times of what it attached, `aaai_library`'s):
+    shown for that source instead of its fetch or claim window, kind `archive_captures` (gate C round 1)."""
+    return {
+        source: entry["capture_window"]
+        for source, entry in sorted(_map(manifest["sources"], "sources").items())
+        if isinstance(entry, Mapping) and "capture_window" in entry
+    }
 
 
 type TrackKey = tuple[str, int, str]  # (venue, year, track)
@@ -263,7 +276,9 @@ def breakdown(
             "built_at": manifest["built_at"],
             "sources": sources,
             # derived exactly as a search record's (TASK-091; `records.snapshot_facts`)
-            "crawl_dates_kind": crawl_dates_kind(windows, sources, ALL_SOURCES, utc_query_sources(manifest)),
+            "crawl_dates_kind": crawl_dates_kind(
+                windows, sources, ALL_SOURCES, utc_query_sources(manifest), captured_windows(manifest)
+            ),
             "identification_citable": not bootstrap_only(sources),
         }
         record_count = _count(manifest["record_count"])

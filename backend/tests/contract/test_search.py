@@ -329,7 +329,8 @@ def test_abstract_kind_on_a_schema_3_index_is_a_422_never_a_500(
         "papers": lambda: client.get(f"/api/v1/papers/{engine.ids[0]}", params={"q": q}),
     }[route]()
     e = error(r, 422, "FIELD_NOT_INDEXED")
-    assert "schema 4" in e["message"] and engine.index_version in e["message"]
+    assert "doesn't hold abstract kinds yet" in e["message"] and engine.index_version in e["message"]
+    assert "schema" not in e["message"]  # the reader's words (gate C round 1)
 
 
 def test_a_query_that_does_not_parse_is_a_422_with_code_point_spans(client: TestClient) -> None:

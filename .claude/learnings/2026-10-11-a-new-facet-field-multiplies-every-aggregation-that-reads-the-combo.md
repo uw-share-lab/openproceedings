@@ -3,7 +3,7 @@
 **Key lesson:** When a field joins an engine's facet combo, make each aggregation read only the fields its caller filters on, and find the cost with the synthetic 80k bench (`tests.bench.report_80k`), not the real-corpus bench, because the real corpus hides a field that follows another one.
 
 - **Date:** 2026-10-11 · **Task:** TASK-215, TASK-220 (decision-049, new venues milestone C; follow-ups TASK-230..232) · **Area:** engine, eval
-- **Artifacts:** commits `f5dad7bd` (index schema 4), `566cafcd` (the fix), `docs/results/2026-10-11-bench.md`, `docs/results/2026-10-10-bench-group-counts.md`, `docs/specs/03-search-engine.md` §Performance budgets, `.superpowers/sdd/2026-10-10-new-venues-milestone-c/perf-report.md` (local, untracked)
+- **Artifacts:** commits `f5dad7bd` (index schema 4), `566cafcd` (the fix), `docs/results/2026-10-11-bench.md`, `docs/results/2026-10-10-bench-group-counts.md`, `docs/specs/03-search-engine.md` §Performance budgets, `docs/results/2026-10-11-perf-regression.md` (the bisect and profiles)
 
 ## What we set out to do
 Add `abstract_kind` as a raw fast field (index schema 4) and verify milestone C on the real data: snapshot diff, index parity, coverage and benchmarks.
@@ -28,7 +28,7 @@ Add `abstract_kind` as a raw fast field (index schema 4) and verify milestone C 
 ## Follow-ups
 - [x] TASK-230 — `/search` first page for main-3-sources over 100 ms on the synthetic 80k
 - [x] TASK-231 — owner review of the OpenAlex fill's refusals
-- [x] TASK-232 — a source for the 3,648 AAAI 1980-2008 records without an abstract
+- [ ] TASK-232 — a source for the 3,648 AAAI 1980-2008 records without an abstract (built; closed after the final rebuild shows its official abstracts)
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `docs/specs/03-search-engine.md` §Performance budgets (the miss and the regression stated); `.claude/skills/index-versioning/SKILL.md` (schema 2 retired before schema 4); no skill rule for the combo yet.

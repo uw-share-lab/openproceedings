@@ -55,6 +55,7 @@ import urllib.parse
 from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -446,8 +447,14 @@ class FillReport(Report):
     )
     near: list[tuple[str, float]] = field(default_factory=list)  # (record id, score), in id order
     refused: Counter[str] = field(default_factory=Counter)
+    # the capture time of each attached page (its row's 14-digit timestamp, UTC): the text's date, which the
+    # manifest's `capture_window` shows for this source instead of the harvest's fetch times
+    attached_captures: list[datetime] = field(default_factory=list)
 
     manifest_key: ClassVar[str] = "fills"
+
+    def captured(self) -> list[datetime]:
+        return self.attached_captures
 
     def to_manifest(self) -> dict[str, Any]:
         return {"pages": self.pages, "candidates": self.candidates, "no_page": self.no_page,
@@ -543,6 +550,9 @@ def fill(
             if how == "near":
                 report.title_near += 1
                 report.near.append((r.id, round(score, 3)))
+            report.attached_captures.append(
+                datetime.strptime(row.timestamp, "%Y%m%d%H%M%S").replace(tzinfo=UTC)
+            )
             out.append(_attach(r, row, page, cleaned, near=score if how == "near" else None))
         else:
             report.official_won += 1

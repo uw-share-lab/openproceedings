@@ -467,6 +467,8 @@ def ingest_openalex(
                                          "candidates": candidates, "doi_unqueryable": unqueryable,
                                          "requests": f.stats.network, "cached": f.stats.cached,
                                          "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+    if unqueryable:  # DOIs no filter can carry: their records go unqueried by the DOI route (counts only)
+        log.warning("openalex_attention", extra={"doi_unqueryable": unqueryable})
     return {"dry_run": False, "extract": sha, "lookups": len(lookups), "works": works, "candidates": candidates,
             "doi_unqueryable": unqueryable, "requests": f.stats.network, "cached": f.stats.cached}  # fmt: skip
 

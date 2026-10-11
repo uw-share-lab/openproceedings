@@ -41,6 +41,7 @@ import shutil
 import sqlite3
 import threading
 import zlib
+from collections import OrderedDict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -290,7 +291,9 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
     as `/coverage` does (`coverage.crawl_dates`; a test compares the two). A bootstrap source's window (RIS:
     when the Scholar searches were run) is `scholar_query_dates`, not a crawl, or `scholar_query_dates_utc`
     when the manifest's `query_dates` says they were converted (TASK-077); `*` over bootstrap sources alone is
-    too, over both is `mixed` (`mixed_utc` with no local dates)."""
+    too, over both is `mixed` (`mixed_utc` with no local dates). A source entry's `capture_window` (an
+    archive's capture times of the copies it attached: `aaai_library`) replaces that source's window, kind
+    `archive_captures` (gate C round 1)."""
     try:
         _path, manifest = indexed_snapshot(data_dir, inputs)  # the name and hash rule of the API's load
         sources = sorted(manifest["sources"])  # required: no sources named is not "a crawl, citable"
@@ -304,7 +307,13 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
             if source == ALL_SOURCES:
                 raise ValueError("a source can't be named `*`")
             crawl[source] = _window(window)  # the claim window wins over the fetch window (TASK-122)
-        kinds = crawl_dates_kind(crawl, sources, ALL_SOURCES, utc_query_sources(manifest))
+        captured = {
+            source: entry["capture_window"]
+            for source, entry in sorted(manifest["sources"].items())
+            if isinstance(entry, dict) and "capture_window" in entry
+        }
+        crawl.update({source: _window(w) for source, w in captured.items()})  # the text's dates win (gate C)
+        kinds = crawl_dates_kind(crawl, sources, ALL_SOURCES, utc_query_sources(manifest), captured)
         conflicts = manifest["conflicts"]
         dedup = Dedup(
             merged=int(manifest["merges"]["total"]),
@@ -924,3 +933,44 @@ def removal_tally(found: Mapping[str, Removal]) -> dict[RemovalCause, int]:
     for r in found.values():
         out[r.cause] += 1
     return out
+
+
+class RemovalMemo:
+    """`removals` and its tally per (record id, index_version), least recently used dropped first (gate C round 1):
+    a stored record never changes and a replay on one index always removes the same ids for the same reasons,
+    so `GET /records/{id}/diff` works out the causes once per record and index, not once per page. Bounded by
+    what it holds: at most `max_ids` removed ids over every entry (one entry larger than that is answered and not
+    kept). Thread-safe; two first requests may both compute an entry, which is the same either way."""
+
+    def __init__(self, max_ids: int = 500_000) -> None:
+        self.max_ids = max_ids
+        self._held: OrderedDict[tuple[str, str], tuple[dict[str, Removal], dict[RemovalCause, int]]] = (
+            OrderedDict()
+        )
+        self._ids = 0
+        self._lock = threading.Lock()
+
+    def get(
+        self, record_id: str, result: Replay
+    ) -> tuple[dict[str, Removal], dict[RemovalCause, int]] | None:
+        """The removed ids' causes and their tally, or None when the replay compared nothing (`refused`)."""
+        if result.removed is None:
+            return None
+        key = (record_id, result.engine.index_version)
+        with self._lock:
+            kept = self._held.get(key)
+            if kept is not None:
+                self._held.move_to_end(key)
+                return kept
+        why = removals(result)
+        assert why is not None  # `result.removed` is not None
+        entry = (why, removal_tally(why))
+        if len(why) <= self.max_ids:
+            with self._lock:
+                if key not in self._held:
+                    self._held[key] = entry
+                    self._ids += len(why)
+                    while self._ids > self.max_ids:
+                        _key, (dropped, _tally) = self._held.popitem(last=False)
+                        self._ids -= len(dropped)
+        return entry
