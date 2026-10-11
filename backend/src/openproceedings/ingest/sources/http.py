@@ -422,7 +422,8 @@ class HttpClient[T]:
         self, request: Request, *, by_length: bool = False, whole: Callable[[bytes], bool] | None = None
     ) -> Response:
         """One request, paced, retried on 429, 5xx, a network error and a truncated 200 (`_truncated`; with
-        `by_length`, judged by the stated `Content-Length` when there is one); any other response is returned for
+        `by_length`, judged by the stated `Content-Length` when there is one; a 200 is truncated unless `whole`
+        vouches for the bytes); any other response is returned for
         the source to judge."""
         assert self.transport is not None
         policy, url = self.policy, self.check(request.url)

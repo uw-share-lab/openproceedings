@@ -16,7 +16,14 @@ from openproceedings.ingest.record import Claim, PaperRecord
 from openproceedings.ingest.sources import aaai_library as a
 from openproceedings.ingest.sources import openalex
 from openproceedings.ingest.sources.common import CrawlError
-from openproceedings.ingest.sources.http import CacheMiss, FetchError, Page, PageCache, Response
+from openproceedings.ingest.sources.http import (
+    CacheMiss,
+    FetchError,
+    Page,
+    PageCache,
+    Response,
+    RetriesExhausted,
+)
 
 from tests.unit.ingest.proceedings_helpers import Clock, FakeTransport, fixture
 
@@ -603,6 +610,77 @@ def test_a_redirect_to_the_same_page_with_other_bytes_is_capture_redirect(tmp_pa
     assert PageCache(tmp_path / a.CACHE_DIR).get(target) is None  # the other bytes are never stored
     (out,), report = a.fill([record(row.key)], a.fetcher(tmp_path, offline=True), table_of(row))
     assert out.abstract is None and report.refused == {"capture_redirect": 1} and report.attached == 0
+
+
+def _unclosed(key: str = "conf/aaai/Araya84") -> bytes:
+    """The fixture's bytes as an archive can serve them: no `</html>` (and the fake transport states no length)."""
+    data = body(FIXTURES[key])
+    assert b"</html>" in data.lower()
+    cut = data[: data.lower().rindex(b"</html>")]
+    assert b"</html>" not in cut.lower()
+    return cut
+
+
+def test_a_capture_with_no_length_and_no_closing_tag_attaches_when_its_digest_matches(tmp_path: Path) -> None:
+    """aaai07-001 (TASK-232): the bytes hash to the pinned digest, so they are whole: one request, cached, attached."""
+    data = _unclosed()
+    row = row_for("conf/aaai/Araya84", data)
+    transport, f = _live(tmp_path, {row.capture: Response(200, {"content-type": "text/html"}, data)})
+    done = a.harvest(table_of(row), f)
+    assert (done.pages, done.fetched) == (1, 1) and transport.calls == [row.capture]
+    (out,), report = a.fill([record(row.key)], a.fetcher(tmp_path, offline=True), table_of(row))
+    assert out.abstract is not None and report.attached == 1 and not report.refused
+
+
+def test_a_capture_with_no_length_and_no_closing_tag_is_refused_when_its_digest_differs(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    row = row_for("conf/aaai/Araya84")  # pinned to the whole page; the archive serves it cut
+    cut = _unclosed()
+    transport, f = _live(tmp_path, {row.capture: Response(200, {"content-type": "text/html"}, cut)})
+    with caplog.at_level(logging.WARNING), pytest.raises(RetriesExhausted):
+        a.harvest(table_of(row), f)
+    assert len(transport.calls) > 1  # retried
+    assert {getattr(r, "why", None) for r in caplog.records if r.getMessage() == "crawl_retry_wait"} == {
+        "truncated_no_length"
+    }
+    assert PageCache(tmp_path / a.CACHE_DIR).get(row.capture) is None
+
+
+def test_a_redirect_target_with_no_length_and_no_closing_tag_attaches_when_its_digest_matches(
+    tmp_path: Path,
+) -> None:
+    data = _unclosed()
+    row = row_for("conf/aaai/Araya84", data)
+    target = f"https://web.archive.org/web/{OTHER_TS}id_/http://{PAGE}"
+    transport, f = _live(
+        tmp_path, {row.capture: _moved(target), target: Response(200, {"content-type": "text/html"}, data)}
+    )
+    done = a.harvest(table_of(row), f)
+    assert (done.pages, done.redirected_same, done.redirect) == (1, 1, 0)
+    assert transport.calls == [row.capture, target]
+    cached = PageCache(tmp_path / a.CACHE_DIR).get(row.capture)
+    assert cached is not None and cached.ok and a.body_of(cached) == data
+
+
+def test_a_redirect_target_with_no_length_and_no_closing_tag_is_refused_when_its_digest_differs(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    row = row_for("conf/aaai/Araya84")
+    target = f"https://web.archive.org/web/{OTHER_TS}id_/http://{PAGE}"
+    cut = _unclosed()
+    transport, f = _live(
+        tmp_path, {row.capture: _moved(target), target: Response(200, {"content-type": "text/html"}, cut)}
+    )
+    with caplog.at_level(logging.WARNING), pytest.raises(RetriesExhausted):
+        a.harvest(table_of(row), f)
+    assert transport.calls.count(target) > 1  # retried as truncated
+    assert {getattr(r, "why", None) for r in caplog.records if r.getMessage() == "crawl_retry_wait"} == {
+        "truncated_no_length"
+    }
+    assert PageCache(tmp_path / a.CACHE_DIR).get(target) is None
+    cached = PageCache(tmp_path / a.CACHE_DIR).get(row.capture)
+    assert cached is None or not cached.ok
 
 
 @pytest.mark.parametrize(
