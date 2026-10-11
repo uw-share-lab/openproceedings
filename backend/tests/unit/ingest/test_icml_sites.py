@@ -9,6 +9,7 @@ titles and abstracts synthetic). No network: pages are seeded into a page cache.
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from openproceedings.ingest.sources.html import HTMLBudgetError
 from openproceedings.ingest.sources.http import Fetcher, Response
 from openproceedings.ingest.sources.icml_sites import Entry, SitePage
 
+from tests.timing import assert_near_linear
 from tests.unit.ingest.proceedings_helpers import FakeTransport, fetcher, seed
 from tests.unit.ingest.test_dblp import TABLE, prepared
 
@@ -391,38 +393,59 @@ def test_a_page_listed_twice_or_a_capture_off_the_official_sites_path_is_refused
     )
 
 
-HOSTILE = {  # the review gate's probes: openings whose closing tag never comes, about 0.3 MB each
-    "cyberchair": "<table>" + "<th>x</th><td>" * 20_000,
-    "icml2007_paper": "<table>" * 1_000 + "<th>x</th><td>y</td>" * 20_000,  # deep nesting, then many cells
-    "icml2007_list": '<a name="1">' * 20_000 + "</a>",  # one far closing tag after every opening
-    "icml2008": '<a name="1"></a>' + "<h3>" * 20_000 + "<p><i>a</p>" * 10_000,
+# the review gate's probes, by size: openings whose closing tag never comes, about 0.3 MB each at n = 20,000
+HOSTILE: dict[str, Callable[[int], str]] = {
+    "cyberchair": lambda n: "<table>" + "<th>x</th><td>" * n,
+    "icml2007_paper": lambda n: (
+        "<table>" * 1_000 + "<th>x</th><td>y</td>" * n
+    ),  # deep nesting, then many cells
+    "icml2007_list": lambda n: '<a name="1">' * n + "</a>",  # one far closing tag after every opening
+    "icml2008": lambda n: '<a name="1"></a>' + "<h3>" * n + "<p><i>a</p>" * (n // 2),
     # the old 2009 patterns were bounded already; the row keeps a future rewrite honest
-    "icml2009": '<h3><a name="1"></a>paper ID: 1</p>' + "x" * 300_000,
-    "icml2010": '<a name="1"></a>' + "<h3>" * 20_000 + '<p class="abstracts">' * 20_000,
-    "icml2011": "<a name='1'><h3>t</h3>" + "Abstract: </span>" * 20_000,
-    "icml2012": '<div class="paper" id="paper-1">' + "<h2>" * 20_000 + "<strong>Abstract: </strong>" * 5_000,
+    "icml2009": lambda n: '<h3><a name="1"></a>paper ID: 1</p>' + "x" * (15 * n),
+    "icml2010": lambda n: '<a name="1"></a>' + "<h3>" * n + '<p class="abstracts">' * n,
+    "icml2011": lambda n: "<a name='1'><h3>t</h3>" + "Abstract: </span>" * n,
+    "icml2012": lambda n: (
+        '<div class="paper" id="paper-1">' + "<h2>" * n + "<strong>Abstract: </strong>" * (n // 4)
+    ),
     # 1997/1998 (TASK-207): many anchors and unclosed tags, and one long submission of headings and digits
-    "icml1997": '<li><a href="#1">' * 10_000 + '<a name="1"></a>Abstract:\n' * 10_000 + "<a b" * 20_000,
-    "icml1998_paper": "<h1>ICML-98 Submission #1</h1>"
-    + "Abstract:\n" * 20_000
-    + "12 34 " * 20_000
-    + "<"
-    + "a" * 100_000,
+    "icml1997": lambda n: (
+        '<li><a href="#1">' * (n // 2) + '<a name="1"></a>Abstract:\n' * (n // 2) + "<a b" * n
+    ),
+    "icml1998_paper": lambda n: (
+        "<h1>ICML-98 Submission #1</h1>" + "Abstract:\n" * n + "12 34 " * n + "<" + "a" * (5 * n)
+    ),
 }
+
+
+# the capture each parser reads its page as, where CAPTURE (a 2007 page) would make it return at once: the 1998
+# parser takes the submission number from a 1998 paper's URL
+HOSTILE_CAPTURES = {
+    "icml1998_paper": "https://web.archive.org/web/19991009084141id_/http://www.cs.wisc.edu:80/icml98/papers/paper1.html"
+}
+
+
+def _read_hostile(parser: str, page: str) -> None:
+    with contextlib.suppress(HTMLBudgetError):  # the shared tree's nesting bound: a refusal, fine, and fast
+        icml_sites.PARSERS[parser](page, HOSTILE_CAPTURES.get(parser, CAPTURE))
+
+
+def test_the_hostile_1998_page_is_read_as_a_1998_paper() -> None:
+    """Read as CAPTURE, the 1998 parser returned at once (about 1 µs at either size), so its growth row measured
+    nothing; read as a 1998 paper it parses the submission."""
+    assert icml_sites.PARSERS["icml1998_paper"](HOSTILE["icml1998_paper"](10), CAPTURE) == []
+    assert icml_sites.PARSERS["icml1998_paper"](
+        HOSTILE["icml1998_paper"](10), HOSTILE_CAPTURES["icml1998_paper"]
+    )
 
 
 @pytest.mark.parametrize("parser", sorted(HOSTILE))
 def test_a_hostile_page_is_parsed_in_linear_time(parser: str) -> None:
     """Unclosed tags made a backtracking pattern take 87 s at 5.6 KB, and lazy `(.*?)` openings tens of seconds
-    at 0.4 MB. Every parser reads such a page at once."""
-    import time
-
+    at 0.4 MB. Every parser reads such a page at once: 4x the page (0.3 MB at the larger size) costs about 4x the
+    CPU time, never quadratic's ~16x (tests/timing.py: a 2 s wall-clock bound flaked in nightly 38056534247)."""
     assert sorted(HOSTILE) == sorted(icml_sites.PARSERS)
-    hostile = HOSTILE[parser]
-    started = time.monotonic()
-    with contextlib.suppress(HTMLBudgetError):  # the shared tree's nesting bound: a refusal, fine, and fast
-        icml_sites.PARSERS[parser](hostile, CAPTURE)
-    assert time.monotonic() - started < 2.0
+    assert_near_linear(lambda page: _read_hostile(parser, page), HOSTILE[parser], 5_000, rounds=5)
 
 
 @pytest.mark.parametrize("parser", sorted(icml_sites.PARSERS))

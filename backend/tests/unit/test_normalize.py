@@ -18,6 +18,8 @@ from openproceedings.query.normalize import (
     tokenize_with_tail,
 )
 
+from tests.timing import assert_near_linear
+
 # Text without LaTeX syntax: the whole-string reference below doesn't model LaTeX. Tokenizer 3 reads the NFKC
 # form, so the characters whose NFKC form is `\` or `$` (full-width, small) are LaTeX syntax too.
 LATEX_SYNTAX = "\\$\uff3c\uff04\ufe68\ufe69"
@@ -259,35 +261,15 @@ def test_command_tokens_span_the_command_name() -> None:
 
 
 def test_script_join_is_linear() -> None:
-    import time
-
-    def secs(n: int) -> float:
-        text = "$" + "^{a" * n + "x$"
-        t = time.thread_time()  # CPU time: being preempted on a busy machine doesn't count
-        normalize(text)
-        return time.thread_time() - t
-
-    secs(1000)  # warm up
-    # best of 9: one busy moment on a shared machine can't push the ratio over (task-070's lesson)
-    small, large = min(secs(5_000) for _ in range(9)), min(secs(20_000) for _ in range(9))
-    assert large < small * 8  # 4× the input: linear is ~4×, quadratic ~16×
+    # 4× the input: linear is ~4×, quadratic ~16× (tests/timing.py)
+    assert_near_linear(normalize, lambda n: "$" + "^{a" * n + "x$", 5_000)
 
 
 @pytest.mark.parametrize("text", ["\u0301", "a\u0301"])
 def test_a_run_of_marks_is_linear(text: str) -> None:
     # TASK-067: each mark rescanned the rest of its run, so a query or abstract of a few thousand marks cost
     # seconds; a mark-heavy `q` is anyone's to send
-    import time
-
-    def secs(n: int) -> float:
-        body = text + "\u0301" * n
-        t = time.thread_time()
-        tokenize(body)
-        return time.thread_time() - t
-
-    secs(1000)
-    small, large = min(secs(5_000) for _ in range(9)), min(secs(20_000) for _ in range(9))
-    assert large < small * 8
+    assert_near_linear(tokenize, lambda n: text + "\u0301" * n, 5_000)
 
 
 @pytest.mark.parametrize(

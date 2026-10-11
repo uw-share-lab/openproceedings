@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import logging
 import threading
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -38,6 +37,7 @@ from openproceedings.ingest.sources.openreview_client import (
 )
 from scholarmend.cache import Cache
 
+from tests.timing import growth
 from tests.unit.ingest.openreview_fakes import PASSWORD, USERNAME, FakeClock, json_response
 from tests.unit.ingest.proceedings_helpers import FakeTransport, fetcher, response
 
@@ -267,15 +267,24 @@ def test_xml_unterminated_prolog_is_truncated(tmp_path: Path, prolog: str) -> No
     ],
 )
 def test_xml_root_scan_is_bounded_on_adversarial_prologs(body: bytes) -> None:
-    """Run in a daemon thread, so a scan that never returns (a backtracking pattern) fails here by name, fast,
-    instead of hanging the job until CI's timeout."""
+    """The whole body costs about 4x its first 1,024 bytes in CPU time, as the 4096-byte window and a linear walk
+    give: never ~16x (quadratic in the window) or ~1,000x (the 1 MB tail read). Measured in a daemon thread, so a
+    scan that never returns (a backtracking pattern) fails here by name instead of hanging the job until CI's
+    timeout; 30 s is that guard, not the measure (tests/timing.py: wall-clock bounds flake on shared runners)."""
     found: list[bytes | None] = []
-    worker = threading.Thread(target=lambda: found.append(_xml_root(body)), daemon=True)
-    start = time.perf_counter()
+    ratios: list[tuple[float, list[tuple[float, float]]]] = []
+
+    def measure() -> None:
+        found.append(_xml_root(body))
+        ratios.append(growth(lambda: _xml_root(body[:1024]), lambda: _xml_root(body), 5, 1e-6, calls=50))
+
+    worker = threading.Thread(target=measure, daemon=True)
     worker.start()
-    worker.join(timeout=2)
-    assert not worker.is_alive(), "_xml_root did not return within 2 s"
-    assert found == [None] and time.perf_counter() - start < 0.5
+    worker.join(timeout=30)
+    assert not worker.is_alive(), "_xml_root did not return within 30 s"
+    assert found == [None]
+    [(ratio, pairs)] = ratios
+    assert ratio < 8, (ratio, pairs)
 
 
 def test_xml_root_reads_only_the_first_4096_bytes() -> None:
