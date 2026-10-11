@@ -15,7 +15,7 @@ import json
 import threading
 from collections import Counter, deque
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import AbstractContextManager, contextmanager, nullcontext
+from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from importlib.metadata import version
 from itertools import repeat
@@ -538,7 +538,9 @@ class TantivyEngine:
         differential); only the wall time drops, the trees' collections running two at a time (Tantivy's
         collection releases the GIL). The caller never waits for a helper that hasn't started: it takes what is
         left itself, and then waits only for a tree the helper is counting. The job is given a `yielding`
-        callable and stops before its next tree once it returns True. On the bitwise path the two threads share
+        callable and stops before its next tree once it returns True, so a search waiting for its worker waits
+        at most for the tree it is counting (one collection; on the bitwise path, one per conjunct of that tree not
+        yet collected). On the bitwise path the two threads share
         the call's conjunct bitmaps: each is still collected once, a thread needing one the other is collecting
         waiting for it (`_Parts.matches`), and the per-value bitmaps are built before the helper is offered."""
         for ast in trees:  # every tree before any is counted: a refused call counts nothing
@@ -695,7 +697,12 @@ class TantivyEngine:
         # as the base-2 digits of the bitmap, highest `ord` first: half the time of a per-hit loop setting bits,
         # all of it holding the GIL a concurrent page needs (TASK-230)
         marks = bytearray(len(self.ids))
-        deque(map(marks.__setitem__, map(itemgetter(0), hits), repeat(1)), maxlen=0)
+        try:
+            deque(map(marks.__setitem__, map(itemgetter(0), hits), repeat(1)), maxlen=0)
+        except IndexError:  # an `ord` past `ids.txt`: the index and its id list disagree (never a silent bit)
+            raise EngineInternalError(
+                DiagnosticCode.API_INTERNAL, f"an ord is past the {len(self.ids):,} ids of {IDS}"
+            ) from None
         return int(marks[::-1].translate(_BINARY_DIGITS) or b"0", 2)
 
     # --- compilation and explain ---------------------------------------------------------------------
@@ -993,15 +1000,18 @@ type Spread = Callable[[Callable[[Callable[[], bool]], None]], None]
 
 class _Shared:
     """One spread `counts` call's trees, taken one at a time by the caller and a helper (`counts`' `spread`).
-    Each tree is taken once, under a lock; its count, or the error counting it raised, is kept by its index."""
+    Each tree is taken once, under a lock; its count, or the error counting it raised, is kept by its index
+    before the tree is marked done, so the caller, once every taken tree is done, sees every error."""
 
     def __init__(self, n: int, count: Callable[[int], int]) -> None:
         self.count = count
         self.lock = threading.Lock()
         self.next = 0  # the next tree to take, under `lock`
-        self.out: list[int] = [0] * n
+        self.out: list[int | None] = [None] * n
         self.done = [threading.Event() for _ in range(n)]  # set when the tree is counted, or failed
-        self.failed: BaseException | None = None  # the helper's error (the caller's own is raised as it is)
+        self.errors: dict[
+            int, BaseException
+        ] = {}  # each failed tree's error, by its index, set before `done`
         self.stop = False  # set on any failure: neither thread takes another tree
 
     def take(self) -> int | None:
@@ -1014,32 +1024,35 @@ class _Shared:
     def run(self, i: int) -> None:
         try:
             self.out[i] = self.count(i)
-        except BaseException:
+        except BaseException as e:
             self.stop = True
+            self.errors[i] = e  # before `done`: a caller woken by it must find the error
             raise
         finally:
             self.done[i].set()
 
     def helper(self, yielding: Callable[[], bool]) -> None:
-        """The helper's job: trees until none is left, the call fails, or `yielding()`; never raises (its error
-        is the caller's to raise)."""
-        try:
+        """The helper's job: trees until none is left, the call fails, or `yielding()`. Never raises: a tree's
+        error is kept by `run` for the caller to raise, and one outside any tree (from `yielding`) loses no tree,
+        since the caller counts every tree nobody took."""
+        with suppress(BaseException):
             while not yielding() and (i := self.take()) is not None:
                 self.run(i)
-        except BaseException as e:
-            self.failed = e
 
     def counted(self, spread: Spread) -> list[int]:
         """Every tree's count: the helper offered, the caller taking trees until none is left, then waiting for
-        any the helper is still counting (one collection each)."""
+        any the helper is still counting (the rest of that tree). The lowest-index tree's error is raised."""
         spread(self.helper)
         while (i := self.take()) is not None:
             self.run(i)
         for done in self.done[: self.next]:  # a tree taken is counted or failed, so set, soon
             done.wait()
-        if self.failed is not None:
-            raise self.failed
-        return self.out
+        if self.errors:
+            raise self.errors[min(self.errors)]
+        out = [n for n in self.out if n is not None]
+        if len(out) != len(self.out):  # every tree was taken and none failed, so each has its count
+            raise EngineInternalError(DiagnosticCode.API_INTERNAL, "a spread count left a tree uncounted")
+        return out
 
 
 def _indexes_ord(schema: tantivy.Schema, searcher: tantivy.Searcher) -> bool:

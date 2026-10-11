@@ -7,22 +7,24 @@ kept for each. A search asked for its groups is the search without them, field f
 
 from __future__ import annotations
 
+import contextvars
 import dataclasses
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Any
 
 import pytest
+import tantivy
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from openproceedings import search
 from openproceedings.engine.compile import conjuncts
 from openproceedings.engine.protocol import EngineInputError, EngineInternalError
 from openproceedings.engine.reference import ReferenceEngine
-from openproceedings.engine.tantivy_engine import Scope, TantivyEngine, _filter_field, _Parts
+from openproceedings.engine.tantivy_engine import Scope, TantivyEngine, _filter_field, _Parts, _Shared
 from openproceedings.query.ast import And, Filter, Node, Not, Phrase, Term, Wildcard
 from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.defaults import apply_defaults
@@ -1219,9 +1221,33 @@ def test_a_count_of_trees_without_filters_aggregates_one_field(tmp_path: Any) ->
 
 
 # --- a counting job shared with an idle counting worker (TASK-230) ------------------------------------------------
+HELPER = "op-test-helper"  # the thread `a_thread` starts a helper on
+CALLER = "op-test-caller"  # the thread `finishes` runs the call on
+
+
 def a_thread(job: Any) -> None:
     """A `spread` that starts the helper on a thread of its own at once (as an idle counting worker would)."""
-    threading.Thread(target=job, args=(lambda: False,), daemon=True).start()
+    threading.Thread(target=job, args=(lambda: False,), name=HELPER, daemon=True).start()
+
+
+def finishes[T](f: Callable[[], T], timeout: float = 10.0) -> T:
+    """`f()` on a thread of its own (named `CALLER`): its result, or its error re-raised; a call that has not
+    returned after `timeout` seconds fails the test (a deadlock fails, never hangs the run)."""
+    box: dict[str, Any] = {}
+
+    def run() -> None:
+        try:
+            box["value"] = f()
+        except BaseException as e:  # re-raised in the test's thread
+            box["error"] = e
+
+    thread = threading.Thread(target=run, name=CALLER, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    assert not thread.is_alive(), f"the call did not return within {timeout} s (a deadlock?)"
+    if "error" in box:
+        raise box["error"]
+    return box["value"]  # type: ignore[no-any-return]
 
 
 # each example evaluates every counted tree with the oracle over the 5k corpus: no per-example deadline
@@ -1237,7 +1263,8 @@ def test_counts_shared_with_a_helper_are_the_counts_without_one_and_the_oracles(
     trees = counted_trees(ast) if len(split(ast).groups) >= 2 else [ast]
     expected = outcome(lambda ts: [len(reference.match_ids(t)) for t in ts], trees)
     tantivy.faceted.clear(), other.faceted.clear()
-    assert outcome(lambda ts: tantivy.counts(ts, spread=a_thread), trees) == expected, render(ast)
+    spread = outcome(lambda ts: finishes(lambda: tantivy.counts(ts, spread=a_thread)), trees)
+    assert spread == expected, render(ast)
     assert outcome(lambda ts: other.counts(ts), trees) == expected, render(ast)
 
 
@@ -1257,6 +1284,9 @@ def slow_combos(engine: TantivyEngine, seconds: float, seen: list[str]) -> None:
 
 
 def test_a_helper_that_starts_at_once_counts_some_of_the_trees(tmp_path: Any) -> None:
+    """The helper takes trees while the caller counts others, and each tree is counted exactly once: `seen`
+    holds one entry per collection, so its length equal to the trees' is what catches a tree counted twice
+    (by both threads), and its two thread names that both threads counted."""
     engine = tantivy_of(RECORDS, tmp_path)
     reference = ReferenceEngine(RECORDS)
     ast = parse(SPREAD_QUERY).effective_ast
@@ -1265,9 +1295,11 @@ def test_a_helper_that_starts_at_once_counts_some_of_the_trees(tmp_path: Any) ->
     seen: list[str] = []
     slow_combos(engine, 0.05, seen)
     engine.faceted.clear()
-    assert engine.counts(trees, spread=a_thread) == [len(reference.match_ids(t)) for t in trees]
-    # each tree counted once, on one thread or the other
-    assert len(seen) == len(trees) and len(set(seen)) == 2
+    assert finishes(lambda: engine.counts(trees, spread=a_thread)) == [
+        len(reference.match_ids(t)) for t in trees
+    ]
+    assert len(seen) == len(trees)  # no tree counted twice
+    assert set(seen) == {CALLER, HELPER}
 
 
 @pytest.mark.parametrize("helper", ["never_starts", "starts_after", "yields"])
@@ -1290,10 +1322,12 @@ def test_the_caller_counts_every_tree_no_helper_takes(tmp_path: Any, helper: str
             job(lambda: True)
 
     engine.faceted.clear()
-    assert engine.counts(trees, spread=spread) == [len(reference.match_ids(t)) for t in trees]
+    assert finishes(lambda: engine.counts(trees, spread=spread)) == [
+        len(reference.match_ids(t)) for t in trees
+    ]
     for job in later:
-        job(lambda: False)  # finds nothing left to take
-    assert seen == [threading.current_thread().name] * len(trees)
+        finishes(lambda job=job: job(lambda: False))  # finds nothing left to take
+    assert seen == [CALLER] * len(trees)
 
 
 def test_a_helpers_failure_is_the_callers(tmp_path: Any) -> None:
@@ -1302,11 +1336,10 @@ def test_a_helpers_failure_is_the_callers(tmp_path: Any) -> None:
     engine = tantivy_of(RECORDS, tmp_path)
     ast = parse(SPREAD_QUERY).effective_ast
     assert ast is not None
-    caller = threading.current_thread()
     real = engine.combos
 
     def combos(*args: Any, **kwargs: Any) -> Any:
-        if threading.current_thread() is not caller:
+        if threading.current_thread().name == HELPER:
             raise RuntimeError("helper broke")
         time.sleep(0.05)  # the helper takes a tree before the caller has taken them all
         return real(*args, **kwargs)
@@ -1314,7 +1347,43 @@ def test_a_helpers_failure_is_the_callers(tmp_path: Any) -> None:
     engine.combos = combos  # type: ignore[method-assign]
     engine.faceted.clear()
     with pytest.raises(RuntimeError, match="helper broke"):
-        engine.counts(counted_trees(ast), spread=a_thread)
+        finishes(lambda: engine.counts(counted_trees(ast), spread=a_thread))
+
+
+def test_a_helpers_failure_is_raised_however_late_its_tree_is_marked_done() -> None:
+    """The review's race (TASK-230 round 1): the caller wakes as soon as the helper's failed tree is marked done,
+    so the error must already be kept by then. A slow `set` on the helper's thread widens the window between the
+    two (a GIL switch, or free threading): the call raises the helper's error, never returns a 0 for its tree."""
+
+    def count(i: int) -> int:
+        if threading.current_thread().name == HELPER:
+            time.sleep(0.05)
+            raise RuntimeError("helper broke")
+        time.sleep(0.01)
+        return 7
+
+    class SlowSet(threading.Event):
+        def set(self) -> None:
+            super().set()
+            if threading.current_thread().name == HELPER:
+                time.sleep(0.2)
+
+    shared = _Shared(4, count)
+    shared.done = [SlowSet() for _ in range(4)]
+    with pytest.raises(RuntimeError, match="helper broke"):
+        finishes(lambda: shared.counted(a_thread))
+
+
+def test_a_spread_count_with_a_tree_left_uncounted_is_an_internal_error() -> None:
+    """The backstop: should a tree end up neither counted nor failed, the call refuses rather than answer 0."""
+    shared = _Shared(2, lambda i: 7)
+
+    def lose_one(job: Any) -> None:
+        shared.next = 1  # as if the helper took tree 0 and lost it
+        shared.done[0].set()
+
+    with pytest.raises(EngineInternalError, match="uncounted"):
+        finishes(lambda: shared.counted(lose_one))
 
 
 def test_a_spread_bitwise_count_collects_each_shared_conjunct_once(tmp_path: Any) -> None:
@@ -1342,9 +1411,20 @@ def test_a_spread_bitwise_count_collects_each_shared_conjunct_once(tmp_path: Any
         a_thread(job)
 
     engine.faceted.clear()
-    assert engine.counts(trees, spread=spread) == [len(reference.match_ids(t)) for t in trees]
+    assert finishes(lambda: engine.counts(trees, spread=spread)) == [
+        len(reference.match_ids(t)) for t in trees
+    ]
     distinct = {id(c) for t in trees for c in conjuncts(t) if _filter_field(c) is None}
     assert offered == [1] and len(collected) == len(distinct)
+
+
+def test_a_bitmap_past_the_id_list_is_an_internal_error(tmp_path: Any) -> None:
+    """An `ord` at or past the length of `ids.txt` (an index and an id list that disagree) is refused with a
+    clear message, never an IndexError from deep in the bitmap or a bit silently dropped."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    engine.ids = engine.ids[:10]
+    with pytest.raises(EngineInternalError, match="past the 10 ids"):
+        engine._bitmap(tantivy.Query.all_query())
 
 
 def test_a_search_spreads_its_counting_over_both_counting_workers(tmp_path: Any) -> None:
@@ -1356,16 +1436,78 @@ def test_a_search_spreads_its_counting_over_both_counting_workers(tmp_path: Any)
     assert parsed.effective_ast is not None
     seen: list[str] = []
     slow_combos(engine, 0.05, seen)
-    got = search.run(engine, parsed, groups=10)
+    got = finishes(lambda: search.run(engine, parsed, groups=10))
     search.shutdown()
     assert got.groups is not None
     assert got.groups.counts == expected_pairs(reference, split(parsed.effective_ast))
     assert len({name for name in seen if name.startswith("op-groups")}) == 2
 
 
+def test_a_recount_in_the_caller_is_never_spread(
+    engines: Engines, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After `WouldVerify` the caller recounts with its own scope, which may verify: none of that recount runs on
+    a counting worker (04 §Cost: a worker never verifies), so it offers no helper."""
+    reference, _tantivy, _other = engines
+    engine = tantivy_of(RECORDS, tmp_path)
+    parsed = parse("(model NEAR/2 model*) AND trust AND calibrat*")
+    assert parsed.effective_ast is not None
+    found = split(parsed.effective_ast)
+    monkeypatch.setattr(Scope, "reader", lambda self: Scope({}, may_verify=False))  # the bug: an empty view
+    counts, combos = engine.counts, engine.combos
+    failed = threading.Event()
+    after: list[str] = []
+
+    def cold_in_the_worker(*a: Any, **kw: Any) -> Any:
+        if threading.current_thread().name.startswith("op-groups"):
+            engine.verified.clear(), engine.compiled.clear(), engine.faceted.clear()
+            kw.pop("compiled")
+            try:
+                return counts(*a, **kw)
+            except BaseException:
+                failed.set()
+                raise
+        return counts(*a, **kw)
+
+    def recorded(*a: Any, **kw: Any) -> Any:
+        if failed.is_set():
+            after.append(threading.current_thread().name)
+            time.sleep(0.02)  # time enough for a helper, were one offered, to take a tree
+        return combos(*a, **kw)
+
+    monkeypatch.setattr(engine, "counts", cold_in_the_worker)
+    monkeypatch.setattr(engine, "combos", recorded)
+    got = finishes(lambda: search.run(engine, parsed, groups=10))
+    search.shutdown()
+    assert got.groups is not None and got.groups.counts == expected_pairs(reference, found)
+    assert after and not any(name.startswith("op-groups") for name in after)
+
+
+def test_counting_in_the_caller_with_the_pools_shut_down_starts_no_counting_worker(
+    engines: Engines, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No worker took the job (the pool is shutting down): the caller counts the groups itself and starts no
+    counting pool again for a helper."""
+    _reference, tantivy, other = engines
+    parsed = parse("trust model calibrat*")
+    expected = search.run(other, parsed, groups=10)
+    search.shutdown()
+    real = search._start
+
+    def shutting_down(job: Any, *, counts: bool = False, helper: bool = False) -> Any:
+        if counts and not helper:
+            return None  # what `_start` answers once the pools are shut down
+        return real(job, counts=counts, helper=helper)
+
+    monkeypatch.setattr(search, "_start", shutting_down)
+    tantivy.faceted.clear()
+    assert finishes(lambda: search.run(tantivy, parsed, groups=10)) == expected
+    assert search._GROUP_POOL is None
+
+
 def test_a_helper_yields_its_worker_to_another_searchs_waiting_job(tmp_path: Any) -> None:
     """While another search's counting job waits for a worker, a helper takes no further tree: other searches'
-    counting never waits on a helper for more than the one collection it is doing."""
+    counting never waits on a helper for more than the tree it is counting."""
     engine = tantivy_of(RECORDS, tmp_path)
     ast = parse(SPREAD_QUERY).effective_ast
     assert ast is not None
@@ -1378,9 +1520,76 @@ def test_a_helper_yields_its_worker_to_another_searchs_waiting_job(tmp_path: Any
         def spread(job: Any) -> None:
             taken.append(search._yield())
 
-        engine.counts(counted_trees(ast), spread=spread)
+        finishes(lambda: engine.counts(counted_trees(ast), spread=spread))
     finally:
         with search._POOL_LOCK:
             search._WAITING[0] -= 1
     assert taken == [True]
     assert search._yield() is False
+
+
+def test_two_searches_queued_behind_a_spread_job_start_within_one_of_its_collections(tmp_path: Any) -> None:
+    """The real pool: search A's job and its helper hold both counting workers, each in a slowed collection, when
+    searches B and C queue their jobs. A's helper yields after the collection it is in, so B's job starts within
+    about one collection, and C's right after B's (B's are quick), both long before A's job (which never yields)
+    is done; both get their counts, not `busy`."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    reference = ReferenceEngine(RECORDS)
+    slow: contextvars.ContextVar[bool] = contextvars.ContextVar("slow", default=False)
+    who: contextvars.ContextVar[str] = contextvars.ContextVar("who", default="")
+    seconds = 0.4  # one of A's collections
+    inside: list[str] = []
+    real_combos, real_alone = engine.combos, search._alone
+    starts: dict[str, float] = {}
+    ends: dict[str, float] = {}
+
+    def combos(*a: Any, **kw: Any) -> Any:
+        if slow.get():
+            inside.append(threading.current_thread().name)
+            time.sleep(seconds)
+        return real_combos(*a, **kw)
+
+    def alone(*a: Any, **kw: Any) -> Any:
+        if threading.current_thread().name.startswith("op-groups"):
+            starts.setdefault(who.get(), time.perf_counter())
+        try:
+            return real_alone(*a, **kw)
+        finally:
+            ends[who.get()] = time.perf_counter()
+
+    engine.combos = combos  # type: ignore[method-assign]
+    queries = {"A": SPREAD_QUERY, "B": "trust model", "C": "calibrat* evaluat*"}
+    got: dict[str, Any] = {}
+
+    def searching(name: str) -> None:
+        who.set(name)
+        slow.set(name == "A")
+        got[name] = search.run(engine, parse(queries[name]), groups=10)
+
+    search.shutdown()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(search, "_alone", alone)
+        a = threading.Thread(target=searching, args=("A",), daemon=True)
+        a.start()
+        deadline = time.monotonic() + 10
+        while (
+            len({n for n in inside if n.startswith("op-groups")}) < 2
+        ):  # A's job and its helper, both inside
+            assert time.monotonic() < deadline, "A's helper never started"
+            time.sleep(0.005)
+        queued = time.perf_counter()
+        b = threading.Thread(target=searching, args=("B",), daemon=True)
+        c = threading.Thread(target=searching, args=("C",), daemon=True)
+        b.start(), c.start()
+        for t in (a, b, c):
+            t.join(30)
+            assert not t.is_alive(), "a search did not return (a deadlock?)"
+    search.shutdown()
+    for name in "BC":
+        assert got[name].groups.not_counted is None
+        parsed = parse(queries[name]).effective_ast
+        assert parsed is not None
+        assert got[name].groups.counts == expected_pairs(reference, split(parsed))
+        assert starts[name] - queued < 2 * seconds, (name, starts[name] - queued)  # about one collection
+        assert starts[name] < ends["A"]  # never behind A's whole job
+    assert ends["A"] - queued > 3 * seconds  # A's job really was still running for a while

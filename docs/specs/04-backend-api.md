@@ -357,7 +357,10 @@ Two readings follow from "the canonical form decides", and are worth knowing:
     exactly as before by whichever thread takes it (a bitwise call's conjunct bitmaps are shared, each still
     collected once), so the counts are the same and only the wall time drops. The job never waits for a helper
     that has not started (it takes what is left itself), and a helper takes no further tree while another
-    search's counting job waits for a worker, so it delays that job by at most the one collection it is in. After the page, the facets and the exclusion accounting are done, a
+    search's counting job waits for a worker, so it delays that job by at most the tree it is counting: one
+    collection, or on the bitwise path one collection per conjunct of that tree not yet collected. Measured on the
+    synthetic 80k index (two first pages 0, 20 and 50 ms apart, 100 rounds each, production waits): neither the
+    single-worker code nor the shared one answered `busy` once in 1,800 rounds (TASK-230's perf report). After the page, the facets and the exclusion accounting are done, a
     search waits for its counts **at most 50 ms if no worker has taken its job** (then `busy`, the job
     cancelled), and **at most 2 s if one has** (then `timed_out`); an abandoned job that is running is
     **stopped before its next collection** (`counts`' `check`), keeping what it had collected in the memo.

@@ -192,7 +192,7 @@ def run(
     if found is not None and countable and _ids_read(found, scope) > groups_ids:
         why, countable = "too_costly", False  # known only now: the ids are the compile's
     if found is not None and countable:
-        job = partial(_alone, engine, found, scope.reader(), abandoned, taken, (ast, compiled))
+        job = partial(_alone, engine, found, scope.reader(), abandoned, taken, (ast, compiled), spread=True)
         counting = _start(job, counts=True)
     # from here to `_grouped`, whatever fails takes the workers' jobs with it: the facets' is cancelled, and
     # the counting job, which nobody will wait for, is cancelled or stops before its next collection
@@ -277,11 +277,15 @@ def _alone(
     abandoned: threading.Event,
     started: threading.Event | None = None,
     compiled: tuple[Node, Compiled] | None = None,
+    spread: bool = False,
 ) -> tuple[Pair, ...]:
     """Each group's two counts, in query order: alone, and the query without it (`TantivyEngine.counts`: at
     most two collections a group, memoised; every conjunct compiled at most once for all of them, or taken
-    from `compiled`, the request's compile of the query, when given; TASK-197), the trees shared with a helper
-    on the other counting worker (`_spread`, TASK-230), which yields to another search's waiting job. Sets
+    from `compiled`, the request's compile of the query, when given; TASK-197), and with `spread` (only the
+    counting worker's job: `run`) the trees shared with a helper on the other counting worker (`_spread`,
+    TASK-230), which yields to another search's waiting job. Counted in the caller (no worker, or a recount
+    after `WouldVerify`), they are never spread: a helper on a counting worker would verify with the caller's
+    scope there (04 §Cost), and with the pools shut down it would start them again. Sets
     `started` when it begins (a worker took the job), and stops before its next collection once `abandoned`
     is set (`_Abandoned`): nobody is waiting for the rest."""
     if started is not None:
@@ -295,7 +299,9 @@ def _alone(
     trees = [*map(found.alone, found.groups), *map(found.without, found.groups)]
     helpers: list[Future[None]] = []
     try:
-        totals = engine.counts(trees, scope=scope, check=wanted, compiled=compiled, spread=_spread(helpers))
+        totals = engine.counts(
+            trees, scope=scope, check=wanted, compiled=compiled, spread=_spread(helpers) if spread else None
+        )
     finally:
         for h in helpers:
             h.cancel()  # still queued: never runs (running: it has nothing left to take)
@@ -483,7 +489,8 @@ def _queued[T](job: Callable[[], T]) -> tuple[Callable[[], T], Callable[[], None
 def _yield() -> bool:
     """A helper's `yielding` (`TantivyEngine.counts`' `spread`): another search's counting job is waiting for a
     worker, so the helper takes no further tree. Other searches' counting then waits on a helper for at most
-    the one collection it is doing, well within their 50 ms grace."""
+    the tree it is counting: one collection, or on the bitwise path one per conjunct of that tree not yet
+    collected (none answered `busy` in TASK-230's two-search measurement)."""
     return _WAITING[0] > 0
 
 
