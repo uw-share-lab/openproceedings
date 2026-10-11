@@ -32,6 +32,7 @@ names the index it was verified on and which saved records still reproduce.
 - pin Python 3.12.15 repo-wide for CVE-2025-6069 (TASK-208) ([#122](https://github.com/uw-share-lab/openproceedings/pull/122))
 - keep text after a bare \< (TASK-209); say submission-time abstract everywhere (TASK-210) ([#126](https://github.com/uw-share-lab/openproceedings/pull/126))
 - ingest: AAAI 1980-2008 and AIES 2018-2023 sections take their own tracks (TASK-224, TASK-225, TASK-226) ([#133](https://github.com/uw-share-lab/openproceedings/pull/133))
+- ingest: hostile crawler input ends in a typed refusal (nested JSON, CSV field limit, OAI-PMH chain ceiling) ([#136](https://github.com/uw-share-lab/openproceedings/pull/136))
 
 ### Internal
 
