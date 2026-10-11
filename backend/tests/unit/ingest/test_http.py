@@ -34,6 +34,7 @@ from openproceedings.ingest.sources.openreview_client import (
     Credentials,
     OpenReviewAuthError,
     OpenReviewClient,
+    OpenReviewPublicDataError,
 )
 from scholarmend.cache import Cache
 
@@ -462,6 +463,27 @@ def test_a_deeply_nested_openreview_answer_is_an_unexpected_shape(tmp_path: Path
     with pytest.raises(FetchError) as e:
         get()
     assert e.value.reason == "unexpected_shape"
+
+
+@pytest.mark.parametrize("field", ["content", "top"])
+def test_a_public_note_nested_under_the_decoders_depth_is_an_unexpected_shape(tmp_path: Path, field: str) -> None:
+    """600 deep parses (`json.loads` allows it) but the public projection's deepcopy recurses deeper per level: a
+    typed refusal, never a raw RecursionError, and nothing cached."""
+    deep = "[" * 600 + "1" + "]" * 600
+    inner = f'"content": {{"title": {{"value": {deep}}}}}' if field == "content" else f'"replyto": {deep}'
+    body = f'{{"notes": [{{"id": "n1", "readers": ["everyone"], {inner}}}]}}'.encode()
+    assert json.loads(body)  # under the decoder's depth: only the projection can fail
+
+    def transport(request: Request, timeout: float) -> Response:
+        if request.method == "POST":
+            return json_response({"token": "tok"}, headers={"content-type": "application/json"})
+        return Response(200, NESTED_JSON, body, "")
+
+    _, get, _ = openreview(tmp_path, transport)
+    with pytest.raises(OpenReviewPublicDataError) as e:
+        get()
+    assert e.value.reason == "unexpected_shape"
+    assert not list(tmp_path.rglob("*.json"))  # never cached
 
 
 def test_a_deeply_nested_openreview_login_answer_is_a_refused_login(tmp_path: Path) -> None:

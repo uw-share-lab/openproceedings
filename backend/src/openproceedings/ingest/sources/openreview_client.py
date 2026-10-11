@@ -272,6 +272,17 @@ def _public_projection(url: str, data: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _projected(url: str, data: Mapping[str, Any]) -> dict[str, Any]:
+    """`_public_projection`, except that an answer nested deep enough for its copy to pass the recursion limit (it
+    parsed, under the decoder's depth, but `copy.deepcopy` takes more frames a level) is refused, never cached."""
+    try:
+        return _public_projection(url, data)
+    except RecursionError:
+        raise OpenReviewPublicDataError(
+            f"OpenReview's answer to GET {url} is nested too deep to copy", reason="unexpected_shape"
+        ) from None
+
+
 def _is_pre_projection_cache(path: Path, url: str) -> bool:
     """Whether a cache file is the old, otherwise-valid raw-response layout (and only that layout)."""
     try:
@@ -377,7 +388,7 @@ class OpenReviewClient(HttpClient[Entry]):
                 "url": url,
                 "fetched_at": self.clock.now().astimezone(UTC).isoformat(),
                 "headers": {k: response.headers[k] for k in KEPT_HEADERS if k in response.headers},
-                "json": _public_projection(url, data),
+                "json": _projected(url, data),
                 "public_projection": PUBLIC_PROJECTION,
             }
             return entry, True
