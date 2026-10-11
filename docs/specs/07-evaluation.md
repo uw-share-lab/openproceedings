@@ -29,7 +29,7 @@ all-negative ones included, it compares:
 - for trees that parse, the exclusion counts.
 
 Shrunk counterexamples are kept in `differential-regressions.json` and replayed on every run. The `nightly`
-workflow's `differential` job runs 50,000 examples in total: 8 independent runs of 6,250 in parallel, each with
+workflow's `differential` job runs 50,000 examples in total: 12 independent runs of ~4,167 in parallel (8 of 6,250 until 2026-10-11), each with
 its own seed, not de-duplicated across runs (TASK-057). Wildcard stems include ones at the 200-expansion cap's edge: 20 records added to the corpus the
 engines search give `qca*` 199 terms, `qcb*` 200 and `qcc*` 201 (refused), since the 5k corpus's own stems
 jump from 117 terms to 278.

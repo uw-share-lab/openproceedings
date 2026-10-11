@@ -9,7 +9,7 @@ held to the oracle in `tests/unit/engine/test_served_schemas.py` (TASK-167). Tre
 weighted up, and stems at the 200-expansion cap's edge (`cap_records()`, 20 records added to the corpus the
 engines search, 5,020 in all, both parts hash-pinned: `qca*` expands to 199 terms, `qcb*` to 200, `qcc*` to 201
 and is refused; TASK-057). 200 examples per PR (`pr` profile); 50,000 in total in the nightly workflow's own
-`differential` job (`nightly`: 8 independent runs of 6,250, each with its own seed; TASK-057).
+`differential` job (`nightly`: 12 independent runs of ~4,167, each with its own seed; TASK-057).
 
 Saving a counterexample: every failure message ends with `regression: <the shrunk AST as JSON>`. Add
 `{"ast": <that JSON>, "note": "<what broke>"}` to `differential-regressions.json`, which

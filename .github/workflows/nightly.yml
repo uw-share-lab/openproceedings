@@ -119,17 +119,20 @@ jobs:
           exit "$status"
   # Differential@50k (spec 07 §A): one Hypothesis property, which pytest-xdist can't split, so the 50,000
   # examples are split across SHARDS jobs, each with its own seed (OP_DIFFERENTIAL_SHARDS, test_differential.py).
-  # A failure prints its blob; to rerun a shard, use the command its log prints.
+  # A failure prints its blob; to rerun a shard, use the command its log prints. 12 shards since 2026-10-11 (8
+  # before): the group-count property (test_group_counts_agree_with_the_oracle, 2026-10-05) took 38-68 min of a
+  # shard beside the main property's 11-32 in 38141281560, so shards ran 50-89 min, and shard 7, on a slow runner,
+  # past 110. n is the matrix size (strategy.job-total), so adding a shard is one edit to the matrix list.
   differential:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     env:
       OP_EARLY_FAILURES: "1"
-      OP_DIFFERENTIAL_SHARDS: "8"
+      OP_DIFFERENTIAL_SHARDS: ${{ strategy.job-total }}
       SEED: ${{ github.run_id }}${{ matrix.shard }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -137,7 +140,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
-      - name: Differential suite, 1/8 of 50,000 examples (10-20 min a shard in 36972065571)
+      - name: Differential suite, 1/12 of 50,000 examples (50-89 min a shard at 8 in 38141281560, so ~35-60)
         run: |
           echo "rerun: OP_DIFFERENTIAL_SHARDS=$OP_DIFFERENTIAL_SHARDS uv run --locked pytest -v --hypothesis-profile=nightly --hypothesis-seed=$SEED backend/tests/differential"
           status=0

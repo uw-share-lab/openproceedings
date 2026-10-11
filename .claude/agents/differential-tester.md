@@ -20,7 +20,7 @@ small enough to fix in minutes.
 1. Scope the change: `git diff --name-only origin/dev...HEAD`. List the AST node kinds and compile rows it
    touches.
 2. Run the suite: `uv run pytest backend/tests/differential -q --hypothesis-profile=ci` (2,000 examples; PR CI
-   runs the `pr` profile, 200, and the nightly `differential` job 50,000 as 8 seeded parts: a failing part's log
+   runs the `pr` profile, 200, and the nightly `differential` job 50,000 as 12 seeded parts: a failing part's log
    prints its rerun command). For a release or an
    `/exactness-check` run, also run the nightly profile with `--hypothesis-profile`.
 3. Make sure the strategies cover what changed. Draw terms from the fixture vocabulary, weighted toward
