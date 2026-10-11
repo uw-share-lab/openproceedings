@@ -57,7 +57,9 @@ SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bd
 # with the version set back to "7" the files hash to 93bf0aef… (checked 2026-10-10). SNAPSHOT_HASH is unchanged.
 # TASK-232 changed it again: record schema v9 (the `aaai_library` source); with the version set back to "8" the files
 # hash to aad4fd98… (checked 2026-10-11). SNAPSHOT_HASH is unchanged.
-FILES_HASH = "37f369e3250d4d1b2e536794ed163307a60e25c90f0e79f443a7f915118b5a13"
+# Release 0.3.0 changed only openproceedings_version, "0.2.0" to "0.3.0": with it set back to "0.2.0" the files hash
+# to 37f369e3… (the value before). SNAPSHOT_HASH is unchanged.
+FILES_HASH = "7c20f8f9c2ae747ce38c3e7862f28d4a40197dd6a3e3d3f4e018cac0131a897b"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:
