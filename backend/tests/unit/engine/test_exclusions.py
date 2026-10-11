@@ -201,3 +201,17 @@ def test_buckets_that_do_not_add_up_are_an_internal_error(engines: tuple[Engine,
     assert isinstance(e.value, InternalError)  # a 5xx, logged at ERROR
     with pytest.raises(EngineInternalError, match="don't sum"):  # a total that isn't the search's
         excluded(engines[1], parsed("trust"), len(engines[1].match_ids(parsed("trust").effective_ast)) + 1)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("q", ["trust", "trust OR track:workshop", "trust track:workshop"])
+def test_a_cold_exclusion_only_call_aggregates_only_the_default_fields(tmp_path: Path, q: str) -> None:
+    """`excluded` with no `facets` on a TantivyEngine aggregates only `ORDER` (track, status), as `search.run`
+    does without facets (TASK-166): never schema 4's `abstract_kind` or the other combo fields, whose deeper
+    nested aggregation cost the cold bench a third of its time (PR #134), and it builds no per-value bitmaps, no
+    value table and, with no verified clause, no ord table. The counts are the brute-force ones."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    assert "abstract_kind" in engine.combo  # schema 4: the field the exclusion path must not aggregate
+    result = parsed(q)
+    assert run(engine, result) == brute(RECORDS, result)
+    assert {key.split("\x00")[0] for key in engine.faceted} == {"track,status"}
+    assert engine._masks is None and engine._index is None and engine._ords is None

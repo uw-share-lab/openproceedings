@@ -1,7 +1,8 @@
 """Exclusion accounting (spec 03 §Exclusion accounting, guarantee 6; default-filters and prisma-reporting skills).
 
 `excluded(engine, parsed, total)` says how many records the default filters removed, and why, using nothing but the
-Engine protocol, so ReferenceEngine and TantivyEngine compute it the same way and can be compared.
+Engine protocol, so ReferenceEngine and TantivyEngine compute it the same way and can be compared (a TantivyEngine's
+facets are only told to aggregate the two default fields, `_counter`: the same counts, fewer combos).
 
 - The counts come from `ParseResult.identification_ast` (None = every record) and `defaults`, never from
   re-parsing `identification_query`, which can be `""` or all-negative.
@@ -18,10 +19,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from functools import partial
 from types import MappingProxyType
 
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.protocol import Engine, EngineInputError, EngineInternalError
+from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.query.ast import And, Filter, FilterField, Node
 from openproceedings.query.defaults import DEFAULT_CLAUSES
 from openproceedings.query.parser import ParseResult
@@ -64,8 +67,11 @@ def excluded(
     """The records the default filters removed from `parsed`'s search, bucketed track first, then status.
     `total` is the search's own match count (`|match_ids(effective_ast)|`, which the caller already has), so
     the query isn't evaluated a third time; the buckets are checked against it. `facets` is `engine.facets`
-    unless given (`search.run` passes its request-scoped one, so no clause is verified twice)."""
-    count = engine.facets if facets is None else facets
+    unless given (`search.run` passes its request-scoped one, so no clause is verified twice); on a TantivyEngine
+    aggregated over `ORDER` alone, as `search.run` counts exclusions without facets (TASK-166): the engine's whole
+    `combo` (schema 4's `abstract_kind` too) would nest the aggregation two levels deeper for the same counts (PR
+    #134's cold bench, 2026-10-11)."""
+    count = facets if facets is not None else _counter(engine)
     if parsed.effective_ast is None:
         raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "exclusions need a query that parses.")
     defaults = [f for f in ORDER if f in parsed.defaults]
@@ -90,6 +96,14 @@ def excluded(
             f"exclusion buckets don't sum to the {removed} records the defaults removed",
         )
     return Excluded(removed, _shaped(buckets["track"]), _shaped(buckets["status"]))
+
+
+def _counter(engine: Engine) -> Callable[[Node, tuple[str, ...]], dict[str, dict[str, int]]]:
+    """`engine.facets`, narrowed to the default fields where the engine can narrow its aggregation (TantivyEngine's
+    `over`; the counts are the same either way, `test_facets_equal.py`)."""
+    if isinstance(engine, TantivyEngine):
+        return partial(engine.facets, over=ORDER)
+    return engine.facets
 
 
 def _and(a: Node | None, b: Node) -> Node:
