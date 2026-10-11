@@ -71,3 +71,7 @@ exchange replays through the real cache without credentials.
   fixture; 261 focused tests, 893 ingest/scrubber tests, 5,117 backend tests and 2,582 frontend tests passed.
 - Propagated to `.claude/skills/openreview-api/SKILL.md` §Fixtures and
   `docs/research/2026-09-27-openreview-and-proceedings-facts.md` §TASK-050 authenticated v2 fixture follow-up.
+
+## Addendum — 2026-10-11 (v0.3.0 release security gate)
+- **Every paging chain needs a ceiling, not only a cycle check.** The OAI-PMH resumption-token chains stopped only when a token repeated, so a server issuing new tokens on empty pages ran forever; `ojs.Chain` now stops past the stated `completeListSize` over the largest page plus 10 (else 10,000 pages) with `chain_too_long`.
+- **A parser's `except ValueError` misses `RecursionError`.** Deeply nested JSON escaped raw from `http._truncated`, `error_name`, Crossref's `_message` and OpenReview's own `json.loads`, and `csv.Error` escaped from the FAccT CSV reader; each now ends in the source's typed refusal, and a cached hostile page fails the same way on offline replay.
