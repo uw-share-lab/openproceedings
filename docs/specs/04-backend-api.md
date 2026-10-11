@@ -962,6 +962,15 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   else pays the record route's full weight). `replay` defaults to `true`, the old answer, and is never null without
   `replay=false` (decision-014: the one response field allowed to become nullable within v1, because only
   the new opt-in parameter produces the null). The access line carries `canonical_hash`, never `q`.
+- **`openalex_abstracts`** (gate C round 2, additive; `int | null` on every `GET /records/{id}` answer) is how
+  many of the record's own saved ids have `abstract_kind` `openalex` on the record's own `index_version`, read
+  per id from that index (`TantivyEngine.filter_values`, the built kind, as the filter and facet read it). It is
+  derived, never stored: a function of the record's ids and its index, worked out once per (record id,
+  index_version) and kept (`api/records.py` `OpenAlexCounts`, an LRU of 10,000 ints). It is null when that index
+  holds no `abstract_kind` (schema 3) or isn't loaded for the request: with a replay, when the replay didn't run
+  on the record's own index; with `replay=false`, when the served index isn't the record's (nothing else is
+  loaded on that read). The methods text's OpenAlex sentence (spec 05 §Components 8) reads only this value, in
+  the save panel and on the record page alike, so the two texts are the same for one record.
 - **`ids_hash`** is `sha256("\n".join(sorted(ids)))`, code-point order, no trailing newline, with
   known-answer tests (the empty set is `sha256("")`).
 - **Record ids** are `secrets.token_urlsafe(9)`: 12 characters of `[A-Za-z0-9_-]`, about 72 random bits,
@@ -987,7 +996,7 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   `crawl_dates_kind` and `dedup.track_not_merged` / `venue_year_not_merged`: a v1 body reads them as null
   ("not recorded", never guessed; the record page treats a null `identification_citable` as not citable),
   and a v2 body missing them, or whose `crawl_dates_kind` keys aren't its `crawl_dates` keys, is unreadable (500). Citability is checked against `sources` on write only (a record whose `identification_citable` contradicts them is never written): which sources are bootstrap ones is this code's `vocab.BOOTSTRAP_SOURCES`, and a stored body must outlive a change there, read and replayed with its citability as saved.
-- **Replay** (`GET /records/{id}`, 200 `{index_version, tokenizer_version, query_version, record, replay}`;
+- **Replay** (`GET /records/{id}`, 200 `{index_version, tokenizer_version, query_version, record, replay, openalex_abstracts}`;
   the top-level versions are those the replay ran on) re-parses the stored `canonical` in native mode, never
   `input`. It runs on the record's own index when this instance has it (served, or loaded on demand; an
   engine handed back for another version counts as unavailable), else on the served index. On its own index
@@ -1078,7 +1087,7 @@ once released: changing one is a breaking change under `/api/v1`.
 |---|---|---|
 | Query does not parse, uses an unknown field or value, or has a bad wildcard (incl. more than 200 expansions) (on endpoints that run the query) | 422 | `PARSE_*`, `FIELD_*`, `WILDCARD_*` (diagnostics carry the spans); a query over 2,000 code points is `PARSE_TOO_LONG`, rejected before parsing, and so is one whose canonical form is over 2,000 code points, refused after canonicalising (decision-008) |
 | A parameter is invalid (bad `sort`, `limit` > 200, unknown `format`, a malformed paper or record id), unknown to the route, or given twice; or a body is malformed. The message names at most 5 problems (more are counted) and never the value; each location is quoted between backticks through `diagnostics.clip`, since a parameter name or body key is the client's own text (TASK-143) | 422 | `API_BAD_PARAM` |
-| A query names a filter field the served index does not hold: `abstract_kind:` on an index of schema 3 (decision-049, milestone C; spec 03 §Versioning). The message names the index in the reader's words, never a schema number: "This index (`<index_version>`) doesn't hold abstract kinds yet; it was built before they existed. Search the current index, or remove the `abstract_kind:` filter."; `/parse` accepts it. Every route that runs the query refuses it before any work: `/search`, `/export`, `POST /records`, `POST /compare`, `GET /papers/{id}?q=` | 422 | `FIELD_NOT_INDEXED` |
+| A query names a filter field the served index does not hold: `abstract_kind:` on an index of schema 3 (decision-049, milestone C; spec 03 §Versioning). The message names the index in the reader's words, never a schema number: "This index (`<index_version>`) doesn't record each paper's abstract source yet; it was built before it was recorded. Search the current index, or remove the `abstract_kind:` filter."; `/parse` accepts it. Every route that runs the query refuses it before any work: `/search`, `/export`, `POST /records`, `POST /compare`, `GET /papers/{id}?q=` | 422 | `FIELD_NOT_INDEXED` |
 | Paper or search record not found (a well-formed id) | 404 | `API_PAPER_NOT_FOUND` / `API_RECORD_NOT_FOUND` |
 | A pinned `index_version` is not available on this instance (an export's; a record save's `index_version` that is not the served index, TASK-091) | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
 | Export requested for a record whose replay status is `mismatch` | 409 | `API_RECORD_MISMATCH` |

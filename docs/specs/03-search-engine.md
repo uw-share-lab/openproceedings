@@ -230,9 +230,13 @@ refuses a query naming `abstract_kind:` (`FIELD_NOT_INDEXED`, 422). Its display 
 stored abstract (`none` or `official`), which is exact because a schema-3 build refuses a record whose abstract
 is OpenAlex's (`IndexBuildError`, "needs index schema 4"). The combo memo's budget (`MAX_FACET_COMBOS`) triples to
 300,000, since a base can have up to three times schema 3's combos: the number of bases memoised stays about the
-same. A memoised five-field combo with its count is about 204 bytes (measured, gate C round 1), so a full `faceted`
-memo is about 61 MB per engine (about 18 MB at schema 3's 100,000); with the default `pinned_indexes` of 4 the API's
-worst case for this memo is about 300 MB, against about 90 MB before. Size a host for it. On schema 4, `op index parity` also checks that
+same. A memoised five-field combo with its count is about 204 bytes (a measurement: `tracemalloc`, 2026-10-10 at load
+42.7 and 2026-10-11 at load 3.3; method in `docs/results/2026-10-11-perf-regression.md` §Memory), so a full
+`faceted` memo is about 61 MB per engine (about 18 MB at schema 3's 100,000); with the default `pinned_indexes` of 4
+the API's worst case for this memo is about 300 MB, against about 90 MB before. The record routes' `RemovalMemo`
+adds about 80 MB per API process when full (about 163 bytes per held id at the default 500,000, measured the same
+way, 2026-10-11 at loads 25 and 3.3), and its entry cap keeps entries that removed nothing to about 5 MB. Size a
+host for both. On schema 4, `op index parity` also checks that
 each document's stored `abstract_kind` equals its record's. On a corpus both can hold, the two schemas give the
 same ids, float scores and shared-field facets (`test_served_schemas.py`), and a record saved on a schema-3 index
 replays `reproduced` after the schema-4 build (`test_records.py`).

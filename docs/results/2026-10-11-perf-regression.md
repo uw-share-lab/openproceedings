@@ -121,10 +121,22 @@ Arriving together, the shared code matches the single worker. With 20-50 ms betw
 usually faster. The worst cells (run 1, main-3 then main-2-pop at +0 and +20) started at a load of 5.4 and are
 level with before in run 2: read as noise, not a regression.
 
+## Memory
+
+Measured with `tracemalloc` (Python 3.12.15, on the machine above): each figure is the traced allocation after
+building the objects, divided by their number. Allocation sizes don't depend on load; the load is given as the
+report's rule asks.
+
+| What | Method | Figure | When, load |
+|---|---|---|---|
+| A memoised five-field facet combo with its count (`faceted`, schema 4) | 300 bases of 1,000 random `(venue, year, track, status, abstract_kind)` tuples with an int count each, stored as sorted tuples in a dict, as `combos` keeps them (years 1980–2026, so most are ints above 256 and separate objects) | **about 204 bytes** a combo: a full `faceted` (300,000) about 61 MB per engine, about 18 MB at schema 3's 100,000; with the default `pinned_indexes` of 4, about 300 MB of `faceted` per API process at worst, against about 90 MB at schema 3 | 2026-10-10, load 42.7 (gate C round 1); repeated 2026-10-11, load 3.3, same figure |
+| A held id in `RemovalMemo` (`records.py`) | 100,000 `secrets.token_urlsafe(9)` ids, then a dict of each to a `Removal` (slots; track and status strings shared) | **about 163 bytes** an id (61 for the id string, 102 for the dict slot and the `Removal`): about 80 MB per API process when the memo is full at the default `max_ids` of 500,000 | 2026-10-11, load 25 to 26 (gate C round 2); repeated 2026-10-11, load 3.3, same figure |
+| An entry in `RemovalMemo` that removed nothing | 20,000 entries offered to a memo with `removals` returning `{}` (a key tuple, an empty dict, a five-key tally); 10,000 held under the entry cap | **about 500 bytes** a held entry (about 550 on the repeat): the default entry cap of 10,000 keeps them to about 5 MB | 2026-10-11, load 25 to 26 (gate C round 2), and the repeat at load 3.3 |
+
 ## Caveats
 
-- The bisect, profile and two-search scripts were scratch harnesses and are not in the repository; the two
-  generated reports above are the reproducible runs.
+- The bisect, profile, two-search and memory scripts were scratch harnesses and are not in the repository; the two
+  generated reports above are the reproducible runs, and §Memory gives each memory figure's method.
 - `2026-10-10-bench-group-counts.md` records commit `ab2de11b-dirty`: dirty only because the regenerated 80k
   report was not yet committed, not because the code differed. The file keeps its 2026-10-10 name although the
   generator dated its heading 2026-10-11 (the UTC date rolled over during the run); citations use the file name.

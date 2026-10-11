@@ -8,7 +8,7 @@
 Reproduce (from the OpenAlex cache, no network):
 
 ```
-uv run op eval openalex --offline --snapshot 2026-10-10-22a339940466 --seed 49 --aaai-sample 1000 --title-sample 1061 --date 2026-10-10 --ruling 'Keep the exact title-key and year rule. The 9 flagged attaches are mostly OCR or spelling variants of the same author, and a surname rule would drop correct attaches; the residual wrong-attach risk is at most 2 of 1,061 (controller, 2026-10-10).'
+uv run op eval openalex --offline --snapshot 2026-10-10-22a339940466 --seed 49 --aaai-sample 1000 --title-sample 1061 --date 2026-10-10 --ruling 'Keep the exact title-key and year rule. The 9 flagged attaches are mostly OCR or spelling variants of the same author, and a surname rule would drop correct attaches; the residual wrong-attach risk is about 2 of 1,061 (an estimate, see Caveats; controller, 2026-10-10).'
 ```
 
 ## Method
@@ -104,7 +104,7 @@ Rules that would exclude them:
 - **Require at least one shared author surname:** excludes all 9 that look wrong, and also the 0 that can't be checked.
 - **Require a matching first-author surname:** excludes all 9 that look wrong, and also 8 that agree on another author and the 0 that can't be checked.
 
-**Ruling:** Keep the exact title-key and year rule. The 9 flagged attaches are mostly OCR or spelling variants of the same author, and a surname rule would drop correct attaches; the residual wrong-attach risk is at most 2 of 1,061 (controller, 2026-10-10).
+**Ruling:** Keep the exact title-key and year rule. The 9 flagged attaches are mostly OCR or spelling variants of the same author, and a surname rule would drop correct attaches; the residual wrong-attach risk is about 2 of 1,061 (an estimate, see Caveats; controller, 2026-10-10).
 
 ## Caveats
 

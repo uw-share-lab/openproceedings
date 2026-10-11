@@ -222,15 +222,16 @@ tracks, and the 2010–2014 topic sections), not a track AAAI itself names. **Tw
 front-matter description, the AI Magazine conference report, the AIES program), not a count of the listing the
 crawl reads. AAAI 2013's count includes its AI and Robotics special track, which is why the 2011 and 2013
 "Robotics Program" sections are `main`; AAAI 2013's gate row therefore pins that mapping ruling (the one gated row that
-depends on a section decision), so a failing 2013 cell is a reason to check the mapping before the crawl. Six more,
+depends on a section decision), so a failing 2013 cell is a reason to check the mapping before the crawl. Four more,
 read 2026-10-10, are counts of AAAI's own published accepted-paper list (no AAAI document states an accepted count
-for these years): AAAI 2010 (262), 2012 (292), 2014 (398), 2017 (637), 2020 (1,614) and 2021 (1,696) main. A list
-count backs a row only when the list is independent of the OJS proceedings (a pre-camera-ready list or an aaai.org
-page of the time) and its definition is our `main` cell, and each row's description says "counted" and names the
-list. The other cells are recorded, not gated, and each carries a cited **ungated-cell note** (`gate_note` on
+for these years): AAAI 2012 (292), 2017 (637), 2020 (1,614) and 2021 (1,696) main. A list count backs a row only
+when the list is independent of the OJS proceedings and its definition is our `main` cell. A list counts as independent of the proceedings when it either states that it is pre-camera-ready, or visibly differs from the proceedings in content (a different count or membership); either shows it was not derived from them. Each row's
+description says "counted", names the list and names its ground (gate C round 2): 2020's lists say they were made
+before camera-ready; 2012, 2017 and 2021 differ from the proceedings in count. AAAI 2010 (262), 2014 (398) and 2016
+match the proceedings exactly and are not shown to predate them, so each is an ungated cell with a note. The other cells are recorded, not gated, and each carries a cited **ungated-cell note** (`gate_note` on
 `/coverage`, a section of the report; `official_counts.UNGATED_NOTES`, TASK-222): AAAI 2011's list leaves out the
-Robotics Program our `main` holds (240 against 248); AAAI 2016's list matches the proceedings section by section, so
-it appears to be derived from them and a gate on it would check nothing; AAAI 2022–2026 have only chairs' emails
+Robotics Program our `main` holds (240 against 248); AAAI 2010's, 2014's and 2016's lists match the proceedings
+and don't say they predate them, so they may be derived from them and a gate on them would check nothing; AAAI 2022–2026 have only chairs' emails
 quoted elsewhere and third-party paper trackers' figures, which are never a row and seem to count the main technical track alone;
 IASEAI 2026's front matter states 92 accepted research papers, but 35 of them are non-archival and unpublished on
 OJS, so 57 indexed against 92 would fail the ±1% gate for a reason the index cannot repair. The research note
@@ -418,7 +419,7 @@ a reader it is OpenAlex's, possibly ACM's version; the label is how a review exc
 Seven of the nine are spelling or OCR variants of the same surname (for example kender/render, pentland/pentlaud), so
 a surname rule would mostly drop correct attaches (requiring a shared surname excludes exactly the 9; requiring the
 first author to match also excludes 8 that agree on another author). **Ruling (controller, 2026-10-10): keep the exact
-title-key and year rule**; the residual wrong-attach risk is at most 2 of 1,061.
+title-key and year rule**; the residual wrong-attach risk is about 2 of 1,061 (an estimate: the audit's Caveats).
 
 ## Error handling
 

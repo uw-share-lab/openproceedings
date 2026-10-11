@@ -250,7 +250,7 @@ warnings, the save's index check), the design doc says so; its open questions li
    the Builder tab: …" and a "Show group counts" button that opens the tab), and the syntax help's Google
    Scholar section names the three tools for a lower count than Scholar's in the order to use them: Add `$`,
    the group counts, Compare with your records.
-4. **Filter sidebar.** Venue, year range, track, status, and (decision-049, milestone C) Abstract. Workshop is
+4. **Filter sidebar.** Venue, year range, track, status, and (decision-049, milestone C) Abstract source. Workshop is
    **off by default**. Each control shows its count and **edits the `track:`/`status:`/`abstract_kind:` clauses in
    `q`**. *As built (milestone C, copy SB-1, SB-12).* The Abstract source fieldset ("Abstract" until gate C round
    1) follows Status in
@@ -300,7 +300,7 @@ warnings, the save's index check), the design doc says so; its open questions li
    attribution itself reads "Abstract: OpenAlex" and links the paper's own page (the hit's `abstract_source.origin`
    is `openalex`; its `url` is `urls.proceedings`). The syntax help gains the `abstract_kind:` row (copy HS-4: it keeps
    or drops whole papers, title matches included, with the query that keeps title matches, and says in plain words
-   that an index built before abstract kinds existed doesn't hold them, never "schema 4") and an example,
+   that an index built before the abstract source was recorded doesn't hold it, never "schema 4") and an example,
    `trust abstract_kind:official`, both from the generated golden. `/coverage#openalex` scrolls to and focuses the
    explanation once the report is drawn (the page draws after a client fetch, so the browser's own jump finds
    nothing; `useHashTarget` in `coverage-report.tsx`), and a citation's repository path links to the file on the
@@ -379,16 +379,19 @@ warnings, the save's index check), the design doc says so; its open questions li
    (07 §C). A review may instead report the default filters as limits, citing the canonical string; the
    record stores both strings, so either framing can be cited.
 
-   *As built (gate C round 1).* When the save panel has the search response, the methods text says how many of the
-   screened records have abstracts supplied by OpenAlex ("`<n>` of the `<total>` records have abstracts supplied by
-   OpenAlex (`abstract_kind:openalex`), not by the venue."), from `facets.abstract_kind` and the query's
-   `abstract_kind:` clause (`openalexHits`: disjunctive facets make an admitted value's count its count in the result
-   set); nothing is said when the count is 0 or unknown (a schema-3 index, a clause that isn't one value list, or the
-   record page, which has no search response). The stored record is unchanged.
+   *As built (gate C rounds 1 and 2).* The methods text says how many of the screened records have abstracts
+   supplied by OpenAlex ("`<n>` of the `<total>` records have abstracts supplied by OpenAlex
+   (`abstract_kind:openalex`), not by the venue."). `<n>` is the record GET's `openalex_abstracts` (spec 04 §Search
+   records): derived on the server from the record's own saved ids on its own `index_version`, never stored and
+   never taken from a search response. The save panel reads it from the record it has just saved, and the record
+   page from its replay read (else its stored read), so both write the same text for one record. Nothing is said
+   when the count is 0 or null (a schema-3 index, or the record's index isn't loaded for the request). The stored
+   record is unchanged.
 
    *As built (TASK-044).* The methods text is `frontend/src/lib/methods-text.ts` (`methodsText`), pure: every
-   number is a field of the record the API sent (`identified_total`, `excluded`, `unclassified_total`,
-   `total`), and the default and limit clauses are slices of `canonical` at the spans of `POST /parse`'s report
+   number comes from the record the API sent (`identified_total`, `excluded`, `unclassified_total`,
+   `total`) or is derived on the server from the record's own ids on its own index (`openalex_abstracts`, gate C
+   round 2), and the default and limit clauses are slices of `canonical` at the spans of `POST /parse`'s report
    of that same string (`clausesOf`: a field in `defaults` is a default clause; any other field with a clause
    of its own is a limit, and one written more than once is each clause behind it; a filter nested in an OR or
    NOT is part of the string, not a limit). Its test renders this section's example sentence from the spec

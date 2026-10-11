@@ -665,7 +665,7 @@ Verdict: **no evidence found.** No verified study shows that provenance labels c
 nearest work, on trust calibration among web searchers, transfers weakly to protocol-driven Boolean search by
 systematic reviewers. The label is kept because it is honest and costs nothing, not because it is known to work. A
 small think-aloud with systematic reviewers on the paper and coverage pages is TASK-233, for `usability-tester`
-(ethics not yet submitted). The rest of this note's evidence is a source census and needs no HCI
+(`Ethics: not submitted`, TASK-233). The rest of this note's evidence is a source census and needs no HCI
 literature.
 
 ## Licence posture
@@ -868,21 +868,22 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   pages archived by the Wayback Machine). Each row's description says "counted" and names the list, and its
   definition must equal our `main` cell within 1%. The review found the independence test applied unevenly: 2016 was
   refused because its list matched the proceedings exactly, while 2010 and 2014 matched exactly too, and 2014's only
-  copy was captured a year after publication. The controller's ruling (gate C round 1) is one rule: a list counts as
-  independent only when it is evidently made before the proceedings, a pre-camera-ready list that says so. Per row:
-  - 2010 (262 = 262) and 2014 (398 = 398): the only archived copies were captured on 2010-08-30 and 2015-09-06, after
-    publication, and nothing on them says they were made before it. Like 2016, now ungated cells with a note.
+  copy was captured a year after publication. The controller's rulings (gate C rounds 1 and 2) are one rule: A list counts as independent of the proceedings when it either states that it is pre-camera-ready, or visibly differs from the proceedings in content (a different count or membership); either shows it was not derived from them. Per row:
+  - 2010 (262 = 262), 2014 (398 = 398) and 2016: each matches the proceedings exactly, and nothing on it says it was
+    made before them (2010's and 2014's only archived copies were captured on 2010-08-30 and 2015-09-06, after
+    publication). Each is an ungated cell with a note.
   - 2012, 2017, 2020 and 2021: the PDFs sit under `wp-content/uploads/2023/01/`, the date of AAAI's site migration,
-    not of the lists, so their upload dates say nothing. The 2020 lists say they were made before camera-ready. The
-    controller's ruling keeps all four gated. Each also differs from the proceedings the crawl reads (deltas +2, +2,
-    −4 and −2 on the snapshot below), which a list copied from them would not.
+    not of the lists, so their upload dates say nothing. All four are gated, each row naming its ground: the 2020
+    lists say they were made before camera-ready; 2012, 2017 and 2021 differ from the proceedings the crawl reads in
+    count (deltas +2, +2 and −2 on the snapshot below; 2020's is −4).
   - 2021: the row cites only the "Main Technical Track" PDF, but counts 1,656 main technical papers plus 40 AI for
     Social Impact. Where the 40 were counted was not recorded, so the row is re-checked against AAAI's own AI for
     Social Impact list (TASK-234).
 
   The deltas are those of snapshot `2026-10-10-9efa49481112`; the post-rebuild coverage report restates them on its
   own snapshot, where the gate is expected at 81 of 82 cells.
-- **Ungated-cell notes (TASK-222).** AAAI 2011, 2016 and 2022–2026 main and IASEAI 2026 main each carry a cited note
+- **Ungated-cell notes (TASK-222).** AAAI 2010, 2011, 2014, 2016 and 2022–2026 main and IASEAI 2026 main each carry a
+  cited note
   saying why they are not gated (`official_counts.UNGATED_NOTES`, `coverage-sources.md` §Ungated cells with a note),
   served on `/coverage` and listed in the coverage report.
 - **AAAI 2020–2026.** The trackers' figures sit close to our `main` minus the special tracks and Journal Track, so
@@ -1063,7 +1064,7 @@ copyright, served on the same posture as the ojs.aaai.org abstracts (decision-01
 **What the research showed** (kept outside git with the milestone's task reports, so not re-checkable from the
 repository; the sample is listed here instead): 15 of 15 sampled captures held the abstract, and the 4 that could be
 checked against the live new-site abstract were identical to it. The sample is one record per year for 15 years
-spread over 1980–2008, each drawn at random (`random.seed(232)`) from that year's records with no abstract and an
+spread over 1980–2008 (the years chosen by hand to span the range), each year's record drawn at random (`random.seed(232)`) from that year's records with no abstract and an
 aaai.org `ee`: Faugeras80, EtheringtonR83, KilhofferK86, Brodie88, CaferraDH91, FrazierP93, WeldE94, Haynes96,
 DetermanB98 (IAAI), LiberatoreS00, FangKLS02, TuanBZS04, ConitzerS06, KimuraSN07 and KuchibatlaM08 (dblp keys
 `conf/aaai/<key>`). Fifteen of fifteen only puts a 95% one-sided lower bound near 82% on the share of pages that hold
