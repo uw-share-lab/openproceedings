@@ -1166,3 +1166,46 @@ def test_a_search_with_group_counts_hands_its_compile_to_the_counting_worker(tmp
         reference, split(parsed.effective_ast)
     )
     assert in_counting == []
+
+
+# --- what a count aggregates: only its trees' filtered fields (2026-10-10 perf report) --------------------------
+@pytest.mark.parametrize(
+    ("q", "over"),
+    [
+        # the defaults (track, status) are the only filters: venue, year and abstract_kind are never read
+        ("(trust OR reliance) AND calibrat* AND model*", "track,status"),
+        ("(trust OR reliance) AND calibrat* year:2020..2022 NOT venue:ICLR", "venue,year,track,status"),
+        ("(trust OR reliance) AND calibrat* abstract_kind:none", "track,status,abstract_kind"),
+        (SHARED_VERIFIED, "track,status"),  # the bitwise path (TASK-197) narrows alike
+    ],
+)
+def test_counts_aggregate_only_the_fields_their_trees_filter(tmp_path: Any, q: str, over: str) -> None:
+    """A tree's count sums the combos passing its top-level filters, so only the filtered fields' values are
+    read: its combos are aggregated over those fields alone (one set for the call, so its trees share memo
+    keys), never over the engine's whole `combo`. Schema 4's `abstract_kind`, independent of the other fields
+    on the synthetic 80k corpus, multiplied every count's combos by up to 1.6 and cost the `/search` first
+    page its budget (docs/results/2026-10-10-bench.md). The counts are the oracle's either way."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    assert "abstract_kind" in engine.combo
+    reference = ReferenceEngine(RECORDS)
+    ast = parse(q).effective_ast
+    assert ast is not None
+    trees = counted_trees(ast)
+    engine.faceted.clear()
+    assert engine.counts(trees) == [len(reference.match_ids(t)) for t in trees]
+    assert {key.split("\x00")[0] for key in engine.faceted} == {over}
+    width = len(over.split(","))
+    assert all(len(combo) == width for combos in engine.faceted.values() for combo, _n in combos)
+
+
+def test_a_count_of_trees_without_filters_aggregates_one_field(tmp_path: Any) -> None:
+    """No tree filters anything (a tree built without the defaults): one field's combos are summed whole."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    reference = ReferenceEngine(RECORDS)
+    trees: list[Node] = [
+        And(span=SPAN, children=(Term(span=SPAN, token="trust"), Term(span=SPAN, token="model"))),
+        Term(span=SPAN, token="calibration"),
+    ]
+    engine.faceted.clear()
+    assert engine.counts(trees) == [len(reference.match_ids(t)) for t in trees]
+    assert {key.split("\x00")[0] for key in engine.faceted} == {"status"}

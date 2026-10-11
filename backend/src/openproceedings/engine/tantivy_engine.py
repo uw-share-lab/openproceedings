@@ -51,6 +51,8 @@ BASE_COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
 # a document's facet values, in this order: what every filter and facet depends on (task-086). Schema 4's; an
 # engine's own is `self.combo` (its `filter_fields`: schema 3's lacks `abstract_kind`)
 COMBO: tuple[str, ...] = (*BASE_COMBO, "abstract_kind")
+# what `counts` aggregates when none of its trees has a top-level filter: one field, its combos summed whole
+UNFILTERED: tuple[str, ...] = ("status",)
 # a document's values of the aggregated fields (`facets`' `over`; all of the engine's combo unless narrowed), in that order:
 # each a str, but `year`, an int; as many values as `over` has fields
 type Combo = tuple[str | int, ...]
@@ -498,8 +500,9 @@ class TantivyEngine:
         """How many documents match each of `trees`, without reading an id (TASK-176: a query's concept groups,
         each alone and the query without each; `search.run`). Counted as a facet is: a tree's top-level
         filters (`Filter`, or `NOT` of one) are set aside, the rest (its *base*) is counted per combination of
-        the engine's `combo` fields (`combos`, memoised per base: another page, and the same group under
-        other filters, never collect again), and the combos passing every filter are summed. A filter
+        the fields the call's trees filter (`combos`, memoised per base and fields: another page, and the same
+        group under other filters on those fields, never collect again; `UNFILTERED` when none filters), and
+        the combos passing every filter are summed. A filter
         depends only on its field's value, so the sum is exact (`test_group_counts.py` holds it to
         `match_ids` and to ReferenceEngine).
 
@@ -534,13 +537,18 @@ class TantivyEngine:
         parts.bitwise = len(shared) <= len(distinct) and any(
             shared[id(c)] > 1 and verifies(c) for base in bases for c in base
         )
+        # a count reads only its filters' fields, so only those are aggregated (one set for the call, so its trees
+        # share memo keys); every field of `combo` would multiply the combos by the unread fields' values
+        # (schema 4's abstract_kind cost the synthetic 80k `/search` first page its budget: 2026-10-10 perf report)
+        filtered = {f for tops in split for c in tops if (f := _filter_field(c)) is not None}
+        over = self._aggregated(tuple(filtered) or UNFILTERED)
         out: list[int] = []
         for ast, tops, base in zip(trees, split, bases, strict=True):
             if check is not None:
                 check()
             self.expansions(ast)  # the cap applies, as for every tree an engine is given
-            filters = [(self.combo.index(f), c) for c in tops if (f := _filter_field(c)) is not None]
-            combos = self.combos(base, scope, parts=parts)
+            filters = [(over.index(f), c) for c in tops if (f := _filter_field(c)) is not None]
+            combos = self.combos(base, scope, over, parts=parts)
             out.append(sum(n for combo, n in combos if all(passes(c, combo[at]) for at, c in filters)))
         return out
 
@@ -562,8 +570,8 @@ class TantivyEngine:
         hit = self.faceted.get(key)  # one read (task-080)
         if hit is not None:
             return hit
-        if parts is not None and parts.bitwise and over == self.combo:
-            combos = self._combos_of(parts.bits(base), parts.check)
+        if parts is not None and parts.bitwise:
+            combos = self._combos_of(parts.bits(base), parts.check, over)
         else:
             combos = self._aggregate(base, scope, over, parts)
         self._trim("faceted", self.faceted, self.MAX_FACET_COMBOS)
@@ -600,12 +608,15 @@ class TantivyEngine:
         return tuple(sorted(found))
 
     def _combos_of(
-        self, documents: int, check: Callable[[], None] | None = None
+        self, documents: int, check: Callable[[], None] | None = None, over: tuple[str, ...] | None = None
     ) -> tuple[tuple[Combo, int], ...]:
-        """`combos` of a bitmap of documents (bit `ord` set for each), over every field of the engine's `combo`:
-        each combination's documents are the AND of its values' bitmaps, walked field by field and pruned where none is left.
+        """`combos` of a bitmap of documents (bit `ord` set for each), over the `over` fields (in `combo` order;
+        every field of the engine's `combo` by default): each combination's documents are the AND of its values'
+        bitmaps, walked field by field and pruned where none is left.
         `check`, as `counts`': asked before each collection, should the per-value bitmaps be built now."""
-        masks = self._value_masks(check)
+        every = self._value_masks(check)
+        over = self.combo if over is None else self._aggregated(over)
+        masks = tuple(every[self.combo.index(f)] for f in over)
         found: list[tuple[Combo, int]] = []
 
         def walk(at: int, within: int, prefix: Combo) -> None:
