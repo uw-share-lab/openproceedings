@@ -41,7 +41,7 @@ from openproceedings.query.clauses import (
 from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode, ParseResult, parse
 from pydantic import ValidationError
 
-from tests.strategies import ParseCase, YearEditCase, click_cases, wrap_cases, year_edit_cases
+from tests.strategies import ParseCase, YearEditCase, _join, click_cases, wrap_cases, year_edit_cases
 
 ROOT = Path(__file__).resolve().parents[3]
 GOLDEN: list[dict[str, Any]] = json.loads(
@@ -323,6 +323,16 @@ def _rest(ast: Node | None, field: str) -> Counter[str]:
         "trust status:accepted(x OR y)", "native", "pinned", DiagnosticCode.PARSE_PAREN_TOUCHES_WORD
     )
 )
+# nightly 37793521347: `_join` wrote `…(model$))(model$ …` together, where `$))(model$` is LaTeX math (so the
+# group's `(` had no `)`); it now puts a space there, and the near miss is refused for the glued `(` alone
+@example(
+    case=ParseCase(
+        "track:main (trust track:main venue:ICLR(model$)) (model$ OR venue:ICLR OR trust OR venue:ICLR) trust",
+        "native",
+        "pinned",
+        DiagnosticCode.PARSE_PAREN_TOUCHES_WORD,
+    )
+)
 @example(case=ParseCase("track:main " + "a" * 1_964, "scholar", "pinned", DiagnosticCode.PARSE_TOO_LONG))
 @example(
     case=ParseCase("(" * 65 + "a track:main" + ")" * 65, "native", "pinned", DiagnosticCode.PARSE_TOO_DEEP)
@@ -364,6 +374,23 @@ def test_every_single_value_click_on_a_toggleable_clause_parses_and_edits_only_t
             own = [c for c in _top(after.effective_ast) if _field_of(c) == field]
             assert len(own) == 1 and isinstance(own[0], Filter), edited
             assert sorted(map(str, own[0].values)) == sorted(values), edited
+
+
+def test_parts_written_together_never_put_two_dollars_in_one_unspaced_run() -> None:
+    """The lexer reads LaTeX math as the tokenizer does, so two `$` in one unspaced run (`model$)(model$`) are math,
+    not two wildcards and a `)(`: the strategies' `_join` writes a `)` and a `(` together only where that can't
+    happen (nightly 37793521347), as the "Add `$`" edits do (spec 02 §Wordforms)."""
+    glued = "(trust venue:ICLR(model$))(model$ OR trust)"
+    assert {e.code for e in parse(glued).errors} == {
+        DiagnosticCode.PARSE_PAREN_TOUCHES_WORD,
+        DiagnosticCode.PARSE_UNBALANCED_PAREN,
+    }
+    assert _join(["(a model$)", "(model$ b)"], "") == "(a model$) (model$ b)"
+    assert _join(["(a$b)", "(model$ b)"], "") == "(a$b) (model$ b)"
+    assert _join(["(model$ a)", "(b)"], "") == "(model$ a)(b)"
+    assert _join(["(a)", "(model$ b)"], "") == "(a)(model$ b)"
+    assert _join(["(a model$)", "(b) (model$)"], "") == "(a model$)(b) (model$)"
+    assert _join(["(model$) a", "(model$)"], "") == "(model$) a (model$)"
 
 
 def test_the_grouped_form_has_the_bare_forms_canonical_string_and_hash() -> None:

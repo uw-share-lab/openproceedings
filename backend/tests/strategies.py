@@ -383,10 +383,15 @@ class YearEditCase(NamedTuple):
 
 
 def _join(parts: list[str], sep: str) -> str:
-    """`parts` joined by `sep`; written together (`sep` "") only where a `)` meets a `(`, else by a space."""
+    """`parts` joined by `sep`; written together (`sep` "") only where a `)` meets a `(`, else by a space. Not
+    where both sides' unspaced runs hold a `$` either: `(a model$)(model$ b)` is LaTeX math from `$)` to `(model$`,
+    as the tokenizer reads it, not two groups (nightly 37793521347)."""
     out = parts[0]
     for part in parts[1:]:
-        out += (sep or ("" if out.endswith(")") and part.startswith("(") else " ")) + part
+        together = out.endswith(")") and part.startswith("(")
+        if together and "$" in out.split()[-1] and "$" in part.split()[0]:
+            together = False
+        out += (sep or ("" if together else " ")) + part
     return out
 
 
