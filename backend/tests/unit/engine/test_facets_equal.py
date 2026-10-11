@@ -108,7 +108,10 @@ def test_exclusion_counts_equal_the_per_kept_set_collections_and_the_oracle(
     if not isinstance(total, frozenset):
         return  # refused (a wildcard over the cap): facets refuse alike, checked above
     tantivy.faceted.clear()
-    got = json.dumps(excluded(tantivy, parsed, len(total)).to_json())  # order-sensitive: spec 04 pins it
+    # the full combo, as a search with facets aggregates it (`excluded`'s own default narrows to ORDER)
+    got = json.dumps(
+        excluded(tantivy, parsed, len(total), facets=tantivy.facets).to_json()
+    )  # order-sensitive
     assert got == json.dumps(excluded(Before(tantivy), parsed, len(total)).to_json()), render(ast)  # type: ignore[arg-type]
     assert got == json.dumps(excluded(reference, parsed, len(total)).to_json()), render(ast)
     # what a search without facets runs (TASK-166), from a cold memo and then a warm one
@@ -130,7 +133,7 @@ def test_exclusion_counts_of_each_trust_evals_string_are_the_same_from_the_defau
     total = len(tantivy.match_ids(parsed.effective_ast))
     tantivy.faceted.clear()
     narrow = excluded(tantivy, parsed, total, facets=partial(tantivy.facets, over=ORDER))
-    assert narrow == excluded(tantivy, parsed, total)
+    assert narrow == excluded(tantivy, parsed, total, facets=tantivy.facets)
     assert narrow == excluded(reference, parsed, total)
 
 
@@ -168,3 +171,19 @@ def test_combos_cover_every_document_of_the_base(engines: Engines) -> None:
         combos = tantivy.combos([ast], over=over)
         assert sum(n for _combo, n in combos) == len(tantivy.match_ids(ast))
         assert all(len(combo) == len(over) for combo, _n in combos)
+
+
+def test_the_aggregation_nests_the_fewest_valued_fields_outermost(engines: Engines) -> None:
+    """The nested terms aggregation runs `abstract_kind` → status → track → venue → year, whatever order its
+    fields are counted in: an innermost few-valued field gives every leaf of the level above its own
+    sub-aggregation (schema 4's `abstract_kind` innermost doubled the 5k all-facets aggregation, PR #134). The
+    combos still come back in `over` order, equal to the per-value bitmaps' (`_combos_of`)."""
+    from openproceedings.engine.tantivy_engine import _nesting
+
+    _reference, tantivy = engines
+    assert _nesting(COMBO) == ("abstract_kind", "status", "track", "venue", "year")
+    assert _nesting(("venue", "year", "track", "status")) == ("status", "track", "venue", "year")
+    every = (1 << len(tantivy.ids)) - 1
+    for over in (tantivy.combo, ("year", "status"), ("venue", "abstract_kind"), ORDER):
+        tantivy.faceted.clear()
+        assert tantivy.combos([], over=over) == tantivy._combos_of(every, over=over), over

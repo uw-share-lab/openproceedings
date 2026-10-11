@@ -201,3 +201,43 @@ def test_buckets_that_do_not_add_up_are_an_internal_error(engines: tuple[Engine,
     assert isinstance(e.value, InternalError)  # a 5xx, logged at ERROR
     with pytest.raises(EngineInternalError, match="don't sum"):  # a total that isn't the search's
         excluded(engines[1], parsed("trust"), len(engines[1].match_ids(parsed("trust").effective_ast)) + 1)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("q", ["trust", "trust OR track:workshop", "trust track:workshop"])
+def test_a_cold_exclusion_only_call_aggregates_only_the_default_fields(tmp_path: Path, q: str) -> None:
+    """`excluded` with no `facets` on a TantivyEngine aggregates only `ORDER` (track, status), as `search.run`
+    does without facets (TASK-166): never schema 4's `abstract_kind` or the other combo fields, whose deeper
+    nested aggregation cost the cold bench a third of its time (PR #134), and it builds no per-value bitmaps, no
+    value table and, with no verified clause, no ord table. The counts are the brute-force ones."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    assert "abstract_kind" in engine.combo  # schema 4: the field the exclusion path must not aggregate
+    result = parsed(q)
+    assert run(engine, result) == brute(RECORDS, result)
+    assert {key.split("\x00")[0] for key in engine.faceted} == {"track,status"}
+    assert engine._masks is None and engine._index is None and engine._ords is None
+
+
+def test_the_narrowed_path_keeps_an_abstract_kind_clause_in_the_base(tmp_path: Path) -> None:
+    """`abstract_kind` is not aggregated on the exclusion-only path (`ORDER`), so a top-level `abstract_kind:`
+    clause stays in the collected base, never set aside: the counts are the oracle's and the full combo's, over
+    the every-kind corpus with some workshop and rejected papers to remove."""
+    from tests.fixtures.corpus import abstract_kinds
+
+    corpus = [
+        # the OpenAlex `trust` papers are 0, 12, 24, 36, 48: three to workshops, one rejected, one kept
+        r.model_copy(
+            update={"track": "workshop"} if i % 24 == 0 else {"status": "rejected"} if i == 12 else {}
+        )
+        for i, r in enumerate(abstract_kinds.records())
+    ]
+    engine, oracle = tantivy_of(corpus, tmp_path), ReferenceEngine(corpus)
+    result = parsed("trust abstract_kind:openalex")
+    total = len(engine.match_ids(result.effective_ast))  # type: ignore[arg-type]
+    narrow = excluded(engine, result, total)
+    assert (total, narrow.to_json()) == (
+        1,
+        {"total": 4, "track": {"workshop": 3, "unknown": 0}, "status": {"rejected": 1, "unknown": 0}},
+    )
+    assert narrow == excluded(oracle, result, total) == excluded(engine, result, total, facets=engine.facets)
+    keys = [k for k in engine.faceted if k.startswith("track,status\x00")]
+    assert keys and all("abstract_kind" in k for k in keys)  # the clause is in each narrowed base

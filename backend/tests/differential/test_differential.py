@@ -100,7 +100,10 @@ def agree(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     parsed = parse(render(ast))
     if parsed.effective_ast is not None:  # a tree the parser accepts: its exclusion counts agree too
         total = len(tantivy.match_ids(parsed.effective_ast))
-        got_json = json.dumps(excluded(tantivy, parsed, total).to_json())  # order-sensitive: spec 04 pins it
+        # every combo field aggregated, as a search with facets counts them (`search.run`'s `over=engine.combo`)
+        got_json = json.dumps(
+            excluded(tantivy, parsed, total, facets=tantivy.facets).to_json()
+        )  # order-sensitive
         expected_json = json.dumps(brute_excluded(reference, parsed, got, ast))
         assert got_json == expected_json, q
         # what a search without facets counts (`search.run`: the default fields only, TASK-166)

@@ -33,3 +33,7 @@ Add `abstract_kind` as a raw fast field (index schema 4) and verify milestone C 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `docs/specs/03-search-engine.md` §Performance budgets (the miss and the regression stated); `.claude/skills/index-versioning/SKILL.md` (schema 2 retired before schema 4); no skill rule for the combo yet.
 - Test or hook added? — yes, in the branch: `test_counts_aggregate_only_the_fields_their_trees_filter` and `test_a_count_of_trees_without_filters_aggregates_one_field` (`566cafcd`); no hook.
+
+## Addendum, 2026-10-11: the CI bench caught a cold path the reports missed, and the merge queue merged anyway
+- **CI's `bench` job compares every benchmark's minimum with the base.** It failed on PR #134: seven cold `match_ids` benchmarks with exclusion accounting were 31-40% slower. `exclusions.excluded`'s default counter aggregated the engine's whole five-field combo, though exclusions read only track and status; `search.run` already passed `over=ORDER`, so only the default path (benchmarks, tests, reports) paid. Fixed in `b74c38b7`, and `51b0577f` nests the aggregation fewest-valued first, so full-combo facets run within 20% of base too.
+- **`bench` is not a merge-queue required check.** The queue merged PR #134 at its earlier head while `bench` was red. Push a fix as its own follow-up PR, and read every check (not only the required ones) before treating a PR as done.

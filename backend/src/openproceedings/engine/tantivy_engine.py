@@ -54,6 +54,11 @@ BASE_COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
 # a document's facet values, in this order: what every filter and facet depends on (task-086). Schema 4's; an
 # engine's own is `self.combo` (its `filter_fields`: schema 3's lacks `abstract_kind`)
 COMBO: tuple[str, ...] = (*BASE_COMBO, "abstract_kind")
+# the order a combos aggregation nests its fields in, fewest distinct values outermost (year, the most, innermost):
+# a few-valued field nested inside gives every leaf of the level above its own sub-aggregation (schema 4's
+# `abstract_kind` innermost doubled the 5k all-facets aggregation, PR #134). Only the collection's order: combos
+# are still keyed in `combo` order (`_aggregate`)
+NESTING: tuple[str, ...] = ("abstract_kind", "status", "track", "venue", "year")
 # what a filter field's values are called in `admit`'s refusal (FIELD_NOT_INDEXED), for a reader who never sees a schema
 _NOT_INDEXED: dict[str, str] = {"abstract_kind": "each paper's abstract source"}
 # what `counts` aggregates when none of its trees has a top-level filter: one field, its combos summed whole
@@ -534,21 +539,24 @@ class TantivyEngine:
         filters = [c for c in tops if _filter_field(c) in over]
         base = [c for c in tops if _filter_field(c) not in over]
         combos = self.combos(base, scope, over)
-        # per field, whether each value that occurs passes every set-aside filter on that field
-        ok = [
-            {
+        # per field with a set-aside filter, whether each value that occurs passes every such filter on that field
+        # (a field without one passes every value, so it is never looked up: the combos' loop reads only these)
+        ok = {
+            i: {
                 v: all(passes(c, v) for c in filters if _filter_field(c) == g)
                 for v in {c[i] for c, _n in combos}
             }
             for i, g in enumerate(over)
-        ]
+            if any(_filter_field(c) == g for c in filters)
+        }
         out: dict[str, dict[str, int]] = {}
         for f in fields:
             at = over.index(f)
-            others = [i for i in range(len(over)) if i != at]  # every other field's filters apply; F's don't
+            # every other field's filters apply; F's don't
+            others = [(i, passing) for i, passing in ok.items() if i != at]
             counts: dict[str, int] = {}
             for combo, n in combos:
-                if all(ok[i][combo[i]] for i in others):
+                if all(passing[combo[i]] for i, passing in others):
                     value = str(combo[at])
                     counts[value] = counts.get(value, 0) + n
             out[f] = dict(sorted(counts.items()))
@@ -688,11 +696,15 @@ class TantivyEngine:
             query = parts.query(base)  # `counts`: conjunct by conjunct, nothing stored in `compiled`
         else:
             query = self.compile(node, scope).query
+        nested = _nesting(over)  # (→ abstract_kind →) status → track → venue → year, innermost last
         aggs: dict[str, Any] = {}
-        for f in reversed(over):  # venue → year → track → status (→ abstract_kind), innermost last
+        for f in reversed(nested):
             aggs = {f: {"terms": {"field": f, "size": 100_000}, **({"aggs": aggs} if aggs else {})}}
         found: list[tuple[Combo, int]] = []
-        _walk(self.searcher.aggregate(query, aggs), over, (), found)
+        _walk(self.searcher.aggregate(query, aggs), nested, (), found)
+        if nested != over:  # each combo's values back in `over` order
+            back = itemgetter(*(nested.index(f) for f in over))  # two fields or more: a tuple
+            found = [(back(combo), n) for combo, n in found]
         return tuple(sorted(found))
 
     def _combos_of(
@@ -1146,6 +1158,11 @@ def _ord(value: object) -> int:
             DiagnosticCode.API_INTERNAL, "a document has no ord: the index predates it; build it again"
         )
     return value
+
+
+def _nesting(over: tuple[str, ...]) -> tuple[str, ...]:
+    """`over`'s fields in the order a combos aggregation nests them (`NESTING`)."""
+    return tuple(sorted(over, key=NESTING.index))
 
 
 def _walk(result: dict[str, Any], over: tuple[str, ...], prefix: Combo, out: list[tuple[Combo, int]]) -> None:
