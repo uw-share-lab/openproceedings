@@ -335,13 +335,13 @@ build departs from, or settles, this design:
     accepted exception); `docs/results/2026-10-11-coverage.md`. The earlier as-built report, index `9977ed00669f`
     (83 of 84), stays as history: `docs/results/2026-10-10-coverage.md`.
   - **Benchmarks (spec 03 §Performance budgets):** on the real corpus the worst first page with group counts is
-    67.7 ms p95 (`main-2-pop`; 76.5 ms before TASK-230), within 100 ms (`docs/results/2026-10-11-bench-group-counts.md`; TASK-220). On the
+    67.4 ms p95 (`main-2-pop`; 76.5 ms before TASK-230), within 100 ms (`docs/results/2026-10-11-bench-group-counts.md`; TASK-220). On the
     synthetic 80k corpus (`docs/results/2026-10-11-bench.md`) `main-3-sources` is **110.7 ms, over the budget**: it is
     65 ms without group counts, so the excess is TASK-176's counting, not schema 4. Schema 4's own regression, a fifth
     combo field multiplying every group-count aggregation, was found by that benchmark and fixed in `566cafcd`.
     Follow-up: TASK-230, done: a counting job now shares its trees with a helper on the other counting worker, and
-    every synthetic 80k first page is within budget (`main-3-sources` 69.9 ms, worst `main-2-pop` 74.2 ms; the real
-    corpus's worst 67.7 ms; both reports regenerated at `ab2de11b`).
+    every synthetic 80k first page is within budget (`main-3-sources` 68.4 ms, worst `main-2-pop` 72.8 ms; the real
+    corpus's worst 67.4 ms; both reports regenerated on the final code and index).
   - **Left for the owner or later:** nothing from TASK-231 (done) or TASK-232 (done: AAAI's own abstracts from Internet
     Archive captures of the old aaai.org paper pages, decision-051, the `aaai_library` source, filled before OpenAlex).
     The bisect and profiles behind the benchmark figures are in `docs/results/2026-10-11-perf-regression.md`.

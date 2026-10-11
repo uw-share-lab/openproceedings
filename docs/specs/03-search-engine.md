@@ -270,11 +270,11 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
   corpus found 0 differences in 214,499 terms and 344,268 phrases).**
   - **Real corpus** (`docs/results/2026-10-11-bench-group-counts.md`, index `b4f335e07e70`, regenerated on the final
     snapshot; a run counts only at a 1-minute load under 5 at the start and the end): every Trust-Evals string's first page with its group counts
-    is within the 100 ms budget, the worst being `main-2-pop` at p95 67.7 ms (76.5 ms before TASK-230). This is the
+    is within the 100 ms budget, the worst being `main-2-pop` at p95 67.4 ms (76.5 ms before TASK-230). This is the
     citable group-count report TASK-220 asked for.
-  - **Synthetic 80k** (`docs/results/2026-10-11-bench.md`, load 4.4 at the start and 4.0 at the end, commit
-    `ab2de11b`): every first page's p95 is within the 100 ms budget, from 7.4 ms (`llm-as-judge`) to 74.2 ms
-    (`main-2-pop`); `main-3-sources` is 69.9 ms. It was 110.7 ms, over budget, after schema 4's fix below: its six
+  - **Synthetic 80k** (`docs/results/2026-10-11-bench.md`, load 2.5 at the start and 2.6 at the end, commit
+    `e7740d08`, the final code): every first page's p95 is within the 100 ms budget, from 6.1 ms (`llm-as-judge`) to 72.8 ms
+    (`main-2-pop`); `main-3-sources` is 68.4 ms. It was 110.7 ms, over budget, after schema 4's fix below: its six
     counted trees ran one after another on one counting worker (about 90 ms, each broad tree 15-30 ms of Tantivy
     query evaluation), longer than the page itself (65 ms), so the counting job was the request's critical path.
     TASK-230 shares a counting job's trees with a helper on the other counting worker (04 §SearchResponse `groups`,
