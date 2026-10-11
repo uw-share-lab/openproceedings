@@ -1,8 +1,9 @@
 """Exclusion accounting (spec 03 §Exclusion accounting, guarantee 6; default-filters and prisma-reporting skills).
 
-`excluded(engine, parsed, total)` says how many records the default filters removed, and why, using nothing but the
-Engine protocol, so ReferenceEngine and TantivyEngine compute it the same way and can be compared (a TantivyEngine's
-facets are only told to aggregate the two default fields, `_counter`: the same counts, fewer combos).
+`excluded(engine, parsed, total)` says how many records the default filters removed, and why, from the Engine
+protocol's `facets`, so ReferenceEngine and TantivyEngine compute it the same way and can be compared. One special
+case: on a TantivyEngine (an `isinstance` check, `_counter`) the default `facets` is told to aggregate only the two
+default fields (`over=ORDER`), as `search.run` does without facets: the same counts from fewer combos.
 
 - The counts come from `ParseResult.identification_ast` (None = every record) and `defaults`, never from
   re-parsing `identification_query`, which can be `""` or all-negative.
