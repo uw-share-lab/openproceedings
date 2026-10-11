@@ -52,7 +52,8 @@ class Before:
 
 @st.composite
 def filtered_asts(draw: st.DrawFn) -> Node:
-    # every filter field, `abstract_kind:` included: the engine is schema 4
+    # every filter field is drawn, but the 5k corpus holds no `openalex` record (NeurIPS, ICLR and ICML only), so
+    # `abstract_kind:openalex` is always empty here; every kind's facets meet the oracle in test_abstract_kind_index.py
     tree = draw(engine_asts(vocab()))
     extra = [
         Not(span=SPAN, child=f) if draw(st.booleans()) else f for f in draw(st.lists(filters(), max_size=4))

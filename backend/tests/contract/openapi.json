@@ -3293,6 +3293,18 @@
             "title": "Index Version",
             "type": "string"
           },
+          "openalex_abstracts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How many of the record's own saved ids have an abstract from OpenAlex (`abstract_kind` `openalex`) on the record's own `index_version`, read per id from that index (the built kind, as the filter and facet read it). Derived, not stored: the same for the same record ids and index. Null when that index has no `abstract_kind` (schema 3) or isn't loaded for this request: with a replay, when the replay didn't run on the record's own index; with `replay=false`, when the served index isn't the record's. The methods text's OpenAlex sentence (spec 05) reads this value only.",
+            "title": "Openalex Abstracts"
+          },
           "query_version": {
             "title": "Query Version",
             "type": "string"
@@ -3321,7 +3333,8 @@
           "tokenizer_version",
           "query_version",
           "record",
-          "replay"
+          "replay",
+          "openalex_abstracts"
         ],
         "title": "RecordResponse",
         "type": "object"
@@ -5523,7 +5536,7 @@
     },
     "/api/v1/records/{id}": {
       "get": {
-        "description": "The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless\n`include=ids`; `/export?record_id=` streams the papers themselves. With `replay=false`, the stored record\nalone (`replay` null; the top-level versions are the served index's).",
+        "description": "The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless\n`include=ids`; `/export?record_id=` streams the papers themselves. With `replay=false`, the stored record\nalone (`replay` null; the top-level versions are the served index's). `openalex_abstracts` is derived from\nthe record's ids on its own index when this request has that index (`OpenAlexCounts`): the replay's\nengine, or with `replay=false` the served one (nothing else is loaded).",
         "operationId": "get_record",
         "parameters": [
           {

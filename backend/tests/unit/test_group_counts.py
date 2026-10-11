@@ -155,7 +155,9 @@ def test_a_group_alone_is_the_query_without_the_other_groups() -> None:
 @st.composite
 def grouped_asts(draw: st.DrawFn) -> Node:
     """An AND of several trees (each a group, a leave-out, or a filter clause) and extra top-level filters."""
-    # every filter field, `abstract_kind:` included: these engines are schema 4
+    # every filter field is drawn, but the 5k corpus holds no `openalex` record (NeurIPS, ICLR and ICML only), so
+    # `abstract_kind:openalex` is always empty here; every kind's counts, spread and bitwise included, meet the
+    # oracle in `test_abstract_kind_index.test_group_counts_over_every_kind_are_the_oracles`
     parts: list[Node] = draw(st.lists(engine_asts(vocab()), min_size=1, max_size=4))
     parts += [
         Not(span=SPAN, child=f) if draw(st.booleans()) else f for f in draw(st.lists(filters(), max_size=3))
@@ -1411,6 +1413,36 @@ def test_a_failed_tree_stops_both_threads_taking_another() -> None:
     with pytest.raises(RuntimeError, match="tree broke"):
         finishes(lambda: shared.counted(lambda job: job(lambda: False)))  # the helper runs first, inline
     assert asked == [0]
+
+
+def test_after_its_own_tree_fails_the_caller_reads_the_taken_trees_under_the_lock() -> None:
+    """Gate C round 2 (nit): after the caller's tree fails, it reads how many trees were taken under the lock, so
+    a helper's `take` that passed the `stop` check just before the failure is counted among the trees waited for
+    (and its tree is never left running when the caller raises)."""
+    failed = threading.Event()
+    after: list[str] = []
+
+    class Watched:
+        def __init__(self) -> None:
+            self.lock = threading.Lock()
+
+        def __enter__(self) -> None:
+            self.lock.acquire()
+            if failed.is_set():
+                after.append(threading.current_thread().name)
+
+        def __exit__(self, *exc: object) -> None:
+            self.lock.release()
+
+    def count(i: int) -> int:
+        failed.set()
+        raise RuntimeError("tree broke")
+
+    shared = _Shared(3, count)
+    shared.lock = Watched()  # type: ignore[assignment]
+    with pytest.raises(RuntimeError, match="tree broke"):
+        finishes(lambda: shared.counted(lambda job: None))  # no helper: the caller fails tree 0
+    assert after == [CALLER]
 
 
 def test_a_spread_count_with_a_tree_left_uncounted_is_an_internal_error() -> None:

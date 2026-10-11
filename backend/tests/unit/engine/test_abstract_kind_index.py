@@ -5,22 +5,28 @@ which is what keeps the schema-3 display fallback (`none`/`official` from the st
 
 from __future__ import annotations
 
+import threading
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 from hypothesis import given, settings
+from hypothesis import strategies as st
+from openproceedings.engine import tantivy_engine
 from openproceedings.engine.exclusions import excluded
 from openproceedings.engine.index import SCHEMA_VERSION, SERVED_SCHEMAS, IndexBuildError
 from openproceedings.engine.protocol import EngineInputError
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.engine.tantivy_engine import COMBO, TantivyEngine, _Parts
-from openproceedings.query.ast import Node
-from openproceedings.query.canonical import render
+from openproceedings.query.ast import And, Node, Not
+from openproceedings.query.canonical import canonicalize, render
+from openproceedings.query.groups import split
 from openproceedings.query.parser import parse
 
 from tests.fixtures.corpus import abstract_kinds
 from tests.fixtures.corpus.synthetic_5k import vocab_of
-from tests.strategies import engine_asts
+from tests.strategies import SPAN, engine_asts, filters
 from tests.unit.engine.facets_before import facets_before
 from tests.unit.engine.test_exclusions import tantivy_of
 
@@ -99,6 +105,82 @@ def test_generated_trees_agree_with_the_oracle_on_schema_4(
     if parsed.effective_ast is not None:  # a tree the parser accepts: its exclusion counts agree too
         total = len(expected)
         assert excluded(engine, parsed, total) == excluded(oracle, parsed, total)
+
+
+@st.composite
+def grouped_kind_asts(draw: st.DrawFn) -> Node:
+    """As `test_group_counts.grouped_asts`, over this corpus: an AND of 1 to 4 trees and top-level filters (or NOT
+    of one), every filter field drawn, so `abstract_kind:openalex` matches papers here (the 5k corpus has none)."""
+    parts: list[Node] = draw(st.lists(engine_asts(vocab_of(CORPUS)), min_size=1, max_size=4))
+    parts += [
+        Not(span=SPAN, child=f) if draw(st.booleans()) else f for f in draw(st.lists(filters(), max_size=3))
+    ]
+    return parts[0] if len(parts) == 1 else And(span=SPAN, children=tuple(draw(st.permutations(parts))))
+
+
+class _Bitwise(_Parts):
+    """`_Parts` held on the bitwise path (each conjunct collected as a bitmap), whatever `counts` decides."""
+
+    bitwise = property(lambda self: True, lambda self, value: None)  # type: ignore[assignment]
+
+
+def _a_thread(job: Callable[[Callable[[], bool]], None]) -> None:
+    """A `spread` that starts the second worker on a thread of its own at once."""
+    threading.Thread(target=job, args=(lambda: False,), daemon=True).start()
+
+
+def _outcome(f: Callable[[], Any]) -> Any:
+    try:
+        return f()
+    except EngineInputError as e:
+        return ("refused", e.code)
+
+
+# each example counts up to nine trees four ways and evaluates them with the oracle: no per-example deadline
+@settings(max_examples=100, deadline=None)
+@given(tree=grouped_kind_asts())
+def test_group_counts_over_every_kind_are_the_oracles(
+    engine: TantivyEngine, oracle: ReferenceEngine, tree: Node
+) -> None:
+    """Gate C round 2 (exactness): `counts`, with the memo cleared and kept, with and without the second worker,
+    and on the bitwise path, equals ReferenceEngine's count of each tree, with OpenAlex documents among them."""
+    ast = canonicalize(tree)
+    found = split(ast)
+    trees = (
+        [ast, *map(found.alone, found.groups), *map(found.without, found.groups)]
+        if len(found.groups) >= 2
+        else [ast]
+    )
+    expected = _outcome(lambda: [len(oracle.match_ids(t)) for t in trees])
+    for bitwise in (False, True):
+        with pytest.MonkeyPatch.context() as m:
+            if bitwise:
+                m.setattr(tantivy_engine, "_Parts", _Bitwise)
+            for spread in (None, _a_thread):
+                engine.faceted.clear()
+                for _memo in ("cleared", "kept"):
+                    got = _outcome(lambda spread=spread: engine.counts(trees, spread=spread))
+                    assert got == expected, (render(ast), bitwise, spread is not None, _memo)
+
+
+def test_the_every_kind_count_property_sees_openalex_on_every_path(
+    engine: TantivyEngine, oracle: ReferenceEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The property above is not vacuous: one fixed AND of two groups under `abstract_kind:openalex` counts a
+    non-zero set on each path."""
+    ast = parse("(trust OR audit) paper abstract_kind:openalex").effective_ast
+    assert ast is not None
+    found = split(ast)
+    trees = [ast, *map(found.alone, found.groups), *map(found.without, found.groups)]
+    expected = [len(oracle.match_ids(t)) for t in trees]
+    assert expected[0] > 0
+    for bitwise in (False, True):
+        with monkeypatch.context() as m:
+            if bitwise:
+                m.setattr(tantivy_engine, "_Parts", _Bitwise)
+            for spread in (None, _a_thread):
+                engine.faceted.clear()
+                assert engine.counts(trees, spread=spread) == expected
 
 
 def test_bitwise_combos_equal_aggregated_combos_on_schema_4(engine: TantivyEngine) -> None:

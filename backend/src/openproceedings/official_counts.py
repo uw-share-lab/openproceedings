@@ -35,7 +35,7 @@ type OfficialTable = dict[tuple[str, int, str], OfficialCount]
 OFFICIAL_ACCEPTED: OfficialTable = {
     ("AAAI", 2012, "main"): OfficialCount(
         292,
-        "papers counted on AAAI's own accepted-paper list (the AAAI-12 accepted-papers PDF on aaai.org): 220 main technical, poster-only full papers included, plus 26 AI and the Web, 11 Cognitive Systems, 21 Computational Sustainability and AI, and 14 Robotics",
+        "papers counted on AAAI's own accepted-paper list (the AAAI-12 accepted-papers PDF on aaai.org): 220 main technical, poster-only full papers included, plus 26 AI and the Web, 11 Cognitive Systems, 21 Computational Sustainability and AI, and 14 Robotics; independent of the proceedings because it differs from them in count (+2 on snapshot 2026-10-10-9efa49481112)",
         "https://aaai.org/wp-content/uploads/2023/01/aaai12accepted-papers.pdf (linked from https://aaai.org/conference/aaai/aaai12/)",
         date(2026, 10, 10),
     ),
@@ -53,7 +53,7 @@ OFFICIAL_ACCEPTED: OfficialTable = {
     ),
     ("AAAI", 2017, "main"): OfficialCount(
         637,
-        "papers counted on AAAI's own accepted-paper list (the AAAI-17 accepted-papers PDF on aaai.org): 599 main technical plus 38 in three special tracks (Cognitive Systems, Computational Sustainability, Integrated Systems)",
+        "papers counted on AAAI's own accepted-paper list (the AAAI-17 accepted-papers PDF on aaai.org): 599 main technical plus 38 in three special tracks (Cognitive Systems, Computational Sustainability, Integrated Systems); independent of the proceedings because it differs from them in count (+2 on snapshot 2026-10-10-9efa49481112)",
         "https://aaai.org/wp-content/uploads/2023/01/aaai17accepted-papers.pdf (linked from https://aaai.org/conference/aaai/aaai17/aaai-17-program-overview/)",
         date(2026, 10, 10),
     ),
@@ -71,13 +71,13 @@ OFFICIAL_ACCEPTED: OfficialTable = {
     ),
     ("AAAI", 2020, "main"): OfficialCount(
         1614,
-        "papers counted on AAAI's own accepted-paper lists (the AAAI-20 PDFs on aaai.org, made before camera-ready): 1,589 main technical plus 25 AI for Social Impact; sister conference track, student abstracts, IAAI and EAAI excluded",
+        "papers counted on AAAI's own accepted-paper lists (the AAAI-20 PDFs on aaai.org): 1,589 main technical plus 25 AI for Social Impact; sister conference track, student abstracts, IAAI and EAAI excluded; independent of the proceedings because the list says it was made before camera-ready",
         "https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-Paper-List.pdf and https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-AISI-Papers.pdf (linked from https://aaai.org/conference/aaai/aaai-20/)",
         date(2026, 10, 10),
     ),
     ("AAAI", 2021, "main"): OfficialCount(
         1696,
-        "papers counted on AAAI's own accepted-paper list (the AAAI-21 main technical track PDF on aaai.org): 1,656 main technical plus 40 AI for Social Impact",
+        "papers counted on AAAI's own accepted-paper list (the AAAI-21 main technical track PDF on aaai.org): 1,656 main technical plus 40 AI for Social Impact; independent of the proceedings because it differs from them in count (−2 on snapshot 2026-10-10-9efa49481112)",
         "https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (linked from https://aaai.org/conference/aaai/aaai-21/)",
         date(2026, 10, 10),
     ),
@@ -543,12 +543,13 @@ _NOT_FOUND = (
     "this main track also holds the special tracks"
 )
 
-# a list counts as independent of the proceedings only when it is evidently made before them, a pre-camera-ready
-# list that says so (the controller's ruling, gate C round 1); an archived page captured after publication is not
+# a list counts as independent of the proceedings when it either says it is pre-camera-ready, or visibly differs from
+# them in content (a different count or membership): either shows it was not derived from them (the controller's
+# rulings, gate C rounds 1 and 2). A list that matches them exactly and isn't shown to predate them is a note
 _AFTER = (
-    "AAAI's own {list} lists {n} papers, but its only archived copy was captured on {captured}, after the "
-    "proceedings were published, and nothing on it says it was made before them; like AAAI 2016's list it may be "
-    "derived from the proceedings, so a gate on it could check the proceedings against themselves"
+    "AAAI's own {list} lists {n} papers, the same as the proceedings, and nothing on it says it was made before "
+    "them (its only archived copy was captured on {captured}, after they were published); like AAAI 2016's list it "
+    "may be derived from the proceedings, so a gate on it could check the proceedings against themselves"
 )
 
 # (venue, year, track) → why that ungated cell has no official count; `docs/results/coverage-sources.md`
@@ -571,8 +572,9 @@ UNGATED_NOTES: dict[tuple[str, int, str], UngatedNote] = {
         date(2026, 10, 11),
     ),
     ("AAAI", 2016, "main"): UngatedNote(
-        "AAAI's own accepted-paper list matches the proceedings section by section, so it appears to be derived from "
-        "them; a gate on it would check the proceedings against themselves",
+        "AAAI's own accepted-paper list is the same as the proceedings, section by section, and nothing on it says it "
+        "was made before them, so it may be derived from them; a gate on it would check the proceedings against "
+        "themselves",
         "https://ojs.aaai.org/index.php/AAAI/issue/view/303 (the proceedings the list matches; docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts)",
         date(2026, 10, 10),
     ),

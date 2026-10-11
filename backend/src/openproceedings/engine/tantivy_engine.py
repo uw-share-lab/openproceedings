@@ -55,7 +55,7 @@ BASE_COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
 # engine's own is `self.combo` (its `filter_fields`: schema 3's lacks `abstract_kind`)
 COMBO: tuple[str, ...] = (*BASE_COMBO, "abstract_kind")
 # what a filter field's values are called in `admit`'s refusal (FIELD_NOT_INDEXED), for a reader who never sees a schema
-_NOT_INDEXED: dict[str, str] = {"abstract_kind": "abstract kinds"}
+_NOT_INDEXED: dict[str, str] = {"abstract_kind": "each paper's abstract source"}
 # what `counts` aggregates when none of its trees has a top-level filter: one field, its combos summed whole
 UNFILTERED: tuple[str, ...] = ("status",)
 # a document's values of the aggregated fields (`facets`' `over`; all of the engine's combo unless narrowed), in that order:
@@ -194,8 +194,9 @@ class TantivyEngine:
     # Weights, in ids/terms (~60 bytes each as Python strings): a verified clause, its ids + 1; an expansion,
     # its terms + 1 (an over-cap count, 1); a compiled query, `Compiled.held` + 1 (the ids and terms inside its
     # Tantivy query: each verified clause's ids once for the list `Compiled.ids` keeps, plus whichever id list its query holds, the ids or the candidates that failed, none when none failed (TASK-076); plus the copies `Compiled.conjuncts` keeps, TASK-197; plus its explain lines); a base's facet combos, their number + 1. So ≲ 30 + 30 + 6 MB for
-    # the first three, plus `faceted`'s: a memoised five-field combo with its count is about 204 bytes (measured,
-    # gate C round 1; a year above 256 is its own int object), so a full `faceted` is about 61 MB (about 18 MB at
+    # the first three, plus `faceted`'s: a memoised five-field combo with its count is about 204 bytes (a measurement,
+    # 2026-10-10 and 2026-10-11: docs/results/2026-10-11-perf-regression.md §Memory; a year above 256 is its own int
+    # object), so a full `faceted` is about 61 MB (about 18 MB at
     # schema 3's 100,000), about 130 MB per engine in all; the API holds the served engine plus `pinned_indexes`
     # more (4 by default: about 300 MB of `faceted` at worst, against about 90 MB before schema 4). Every memo is checked before each
     # entry is stored and charged right after (`verified` clause by clause, inside a compile: `_store_verified`),
@@ -317,8 +318,9 @@ class TantivyEngine:
             raise EngineInputError(
                 DiagnosticCode.FIELD_NOT_INDEXED,
                 # in the reader's words, not the schema's (gate C round 1): only `abstract_kind` can be missing
-                f"This index ({self.index_version}) doesn't hold {_NOT_INDEXED.get(missing[0], missing[0])} "
-                f"yet; it was built before they existed. Search the current index, or remove the "
+                # and the sidebar's (gate C round 2: "Abstract source")
+                f"This index ({self.index_version}) doesn't record {_NOT_INDEXED.get(missing[0], missing[0])} "
+                f"yet; it was built before it was recorded. Search the current index, or remove the "
                 f"`{missing[0]}:` filter.",
             )
 
@@ -1095,7 +1097,11 @@ class _Shared:
                 self.run(i)
             except BaseException:  # kept in `errors` by `run`, raised below once the helper's tree is done
                 break
-        for done in self.done[: self.next]:  # a tree taken is counted or failed, so set, soon
+        # read under the lock (gate C round 2): a helper's `take` that passed the `stop` check before a failure
+        # finishes incrementing first; `stop` is set by then, so no later `take` succeeds
+        with self.lock:
+            taken = self.next
+        for done in self.done[:taken]:  # a tree taken is counted or failed, so set, soon
             done.wait()
         if self.errors:
             raise self.errors[min(self.errors)]

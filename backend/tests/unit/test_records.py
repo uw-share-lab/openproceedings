@@ -952,21 +952,46 @@ def test_the_removal_memo_works_out_a_records_causes_once_per_index() -> None:
 
 
 def test_the_removal_memo_is_bounded_by_the_ids_it_holds() -> None:
-    memo = records.RemovalMemo(max_ids=3)
+    """Each entry costs its removed ids plus one (gate C round 2), least recently used dropped first."""
+    memo = records.RemovalMemo(max_ids=5)
     engine = _CountingEngine("aaaaaaaaaaaa")
-    memo.get("a", _replay_on(engine, ("1", "2")))
-    memo.get("b", _replay_on(engine, ("3",)))
+    memo.get("a", _replay_on(engine, ("1", "2")))  # costs 3
+    memo.get("b", _replay_on(engine, ("3",)))  # costs 2: 5 held
     memo.get("a", _replay_on(engine, ("1", "2")))  # a used last: b goes first
-    memo.get("c", _replay_on(engine, ("4",)))
+    memo.get("c", _replay_on(engine, ("4",)))  # 7 > 5: b dropped
     assert engine.calls == 3
     memo.get("a", _replay_on(engine, ("1", "2")))
     assert engine.calls == 3  # a kept
     memo.get("b", _replay_on(engine, ("3",)))
     assert engine.calls == 4  # b was dropped
-    big = ("5", "6", "7", "8")
+
+
+def test_an_entry_over_the_bound_is_answered_and_refused_never_flushing_the_others() -> None:
+    """Gate C round 2 (qa nit): an entry costing more than the bound is not stored, so it never evicts the
+    entries already kept."""
+    memo = records.RemovalMemo(max_ids=5)
+    engine = _CountingEngine("aaaaaaaaaaaa")
+    memo.get("a", _replay_on(engine, ("1", "2")))
+    big = ("5", "6", "7", "8", "9")  # costs 6 > 5
     assert memo.get("d", _replay_on(engine, big)) is not None
     memo.get("d", _replay_on(engine, big))
-    assert engine.calls == 6  # larger than the bound: answered, never kept
+    assert engine.calls == 3  # answered twice, never kept
+    memo.get("a", _replay_on(engine, ("1", "2")))
+    assert engine.calls == 3  # a is still answered from the memo
+
+
+def test_entries_that_removed_nothing_still_count_against_the_bound() -> None:
+    """Gate C round 2 (performance): an unchanged record's entry (nothing removed) costs one, so more than
+    `max_ids` of them stay bounded instead of growing with every record asked for."""
+    memo = records.RemovalMemo(max_ids=3)
+    engine = _CountingEngine("aaaaaaaaaaaa")
+    for i in range(10):
+        assert memo.get(f"r{i}", _replay_on(engine, ())) is not None
+    assert len(memo._held) <= 3
+    capped = records.RemovalMemo(max_ids=100, max_entries=2)  # and the entry cap holds however cheap they are
+    for i in range(5):
+        capped.get(f"r{i}", _replay_on(engine, ()))
+    assert list(capped._held) == [("r3", "aaaaaaaaaaaa"), ("r4", "aaaaaaaaaaaa")]
 
 
 def test_filter_clauses_of_a_single_node_tree() -> None:

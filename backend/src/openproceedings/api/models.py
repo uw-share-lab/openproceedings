@@ -573,6 +573,14 @@ class RecordResponse(Versioned):
         description="The replay check (HTTP 200 whatever its status). Null exactly when the request asked "
         "`replay=false`; never null otherwise (decision-014)."
     )
+    openalex_abstracts: int | None = Field(  # gate C round 2: additive, derived, never stored
+        description="How many of the record's own saved ids have an abstract from OpenAlex (`abstract_kind` "
+        "`openalex`) on the record's own `index_version`, read per id from that index (the built kind, as the "
+        "filter and facet read it). Derived, not stored: the same for the same record ids and index. Null when "
+        "that index has no `abstract_kind` (schema 3) or isn't loaded for this request: with a replay, when "
+        "the replay didn't run on the record's own index; with `replay=false`, when the served index isn't "
+        "the record's. The methods text's OpenAlex sentence (spec 05) reads this value only."
+    )
 
 
 class DiffEntry(Model):

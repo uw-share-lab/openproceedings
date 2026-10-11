@@ -172,6 +172,42 @@ class SaveCeiling:
         log.log(level, event, extra={"scope": scope, "burst": burst, "per_hour": per_hour})
 
 
+MAX_OPENALEX_COUNTS = 10_000  # (record id, index_version) pairs whose `openalex_abstracts` is kept
+
+
+@dataclass
+class OpenAlexCounts:
+    """Each record's `openalex_abstracts` on its own index, worked out once (a byte read per id,
+    `TantivyEngine.filter_values`) and kept: a stored record's ids never change and an index is immutable, so
+    the count is a function of (record id, index_version). An LRU of `MAX_OPENALEX_COUNTS` ints."""
+
+    kept: OrderedDict[tuple[str, str], int] = field(default_factory=OrderedDict)
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def of(self, record: SearchRecord, engine: TantivyEngine | None) -> int | None:
+        """How many of `record`'s ids are `abstract_kind:openalex` on `engine`; None unless `engine` is the
+        record's own index and holds `abstract_kind` (schema 4), or when the record has no stored ids."""
+        if (
+            engine is None
+            or engine.index_version != record.index_version
+            or "abstract_kind" not in engine.filter_fields
+            or record.ids is None
+        ):
+            return None
+        key = (record.record_id, record.index_version)
+        with self.lock:
+            if key in self.kept:
+                self.kept.move_to_end(key)
+                return self.kept[key]
+        values = engine.filter_values(list(record.ids))  # outside the lock: a race only counts twice
+        n = sum(v.get("abstract_kind") == "openalex" for v in values.values())
+        with self.lock:
+            self.kept[key] = n
+            while len(self.kept) > MAX_OPENALEX_COUNTS:
+                self.kept.popitem(last=False)
+        return n
+
+
 @dataclass(frozen=True)
 class Records:
     """What the record routes share, on `app.state.records`."""
@@ -183,6 +219,7 @@ class Records:
     removed: RemovalMemo = field(
         default_factory=RemovalMemo
     )  # each drifted record's removal causes, per index
+    openalex: OpenAlexCounts = field(default_factory=OpenAlexCounts)  # `openalex_abstracts`, kept
 
 
 def install(app: FastAPI, config: ApiConfig, state: IndexState) -> None:
@@ -309,19 +346,25 @@ def get_record(
 ) -> RecordResponse:
     """The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless
     `include=ids`; `/export?record_id=` streams the papers themselves. With `replay=false`, the stored record
-    alone (`replay` null; the top-level versions are the served index's)."""
+    alone (`replay` null; the top-level versions are the served index's). `openalex_abstracts` is derived from
+    the record's ids on its own index when this request has that index (`OpenAlexCounts`): the replay's
+    engine, or with `replay=false` the served one (nothing else is loaded)."""
     record = stored_record(request, id)
     shown = record if include == "ids" else record.model_copy(update={"ids": None})
     if not replay:
         annotate(request, canonical_hash=record.canonical_hash)
         return RecordResponse(
-            **versions(engine.index_version, engine.tokenizer_version), record=shown, replay=None
+            **versions(engine.index_version, engine.tokenizer_version),
+            record=shown,
+            replay=None,
+            openalex_abstracts=_records(request).openalex.of(record, engine),  # the served index only
         )
     result, clauses = _replayed(request, engine, record)
     return RecordResponse(
         **versions(result.engine.index_version, result.engine.tokenizer_version),
         record=shown,
         replay=replay_info(result, clauses),
+        openalex_abstracts=_records(request).openalex.of(record, result.engine),
     )
 
 

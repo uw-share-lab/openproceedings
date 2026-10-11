@@ -59,6 +59,7 @@ from pydantic import (
     model_validator,
 )
 
+from openproceedings.coverage import captured_windows
 from openproceedings.diagnostics import DiagnosticCode, InternalError, OpenProceedingsError
 from openproceedings.engine.exclusions import identified_total, unclassified_total
 from openproceedings.engine.index import VERSION_NAME
@@ -307,11 +308,7 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
             if source == ALL_SOURCES:
                 raise ValueError("a source can't be named `*`")
             crawl[source] = _window(window)  # the claim window wins over the fetch window (TASK-122)
-        captured = {
-            source: entry["capture_window"]
-            for source, entry in sorted(manifest["sources"].items())
-            if isinstance(entry, dict) and "capture_window" in entry
-        }
+        captured = captured_windows(manifest)  # `/coverage`'s one reading (gate C round 2)
         crawl.update({source: _window(w) for source, w in captured.items()})  # the text's dates win (gate C)
         kinds = crawl_dates_kind(crawl, sources, ALL_SOURCES, utc_query_sources(manifest), captured)
         conflicts = manifest["conflicts"]
@@ -939,11 +936,17 @@ class RemovalMemo:
     """`removals` and its tally per (record id, index_version), least recently used dropped first (gate C round 1):
     a stored record never changes and a replay on one index always removes the same ids for the same reasons,
     so `GET /records/{id}/diff` works out the causes once per record and index, not once per page. Bounded by
-    what it holds: at most `max_ids` removed ids over every entry (one entry larger than that is answered and not
-    kept). Thread-safe; two first requests may both compute an entry, which is the same either way."""
+    what it holds: each entry costs its removed ids plus one (gate C round 2: an unchanged record's entry, which
+    removed nothing, still counts), at most `max_ids` over every entry and at most `max_entries` entries; one
+    entry costing more than `max_ids` is answered and not stored, so it never evicts the others. Memory when full:
+    about 80 MB per API process at the default 500,000 (about 163 bytes per held id, a measurement:
+    `docs/results/2026-10-11-perf-regression.md` §Memory), and the entry cap keeps entries that removed nothing
+    (about 500 bytes each, measured there too) to about 5 MB. Thread-safe; two first requests may both compute an
+    entry, which is the same either way."""
 
-    def __init__(self, max_ids: int = 500_000) -> None:
+    def __init__(self, max_ids: int = 500_000, max_entries: int = 10_000) -> None:
         self.max_ids = max_ids
+        self.max_entries = max_entries
         self._held: OrderedDict[tuple[str, str], tuple[dict[str, Removal], dict[RemovalCause, int]]] = (
             OrderedDict()
         )
@@ -965,12 +968,13 @@ class RemovalMemo:
         why = removals(result)
         assert why is not None  # `result.removed` is not None
         entry = (why, removal_tally(why))
-        if len(why) <= self.max_ids:
+        cost = len(why) + 1
+        if cost <= self.max_ids:  # a larger entry is refused, never stored: it would evict every other one
             with self._lock:
                 if key not in self._held:
                     self._held[key] = entry
-                    self._ids += len(why)
-                    while self._ids > self.max_ids:
+                    self._ids += cost
+                    while self._ids > self.max_ids or len(self._held) > self.max_entries:
                         _key, (dropped, _tally) = self._held.popitem(last=False)
-                        self._ids -= len(dropped)
+                        self._ids -= len(dropped) + 1
         return entry

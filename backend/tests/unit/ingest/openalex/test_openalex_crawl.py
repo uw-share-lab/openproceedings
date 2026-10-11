@@ -292,6 +292,38 @@ def test_the_harvest_logs_a_start_line_and_a_progress_line_at_most_every_30_seco
     assert [(b["done"], b["of"]) for b in beats] == [(1, 2), (2, 2)]
 
 
+def test_no_progress_line_comes_inside_30_seconds_of_the_last_one(tmp_path, caplog) -> None:
+    """Gate C round 2 (qa): the "at most" of every 30 s. Three batches, the second only 5 s after the first's
+    line: it gives no line, and the third, 31 s on, does."""
+    from openproceedings.ingest.sources.http import canonical
+
+    from tests.unit.ingest.proceedings_helpers import Clock
+
+    dois = [f"10.1145/3593013.{3594011 + i}" for i in range(2 * openalex.BATCH + 1)]  # three batches
+    recs = [rec(f"op:facct:2023:doi-3593013.{3594011 + i}", "FAccT", 2023, doi=d) for i, d in enumerate(dois)]
+    t = FakeTransport({})
+    for at in range(0, len(dois), openalex.BATCH):
+        chunk = dois[at : at + openalex.BATCH]
+        t.script[canonical(openalex.doi_url(sorted(chunk)), keep_query=True)] = [
+            response(api.page(), headers=api.JSON)
+        ]
+    f = crawl.openalex_fetcher(tmp_path, offline=False, transport=t, min_interval=0)
+    clock = Clock()
+    f.clock = clock
+    real_get = f.get
+    waits = iter([31, 5, 31])  # each request's wait on the fetcher's clock
+
+    def slow_get(url, **kw):
+        clock.t += next(waits)
+        return real_get(url, **kw)
+
+    f.get = slow_get  # type: ignore[method-assign]
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest"):
+        openalex.harvest(recs, f, table=openalex_table_empty())
+    beats = [r.__dict__ for r in caplog.records if r.getMessage() == "openalex_harvest_progress"]
+    assert [(b["done"], b["of"]) for b in beats] == [(1, 3), (3, 3)]
+
+
 def test_an_ingest_with_a_doi_no_filter_can_carry_warns_once(tmp_path, monkeypatch, caplog) -> None:
     odd = "10.1145/3593013.3594012"
     monkeypatch.setattr(openalex, "queryable", lambda d: d != odd)

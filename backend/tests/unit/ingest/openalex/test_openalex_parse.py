@@ -273,3 +273,13 @@ def test_a_malformed_key_stops_without_quoting_it(value: str, tmp_path, caplog) 
     for err in (e.value, from_dotenv.value):
         assert "SECRET" not in str(err) and "Evil" not in str(err) and "SECRET" not in repr(err.args)
     assert "SECRET" not in caplog.text and "Evil" not in caplog.text
+
+
+def test_a_rebuilt_text_of_exactly_the_abstract_cap_is_kept_and_one_character_more_refused() -> None:
+    """Gate C round 2 (qa nit): `MAX_TEXT` is `caps.MAX_ABSTRACT` (20,000 characters), pinned at its edge."""
+    at_cap = openalex.rebuild({"w" * 176: list(range(113))})  # 113 words of 176 and 112 spaces
+    assert (
+        at_cap.refused is None and at_cap.text is not None and len(at_cap.text) == caps.MAX_ABSTRACT == 20_000
+    )
+    over = openalex.rebuild({"w" * 176: list(range(112)), "x" * 177: [112]})  # 20,001 characters
+    assert over == openalex.Rebuilt(None, "inverted_oversize")

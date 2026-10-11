@@ -169,7 +169,9 @@ assert SHARDS >= 1, "OP_DIFFERENTIAL_SHARDS is a positive count of jobs"
 
 # the oracle over 5k records, every sort and the facets per example: no per-example deadline
 @settings(deadline=None, max_examples=max(1, settings().max_examples // SHARDS))
-@given(ast=engine_asts(cap_vocab()))  # every filter field, `abstract_kind:` included: the engine is schema 4
+# every filter field is drawn, but the 5k corpus holds no `openalex` record (NeurIPS, ICLR and ICML only), so
+# `abstract_kind:openalex` is always empty here; every kind meets the oracle in `test_abstract_kind_index.py`
+@given(ast=engine_asts(cap_vocab()))
 def test_tantivy_agrees_with_the_oracle(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     agree(engines, ast)
 

@@ -120,3 +120,29 @@ def test_a_takedown_on_an_openalex_record_makes_its_kind_none_everywhere(tmp_pat
     assert by_id[target.id] == "none" and "openalex" in by_id.values()  # the others keep theirs
     objs = {o["id"]: o for o in map(json.loads, filter(None, lines.splitlines()))}
     assert objs[target.id]["abstract_kind"] == "none" and objs[target.id]["abstract"] is None
+
+
+def test_a_record_names_how_many_of_its_own_ids_have_an_openalex_abstract(tmp_path: Path) -> None:
+    """Gate C round 2 (ruling 2): `openalex_abstracts` is derived from the record's saved ids on its own index,
+    never stored and never from a search response; the same with and without a replay."""
+    app, _ = _app(tmp_path)
+    with TestClient(app) as client:
+        made = client.post("/api/v1/records", json={"q": "paper venue:(AAAI OR AIES)"})
+        assert made.status_code == 201, made.text
+        rid = made.json()["record_id"]
+        replayed = client.get(f"/api/v1/records/{rid}", params={"include": "ids"}).json()
+        stored = client.get(f"/api/v1/records/{rid}", params={"replay": "false"}).json()
+    kinds = {r.id: r.abstract_kind for r in CORPUS}
+    want = sum(kinds[i] == "openalex" for i in replayed["record"]["ids"])
+    assert 0 < want < replayed["record"]["total"]  # some, not all: a count of the ids, not of the facet
+    assert replayed["openalex_abstracts"] == want
+    assert stored["openalex_abstracts"] == want
+
+
+def test_a_record_on_a_schema_3_index_has_no_openalex_count(tmp_path: Path) -> None:
+    app, _ = _app(tmp_path, "3", PLAIN)
+    with TestClient(app) as client:
+        rid = client.post("/api/v1/records", json={"q": "paper"}).json()["record_id"]
+        for params in ({}, {"replay": "false"}):
+            body = client.get(f"/api/v1/records/{rid}", params=params).json()
+            assert body["openalex_abstracts"] is None, body
