@@ -13,7 +13,6 @@ from __future__ import annotations
 import io
 import json
 import logging
-import time
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -28,6 +27,7 @@ from openproceedings.ingest.sources.http import Response
 from openproceedings.ingest.sources.icml_sites import Entry, SitePage
 from openproceedings.query.parser import parse
 
+from tests.timing import assert_near_linear
 from tests.unit.ingest.proceedings_helpers import FakeTransport
 from tests.unit.ingest.test_dblp import TABLE, stream
 
@@ -263,10 +263,15 @@ def test_an_author_or_address_block_after_the_abstract_ends_it(block: str) -> No
 
 
 def test_a_hostile_1998_page_is_parsed_in_linear_time() -> None:
-    page = "<h1>ICML-98 Submission #1</h1>" + "Abstract:\n" * 20_000 + "12 34 " * 20_000 + "<" + "a" * 100_000
-    started = time.monotonic()
-    icml_sites.icml1998_paper(page, PAPER_CAPTURE.format(n=1))
-    assert time.monotonic() - started < 2.0
+    """4x the page (0.4 MB at the larger size) costs about 4x the CPU time, never quadratic's ~16x
+    (tests/timing.py)."""
+
+    def page(n: int) -> str:
+        return "<h1>ICML-98 Submission #1</h1>" + "Abstract:\n" * n + "12 34 " * n + "<" + "a" * (5 * n)
+
+    assert_near_linear(
+        lambda p: icml_sites.icml1998_paper(p, PAPER_CAPTURE.format(n=1)), page, 5_000, rounds=5
+    )
 
 
 # --- end to end: no contact detail reaches records, the snapshot, the index, an export or a log line ------------

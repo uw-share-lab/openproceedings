@@ -4,7 +4,6 @@ hand-built corpus with a known answer. The engine here is the oracle itself: no 
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -51,6 +50,7 @@ from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode, parse
 
+from tests.timing import assert_near_linear
 from tests.unit.ingest.test_dedup import H, paper
 
 NAME = "set.ris"
@@ -1009,36 +1009,25 @@ def test_doi_key(text: str, key: str | None) -> None:
     assert doi_key(text) == key
 
 
-@pytest.mark.parametrize(
-    "hostile",
-    [
-        "10.1/x" + ")" * 1_000_000,
-        "10.1/x" + "." * 1_000_000,
-        "10.1/x" + ".,;)" * 250_000,
-        "10.1/x(" + ")" * 1_000_000,
-        "doi:" + " " * 1_000_000 + "10.1/x",
-        "10.1/x" + " " * 1_000_000 + ".",
-        "https://doi.org/10.1/x" + "?" * 1_000_000,
-        "10." + "1." * 500_000 + "/x!",
-        "doi:" + " " * 1_000_000 + "https://doi.org/10.1/x",
-    ],
-    ids=[
-        "parens",
-        "dots",
-        "mixed",
-        "one-open",
-        "label-spaces",
-        "inner-spaces",
-        "queries",
-        "registrant",
-        "label-link",
-    ],
-)
+# hostile values by size: 1 MB at n = 1,000,000
+HOSTILE_DOIS: dict[str, Callable[[int], str]] = {
+    "parens": lambda n: "10.1/x" + ")" * n,
+    "dots": lambda n: "10.1/x" + "." * n,
+    "mixed": lambda n: "10.1/x" + ".,;)" * (n // 4),
+    "one-open": lambda n: "10.1/x(" + ")" * n,
+    "label-spaces": lambda n: "doi:" + " " * n + "10.1/x",
+    "inner-spaces": lambda n: "10.1/x" + " " * n + ".",
+    "queries": lambda n: "https://doi.org/10.1/x" + "?" * n,
+    "registrant": lambda n: "10." + "1." * (n // 2) + "/x!",
+    "label-link": lambda n: "doi:" + " " * n + "https://doi.org/10.1/x",
+}
+
+
+@pytest.mark.parametrize("hostile", list(HOSTILE_DOIS))
 def test_doi_key_is_linear_on_a_hostile_value(hostile: str) -> None:
-    """The trim is one pass, not a character at a time (a hostile file must not defeat /compare's time cap)."""
-    started = time.perf_counter()
-    doi_key(hostile)
-    assert time.perf_counter() - started < 0.5
+    """The trim is one pass, not a character at a time (a hostile file must not defeat /compare's time cap): 4x
+    the value (1 MB at the larger size) costs about 4x the CPU time, never quadratic's ~16x (tests/timing.py)."""
+    assert_near_linear(doi_key, HOSTILE_DOIS[hostile], 250_000, rounds=5)
 
 
 def test_a_di_tag_is_not_read() -> None:

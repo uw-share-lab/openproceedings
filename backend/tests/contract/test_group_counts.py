@@ -263,7 +263,7 @@ def test_at_the_default_waits_a_search_is_answered_at_once_while_the_counting_wo
     assert {k: v for k, v in body.items() if k != "groups"} == {
         k: v for k, v in whole.items() if k != "groups"
     }
-    assert took < 1.5  # the grace and the search, never the 2 s wait
+    assert took < wait  # the grace and the search, never the 2 s wait (the bound that tells the two apart)
     assert access(logs)[-1]["groups_not_counted"] == "busy"
 
 

@@ -807,7 +807,9 @@ def test_at_the_production_waits_a_search_is_busy_at_once_while_the_counting_wor
         search.shutdown()
     assert got.groups == search.GroupCounts((), 3, 10, "busy")
     assert dataclasses.replace(got, groups=None) == plain
-    assert took < 1.0
+    # under the 2 s wait it would have waited, the one bound that tells the two apart (idle it is ~50 ms; a
+    # tighter wall-clock bound only measures the runner's load)
+    assert took < search.GROUP_COUNT_WAIT_SECONDS
 
 
 # --- concurrency: searches with groups from several threads while the memos are cleared -------------------------
