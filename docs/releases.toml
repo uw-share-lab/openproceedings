@@ -31,3 +31,12 @@ schema_version = "3"
 tantivy_version = "0.26.2"
 query_version = "2"
 notes = "Verified on the same served index as 0.1.0; this release's ingest changes (decisions 040, 044, 045) take effect at the next snapshot build, which changes 59 abstracts and no merge (decisions 044, 045)."
+
+[releases."0.3.0"]
+index_version = "b4f335e07e70"
+snapshot_hash = "93c2937e2f2936b851feb29b4e82114dd0c7c0a99de00500bfe2f2fb457e7ccb"
+tokenizer_version = "3"
+schema_version = "4"
+tantivy_version = "0.26.2"
+query_version = "2"
+notes = "Verified on a new schema-4 index of the 173,253-paper snapshot of 2026-10-11: AAAI (1980+), AIES, FAccT and IASEAI join the corpus (decision-049), 4,536 AAAI 1980-2008 papers gain AAAI's own abstracts from archived aaai.org pages (decision-051) and 1,117 gain labelled OpenAlex abstracts (abstract_kind:openalex). Default searches shrank where AAAI 1980-2008 and AIES 2018-2023 entries outside the technical program took their own tracks (decision-050: 1,197 track changes, 39 not-paper removals), so a search record saved on an earlier index replays as drifted, naming each removed paper's cause. Index schema 2 is retired; schema-3 indexes stay replayable. Promotion does not deploy data."
