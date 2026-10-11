@@ -33,9 +33,12 @@ official count (`official_counts.UNGATED_NOTES`, kept equal to `coverage-sources
 `test_official_counts.py`; `check_notes` refuses a note on a gated cell or one without a citation). The page shows it
 under the track's row (copy deck CV-9) and the report lists it under "Ungated cells with a note". A failing gated
 cell's cause still goes in `coverage-causes.toml`, never a note. A note is for an ungated cell only, in plain words with a
-citation a reader can check (a URL or a repo path); `coverage-sources.md` also holds the list-count rows that gate AAAI 2010,
-2012, 2014, 2017, 2020 and 2021 main (a count of AAAI's own published list: the row's description says "counted" and
-names the list, and the list must be independent of the proceedings and match our `main` definition).
+citation a reader can check (a URL or a repo path); `coverage-sources.md` also holds the list-count rows that gate AAAI
+2012, 2017, 2020 and 2021 main (a count of AAAI's own published list: the row's description says "counted" and
+names the list, and the list must match our `main` definition and be independent of the proceedings, which means
+evidently made before them: a pre-camera-ready list that says so). An archived copy captured after publication is not
+evidence of independence (gate C round 1): AAAI 2010's and 2014's lists, like 2016's, are ungated cells with a note. On
+a public page a repo-path citation is rendered as a link to the file on the repository's default branch.
 
 **Abstract kinds (decision-049, milestone C).** Every cell, venue-year and the totals carry `abstract_official` and
 `abstract_openalex` beside `abstract_missing` and `abstract_withheld`, and they sum to `records`: official + OpenAlex +

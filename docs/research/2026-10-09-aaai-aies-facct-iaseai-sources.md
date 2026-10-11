@@ -61,7 +61,8 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
 - AAAI's `ListSets` is paginated (99 sets on its first page). It lists 386 sets, but only 383 distinct specs (see
   quirk 2).
 - **Pre-2010** is not on OJS. The aaai.org library pages redirect to WordPress pages with no abstracts, and
-  aaai.org's robots.txt sets `Crawl-delay: 43200`. Milestone B takes AAAI 1980–2008 from the pinned dblp release:
+  aaai.org's robots.txt (https://www.aaai.org/robots.txt, read during this research in 2026-10; the exact date was
+  not recorded) sets `Crawl-delay: 43200`. Milestone B takes AAAI 1980–2008 from the pinned dblp release:
   `conf/aaai/<year>` 1980–2026, with no AAAI in 1981, 1985, 1989, 1995, 2001, 2003 or 2009 (1995 was found by the
   2026-10-10 census; see §AAAI 1980–2008 (dblp)). Its main keys total 28,802,
   and its workshop keys (`2015ethics`, `2017w`, `2021safeai`, …) total 2,368. From 2014 dblp matches OJS closely:
@@ -458,13 +459,15 @@ ran 2026-10-10 21:09–21:16 UTC (387 s, of which about 290 s is the offline rep
 - A key, when there is one, goes as `Authorization: Bearer <key>` (`crawl.openalex_fetcher`), never in a URL. The
   answers' `access-control-allow-headers` list `Authorization`.
 
-**Licence (checked by the controller, 2026-10-10).** The API itself states none: its root answer is `{"version",
-"documentation_url", "msg"}`, and a work answer carries only each paper's own `license` field, which is not a data
-licence. The two statements that matter are in OpenAlex's help pages:
-- help.openalex.org (Pricing): the data is "released under a CC0 public-domain license with no 'personal use only'
-  carve-out and no permission to ask".
-- The work-object documentation (https://help.openalex.org/api-entities/works/work-object): "OpenAlex does not ship
-  plaintext abstracts for legal reasons; reconstruct the abstract from the index."
+**Licence (read by the controller, 2026-10-10; not re-opened in review, which had no network).** The API itself
+states none: its root answer is `{"version", "documentation_url", "msg"}`, and a work answer carries only each paper's
+own `license` field, which is not a data licence. The two statements that matter are in OpenAlex's help pages:
+- OpenAlex's Pricing page on https://help.openalex.org/ (the page's exact URL was not recorded): the data is released
+  under CC0, with no "personal use only" carve-out. A pricing page is an odd home for a data licence; OpenAlex's own
+  terms or data-licence page, if it has one, was not read, and should be cited here when it is (TASK-236).
+- The work-object documentation (https://help.openalex.org/api-entities/works/work-object): OpenAlex does not ship
+  abstracts as plain text, "for legal reasons", and gives the inverted index to rebuild them from. Only "for legal
+  reasons" is quoted; the rest is paraphrased, since the wording held earlier read as a paraphrase in quote marks.
 
 So the data is CC0, but the abstract text is deliberately not shipped: the `abstract_inverted_index` is the form
 OpenAlex releases, and `openalex.rebuild` turns it back into text. The consequence for this project is that serving a
@@ -653,6 +656,17 @@ the snapshot itself is rebuilt later):
 | `inverted_gap` | 50 | 60 (10 formerly unreadable indexes have a hole) |
 | `doi_duplicate` | 2 | 1 |
 | `title_ambiguous` / `no_abstract` / `title_unmatched` | 21 / 119 / 3,357 | unchanged |
+
+### Does an inline provenance label let a reviewer judge and filter fallback text? (gate C round 1)
+
+The design assumes that a reviewer who sees "Abstract via OpenAlex" on a hit or a paper page, or the Abstract
+source facet, understands that the text is a third party's and chooses `abstract_kind:official` when that matters.
+Verdict: **no evidence found.** No verified study shows that provenance labels change expert screening behaviour. The
+nearest work, on trust calibration among web searchers, transfers weakly to protocol-driven Boolean search by
+systematic reviewers. The label is kept because it is honest and costs nothing, not because it is known to work. A
+small think-aloud with systematic reviewers on the paper and coverage pages is TASK-233, for `usability-tester`
+(ethics not yet submitted). The rest of this note's evidence is a source census and needs no HCI
+literature.
 
 ## Licence posture
 
@@ -848,14 +862,26 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   stated; the exact match with the listing suggests none.
 - **AAAI 2018, 2019.** "Original research publications" is read as the technical program, special tracks
   included; the front matter does not itemise.
-- **AAAI list counts (2026-10-10).** For 2010, 2012, 2014, 2016, 2017, 2020 and 2021 no AAAI document *states* an
-  accepted count (prefaces, conference pages and press releases give submissions only), so the rows count the
-  entries of AAAI's own accepted-paper list (aaai.org PDFs, or aaai.org pages archived by the Wayback Machine). The
-  controller's ruling for the owner: a list count backs a row when the list is independent of the OJS proceedings (a
-  pre-camera-ready list or an aaai.org page of the time) and its definition equals our `main` cell within 1%; each
-  row's description says "counted" and names the list. AAAI 2016's list is "ordered … in each proceedings
-  category" and matches the OJS sections exactly, so it may have been built from the proceedings; a gate against it
-  would be circular, and the cell gets a note instead. Indexed figures are from snapshot `2026-10-10-9efa49481112`.
+- **AAAI list counts (2026-10-10; one independence rule since gate C round 1, 2026-10-11).** For 2010, 2012, 2014,
+  2016, 2017, 2020 and 2021 no AAAI document *states* an accepted count (prefaces, conference pages and press releases
+  give submissions only), so the rows count the entries of AAAI's own accepted-paper list (aaai.org PDFs, or aaai.org
+  pages archived by the Wayback Machine). Each row's description says "counted" and names the list, and its
+  definition must equal our `main` cell within 1%. The review found the independence test applied unevenly: 2016 was
+  refused because its list matched the proceedings exactly, while 2010 and 2014 matched exactly too, and 2014's only
+  copy was captured a year after publication. The controller's ruling (gate C round 1) is one rule: a list counts as
+  independent only when it is evidently made before the proceedings, a pre-camera-ready list that says so. Per row:
+  - 2010 (262 = 262) and 2014 (398 = 398): the only archived copies were captured on 2010-08-30 and 2015-09-06, after
+    publication, and nothing on them says they were made before it. Like 2016, now ungated cells with a note.
+  - 2012, 2017, 2020 and 2021: the PDFs sit under `wp-content/uploads/2023/01/`, the date of AAAI's site migration,
+    not of the lists, so their upload dates say nothing. The 2020 lists say they were made before camera-ready. The
+    controller's ruling keeps all four gated. Each also differs from the proceedings the crawl reads (deltas +2, +2,
+    −4 and −2 on the snapshot below), which a list copied from them would not.
+  - 2021: the row cites only the "Main Technical Track" PDF, but counts 1,656 main technical papers plus 40 AI for
+    Social Impact. Where the 40 were counted was not recorded, so the row is re-checked against AAAI's own AI for
+    Social Impact list (TASK-234).
+
+  The deltas are those of snapshot `2026-10-10-9efa49481112`; the post-rebuild coverage report restates them on its
+  own snapshot, where the gate is expected at 81 of 82 cells.
 - **Ungated-cell notes (TASK-222).** AAAI 2011, 2016 and 2022–2026 main and IASEAI 2026 main each carry a cited note
   saying why they are not gated (`official_counts.UNGATED_NOTES`, `coverage-sources.md` §Ungated cells with a note),
   served on `/coverage` and listed in the coverage report.
@@ -892,6 +918,9 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   2025-06 and 2026-06 (2,704; 3,776; 5,141; 4,389), to size the windows
 - https://proceedings.mlr.press/v81/ and https://proceedings.mlr.press/ (2026-10-10)
 - api.openalex.org (2026-10-10, keyless; §OpenAlex lists every query)
+- https://www.aaai.org/robots.txt (`Crawl-delay: 43200`; read during this research in 2026-10, the exact date not
+  recorded) and web.archive.org's CDX index and `id_` captures of `www.aaai.org/Library/` (2026-10-10, TASK-232)
+- help.openalex.org: the Pricing page and the work-object documentation (read by the controller, 2026-10-10)
 - the pinned dblp release `dblp-2026-10-03.xml.gz`
 
 ## AAAI 1993–2008 sections (TASK-224/225/226, decision-050, 2026-10-10)
@@ -1020,16 +1049,26 @@ After the OpenAlex fill, 3,648 of the 4,709 AAAI 1980–2008 records had no abst
 OpenAlex's. dblp gives these years none, but each record's dblp `ee` is its old aaai.org paper page,
 `www.aaai.org/Library/{AAAI,IAAI}/<yyyy>/<id>.php`, which printed the abstract.
 
-**The crawl-delay decision.** aaai.org's robots.txt sets `Crawl-delay: 43200` (one request every 12 hours: about 6.3
-years for 4,609 pages), and its 2023 site dropped the Library pages. The owner approved reading the Internet
+**The crawl-delay decision.** aaai.org's robots.txt (https://www.aaai.org/robots.txt; see §ojs.aaai.org) sets
+`Crawl-delay: 43200` (one request every 12 hours: about 6.3 years for 4,609 pages), and its 2023 site dropped the
+Library pages. The Crawl-delay is a request to crawlers of aaai.org. Reading the Internet Archive's copies does not
+breach it, since aaai.org is never fetched, but it does signal that AAAI does not want its site crawled, and the
+record should say so. Asking AAAI for the abstracts, or for permission, is not recorded among the options the decision
+weighed; it stays open, through the channel the copyright-office consultation (TASK-135) uses. The owner approved reading the Internet
 Archive's captures instead (decision-051): the only host is `web.archive.org`, for the captures and its CDX index;
 aaai.org is never fetched, so the crawl delay is never in play and aaai.org bears no load. The archive is read one
 request at a time, at least 3 s apart, with the repo's generic User-Agent and no contact string. The text is AAAI's
 copyright, served on the same posture as the ojs.aaai.org abstracts (decision-018, the takedown list, TASK-135).
 
-**What the research showed** (`.superpowers/sdd/2026-10-10-new-venues-milestone-c/task232-research/`): 15 of 15
-sampled captures held the abstract, and the 4 that could be checked against the live new-site abstract were identical
-to it. `https://web.archive.org/web/<timestamp>id_/<url>` returns the archived bytes exactly, and their SHA-1 (base32)
+**What the research showed** (kept outside git with the milestone's task reports, so not re-checkable from the
+repository; the sample is listed here instead): 15 of 15 sampled captures held the abstract, and the 4 that could be
+checked against the live new-site abstract were identical to it. The sample is one record per year for 15 years
+spread over 1980–2008, each drawn at random (`random.seed(232)`) from that year's records with no abstract and an
+aaai.org `ee`: Faugeras80, EtheringtonR83, KilhofferK86, Brodie88, CaferraDH91, FrazierP93, WeldE94, Haynes96,
+DetermanB98 (IAAI), LiberatoreS00, FangKLS02, TuanBZS04, ConitzerS06, KimuraSN07 and KuchibatlaM08 (dblp keys
+`conf/aaai/<key>`). Fifteen of fifteen only puts a 95% one-sided lower bound near 82% on the share of pages that hold
+an abstract, so the sample shows the source exists, not how complete it is: the evidence for that is the full
+harvest's refusal counts, which "As built" records after the harvest. `https://web.archive.org/web/<timestamp>id_/<url>` returns the archived bytes exactly, and their SHA-1 (base32)
 is the CDX digest. The old layout is `<div id="abstract"><h1><a href=…pdf>TITLE</a></h1><p class="left"><i>AUTHORS</i>
 </p><p>ABSTRACT</p>`; the 2007-style pages break lines inside the abstract and add `Subjects:` / `Submitted:`
 paragraphs. One placeholder was found, `None - 2 page paper is an abstract` (aaai06-329).
@@ -1074,5 +1113,8 @@ evidence names the capture that was read.
 
 **As built.** `ingest/aaai_library.toml` + `aaai_library_table.py`, `sources/aaai_library.py`, `op ingest
 aaai-library`, the `aaai_library` claim source (record schema 9; after `ojs`, before `openalex`), filled after dedup and
-before the OpenAlex fill (spec 01 §Sources, AAAI library row). The full harvest (about 4,607 requests, at least 3.8
+before the OpenAlex fill (spec 01 §Sources, AAAI library row). The snapshot manifest's `sources.aaai_library` carries a
+`capture_window`, the range of the attached pages' capture times, and `/coverage` and a search record show that range
+for the source (kind `archive_captures`), not the harvest's fetch dates: the text is from 2016–2022, not 2026 (gate C
+round 1). The full harvest (about 4,607 requests, at least 3.8
 hours) and the rebuild are run after review; their counts go here then.

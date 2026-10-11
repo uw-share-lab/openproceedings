@@ -202,10 +202,15 @@ abstract is null or withheld (a takedown). `GET /papers/{id}` carries the same `
 
 `abstract_kind` (decision-049, additive; open enum) says where a hit's abstract came from: `official` (the venue's own
 source, an archived aaai.org page included), `openalex` (filled from OpenAlex, only for an AAAI, AIES or FAccT paper no official source gives one) or
-`none` (no abstract, or one withheld by a takedown). `GET /papers/{id}` carries it on `paper` (a derived field, like
-`venue_name`). `facets.abstract_kind` counts it like the other facets, and is null on an index of schema 3, which holds
-no such field (a query naming `abstract_kind:` on one is 422 `FIELD_NOT_INDEXED`, spec 03 §Versioning). `GET /meta` `values.abstract_kind`
-lists the three values.
+`none` (no abstract, or one withheld by a takedown; `abstract_withheld` tells the two apart). `GET /papers/{id}` carries
+it on `paper` (a derived field, like `venue_name`). `facets.abstract_kind` counts it like the other facets, and is null
+on an index of schema 3, which holds no such field (a query naming `abstract_kind:` on one is 422 `FIELD_NOT_INDEXED`,
+spec 03 §Versioning). `GET /meta` `values.abstract_kind` lists the three values. **A takedown after the build** (the
+owner's TASK-136 decision: membership is fixed by the index, guarantee 4): the `abstract_kind:` filter and
+`facets.abstract_kind` read the kind the index was built with, so an id put on the takedown list after the build still
+matches `abstract_kind:openalex` (or `official`), not `abstract_kind:none`, and is counted under its built kind, while
+its hit, paper and exports show `none` and `/coverage` moves it to withheld. The next build applies the takedown to the
+kind too. `ABSTRACT_KIND_DOC` says the same in the schema.
 
 `excluded` always has this shape: `total` (= the `identification_ast` count − `total`, 03 §Exclusion
 accounting) plus a `track` and a `status` map whose buckets sum to it. Each map always carries an `unknown`
@@ -426,7 +431,7 @@ route execution.
   text out. The attribution is the record's `Attribution` from the exported index's snapshot, computed once
   when the snapshot is loaded (`RecordFile.attributions`, `ingest/dedup.py::attribution`), the same one
   `GET /search` sends as `abstract_source`; nothing recomputes it. `<site>` is the results list's name for the
-  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`, `ICML conference site`, `AAAI Digital Library` (ojs.aaai.org: AAAI, AIES and IASEAI, decision-049), `Crossref` and `FAccT conference site` (decision-049, milestone B: Crossref's records of the ACM proceedings, and the official FAccT pages; Crossref carries no abstract today, so a FAccT abstract's origin is `facct_site`, and both link the paper's DOI) `AAAI` (decision-051, TASK-232: AAAI's own abstract from an archived aaai.org page, linking that aaai.org page, never
+  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`, `ICML conference site`, `AAAI Digital Library` (ojs.aaai.org: AAAI, AIES and IASEAI, decision-049), `Crossref` and `FAccT conference site` (decision-049, milestone B: Crossref's records of the ACM proceedings, and the official FAccT pages; Crossref carries no abstract today, so a FAccT abstract's origin is `facct_site`, and both link the paper's DOI), `AAAI` (decision-051, TASK-232: AAAI's own abstract from an archived aaai.org page, linking that aaai.org page, never
 the archive) and `OpenAlex` (decision-049, milestone C: an abstract filled from OpenAlex, linking the paper's own page, so the RIS line reads `N1  - Abstract source: OpenAlex <paper's page>`; the design said "the work's URL", but a reader who follows the link should reach the paper, not OpenAlex's API, so the claim's own API url is kept in the provenance only);
   `export.ORIGIN_NAMES`,
   pinned equal to `hit-item.tsx`'s), plus ` (via RIS import)` when the claim came through an imported RIS file;
@@ -856,7 +861,7 @@ request body. It is the comparison of 07 §B (`eval/scholar_compare.py`, the one
 |---|---|
 | `input`, `mode`, `canonical`, `canonical_hash`, `identification_query` | what was searched, and the string that reproduces "identified" |
 | `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (the corpus-wide `*` from–to summary plus each claim source's own manifest window when available) | the database version and when its contents were collected |
-| `crawl_dates_kind` (per `crawl_dates` key: `crawl`, `scholar_query_dates`, `scholar_query_dates_utc`, `mixed` or `mixed_utc`; an open set) | what those dates are: a bootstrap source's window is when its Scholar searches were run, `scholar_query_dates_utc` when converted to UTC with a recorded offset (TASK-077, decision-025), else `scholar_query_dates` (Publish or Perish's local time, stored labelled UTC), not a crawl |
+| `crawl_dates_kind` (per `crawl_dates` key: `crawl`, `scholar_query_dates`, `scholar_query_dates_utc`, `mixed`, `mixed_utc` or `archive_captures`; an open set) | what those dates are: an archive source's window (`aaai_library`) is the range of its attached copies' capture times, from the manifest's `capture_window`, not when they were fetched (`archive_captures`, gate C round 1); a bootstrap source's window is when its Scholar searches were run, `scholar_query_dates_utc` when converted to UTC with a recorded offset (TASK-077, decision-025), else `scholar_query_dates` (Publish or Perish's local time, stored labelled UTC), not a crawl |
 | `sources` (the manifest's source names) and `identification_citable` | whether `total` can be cited as a PRISMA identification number: `false` when every source is a bootstrap one (`vocab.bootstrap_only`, the test `op search`'s "bootstrap corpus" note uses), since the corpus is then an earlier search's output, not a database |
 | `searched_at` (UTC) | the search date, which is separate from the crawl date |
 | `total`, `excluded` (with `unknown` itemised) | the counts cited in PRISMA |
@@ -1047,8 +1052,11 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
     abstract or another searched field no longer matches. An open set. `failed_filter` is the field that
     failed (`track`, `status`, or the `filter_changed` field), else null. `removed_causes` `{track_changed,
     status_changed, filter_changed, not_in_index, still_eligible}` counts the whole removed list, not the page,
-    every cause present (cheap per page: a bitmap read per id). The cause is a function of the replay's removed
-    set, so `ids_hash`, the status and every other field are unchanged (guarantee 4).
+    every cause present. The causes are worked out once per (record id, replay `index_version`) and kept
+    (`records.RemovalMemo`, least recently used dropped first, bounded at 500,000 removed ids over every entry; a
+    record larger than that is answered and not kept), so later pages of a long removed list don't repeat the work;
+    each id's filter values are a byte read per field (`TantivyEngine.filter_values` over `_value_index`, gate C
+    round 1). The cause is a function of the replay's removed set, so `ids_hash`, the status and every other field are unchanged (guarantee 4).
     `records.removals`/`removal_cause` are the one implementation. The access line carries the five counts
     (`removed_<cause>`), never an id or a title.
 - **For `/export?record_id=` (task-036)**: `api.records.stored_record(request, record_id)` (422/404) and
@@ -1070,7 +1078,7 @@ once released: changing one is a breaking change under `/api/v1`.
 |---|---|---|
 | Query does not parse, uses an unknown field or value, or has a bad wildcard (incl. more than 200 expansions) (on endpoints that run the query) | 422 | `PARSE_*`, `FIELD_*`, `WILDCARD_*` (diagnostics carry the spans); a query over 2,000 code points is `PARSE_TOO_LONG`, rejected before parsing, and so is one whose canonical form is over 2,000 code points, refused after canonicalising (decision-008) |
 | A parameter is invalid (bad `sort`, `limit` > 200, unknown `format`, a malformed paper or record id), unknown to the route, or given twice; or a body is malformed. The message names at most 5 problems (more are counted) and never the value; each location is quoted between backticks through `diagnostics.clip`, since a parameter name or body key is the client's own text (TASK-143) | 422 | `API_BAD_PARAM` |
-| A query names a filter field the served index does not hold: `abstract_kind:` on an index of schema 3 (decision-049, milestone C; spec 03 §Versioning). The message names the field and the index; `/parse` accepts it. Every route that runs the query refuses it before any work: `/search`, `/export`, `POST /records`, `POST /compare`, `GET /papers/{id}?q=` | 422 | `FIELD_NOT_INDEXED` |
+| A query names a filter field the served index does not hold: `abstract_kind:` on an index of schema 3 (decision-049, milestone C; spec 03 §Versioning). The message names the index in the reader's words, never a schema number: "This index (`<index_version>`) doesn't hold abstract kinds yet; it was built before they existed. Search the current index, or remove the `abstract_kind:` filter."; `/parse` accepts it. Every route that runs the query refuses it before any work: `/search`, `/export`, `POST /records`, `POST /compare`, `GET /papers/{id}?q=` | 422 | `FIELD_NOT_INDEXED` |
 | Paper or search record not found (a well-formed id) | 404 | `API_PAPER_NOT_FOUND` / `API_RECORD_NOT_FOUND` |
 | A pinned `index_version` is not available on this instance (an export's; a record save's `index_version` that is not the served index, TASK-091) | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
 | Export requested for a record whose replay status is `mismatch` | 409 | `API_RECORD_MISMATCH` |
@@ -1412,8 +1420,10 @@ shows SV-9 and never retries that request (spec 05 §Error states).
       and a reload would lose them. The paper page links as `/paper/<id>?q=…&mode=…` instead (spec 05).
   - `GET /meta` answers the three versions, plus `index_versions` (every index this instance can serve,
     sorted, with the served one included; which are left out: §Implementation notes, pinned indexes), `text_fields` (`title`, `abstract`), `filter_fields` (`venue`,
-    `year`, `track`, `status`), and `values` (`venue`, `track` and `status`: the vocabularies the parser checks
-    filter values against, so autocomplete never offers a value it refuses), and `limits` (task-089):
+    `year`, `track`, `status`, and `abstract_kind` when the served index holds it: the engine's own
+    `filter_fields`, so autocomplete never offers a field every route would refuse with `FIELD_NOT_INDEXED`), and
+    `values` (`venue`, `track`, `status` and `abstract_kind`: the vocabularies the parser checks filter values
+    against, the grammar's whole vocabulary, so autocomplete never offers a value it refuses), and `limits` (task-089):
     `max_query_length` (the parser's `MAX_QUERY_LENGTH`, 2,000 code points; not configurable),
     `max_query_depth` (the parser's `MAX_DEPTH`, 64 nested groups and `NOT`s, deeper is `PARSE_TOO_DEEP`;
     not configurable; additive),
@@ -1448,7 +1458,9 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   listed since), never counted in `abstract_missing`. TASK-222 adds, additively, each track's `gate_note` and
   `gate_note_citation`: for an ungated cell, why it has no official count to gate on and where that comes from
   (`official_counts.UNGATED_NOTES`, the copy of `docs/results/coverage-sources.md` §Ungated cells with a note);
-  both null for a gated cell and for a cell without a note. Decision-049 (milestone C) adds, additively, `abstract_official` and
+  both null for a gated cell and for a cell without a note. Gate C round 1 adds, additively, `gate_note_accessed`, the
+  date the note's citation was read (null exactly when `gate_note` is), shown beside it as an official count's
+  `official_accessed` is. Decision-049 (milestone C) adds, additively, `abstract_official` and
   `abstract_openalex` to the totals, each venue-year and each track, 0 included: the records with an abstract from
   an official source and the records whose abstract OpenAlex filled, so that `abstract_official + abstract_openalex +
   abstract_missing + abstract_withheld = records` in every cell. They come from the manifest's `abstract_openalex`

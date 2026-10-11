@@ -86,6 +86,13 @@ NAACL, CHI and CSCW remain out of scope for now.
     benchmark is within budget on the real corpus (worst p95 76.5 ms) and over it on the synthetic 80k for
     `main-3-sources` (110.7 ms, 65 ms without group counts: TASK-176's counting, not schema 4), recorded in spec 03
     §Performance budgets and followed up in TASK-230.
+  - **Gate rows, one independence rule (milestone C review, gate C round 1, 2026-10-11; recorded here because the
+    backlog CLI can't edit TASK-219, which is completed).** A count of AAAI's own accepted-paper list backs a gate
+    row only when the list is evidently made before the proceedings: a pre-camera-ready list that says so. AAAI 2010
+    (262) and 2014 (398) move from gate rows to ungated cells with a cited note, because their only archived copies
+    were captured after publication (2010-08-30 and 2015-09-06), the reason AAAI 2016's list was refused; AAAI 2012,
+    2017, 2020 and 2021 stay gated. `official_counts.py`, `docs/results/coverage-sources.md` and their tests are
+    updated, and the gate is expected at 81 of 82 cells once the coverage report is regenerated after the rebuild.
 - Spec 00's venue list says what is indexed now and what is in scope and planned; a venue-year appears in the
   coverage report only once it is crawled.
 - Licence posture is the one already used for PMLR and NeurIPS (titles and abstracts with links back; AAAI

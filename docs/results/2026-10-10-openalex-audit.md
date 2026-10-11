@@ -2,7 +2,7 @@
 
 - Snapshot: `2026-10-10-22a339940466`
 - Code: commit `3968d852b74f`
-- Sample: seed 49; every record with an official abstract and a DOI of FAccT 2022, 2025, 2026; AIES 2024, 2025; and 1,000 of 25,124 such AAAI 2010+ records, drawn in id order. Title-route check: 1,061 attaches.
+- Sample: seed 49; every record with an official abstract and a DOI of FAccT 2022, 2025, 2026; AIES 2024, 2025; and 1,000 of 25,124 such AAAI 2010+ records, sorted by id after a seeded draw. Title-route check: 1,061 attaches.
 - Date: 2026-10-10
 
 Reproduce (from the OpenAlex cache, no network):
@@ -105,3 +105,8 @@ Rules that would exclude them:
 - **Require a matching first-author surname:** excludes all 9 that look wrong, and also 8 that agree on another author and the 0 that can't be checked.
 
 **Ruling:** Keep the exact title-key and year rule. The 9 flagged attaches are mostly OCR or spelling variants of the same author, and a surname rule would drop correct attaches; the residual wrong-attach risk is at most 2 of 1,061 (controller, 2026-10-10).
+
+## Caveats
+
+- OpenAlex's fidelity for AAAI before 2010 is unmeasured. The DOI route compares only records that also have an official abstract, and the title route checks authors, not abstract text. Where AAAI's archived aaai.org pages (`aaai_library`) and OpenAlex both give an abstract for an AAAI 1980–2008 paper, the two can be compared; that measure is a follow-up (TASK-235).
+- The title route's residual wrong-attach risk is an estimate, not a measured bound: 7 of the 9 attaches that look wrong have a first-author surname close to ours, judged by a character ratio, not checked by a person. If they are the same authors, 2 of the 1,061 sampled attaches (0.2%) would be wrong.

@@ -304,7 +304,8 @@ build departs from, or settles, this design:
 - **`abstract_kind`** is derived exactly as designed (`record.abstract_kind_of`), an open enum, the last filter field
   (canonical order venue, year, track, status, `abstract_kind`), with no default. **`QUERY_VERSION` is unchanged**: a query
   naming the field was an error before. A schema-3 index refuses it (`FIELD_NOT_INDEXED`, 422) and cannot be built from a
-  snapshot holding an OpenAlex abstract. Record schema 8; index schema 4. **Schema 2 was retired first**, so schemas 3 and
+  snapshot holding an OpenAlex abstract. Record schema 9 (8 was this milestone's OpenAlex step; TASK-232's `aaai_library`
+  source made it 9); index schema 4. **Schema 2 was retired first**, so schemas 3 and
   4 are served; each engine's facets and combination aggregation are its own, and the combo memo's budget triples.
 - **Licence.** OpenAlex's data is CC0 with no personal-use carve-out, but it ships no plaintext abstracts, so a rebuilt
   abstract is served on the publisher-abstract posture (decision-018, the takedown list, TASK-135), not a CC0 one.
@@ -327,15 +328,18 @@ build departs from, or settles, this design:
   - **Coverage:** `op eval coverage --check` passes, 83 of 84 gated cells (ICLR 2013 is the accepted exception);
     `docs/results/2026-10-10-coverage.md`.
   - **Benchmarks (spec 03 §Performance budgets):** on the real corpus the worst first page with group counts is
-    76.5 ms p95 (`main-2-pop`), within 100 ms (`docs/results/2026-10-10-bench-group-counts.md`; TASK-220). On the
+    67.7 ms p95 (`main-2-pop`; 76.5 ms before TASK-230), within 100 ms (`docs/results/2026-10-10-bench-group-counts.md`; TASK-220). On the
     synthetic 80k corpus (`docs/results/2026-10-11-bench.md`) `main-3-sources` is **110.7 ms, over the budget**: it is
     65 ms without group counts, so the excess is TASK-176's counting, not schema 4. Schema 4's own regression, a fifth
     combo field multiplying every group-count aggregation, was found by that benchmark and fixed in `566cafcd`.
     Follow-up: TASK-230, done: a counting job now shares its trees with a helper on the other counting worker, and
     every synthetic 80k first page is within budget (`main-3-sources` 69.9 ms, worst `main-2-pop` 74.2 ms; the real
     corpus's worst 67.7 ms; both reports regenerated at `ab2de11b`).
-  - **Left for the owner or later:** a review of the fill's refusals (TASK-231) and another source for the 3,648
-    AAAI 1980–2008 records still without an abstract (TASK-232).
+  - **Left for the owner or later:** a review of the fill's refusals (TASK-231, done) and another source for the
+    3,648 AAAI 1980–2008 records still without an abstract: TASK-232 built one, AAAI's own abstracts from Internet
+    Archive captures of the old aaai.org paper pages (decision-051, the `aaai_library` source, filled before OpenAlex);
+    the counts above that depend on it are restated after the final rebuild. The bisect and profiles behind the
+    benchmark figures are in `docs/results/2026-10-11-perf-regression.md`.
 - **The audit** (`op eval openalex`, spec 07 §G, `docs/results/2026-10-10-openalex-audit.md`): over 2,122 records with
   both abstracts, 83.1% exact or near-exact; AAAI 2010+ 99.3%, AIES 100%, FAccT 23–59% (OpenAlex likely carries ACM's
   published version, which the `openalex` label covers). All 1,061 title-route attaches were checked against OpenAlex's

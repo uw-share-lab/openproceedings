@@ -18,7 +18,13 @@ abstract, and the 4 that could be checked against the live new-site abstract wer
 as `https://web.archive.org/web/<timestamp>id_/<url>` returns the archived bytes exactly; their SHA-1 is the digest the
 archive's CDX index gives. Options considered: crawling aaai.org at its crawl delay (refused: about 6.3 years for
 4,609 pages), the PDFs (refused: text extraction, and the same copyright), leaving the records `none` or OpenAlex's
-(refused: AAAI's own text exists and is official), and the archived pages (chosen). The owner approved on 2026-10-10.
+(refused: AAAI's own text exists and is official), and the archived pages (chosen). Asking AAAI for the abstracts, or
+for permission, is not recorded among the options weighed; it stays open, through the channel the copyright-office
+consultation (TASK-135) uses. The owner approved on 2026-10-10. The Crawl-delay is a request to crawlers of aaai.org
+(https://www.aaai.org/robots.txt): reading the archive's copies does not breach it, since aaai.org is never fetched,
+but it does signal that AAAI does not want its site crawled (gate C round 1). The 15-capture sample shows the source
+exists; how complete it is will be shown by the full harvest's refusal counts, not by the sample (the sample's keys
+and selection rule are in the research note).
 
 ## Decision
 

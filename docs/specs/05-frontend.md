@@ -252,7 +252,8 @@ warnings, the save's index check), the design doc says so; its open questions li
    the group counts, Compare with your records.
 4. **Filter sidebar.** Venue, year range, track, status, and (decision-049, milestone C) Abstract. Workshop is
    **off by default**. Each control shows its count and **edits the `track:`/`status:`/`abstract_kind:` clauses in
-   `q`**. *As built (milestone C, copy SB-1, SB-12).* The Abstract fieldset follows Status in
+   `q`**. *As built (milestone C, copy SB-1, SB-12).* The Abstract source fieldset ("Abstract" until gate C round
+   1) follows Status in
    `src/components/search/filter-sidebar.tsx` and is drawn only when `facets.abstract_kind` is not null, that is,
    on an index of schema 4 (a schema-3 index holds no such field, so nothing is offered that its server would
    refuse). It never says "(default)", because the field has no default, and a click edits the `abstract_kind:`
@@ -291,13 +292,19 @@ warnings, the save's index check), the design doc says so; its open questions li
    `src/components/search/hit-item.tsx`).
 
    *As built (milestone C, decision-049).* An abstract filled from OpenAlex (the API's `abstract_kind` is `openalex`)
-   says so (copy RH-20, PA-12): "Abstract via OpenAlex: no official source publishes one for this paper." in the
-   result, a line right under the attribution, and on the paper page right after the abstract text, before the
+   says so (copy RH-20, PA-12): "Abstract via OpenAlex: this index holds no official abstract for this paper.
+   OpenAlex's text can differ from the published one." (gate C round 1: ACM and AAAI may publish an abstract the
+   index can't read, so "no official source publishes one" was untrue for some) in the result, a line right under the attribution, and on the paper page right after the abstract text, before the
    submission-time line above; the word OpenAlex links to `/coverage#openalex` (`OpenAlexNote` and `OPENALEX_ANCHOR`
    in `src/components/search/hit-item.tsx`). Nothing is shown for an official, missing or withheld abstract. The
    attribution itself reads "Abstract: OpenAlex" and links the paper's own page (the hit's `abstract_source.origin`
-   is `openalex`; its `url` is `urls.proceedings`). The syntax help gains the `abstract_kind:` row, "(on indexes
-   built since schema 4)", and an example, `trust abstract_kind:official`, both from the generated golden.
+   is `openalex`; its `url` is `urls.proceedings`). The syntax help gains the `abstract_kind:` row (copy HS-4: it keeps
+   or drops whole papers, title matches included, with the query that keeps title matches, and says in plain words
+   that an index built before abstract kinds existed doesn't hold them, never "schema 4") and an example,
+   `trust abstract_kind:official`, both from the generated golden. `/coverage#openalex` scrolls to and focuses the
+   explanation once the report is drawn (the page draws after a client fetch, so the browser's own jump finds
+   nothing; `useHashTarget` in `coverage-report.tsx`), and a citation's repository path links to the file on the
+   public repository (`src/lib/repo.ts`, the one place the repository URL is named).
 
    *As built (TASK-162, decision-029).* A record with twins (the API's `twins`: the same paper kept as two
    records, an ICLR 2017 workshop copy and its conference submission) says "See also (the same paper's other
@@ -371,6 +378,13 @@ warnings, the save's index check), the design doc says so; its open questions li
    when there are none. The coverage report is cited with its snapshot hash as the database-scope caveat
    (07 §C). A review may instead report the default filters as limits, citing the canonical string; the
    record stores both strings, so either framing can be cited.
+
+   *As built (gate C round 1).* When the save panel has the search response, the methods text says how many of the
+   screened records have abstracts supplied by OpenAlex ("`<n>` of the `<total>` records have abstracts supplied by
+   OpenAlex (`abstract_kind:openalex`), not by the venue."), from `facets.abstract_kind` and the query's
+   `abstract_kind:` clause (`openalexHits`: disjunctive facets make an admitted value's count its count in the result
+   set); nothing is said when the count is 0 or unknown (a schema-3 index, a clause that isn't one value list, or the
+   record page, which has no search response). The stored record is unchanged.
 
    *As built (TASK-044).* The methods text is `frontend/src/lib/methods-text.ts` (`methodsText`), pure: every
    number is a field of the record the API sent (`identified_total`, `excluded`, `unclassified_total`,

@@ -233,7 +233,7 @@
 
 ### Task 1: Retire index schema 2
 
-The controller runs this prerequisite first and records the output in the task ledger. With `export OP_DATA_DIR=/Users/jeevanparmar/school/Research/Ferguson/openproceedings/data`:
+The controller runs this prerequisite first and records the output in the task ledger. With `export OP_DATA_DIR=<main checkout>/data`:
 
 ```bash
 for v in 05a0541717f6 6508b8cf66ff a7cfd04b656f c76d7f26ee06; do uv run op index retire "$v" --dry-run; done
@@ -2131,7 +2131,7 @@ git commit -m "feat(coverage): ungated cells carry a cited note on /coverage and
 
 ### Task 12: Census (live): OpenAlex facts, the AAAI listing table rows, recorded fixtures
 
-The controller runs this. It touches the network and is never a test. `export OP_DATA_DIR=/Users/jeevanparmar/school/Research/Ferguson/openproceedings/data`. Set `OPENALEX_API_KEY` in `.env` only if the owner provides one.
+The controller runs this. It touches the network and is never a test. `export OP_DATA_DIR=<main checkout>/data`. Set `OPENALEX_API_KEY` in `.env` only if the owner provides one.
 
 **Files:**
 - Create: `scripts/openalex_census.py` (read-only helper: fetches through `crawl.openalex_fetcher` into the cache, prints facts and draft rows, writes nothing else)
@@ -2351,7 +2351,7 @@ git commit -m "docs: specs, decision-049, README, skills and copy for OpenAlex a
 
 ### Task 15: Real-data verification, benchmarks (TASK-220 folded), then the closing workflow
 
-The controller runs every step in the foreground: agents stall on background runs. `export OP_DATA_DIR=/Users/jeevanparmar/school/Research/Ferguson/openproceedings/data`, a data dir outside the worktree.
+The controller runs every step in the foreground: agents stall on background runs. `export OP_DATA_DIR=<main checkout>/data`, a data dir outside the worktree.
 
 - [ ] **Step 1: Crawl OpenAlex.**
 
@@ -2445,8 +2445,8 @@ cd backend && uv run python -m tests.bench.report_80k
   5. Push; `/open-pr` into `dev`; `gh pr merge <n> --auto`.
 
 ### Critical Files for Implementation
-- /Users/jeevanparmar/school/Research/Ferguson/openproceedings-wt-new-venues/backend/src/openproceedings/engine/tantivy_engine.py
-- /Users/jeevanparmar/school/Research/Ferguson/openproceedings-wt-new-venues/backend/src/openproceedings/engine/index.py
-- /Users/jeevanparmar/school/Research/Ferguson/openproceedings-wt-new-venues/backend/src/openproceedings/ingest/record.py
-- /Users/jeevanparmar/school/Research/Ferguson/openproceedings-wt-new-venues/backend/src/openproceedings/ingest/snapshot.py
-- /Users/jeevanparmar/school/Research/Ferguson/openproceedings-wt-new-venues/backend/src/openproceedings/ingest/sources/openalex.py (new; patterns from `ingest/sources/crossref.py` in milestone B and `ingest/dedup.py`)
+- backend/src/openproceedings/engine/tantivy_engine.py
+- backend/src/openproceedings/engine/index.py
+- backend/src/openproceedings/ingest/record.py
+- backend/src/openproceedings/ingest/snapshot.py
+- backend/src/openproceedings/ingest/sources/openalex.py (new; patterns from `ingest/sources/crossref.py` in milestone B and `ingest/dedup.py`)
