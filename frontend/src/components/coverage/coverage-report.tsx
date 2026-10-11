@@ -405,7 +405,7 @@ const COLUMNS = [
 ] as const;
 
 /** The OpenAlex fidelity audit (spec 07 §G), linked in the repository. */
-export const OPENALEX_AUDIT = blobUrl("docs/results/2026-10-10-openalex-audit.md");
+export const OPENALEX_AUDIT = blobUrl("docs/results/2026-10-11-openalex-audit.md");
 
 /** The venues OpenAlex can fill (decision-049), in this order. */
 const OPENALEX_VENUES = ["AAAI", "AIES", "FAccT"] as const;

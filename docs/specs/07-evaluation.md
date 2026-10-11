@@ -378,9 +378,10 @@ release gate. Both become required when the semantic layer is built.
 
 OpenAlex fills an abstract only where every official source gave none (spec 01 §Sources), so on the records it fills
 there is no official text to check it against. The audit measures it where both exist, and writes
-`docs/results/<date>-openalex-audit.md` (the milestone's report is
-[2026-10-10-openalex-audit.md](../results/2026-10-10-openalex-audit.md), on snapshot `2026-10-10-22a339940466`, the one holding the fill before
-`aaai_library` took over most AAAI 1980–2008 abstracts; its re-run on the final snapshot `2026-10-11-93c2937e2f29`, where the title route attaches 19, is TASK-235; the rates below are the 2026-10-10 report's).
+`docs/results/<date>-openalex-audit.md` (the milestone's report is [2026-10-11-openalex-audit.md](../results/2026-10-11-openalex-audit.md), on the final snapshot
+`2026-10-11-93c2937e2f29`, where the title route attaches 19 and 18 agree; the earlier
+[2026-10-10 report](../results/2026-10-10-openalex-audit.md), on snapshot `2026-10-10-22a339940466` before `aaai_library`
+took over most AAAI 1980–2008 abstracts, checked 1,061 title attaches; the DOI-route rates below are the same in both).
 It feeds nothing: it writes no extract, touches no snapshot and gates nothing, and the rates are not thresholds.
 
 **Method (`eval/openalex_audit.py`).**

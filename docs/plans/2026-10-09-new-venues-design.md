@@ -350,8 +350,8 @@ build departs from, or settles, this design:
   both abstracts, 83.1% exact or near-exact; AAAI 2010+ 99.3%, AIES 100%, FAccT 23–59% (OpenAlex likely carries ACM's
   published version, which the `openalex` label covers). All 1,061 title-route attaches of that snapshot were checked
   against OpenAlex's authors: 1,052 agree and 9 look wrong (mostly OCR variants of one surname); the controller's ruling
-  keeps the exact title-key rule. The final snapshot's title route attaches 19, so the audit's re-run on it (with the
-  AAAI 1980–2008 archive-against-OpenAlex measure) is TASK-235.
+  keeps the exact title-key rule. The final snapshot's title route attaches 19; the audit's re-run on it (`docs/results/2026-10-11-openalex-audit.md`) finds 18 agree and 1 an OCR variant of the same surname. The AAAI 1980–2008
+  archive-against-OpenAlex measure is TASK-235.
 - **Also built in milestone C.** The IAAI and EAAI track badges' expansions as visible text (paper page and syntax help);
   a drifted search record's diff says why each removed paper left (`track_changed`, `status_changed`, `filter_changed`,
   `not_in_index`, `still_eligible`) with a per-cause tally; cited notes on ungated coverage cells and six AAAI list-count
