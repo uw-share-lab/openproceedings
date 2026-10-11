@@ -3,7 +3,7 @@
 Written by hand from the milestone C perf report (kept outside git with the milestone's task reports), so the
 figures spec 03 §Performance budgets, spec 04 §SearchResponse (`groups`, Cost) and `search._yield` cite live in the
 repository. The two generated reports, `2026-10-11-bench.md` (synthetic 80k) and
-`2026-10-10-bench-group-counts.md` (real corpus), stay the citable budget runs; this file holds the bisect, the
+`2026-10-11-bench-group-counts.md` (real corpus), stay the citable budget runs; this file holds the bisect, the
 profiles and the two-search measurement that led to them.
 
 - Machine: Apple M1 Pro, macOS-15.6.1-arm64, 8 CPUs; Python 3.12.15, tantivy 0.26.2. Load is given per

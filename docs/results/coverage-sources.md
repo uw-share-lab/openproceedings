@@ -32,8 +32,8 @@ and 2, 2026-10-11). Under this rule AAAI 2020's lists are independent because th
 camera-ready, and 2012's, 2017's and 2021's because each differs from the proceedings in count. AAAI 2010's, 2014's
 and 2016's lists match the proceedings exactly and are not shown to predate them (2010's and 2014's only archived
 copies were captured after publication, on 2010-08-30 and 2015-09-06), so each is an ungated cell with a note. Deltas of the four on snapshot
-`2026-10-10-9efa49481112`: +2 (0.68%), +2 (0.31%), −4 (0.25%) and −2 (0.12%); the post-rebuild coverage report
-restates them on its snapshot.
+`2026-10-11-93c2937e2f29` (index `b4f335e07e70`, `docs/results/2026-10-11-coverage.md`): +2 (0.68%), +2 (0.31%), −4 (0.25%)
+and −2 (0.12%), the same as on `2026-10-10-9efa49481112`: the abstract fills change no count.
 
 The other AAAI `main` cells and IASEAI 2026 are reported, not gated, each with a note in §Ungated cells with a
 note: AAAI 2010's and 2014's lists match the proceedings and survive only as copies captured after publication;

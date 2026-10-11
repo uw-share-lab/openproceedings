@@ -266,12 +266,10 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
   index) and `tests.bench.report_80k`. A run counts only when the machine's 1-minute load average is under 5 at
   its start and its end. The citable group-count report is `docs/results/<date>-bench-group-counts.md`, written by
   that command and never edited by hand; the milestone's reports are linked from `docs/README.md`.
-- **Milestone C, as measured (index `9977ed00669f`: schema 4, tokenizer 3, 173,253 documents; parity over the full
-  corpus found 0 differences in 212,911 terms and 340,773 phrases).**
-  - **Real corpus** (`docs/results/2026-10-10-bench-group-counts.md`, a 1-minute load under 5 at the start and the
-    end; regenerated for TASK-230 at commit `ab2de11b`, which the report records as `ab2de11b-dirty` because the
-    regenerated 80k report was not yet committed, the code being the same; it keeps its 2026-10-10 file name though
-    the generator dated its heading 2026-10-11): every Trust-Evals string's first page with its group counts
+- **Milestone C, as measured (index `b4f335e07e70`: schema 4, tokenizer 3, 173,253 documents; parity over the full
+  corpus found 0 differences in 214,499 terms and 344,268 phrases).**
+  - **Real corpus** (`docs/results/2026-10-11-bench-group-counts.md`, index `b4f335e07e70`, regenerated on the final
+    snapshot; a run counts only at a 1-minute load under 5 at the start and the end): every Trust-Evals string's first page with its group counts
     is within the 100 ms budget, the worst being `main-2-pop` at p95 67.7 ms (76.5 ms before TASK-230). This is the
     citable group-count report TASK-220 asked for.
   - **Synthetic 80k** (`docs/results/2026-10-11-bench.md`, load 4.4 at the start and 4.0 at the end, commit

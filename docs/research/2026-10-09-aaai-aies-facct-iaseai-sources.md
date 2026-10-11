@@ -595,7 +595,7 @@ Matching is one-to-one by exact title key, year and venue, so none of these can 
 
 **In all,** the fill would attach 2,158 of the 5,808 candidates: 1,097 by DOI and 1,061 by title. That leaves 3,650
 records at `none`, 3,648 of them AAAI 1980–2008. With TASK-231's rulings the same extract attaches 2,248 (1,098 by
-DOI, 1,150 by title) and leaves 3,560 at `none` (§TASK-231 below).
+DOI, 1,150 by title) and leaves 3,560 at `none` (§TASK-231 below). These are the figures before `aaai_library` (§AAAI 1980–2008 abstracts, below): in the final build (2026-10-11) OpenAlex fills 1,117, 1,098 by DOI and 19 by title, because 4,536 AAAI 1980–2008 records already have AAAI's own abstract.
 
 ### Fixtures and what the census leaves for the owner
 
@@ -615,7 +615,7 @@ DOI, 1,150 by title) and leaves 3,560 at `none` (§TASK-231 below).
      position (§TASK-231 below). The extract keeps the raw index, so no refetch was needed.
   3. Note that the `works` counts are a live total. If OpenAlex adds or merges a work under S4306420577 for a
      listed year, Task 15's crawl stops with `count_mismatch` and the row needs re-verifying. Nothing guesses.
-  4. Note that 3,648 AAAI 1980–2008 records stay `none`. OpenAlex files no more of them under an AAAI source.
+  4. Note that 3,648 AAAI 1980–2008 records stayed `none` after the OpenAlex fill alone. OpenAlex files no more of them under an AAAI source; `aaai_library` (§AAAI 1980–2008 abstracts) then gave 4,536 of the 4,709 AAAI's own abstract.
 
 ### TASK-231: the owner's rulings on the fill's refusals (2026-10-10)
 
@@ -880,8 +880,8 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
     Social Impact. Where the 40 were counted was not recorded, so the row is re-checked against AAAI's own AI for
     Social Impact list (TASK-234).
 
-  The deltas are those of snapshot `2026-10-10-9efa49481112`; the post-rebuild coverage report restates them on its
-  own snapshot, where the gate is expected at 81 of 82 cells.
+  The deltas are those of snapshot `2026-10-10-9efa49481112` and are unchanged on the final snapshot
+  `2026-10-11-93c2937e2f29` (`docs/results/2026-10-11-coverage.md`), where the gate passes at 81 of 82 cells.
 - **Ungated-cell notes (TASK-222).** AAAI 2010, 2011, 2014, 2016 and 2022–2026 main and IASEAI 2026 main each carry a
   cited note
   saying why they are not gated (`official_counts.UNGATED_NOTES`, `coverage-sources.md` §Ungated cells with a note),
@@ -1046,7 +1046,7 @@ v81); AIES 2018–2023 575 records; AAAI 1980–2008 4,730 records in 23 held ye
 
 ## AAAI 1980–2008 abstracts: the archived aaai.org paper pages (TASK-232, decision-051, 2026-10-10)
 
-After the OpenAlex fill, 3,648 of the 4,709 AAAI 1980–2008 records had no abstract and the other 1,061 had
+Before this source, after the OpenAlex fill alone, 3,648 of the 4,709 AAAI 1980–2008 records had no abstract and the other 1,061 had
 OpenAlex's. dblp gives these years none, but each record's dblp `ee` is its old aaai.org paper page,
 `www.aaai.org/Library/{AAAI,IAAI}/<yyyy>/<id>.php`, which printed the abstract.
 
@@ -1118,4 +1118,15 @@ before the OpenAlex fill (spec 01 §Sources, AAAI library row). The snapshot man
 `capture_window`, the range of the attached pages' capture times, and `/coverage` and a search record show that range
 for the source (kind `archive_captures`), not the harvest's fetch dates: the text is from 2016–2022, not 2026 (gate C
 round 1). The full harvest (about 4,607 requests, at least 3.8
-hours) and the rebuild are run after review; their counts go here then.
+hours) and the rebuild were run after review (2026-10-11); the counts:
+
+- Harvest: 4,607 pages pinned, 0 missing, 1 unavailable because its capture redirects (`capture_redirect`).
+- Snapshot `2026-10-11-93c2937e2f29` (173,253 records), index `b4f335e07e70`: `aaai_library` attached 4,536 of 4,709
+  candidates (126 `title_near`), refusing `title_mismatch` 43, `layout_unknown` 23, `undecodable` 3 and
+  `capture_redirect` 1; the capture window is 2016-05-05 to 2022-12-29. So 96.3% of AAAI 1980–2008 records have AAAI's
+  own abstract.
+- OpenAlex then fills only what is left: 1,117 abstracts (1,098 by DOI and 19 by title; AAAI 21, AIES 557, FAccT 539),
+  with `official_won` 1,305 and refused `doi_duplicate` 1, `inverted_gap` 2, `no_abstract` 10, `title_ambiguous` 1,
+  `title_unmatched` 141.
+- `op snapshot diff` against `2026-10-10-9efa49481112` (before milestone C): 5,653 changed, `abstract` only
+  (`abstract_kind` `none` → `official` 4,536, `none` → `openalex` 1,117); none added, removed or rekeyed.

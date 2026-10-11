@@ -28,7 +28,7 @@ Add `abstract_kind` as a raw fast field (index schema 4) and verify milestone C 
 ## Follow-ups
 - [x] TASK-230 — `/search` first page for main-3-sources over 100 ms on the synthetic 80k
 - [x] TASK-231 — owner review of the OpenAlex fill's refusals
-- [ ] TASK-232 — a source for the 3,648 AAAI 1980-2008 records without an abstract (built; closed after the final rebuild shows its official abstracts)
+- [x] TASK-232 — a source for the 3,648 AAAI 1980-2008 records without an abstract (done: the final rebuild gives 4,536 of 4,709 AAAI's own abstract)
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `docs/specs/03-search-engine.md` §Performance budgets (the miss and the regression stated); `.claude/skills/index-versioning/SKILL.md` (schema 2 retired before schema 4); no skill rule for the combo yet.
