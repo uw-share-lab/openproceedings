@@ -42,6 +42,7 @@ names the index it was verified on and which saved records still reproduce.
 - bump the uv-minor-patch group with 2 updates ([#125](https://github.com/uw-share-lab/openproceedings/pull/125))
 - fail make tooling when the npm manifests and the lock's workspace entries disagree ([#128](https://github.com/uw-share-lab/openproceedings/pull/128))
 - /dependabot-review runs in a Claude Code cloud session (REST only, CCR auto-merge route) ([#129](https://github.com/uw-share-lab/openproceedings/pull/129))
+- green nightly: CPU-growth timing checks, a bounded mutation runner, 12 differential shards (TASK-237) ([#137](https://github.com/uw-share-lab/openproceedings/pull/137))
 
 ### Data
 
