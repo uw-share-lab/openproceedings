@@ -12,10 +12,12 @@ Two routes, both through the shared HTTP layer (`http.py`), one request at a tim
   sources `openalex_sources.toml` names (`openalex_table`, `listing_url`, cursor paged), and a work joins a record
   only by exact title key with exactly one candidate on each side; a listing whose count differs from the table's
   stops the crawl.
-Refusals, never a best guess: an inverted index with a gap, two words at one position or any other shape
-(`rebuild`); an abstract that cleaning leaves empty or a snippet (`abstract_unusable`, `abstract_of`), or that holds
-a lone UTF-16 surrogate (`abstract_surrogate`, the shared refusal of `common.clean_abstract`, TASK-229); an answer
-that is not a work list (`CrawlError`, `openalex_unreadable`, whose message never quotes the body).
+Refusals, never a best guess: an inverted index with a gap, two words at one position, a blank key or any other
+shape (`rebuild`; a key with whitespace inside reads as its words joined by one space, TASK-231); several works for
+one DOI whose texts differ (`doi_duplicate`), unless a cited `[[duplicate_choice]]` row of the table picks one; an
+abstract that cleaning leaves empty or a snippet (`abstract_unusable`, `abstract_of`), or that holds a lone UTF-16
+surrogate (`abstract_surrogate`, the shared refusal of `common.clean_abstract`, TASK-229); an answer that is not a
+work list (`CrawlError`, `openalex_unreadable`, whose message never quotes the body).
 
 The extract: a crawl keeps each work's raw `abstract_inverted_index` (`Work.inverted`), writes a content-addressed
 extract and a marker naming it, and `op snapshot build` replays the extract offline, rebuilding and cleaning each
@@ -92,7 +94,9 @@ _DOI = re.compile(r"10\.[0-9]{1,9}(?:\.[0-9]{1,9}){0,8}/\S{1,1000}")
 _ID = re.compile(r"(?:https://openalex\.org/)?(W[0-9]{1,12})")
 _SOURCE_ID = re.compile(r"(?:https://openalex\.org/)?(S[0-9]{1,12})")
 _CURSOR = re.compile(rf"[\x21-\x7e]{{1,{MAX_CURSOR}}}")
-_WORD = re.compile(r"\S+")  # one word: a key with whitespace in it is no inverted index
+# whitespace inside a key (OpenAlex tokenises on spaces only, so a paragraph break `word\r\n\r\nword` stays in one
+# key at one position): each run, and any at the edges, reads as one space between the key's words (TASK-231)
+_SPACE = re.compile(r"\s+")
 _DOI_UNSAFE = frozenset(
     "|,&#?%+"
 )  # what would split the filter or the query string, or change it once decoded
@@ -125,21 +129,20 @@ class Rebuilt:
 def rebuild(inverted: object) -> Rebuilt:
     """The abstract an `abstract_inverted_index` encodes, its words in position order. A position held by two
     different words, a gap, or anything not `{word: [position, …]}` is refused: no abstract with a silent hole.
-    The same word listed twice at one position is kept once. A position at or past `MAX_POSITIONS`, or more
-    entries than that in all, is refused before anything is built from it."""
+    A key holding whitespace (a line break OpenAlex left inside one token) is one entry at its one position, read
+    with each whitespace run as one space and none at its edges (`"one.\r\n\r\nTwo"` → `one. Two`); an empty or
+    whitespace-only key is refused (TASK-231, owner ruling 2026-10-10). The same word listed twice at one position
+    is kept once. A position at or past `MAX_POSITIONS`, or more entries than that in all, is refused before
+    anything is built from it."""
     if inverted is None:
         return Rebuilt(None, None)
     if not isinstance(inverted, dict) or not inverted:
         return Rebuilt(None, "inverted_unreadable")
     at: dict[int, str] = {}
     entries = 0
-    for word, positions in inverted.items():
-        if (
-            not isinstance(word, str)
-            or not _WORD.fullmatch(word)
-            or not isinstance(positions, list)
-            or not positions
-        ):
+    for key, positions in inverted.items():
+        word = _SPACE.sub(" ", key).strip() if isinstance(key, str) else ""
+        if not word or not isinstance(positions, list) or not positions:
             return Rebuilt(None, "inverted_unreadable")
         entries += len(positions)
         if entries > MAX_POSITIONS:
@@ -564,6 +567,7 @@ class FillReport(Report):
     candidates: int = 0  # AAAI/AIES/FAccT records whose resolved abstract was null
     attached_doi: int = 0
     attached_title: int = 0
+    duplicate_chosen: int = 0  # of attached_doi: the DOIs a `[[duplicate_choice]]` row resolved
     official_won: int = 0  # records the extract has a work for whose own abstract is official now
     not_queried: int = 0  # candidates no lookup of the extract covered (a DOI not batched; no listing row)
     # refused also counts `listing_stale`: a DOI-less candidate whose venue-year listing is in the extract but the
@@ -574,12 +578,29 @@ class FillReport(Report):
 
     def to_manifest(self) -> dict[str, Any]:
         return {"extract": self.extract, "candidates": self.candidates, "attached_doi": self.attached_doi,
-                "attached_title": self.attached_title, "official_won": self.official_won,
+                "attached_title": self.attached_title, "duplicate_chosen": self.duplicate_chosen,
+                "official_won": self.official_won,
                 "not_queried": self.not_queried, "refused": dict(sorted(self.refused.items()))}  # fmt: skip
 
 
 def _id_order(w: Work) -> int:
     return int(w.id[1:])
+
+
+def _check_choices(
+    table: Table, by_doi: Mapping[str, Sequence[tuple[Work, Lookup]]], queried: set[str]
+) -> None:
+    """Every `[[duplicate_choice]]` row for a DOI the extract asked must name one of two or more works the extract
+    answers for it; otherwise the build stops (`duplicate_choice_unmatched`): OpenAlex merged or changed the works
+    since the choice was checked, so re-check it. A row for a DOI the extract never asked is inert."""
+    for doi, choice in table.duplicate_choices.items():
+        if doi not in queried:
+            continue
+        ids = {w.id for w, _ in by_doi.get(doi, ())}
+        if len(ids) < 2 or choice.work not in ids:
+            raise CrawlError(f"openalex_sources.toml duplicate_choice {doi}: {choice.work} is not among two or more "
+                             f"works the extract answers for it ({', '.join(sorted(ids)) or 'none'}): re-check the "
+                             "row", reason="duplicate_choice_unmatched")  # fmt: skip
 
 
 def _attach(r: PaperRecord, works: Sequence[Work], cleaned: Cleaned, lookup: Lookup, how: str) -> PaperRecord:
@@ -598,7 +619,8 @@ def fill(
     records: Iterable[PaperRecord], extract: Extract, table: Table | None = None
 ) -> tuple[list[PaperRecord], FillReport]:
     """Fill each AAAI, AIES or FAccT record whose abstract is null from the extract, in record id order: by its
-    DOI (every work answering for it; one text, or refused `doi_duplicate`), or, with no DOI, by the exact title
+    DOI (every work answering for it; one text, or refused `doi_duplicate` unless the table's `[[duplicate_choice]]`
+    row for the DOI picks one, counted `duplicate_chosen` too; `_check_choices`), or, with no DOI, by the exact title
     key, year and venue in that venue-year's listing (one work and one record sharing the key, or refused
     `title_ambiguous`; the listing must be the table's row as it stands). Every refusal is counted, never forced;
     a record with an abstract, or outside those venues, is passed through as it is."""
@@ -623,6 +645,7 @@ def fill(
                 listings[(lk.venue, lk.year)] = lk
             else:  # a row the table changed since is not replayed: counted `listing_stale`
                 stale.add((lk.venue, lk.year))
+    _check_choices(table, by_doi, queried)
     corpus_dois = {d for r in ordered if (d := bare_doi(r.urls.doi))}
     # every DOI-less record of those venues, with an abstract or not: a work whose key a record with an official
     # abstract also has is never credited to the other one
@@ -655,7 +678,17 @@ def fill(
             else:
                 read = [(w, hlk, *abstract_of(w)) for w, hlk in hits]
                 usable = [(w, hlk, c) for w, hlk, c, _ in read if c is not None]
-                if not usable:
+                choice = table.duplicate_choices.get(doi)
+                if choice is not None:  # `_check_choices`: its work is among two or more hits
+                    w, hlk, c, why = next(h for h in read if h[0].id == choice.work)
+                    if c is None:
+                        refusal = why or "no_abstract"
+                    else:
+                        attached = _attach(r, [w], c, hlk, f"by DOI {doi}, the work openalex_sources.toml's "
+                                           f"duplicate_choice names of {len(hits)} works for it")  # fmt: skip
+                        report.attached_doi += 1
+                        report.duplicate_chosen += 1
+                elif not usable:
                     refusal = next((why for *_, why in read if why), "no_abstract")
                 elif len({c.text for *_, c in usable}) > 1:
                     refusal = "doi_duplicate"

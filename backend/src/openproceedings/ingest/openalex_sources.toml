@@ -14,6 +14,16 @@
 #   works        the works OpenAlex listed for the row when verified; a crawl that finds another count stops
 #   verified     the date the row was checked live
 #   source       where the check is recorded
+#
+# [[duplicate_choice]] columns (TASK-231, owner ruling 2026-10-10): a cited, hand-checked exception to the DOI
+# route's `doi_duplicate` refusal, for a DOI OpenAlex answers with several works whose texts differ. The fill
+# attaches `work` alone (counted `attached_doi` and `duplicate_chosen`), and stops (`duplicate_choice_unmatched`)
+# if the extract answers the DOI without `work` among two or more works.
+#   doi          the bare, lower-case DOI
+#   work         the OpenAlex work id (`W…`) attached for it
+#   reason       why that work, not the other
+#   verified     the date the texts were compared
+#   source       where the comparison and the ruling are recorded
 
 [[listing]]
 venue = "AAAI"
@@ -198,3 +208,10 @@ source_ids = ["S4306420577"]
 works = 120
 verified = 2026-10-10
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md (scripts/openalex_census.py)"
+
+[[duplicate_choice]]
+doi = "10.1145/3306618.3314250"
+work = "W2796639635"
+reason = "AIES 2019 'Incomplete Contracting and AI Alignment': W2796639635 and W2963086506 carry the same abstract word for word, but W2963086506's copy has PDF-extraction damage (lost fi/fl ligatures, hyphen splits); W2796639635 is clean"
+verified = 2026-10-10
+source = "TASK-231 (owner ruling 2026-10-10); docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §OpenAlex (TASK-231)"

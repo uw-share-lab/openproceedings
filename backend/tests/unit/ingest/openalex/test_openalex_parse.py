@@ -33,12 +33,30 @@ def test_rebuild_keeps_a_word_listed_twice_at_its_position_once() -> None:
     ([], "inverted_unreadable"), ("x", "inverted_unreadable"), ({"": [0]}, "inverted_unreadable"),
     ({"a": []}, "inverted_unreadable"), ({"a": [-1]}, "inverted_unreadable"), ({"a": [True]}, "inverted_unreadable"),
     ({"a": [0.0]}, "inverted_unreadable"), ({"a": "0"}, "inverted_unreadable"), ({1: [0]}, "inverted_unreadable"),
-    ({"a": [10**7]}, "inverted_unreadable"), ({"a b": [0]}, "inverted_unreadable"),
-    ({"a\tb": [0]}, "inverted_unreadable"), ({" a": [0]}, "inverted_unreadable"),
-    ({"a\u00a0b": [0]}, "inverted_unreadable"),
+    ({"a": [10**7]}, "inverted_unreadable"), ({" ": [0]}, "inverted_unreadable"),
+    ({"\r\n\r\n": [0]}, "inverted_unreadable"), ({"\u00a0": [0]}, "inverted_unreadable"),
+    ({"a": [0], "\t": [1]}, "inverted_unreadable"),
 ])  # fmt: skip
 def test_rebuild_refuses_unreadable_shapes(raw, reason: str) -> None:
     assert openalex.rebuild(raw) == openalex.Rebuilt(None, reason)
+
+
+@pytest.mark.parametrize(("raw", "text"), [
+    ({"one.\r\n\r\nTwo": [1], "Word": [0], "three": [2]}, "Word one. Two three"),
+    ({"a\nb": [0]}, "a b"), ({"a\tb": [0]}, "a b"), ({"a \u00a0 b": [0]}, "a b"),
+    ({"x": [0], "\r\nIn": [1]}, "x In"), ({"end\r\n": [0]}, "end"),
+])  # fmt: skip
+def test_rebuild_collapses_whitespace_inside_a_key_to_one_space_at_its_one_position(raw, text: str) -> None:
+    """OpenAlex tokenises on spaces only, so a paragraph break stays inside one key at one position (TASK-231,
+    owner ruling 2026-10-10): the key reads as its words joined by one space, still at that one position."""
+    assert openalex.rebuild(raw) == openalex.Rebuilt(text, None)
+
+
+def test_a_key_with_a_line_break_still_takes_part_in_the_gap_and_conflict_rules() -> None:
+    assert openalex.rebuild({"a\r\nb": [0], "c": [2]}) == openalex.Rebuilt(None, "inverted_gap")
+    assert openalex.rebuild({"a\r\nb": [0], "c": [0]}) == openalex.Rebuilt(None, "inverted_conflict")
+    # two spellings of one key at one position are the same word, kept once
+    assert openalex.rebuild({"a\r\nb": [0], "a b": [0]}) == openalex.Rebuilt("a b", None)
 
 
 def test_rebuild_refuses_more_entries_than_any_abstract_has_words() -> None:

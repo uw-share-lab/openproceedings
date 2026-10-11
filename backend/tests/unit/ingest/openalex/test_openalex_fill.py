@@ -8,6 +8,7 @@ from openproceedings.ingest import openalex_table
 from openproceedings.ingest.dedup import attribution, resolve
 from openproceedings.ingest.record import Claim, PaperRecord
 from openproceedings.ingest.sources import openalex
+from openproceedings.ingest.sources.common import CrawlError
 
 from tests.unit.ingest.openalex import api
 
@@ -248,3 +249,60 @@ def test_an_openalex_attach_runs_the_record_guard() -> None:
     assert cleaned is not None
     with pytest.raises(ValidationError):
         openalex._attach(r, lookup.works, cleaned, lookup, "by DOI")
+
+
+CHOICE = (
+    TABLE_TEXT_MOVED.replace("S78", "S77")
+    + f"""
+[[duplicate_choice]]
+doi = "{D1}"
+work = "W2"
+reason = "the same abstract; W1's copy has PDF-extraction damage"
+verified = 2026-10-10
+source = "TASK-231"
+"""
+)
+
+
+def test_a_pinned_duplicate_choice_attaches_the_chosen_work_and_is_counted() -> None:
+    """TASK-231 (owner ruling 2026-10-10): a cited `[[duplicate_choice]]` row picks one of a DOI's works whose texts
+    differ; the record is filled by DOI from that work alone, and counted `duplicate_chosen` too."""
+    r = rec("op:facct:2023:doi-3593013.3594011", "FAccT", 2023, doi=D1)
+    lookup = doi_lookup(api.work("W1", D1, text="Damaged te- xt."), api.work("W2", D1, text="Clean text."))
+    (out,), report = openalex.fill([r], ext(lookup), openalex_table.load(CHOICE))
+    (claim,) = out.claims("abstract")
+    assert out.abstract == "Clean text." and claim.url.endswith("/W2") and "W1" not in claim.evidence
+    assert "duplicate_choice" in claim.evidence
+    assert (report.attached_doi, report.duplicate_chosen, sum(report.refused.values())) == (1, 1, 0)
+    assert report.to_manifest()["duplicate_chosen"] == 1
+
+
+def test_without_its_choice_row_the_same_duplicate_is_still_refused() -> None:
+    r = rec("op:facct:2023:doi-3593013.3594011", "FAccT", 2023, doi=D1)
+    lookup = doi_lookup(api.work("W1", D1, text="Damaged te- xt."), api.work("W2", D1, text="Clean text."))
+    (out,), report = openalex.fill([r], ext(lookup), TABLE)
+    assert out.abstract is None and report.refused["doi_duplicate"] == 1 and report.duplicate_chosen == 0
+
+
+@pytest.mark.parametrize("works", [
+    (api.work("W1", D1, text="One."), api.work("W3", D1, text="Two.")),  # the chosen work is not returned
+    (api.work("W2", D1, text="Only one work."),),  # no longer a duplicate
+])  # fmt: skip
+def test_a_choice_whose_work_is_not_among_the_returned_duplicates_stops(works) -> None:
+    r = rec("op:facct:2023:doi-3593013.3594011", "FAccT", 2023, doi=D1)
+    with pytest.raises(CrawlError, match="duplicate_choice") as e:
+        openalex.fill([r], ext(doi_lookup(*works)), openalex_table.load(CHOICE))
+    assert e.value.reason == "duplicate_choice_unmatched"
+
+
+def test_a_choice_for_a_doi_the_extract_never_asked_is_inert() -> None:
+    r = rec("op:facct:2023:doi-3593013.3594011", "FAccT", 2023, doi=D1)
+    (_out,), report = openalex.fill([r], ext(), openalex_table.load(CHOICE))
+    assert report.not_queried == 1 and report.duplicate_chosen == 0
+
+
+def test_a_chosen_work_with_no_usable_abstract_is_refused_with_why_never_another_work() -> None:
+    r = rec("op:facct:2023:doi-3593013.3594011", "FAccT", 2023, doi=D1)
+    lookup = doi_lookup(api.work("W1", D1, text="Other text."), api.work("W2", D1, raw={"a": [1]}))
+    (out,), report = openalex.fill([r], ext(lookup), openalex_table.load(CHOICE))
+    assert out.abstract is None and report.refused == {"inverted_gap": 1} and report.duplicate_chosen == 0

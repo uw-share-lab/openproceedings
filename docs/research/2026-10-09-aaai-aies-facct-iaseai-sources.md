@@ -496,6 +496,10 @@ The 1,099 DOIs make 22 batches of 50, and no DOI is unqueryable.
   - 10.1145/3442188.3445937 (FAccT 2021; W3134362900, W3122480037).
   - The simulated fill attaches two of them once, because their texts are identical. It refuses the other two
     (`doi_duplicate` 2): one AIES 2019 record and one FAccT 2021 record.
+  - TASK-231 (owner ruling 2026-10-10): the AIES 2019 pair carries one abstract, word for word, but W2963086506's
+    copy has PDF-extraction damage (lost fi/fl ligatures, hyphen splits), so a `[[duplicate_choice]]` row pins the
+    clean W2796639635. The FAccT 2021 pair genuinely differs (a preprint and the published text) and stays refused.
+    See §TASK-231 below.
 
 **Yield** (simulated: `openalex.fill` over the census's lookups and the table below):
 
@@ -581,12 +585,14 @@ Matching is one-to-one by exact title key, year and venue, so none of these can 
 - `no_abstract` 119.
 - All the `inverted_*` refusals are listing works, and every one is from 1980–2008. The DOI route had none.
   - Of the listing works whose index is `inverted_unreadable`, 117 have a key holding a CR or LF (`word\r\n`) or an
-    empty key, which `rebuild` refuses as no single word.
+    empty key, which `rebuild` refused as no single word. TASK-231 changed the rule for the line breaks (§TASK-231
+    below).
   - The 54 gaps split evenly: 27 are missing one position and 27 are missing more.
   - The rules stand, and nothing is forced.
 
 **In all,** the fill would attach 2,158 of the 5,808 candidates: 1,097 by DOI and 1,061 by title. That leaves 3,650
-records at `none`, 3,648 of them AAAI 1980–2008.
+records at `none`, 3,648 of them AAAI 1980–2008. With TASK-231's rulings the same extract attaches 2,248 (1,098 by
+DOI, 1,150 by title) and leaves 3,560 at `none` (§TASK-231 below).
 
 ### Fixtures and what the census leaves for the owner
 
@@ -602,11 +608,51 @@ records at `none`, 3,648 of them AAAI 1980–2008.
 - **For the owner:**
   1. The OpenAlex licence is settled (§OpenAlex, Licence): CC0 data, abstracts rebuilt from the index under
      the publisher-abstract posture.
-  2. Decide whether a key holding CR/LF (117 old AAAI works) should be split or stripped rather than refused. That
-     would be a rule change in `openalex.rebuild`, and the extract keeps the raw index, so no refetch is needed.
+  2. Decided (TASK-231, 2026-10-10): a key holding CR/LF is read as its words joined by one space, at its one
+     position (§TASK-231 below). The extract keeps the raw index, so no refetch was needed.
   3. Note that the `works` counts are a live total. If OpenAlex adds or merges a work under S4306420577 for a
      listed year, Task 15's crawl stops with `count_mismatch` and the row needs re-verifying. Nothing guesses.
   4. Note that 3,648 AAAI 1980–2008 records stay `none`. OpenAlex files no more of them under an AAAI source.
+
+### TASK-231: the owner's rulings on the fill's refusals (2026-10-10)
+
+The owner reviewed the refusals of the real fill (snapshot 2026-10-10-22a339940466, extract 7fea58b98325) from a
+read-only replay that reproduced the manifest's counts exactly.
+
+**Line breaks inside a key.** OpenAlex tokenises on spaces only, so a paragraph break in the source stays inside one
+key at one position (`word\r\n\r\nword`: 154 keys hold two CRLFs, 30 a single break, 3 a non-breaking space).
+The evidence that this is one token, not two words: in every otherwise-dense index the key occupies exactly one
+position, the next word is at the next position, and nothing is missing there. 157 of the 184 break keys end their
+first part in sentence punctuation.
+- **Ruling:** `openalex.rebuild` reads such a key as its words joined by one space, at its one position (each
+  whitespace run becomes one space, and none is kept at the key's edges; 5 keys start with `\r\n`). An empty or
+  whitespace-only key is still `inverted_unreadable`, and the gap and conflict rules still apply. It is deterministic
+  and exact: nothing is moved or matched loosely. The paragraph break itself is lost, as it is for every abstract
+  `common.clean_abstract` reads.
+- **Not checked:** none of the 101 records has an official abstract to compare against. The only evidence of
+  fidelity is internal (dense positions, breaks at sentence boundaries).
+
+**The AIES 2019 duplicate.** 10.1145/3306618.3314250 ("Incomplete Contracting and AI Alignment") is answered by
+W2796639635 and W2963086506. They hold the same abstract word for word, but W2963086506 has PDF-extraction damage
+(`nding`, `rst`, `par- allels`). **Ruling:** a cited `[[duplicate_choice]]` row in `openalex_sources.toml` pins
+W2796639635. The fill attaches it (counted `attached_doi` and `duplicate_chosen`), and the build stops
+(`duplicate_choice_unmatched`) if a later extract answers the DOI without that work among two or more works. No text
+heuristic (de-hyphenation, ligature repair) is applied: the choice is one checked row, not a rule.
+
+**Kept refused:** FAccT 2021's 10.1145/3442188.3445881 (the two texts genuinely differ); all 21 `title_ambiguous`,
+Shvaytser 1990 included; `inverted_gap`, `no_abstract` and `title_unmatched`.
+
+**Predicted effect** (an offline replay of the extract over the snapshot's records with the OpenAlex claims removed;
+the snapshot itself is rebuilt later):
+
+| | Before | With the rulings |
+|---|---|---|
+| Attached by DOI | 1,097 | 1,098 (1 `duplicate_chosen`) |
+| Attached by title | 1,061 | 1,150 |
+| `inverted_unreadable` | 101 | 2 (empty-string keys) |
+| `inverted_gap` | 50 | 60 (10 formerly unreadable indexes have a hole) |
+| `doi_duplicate` | 2 | 1 |
+| `title_ambiguous` / `no_abstract` / `title_unmatched` | 21 / 119 / 3,357 | unchanged |
 
 ## Licence posture
 

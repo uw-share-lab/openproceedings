@@ -101,12 +101,14 @@
   - **Duplicate DOI.** Several works share a requested DOI:
     - attached once, citing every work id, when their rebuilt and cleaned texts are identical;
     - otherwise refused, `doi_duplicate`.
+    - unless a cited `[[duplicate_choice]]` row of `openalex_sources.toml` names one of the works: that work attaches alone, counted `attached_doi` and `duplicate_chosen`; a row whose work is not among two or more works the extract answers for its DOI stops the build, `duplicate_choice_unmatched` (TASK-231, owner ruling 2026-10-10).
   - **Truncated DOI.** OpenAlex's DOI is a cut-off form, so the exact DOI lookup finds nothing: `doi_unmatched`. A truncated DOI is never widened to match.
 - Planner decision: the inverted-index rebuild rules:
   - positions must cover `0..n-1` exactly (a gap → refused, `inverted_gap`);
   - one position claimed by two different words → refused, `inverted_conflict`;
   - the same word listed twice at one position is harmless and kept once;
   - any non-string word, an empty word, a non-list or empty position list, or a negative or non-integer position → refused, `inverted_unreadable`;
+  - a key with whitespace inside (a line break OpenAlex left in one token) is one entry at its one position, read with each whitespace run as one space and none at its edges; an empty or whitespace-only key → refused, `inverted_unreadable` (TASK-231, owner ruling 2026-10-10; it replaces Task 7's rule that a key with whitespace inside is unreadable);
   - then `common.clean_abstract` (controls, `…` snippet, placeholders) and `caps.cap_record` (20,000 characters, combining marks).
 - Planner decision: the claim's `url` is the work's API URL (`https://api.openalex.org/works/W…`). Its `evidence` names the work's page (`https://openalex.org/W…`) and the match rule. `dedup.attribution` credits `openalex` to the record's `urls.proceedings`, never the API URL.
   - This **deviates** from spec §Query/API's "names OpenAlex and the work's URL" wording, per the milestone A/B lessons.
