@@ -4,14 +4,14 @@
       "q": "trust* AND year:2020..2026",
       "mode": "native",
       "created": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record_id": "Rec000000000",
         "page": "/record/Rec000000000"
       },
       "stored": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record": {
@@ -22,10 +22,10 @@
           "canonical": "(trust* AND year:2020..2026 AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
           "canonical_hash": "054a79f32a6b6d5b69cbe6e38134134514938bf529d398970158cc25f2e9e4a6",
           "identification_query": "(trust* AND year:2020..2026)",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "tokenizer_version": "3",
           "query_version": "2",
-          "schema_version": "3",
+          "schema_version": "4",
           "ranking_params": {
             "bm25": {
               "b": 0.75,
@@ -95,10 +95,11 @@
           "identified_total": 420,
           "unclassified_total": 85
         },
-        "replay": null
+        "replay": null,
+        "openalex_abstracts": 0
       },
       "replayed": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record": {
@@ -109,10 +110,10 @@
           "canonical": "(trust* AND year:2020..2026 AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
           "canonical_hash": "054a79f32a6b6d5b69cbe6e38134134514938bf529d398970158cc25f2e9e4a6",
           "identification_query": "(trust* AND year:2020..2026)",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "tokenizer_version": "3",
           "query_version": "2",
-          "schema_version": "3",
+          "schema_version": "4",
           "ranking_params": {
             "bm25": {
               "b": 0.75,
@@ -184,7 +185,7 @@
         },
         "replay": {
           "status": "reproduced",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "query_version": "2",
           "total": 26,
           "excluded": {
@@ -215,10 +216,11 @@
           "membership_identical": true,
           "identified_total": 420,
           "unclassified_total": 85
-        }
+        },
+        "openalex_abstracts": 0
       },
       "parse_canonical": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -342,13 +344,22 @@
             "reason": null,
             "blocking_spans": [],
             "values": ["accepted"]
+          },
+          "abstract_kind": {
+            "field": "abstract_kind",
+            "negated": false,
+            "span": [100, 100],
+            "toggleable": true,
+            "reason": null,
+            "blocking_spans": [],
+            "values": ["none", "official", "openalex"]
           }
         },
         "word_forms": [],
         "word_forms_skipped": []
       },
       "parse_identification": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -460,6 +471,15 @@
             "reason": null,
             "blocking_spans": [],
             "values": ["accepted"]
+          },
+          "abstract_kind": {
+            "field": "abstract_kind",
+            "negated": false,
+            "span": [28, 28],
+            "toggleable": true,
+            "reason": null,
+            "blocking_spans": [],
+            "values": ["none", "official", "openalex"]
           }
         },
         "word_forms": [],
@@ -470,14 +490,14 @@
       "q": "status:accepted",
       "mode": "native",
       "created": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record_id": "Rec000000001",
         "page": "/record/Rec000000001"
       },
       "stored": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record": {
@@ -488,10 +508,10 @@
           "canonical": "(track:(datasets_benchmarks OR main OR position) AND status:accepted)",
           "canonical_hash": "a46521cdcdceb344c1126bff02be516b75286776f63dd00fbd839643c2d2cbfb",
           "identification_query": "",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "tokenizer_version": "3",
           "query_version": "2",
-          "schema_version": "3",
+          "schema_version": "4",
           "ranking_params": {
             "bm25": {
               "b": 0.75,
@@ -559,10 +579,11 @@
           "identified_total": 715,
           "unclassified_total": 152
         },
-        "replay": null
+        "replay": null,
+        "openalex_abstracts": 0
       },
       "replayed": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record": {
@@ -573,10 +594,10 @@
           "canonical": "(track:(datasets_benchmarks OR main OR position) AND status:accepted)",
           "canonical_hash": "a46521cdcdceb344c1126bff02be516b75286776f63dd00fbd839643c2d2cbfb",
           "identification_query": "",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "tokenizer_version": "3",
           "query_version": "2",
-          "schema_version": "3",
+          "schema_version": "4",
           "ranking_params": {
             "bm25": {
               "b": 0.75,
@@ -646,7 +667,7 @@
         },
         "replay": {
           "status": "reproduced",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "query_version": "2",
           "total": 42,
           "excluded": {
@@ -677,10 +698,11 @@
           "membership_identical": true,
           "identified_total": 715,
           "unclassified_total": 152
-        }
+        },
+        "openalex_abstracts": 0
       },
       "parse_canonical": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -768,13 +790,22 @@
             "reason": null,
             "blocking_spans": [],
             "values": ["accepted"]
+          },
+          "abstract_kind": {
+            "field": "abstract_kind",
+            "negated": false,
+            "span": [69, 69],
+            "toggleable": true,
+            "reason": null,
+            "blocking_spans": [],
+            "values": ["none", "official", "openalex"]
           }
         },
         "word_forms": [],
         "word_forms_skipped": []
       },
       "parse_identification": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -803,14 +834,14 @@
       "q": "status:accepted NOT trust",
       "mode": "native",
       "created": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record_id": "Rec000000002",
         "page": "/record/Rec000000002"
       },
       "stored": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record": {
@@ -821,10 +852,10 @@
           "canonical": "(NOT trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
           "canonical_hash": "2c8b8fb709a5d83f26baa3fc48f89d45ccd25aae61a66c69844b51a62d3bde85",
           "identification_query": "NOT trust",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "tokenizer_version": "3",
           "query_version": "2",
-          "schema_version": "3",
+          "schema_version": "4",
           "ranking_params": {
             "bm25": {
               "b": 0.75,
@@ -892,10 +923,11 @@
           "identified_total": 478,
           "unclassified_total": 103
         },
-        "replay": null
+        "replay": null,
+        "openalex_abstracts": 0
       },
       "replayed": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record": {
@@ -906,10 +938,10 @@
           "canonical": "(NOT trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
           "canonical_hash": "2c8b8fb709a5d83f26baa3fc48f89d45ccd25aae61a66c69844b51a62d3bde85",
           "identification_query": "NOT trust",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "tokenizer_version": "3",
           "query_version": "2",
-          "schema_version": "3",
+          "schema_version": "4",
           "ranking_params": {
             "bm25": {
               "b": 0.75,
@@ -979,7 +1011,7 @@
         },
         "replay": {
           "status": "reproduced",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "query_version": "2",
           "total": 29,
           "excluded": {
@@ -1010,10 +1042,11 @@
           "membership_identical": true,
           "identified_total": 478,
           "unclassified_total": 103
-        }
+        },
+        "openalex_abstracts": 0
       },
       "parse_canonical": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -1121,13 +1154,22 @@
             "reason": null,
             "blocking_spans": [],
             "values": ["accepted"]
+          },
+          "abstract_kind": {
+            "field": "abstract_kind",
+            "negated": false,
+            "span": [83, 83],
+            "toggleable": true,
+            "reason": null,
+            "blocking_spans": [],
+            "values": ["none", "official", "openalex"]
           }
         },
         "word_forms": [],
         "word_forms_skipped": []
       },
       "parse_identification": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -1156,14 +1198,14 @@
       "q": "trust AND track:(main OR workshop)",
       "mode": "native",
       "created": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record_id": "Rec000000003",
         "page": "/record/Rec000000003"
       },
       "stored": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record": {
@@ -1174,10 +1216,10 @@
           "canonical": "(trust AND track:(main OR workshop) AND status:accepted)",
           "canonical_hash": "95a10ab58b7c8d71158e9bb9f32089ce18f914bc67742820e1b21ff7409c281e",
           "identification_query": "(trust AND track:(main OR workshop))",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "tokenizer_version": "3",
           "query_version": "2",
-          "schema_version": "3",
+          "schema_version": "4",
           "ranking_params": {
             "bm25": {
               "b": 0.75,
@@ -1240,10 +1282,11 @@
           "identified_total": 59,
           "unclassified_total": 11
         },
-        "replay": null
+        "replay": null,
+        "openalex_abstracts": 0
       },
       "replayed": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record": {
@@ -1254,10 +1297,10 @@
           "canonical": "(trust AND track:(main OR workshop) AND status:accepted)",
           "canonical_hash": "95a10ab58b7c8d71158e9bb9f32089ce18f914bc67742820e1b21ff7409c281e",
           "identification_query": "(trust AND track:(main OR workshop))",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "tokenizer_version": "3",
           "query_version": "2",
-          "schema_version": "3",
+          "schema_version": "4",
           "ranking_params": {
             "bm25": {
               "b": 0.75,
@@ -1322,7 +1365,7 @@
         },
         "replay": {
           "status": "reproduced",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "query_version": "2",
           "total": 10,
           "excluded": {
@@ -1348,10 +1391,11 @@
           "membership_identical": true,
           "identified_total": 59,
           "unclassified_total": 11
-        }
+        },
+        "openalex_abstracts": 0
       },
       "parse_canonical": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -1451,13 +1495,22 @@
             "reason": null,
             "blocking_spans": [],
             "values": ["accepted"]
+          },
+          "abstract_kind": {
+            "field": "abstract_kind",
+            "negated": false,
+            "span": [56, 56],
+            "toggleable": true,
+            "reason": null,
+            "blocking_spans": [],
+            "values": ["none", "official", "openalex"]
           }
         },
         "word_forms": [],
         "word_forms_skipped": []
       },
       "parse_identification": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -1551,6 +1604,15 @@
             "reason": null,
             "blocking_spans": [],
             "values": ["accepted"]
+          },
+          "abstract_kind": {
+            "field": "abstract_kind",
+            "negated": false,
+            "span": [36, 36],
+            "toggleable": true,
+            "reason": null,
+            "blocking_spans": [],
+            "values": ["none", "official", "openalex"]
           }
         },
         "word_forms": [],
@@ -1561,14 +1623,14 @@
       "q": "source:ICLR \"large language\" | trust",
       "mode": "scholar",
       "created": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record_id": "Rec000000004",
         "page": "/record/Rec000000004"
       },
       "stored": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record": {
@@ -1579,10 +1641,10 @@
           "canonical": "(((\"large language\" AND venue:ICLR) OR trust) AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
           "canonical_hash": "5f47dc5c37c5b998c2dd576b12617ebd35a3040478be01450ac330a2785e354d",
           "identification_query": "((\"large language\" AND venue:ICLR) OR trust)",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "tokenizer_version": "3",
           "query_version": "2",
-          "schema_version": "3",
+          "schema_version": "4",
           "ranking_params": {
             "bm25": {
               "b": 0.75,
@@ -1670,10 +1732,11 @@
           "identified_total": 239,
           "unclassified_total": 50
         },
-        "replay": null
+        "replay": null,
+        "openalex_abstracts": 0
       },
       "replayed": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "record": {
@@ -1684,10 +1747,10 @@
           "canonical": "(((\"large language\" AND venue:ICLR) OR trust) AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
           "canonical_hash": "5f47dc5c37c5b998c2dd576b12617ebd35a3040478be01450ac330a2785e354d",
           "identification_query": "((\"large language\" AND venue:ICLR) OR trust)",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "tokenizer_version": "3",
           "query_version": "2",
-          "schema_version": "3",
+          "schema_version": "4",
           "ranking_params": {
             "bm25": {
               "b": 0.75,
@@ -1777,7 +1840,7 @@
         },
         "replay": {
           "status": "reproduced",
-          "index_version": "fb3fc0aab48e",
+          "index_version": "f1a54bcc9508",
           "query_version": "2",
           "total": 13,
           "excluded": {
@@ -1808,10 +1871,11 @@
           "membership_identical": true,
           "identified_total": 239,
           "unclassified_total": 50
-        }
+        },
+        "openalex_abstracts": 0
       },
       "parse_canonical": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -1985,13 +2049,22 @@
             "reason": null,
             "blocking_spans": [],
             "values": ["accepted"]
+          },
+          "abstract_kind": {
+            "field": "abstract_kind",
+            "negated": false,
+            "span": [118, 118],
+            "toggleable": true,
+            "reason": null,
+            "blocking_spans": [],
+            "values": ["none", "official", "openalex"]
           }
         },
         "word_forms": [],
         "word_forms_skipped": []
       },
       "parse_identification": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -2147,6 +2220,15 @@
             "reason": null,
             "blocking_spans": [],
             "values": ["accepted"]
+          },
+          "abstract_kind": {
+            "field": "abstract_kind",
+            "negated": false,
+            "span": [44, 44],
+            "toggleable": true,
+            "reason": null,
+            "blocking_spans": [],
+            "values": ["none", "official", "openalex"]
           }
         },
         "word_forms": [],
@@ -2159,7 +2241,7 @@
       "q": "trust*",
       "mode": "native",
       "search": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "query": {
@@ -2226,6 +2308,10 @@
             "rejected": 28,
             "unknown": 34,
             "withdrawn": 31
+          },
+          "abstract_kind": {
+            "none": 2,
+            "official": 28
           }
         },
         "groups": {
@@ -2262,12 +2348,13 @@
             "abstract_source": null,
             "abstract_withheld": false,
             "twins": [],
-            "abstract_note": null
+            "abstract_note": null,
+            "abstract_kind": "official"
           }
         ]
       },
       "parse": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -2351,6 +2438,15 @@
             "reason": null,
             "blocking_spans": [],
             "values": ["accepted"]
+          },
+          "abstract_kind": {
+            "field": "abstract_kind",
+            "negated": false,
+            "span": [6, 6],
+            "toggleable": true,
+            "reason": null,
+            "blocking_spans": [],
+            "values": ["none", "official", "openalex"]
           }
         },
         "word_forms": [],
@@ -2361,7 +2457,7 @@
       "q": "trust* AND status:(accepted OR rejected OR withdrawn)",
       "mode": "native",
       "search": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "query": {
@@ -2425,6 +2521,10 @@
             "rejected": 28,
             "unknown": 34,
             "withdrawn": 31
+          },
+          "abstract_kind": {
+            "none": 3,
+            "official": 86
           }
         },
         "groups": {
@@ -2461,12 +2561,13 @@
             "abstract_source": null,
             "abstract_withheld": false,
             "twins": [],
-            "abstract_note": null
+            "abstract_note": null,
+            "abstract_kind": "official"
           }
         ]
       },
       "parse": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -2562,6 +2663,15 @@
             "reason": null,
             "blocking_spans": [],
             "values": ["accepted", "rejected", "withdrawn"]
+          },
+          "abstract_kind": {
+            "field": "abstract_kind",
+            "negated": false,
+            "span": [53, 53],
+            "toggleable": true,
+            "reason": null,
+            "blocking_spans": [],
+            "values": ["none", "official", "openalex"]
           }
         },
         "word_forms": [],
@@ -2572,7 +2682,7 @@
       "q": "trust* NOT status:rejected",
       "mode": "native",
       "search": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "query": {
@@ -2636,6 +2746,10 @@
             "rejected": 28,
             "unknown": 34,
             "withdrawn": 31
+          },
+          "abstract_kind": {
+            "none": 4,
+            "official": 124
           }
         },
         "groups": {
@@ -2676,12 +2790,13 @@
             "abstract_source": null,
             "abstract_withheld": false,
             "twins": [],
-            "abstract_note": null
+            "abstract_note": null,
+            "abstract_kind": "official"
           }
         ]
       },
       "parse": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -2785,6 +2900,15 @@
             "reason": "negated",
             "blocking_spans": [],
             "values": ["rejected"]
+          },
+          "abstract_kind": {
+            "field": "abstract_kind",
+            "negated": false,
+            "span": [26, 26],
+            "toggleable": true,
+            "reason": null,
+            "blocking_spans": [],
+            "values": ["none", "official", "openalex"]
           }
         },
         "word_forms": [],
@@ -2795,7 +2919,7 @@
       "q": "trust* AND track:(main OR workshop)",
       "mode": "native",
       "search": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "query": {
@@ -2856,6 +2980,9 @@
             "rejected": 25,
             "unknown": 23,
             "withdrawn": 27
+          },
+          "abstract_kind": {
+            "official": 20
           }
         },
         "groups": {
@@ -2892,12 +3019,13 @@
             "abstract_source": null,
             "abstract_withheld": false,
             "twins": [],
-            "abstract_note": null
+            "abstract_note": null,
+            "abstract_kind": "official"
           }
         ]
       },
       "parse": {
-        "index_version": "fb3fc0aab48e",
+        "index_version": "f1a54bcc9508",
         "tokenizer_version": "3",
         "query_version": "2",
         "mode": "native",
@@ -2993,10 +3121,497 @@
             "reason": null,
             "blocking_spans": [],
             "values": ["accepted"]
+          },
+          "abstract_kind": {
+            "field": "abstract_kind",
+            "negated": false,
+            "span": [35, 35],
+            "toggleable": true,
+            "reason": null,
+            "blocking_spans": [],
+            "values": ["none", "official", "openalex"]
           }
         },
         "word_forms": [],
         "word_forms_skipped": []
+      }
+    }
+  },
+  "drift": {
+    "q": "trust",
+    "mode": "native",
+    "created": {
+      "index_version": "fdfdb61ad11d",
+      "tokenizer_version": "3",
+      "query_version": "2",
+      "record_id": "RecDrift0001",
+      "page": "/record/RecDrift0001"
+    },
+    "stored": {
+      "index_version": "ab3972d6f469",
+      "tokenizer_version": "3",
+      "query_version": "2",
+      "record": {
+        "body_version": 2,
+        "record_id": "RecDrift0001",
+        "input": "trust",
+        "mode": "native",
+        "canonical": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+        "canonical_hash": "8d22ca9e97f0895e2fae66a74344dbbaade5b8cbd66d3f604e2e6bb425da8bbe",
+        "identification_query": "trust",
+        "index_version": "fdfdb61ad11d",
+        "tokenizer_version": "3",
+        "query_version": "2",
+        "schema_version": "4",
+        "ranking_params": {
+          "bm25": {
+            "b": 0.75,
+            "k1": 1.2
+          },
+          "field_weights": {
+            "abstract": 1.0,
+            "title": 2.0
+          },
+          "sorts": {
+            "relevance": "-score,id",
+            "title": "casefold(nfkc(display title)),id",
+            "year_asc": "year,id",
+            "year_desc": "-year,id"
+          }
+        },
+        "snapshot_hash": "541079e15c10348ab17197060079cd3b04d8054108192325e49ab2acbae32148",
+        "crawl_dates": {
+          "*": {
+            "from": "2026-09-26T00:00:00Z",
+            "to": "2026-09-26T00:00:00Z"
+          },
+          "ris": {
+            "from": "2026-09-26T00:00:00Z",
+            "to": "2026-09-26T00:00:00Z"
+          }
+        },
+        "searched_at": "2026-09-25T14:03:11Z",
+        "total": 5,
+        "excluded": {
+          "total": 0,
+          "track": {
+            "unknown": 0
+          },
+          "status": {
+            "unknown": 0
+          }
+        },
+        "expansions": {},
+        "translations": [],
+        "warnings": [],
+        "ids": null,
+        "ids_hash": "857a7d9bef9a4c3d76994400d0140f0ed7891f5b2681e61ac8ac64d939bf0117",
+        "dedup": {
+          "merged": 0,
+          "ambiguous_not_merged": 0,
+          "track_not_merged": 0,
+          "venue_year_not_merged": 0
+        },
+        "semantic_version": null,
+        "sources": ["ris"],
+        "identification_citable": false,
+        "crawl_dates_kind": {
+          "*": "scholar_query_dates",
+          "ris": "scholar_query_dates"
+        },
+        "identified_total": 5,
+        "unclassified_total": 0
+      },
+      "replay": null,
+      "openalex_abstracts": null
+    },
+    "replayed": {
+      "index_version": "ab3972d6f469",
+      "tokenizer_version": "3",
+      "query_version": "2",
+      "record": {
+        "body_version": 2,
+        "record_id": "RecDrift0001",
+        "input": "trust",
+        "mode": "native",
+        "canonical": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+        "canonical_hash": "8d22ca9e97f0895e2fae66a74344dbbaade5b8cbd66d3f604e2e6bb425da8bbe",
+        "identification_query": "trust",
+        "index_version": "fdfdb61ad11d",
+        "tokenizer_version": "3",
+        "query_version": "2",
+        "schema_version": "4",
+        "ranking_params": {
+          "bm25": {
+            "b": 0.75,
+            "k1": 1.2
+          },
+          "field_weights": {
+            "abstract": 1.0,
+            "title": 2.0
+          },
+          "sorts": {
+            "relevance": "-score,id",
+            "title": "casefold(nfkc(display title)),id",
+            "year_asc": "year,id",
+            "year_desc": "-year,id"
+          }
+        },
+        "snapshot_hash": "541079e15c10348ab17197060079cd3b04d8054108192325e49ab2acbae32148",
+        "crawl_dates": {
+          "*": {
+            "from": "2026-09-26T00:00:00Z",
+            "to": "2026-09-26T00:00:00Z"
+          },
+          "ris": {
+            "from": "2026-09-26T00:00:00Z",
+            "to": "2026-09-26T00:00:00Z"
+          }
+        },
+        "searched_at": "2026-09-25T14:03:11Z",
+        "total": 5,
+        "excluded": {
+          "total": 0,
+          "track": {
+            "unknown": 0
+          },
+          "status": {
+            "unknown": 0
+          }
+        },
+        "expansions": {},
+        "translations": [],
+        "warnings": [],
+        "ids": null,
+        "ids_hash": "857a7d9bef9a4c3d76994400d0140f0ed7891f5b2681e61ac8ac64d939bf0117",
+        "dedup": {
+          "merged": 0,
+          "ambiguous_not_merged": 0,
+          "track_not_merged": 0,
+          "venue_year_not_merged": 0
+        },
+        "semantic_version": null,
+        "sources": ["ris"],
+        "identification_citable": false,
+        "crawl_dates_kind": {
+          "*": "scholar_query_dates",
+          "ris": "scholar_query_dates"
+        },
+        "identified_total": 5,
+        "unclassified_total": 0
+      },
+      "replay": {
+        "status": "drifted",
+        "index_version": "ab3972d6f469",
+        "query_version": "2",
+        "total": 1,
+        "excluded": {
+          "total": 2,
+          "track": {
+            "iaai": 1,
+            "unknown": 0
+          },
+          "status": {
+            "withdrawn": 1,
+            "unknown": 0
+          }
+        },
+        "ids_hash": "02c467504d98065c44d52a2043444d172821f7fa9f3bd08cc1902bc7c1719043",
+        "ids_match": false,
+        "excluded_match": false,
+        "refused": null,
+        "verified_clauses": 0,
+        "changed": [
+          {
+            "input": "snapshot_hash",
+            "kind": "corpus",
+            "recorded": "541079e15c10348ab17197060079cd3b04d8054108192325e49ab2acbae32148",
+            "current": "281f19b0ce911eca0381e21003b9cabc86ad6d3e026c10a64b7a348a49a30d42"
+          }
+        ],
+        "added_total": 0,
+        "removed_total": 4,
+        "membership_identical": false,
+        "identified_total": 3,
+        "unclassified_total": 0
+      },
+      "openalex_abstracts": null
+    },
+    "parse_canonical": {
+      "index_version": "ab3972d6f469",
+      "tokenizer_version": "3",
+      "query_version": "2",
+      "mode": "native",
+      "ast": {
+        "span": [0, 79],
+        "kind": "and",
+        "children": [
+          {
+            "span": [1, 6],
+            "kind": "term",
+            "token": "trust",
+            "field": null
+          },
+          {
+            "span": [11, 58],
+            "kind": "filter",
+            "field": "track",
+            "values": ["datasets_benchmarks", "main", "position"]
+          },
+          {
+            "span": [63, 78],
+            "kind": "filter",
+            "field": "status",
+            "values": ["accepted"]
+          }
+        ]
+      },
+      "effective_ast": {
+        "span": [1, 78],
+        "kind": "and",
+        "children": [
+          {
+            "span": [1, 6],
+            "kind": "term",
+            "token": "trust",
+            "field": null
+          },
+          {
+            "span": [11, 58],
+            "kind": "filter",
+            "field": "track",
+            "values": ["datasets_benchmarks", "main", "position"]
+          },
+          {
+            "span": [63, 78],
+            "kind": "filter",
+            "field": "status",
+            "values": ["accepted"]
+          }
+        ]
+      },
+      "canonical": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+      "canonical_hash": "8d22ca9e97f0895e2fae66a74344dbbaade5b8cbd66d3f604e2e6bb425da8bbe",
+      "identification_query": "trust",
+      "defaults": ["track", "status"],
+      "warnings": [],
+      "errors": [],
+      "translations": [],
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [79, 79],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["AAAI", "AIES", "FAccT", "IASEAI", "ICLR", "ICML", "NeurIPS"]
+        },
+        "year": {
+          "field": "year",
+          "negated": false,
+          "span": [79, 79],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "ranges": [
+            {
+              "lo": 1000,
+              "hi": 9999
+            }
+          ]
+        },
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [11, 58],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["datasets_benchmarks", "main", "position"]
+        },
+        "status": {
+          "field": "status",
+          "negated": false,
+          "span": [63, 78],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["accepted"]
+        },
+        "abstract_kind": {
+          "field": "abstract_kind",
+          "negated": false,
+          "span": [79, 79],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["none", "official", "openalex"]
+        }
+      },
+      "word_forms": [],
+      "word_forms_skipped": []
+    },
+    "parse_identification": {
+      "index_version": "ab3972d6f469",
+      "tokenizer_version": "3",
+      "query_version": "2",
+      "mode": "native",
+      "ast": {
+        "span": [0, 5],
+        "kind": "term",
+        "token": "trust",
+        "field": null
+      },
+      "effective_ast": {
+        "span": [0, 5],
+        "kind": "and",
+        "children": [
+          {
+            "span": [0, 5],
+            "kind": "term",
+            "token": "trust",
+            "field": null
+          },
+          {
+            "span": [5, 5],
+            "kind": "filter",
+            "field": "track",
+            "values": ["datasets_benchmarks", "main", "position"]
+          },
+          {
+            "span": [5, 5],
+            "kind": "filter",
+            "field": "status",
+            "values": ["accepted"]
+          }
+        ]
+      },
+      "canonical": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+      "canonical_hash": "8d22ca9e97f0895e2fae66a74344dbbaade5b8cbd66d3f604e2e6bb425da8bbe",
+      "identification_query": "trust",
+      "defaults": ["track", "status"],
+      "warnings": [],
+      "errors": [],
+      "translations": [],
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["AAAI", "AIES", "FAccT", "IASEAI", "ICLR", "ICML", "NeurIPS"]
+        },
+        "year": {
+          "field": "year",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "ranges": [
+            {
+              "lo": 1000,
+              "hi": 9999
+            }
+          ]
+        },
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["datasets_benchmarks", "main", "position"]
+        },
+        "status": {
+          "field": "status",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["accepted"]
+        },
+        "abstract_kind": {
+          "field": "abstract_kind",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "blocking_spans": [],
+          "values": ["none", "official", "openalex"]
+        }
+      },
+      "word_forms": [],
+      "word_forms_skipped": []
+    },
+    "diff": {
+      "index_version": "ab3972d6f469",
+      "tokenizer_version": "3",
+      "query_version": "2",
+      "record_id": "RecDrift0001",
+      "status": "drifted",
+      "recorded_index_version": "fdfdb61ad11d",
+      "refused": null,
+      "verified_clauses": 0,
+      "changed": [
+        {
+          "input": "snapshot_hash",
+          "kind": "corpus",
+          "recorded": "541079e15c10348ab17197060079cd3b04d8054108192325e49ab2acbae32148",
+          "current": "281f19b0ce911eca0381e21003b9cabc86ad6d3e026c10a64b7a348a49a30d42"
+        }
+      ],
+      "offset": 0,
+      "limit": 50,
+      "added_total": 0,
+      "removed_total": 4,
+      "added": [],
+      "removed": [
+        {
+          "id": "op:aaai:2024:Fx0001",
+          "title": "Trust in deployed models",
+          "track": "iaai",
+          "status": "accepted",
+          "cause": "track_changed",
+          "failed_filter": "track"
+        },
+        {
+          "id": "op:aaai:2024:Fx0002",
+          "title": null,
+          "track": null,
+          "status": null,
+          "cause": "not_in_index",
+          "failed_filter": null
+        },
+        {
+          "id": "op:aaai:2024:Fx0003",
+          "title": "Reliance in teams",
+          "track": "main",
+          "status": "accepted",
+          "cause": "still_eligible",
+          "failed_filter": null
+        },
+        {
+          "id": "op:aaai:2024:Fx0005",
+          "title": "Trust signals, withdrawn",
+          "track": "main",
+          "status": "withdrawn",
+          "cause": "status_changed",
+          "failed_filter": "status"
+        }
+      ],
+      "membership_identical": false,
+      "removed_causes": {
+        "track_changed": 1,
+        "status_changed": 1,
+        "filter_changed": 0,
+        "not_in_index": 1,
+        "still_eligible": 1
       }
     }
   }

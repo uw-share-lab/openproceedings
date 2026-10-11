@@ -78,6 +78,12 @@ describe("spec 05 §Components 8, verbatim (AC#1)", () => {
           values: ["datasets_benchmarks", "main", "position"],
         },
         status: { ...none, field: "status", span: at(clauses.status), values: ["accepted"] },
+        abstract_kind: {
+          ...none,
+          field: "abstract_kind",
+          span: [end, end],
+          values: ["none", "official", "openalex"],
+        },
       },
     };
   }
@@ -256,6 +262,51 @@ describe("the methods text for the API's own records (every number is the record
     });
   });
 
+  it("names an abstract_kind: clause the reader wrote as a limit, like the other filters", () => {
+    const { record, canonical, identification } = citable(RECORDS.limits);
+    const q =
+      "(trust AND abstract_kind:official AND track:(datasets_benchmarks OR main OR position) AND status:accepted)";
+    record.canonical = q;
+    const at = (text: string): [number, number] => [q.indexOf(text), q.indexOf(text) + text.length];
+    const end = q.length;
+    const none = { negated: false, toggleable: true, reason: null, blocking_spans: [] };
+    const track = "track:(datasets_benchmarks OR main OR position)";
+    const parse: ParseResponse = {
+      ...canonical,
+      canonical: q,
+      query_version: record.query_version,
+      defaults: ["track", "status"],
+      filters: {
+        venue: { ...none, field: "venue", span: [end, end], values: ["ICLR", "ICML", "NeurIPS"] },
+        year: { ...none, field: "year", span: [end, end], ranges: [{ lo: 1000, hi: 9999 }] },
+        track: {
+          ...none,
+          field: "track",
+          span: at(track),
+          values: ["datasets_benchmarks", "main", "position"],
+        },
+        status: { ...none, field: "status", span: at("status:accepted"), values: ["accepted"] },
+        abstract_kind: {
+          ...none,
+          field: "abstract_kind",
+          span: at("abstract_kind:official"),
+          values: ["official"],
+        },
+      },
+    };
+    expect(clausesOf(record, parse)).toEqual({
+      defaults: [track, "status:accepted"],
+      limits: ["abstract_kind:official"],
+    });
+    const text = methodsText({
+      record,
+      parseCanonical: parse,
+      parseIdentification: identification,
+      url: URL,
+    });
+    expect(text).toContain("within the limits it states (`abstract_kind:official`).");
+  });
+
   it("uses singular words for a count of one", () => {
     const { record: base, canonical, identification } = citable(RECORDS.limits);
     const record = { ...base, total: 1, unclassified_total: 1 };
@@ -317,5 +368,21 @@ describe("the crawl window and the citability caution", () => {
     );
     r.identification_citable = true;
     expect(citabilityCaution(r)).toBeNull();
+  });
+});
+
+describe("how many of the record's results rest on OpenAlex text (gate C rounds 1 and 2)", () => {
+  it("adds one sentence when some results' abstracts are OpenAlex's, and none otherwise", () => {
+    const c = RECORDS.limits;
+    const { record, canonical, identification } = citable(c);
+    const input = { record, parseCanonical: canonical, parseIdentification: identification, url: URL };
+    const plain = methodsText(input);
+    const records = `${record.total.toLocaleString("en-US")} ${record.total === 1 ? "record" : "records"}`;
+    const sentence = `12 of the ${records} have abstracts supplied by OpenAlex (\`abstract_kind:openalex\`), not by the venue.`;
+    const withCount = methodsText({ ...input, openalex: 12 });
+    expect(withCount).toContain(` ${sentence} Cross-source duplicates were merged`);
+    expect(withCount.replace(`${sentence} `, "")).toBe(plain);
+    expect(methodsText({ ...input, openalex: 0 })).toBe(plain);
+    expect(methodsText({ ...input, openalex: null })).toBe(plain);
   });
 });

@@ -12,8 +12,8 @@
  */
 const TRACK_SHORT: Readonly<Record<string, { short: string; long: string }>> = {
   datasets_benchmarks: { short: "D&B", long: "D&B, datasets and benchmarks" },
-  iaai: { short: "IAAI", long: "IAAI, Innovative Applications of AI" },
-  eaai: { short: "EAAI", long: "EAAI, Educational Advances in AI" },
+  iaai: { short: "IAAI", long: "IAAI, Innovative Applications of Artificial Intelligence" },
+  eaai: { short: "EAAI", long: "EAAI, Educational Advances in Artificial Intelligence" },
 };
 
 /** A track as the sidebar and badges show it: its short form, and its accessible name. */
@@ -34,12 +34,15 @@ export function PaperBadges({
   track,
   presentation,
   status,
+  expandTrack = false,
 }: {
   venue: string;
   year: number;
   track: string;
   presentation: string | null;
   status: string;
+  /** Print a track's expansion beside its badge as visible text (the paper page); a hit keeps the compact badge. */
+  expandTrack?: boolean;
 }) {
   const t = trackDisplay(track);
   return (
@@ -49,6 +52,8 @@ export function PaperBadges({
       <li className={track === "workshop" ? `${badge} border-track-workshop text-track-workshop` : badge}>
         {t.short === t.long ? (
           t.short
+        ) : expandTrack ? (
+          `${t.short} (${t.long.slice(t.short.length + 2)})`
         ) : (
           <>
             <span aria-hidden="true" title={t.long}>

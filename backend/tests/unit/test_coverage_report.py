@@ -148,8 +148,8 @@ def test_the_header_names_everything_the_numbers_depend_on() -> None:
 def test_per_cell_columns_missing_abstracts_and_statuses_indexed() -> None:
     line = row(report(), "ICLR", 2013, "main")
     # one title-only record, no unknown track; ICLR on OpenReview holds every status (decision-012)
-    assert [c.strip() for c in line.strip("|").split("|")][-4:] == [
-        "1", "0", "0", "accepted, rejected, withdrawn, desk_rejected, unknown"]  # fmt: skip
+    assert [c.strip() for c in line.strip("|").split("|")][-6:] == [
+        "1", "23", "0", "0", "0", "accepted, rejected, withdrawn, desk_rejected, unknown"]  # fmt: skip
 
 
 def test_listings_that_skipped_entries_are_listed_with_their_reasons() -> None:
@@ -307,8 +307,9 @@ def test_a_same_day_report_is_replaced_whole(
     assert (out / "2026-10-01-coverage.md").read_text().startswith("# Coverage report, 2026-10-01")
     logged = [json.loads(ln) for ln in capsys.readouterr().err.splitlines() if ln.startswith("{")]
     [written] = [e for e in logged if e.get("event") == "coverage_report_written"]  # one INFO line per run
-    # the real official table's gated cells (+26: NeurIPS 1987-2012, decision-047)
-    assert (written["replaced"], written["gated"]) == (True, 78)
+    # the real official table's gated cells (+26: NeurIPS 1987-2012, decision-047; +4: AAAI list counts, TASK-219,
+    # 2010 and 2014 ungated by gate C round 1)
+    assert (written["replaced"], written["gated"]) == (True, 82)
     assert sorted(p.name for p in out.iterdir()) == ["2026-10-01-coverage.md"]  # no temp file left
 
 
@@ -955,3 +956,84 @@ def test_the_scope_says_what_the_crossref_years_rest_on_and_that_aies_has_no_sec
     )
     assert "only 2022, 2025 and 2026 have one" in text
     assert "Crossref" not in "\n".join(_scope(cov, {"sources": {}}))
+
+
+def test_the_scope_says_how_many_abstracts_are_openalex_s_only_when_there_are_any() -> None:
+    assert "OpenAlex" not in report().split("## ", 1)[0]
+    manifest = manifest_of(corpus())
+    manifest["abstract_openalex"] = {"ICLR": {"2013": 2}}
+    manifest["abstract_openalex_by_track"] = {"ICLR": {"2013": {"main": 2}}}
+    text = render(breakdown(manifest, "x", official=TABLE), manifest, META, official=TABLE, causes={})
+    assert (
+        "- 2 abstracts (ICLR) are OpenAlex's, filled where no official source gives one, and labelled "
+        "`abstract_kind:openalex`." in text
+    )
+    assert "| 1 | 21 | 2 |" in row(text, "ICLR", 2013, "main")  # missing, official, OpenAlex
+
+
+def test_the_aaai_line_stops_saying_dblp_holds_no_abstract_once_openalex_filled_some() -> None:
+    from openproceedings.eval.coverage_report import _scope
+
+    doi = "https://doi.org/10.4230/dblp.xml.2026-10-03"
+    manifest = {
+        "sources": {"dblp": {"listings": [{"venue": "AAAI", "year": 1986, "listing": doi, "records": 7}]}}
+    }
+
+    def text(filled: int) -> str:
+        cov = {"venue_years": [{"venue": "AAAI", "year": 1986, "records": 7, "abstract_openalex": filled,
+                                "tracks": [{"track": "main"}]}]}  # fmt: skip
+        return "\n".join(_scope(cov, manifest))
+
+    assert "Its 7 records have no abstract (dblp holds none)." in text(0)
+    some = text(2)
+    assert (
+        "Its 7 records come with no abstract from dblp; where no official AAAI source gives one, OpenAlex's"
+        in some
+    )
+    assert "dblp holds none" not in some
+
+
+def test_the_aaai_line_counts_the_official_abstracts_from_archived_aaai_pages() -> None:
+    """TASK-232: the AAAI 1980-2008 line says, in plain words, how many records have AAAI's own abstract from an
+    archived aaai.org page (the build's `aaai_library` fill report), before OpenAlex's."""
+    from openproceedings.eval.coverage_report import _scope
+
+    doi = "https://doi.org/10.4230/dblp.xml.2026-10-03"
+    fills = {"pages": 6, "candidates": 7, "no_page": 1, "attached": 5, "replaced": 0, "official_won": 0,
+             "rows_unmatched": 0, "refused": {"title_mismatch": 1}}  # fmt: skip
+    manifest = {"sources": {"dblp": {"listings": [{"venue": "AAAI", "year": 1986, "listing": doi, "records": 7}]},
+                            "aaai_library": {"fills": [fills]}}}  # fmt: skip
+
+    def text(filled: int) -> str:
+        cov = {"venue_years": [{"venue": "AAAI", "year": 1986, "records": 7, "abstract_openalex": filled,
+                                "tracks": [{"track": "main"}]}]}  # fmt: skip
+        return "\n".join(_scope(cov, manifest))
+
+    none = text(0)
+    assert (
+        "Its 7 records come with no abstract from dblp; 5 have AAAI's own abstract, read from the Internet "
+        "Archive's copies of their old aaai.org paper pages (official; decision-051), and the rest have none."
+        in none
+    )
+    assert "dblp holds none" not in none
+    assert (
+        "5 have AAAI's own abstract, read from the Internet Archive's copies of their old aaai.org paper pages "
+        "(official; decision-051); where neither gives one, OpenAlex's is filled in (counted below)."
+        in text(1)
+    )
+
+
+def test_each_noted_ungated_cell_is_listed_with_its_note_and_citation() -> None:
+    """TASK-222: an ungated cell with a note (`official_counts.UNGATED_NOTES`) is listed under its own heading,
+    with the note and its citation, as `/coverage` serves them; without one the section says so."""
+    from openproceedings.official_counts import UNGATED_NOTES
+
+    papers = corpus() + [
+        paper(f"IA2026x{i:04d}", f"Archival paper {i}", venue="IASEAI", year=2026) for i in range(3)
+    ]
+    manifest = manifest_of(papers)
+    text = render(breakdown(manifest, "x", official=TABLE), manifest, META, official=TABLE)
+    note = UNGATED_NOTES[("IASEAI", 2026, "main")]
+    assert "## Ungated cells with a note" in text
+    assert f"- IASEAI 2026 main: {note.note} (source: {note.citation})" in text
+    assert "None: no ungated cell in this snapshot has a note." in report()

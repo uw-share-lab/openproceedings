@@ -9,7 +9,8 @@ does, across worker processes):
   id. That is a read-back of the positions Tantivy indexed, which phrases and NEAR rely on;
 - each term's document frequency in Tantivy's term dictionary equals the count of records holding it, in
   both directions (a term Tantivy dropped, split or invented shows up).
-Term frequencies within a document are not checked beyond what the phrase read-back implies.
+Term frequencies within a document are not checked beyond what the phrase read-back implies. On schema 4, each
+document's stored `abstract_kind` must also equal its record's (decision-049), in the same walk.
 
 The first difference raises `ParityError`. Unlike other errors, its message quotes the differing tokens:
 it is printed to the local terminal of the person checking their own index, and never logged
@@ -31,6 +32,7 @@ from typing import Any
 import tantivy
 
 from openproceedings.engine.index import (
+    SERVED_SCHEMAS,
     TEXT,
     IndexBuildError,
     _cpus,
@@ -73,11 +75,17 @@ def check_parity(
             f"index {manifest['index_version']} was built with tokenizer {manifest['tokenizer_version']}, which "
             f"this code no longer has (it serves {', '.join(SERVED_TOKENIZERS)})"
         )
+    form = SERVED_SCHEMAS.get(manifest["schema_version"])
+    if form is None:  # this code can't say what the index's documents hold
+        raise IndexBuildError(
+            f"index {manifest['index_version']} has schema {manifest['schema_version']}, which this code no longer "
+            f"serves (it serves {', '.join(SERVED_SCHEMAS)})"
+        )
     tantivy_index = open_index(index)
     searcher = tantivy_index.searcher()
     exact = analyzer()
     expected: Counter[tuple[str, str]] = Counter()
-    stored = _stored(searcher)  # in id order, like the snapshot
+    stored = _stored(searcher, form.abstract_kind)  # in id order, like the snapshot
     n = phrases = 0
     # a tampered snapshot may stop this loop with ParityError before iter_records reaches its own hash check
     # by the tokenizer the index was built with (an older served one, for an index a record pins)
@@ -91,6 +99,11 @@ def check_parity(
                 "the snapshot, not in the index" if missing == record.id else "the index, not in the snapshot"
             )
             raise ParityError(f"{missing}: in {side}")
+        if form.abstract_kind and doc["abstract_kind"] != record.abstract_kind:
+            raise ParityError(
+                f"{record.id}: the index stores abstract_kind {doc['abstract_kind']!r}, the record's is "
+                f"{record.abstract_kind!r}"
+            )
         for field in TEXT:
             _first_difference(record.id, field, exact.analyze(doc[field]), fields[field])
             if len(fields[field]) >= 2:
@@ -122,8 +135,9 @@ def terms(searcher: tantivy.Searcher, field: str) -> list[tuple[str, int]]:
     return list(searcher.terms_with_prefix(field, ""))
 
 
-def _stored(searcher: tantivy.Searcher) -> Iterator[tuple[str, dict[str, str]]]:
-    """Each document's id and stored text fields, one at a time in `ord` (= id) order."""
+def _stored(searcher: tantivy.Searcher, kind: bool = False) -> Iterator[tuple[str, dict[str, str]]]:
+    """Each document's id and stored text fields (and its `abstract_kind`, when `kind`: schema 4), one at a time in
+    `ord` (= id) order."""
     addresses = [
         a for _score, a in searcher.search(tantivy.Query.all_query(), max(1, searcher.num_docs)).hits
     ]
@@ -134,7 +148,10 @@ def _stored(searcher: tantivy.Searcher) -> Iterator[tuple[str, dict[str, str]]]:
         raise ParityError("a document has no ord: the index predates it; build it again")
     for _ord, address in sorted(zip(ords, addresses, strict=True), key=lambda pair: pair[0]):
         doc = searcher.doc(address).to_dict()
-        yield doc["id"][0], {f: doc[f][0] if doc.get(f) else "" for f in TEXT}
+        fields = {f: doc[f][0] if doc.get(f) else "" for f in TEXT}
+        if kind:
+            fields["abstract_kind"] = doc["abstract_kind"][0]
+        yield doc["id"][0], fields
 
 
 def _positions(

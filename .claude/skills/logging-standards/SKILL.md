@@ -87,14 +87,34 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   `withheld`: 1997/1998 abstracts withheld for a contact detail or because no field ends them, counted and never
   their text, TASK-207) for a year's ICML pages; one `dblp_year_mined` per year (records, `abstract_attached`,
   `abstract_missing`, the `site_*` counts, `abstract_control_characters`, `abstract_pdf_codes`, `abstract_short`),
-  and `dblp_ingested` (`years`, `requests`, `cached`). Never a line per item.
+  and `dblp_ingested` (`years`, `requests`, `cached`). The milestone C sources (decision-049, decision-051; gate C
+  round 1): **OpenAlex** `openalex_harvest_started` (`batches`, `listings`, `offline`) / `openalex_harvest_progress`
+  (`done`, `of`, `requests`, `ms`, at most every 30 s of the fetcher's clock) / `openalex_ingested` (`extract`,
+  `lookups`, `works`, `candidates`, `doi_unqueryable`, `requests`, `cached`, `ms`), INFO; the build's
+  `openalex_filled` (`extract`, `candidates`, `attached`, `refused` per reason, `not_queried`, `ms`), INFO; and one
+  `openalex_attention` WARNING, counts only, when the operator must re-run the crawl: at ingest `doi_unqueryable`
+  above 0, at the fill `not_queried` or `listing_stale` above 0. **AAAI library** `aaai_library_harvest_started`
+  (`pages`, `offline`) / `aaai_library_harvest_progress` (`done`, `of`, `requests`, `ms`, at most every 30 s) /
+  `aaai_library_ingested` (`pages`, `missing`, `redirect`, `redirected_same`, `requests`, `cached`, `ms`), INFO, with
+  `aaai_library_capture_redirected` INFO per redirect judged (`key`, `status`, `outcome`, `followed`: rare, the
+  archive's own quirk); the build's `aaai_library_filled` (every count, `title_near` included, `ms`), INFO; and one
+  `aaai_library_attention` WARNING (the `_ATTENTION` refusals and `title_near`) at ingest or fill. **The OpenAlex
+  audit** (`op eval openalex`): `openalex_audit_started` (`snapshot`, `sampled`, `offline`) and
+  `openalex_audit_written` (`snapshot`, `sampled`, `differs`, `title_attached`, `title_wrong`, `requests`, `cached`,
+  `replaced`, `ms`), INFO. None carries a title, an abstract, a key or a body. Never a line per item.
 - **Record-level anomalies are DEBUG** (`openreview_unknown_track`, `openreview_v1_unmapped`,
-  `openreview_v1_conflict`, `openreview_v1_twin_outcome`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `openreview_presentation_unmapped`, `openreview_title_control_characters` (forum and count, never the title), `neurips_record_invalid`,
+  `abstract_surrogate_refused` (the source and the record id or page row, never the text; TASK-229; each report
+  counts them as `abstract_surrogate` or `site_surrogate`), `openreview_v1_conflict`, `openreview_v1_twin_outcome`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `openreview_presentation_unmapped`, `openreview_title_control_characters` (forum and count, never the title), `neurips_record_invalid`,
   `pmlr_record_invalid`, `dblp_record_invalid` (the dblp key and the error type), and per cache entry `openreview_cache_incompatible`, a purged pre-projection entry,
   which a crawl reports as `cache_incompatible`). Each listing or crawl logs **at most one aggregate WARNING**
   with the counts
-  (`listing_attention`, `openreview_crawl_attention`); listing-level conditions (`listing_count_mismatch`,
-  `listing_see_also_unfollowed`) keep their own line.
+  (`listing_attention`, `openreview_crawl_attention`, `ris_import_attention`); listing-level conditions (`listing_count_mismatch`,
+  `listing_see_also_unfollowed`) keep their own line. **Abstracts refused for a lone surrogate** (TASK-229) are
+  visible at the default level that way: `abstract_surrogate` (`site_surrogate` for an official ICML or FAccT
+  page's rows) is always on the source's INFO end line (`pmlr_volume_mined`, `neurips_listing_mined`,
+  `ojs_journal_mined`, `dblp_year_mined`, `crossref_proceedings_mined`, `openreview_crawl_finished`, `ris_import`),
+  and, when above 0, it is in that source's aggregate WARNING and triggers it; `openalex_filled` carries the
+  per-reason `refused` counts (`abstract_surrogate` among them), never only their total.
 - **HTTP policy events are constants** (`http.PolicyEvents`: `crawl_retry_wait` / `openreview_retry_wait`
   WARNING, `*_budget_wait` INFO, `*_cache_expired` INFO), selected by the source's `Policy`, never built from
   a prefix; a test walks every crawler log call and refuses an f-string or concatenated event.
@@ -143,7 +163,9 @@ meanwhile. `verify_cpu_ms` is the verifying thread's CPU in those holds, and `ve
 time was debited after the fact (`RateLimit`; never wall time, which other requests' load inflates). A comparison (`POST /compare`, TASK-177) adds counts only: `ris_bytes`, `ris_records`, `ris_papers`, `kept`,
 `dropped`, `not_in_index`, `added`, `compare_ms` (wall time it held its slot), `compare_cost_ms` (what is
 debited: the file's arrival plus the work's CPU) and `compare_tokens`. Never a title, a venue string or a file
-name from the uploaded file (none is sent; a test greps every line for them). The served index's match table
+name from the uploaded file (none is sent; a test greps every line for them). A record's `/diff` adds its
+removal causes, counts only (TASK-227): `removed_track_changed`, `removed_status_changed`,
+`removed_filter_changed`, `removed_not_in_index`, `removed_still_eligible`. The served index's match table
 logs `match_index_built` (INFO: `index_version`, `records`, `ms`) once per served index, or `match_index_failed`
 (ERROR: `index_version`, `error`, `ms`, `reason` when there is one, `frames` for an unexpected type); each
 comparison refused after it is a state on the access line (`busy: match_index_failed`), not another ERROR. A facet worker

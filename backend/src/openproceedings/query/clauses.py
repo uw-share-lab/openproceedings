@@ -67,7 +67,7 @@ from openproceedings.query.canonical import canonicalize
 from openproceedings.query.defaults import DEFAULT_CLAUSES
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode, ParseResult, parse
-from openproceedings.vocab import STATUSES, TRACKS, VENUES
+from openproceedings.vocab import ABSTRACT_KINDS, STATUSES, TRACKS, VENUES
 
 ClauseReason = Literal[
     "multiple_clauses", "nested", "mixed_fields", "negated", "too_long", "too_deep", "unparsable_edit"
@@ -79,6 +79,7 @@ VOCABULARY: dict[FilterField, tuple[str, ...]] = {
     "venue": tuple(sorted(VENUES.values())),
     "track": tuple(sorted(TRACKS)),
     "status": tuple(sorted(STATUSES)),
+    "abstract_kind": tuple(sorted(ABSTRACT_KINDS)),
 }
 EVERY_YEAR = YearRange(lo=MIN_YEAR, hi=MAX_YEAR)
 # The most ranges a year action writes (the reducer refuses more: TOO_MANY_RANGES). Shared with the reducer
@@ -127,7 +128,7 @@ class _Clause(BaseModel):
 
 
 class ParsedClause(_Clause):
-    """A `venue`, `track` or `status` clause."""
+    """A `venue`, `track`, `status` or `abstract_kind` clause."""
 
     values: list[str] | None = Field(
         description="The values the clause admits, sorted: an applied default's, or every value for an "
@@ -162,6 +163,7 @@ class ParsedFilters(BaseModel):
     year: ParsedYearClause
     track: ParsedClause
     status: ParsedClause
+    abstract_kind: ParsedClause
 
 
 def _conjuncts(n: Node) -> list[Node]:

@@ -43,6 +43,8 @@ class DiagnosticCode(StrEnum):
     FIELD_RANGE_INVERTED = "FIELD_RANGE_INVERTED"
     FIELD_FILTER_SYNTAX = "FIELD_FILTER_SYNTAX"
     FIELD_COMPAT_ONLY = "FIELD_COMPAT_ONLY"
+    # a filter field the queried index's schema doesn't hold (a pinned older index; decision-049)
+    FIELD_NOT_INDEXED = "FIELD_NOT_INDEXED"
     # warnings (shown, never auto-fixed; they do not change what a query means)
     WARN_LOWERCASE_OPERATOR = "WARN_LOWERCASE_OPERATOR"
     WARN_MIXED_AND_OR = "WARN_MIXED_AND_OR"

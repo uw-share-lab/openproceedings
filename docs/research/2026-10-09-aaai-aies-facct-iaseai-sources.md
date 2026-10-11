@@ -10,7 +10,9 @@ It records:
 - the section-to-track decisions, including the sections left for the owner to review;
 - the dblp census behind `dblp_aaai.toml` (AAAI 1980–2008, 2026-10-10);
 - the ACM census behind `acm_proceedings.toml` (FAccT 2019–2026, AIES 2018–2023), the PMLR v81 row and the
-  facctconference.org pages (2026-10-10).
+  facctconference.org pages (2026-10-10);
+- the OpenAlex census behind `openalex_sources.toml` (auth, budget, DOI-route yield, the AAAI 1980–2008 source;
+  2026-10-10).
 
 Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 retry and the dblp check are
 2026-10-10, and say so).
@@ -59,7 +61,8 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
 - AAAI's `ListSets` is paginated (99 sets on its first page). It lists 386 sets, but only 383 distinct specs (see
   quirk 2).
 - **Pre-2010** is not on OJS. The aaai.org library pages redirect to WordPress pages with no abstracts, and
-  aaai.org's robots.txt sets `Crawl-delay: 43200`. Milestone B takes AAAI 1980–2008 from the pinned dblp release:
+  aaai.org's robots.txt (https://www.aaai.org/robots.txt, read during this research in 2026-10; the exact date was
+  not recorded) sets `Crawl-delay: 43200`. Milestone B takes AAAI 1980–2008 from the pinned dblp release:
   `conf/aaai/<year>` 1980–2026, with no AAAI in 1981, 1985, 1989, 1995, 2001, 2003 or 2009 (1995 was found by the
   2026-10-10 census; see §AAAI 1980–2008 (dblp)). Its main keys total 28,802,
   and its workshop keys (`2015ethics`, `2017w`, `2021safeai`, …) total 2,368. From 2014 dblp matches OJS closely:
@@ -163,8 +166,9 @@ The first part of this section is the 2026-10-09 session's record, kept as writt
   have abstracts; the other years have titles only (§FAccT site below has the census).
 - The ACM DL answers 403 (Cloudflare).
 - OpenAlex has abstracts for 100% of 2019–2024, 195 of 206 for 2025, and 293 of 317 for 2026 *(query not
-  recorded; unverified here; milestone C re-reads it)*. Its DOIs are sometimes truncated or duplicated, which is
-  the likely reason its 2026 count (317) differs from the 314 Crossref DOIs.
+  recorded)*. The milestone C census of 2026-10-10 (§OpenAlex) reproduced 195 of 206 for 2025. For 2026 it
+  found 290 abstracts among 314 works, the Crossref count, so the earlier 317 no longer stands. It found no
+  truncated DOI, and found one duplicated DOI per roughly 250.
 - ACM has been fully open access since 2026-01-01. No metadata or abstract licence was found.
 
 ### The ACM census (2026-10-10)
@@ -419,6 +423,251 @@ are keyed `conf/aaai/` and were read as AAAI `main`; since TASK-226 those of 199
   must match these records by title.
 - No inproceedings dated 1980–2009 crossrefs a missing proceedings key.
 
+## OpenAlex (milestone C census, 2026-10-10)
+
+`scripts/openalex_census.py` reads OpenAlex only through `crawl.openalex_fetcher`: the host is api.openalex.org
+only, it sends the repo's generic User-Agent, and it makes one request at a time, `openalex.MIN_INTERVAL` (1 s) apart.
+It ran **keyless**: no `OPENALEX_API_KEY`, no `mailto` and no contact address of any kind. The DOI batches and listings
+it fetched are the URLs `op ingest openalex` asks, so they sit in `<cache>/openalex/pages` for Task 15's crawl. The
+candidates come from `crawl.replay_all` over the existing caches, offline. The census wrote nothing but the cache. It
+ran 2026-10-10 21:09–21:16 UTC (387 s, of which about 290 s is the offline replay). Before it, a probe (7 requests,
+21:06 UTC) read the API root, the two source searches and four per-year counts through the same fetcher.
+**79 live requests in all**, with 26 cache hits in the census run.
+
+**Endpoints and queries** (all `https://api.openalex.org`):
+- `/` (the root, read live for its headers);
+- `/sources?search=AAAI&per-page=50` and `/sources?search=National%20Conference%20on%20Artificial%20Intelligence&per-page=50`;
+- `/sources?search=Fairness%2C%20Accountability%2C%20and%20Transparency&per-page=50`;
+- `/works?filter=primary_location.source.id:<S…>&group_by=publication_year` for S4306420577, S4210191458,
+  S4306400155 and S4306464630, plus S4210191458 with `publication_year:<2010`;
+- `/works?filter=primary_location.source.id:S4363608463,publication_year:2025|2026[,has_abstract:true]&group_by=publication_year`;
+- the DOI route: `/works?filter=doi:<d1>|…|<d50>&per-page=50&select=id,doi,title,publication_year,primary_location,abstract_inverted_index`
+  (`openalex.doi_url`);
+- the listing route: `/works?filter=primary_location.source.id:S4306420577,publication_year:<year>&per-page=200&select=…&cursor=*`
+  (`openalex.listing_url`).
+
+**Auth and budget.** A keyless request answers HTTP 200. Each answer carries `x-ratelimit-limit: 1000`,
+`x-ratelimit-remaining`, `x-ratelimit-credits-used`, `x-ratelimit-cost-usd`, `x-ratelimit-limit-usd: 0.1`,
+`x-ratelimit-remaining-usd`, `x-ratelimit-onetime-remaining: 0`, `x-ratelimit-prepaid-remaining-usd: 0` and
+`x-ratelimit-reset` (seconds to the daily reset; 10,235 at 21:09 UTC, so midnight UTC).
+- The keyless budget is **1,000 credits a day**, worth $0.10.
+- A `/works` filter page or a `group_by` costs 1 credit ($0.0001). The API root also costs 1 credit.
+- A `/sources?search=` costs 10 credits ($0.001).
+- The census and probe used 106 credits, leaving 894.
+- A full `op ingest openalex` is about 53 filter requests (30 DOI requests and 23 listing pages), about 5% of a
+  keyless day, so no key is needed. Pages already cached cost nothing.
+- A key, when there is one, goes as `Authorization: Bearer <key>` (`crawl.openalex_fetcher`), never in a URL. The
+  answers' `access-control-allow-headers` list `Authorization`.
+
+**Licence (read by the controller, 2026-10-10; not re-opened in review, which had no network).** The API itself
+states none: its root answer is `{"version", "documentation_url", "msg"}`, and a work answer carries only each paper's
+own `license` field, which is not a data licence. The two statements that matter are in OpenAlex's help pages:
+- OpenAlex's Pricing page on https://help.openalex.org/ (the page's exact URL was not recorded): the data is released
+  under CC0, with no "personal use only" carve-out. A pricing page is an odd home for a data licence; OpenAlex's own
+  terms or data-licence page, if it has one, was not read, and should be cited here when it is (TASK-236).
+- The work-object documentation (https://help.openalex.org/api-entities/works/work-object): OpenAlex does not ship
+  abstracts as plain text, "for legal reasons", and gives the inverted index to rebuild them from. Only "for legal
+  reasons" is quoted; the rest is paraphrased, since the wording held earlier read as a paraphrase in quote marks.
+
+So the data is CC0, but the abstract text is deliberately not shipped: the `abstract_inverted_index` is the form
+OpenAlex releases, and `openalex.rebuild` turns it back into text. The consequence for this project is that serving a
+rebuilt OpenAlex abstract carries **the same copyright posture as serving a publisher's abstract**, not a CC0 one.
+It rests on decision-018 (README §Abstracts on a public instance), the takedown list (a listed paper's abstract is
+withheld whatever its source, so an OpenAlex abstract too) and the pending copyright-office consultation (TASK-135).
+The `abstract_kind` label and filter let a review see and exclude these abstracts.
+
+### The DOI route (AIES 2018–2023, FAccT, two AAAI 2020 records)
+
+The candidates are the AAAI, AIES and FAccT records with no abstract after every official source: **5,808** in all.
+- 1,099 have a DOI:
+  - AAAI 2020: 2;
+  - AIES 2018–2023: 76, 89, 72, 113, 109, 98;
+  - FAccT 2019–2024: 41, 69, 82, 12, 153, 167;
+  - FAccT 2026: 16.
+  - FAccT 2025 has none, because every 2025 record has its official abstract.
+- 4,709 are DOI-less: AAAI 1980–2008, every held year.
+
+The 1,099 DOIs make 22 batches of 50, and no DOI is unqueryable.
+- **Halved batches.** Four batches matched 51 works, more than their 50-work page, because each held one duplicate.
+  `harvest` halved each one, so the route made 30 requests and kept 26 lookups.
+- **Every requested DOI has a work.** No DOI went unmatched (`doi_unmatched` 0).
+- **No truncated or foreign DOI.** No work came back whose DOI was not requested (`doi_mismatch` 0).
+- **Four DOIs returned twice:**
+  - 10.1145/3306618.3314250 (AIES 2019; W2963086506, W2796639635);
+  - 10.1145/3375627.3375862 (AIES 2020; W3005414547, W3101820912);
+  - 10.1145/3442188.3445881 (FAccT 2021; W3101729298, W4288076238);
+  - 10.1145/3442188.3445937 (FAccT 2021; W3134362900, W3122480037).
+  - The simulated fill attaches two of them once, because their texts are identical. It refuses the other two
+    (`doi_duplicate` 2): one AIES 2019 record and one FAccT 2021 record.
+  - TASK-231 (owner ruling 2026-10-10): the AIES 2019 pair carries one abstract, word for word, but W2963086506's
+    copy has PDF-extraction damage (lost fi/fl ligatures, hyphen splits), so a `[[duplicate_choice]]` row pins the
+    clean W2796639635. The FAccT 2021 pair genuinely differs (a preprint and the published text) and stays refused.
+    See §TASK-231 below.
+
+**Yield** (simulated: `openalex.fill` over the census's lookups and the table below):
+
+| Venue-year | Candidates (DOI) | Filled |
+|---|---|---|
+| AAAI 2020 | 2 | 2 |
+| AIES 2018 / 2019 / 2020 / 2021 / 2022 / 2023 | 76 / 89 / 72 / 113 / 109 / 98 | 76 / 88 / 72 / 113 / 109 / 98 |
+| FAccT 2019 / 2020 / 2021 / 2022 / 2023 / 2024 / 2026 | 41 / 69 / 82 / 12 / 153 / 167 / 16 | 41 / 69 / 81 / 12 / 153 / 167 / 16 |
+| **Total** | **1,099** | **1,097** |
+
+**FAccT 2025/2026 against the note's counts.** These close the *(unverified here)* marks of §FAccT. The census asked
+OpenAlex for every FAccT 2025 and 2026 DOI the corpus holds, not only the candidates' DOIs.
+- **2025:** 206 DOIs gave 206 works, and 195 have a usable abstract. This is the note's 195 of 206 exactly.
+- **2026:** 314 DOIs gave 315 works. One DOI was returned twice: 10.1145/3805689.3806436 (W7152330660, W7166554585).
+  290 DOIs have a usable abstract.
+- OpenAlex's FAccT source, S4363608463 ("ACM Conference on Fairness, Accountability, and Transparency (FAccT)"),
+  lists 206 works for 2025 (195 with an abstract) and 314 for 2026 (290 with an abstract).
+- So the note's 293 of 317 is **not reproduced**. OpenAlex now lists 314 works for 2026, the Crossref count.
+  The 3 extra works and 3 extra abstracts of the earlier reading are gone, most likely duplicates OpenAlex has
+  since merged. The query behind the earlier figure was never recorded, so this can't be checked further.
+- The session's "1,341 DOIs" is not explained by OpenAlex either. The DOI route shows one duplicate per roughly 250
+  DOIs and no truncated DOI, nowhere near 102 extra.
+
+### The listing route (AAAI 1980–2008)
+
+`/sources?search=AAAI` gives 14 sources, and `/sources?search=National Conference on Artificial Intelligence` gives 1.
+Two of them are the AAAI conference itself:
+- S4306420577, "National Conference on Artificial Intelligence" (3,957 works, 1980–2021);
+- S4210191458, "Proceedings of the AAAI Conference on Artificial Intelligence" (25,116 works, **none before 2010**).
+
+The others are not the conference, so no row names them:
+- symposia, workshops and other AAAI conferences (ICWSM, AIIDE, HCOMP, AIES);
+- the repository S4306400155 (works from 2009 on);
+- the ebook platforms S4306464630 "AAAI Press eBooks" (265 works over 1991–2015, books and symposia) and S4306464629.
+
+**Why each row exists.** S4306420577 holds works in **every** held year from 1980 to 2008, so each of the 23 held
+years has a `[[listing]]` row naming that source, with `works` = the census count. No year is left without a row.
+The source also files 1, 9, 1 and 4 works under 1989, 1995, 2001 and 2003, years with no AAAI conference. Those get
+no row, because the table refuses a not-held year.
+
+**What the source mixes in.** It holds works for about 20–50% of each year's dblp records. The source also holds works
+that match no record:
+- the proceedings volumes themselves (for example "Proceedings of the Nineteenth National Conference on
+  Artificial Intelligence");
+- other venues' papers (ECAI-84, ICAPS 2004, and 2005–2008 weblog and symposium papers);
+- OCR-garbled titles ("powek", "Found ations", "decomposab1lity").
+
+Matching is one-to-one by exact title key, year and venue, so none of these can attach. A garbled title stays
+`title_unmatched`, and is never widened to a fuzzy match.
+
+| Year | Works (`works`) | With a usable abstract | DOI-less records | One-to-one title keys | Works matching no record | Filled (simulated) |
+|---|---|---|---|---|---|---|
+| 1980 | 49 | 36 | 95 | 46 | 3 | 34 |
+| 1982 | 63 | 50 | 104 | 58 | 5 | 46 |
+| 1983 | 55 | 50 | 92 | 51 | 4 | 47 |
+| 1984 | 32 | 30 | 69 | 31 | 1 | 30 |
+| 1986 | 94 | 55 | 188 | 72 | 22 | 50 |
+| 1987 | 104 | 87 | 149 | 95 | 9 | 79 |
+| 1988 | 95 | 68 | 150 | 80 | 15 | 59 |
+| 1990 | 98 | 74 | 165 | 75 | 21 | 64 |
+| 1991 | 82 | 65 | 144 | 72 | 10 | 59 |
+| 1992 | 92 | 72 | 134 | 63 | 29 | 53 |
+| 1993 | 60 | 41 | 133 | 52 | 8 | 38 |
+| 1994 | 119 | 80 | 302 | 105 | 12 | 74 |
+| 1996 | 115 | 75 | 300 | 98 | 17 | 71 |
+| 1997 | 85 | 52 | 247 | 79 | 6 | 50 |
+| 1998 | 55 | 49 | 205 | 38 | 17 | 36 |
+| 1999 | 51 | 37 | 193 | 43 | 8 | 35 |
+| 2000 | 52 | 40 | 231 | 42 | 10 | 35 |
+| 2002 | 50 | 42 | 180 | 27 | 23 | 26 |
+| 2004 | 80 | 44 | 194 | 29 | 51 | 25 |
+| 2005 | 99 | 73 | 325 | 39 | 60 | 33 |
+| 2006 | 138 | 96 | 385 | 51 | 87 | 41 |
+| 2007 | 114 | 68 | 368 | 32 | 82 | 29 |
+| 2008 | 120 | 99 | 356 | 53 | 67 | 47 |
+| **Total** | **1,902** | **1,383** | **4,709** | **1,331** | | **1,061** |
+
+**Listing-route refusals** (the simulated fill over all routes):
+- `title_unmatched` 3,357, most of them records OpenAlex does not file under this source;
+- `title_ambiguous` 21;
+- `inverted_unreadable` 101;
+- `inverted_gap` 50;
+- `no_abstract` 119.
+- All the `inverted_*` refusals are listing works, and every one is from 1980–2008. The DOI route had none.
+  - Of the listing works whose index is `inverted_unreadable`, 117 have a key holding a CR or LF (`word\r\n`) or an
+    empty key, which `rebuild` refused as no single word. TASK-231 changed the rule for the line breaks (§TASK-231
+    below).
+  - The 54 gaps split evenly: 27 are missing one position and 27 are missing more.
+  - The rules stand, and nothing is forced.
+
+**In all,** the fill would attach 2,158 of the 5,808 candidates: 1,097 by DOI and 1,061 by title. That leaves 3,650
+records at `none`, 3,648 of them AAAI 1980–2008. With TASK-231's rulings the same extract attaches 2,248 (1,098 by
+DOI, 1,150 by title) and leaves 3,560 at `none` (§TASK-231 below). These are the figures before `aaai_library` (§AAAI 1980–2008 abstracts, below): in the final build (2026-10-11) OpenAlex fills 1,117, 1,098 by DOI and 19 by title, because 4,536 AAAI 1980–2008 records already have AAAI's own abstract.
+
+### Fixtures and what the census leaves for the owner
+
+- **Fixtures.** `backend/tests/fixtures/http/openalex/doi-batch.json` (one FAccT 2023 batch of 50 DOIs) and
+  `listing-1984.json` (the 32-work AAAI 1984 listing) are the census's own cache entries. They are scrubbed by
+  `scrub.py`'s OpenAlex branch:
+  - work ids, DOIs, years, the primary location and `meta` stay real;
+  - titles become synthetic;
+  - every inverted index is rebuilt from synthetic text of the same word count.
+  - No abstract word is in the repository. The scrub makes every index dense, so the one `inverted_unreadable`
+    index of the real 1984 page reads as a dense one in the fixture.
+  - `test_openalex_recorded.py` pins them to the parser, the rebuild and the shipped table.
+- **For the owner:**
+  1. The OpenAlex licence is settled (§OpenAlex, Licence): CC0 data, abstracts rebuilt from the index under
+     the publisher-abstract posture.
+  2. Decided (TASK-231, 2026-10-10): a key holding CR/LF is read as its words joined by one space, at its one
+     position (§TASK-231 below). The extract keeps the raw index, so no refetch was needed.
+  3. Note that the `works` counts are a live total. If OpenAlex adds or merges a work under S4306420577 for a
+     listed year, Task 15's crawl stops with `count_mismatch` and the row needs re-verifying. Nothing guesses.
+  4. Note that 3,648 AAAI 1980–2008 records stayed `none` after the OpenAlex fill alone. OpenAlex files no more of them under an AAAI source; `aaai_library` (§AAAI 1980–2008 abstracts) then gave 4,536 of the 4,709 AAAI's own abstract.
+
+### TASK-231: the owner's rulings on the fill's refusals (2026-10-10)
+
+The owner reviewed the refusals of the real fill (snapshot 2026-10-10-22a339940466, extract 7fea58b98325) from a
+read-only replay that reproduced the manifest's counts exactly.
+
+**Line breaks inside a key.** OpenAlex tokenises on spaces only, so a paragraph break in the source stays inside one
+key at one position (`word\r\n\r\nword`: 154 keys hold two CRLFs, 30 a single break, 3 a non-breaking space).
+The evidence that this is one token, not two words: in every otherwise-dense index the key occupies exactly one
+position, the next word is at the next position, and nothing is missing there. 157 of the 184 break keys end their
+first part in sentence punctuation.
+- **Ruling:** `openalex.rebuild` reads such a key as its words joined by one space, at its one position (each
+  whitespace run becomes one space, and none is kept at the key's edges; 5 keys start with `\r\n`). An empty or
+  whitespace-only key is still `inverted_unreadable`, and the gap and conflict rules still apply. It is deterministic
+  and exact: nothing is moved or matched loosely. The paragraph break itself is lost, as it is for every abstract
+  `common.clean_abstract` reads.
+- **Not checked:** none of the 101 records has an official abstract to compare against. The only evidence of
+  fidelity is internal (dense positions, breaks at sentence boundaries).
+
+**The AIES 2019 duplicate.** 10.1145/3306618.3314250 ("Incomplete Contracting and AI Alignment") is answered by
+W2796639635 and W2963086506. They hold the same abstract word for word, but W2963086506 has PDF-extraction damage
+(`nding`, `rst`, `par- allels`). **Ruling:** a cited `[[duplicate_choice]]` row in `openalex_sources.toml` pins
+W2796639635. The fill attaches it (counted `attached_doi` and `duplicate_chosen`), and the build stops
+(`duplicate_choice_unmatched`) if a later extract answers the DOI without that work among two or more works. No text
+heuristic (de-hyphenation, ligature repair) is applied: the choice is one checked row, not a rule.
+
+**Kept refused:** FAccT 2021's 10.1145/3442188.3445881 (the two texts genuinely differ); all 21 `title_ambiguous`,
+Shvaytser 1990 included; `inverted_gap`, `no_abstract` and `title_unmatched`.
+
+**Predicted effect** (an offline replay of the extract over the snapshot's records with the OpenAlex claims removed;
+the snapshot itself is rebuilt later):
+
+| | Before | With the rulings |
+|---|---|---|
+| Attached by DOI | 1,097 | 1,098 (1 `duplicate_chosen`) |
+| Attached by title | 1,061 | 1,150 |
+| `inverted_unreadable` | 101 | 2 (empty-string keys) |
+| `inverted_gap` | 50 | 60 (10 formerly unreadable indexes have a hole) |
+| `doi_duplicate` | 2 | 1 |
+| `title_ambiguous` / `no_abstract` / `title_unmatched` | 21 / 119 / 3,357 | unchanged |
+
+### Does an inline provenance label let a reviewer judge and filter fallback text? (gate C round 1)
+
+The design assumes that a reviewer who sees "Abstract via OpenAlex" on a hit or a paper page, or the Abstract
+source facet, understands that the text is a third party's and chooses `abstract_kind:official` when that matters.
+Verdict: **no evidence found.** No verified study shows that provenance labels change expert screening behaviour. The
+nearest work, on trust calibration among web searchers, transfers weakly to protocol-driven Boolean search by
+systematic reviewers. The label is kept because it is honest and costs nothing, not because it is known to work. A
+small think-aloud with systematic reviewers on the paper and coverage pages is TASK-233, for `usability-tester`
+(`Ethics: not submitted`, TASK-233). The rest of this note's evidence is a source census and needs no HCI
+literature.
+
 ## Licence posture
 
 What each source states about reuse, and what the index does with its text. None of this is legal advice; the
@@ -432,7 +681,7 @@ project's position is decision-018 (README §Abstracts on a public instance).
 | Crossref (FAccT 2019–2026, AIES 2018–2023) | not read: milestone B takes titles, authors and DOIs from it and no abstract (it holds none for these DOIs) | not checked (2026-10-10, no network in the review) |
 | PMLR v81 (FAccT 2018) | PMLR's CC BY 4.0, as README states for its volumes (known from ICML 2017, v70); v81's own page not read for it | 2026-10-10 *(v81 unverified)* |
 | the pinned dblp release | CC0, as spec 01 records for the Dagstuhl DROPS release (titles, no abstracts; decision-047, and AAAI 1980–2008 in milestone B) | spec 01's record of the release page; not re-read 2026-10-10 |
-| OpenAlex (milestone C fallback) | not checked in this task (OpenAlex documents its data as CC0; re-check before milestone C stores any abstract) | not checked |
+| OpenAlex (milestone C fallback) | CC0 for the data, "with no 'personal use only' carve-out and no permission to ask" (help.openalex.org, Pricing); abstracts are not shipped as text "for legal reasons" and are rebuilt from the inverted index (the work-object docs). A rebuilt abstract is served on the publisher-abstract posture: decision-018, the takedown list and TASK-135 | 2026-10-10: controller read both help pages |
 
 **Index versus fixtures.** The live index stores and shows an OJS abstract with its attribution ("AAAI Digital
 Library") and a link to the paper's own page on ojs.aaai.org, never the full text, on decision-018's fair-dealing
@@ -583,7 +832,8 @@ Re-presented work stays out of the default search so it doesn't sit beside its o
 ## Official counts (spec 07 §C)
 
 Six rows were added to `official_counts.py` and `docs/results/coverage-sources.md` (TASK-219, read 2026-10-09 by
-plain GETs of the pages named; dblp.org never fetched). Classes: **gateable** (an official statement whose
+plain GETs of the pages named; dblp.org never fetched). Six more followed on 2026-10-10 (below, "AAAI list counts"),
+and every other new-venue main cell this table classifies as not gated carries a cited note (TASK-222). Classes: **gateable** (an official statement whose
 definition is our `main` cell, within ±1%), **definition mismatch**, **not found** (aggregator or news figures
 exist for some years; they are never a row). "Ours" is the `main` cell after the Robotics Program move (the
 2026-10-10 coverage report's figure, plus the moved rows for 2011 and 2013).
@@ -596,8 +846,15 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
 | AAAI 2015 | 539 | papers "selected … and presented" from the main technical and topical tracks (AI Magazine report) | https://ojs.aaai.org/index.php/aimagazine/article/view/2606/2500 | 538 | gateable (row; the weakest wording) |
 | AAAI 2018 | 938 | original research publications in the proceedings (3,800 submissions) | https://ojs.aaai.org/index.php/AAAI/issue/view/301 | 937 | gateable (row) |
 | AAAI 2019 | 1,147 | original research publications in the proceedings (7,095 submissions) | https://ojs.aaai.org/index.php/AAAI/issue/view/246 | 1,147 | gateable (row) |
-| AAAI 2014, 2016, 2017 | none | submissions only (1,406; 2,132; 2,571) | issue pages 305, 303, 302 | 398, 548, 639 | not found |
-| AAAI 2010–2012, 2020–2026 | none | no AAAI statement found (aggregator figures only) | issue pages; aaai.org conference pages | see the per-year table | not found |
+| AAAI 2010 | 262 | counted on AAAI's own list: 202 main technical (short papers included) + 60 in five special tracks; Nectar and senior member excluded | https://web.archive.org/web/20100830185521/http://www.aaai.org/Conferences/AAAI/2010/aaai10papers.php | 262 | gateable (row, list count, 2026-10-10) |
+| AAAI 2011 | 240 | counted on AAAI's own list, which has no Robotics Program | https://web.archive.org/web/20120605015434/http://www.aaai.org/Conferences/AAAI/2011/aaai11accepts.php | 248 | definition mismatch (note) |
+| AAAI 2012 | 292 | counted on AAAI's own list: 220 main technical (poster-only full papers included) + 26 + 11 + 21 + 14 in four special tracks | https://aaai.org/wp-content/uploads/2023/01/aaai12accepted-papers.pdf | 294 | gateable (row, list count, 2026-10-10) |
+| AAAI 2014 | 398 | counted on AAAI's own list: the 22 AAAI technical categories (submissions 1,406) | https://web.archive.org/web/20150906033202/http://www.aaai.org/Conferences/AAAI/2014/aaai14accepts.php | 398 | gateable (row, list count, 2026-10-10) |
+| AAAI 2016 | 548 | AAAI's list, "ordered … in each proceedings category", matching the OJS sections exactly (submissions 2,132) | aaai.org list; issue page 303 | 548 | not gated: the list appears derived from the proceedings (note) |
+| AAAI 2017 | 637 | counted on AAAI's own list: 599 main technical + 38 in three special tracks (submissions 2,571) | https://aaai.org/wp-content/uploads/2023/01/aaai17accepted-papers.pdf | 639 | gateable (row, list count, 2026-10-10) |
+| AAAI 2020 | 1,614 | counted on AAAI's own pre-camera-ready lists: 1,589 main technical + 25 AI for Social Impact | https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-Paper-List.pdf and https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-AISI-Papers.pdf | 1,610 | gateable (row, list count, 2026-10-10) |
+| AAAI 2021 | 1,696 | counted on AAAI's own list: 1,656 main technical + 40 AI for Social Impact | https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf | 1,694 | gateable (row, list count, 2026-10-10) |
+| AAAI 2022–2026 | none | chairs' notification emails quoted on third-party sites and aggregator figures only (1,349; 1,721; 2,342; 3,032; 4,167), apparently the main technical track alone | none official | see the per-year table | not found (note) |
 | IASEAI 2026 | 92 | accepted research papers, 35 of them non-archival and unpublished on OJS | https://ojs.aaai.org/index.php/IASEAI/issue/view/741 | 57 | definition mismatch: recorded, not gated |
 
 - **AIES.** The chairs' statements are not the OJS issue listing (whose totals this note once called circular);
@@ -605,9 +862,34 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   stated; the exact match with the listing suggests none.
 - **AAAI 2018, 2019.** "Original research publications" is read as the technical program, special tracks
   included; the front matter does not itemise.
+- **AAAI list counts (2026-10-10; one independence rule since gate C round 1, 2026-10-11).** For 2010, 2012, 2014,
+  2016, 2017, 2020 and 2021 no AAAI document *states* an accepted count (prefaces, conference pages and press releases
+  give submissions only), so the rows count the entries of AAAI's own accepted-paper list (aaai.org PDFs, or aaai.org
+  pages archived by the Wayback Machine). Each row's description says "counted" and names the list, and its
+  definition must equal our `main` cell within 1%. The review found the independence test applied unevenly: 2016 was
+  refused because its list matched the proceedings exactly, while 2010 and 2014 matched exactly too, and 2014's only
+  copy was captured a year after publication. The controller's rulings (gate C rounds 1 and 2) are one rule: A list counts as independent of the proceedings when it either states that it is pre-camera-ready, or visibly differs from the proceedings in content (a different count or membership); either shows it was not derived from them. Per row:
+  - 2010 (262 = 262), 2014 (398 = 398) and 2016: each matches the proceedings exactly, and nothing on it says it was
+    made before them (2010's and 2014's only archived copies were captured on 2010-08-30 and 2015-09-06, after
+    publication). Each is an ungated cell with a note.
+  - 2012, 2017, 2020 and 2021: the PDFs sit under `wp-content/uploads/2023/01/`, the date of AAAI's site migration,
+    not of the lists, so their upload dates say nothing. All four are gated, each row naming its ground: the 2020
+    lists say they were made before camera-ready; 2012, 2017 and 2021 differ from the proceedings the crawl reads in
+    count (deltas +2, +2 and −2 on the snapshot below; 2020's is −4).
+  - 2021: the row cites only the "Main Technical Track" PDF, but counts 1,656 main technical papers plus 40 AI for
+    Social Impact. Where the 40 were counted was not recorded, so the row is re-checked against AAAI's own AI for
+    Social Impact list (TASK-234).
+
+  The deltas are those of snapshot `2026-10-10-9efa49481112` and are unchanged on the final snapshot
+  `2026-10-11-93c2937e2f29` (`docs/results/2026-10-11-coverage.md`), where the gate passes at 81 of 82 cells.
+- **Ungated-cell notes (TASK-222).** AAAI 2010, 2011, 2014, 2016 and 2022–2026 main and IASEAI 2026 main each carry a
+  cited note
+  saying why they are not gated (`official_counts.UNGATED_NOTES`, `coverage-sources.md` §Ungated cells with a note),
+  served on `/coverage` and listed in the coverage report.
 - **AAAI 2020–2026.** The trackers' figures sit close to our `main` minus the special tracks and Journal Track, so
   they likely count the Main Technical Track only; even an official figure of that kind would be a definition
-  mismatch with our `main`. The chairs' opening slides or AAAI press releases may hold the official numbers.
+  mismatch with our `main`. For 2020 and 2021 AAAI's own accepted-paper lists itemise the special tracks and back a
+  row (above); for 2022–2026 no such list was found.
 - **FAccT 2018–2026 and AIES 2018–2023 (2026-10-10): none gated, no row.** The census counts are the proceedings'
   contents (Crossref's DOIs, PMLR's index), and no official accepted-paper statement was read for these years.
   FAccT's site gives accepted-paper lists, not a stated count, and the 2025/2026 lists include non-archival papers
@@ -636,7 +918,10 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   &rows=0` for the 14 ISBNs; `/works/10.1145/3287560.3287581`; monthly `prefix:10.1145` totals for 2019-01, 2022-06,
   2025-06 and 2026-06 (2,704; 3,776; 5,141; 4,389), to size the windows
 - https://proceedings.mlr.press/v81/ and https://proceedings.mlr.press/ (2026-10-10)
-- OpenAlex
+- api.openalex.org (2026-10-10, keyless; §OpenAlex lists every query)
+- https://www.aaai.org/robots.txt (`Crawl-delay: 43200`; read during this research in 2026-10, the exact date not
+  recorded) and web.archive.org's CDX index and `id_` captures of `www.aaai.org/Library/` (2026-10-10, TASK-232)
+- help.openalex.org: the Pricing page and the work-object documentation (read by the controller, 2026-10-10)
 - the pinned dblp release `dblp-2026-10-03.xml.gz`
 
 ## AAAI 1993–2008 sections (TASK-224/225/226, decision-050, 2026-10-10)
@@ -758,3 +1043,90 @@ Totals as built: FAccT 1,230 records (1,239 ACM DOIs, minus 26 FAccT 2020 tutori
 v81); AIES 2018–2023 575 records; AAAI 1980–2008 4,730 records in 23 held years. Since TASK-224/225/226: AIES
 2018–2023 557 records (449 `main`, 108 `student_abstract`), AAAI 1980–2008 4,709 records (3,567 `main`; §AAAI
 1993–2008 sections).
+
+## AAAI 1980–2008 abstracts: the archived aaai.org paper pages (TASK-232, decision-051, 2026-10-10)
+
+Before this source, after the OpenAlex fill alone, 3,648 of the 4,709 AAAI 1980–2008 records had no abstract and the other 1,061 had
+OpenAlex's. dblp gives these years none, but each record's dblp `ee` is its old aaai.org paper page,
+`www.aaai.org/Library/{AAAI,IAAI}/<yyyy>/<id>.php`, which printed the abstract.
+
+**The crawl-delay decision.** aaai.org's robots.txt (https://www.aaai.org/robots.txt; see §ojs.aaai.org) sets
+`Crawl-delay: 43200` (one request every 12 hours: about 6.3 years for 4,609 pages), and its 2023 site dropped the
+Library pages. The Crawl-delay is a request to crawlers of aaai.org. Reading the Internet Archive's copies does not
+breach it, since aaai.org is never fetched, but it does signal that AAAI does not want its site crawled, and the
+record should say so. Asking AAAI for the abstracts, or for permission, is not recorded among the options the decision
+weighed; it stays open, through the channel the copyright-office consultation (TASK-135) uses. The owner approved reading the Internet
+Archive's captures instead (decision-051): the only host is `web.archive.org`, for the captures and its CDX index;
+aaai.org is never fetched, so the crawl delay is never in play and aaai.org bears no load. The archive is read one
+request at a time, at least 3 s apart, with the repo's generic User-Agent and no contact string. The text is AAAI's
+copyright, served on the same posture as the ojs.aaai.org abstracts (decision-018, the takedown list, TASK-135).
+
+**What the research showed** (kept outside git with the milestone's task reports, so not re-checkable from the
+repository; the sample is listed here instead): 15 of 15 sampled captures held the abstract, and the 4 that could be
+checked against the live new-site abstract were identical to it. The sample is one record per year for 15 years
+spread over 1980–2008 (the years chosen by hand to span the range), each year's record drawn at random (`random.seed(232)`) from that year's records with no abstract and an
+aaai.org `ee`: Faugeras80, EtheringtonR83, KilhofferK86, Brodie88, CaferraDH91, FrazierP93, WeldE94, Haynes96,
+DetermanB98 (IAAI), LiberatoreS00, FangKLS02, TuanBZS04, ConitzerS06, KimuraSN07 and KuchibatlaM08 (dblp keys
+`conf/aaai/<key>`). Fifteen of fifteen only puts a 95% one-sided lower bound near 82% on the share of pages that hold
+an abstract, so the sample shows the source exists, not how complete it is: the evidence for that is the full
+harvest's refusal counts, which "As built" records after the harvest. `https://web.archive.org/web/<timestamp>id_/<url>` returns the archived bytes exactly, and their SHA-1 (base32)
+is the CDX digest. The old layout is `<div id="abstract"><h1><a href=…pdf>TITLE</a></h1><p class="left"><i>AUTHORS</i>
+</p><p>ABSTRACT</p>`; the 2007-style pages break lines inside the abstract and add `Subjects:` / `Submitted:`
+paragraphs. One placeholder was found, `None - 2 page paper is an abstract` (aaai06-329).
+
+**The census** (`scripts/aaai_library_census.py`, 2026-10-10; two CDX requests, nothing else fetched). It read the
+4,709 AAAI 1980–2008 dblp records of snapshot `2026-10-10-22a339940466` and their `ee` links from the pinned dblp
+extract (both offline), then every status-200 capture under `www.aaai.org/Library/AAAI/` (31,206) and `…/IAAI/`
+(3,275): 7,795 distinct pages, none set aside (no query, port, non-HTML type or missing digest).
+
+| | Records |
+|---|---|
+| AAAI 1980–2008 dblp records | 4,709 |
+| no `ee` at all (1996: 16, 1997: 37, 2000: 2, 2004: 24, 2005: 21) | 100 |
+| an `ee` that is a Library page | 4,609 |
+| of those, no 200 capture (MichelsonK06, ParkerFT06) | 2 |
+| **rows of `ingest/aaai_library.toml`** | **4,607** |
+| capture chosen: the latest `text/html` 200 before 2023-01-01 | 4,607 |
+| capture chosen: the earliest (none before 2023) | 0 |
+| capture's original URL differs from the `ee` (beyond scheme and `:80`) | 0 |
+
+Rows by year: 1980 95, 1982 104, 1983 92, 1984 69, 1986 188, 1987 149, 1988 150, 1990 165, 1991 144, 1992 134, 1993
+133, 1994 302, 1996 284, 1997 210, 1998 205, 1999 193, 2000 229, 2002 180, 2004 170, 2005 304, 2006 383, 2007 368, 2008
+356. The chosen captures date from 2016 (1,010) to 2022 (1,117). The 100 records with no `ee` and the two pages with
+no capture stay as they are (OpenAlex's abstract, or none); a follow-up can look for them elsewhere.
+
+**Five captures were recorded as fixtures** (Araya84 1984, DetermanB98 IAAI 1998, KimuraSN07 2007, TaylorS06 2006's
+placeholder, Lifschitz08 2008; captures from 2021-10 to 2022-12): every digest matched and none redirected, so the
+late-2022 captures still hold the old layout. They are scrubbed the OJS way (decision-004: synthetic title, authors
+and abstract words, the HTML structure, the placeholder and the `Subjects:`/`Submitted:` lines real;
+`backend/tests/fixtures/http/aaai_library/`).
+
+**The title check.** The page's `<h1>` must have the record's title key. dblp's titles carry OCR typos the pages
+don't: 2 of the 15 sampled pages fail the check for that reason alone (aaai80-016, dblp `Optimisation … Conputer` vs
+the page's `Optimization … Computer`; aaai93-015, dblp `Programrning`). So expect roughly a tenth of the pages to be
+refused under an exact rule. The controller's ruling (fix round 1, decision-051): a page also attaches when the two
+title keys' similarity (1 − Levenshtein / the longer) is at least 0.9 and their digit tokens agree (aaai80-016 scores
+0.974); those attaches are counted `title_near` and listed by record id with their score.
+
+**The attribution links.** A record's attribution links its dblp `ee`, AAAI's own canonical URL for the paper. On
+AAAI's 2023 site those URLs may now redirect or be dead; they are kept, because they are AAAI's own, and the claim's
+evidence names the capture that was read.
+
+**As built.** `ingest/aaai_library.toml` + `aaai_library_table.py`, `sources/aaai_library.py`, `op ingest
+aaai-library`, the `aaai_library` claim source (record schema 9; after `ojs`, before `openalex`), filled after dedup and
+before the OpenAlex fill (spec 01 §Sources, AAAI library row). The snapshot manifest's `sources.aaai_library` carries a
+`capture_window`, the range of the attached pages' capture times, and `/coverage` and a search record show that range
+for the source (kind `archive_captures`), not the harvest's fetch dates: the text is from 2016–2022, not 2026 (gate C
+round 1). The full harvest (about 4,607 requests, at least 3.8
+hours) and the rebuild were run after review (2026-10-11); the counts:
+
+- Harvest: 4,607 pages pinned, 0 missing, 1 unavailable because its capture redirects (`capture_redirect`).
+- Snapshot `2026-10-11-93c2937e2f29` (173,253 records), index `b4f335e07e70`: `aaai_library` attached 4,536 of 4,709
+  candidates (126 `title_near`), refusing `title_mismatch` 43, `layout_unknown` 23, `undecodable` 3,
+  `capture_redirect` 1 and `no_abstract` 1; the capture window is 2016-05-05 to 2022-12-29. So 96.3% of AAAI 1980–2008 records have AAAI's
+  own abstract.
+- OpenAlex then fills only what is left: 1,117 abstracts (1,098 by DOI and 19 by title; AAAI 21, AIES 557, FAccT 539),
+  with `official_won` 1,305 and refused `doi_duplicate` 1, `inverted_gap` 2, `no_abstract` 10, `title_ambiguous` 1,
+  `title_unmatched` 141.
+- `op snapshot diff` against `2026-10-10-9efa49481112` (before milestone C): 5,653 changed, `abstract` only
+  (`abstract_kind` `none` → `official` 4,536, `none` → `openalex` 1,117); none added, removed or rekeyed.

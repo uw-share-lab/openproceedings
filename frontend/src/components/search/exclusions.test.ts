@@ -4,7 +4,7 @@ import { HOSTILE, quotedSafely } from "@/test/hostile";
 import { bannerOf, clauseText, defaultsText, includedText, limitsOf } from "./exclusions";
 
 const clause = (
-  field: "venue" | "track" | "status",
+  field: "venue" | "track" | "status" | "abstract_kind",
   span: [number, number] | null,
   values: string[] | null,
 ) => ({
@@ -31,6 +31,7 @@ const TRUST: ParsedFilters = {
   },
   track: clause("track", [5, 5], ["datasets_benchmarks", "main", "position"]),
   status: clause("status", [5, 5], ["accepted"]),
+  abstract_kind: clause("abstract_kind", [5, 5], ["none", "official", "openalex"]),
 };
 
 const EXCLUDED = {
@@ -43,6 +44,7 @@ const FACETS = {
   year: { "2024": 141 },
   track: { main: 301, datasets_benchmarks: 64, position: 47, workshop: 205, competition: 4 },
   status: { accepted: 412, rejected: 88 },
+  abstract_kind: null,
 };
 
 describe("bannerOf (design W5 banner; BN-1–3)", () => {
@@ -179,6 +181,32 @@ describe("limitsOf (design W5 Limits line; RH-4, BN-5)", () => {
     const filters: ParsedFilters = { ...TRUST, track: clause("track", null, null) };
     expect(limitsOf("trust track:main (track:workshop x)", filters, ["status"], FACETS, vocab)).toEqual([
       { field: "track", text: null, leavesOut: [] },
+    ]);
+  });
+});
+
+describe("limitsOf: an abstract_kind: clause the reader wrote (decision-049)", () => {
+  it("is a limit, with what it leaves out from the facet when the index counts it", () => {
+    const q = "trust abstract_kind:official";
+    const filters: ParsedFilters = {
+      ...TRUST,
+      abstract_kind: clause("abstract_kind", [6, 28], ["official"]),
+    };
+    const vocab = { abstract_kind: ["official", "openalex", "none"] };
+    const kinds = { official: 40, openalex: 7, none: 3 };
+    expect(limitsOf(q, filters, ["track", "status"], { ...FACETS, abstract_kind: kinds }, vocab)).toEqual([
+      {
+        field: "abstract_kind",
+        text: "abstract_kind:official",
+        leavesOut: [
+          ["openalex", 7],
+          ["none", 3],
+        ],
+      },
+    ]);
+    // no counts on an index without the field: the limit is still listed
+    expect(limitsOf(q, filters, ["track", "status"], FACETS, vocab)).toEqual([
+      { field: "abstract_kind", text: "abstract_kind:official", leavesOut: [] },
     ]);
   });
 });

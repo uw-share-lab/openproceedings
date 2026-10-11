@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Schemas } from "@/api/client";
 import { CoverageReport, yearSpans } from "./coverage-report";
 import fixture from "./coverage-fixture.json";
@@ -36,9 +36,11 @@ describe("the venue × year table", () => {
     for (const vy of COVERAGE.venue_years) {
       const cells = [...row(vy.venue, vy.year).querySelectorAll("td")].map((td) => td.textContent);
       const flagged = vy.records > 0 && vy.abstract_missing === vy.records;
-      expect(cells.slice(0, 6)).toEqual([
+      expect(cells.slice(0, 8)).toEqual([
         String(vy.year),
         count(vy.records),
+        count(vy.abstract_official),
+        count(vy.abstract_openalex),
         flagged
           ? `⚠ ${count(vy.abstract_missing)}no abstracts: only titles are searchable`
           : count(vy.abstract_missing),
@@ -65,6 +67,25 @@ describe("the venue × year table", () => {
     expect(order).toEqual(expected);
     for (const th of within(table()).getAllByRole("columnheader"))
       expect(th.getAttribute("scope")).toBe("col");
+  });
+
+  it("heads its columns with the official and OpenAlex abstract counts beside No abstract (CV-4)", () => {
+    render(<CoverageReport coverage={COVERAGE} />);
+    const heads = within(table())
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+    expect(heads).toEqual([
+      "Venue",
+      "Year",
+      "Records",
+      "Official abstract",
+      "OpenAlex abstract",
+      "No abstract",
+      "Unknown track",
+      "Unknown status",
+      "Statuses indexed",
+      "Details",
+    ]);
   });
 
   it("flags a venue-year with no abstracts at all, and only that one", () => {
@@ -96,7 +117,15 @@ describe("a venue-year's details", () => {
     const header = within(byStatus)
       .getAllByRole("columnheader")
       .map((h) => h.textContent);
-    expect(header).toEqual(["Track", ...vy.statuses_indexed, "Records", "No abstract", "Sources"]);
+    expect(header).toEqual([
+      "Track",
+      ...vy.statuses_indexed,
+      "Records",
+      "Official abstract",
+      "OpenAlex abstract",
+      "No abstract",
+      "Sources",
+    ]);
     const body = within(byStatus).getAllByRole("row").slice(1);
     expect(body.map((r) => within(r).getByRole("rowheader").textContent)).toEqual(
       vy.tracks.map((t) => t.track),
@@ -111,6 +140,8 @@ describe("a venue-year's details", () => {
       expect(shown).toEqual([
         ...expected,
         count(track.records),
+        count(track.abstract_official),
+        count(track.abstract_openalex),
         count(track.abstract_missing),
         track.sources.join(", "),
       ]);
@@ -172,6 +203,131 @@ describe("a venue-year's details", () => {
   });
 });
 
+describe("an official count's citation", () => {
+  it("links each URL in it, not the whole citation", () => {
+    const data = copy();
+    const vy = data.venue_years[0]!;
+    Object.assign(vy.tracks[0]!, {
+      official_accepted: 10,
+      official_counts: "papers counted on the list",
+      official_citation: "https://example.org/list.pdf (linked from https://example.org/conf/)",
+      official_accessed: "2026-10-10",
+      delta: 0,
+      delta_pct: 0,
+      gated: true,
+      within_gate: true,
+    });
+    render(<CoverageReport coverage={data} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: `Details: track and status for ${vy.venue} ${vy.year}` }),
+    );
+    const official = screen.getByRole("table", {
+      name: `${vy.venue} ${vy.year}: accepted records against the official count`,
+    });
+    expect(
+      within(official)
+        .getAllByRole("link")
+        .map((a) => a.getAttribute("href")),
+    ).toEqual(["https://example.org/list.pdf", "https://example.org/conf/"]);
+  });
+
+  function linksOf(citation: string): { hrefs: (string | null)[]; text: string } {
+    cleanup(); // one render at a time, so a loop over citations sees only its own
+    const data = copy();
+    const vy = data.venue_years[0]!;
+    Object.assign(vy.tracks[0]!, {
+      official_accepted: 10,
+      official_counts: "papers counted on the list",
+      official_citation: citation,
+      official_accessed: "2026-10-10",
+      delta: 0,
+      delta_pct: 0,
+      gated: true,
+      within_gate: true,
+    });
+    render(<CoverageReport coverage={data} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: `Details: track and status for ${vy.venue} ${vy.year}` }),
+    );
+    const official = screen.getByRole("table", {
+      name: `${vy.venue} ${vy.year}: accepted records against the official count`,
+    });
+    return {
+      hrefs: within(official)
+        .queryAllByRole("link")
+        .map((a) => a.getAttribute("href")),
+      text: official.textContent ?? "",
+    };
+  }
+
+  it("links an http(s) URL only: a javascript: string beside one gives exactly one link", () => {
+    const { hrefs, text } = linksOf("javascript:alert(1) and https://ok.org");
+    expect(hrefs).toEqual(["https://ok.org"]);
+    expect(text).toContain("javascript:alert(1) and https://ok.org");
+  });
+
+  it("leaves a sentence's closing punctuation out of the link", () => {
+    for (const mark of [".", ",", ";", ":", ".)"]) {
+      const { hrefs, text } = linksOf(`see https://ok.org/list${mark} Then more`);
+      expect(hrefs, mark).toEqual(["https://ok.org/list"]);
+      expect(text, mark).toContain(`see https://ok.org/list${mark} Then more`);
+    }
+  });
+});
+
+describe("an ungated cell's note (TASK-222, CV-9)", () => {
+  it("shows the note and its citation under the track's row, each URL a link", () => {
+    const data = copy();
+    const vy = data.venue_years[0]!;
+    const [first] = vy.tracks;
+    Object.assign(first!, {
+      gate_note: "the list counts a different set of papers",
+      gate_note_citation:
+        "https://example.org/list (linked from https://example.org/conf/) and docs/research/notes.md §Counts",
+      gate_note_accessed: "2026-10-10",
+    });
+    render(<CoverageReport coverage={data} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: `Details: track and status for ${vy.venue} ${vy.year}` }),
+    );
+    const official = screen.getByRole("table", {
+      name: `${vy.venue} ${vy.year}: accepted records against the official count`,
+    });
+    const rows = within(official).getAllByRole("row");
+    expect(rows[1]!.querySelector("th")?.textContent).toBe(first!.track);
+    // the track first, for a screen reader arriving at the row; the read date, as an official count's (gate C)
+    expect(rows[2]!.textContent).toBe(
+      `${first!.track} not gated: the list counts a different set of papers. Source: ` +
+        "https://example.org/list (linked from https://example.org/conf/) and docs/research/notes.md §Counts, " +
+        "read 2026-10-10",
+    );
+    // a repo path opens on the public repository (gate C round 1)
+    expect(
+      within(rows[2]!)
+        .getAllByRole("link")
+        .map((a) => a.getAttribute("href")),
+    ).toEqual([
+      "https://example.org/list",
+      "https://example.org/conf/",
+      "https://github.com/uw-share-lab/openproceedings/blob/dev/docs/research/notes.md",
+    ]);
+  });
+
+  it("adds no row for a track without a note", () => {
+    const vy = COVERAGE.venue_years[0]!;
+    expect(vy.tracks.every((t) => t.gate_note === null && t.gate_note_citation === null)).toBe(true);
+    render(<CoverageReport coverage={COVERAGE} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: `Details: track and status for ${vy.venue} ${vy.year}` }),
+    );
+    const official = screen.getByRole("table", {
+      name: `${vy.venue} ${vy.year}: accepted records against the official count`,
+    });
+    expect(within(official).getAllByRole("row")).toHaveLength(vy.tracks.length + 1);
+    expect(official.textContent).not.toMatch(/not gated:/);
+  });
+});
+
 describe("the header", () => {
   it("names the index, snapshot, build time, windows and sources from the snapshot facts", () => {
     render(<CoverageReport coverage={COVERAGE} />);
@@ -216,7 +372,7 @@ describe("the header", () => {
     expect(document.body.textContent).toContain(
       "of unknown status · 2 with the abstract removed at a rights holder's request",
     );
-    const noAbstract = [...row(vy.venue, vy.year).querySelectorAll("td")][2]!;
+    const noAbstract = [...row(vy.venue, vy.year).querySelectorAll("td")][4]!;
     expect(noAbstract.textContent).toContain(`${count(vy.abstract_missing)}and 2 removed on request`);
     // a venue-year whose every record lacks a shown abstract, removed ones included, is flagged (CV-5)
     cleanup();
@@ -224,7 +380,7 @@ describe("the header", () => {
     const flagged = all.venue_years.find((v) => v.records > v.abstract_missing)!;
     flagged.abstract_withheld = flagged.records - flagged.abstract_missing;
     render(<CoverageReport coverage={all} />);
-    const cell = [...row(flagged.venue, flagged.year).querySelectorAll("td")][2]!.textContent;
+    const cell = [...row(flagged.venue, flagged.year).querySelectorAll("td")][4]!.textContent;
     // removed abstracts may still be matched on an older index, so the flag says "shown", not "searchable"
     expect(cell).toContain(`and ${count(flagged.abstract_withheld)} removed on request`);
     expect(cell).toMatch(/removed on requestno abstracts shown$/);
@@ -242,6 +398,79 @@ describe("the header", () => {
     render(<CoverageReport coverage={c} />);
     expect(screen.getByText(/^Only titles and abstracts are indexed/).textContent).toBe(
       "Only titles and abstracts are indexed. A record without an abstract can be found by its title only.",
+    );
+  });
+
+  it("counts OpenAlex abstracts in the totals only when there are any (CV-2)", () => {
+    expect(COVERAGE.totals.abstract_openalex).toBe(0);
+    render(<CoverageReport coverage={COVERAGE} />);
+    expect(document.body.textContent).not.toContain("abstracts from OpenAlex");
+    cleanup();
+    const c = copy();
+    c.totals.abstract_openalex = 7;
+    render(<CoverageReport coverage={c} />);
+    const t = c.totals;
+    expect(document.body.textContent).toContain(
+      `${count(t.unknown_track)} of unknown track · ${count(t.unknown_status)} of unknown status · ` +
+        "7 abstracts from OpenAlex",
+    );
+  });
+
+  it("says '1 abstract from OpenAlex' for a single one (CV-2)", () => {
+    const c = copy();
+    c.totals.abstract_openalex = 1;
+    render(<CoverageReport coverage={c} />);
+    expect(document.body.textContent).toContain(" · 1 abstract from OpenAlex");
+    expect(document.body.textContent).not.toContain("1 abstracts from OpenAlex");
+  });
+
+  it("explains OpenAlex abstracts under the table, at the anchor the label links to (CV-8)", () => {
+    const data = copy();
+    data.venue_years.forEach((vy) => (vy.abstract_openalex = 0));
+    // two AAAI years summed, one FAccT year; AIES has none, so it isn't named
+    Object.assign(data.venue_years[0]!, { venue: "AAAI", year: 1990, abstract_openalex: 1200 });
+    Object.assign(data.venue_years[1]!, { venue: "AAAI", year: 1991, abstract_openalex: 34 });
+    Object.assign(data.venue_years[2]!, { venue: "FAccT", year: 2022, abstract_openalex: 5 });
+    const counts = "AAAI 1,234; FAccT 5";
+    render(<CoverageReport coverage={data} />);
+    const note = document.getElementById("openalex")!;
+    expect(note.tagName).toBe("P");
+    expect(note.textContent).toBe(
+      "OpenAlex can fill an abstract only for AAAI, AIES and FAccT, and only for a paper this index holds no " +
+        `official abstract for. OpenAlex abstracts in this snapshot: ${counts}. OpenAlex is an open catalogue that gathers ` +
+        "abstracts from publishers and repositories. ACM or another publisher may publish an official abstract " +
+        "for such a paper that this index does not hold, and OpenAlex's text can differ from the published one, " +
+        "sometimes substantially; how often varies by venue (the OpenAlex audit). Each is labelled. " +
+        "abstract_kind:official drops the whole paper from a search, including papers that matched on their " +
+        "title; to keep those, search (term abstract_kind:official) OR title:term.",
+    );
+    expect(within(note).getByText("abstract_kind:official").tagName).toBe("CODE");
+    expect(within(note).getByRole("link", { name: "the OpenAlex audit" }).getAttribute("href")).toBe(
+      "https://github.com/uw-share-lab/openproceedings/blob/dev/docs/results/2026-10-11-openalex-audit.md",
+    );
+    expect(note.getAttribute("tabindex")).toBe("-1"); // the label's target takes focus
+    const region = screen.getByRole("region", { name: "Coverage table" });
+    // under the table: after its region
+    expect(region.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says no abstract is OpenAlex's when the snapshot has none, and names no year (gate C round 1)", () => {
+    const data = copy();
+    data.venue_years.forEach((vy) => (vy.abstract_openalex = 0));
+    render(<CoverageReport coverage={data} />);
+    const text = document.getElementById("openalex")!.textContent ?? "";
+    expect(text).toContain("No abstract in this snapshot is OpenAlex's.");
+    expect(text).not.toMatch(/\d/);
+  });
+
+  it("calls an archive source's window its copies' capture dates, never a crawl (gate C round 1)", () => {
+    const data = copy();
+    const captures = { from: "2016-03-01T12:00:00Z", to: "2022-06-01T08:00:00Z" };
+    data.snapshot.crawl_dates = { ...data.snapshot.crawl_dates, aaai_library: captures };
+    data.snapshot.crawl_dates_kind = { ...data.snapshot.crawl_dates_kind, aaai_library: "archive_captures" };
+    render(<CoverageReport coverage={data} />);
+    expect(document.body.textContent).toContain(
+      "aaai_library: Internet Archive copies captured 2016-03-01 to 2022-06-01",
     );
   });
 
@@ -299,6 +528,8 @@ describe("no hard-coded numbers (TASK-045 AC1)", () => {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const numbers: string[] = [];
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      // CV-8's OpenAlex counts are sums of the API's per-venue-year counts (tested above), not served as such
+      if (node.parentElement?.closest("#openalex")) continue;
       numbers.push(...(node.textContent?.match(/\d[\d,]*/g) ?? []));
     }
     expect(numbers.length).toBeGreaterThan(100);
@@ -390,5 +621,51 @@ describe("the years indexed per venue (copy deck CV-7, decision-047)", () => {
     ];
     render(<CoverageReport coverage={c} />);
     expect(screen.getByText(/^Years indexed:/).textContent).toBe("Years indexed: ICLR 2020 · ICML 2020");
+  });
+});
+
+describe("following a link to a part of the page (gate C round 1)", () => {
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
+  it("scrolls to and focuses the element the URL's hash names once the report is drawn", () => {
+    window.history.replaceState(null, "", "/coverage#openalex");
+    const scrolled: Element[] = [];
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    try {
+      render(<CoverageReport coverage={COVERAGE} />);
+    } finally {
+      Element.prototype.scrollIntoView = before;
+    }
+    const target = document.getElementById("openalex")!;
+    expect(scrolled).toEqual([target]);
+    expect(document.activeElement).toBe(target);
+  });
+
+  it("moves nothing without a hash, or for one the page doesn't hold", () => {
+    render(<CoverageReport coverage={COVERAGE} />);
+    expect(document.activeElement).toBe(document.body);
+    cleanup();
+    window.history.replaceState(null, "", "/coverage#nowhere");
+    render(<CoverageReport coverage={COVERAGE} />);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("ignores a malformed hash: no scroll, no focus, and the report still draws (gate C round 2)", () => {
+    const scroll = vi.fn();
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    for (const hash of ["#%E0%A4%A", "#%"]) {
+      window.history.replaceState(null, "", `/coverage${hash}`);
+      render(<CoverageReport coverage={COVERAGE} />);
+      expect(document.getElementById("openalex")).not.toBeNull();
+      expect(document.activeElement).toBe(document.body);
+      cleanup();
+    }
+    expect(scroll).not.toHaveBeenCalled();
+    Element.prototype.scrollIntoView = before;
+    window.history.replaceState(null, "", "/coverage");
   });
 });

@@ -28,8 +28,9 @@ from openproceedings.ingest.record import ClaimField, Presentation, Source
 from openproceedings.query.ast import FilterField, TextField
 from openproceedings.query.clauses import CLAUSE_REASONS
 from openproceedings.query.exact import SkipReason
+from openproceedings.records import REMOVAL_CAUSES
 from openproceedings.search import NotCounted
-from openproceedings.vocab import Status, Track, Venue
+from openproceedings.vocab import AbstractKind, Status, Track, Venue
 
 # repo-relative; the snapshot sits with the contract tests that pin it
 SNAPSHOT = Path("backend/tests/contract/openapi.json")
@@ -165,6 +166,7 @@ OPEN_ENUMS: dict[str, frozenset[str]] = {
     "venue": frozenset(get_args(Venue)),
     "track": frozenset(get_args(Track)),
     "status": frozenset(get_args(Status)),
+    "abstract kind": frozenset(get_args(AbstractKind)),  # decision-049: a later fallback source adds one
     "presentation": frozenset(get_args(Presentation)),
     "claim source": frozenset(get_args(Source)),
     "abstract origin": frozenset(get_args(Origin)),  # TASK-134: the site an abstract came from
@@ -182,6 +184,7 @@ OPEN_ENUMS: dict[str, frozenset[str]] = {
     "not compared reason": frozenset(get_args(NotComparedReason)),
     # why /parse offers no `$` for a term the no-stemming notice names (TASK-192): a new lexer rule adds one
     "word form skip reason": frozenset(get_args(SkipReason)),
+    "removal cause": frozenset(REMOVAL_CAUSES),  # why a record's diff removed a paper (TASK-227)
 }
 CLOSED_ENUMS: dict[str, frozenset[str]] = {
     "mode": frozenset({"native", "scholar"}),

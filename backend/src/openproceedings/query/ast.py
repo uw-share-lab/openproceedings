@@ -13,10 +13,11 @@ from typing import Annotated, Any, Literal, Self, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from openproceedings.vocab import STATUSES, TRACKS, VENUES
+from openproceedings.vocab import ABSTRACT_KINDS, STATUSES, TRACKS, VENUES
 
 TextField = Literal["title", "abstract"]
-FilterField = Literal["venue", "year", "track", "status"]  # also the canonical filter order (decision-001)
+# also the canonical filter order (decision-001); `abstract_kind` last, so no earlier canonical string moved
+FilterField = Literal["venue", "year", "track", "status", "abstract_kind"]
 FILTER_FIELDS: tuple[FilterField, ...] = get_args(FilterField)
 Span = tuple[int, int]
 _TOKEN = r"^\S+$"  # a normalised token: non-empty, no whitespace
@@ -112,7 +113,8 @@ class Filter(_Node):
         want = YearRange if self.field == "year" else str
         if not all(isinstance(v, want) for v in self.values):
             raise ValueError(f"`{self.field}` filter values must all be {want.__name__}")
-        allowed = {"venue": VENUES.values(), "track": TRACKS, "status": STATUSES}.get(self.field)
+        allowed = {"venue": VENUES.values(), "track": TRACKS, "status": STATUSES,
+                   "abstract_kind": ABSTRACT_KINDS}.get(self.field)  # fmt: skip
         if allowed is not None and not all(v in allowed for v in self.values):
             raise ValueError(f"`{self.field}` values must be canonical vocabulary values, got {self.values}")
         return self

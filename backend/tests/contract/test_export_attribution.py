@@ -113,7 +113,7 @@ def credits(fmt: str, text: str) -> dict[str, Any]:
         return {e.fields["openproceedings_id"]: e.fields.get("abstract_source") for e in parse_string(text)}
     if fmt == "csv":
         rows = csv.DictReader(io.StringIO(text.removeprefix("﻿")))
-        assert rows.fieldnames is not None and rows.fieldnames[-7:-3] == [
+        assert rows.fieldnames is not None and rows.fieldnames[-8:-4] == [
             "abstract_source",
             "abstract_origin",
             "abstract_url",

@@ -295,6 +295,7 @@ class DblpReport(ListingReport):
     site_unjoined: int = 0  # 2007's halves: a paper number with a title but no abstract page, or the reverse
     # page entries with no usable title or abstract (an empty page; a 1997/1998 submission with no `Abstract` heading)
     site_dropped: int = 0
+    site_surrogate: int = 0  # of site_dropped: an abstract refused for a lone UTF-16 surrogate (TASK-229)
     # 1997/1998 submission abstracts withheld whole: a contact detail, or no field ends them (TASK-207)
     site_withheld: int = 0
     # the year's pages are the submissions (1997, 1998), so its abstracts are as submitted
@@ -308,6 +309,8 @@ class DblpReport(ListingReport):
                     "site_ambiguous": self.site_ambiguous, "site_unjoined": self.site_unjoined,
                     "site_dropped": self.site_dropped, "site_withheld": self.site_withheld,
                     "abstracts_as_submitted": self.abstracts_as_submitted}  # fmt: skip
+            if self.site_surrogate:  # listed only when above 0, so a year with none keeps its shape
+                out["site_surrogate"] = self.site_surrogate
         return dict(sorted(out.items()))
 
 
@@ -392,13 +395,16 @@ def mine_year(
         "site_ambiguous": report.site_ambiguous, "site_unjoined": report.site_unjoined,
         "abstract_control_characters": report.abstract_control_characters,
         "abstract_pdf_codes": report.abstract_pdf_codes, "abstract_short": report.abstract_short,
-        "site_dropped": report.site_dropped, "site_withheld": report.site_withheld, "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+        "site_dropped": report.site_dropped, "site_surrogate": report.site_surrogate,
+        "site_withheld": report.site_withheld, "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     if not report.count_ok:
         log.warning("listing_count_mismatch", extra={"year": year, "listing": report.listing,
                                                      "listed": report.listed, "stated": report.stated})  # fmt: skip
-    if report.skipped.get("invalid") or report.skipped.get("unparsed_key"):
+    if report.skipped.get("invalid") or report.skipped.get("unparsed_key") or report.site_surrogate:
         log.warning("listing_attention", extra={"year": year, "listing": report.listing, "unknown_track": 0,
-                                                "skipped": dict(report.skipped)})  # fmt: skip
+                                                "skipped": dict(report.skipped),
+                                                **({"site_surrogate": report.site_surrogate}
+                                                   if report.site_surrogate else {})})  # fmt: skip
     return YearResult(records, [report])
 
 
@@ -415,6 +421,7 @@ def _match(
     report.site_entries = len(site.entries)
     report.site_unjoined = site.unjoined
     report.site_dropped = site.dropped
+    report.site_surrogate = site.surrogate
     report.site_withheld = site.withheld
     report.abstracts_as_submitted = site.as_submitted
     report.fetched += site.fetched

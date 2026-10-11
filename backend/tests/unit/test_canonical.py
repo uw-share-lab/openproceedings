@@ -65,6 +65,16 @@ GOLDEN: list[tuple[str, str]] = [
     ("venue:(icml | ICLR | ICML)", "venue:(ICLR OR ICML)"),  # deduplicated
     ("year:(2024 OR 2019..2021)", "year:(2019..2021 OR 2024)"),
     ("track:(workshop OR main)", "track:(main OR workshop)"),
+    # abstract_kind (decision-049) is the last filter field, so every earlier canonical string is unchanged
+    (
+        "abstract_kind:none status:accepted track:main year:2024 venue:ICLR trust",
+        "(trust AND venue:ICLR AND year:2024 AND track:main AND status:accepted AND abstract_kind:none)",
+    ),
+    ("abstract_kind:(openalex OR official)", "abstract_kind:(official OR openalex)"),
+    (
+        "trust NOT abstract_kind:none abstract_kind:openalex",
+        "(trust AND abstract_kind:openalex AND NOT abstract_kind:none)",
+    ),
     ("trust NOT track:workshop venue:ICLR", "(trust AND venue:ICLR AND NOT track:workshop)"),
     ("trust track:main NOT track:workshop", "(trust AND track:main AND NOT track:workshop)"),
     (

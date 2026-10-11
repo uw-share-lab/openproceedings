@@ -428,7 +428,8 @@ def mine_journal(
             )
             return
         records.append(record)
-        report.count(record, None if record.abstract else "no_abstract", cleaned.spaced, cleaned.pdf_codes)
+        missing = None if record.abstract else cleaned.refused or "no_abstract"
+        report.count(record, missing, cleaned.spaced, cleaned.pdf_codes)
 
     # imported here, not at the top: ojs_harvest imports this module
     from openproceedings.ingest.sources.ojs_harvest import harvest_journal
@@ -467,10 +468,15 @@ def mine_journal(
     result.reports = [reports[v] for v in sorted(reports)]
     mismatched = [r for r in result.reports if not r.count_ok]
     for r in result.reports:
-        if r.skipped:
+        if r.skipped or r.abstract_surrogate:
             log.warning(
                 "listing_attention",
-                extra={"journal": journal, "volume": r.volume, "skipped": dict(r.skipped)},
+                extra={
+                    "journal": journal,
+                    "volume": r.volume,
+                    "skipped": dict(r.skipped),
+                    **r.surrogate_attention(),
+                },
             )
     if (
         mismatched
@@ -492,6 +498,7 @@ def mine_journal(
             "unavailable": result.unavailable,
             "duplicates": result.duplicates,
             "recovered": result.recovered,
+            "abstract_surrogate": sum(r.abstract_surrogate for r in result.reports),
             "ms": elapsed_ms(started, time.monotonic),
         },
     )

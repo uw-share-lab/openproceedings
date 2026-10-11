@@ -67,6 +67,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
@@ -80,8 +81,11 @@ from openproceedings.query.normalize import normalize
 
 _TEXT: tuple[Source, ...] = (
     "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ojs",
-    "crossref", "facct_site", "ris",
+    "aaai_library", "crossref", "facct_site", "ris", "openalex",
 )  # fmt: skip
+# aaai_library after ojs: AAAI's own archived paper pages, official, for AAAI 1980-2008 only (decision-051); its fill
+# runs after dedup and before OpenAlex's (`sources/aaai_library.apply`). OpenAlex last: it only fills an abstract no other source gives (decision-049); the fill runs after dedup
+# (`sources/openalex.apply`), so this order is the second guard
 _ACCEPTANCE: tuple[Source, ...] = (
     "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "ojs", "crossref", "openreview_v2", "openreview_v1",
     "ris",
@@ -235,6 +239,8 @@ Origin = Literal[
     "ojs",
     "crossref",
     "facct_site",
+    "openalex",
+    "aaai_library",
 ]
 _DIRECT_ORIGIN: dict[str, Origin] = {
     "openreview_v2": "openreview", "openreview_v1": "openreview", "neurips_proceedings": "neurips_proceedings",
@@ -245,12 +251,24 @@ _DIRECT_ORIGIN: dict[str, Origin] = {
     "ojs": "ojs",
     "crossref": "crossref",
     "facct_site": "facct_site",
+    "openalex": "openalex",
+    "aaai_library": "aaai_library",
 }  # fmt: skip
 _SITE_ORIGIN: dict[str, Origin] = {
     "NeurIPS": "neurips_proceedings",
     "ICLR": "iclr_proceedings",
     "PMLR": "pmlr",
 }
+_ID_CAPTURE = re.compile(r"https://web\.archive\.org/web/[0-9]{14}id_/(https?://\S+)")
+
+
+def archived_original(capture: object) -> str | None:
+    """The page an Internet Archive `id_` capture URL is a copy of (`…/web/<timestamp>id_/<url>` → `<url>`), or
+    None for anything else."""
+    m = _ID_CAPTURE.fullmatch(capture) if isinstance(capture, str) else None
+    return m.group(1) if m else None
+
+
 # how `ingest/ris.py` writes an abstract claim's evidence: `scholarmend:<its abstract source> <its evidence>`
 RIS_VIA_OPENREVIEW = "scholarmend:openreview_api"
 RIS_VIA_PROCEEDINGS = "scholarmend:proceedings_page"
@@ -336,9 +354,11 @@ def attribution(
     if origin == "icml_site":  # a submission page's evidence says so (TASK-207); read here, never re-derived
         return Attribution(source, origin, claim.url, AS_SUBMITTED in (claim.evidence or ""))
     # each claim's url is an API page (an OAI token page, a Crossref work) or a listing of every paper (a FAccT
-    # CSV): credit the paper's own page, its urls.proceedings (the article page, the DOI link)
-    if origin in ("ojs", "crossref", "facct_site"):
+    # CSV, OpenAlex's API work URL): credit the paper's own page, its urls.proceedings (the article page, the DOI link)
+    if origin in ("ojs", "crossref", "facct_site", "openalex"):
         return Attribution(source, origin, proceedings)
+    if origin == "aaai_library":  # its url is the archive's capture: credit the aaai.org page it is a copy of
+        return Attribution(source, origin, archived_original(claim.url))
     if origin is not None:
         return Attribution(source, origin, claim.url)
     via, _, rest = (claim.evidence or "").partition(" ")

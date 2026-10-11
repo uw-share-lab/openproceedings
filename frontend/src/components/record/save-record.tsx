@@ -640,7 +640,9 @@ function Saved({
           Open record page <span aria-hidden="true">▸</span>
         </Link>
       </p>
-      {data !== null && !mismatch && <MethodsBlock record={data.record} url={url} />}
+      {data !== null && !mismatch && (
+        <MethodsBlock record={data.record} url={url} openalex={data.openalex_abstracts} />
+      )}
     </section>
   );
 }

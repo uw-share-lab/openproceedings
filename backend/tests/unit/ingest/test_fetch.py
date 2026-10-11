@@ -157,6 +157,26 @@ def test_a_capture_judged_by_length_is_whole_without_a_closing_html_tag(
         }
 
 
+def test_a_capture_with_no_length_is_whole_when_its_source_vouches_for_its_bytes(
+    tmp_path: Path, caplog
+) -> None:
+    """An archived page served with no Content-Length and no closing </html> (aaai07-001, TASK-232) is whole when
+    `whole` vouches for its exact bytes (a pinned digest); otherwise it is still `truncated_no_length`."""
+    body = "<html><body><p>an old page that never closed its tags"
+    t = FakeTransport({URL: response(body, headers={"content-type": "text/html"})})
+    f, _ = fetcher(tmp_path / "ok", t, HOSTS, min_interval=0)
+    assert f.get(URL, by_length=True, whole=lambda b: b == body.encode()).text == body
+    assert len(t.calls) == 1
+    t = FakeTransport({URL: response(body, headers={"content-type": "text/html"})})
+    f, _ = fetcher(tmp_path / "no", t, HOSTS, min_interval=0)
+    caplog.clear()
+    with caplog.at_level(logging.WARNING), pytest.raises(RetriesExhausted):
+        f.get(URL, by_length=True, whole=lambda b: False)
+    assert {getattr(r, "why", None) for r in caplog.records if r.getMessage() == "crawl_retry_wait"} == {
+        "truncated_no_length"
+    }
+
+
 def test_query_strings_and_fragments_are_dropped() -> None:
     assert canonical("http://PROCEEDINGS.mlr.press/v28/x.html?utm_source=chatgpt.com#abs") == (
         "https://proceedings.mlr.press/v28/x.html"
@@ -240,3 +260,75 @@ def test_a_body_with_no_charset_decodes_with_the_one_asked_for_and_a_named_one_w
     named = Response(200, {"content-type": "text/html; charset=utf-8"}, "café</html>".encode())
     f, _ = fetcher(tmp_path / "c", FakeTransport({url: named}), frozenset({"icml.cc"}), min_interval=0)
     assert f.get(url, charset="cp1252").text == "café</html>"
+
+
+def test_exact_bytes_keeps_the_body_one_to_one_whatever_charset_the_response_names(tmp_path: Path) -> None:
+    """TASK-232: a source that checks a digest of the captured bytes (aaai_library) reads the body as ISO-8859-1,
+    whatever the response names, so `text.encode("latin-1")` is the body exactly, and a body the named charset
+    can't decode is still kept, never refused."""
+    url = "https://web.archive.org/web/20081121081132id_/http://www.aaai.org/Library/AAAI/1980/aaai80-001.php"
+    body = "<html>café ’ </html>".encode() + b"\xe9\xff</html>"  # UTF-8, then two bytes UTF-8 refuses
+    named = Response(200, {"content-type": "text/html; charset=utf-8"}, body)
+    f, _ = fetcher(
+        tmp_path / "a", FakeTransport({url: named}), frozenset({"web.archive.org"}), min_interval=0
+    )
+    page = f.get(url, exact_bytes=True)
+    assert page.text.encode("latin-1") == body
+    assert page.content_type == "text/html; charset=utf-8"  # the response's own, kept for the record
+    assert PageCache(tmp_path / "a").get(canonical(url)) == page  # cached as read
+    f, _ = fetcher(
+        tmp_path / "b", FakeTransport({url: named}), frozenset({"web.archive.org"}), min_interval=0
+    )
+    with pytest.raises(FetchError, match="not utf-8"):
+        f.get(url)  # without it, the named charset still decides
+
+
+def test_a_verify_callback_that_refuses_keeps_the_page_out_of_the_cache(tmp_path: Path) -> None:
+    """TASK-232: `get(verify=)` judges a fetched 200 before it is stored; a refused page is returned, never cached."""
+    url = "https://web.archive.org/web/20081121081132id_/http://www.aaai.org/Library/AAAI/1980/aaai80-001.php"
+    ok = Response(200, {"content-type": "text/html"}, b"<html>x</html>")
+    f, _ = fetcher(tmp_path, FakeTransport({url: ok}), frozenset({"web.archive.org"}), min_interval=0)
+    page = f.get(url, verify=lambda p: False)
+    assert page.ok and PageCache(tmp_path).get(canonical(url)) is None
+    assert f.get(url, verify=lambda p: True).ok and PageCache(tmp_path).get(canonical(url)) == page
+
+
+def test_a_redirect_callback_judges_a_3xx_and_fetch_never_hops_or_caches(tmp_path: Path) -> None:
+    """`get(redirect=)` hands a 3xx (with its Location) to the source, which returns the page to keep: a 200 it
+    vouches for, or the 3xx as a stable answer; both are cached. Without it a 3xx is still `HTTPRefused`.
+    `fetch` is one live request, never cached, and a 3xx there is refused, never followed."""
+    from openproceedings.ingest.sources.http import HTTPRefused
+
+    hosts = frozenset({"web.archive.org"})
+    url, there = "https://web.archive.org/web/1/x", "https://web.archive.org/web/2/x"
+    moved = Response(302, {"location": there}, b"")
+    script = {url: moved, there: Response(200, {"content-type": "text/html"}, b"<html>x</html>")}
+    f, _ = fetcher(tmp_path, FakeTransport(script), hosts, min_interval=0)
+    with pytest.raises(HTTPRefused):
+        f.get(url)
+    seen: list[str] = []
+
+    def follow(at: str, resp: Response) -> Page:
+        seen.append(resp.headers["location"])
+        return Page(at, resp.status, "", T1)
+
+    page = f.get(url, redirect=follow)
+    assert seen == [there] and page.status == 302 and PageCache(tmp_path).get(canonical(url)) == page
+    assert f.fetch(there).ok and PageCache(tmp_path).get(canonical(there)) is None
+    with pytest.raises(HTTPRefused):
+        f.fetch(url)
+    with pytest.raises(FetchError, match="not on"):
+        f.fetch("https://www.aaai.org/x")
+
+
+@pytest.mark.parametrize(
+    "url", ["https://www.aaai.org/x", "http://web.archive.org.evil/x", "ftp://web.archive.org/x"]
+)
+def test_fetch_refuses_a_url_off_its_hosts_before_any_request(tmp_path: Path, url: str) -> None:
+    """`Fetcher.fetch` is a general API (gate C round 1): a URL off the fetcher's hosts, or not http(s), is a
+    `FetchError` (`off_host`) and the transport is never called."""
+    transport = FakeTransport({})
+    f, _ = fetcher(tmp_path, transport, frozenset({"web.archive.org"}), min_interval=0)
+    with pytest.raises(FetchError) as e:
+        f.fetch(url)
+    assert e.value.reason == "off_host" and transport.calls == []

@@ -101,6 +101,11 @@ GOLDEN: list[tuple[str, str]] = [
     ("venue:ＩＣＬＲ", "venue:ICLR"),
     ("venue:İCLR", "venue:ICLR"),
     ("track:ＭＡＩＮ", "track:main"),
+    # abstract_kind (decision-049): a filter like track's, case-blind values, field names too
+    ("abstract_kind:openalex", "abstract_kind:openalex"),
+    ("Abstract_Kind:OFFICIAL", "abstract_kind:official"),
+    ("abstract_kind:(official OR none)", "abstract_kind:official|none"),
+    ("trust NOT abstract_kind:none", "(AND trust (NOT abstract_kind:none))"),
     ("NOT NOT a", "(NOT (NOT a))"),  # positive: not all-negative
     ("a OR NOT NOT b", "(OR a (NOT (NOT b)))"),
     ("a NEAR/3 (b)", "(NEAR/3 a b)"),  # a one-word group counts as a word
@@ -474,6 +479,9 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ("NOT venue:ICLR", DiagnosticCode.PARSE_ALL_NEGATIVE, (0, 14)),
     ("year:2026..2020", DiagnosticCode.FIELD_RANGE_INVERTED, (5, 15)),
     ("track:foo", DiagnosticCode.FIELD_UNKNOWN_VALUE, (6, 9)),
+    ("abstract_kind:crossref", DiagnosticCode.FIELD_UNKNOWN_VALUE, (14, 22)),
+    ("abstract_kind:(none AND official)", DiagnosticCode.FIELD_FILTER_SYNTAX, (20, 23)),
+    ("NOT abstract_kind:none", DiagnosticCode.PARSE_ALL_NEGATIVE, (0, 22)),
     ("venue:NIPS", DiagnosticCode.FIELD_UNKNOWN_VALUE, (6, 10)),
     ("status:accept*", DiagnosticCode.FIELD_UNKNOWN_VALUE, (7, 14)),
     ("year:abc", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 8)),

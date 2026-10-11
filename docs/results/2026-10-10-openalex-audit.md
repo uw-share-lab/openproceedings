@@ -1,0 +1,112 @@
+# OpenAlex fidelity audit (2026-10-10)
+
+- Snapshot: `2026-10-10-22a339940466`
+- Code: commit `3968d852b74f`
+- Sample: seed 49; every record with an official abstract and a DOI of FAccT 2022, 2025, 2026; AIES 2024, 2025; and 1,000 of 25,124 such AAAI 2010+ records, sorted by id after a seeded draw. Title-route check: 1,061 attaches.
+- Date: 2026-10-10
+
+Reproduce (from the OpenAlex cache, no network):
+
+```
+uv run op eval openalex --offline --snapshot 2026-10-10-22a339940466 --seed 49 --aaai-sample 1000 --title-sample 1061 --date 2026-10-10 --ruling 'Keep the exact title-key and year rule. The 9 flagged attaches are mostly OCR or spelling variants of the same author, and a surname rule would drop correct attaches; the residual wrong-attach risk is about 2 of 1,061 (an estimate, see Caveats; controller, 2026-10-10).'
+```
+
+## Method
+
+Each sampled record has an official abstract (FAccT's from the official FAccT pages, `facct_site`; AIES's and
+AAAI's from ojs.aaai.org, `ojs`) and a DOI. Each venue-year's DOIs were looked up in OpenAlex in sorted batches of
+50, as `op ingest openalex` looks them up, and each work's `abstract_inverted_index` was rebuilt and cleaned by the
+fill's own rules (`openalex.abstract_of`: a gap, two words at one position or any other shape is refused). OpenAlex's
+text is then compared with the official one:
+
+- `exact`: equal once whitespace is collapsed.
+- `near_exact`: the same search tokens (`dedup.title_key`, the token contract): every search matches both alike.
+- `truncated`: OpenAlex's tokens are a strict prefix of the official ones.
+- `similar`: a token `SequenceMatcher` ratio of at least 0.9.
+- `differs`: anything else.
+- `no_abstract`: OpenAlex has the work but no abstract for it.
+- `no_openalex`: no OpenAlex work answers for the DOI.
+- `refused`: the work's abstract was refused by the rebuild or cleaning (why is listed below the table).
+- `duplicate`: several works answer for the DOI with differing texts (several with one text are compared once).
+
+Each rate is of the records compared in that row. No abstract text is quoted here; records are named by id.
+
+## The DOI route: OpenAlex's abstract against the official one
+
+| Venue | Year | Compared | `exact` | `near_exact` | `truncated` | `similar` | `differs` | `no_abstract` | `no_openalex` | `refused` | `duplicate` |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| AAAI | 2010 | 9 | 8 (88.9%) | 0 (0.0%) | 0 (0.0%) | 1 (11.1%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2011 | 9 | 7 (77.8%) | 0 (0.0%) | 0 (0.0%) | 2 (22.2%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2012 | 17 | 17 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2013 | 9 | 9 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2014 | 25 | 25 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2015 | 28 | 28 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2016 | 31 | 31 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2017 | 31 | 30 (96.8%) | 0 (0.0%) | 0 (0.0%) | 1 (3.2%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2018 | 38 | 37 (97.4%) | 1 (2.6%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2019 | 50 | 50 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2020 | 79 | 79 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2021 | 74 | 73 (98.6%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 (1.4%) |
+| AAAI | 2022 | 64 | 63 (98.4%) | 0 (0.0%) | 0 (0.0%) | 1 (1.6%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2023 | 72 | 71 (98.6%) | 1 (1.4%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2024 | 112 | 112 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2025 | 154 | 154 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AAAI | 2026 | 198 | 197 (99.5%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1 (0.5%) |
+| AIES | 2024 | 170 | 170 (100.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| AIES | 2025 | 279 | 278 (99.6%) | 1 (0.4%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| FAccT | 2022 | 169 | 25 (14.8%) | 14 (8.3%) | 9 (5.3%) | 64 (37.9%) | 57 (33.7%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| FAccT | 2025 | 206 | 14 (6.8%) | 108 (52.4%) | 10 (4.9%) | 55 (26.7%) | 8 (3.9%) | 11 (5.3%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| FAccT | 2026 | 298 | 66 (22.1%) | 94 (31.5%) | 17 (5.7%) | 80 (26.8%) | 16 (5.4%) | 24 (8.1%) | 0 (0.0%) | 0 (0.0%) | 1 (0.3%) |
+| **All** | | **2,122** | 1,544 (72.8%) | 219 (10.3%) | 36 (1.7%) | 204 (9.6%) | 81 (3.8%) | 35 (1.6%) | 0 (0.0%) | 0 (0.0%) | 3 (0.1%) |
+
+Refusals: none.
+Works returned for a DOI the batch didn't ask for (not compared): 1; it is in no count above, so no figure changes.
+`differs` examples (the first 10 of 81): `op:facct:2022:doi-3531146.3533069`, `op:facct:2022:doi-3531146.3533070`, `op:facct:2022:doi-3531146.3533082`, `op:facct:2022:doi-3531146.3533083`, `op:facct:2022:doi-3531146.3533088`, `op:facct:2022:doi-3531146.3533089`, `op:facct:2022:doi-3531146.3533091`, `op:facct:2022:doi-3531146.3533092`, `op:facct:2022:doi-3531146.3533094`, `op:facct:2022:doi-3531146.3533097`.
+
+Of 2,122 records compared, OpenAlex's abstract is exact for 1,544 (72.8%) and near-exact for 219 (10.3%): together 1,763 (83.1%) would match every search exactly as the official abstract does.
+
+**A note on FAccT.** FAccT agrees far less often than AAAI or AIES, whose official abstracts come from ojs.aaai.org.
+FAccT's official abstracts come from the conference's own pages (`facct_site`). Most of FAccT's `similar` and
+`differs` cases are about the same length as the official text and mostly open with the same words, so they look
+like another version of the same abstract rather than noise: OpenAlex likely carries ACM's published version, not
+the conference site's text. A few are entirely different texts. An abstract the fill takes from OpenAlex is labelled
+`abstract_kind: openalex`, never `official`, so the label already tells a reader the text is OpenAlex's, which may be
+ACM's version rather than the site's.
+
+## The title route (AAAI 1980–2008): wrong-attach check
+
+AAAI 1980–2008 records have no DOI. The fill matches each one by exact title key in the year's OpenAlex listing (`openalex_sources.toml`), attaching only when one listed work and one DOI-less record share the key. The listing source also holds proceedings volumes, other venues' papers and OCR-garbled titles, so an exact title could still name another paper. The fill was replayed over the cached listings (no new listing fetch). A seeded sample of its title-route attaches was then checked against OpenAlex's authors for each work (seed 49; one request per 50 works, `select=id,authorships,biblio`).
+
+- DOI-less AAAI 1980–2008 records with no abstract: 3,648; title-route attaches: 1,061; the fill's refusals: `inverted_gap` 50, `inverted_unreadable` 101, `no_abstract` 119, `title_ambiguous` 21, `title_unmatched` 3,357.
+- Sampled: 1,061 of 1,061 attaches.
+- Year: OpenAlex's `publication_year` equals ours in 1,061 of 1,061. The listing is filtered by year and the fill requires the year, so this holds by construction.
+- Authors: OpenAlex lists authors for 1,061 of 1,061; the first-author surname matches ours in 1,044; the lists share at least one surname in 1,052.
+- Pages: OpenAlex holds a first page for 1,054 of 1,061. Our records carry no page field, so pages can't be compared.
+
+**Verdict:** 1,052 agree (99.2%), 9 look wrong (0.8%), 0 can't be checked (0.0%; no authors on one side). `agree`: the years match and the author lists share a surname (surnames compared without marks or case, dblp's homonym numbers dropped). `wrong`: OpenAlex lists authors and none of their surnames is any of ours.
+
+| Record | OpenAlex work | Our first-author surname | OpenAlex's first-author surname |
+|---|---|---|---|
+| `op:aaai:1982:dblp-Kender82` | `W147023952` | kender | render |
+| `op:aaai:1982:dblp-Witkin82` | `W164237969` | witkin | within |
+| `op:aaai:1988:dblp-Pentland88` | `W131553806` | pentland | pentlaud |
+| `op:aaai:1992:dblp-Vempaty92` | `W41953994` | vempaty | rao |
+| `op:aaai:1994:dblp-Elliot94` | `W2097837865` | elliot | elliott |
+| `op:aaai:1996:dblp-Sandholm96` | `W21597398` | sandholm | sandholrn |
+| `op:aaai:1997:dblp-Nournai97` | `W2523563690` | nournai | nourani |
+| `op:aaai:1998:dblp-Pedersen98a` | `W2164604466` | pedersen | pederson |
+| `op:aaai:1998:dblp-TorreT98` | `W1838373937` | torre | toor |
+
+7 of the 9 that look wrong have a first-author surname close to ours (a character ratio of at least 0.75): by the look of them, spelling or OCR variants of the same surname.
+
+Rules that would exclude them:
+
+- **Require at least one shared author surname:** excludes all 9 that look wrong, and also the 0 that can't be checked.
+- **Require a matching first-author surname:** excludes all 9 that look wrong, and also 8 that agree on another author and the 0 that can't be checked.
+
+**Ruling:** Keep the exact title-key and year rule. The 9 flagged attaches are mostly OCR or spelling variants of the same author, and a surname rule would drop correct attaches; the residual wrong-attach risk is about 2 of 1,061 (an estimate, see Caveats; controller, 2026-10-10).
+
+## Caveats
+
+- OpenAlex's fidelity for AAAI before 2010 is unmeasured. The DOI route compares only records that also have an official abstract, and the title route checks authors, not abstract text. Where AAAI's archived aaai.org pages (`aaai_library`) and OpenAlex both give an abstract for an AAAI 1980–2008 paper, the two can be compared; that measure is a follow-up (TASK-235).
+- The title route's residual wrong-attach risk is an estimate, not a measured bound: 7 of the 9 attaches that look wrong have a first-author surname close to ours, judged by a character ratio, not checked by a person. If they are the same authors, 2 of the 1,061 sampled attaches (0.2%) would be wrong.

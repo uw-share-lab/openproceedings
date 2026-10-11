@@ -34,7 +34,7 @@ import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, FastAPI, Query, Request, Response
 from fastapi import Path as PathParam
@@ -65,6 +65,7 @@ from openproceedings.api.models import (
     RecordDiff,
     RecordRequest,
     RecordResponse,
+    RemovalCauses,
     ReplayInfo,
     versions,
 )
@@ -78,6 +79,8 @@ from openproceedings.records import (
     RECORDS_DIR,
     PinnedLoader,
     RecordStore,
+    Removal,
+    RemovalMemo,
     Replay,
     SearchRecord,
     freeze,
@@ -169,6 +172,43 @@ class SaveCeiling:
         log.log(level, event, extra={"scope": scope, "burst": burst, "per_hour": per_hour})
 
 
+MAX_OPENALEX_COUNTS = 10_000  # (record id, index_version) pairs whose `openalex_abstracts` is kept
+
+
+@dataclass
+class OpenAlexCounts:
+    """Each record's `openalex_abstracts` on its own index, worked out once (`abstract_kind`'s byte per id alone,
+    `TantivyEngine.count_value`) and kept: a stored record's ids never change and an index is immutable, so
+    the count is a function of (record id, index_version). An LRU of `MAX_OPENALEX_COUNTS` ints."""
+
+    kept: OrderedDict[tuple[str, str], int] = field(default_factory=OrderedDict)
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def of(self, record: SearchRecord, engine: TantivyEngine | None) -> int | None:
+        """How many of `record`'s ids are `abstract_kind:openalex` on `engine`; None unless `engine` is the
+        record's own index and holds `abstract_kind` (schema 4), or when the record has no stored ids."""
+        if (
+            engine is None
+            or engine.index_version != record.index_version
+            or "abstract_kind" not in engine.filter_fields
+            or record.ids is None
+        ):
+            return None
+        key = (record.record_id, record.index_version)
+        with self.lock:
+            if key in self.kept:
+                self.kept.move_to_end(key)
+                return self.kept[key]
+        # one field's byte per id, outside the lock (a race only counts twice); about 117 ms for all 173,253 ids
+        # through `filter_values` before gate C round 3, less now that no per-id dict is built
+        n = engine.count_value(record.ids, "abstract_kind", "openalex")
+        with self.lock:
+            self.kept[key] = n
+            while len(self.kept) > MAX_OPENALEX_COUNTS:
+                self.kept.popitem(last=False)
+        return n
+
+
 @dataclass(frozen=True)
 class Records:
     """What the record routes share, on `app.state.records`."""
@@ -177,6 +217,10 @@ class Records:
     store: RecordStore
     pinned: PinnedLoader  # `IndexState.pinned(v).engine`
     saves: SaveCeiling
+    removed: RemovalMemo = field(
+        default_factory=RemovalMemo
+    )  # each drifted record's removal causes, per index
+    openalex: OpenAlexCounts = field(default_factory=OpenAlexCounts)  # `openalex_abstracts`, kept
 
 
 def install(app: FastAPI, config: ApiConfig, state: IndexState) -> None:
@@ -303,19 +347,25 @@ def get_record(
 ) -> RecordResponse:
     """The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless
     `include=ids`; `/export?record_id=` streams the papers themselves. With `replay=false`, the stored record
-    alone (`replay` null; the top-level versions are the served index's)."""
+    alone (`replay` null; the top-level versions are the served index's). `openalex_abstracts` is derived from
+    the record's ids on its own index when this request has that index (`OpenAlexCounts`): the replay's
+    engine, or with `replay=false` the served one (nothing else is loaded)."""
     record = stored_record(request, id)
     shown = record if include == "ids" else record.model_copy(update={"ids": None})
     if not replay:
         annotate(request, canonical_hash=record.canonical_hash)
         return RecordResponse(
-            **versions(engine.index_version, engine.tokenizer_version), record=shown, replay=None
+            **versions(engine.index_version, engine.tokenizer_version),
+            record=shown,
+            replay=None,
+            openalex_abstracts=_records(request).openalex.of(record, engine),  # the served index only
         )
     result, clauses = _replayed(request, engine, record)
     return RecordResponse(
         **versions(result.engine.index_version, result.engine.tokenizer_version),
         record=shown,
         replay=replay_info(result, clauses),
+        openalex_abstracts=_records(request).openalex.of(record, result.engine),
     )
 
 
@@ -329,14 +379,30 @@ def get_record_diff(
 ) -> RecordDiff:
     """The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each
     list is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A
-    title comes from the index the replay ran on, null if it doesn't hold the paper. A refused replay
-    compared nothing: empty lists, null totals."""
+    title comes from the index the replay ran on, null if it doesn't hold the paper. Each entry also has its
+    track and status there, each removed one its cause and failed filter, and `removed_causes` counts the
+    causes over the whole list (`removals`, TASK-227: a byte read per id per filter field, worked out once
+    per record and index and kept, `RemovalMemo`; the counts go on the access line too, never a title). A refused replay compared nothing: empty lists,
+    null totals and `removed_causes`."""
     record = stored_record(request, id)
     result, clauses = _replayed(request, engine, record)
     added = list(result.added[offset : offset + limit]) if result.added is not None else []
     removed = list(result.removed[offset : offset + limit]) if result.removed is not None else []
     wanted = [*added, *removed]
-    titles = {i: str(r["title"]) for i, r in result.engine.display(wanted).items()} if wanted else {}
+    shown = result.engine.display(wanted) if wanted else {}
+    # None exactly when `result.removed` is (refused), and then `removed` is empty. Worked out once per record and
+    # index (`RemovalMemo`), so later pages of a long removed list don't repeat it
+    found = _records(request).removed.get(record.record_id, result)
+    why, tally = found if found is not None else (None, None)
+    if tally is not None:
+        annotate(
+            request,
+            removed_track_changed=tally["track_changed"],
+            removed_status_changed=tally["status_changed"],
+            removed_filter_changed=tally["filter_changed"],
+            removed_not_in_index=tally["not_in_index"],
+            removed_still_eligible=tally["still_eligible"],
+        )
     return RecordDiff(
         **versions(result.engine.index_version, result.engine.tokenizer_version),
         record_id=record.record_id,
@@ -349,9 +415,24 @@ def get_record_diff(
         limit=limit,
         added_total=len(result.added) if result.added is not None else None,
         removed_total=len(result.removed) if result.removed is not None else None,
-        added=[DiffEntry(id=i, title=titles.get(i)) for i in added],
-        removed=[DiffEntry(id=i, title=titles.get(i)) for i in removed],
+        added=[_entry(i, shown, None) for i in added],
+        removed=[_entry(i, shown, why[i]) for i in removed if why is not None],
         membership_identical=result.membership_identical,
+        removed_causes=RemovalCauses(**tally) if tally is not None else None,
+    )
+
+
+def _entry(i: str, shown: dict[str, dict[str, Any]], why: Removal | None) -> DiffEntry:
+    """One diff entry: its title, track and status from the replaying index's display record (null when not
+    held), and for a removed one its cause and the filter it now fails."""
+    r = shown.get(i)
+    return DiffEntry(
+        id=i,
+        title=str(r["title"]) if r is not None else None,
+        track=r["track"] if r is not None else None,
+        status=r["status"] if r is not None else None,
+        cause=why.cause if why is not None else None,
+        failed_filter=why.field if why is not None else None,
     )
 
 

@@ -157,7 +157,7 @@ def _notes_in(fmt: str, text: str) -> dict[str, str | None]:
         return {e.fields["openproceedings_id"]: e.fields.get("abstract_note") for e in parse_string(text)}
     if fmt == "csv":
         rows = csv.DictReader(io.StringIO(text.removeprefix("﻿")))
-        assert rows.fieldnames is not None and rows.fieldnames[-1] == "abstract_note"
+        assert rows.fieldnames is not None and rows.fieldnames[-2:] == ["abstract_note", "abstract_kind"]
         return {row["id"]: row["abstract_note"] or None for row in rows}
     return {(o := json.loads(line))["id"]: o.get("abstract_note") for line in text.splitlines()}
 

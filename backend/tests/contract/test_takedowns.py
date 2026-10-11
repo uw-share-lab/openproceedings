@@ -29,7 +29,7 @@ from openproceedings.api.state import IndexState, Served
 from openproceedings.engine.index import build_index
 from openproceedings.ingest import snapshot as snapshot_module
 from openproceedings.ingest.dedup import DedupResult, Merge
-from openproceedings.ingest.record import PaperRecord
+from openproceedings.ingest.record import DERIVED, PaperRecord
 from openproceedings.ingest.snapshot import render, withhold
 from openproceedings.query.normalize import normalize
 from openproceedings.vocab import STATUSES, TRACKS
@@ -207,7 +207,7 @@ def test_the_paper_page_withholds_the_abstract_and_its_claims(
     body = client.get(f"/api/v1/papers/{paper.id}", params={"q": f"abstract:{word} {EVERY}"}).json()
     assert body["abstract_withheld"] is True and body["matched"] is True  # the index's answer, as /search's
     assert body["highlights"]["abstract"] == []
-    shown = {k: v for k, v in body["paper"].items() if k != "venue_name"}  # derived, never stored
+    shown = {k: v for k, v in body["paper"].items() if k not in DERIVED}  # derived, never stored
     record = PaperRecord.model_validate_json(json.dumps(shown))  # content_hash consistent with what is shown
     assert record.abstract is None and record.claims("abstract") == ()
     assert record.provenance and record.title == paper.title

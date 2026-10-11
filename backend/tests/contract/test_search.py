@@ -38,7 +38,7 @@ QUERIES = [
 ]
 HIT_KEYS = {
     "id", "title", "abstract", "authors", "venue", "year", "track", "status", "presentation", "score",
-    "highlights", "urls", "abstract_source", "abstract_withheld", "twins", "abstract_note",
+    "highlights", "urls", "abstract_source", "abstract_withheld", "twins", "abstract_note", "abstract_kind",
 }  # fmt: skip
 
 
@@ -51,6 +51,7 @@ def reference() -> ReferenceEngine:
             p = as_paper(r)
             self.id, self.title, self.abstract = p.id, p.title, p.abstract
             self.venue, self.year, self.track, self.status = p.venue, p.year, p.track, p.status
+            self.abstract_kind = p.abstract_kind
 
     return ReferenceEngine([Rec(r) for r in records()])
 
@@ -101,7 +102,7 @@ def test_the_response_has_every_field_of_spec_04(client: TestClient, store: Stor
         "translations": [],
         "expansions": {"calibrat*": list(engine_of(client).expand(result.ast.children[1]))},  # type: ignore[union-attr]
     }
-    assert set(body["facets"]) == {"venue", "year", "track", "status"}
+    assert set(body["facets"]) == {"venue", "year", "track", "status", "abstract_kind"}
     assert body["hits"] and all(set(h) == HIT_KEYS for h in body["hits"])
     assert all(set(h["highlights"]) == {"title", "abstract"} for h in body["hits"])
     assert all(set(h["urls"]) == {"forum", "pdf", "proceedings", "doi"} for h in body["hits"])
@@ -235,7 +236,9 @@ def test_excluded_is_present_even_when_nothing_was_removed(client: TestClient) -
 # --- AC4: disjunctive facets (decision-001) ---------------------------------------------------------------
 @pytest.mark.parametrize("q", QUERIES)
 def test_facets_equal_the_oracles(client: TestClient, reference: ReferenceEngine, q: str) -> None:
-    assert ok(client, q, limit=0)["facets"] == reference.facets(parse(q).effective_ast)  # type: ignore[arg-type]
+    # the served index's fields (a schema-3 index has no `abstract_kind`, which the oracle could count)
+    fields = engine_of(client).filter_fields
+    assert ok(client, q, limit=0)["facets"] == reference.facets(parse(q).effective_ast, fields)  # type: ignore[arg-type]
 
 
 def test_a_facet_drops_only_its_own_top_level_conjuncts(
@@ -307,6 +310,30 @@ def error(r: Any, status: int, code: str) -> dict[str, Any]:
     body = r.json()
     assert set(body) == {"error"} and body["error"]["code"] == code
     return body["error"]  # type: ignore[no-any-return]
+
+
+@pytest.mark.parametrize("route", ["search", "records", "export", "papers"])
+def test_abstract_kind_on_a_schema_3_index_is_a_422_never_a_500(
+    schema_3_client: TestClient, route: str
+) -> None:
+    """decision-049: a schema-3 index holds no `abstract_kind`, so a query naming it is the client's error on
+    every route that runs a query, refused before anything is compiled."""
+    q, client = "trust abstract_kind:openalex", schema_3_client
+    engine = engine_of(client)
+    assert engine.schema_version == "3" and "abstract_kind" not in engine.filter_fields
+    r = {
+        "search": lambda: client.get(SEARCH, params={"q": q}),
+        "records": lambda: client.post("/api/v1/records", json={"q": q}),
+        "export": lambda: client.get("/api/v1/export", params={"q": q, "format": "ris"}),
+        # a paper's highlights for `q`: no collection runs, so the refusal can't come from a compile
+        "papers": lambda: client.get(f"/api/v1/papers/{engine.ids[0]}", params={"q": q}),
+    }[route]()
+    e = error(r, 422, "FIELD_NOT_INDEXED")
+    assert (
+        "doesn't record each paper's abstract source yet" in e["message"]
+        and engine.index_version in e["message"]
+    )
+    assert "schema" not in e["message"]  # the reader's words (gate C round 1)
 
 
 def test_a_query_that_does_not_parse_is_a_422_with_code_point_spans(client: TestClient) -> None:

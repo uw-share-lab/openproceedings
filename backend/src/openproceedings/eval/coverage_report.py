@@ -5,6 +5,8 @@
 What it adds to that data, and nothing else:
 - **Gaps.** A gated official cell (main or D&B with an official count) that the snapshot holds no record for is
   a row with 0 indexed and ✗, never a silent zero (spec 07 §C: a venue-year with no source is a reported gap).
+- **Ungated cells with a note.** Each cell `GET /coverage` serves with a `gate_note` (`official_counts.UNGATED_NOTES`,
+  TASK-222), with its note and citation: why it has no official count to gate on.
 - **The M4 gate verdict.** Every gated cell within ±1% (`official_counts.within_gate`), gaps included.
 - **Cause notes.** Every failing cell gets its cause from `causes` (a person's classification: source
   definition, classification, dedup or crawl gap), or `**unclassified**`: never adjust an official number to fit.
@@ -329,7 +331,7 @@ def _row(
     if cell is None:  # a gated official cell the snapshot holds nothing for
         assert row is not None
         return (f"| {year} | {track} | 0 | {row.accepted:,} | {_signed(-row.accepted)} | {_pct(-100.0)} "
-                f"| ✗ gap | 0 | {unknown} | {statuses} |")  # fmt: skip
+                f"| ✗ gap | 0 | 0 | 0 | {unknown} | {statuses} |")  # fmt: skip
     indexed = cell["indexed_accepted"]
     if cell["official_accepted"] is None:
         verdict, off, delta, pct = (
@@ -344,7 +346,8 @@ def _row(
         if accepted:  # outside ±1% by exactly the owner-accepted counts: passes, and says why
             verdict = "✓ accepted exception"
     return (f"| {year} | {track} | {indexed:,} | {off} | {delta} | {pct} | {verdict} | "
-            f"{cell['abstract_missing']:,} | {unknown} | {statuses} |")  # fmt: skip
+            f"{cell['abstract_missing']:,} | {cell['abstract_official']:,} | {cell['abstract_openalex']:,} "
+            f"| {unknown} | {statuses} |")  # fmt: skip
 
 
 def _listing_rows(manifest: Mapping[str, Any]) -> tuple[list[str], list[str]]:
@@ -476,10 +479,25 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
     if aaai:
         held = sorted({int(x["year"]) for x in aaai})
         releases = sorted({str(x["listing"]) for x in aaai})
+        filled = sum(vy.get("abstract_openalex", 0) for vy in cov["venue_years"] if vy["venue"] == "AAAI")
+        pages = sum(int(x.get("attached", 0)) for x in manifest.get("sources", {}).get("aaai_library", {})
+                    .get("fills", []))  # fmt: skip
+        archived = (
+            f"; {pages:,} have AAAI's own abstract, read from the Internet Archive's copies of their old aaai.org "
+            "paper pages (official; decision-051)"
+            if pages else ""
+        )  # fmt: skip
+        if filled:
+            no_abstract = (f"come with no abstract from dblp{archived}; where "
+                           f"{'neither gives' if pages else 'no official AAAI source gives'} one, OpenAlex's is "
+                           "filled in (counted below)")  # fmt: skip
+        else:
+            no_abstract = (f"come with no abstract from dblp{archived}, and the rest have none" if pages
+                           else "have no abstract (dblp holds none)")  # fmt: skip
         out.append(
             f"- AAAI {held[0]}–{held[-1]}: from the pinned dblp snapshot release {', '.join(releases)} (a "
             "bibliography read from one pinned file; decision-049). "
-            f"Its {sum(int(x['records']) for x in aaai):,} records have no abstract (dblp holds none). Each "
+            f"Its {sum(int(x['records']) for x in aaai):,} records {no_abstract}. Each "
             "record's track comes from the section the official AAAI contents page prints it in: student "
             "abstracts, the doctoral consortium, demonstrations, IAAI papers and the other non-technical "
             f"sections have their own tracks, which a default search leaves out.{_not_indexed(aaai, 'invited talks and panels')}"
@@ -502,6 +520,14 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
         out.append(
             f"- {venue} {held[0]}–{held[-1]}: from Crossref's records of the ACM proceedings (decision-049): "
             f"{records:,} records, {what}.{_not_indexed(mine, kinds)}"
+        )
+    filled = sorted({vy["venue"] for vy in cov["venue_years"] if vy.get("abstract_openalex")})
+    if filled:  # additive: a snapshot OpenAlex filled nothing in reads as before
+        n = sum(vy["abstract_openalex"] for vy in cov["venue_years"])
+        names = f"{', '.join(filled[:-1])} and {filled[-1]}" if len(filled) > 1 else filled[0]
+        out.append(
+            f"- {n:,} abstracts ({names}) are OpenAlex's, filled where no official source gives one, and "
+            "labelled `abstract_kind:openalex`."
         )
     return out
 
@@ -592,8 +618,9 @@ def render(
             f"## {venue}",
             "",
             "| year | track | indexed accepted | official | Δ | Δ% | gate | missing abstracts "
+            "| Official abstract | OpenAlex abstract "
             "| unknown track (venue-year) | unknown status (venue-year) | statuses indexed |",
-            "|---|---|---|---|---|---|---|---|---|---|---|",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         mine = sorted((k for k in keys if k[0] == venue), key=lambda k: (k[1], TRACK_ORDER[k[2]]))
         lines += [
@@ -625,6 +652,20 @@ def render(
             "",
         ]
         lines += [f"- {v} {y} {t}: {causes[(v, y, t)]}" for v, y, t in stale]
+    lines += ["", "## Ungated cells with a note", ""]
+    noted = [
+        (vy["venue"], vy["year"], t) for vy in cov["venue_years"] for t in vy["tracks"] if t["gate_note"]
+    ]
+    if noted:  # why a cell has no official count to gate on (TASK-222), as `/coverage` serves it
+        lines += [
+            "These cells are reported, not gated: each has no official count that the index's cell can be checked "
+            "against, for the reason given (`docs/results/coverage-sources.md` §Ungated cells with a note).",
+            "",
+            *(f"- {v} {y} {t['track']}: {t['gate_note']} (source: {t['gate_note_citation']})"
+              for v, y, t in sorted(noted, key=lambda n: (n[0], n[1], TRACK_ORDER[n[2]["track"]]))),
+        ]  # fmt: skip
+    else:
+        lines.append("None: no ungated cell in this snapshot has a note.")
     lines += ["", "## Owner-accepted exceptions", ""]
     if verdict.accepted:
         lines += [

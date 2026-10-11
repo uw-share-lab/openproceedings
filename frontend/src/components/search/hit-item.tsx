@@ -5,7 +5,8 @@
  * `/paper/<id>?q=&mode=`, the authors (the first three and "et al.", with a button for the full list), badges,
  * the abstract excerpt, the abstract's attribution ("Abstract: PMLR", linking to the paper's page there;
  * decision-018, the API's `abstract_source`), then what to know of the abstract (the API's `abstract_note`, copy
- * RH-19: a submission-time abstract, TASK-210) and the outbound links. An abstract this instance withholds at a
+ * RH-19: a submission-time abstract, TASK-210), a line for an abstract filled from OpenAlex (the API's `abstract_kind`,
+ * copy RH-20; decision-049) and the outbound links. An abstract this instance withholds at a
  * rights holder's request (the API's `abstract_withheld`, decision-022) says so (copy RH-15), never "No abstract
  * in the index". A record with twins (the API's `twins`, decision-029) names each, a link to its paper page (copy
  * RH-18). Highlights are the API's spans only
@@ -112,6 +113,8 @@ const ORIGIN_NAMES: Readonly<Record<string, string>> = {
   ojs: "AAAI Digital Library",
   crossref: "Crossref",
   facct_site: "FAccT conference site",
+  openalex: "OpenAlex",
+  aaai_library: "AAAI",
 };
 
 type AbstractFrom = NonNullable<SearchHit["abstract_source"]>;
@@ -178,6 +181,28 @@ export function AbstractNote({ note }: { note: string | null }) {
   return <p className="text-xs text-muted-foreground">{note}</p>;
 }
 
+/** The coverage page's explanation of OpenAlex abstracts (copy CV-8), which the label links to. */
+export const OPENALEX_ANCHOR = "/coverage#openalex";
+
+/** An abstract filled from OpenAlex because the index holds no official one (copy RH-20, PA-12; decision-049; the
+ * controller's ruling of gate C round 1, since the venue itself may publish one the index can't read): "Abstract via
+ * OpenAlex: this index holds no official abstract for this paper. OpenAlex's text can differ from the published
+ * one.", the word OpenAlex a link to the coverage page's explanation. Nothing for any other kind (`official`,
+ * `none`, or one this code doesn't know). */
+export function OpenAlexNote({ kind }: { kind: string }) {
+  if (kind !== "openalex") return null;
+  return (
+    <p className="text-xs text-muted-foreground">
+      Abstract via{" "}
+      <Link href={OPENALEX_ANCHOR} className="inline-flex min-h-6 items-center underline underline-offset-4">
+        OpenAlex
+      </Link>
+      : this index holds no official abstract for this paper. OpenAlex&apos;s text can differ from the
+      published one.
+    </p>
+  );
+}
+
 function Abstract({ text, spans }: { text: string; spans: readonly (readonly number[])[] }) {
   const [full, setFull] = useState(false);
   const regionId = useId();
@@ -239,6 +264,7 @@ export function HitItem({ hit, q, mode }: { hit: SearchHit; q: string; mode: Mod
         <>
           <Abstract text={hit.abstract} spans={hit.highlights.abstract} />
           {hit.abstract_source !== null && <AbstractSource from={hit.abstract_source} title={hit.title} />}
+          <OpenAlexNote kind={hit.abstract_kind} />
           <AbstractNote note={hit.abstract_note} />
         </>
       )}

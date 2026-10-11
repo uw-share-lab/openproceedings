@@ -457,7 +457,9 @@ def test_venue_name_is_derived_never_stored_or_hashed() -> None:
     assert r.model_copy(update={"title": "Other"}).venue_name == r.venue_name
     moved = r.model_copy(update={"year": 2025, "id": "op:iclr:2025:iilhN2MycO"})  # recomputed, not carried
     assert moved.venue_name == "International Conference on Learning Representations (ICLR 2025)"
-    assert "venue_name" not in PaperRecord.model_fields and frozenset({"venue_name"}) == DERIVED
+    assert (
+        "venue_name" not in PaperRecord.model_fields and frozenset({"venue_name", "abstract_kind"}) == DERIVED
+    )
     with pytest.raises(ValidationError, match="venue_name"):
         PaperRecord.model_validate(r.model_dump())
 
@@ -635,8 +637,8 @@ def _rec(rid: str, venue: str, year: int, track: str = "main") -> PaperRecord:
                              year=year, track=track, status="accepted")  # fmt: skip
 
 
-def test_schema_is_7() -> None:
-    assert RECORD_SCHEMA_VERSION == "7"
+def test_schema_is_9() -> None:
+    assert RECORD_SCHEMA_VERSION == "9"
 
 
 @pytest.mark.parametrize(

@@ -106,6 +106,19 @@ def test_numbers_match_the_snapshot_manifest_exactly(client: TestClient, store: 
             (venue, year): n for venue, years in manifest[key].items() for year, n in years.items()
         }
     assert body["totals"]["records"] == manifest["record_count"]
+    for row in (
+        *body["venue_years"],
+        *(t for vy in body["venue_years"] for t in vy["tracks"]),
+        body["totals"],
+    ):
+        assert (
+            row["abstract_official"]
+            + row["abstract_openalex"]
+            + row["abstract_missing"]
+            + row["abstract_withheld"]
+            == row["records"]
+        )  # decision-049: the four origins partition the records; this fixture has no OpenAlex abstract
+        assert row["abstract_openalex"] == 0
     assert sorted(manifest["sources"]) == ["ris"]
     assert body["snapshot"] == {
         "name": snapshot.name,
@@ -275,9 +288,25 @@ def _move_a_missing_abstract(manifest: dict[str, Any]) -> None:
     raise AssertionError("no venue-year to move a missing abstract within")
 
 
+def _claim_an_openalex_abstract(manifest: dict[str, Any]) -> None:
+    """The manifest says OpenAlex filled one abstract of a track that has an official one; no record's claims say so."""
+    for venue, years in manifest["abstract_missing_by_track"].items():
+        for year, tracks in years.items():
+            for track, missing in tracks.items():
+                if sum(manifest["counts"][venue][year][track].values()) > missing:
+                    manifest["abstract_openalex"] = {venue: {year: 1}}
+                    manifest["abstract_openalex_by_track"] = {venue: {year: {track: 1}}}
+                    return
+    raise AssertionError("no track with an official abstract")
+
+
 @pytest.mark.parametrize(
     ("tamper", "reason"),
     [
+        (
+            "openalex_claimed",
+            "abstract_openalex_mismatch",
+        ),  # decision-049: consistent with itself, not the records
         ("move_a_cell", "counts_mismatch"),  # consistent with itself, not with the records
         ("abstract_missing_zero", "abstract_missing_mismatch"),
         ("move_a_missing_abstract", "track_facts_mismatch"),  # TASK-082: per track, consistent but wrong
@@ -299,7 +328,9 @@ def test_a_manifest_that_doesnt_describe_the_index_fails_the_load(
     venue = next(iter(manifest["counts"]))
     year = next(iter(manifest["counts"][venue]))
     cell = manifest["counts"][venue][year]
-    if tamper == "move_a_cell":
+    if tamper == "openalex_claimed":
+        _claim_an_openalex_abstract(manifest)
+    elif tamper == "move_a_cell":
         _move_a_cell(manifest)
     elif tamper == "abstract_missing_zero":
         _no_missing_abstracts(manifest)

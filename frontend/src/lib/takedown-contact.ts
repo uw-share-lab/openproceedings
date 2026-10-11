@@ -10,8 +10,10 @@
  * with the fallback. The `web` image requires it to be set (`deploy/web.Dockerfile`, `deploy/web-build-gate.sh`).
  */
 
+import { REPO_URL } from "./repo";
+
 /** The repository's issues page (the project's own contact), used when a deployment names none. */
-export const TAKEDOWN_FALLBACK_URL = "https://github.com/uw-share-lab/openproceedings/issues";
+export const TAKEDOWN_FALLBACK_URL = `${REPO_URL}/issues`;
 
 export type TakedownContact =
   /** An address the operator set: the link is `mailto:`, its text the address. */

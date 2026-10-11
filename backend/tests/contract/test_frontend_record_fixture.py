@@ -44,3 +44,24 @@ def test_the_fixture_exercises_every_methods_text_branch() -> None:
     ]
     assert searches["negated_status"]["parse"]["filters"]["status"]["negated"] is True
     assert "track" not in searches["workshop"]["parse"]["defaults"]
+
+
+def test_the_drift_case_has_every_removal_cause() -> None:
+    """TASK-227: the diff view's test reads one removed paper of each cause, and the tally, from here."""
+    body = json.loads(OUT.read_text(encoding="utf-8"))["drift"]
+    assert body["replayed"]["replay"]["status"] == "drifted"
+    diff = body["diff"]
+    assert sorted(x["cause"] for x in diff["removed"]) == [
+        "not_in_index",
+        "status_changed",
+        "still_eligible",
+        "track_changed",
+    ]
+    assert diff["removed_causes"] == {
+        "track_changed": 1,
+        "status_changed": 1,
+        "filter_changed": 0,
+        "not_in_index": 1,
+        "still_eligible": 1,
+    }
+    assert {x["status"] for x in diff["removed"]} == {"accepted", "withdrawn", None}

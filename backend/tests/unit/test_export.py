@@ -1000,7 +1000,7 @@ def test_each_format_names_a_pmlr_abstracts_source_byte_for_byte() -> None:
     assert attributed_export("csv", PMLR_RECORD, PMLR) == (
         "﻿" + ",".join(export.CSV_COLUMNS) + "\r\n"
         'op:icml:2023:pmlr-v202-okafor23a,Sample-Efficient Evaluation,We adapt.,"Okafor, Chidi",ICML,2023,'
-        f"main,accepted,,,,,{PMLR_PAGE},,,abcdef123456,{'0' * 64},2026-09-26,,,pmlr,pmlr,{PMLR_PAGE},false,,,\r\n"
+        f"main,accepted,,,,,{PMLR_PAGE},,,abcdef123456,{'0' * 64},2026-09-26,,,pmlr,pmlr,{PMLR_PAGE},false,,,,\r\n"
     )
     (obj,) = [json.loads(x) for x in attributed_export("jsonl", PMLR_RECORD, PMLR).splitlines()]
     assert obj["abstract_source"] == {"source": "pmlr", "origin": "pmlr", "url": PMLR_PAGE}
@@ -1068,7 +1068,7 @@ def test_a_submission_time_abstract_says_so_in_every_format_byte_for_byte() -> N
     (entry,) = parse_string(bib)
     assert entry.fields["abstract_note"] == SUBMISSION_NOTE and entry.fields["note"] == PROVENANCE.line()
     text = attributed_export("csv", RECORD_98, SUBMITTED)
-    assert text.endswith(f',icml_site,icml_site,{CAPTURE_98},false,,,"{SUBMISSION_NOTE}"\r\n')
+    assert text.endswith(f',icml_site,icml_site,{CAPTURE_98},false,,,"{SUBMISSION_NOTE}",\r\n')
     (row,) = csv.DictReader(io.StringIO(text.removeprefix("\ufeff")))
     assert row["abstract_note"] == SUBMISSION_NOTE
     (obj,) = [json.loads(x) for x in attributed_export("jsonl", RECORD_98, SUBMITTED).splitlines()]
@@ -1109,7 +1109,7 @@ def test_without_a_source_every_format_is_byte_for_byte_what_it_was() -> None:
         ris = attributed_export("ris", record, source)
         assert "Abstract source" not in ris and ris.count("N1  - ") == 1
         assert "abstract_source" not in attributed_export("bibtex", record, source)
-        assert attributed_export("csv", record, source).endswith(",2026-09-26,,,,,,false,,,\r\n")
+        assert attributed_export("csv", record, source).endswith(",2026-09-26,,,,,,false,,,,\r\n")
         (obj,) = [json.loads(x) for x in attributed_export("jsonl", record, source).splitlines()]
         assert obj["abstract_source"] is None
 
@@ -1120,6 +1120,7 @@ def test_the_csv_columns_before_task_138_keep_their_positions() -> None:
         "abstract_withheld_reason",  # TASK-136, appended last (decision-021 rule 1)
         "twins",  # TASK-162, appended after it
         "abstract_note",  # TASK-210, appended after that
+        "abstract_kind",  # decision-049, appended last
     ) == export.CSV_COLUMNS  # fmt: skip
 
 
@@ -1262,11 +1263,28 @@ def test_without_sources_every_abstract_is_withheld_and_each_record_says_so() ->
     (entry,) = parse_string(withheld("bibtex", PMLR_RECORD))
     assert "abstract" not in entry.fields and "abstract_source" not in entry.fields
     assert entry.fields["abstract_withheld"] == export.WITHHELD and entry.fields["note"] == PROVENANCE.line()
-    assert withheld("csv", PMLR_RECORD).endswith(",2026-09-26,,,,,,true,source_unavailable,,\r\n")
+    assert withheld("csv", PMLR_RECORD).endswith(",2026-09-26,,,,,,true,source_unavailable,,,none\r\n")
     assert ",We adapt.," not in withheld("csv", PMLR_RECORD)
     (obj,) = [json.loads(x) for x in withheld("jsonl", PMLR_RECORD).splitlines()]
     assert obj["abstract"] is None and obj["abstract_source"] is None and obj["abstract_withheld"] is True
     assert obj["abstract_withheld_reason"] == "source_unavailable"
+    # a withheld abstract's kind is none, whatever the index stored (the hit and the paper say the same)
+    openalex = {**PMLR_RECORD, "abstract_kind": "openalex"}
+    assert json.loads(withheld("jsonl", openalex))["abstract_kind"] == "none"
+    assert withheld("csv", openalex).endswith(",true,source_unavailable,,,none\r\n")
+    (taken,) = [
+        json.loads(x)
+        for x in "".join(
+            export.entries(
+                "jsonl",
+                [openalex],
+                PROVENANCE,
+                sources={openalex["id"]: PMLR},
+                withheld=frozenset({openalex["id"]}),
+            )
+        ).splitlines()
+    ]
+    assert taken["abstract_kind"] == "none" and taken["abstract_withheld_reason"] == "takedown"
 
 
 def test_the_abstract_source_header_states_are_a_closed_enum() -> None:
@@ -1327,3 +1345,31 @@ def test_a_withheld_record_the_snapshot_lacks_is_still_an_internal_error() -> No
                 "ris", [PMLR_RECORD], PROVENANCE, sources={}, withheld=frozenset({PMLR_RECORD["id"]})
             )
         )  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("source", "words"),
+    [
+        # TASK-232: the aaai.org page the archive copy was of, never the capture
+        (Attribution("aaai_library", "aaai_library", "http://www.aaai.org/Library/AAAI/1984/aaai84-047.php"),
+         "AAAI http://www.aaai.org/Library/AAAI/1984/aaai84-047.php"),
+        # decision-049 milestone C: OpenAlex, linking the paper's own page
+        (Attribution("openalex", "openalex", "https://doi.org/10.1145/3593013.3594011"),
+         "OpenAlex https://doi.org/10.1145/3593013.3594011"),
+    ],
+)  # fmt: skip
+def test_the_new_abstract_origins_are_credited_byte_for_byte_in_every_format(
+    source: Attribution, words: str
+) -> None:
+    """Gate C round 1: the credit line of an `aaai_library` and an `openalex` abstract, pinned per format (RIS `N1`,
+    BibTeX `abstract_source`, the CSV source columns, JSONL `abstract_source`)."""
+    assert export.credit(source) == words
+    assert f"N1  - Abstract source: {words}\nN1  - {PROVENANCE.line()}\nER  - \n" in attributed_export(
+        "ris", PMLR_RECORD, source
+    )
+    assert f"  abstract_source = {{{words}}},\n" in attributed_export("bibtex", PMLR_RECORD, source)
+    assert attributed_export("csv", PMLR_RECORD, source).endswith(
+        f",{source.source},{source.origin},{source.url},false,,,,\r\n"
+    )
+    (obj,) = [json.loads(x) for x in attributed_export("jsonl", PMLR_RECORD, source).splitlines()]
+    assert obj["abstract_source"] == {"source": source.source, "origin": source.origin, "url": source.url}

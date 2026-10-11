@@ -30,13 +30,12 @@ venues.
   2010-2026 from ojs.aaai.org), AIES (from 2018: 2018-2023 from Crossref's records of the ACM proceedings,
   2024-2025 from ojs.aaai.org), FAccT (from 2018: FAT\* 2018 from PMLR v81, 2019-2026 from Crossref, with the
   official abstracts of 2022, 2025 and 2026 from facctconference.org) and IASEAI (2026; its archival papers only,
-  57 of the 92 accepted, the other 35 being non-archival and unpublished) (decision-049, milestones A and B).
-- Venues **in scope and planned** (decision-049; milestone C of the
-  [design](../plans/2026-10-09-new-venues-design.md), not built): IASEAI 2027 once its accepted papers are public,
-  and an OpenAlex fallback for abstracts no official source holds (labelled, with an `abstract_kind:` filter).
-  Until a venue-year is built it is absent from the index and the coverage page, which says so (copy deck CV-7).
+  57 of the 92 accepted, the other 35 being non-archival and unpublished) (decision-049, milestones A and B). Milestone C fills the abstracts of AAAI, AIES and FAccT records that no
+  official source holds from OpenAlex, labelled, with an `abstract_kind:` filter (the
+  [design](../plans/2026-10-09-new-venues-design.md)).
+- Venues **in scope and planned** (decision-049): IASEAI 2027 once its accepted papers are public. Until a venue-year is built it is absent from the index and the coverage page, which says so (copy deck CV-7).
   Most records of AAAI 1980-2008 and of FAccT 2019-2021, 2023 and 2024 and AIES 2018-2023 have a title and no
-  abstract until milestone C's labelled OpenAlex fallback, and some will stay without one; the coverage page and
+  abstract unless OpenAlex's labelled fallback (milestone C) fills one, and many stay without one; the coverage page and
   the home page name these venue-years (copy deck CV-8). AIES 2018-2023's student abstracts are
   `student_abstract` by their page position (Crossref labels no section) and its keynotes are counted, not indexed,
   so a default search leaves them out as it does AIES 2024+'s; AAAI 1993-2008's non-technical sections take their

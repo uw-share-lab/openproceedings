@@ -31,7 +31,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.exclusions import ORDER, excluded
-from openproceedings.engine.protocol import FACET_FIELDS, MAX_EXPANSIONS, EngineInputError
+from openproceedings.engine.protocol import MAX_EXPANSIONS, EngineInputError
 from openproceedings.engine.reference import ReferenceEngine, _conjuncts, _own_field
 from openproceedings.engine.tantivy_engine import SORTS, TantivyEngine
 from openproceedings.query.ast import And, Node, Not, Wildcard
@@ -91,7 +91,7 @@ def agree(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     got = frozenset(BACK[i] for i in got)
     only_t, only_r = sorted(got - expected)[:5], sorted(expected - got)[:5]  # type: ignore[operator]
     assert got == expected, f"only in tantivy: {only_t}\nonly in reference: {only_r}\n{q}"
-    assert expected_facets(reference, ast, got) == tantivy.facets(ast), q
+    assert expected_facets(reference, ast, got, tantivy.filter_fields) == tantivy.facets(ast), q
     for sort in SORTS:
         assert tantivy.search(ast, sort=sort, limit=0).total == len(got), (sort, q)
     page = [BACK[i] for i in tantivy.search(ast, sort="year_asc", limit=len(got)).ids]
@@ -144,13 +144,14 @@ def brute_excluded(
 
 
 def expected_facets(
-    reference: ReferenceEngine, ast: Node, matched: frozenset[str]
+    reference: ReferenceEngine, ast: Node, matched: frozenset[str], fields: tuple[str, ...]
 ) -> dict[str, dict[str, int]]:
-    """The oracle's disjunctive facets. A field with no top-level conjunct of its own is counted over the
-    match set, which is already known; only the others need the oracle's own pass (one per field)."""
+    """The oracle's disjunctive facets over `fields` (the index's). A field with no top-level conjunct of its
+    own is counted over the match set, which is already known; only the others need the oracle's own pass (one
+    per field)."""
     own = {_own_field(c) for c in _conjuncts(ast)}
-    out = reference.facets(ast, tuple(f for f in FACET_FIELDS if f in own))
-    for f in FACET_FIELDS:
+    out = reference.facets(ast, tuple(f for f in fields if f in own))
+    for f in fields:
         if f not in own:
             counts: dict[str, int] = {}
             for i in matched:
@@ -168,6 +169,8 @@ assert SHARDS >= 1, "OP_DIFFERENTIAL_SHARDS is a positive count of jobs"
 
 # the oracle over 5k records, every sort and the facets per example: no per-example deadline
 @settings(deadline=None, max_examples=max(1, settings().max_examples // SHARDS))
+# every filter field is drawn, but the 5k corpus holds no `openalex` record (NeurIPS, ICLR and ICML only), so
+# `abstract_kind:openalex` is always empty here; every kind meets the oracle in `test_abstract_kind_index.py`
 @given(ast=engine_asts(cap_vocab()))
 def test_tantivy_agrees_with_the_oracle(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     agree(engines, ast)
@@ -202,9 +205,11 @@ def test_the_corpus_covers_every_filter_combination() -> None:
     seen = {(r.venue, r.year, r.track, r.status) for r in corpus_5k}
 
     def digest(rs: tuple[Rec, ...]) -> str:
-        return hashlib.sha256(
-            json.dumps([dataclasses.asdict(r) for r in rs], ensure_ascii=False).encode()
-        ).hexdigest()
+        # `abstract_kind` is derived from the abstract here (`Rec`), so it is left out: the hash pins the
+        # records as generated, and stays what it was before the field existed
+        assert all(r.abstract_kind == ("none" if r.abstract is None else "official") for r in rs)
+        rows = [{k: v for k, v in dataclasses.asdict(r).items() if k != "abstract_kind"} for r in rs]
+        return hashlib.sha256(json.dumps(rows, ensure_ascii=False).encode()).hexdigest()
 
     # pinned: a change here (to the generator, the golden fixture's n-grams, normalize() or the cap records) is
     # deliberate, and saved regressions must be re-checked against the new corpus

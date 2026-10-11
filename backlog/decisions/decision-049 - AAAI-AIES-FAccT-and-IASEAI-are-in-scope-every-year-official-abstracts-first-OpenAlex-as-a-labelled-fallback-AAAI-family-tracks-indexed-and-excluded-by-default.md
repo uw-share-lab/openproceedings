@@ -56,8 +56,51 @@ NAACL, CHI and CSCW remain out of scope for now.
   keynotes are in `main`. No source was added for the scheduled crawl's `facct-site` target: it is folded into
   `crossref`. Spec 01 §Sources has the rows; the design's "Milestone B as built" note records where the build
   departs from the plan.
-- **Milestone C (planned):** the OpenAlex abstract fill, `abstract_kind` and its filter (index schema 4),
-  the coverage and abstract-origin copy, the snapshot and index build, and the benchmarks at the larger size.
+- **Milestone C (built, 2026-10-10):** the OpenAlex abstract fill (`sources/openalex.py`, `openalex_table.py` with
+  `openalex_sources.toml`, `op ingest openalex`, last in a full crawl; `OPENALEX_API_KEY` optional, no contact address
+  sent), `abstract_kind` and its `abstract_kind:` filter (index schema 4), the coverage, export and label copy, and the
+  fidelity audit (`op eval openalex`).
+  - **Record schema 7 → 8:** the `openalex` claim source (an `abstract` claim only, AAAI, AIES and FAccT only) and the
+    derived, never-stored `abstract_kind` (`official`, `openalex`, `none`).
+  - **Index schema 3 → 4:** `abstract_kind` is a raw fast field, and each engine's facets and combos are its own.
+    Schemas 3 and 4 are served; **schema 2 is retired** (its four local indexes were checked with `op index retire
+    --dry-run`: 0 pins). A schema-3 index refuses `abstract_kind:` with `FIELD_NOT_INDEXED` and cannot be built from
+    a snapshot holding an OpenAlex abstract, so promoting an OpenAlex-filled snapshot needs a schema-4 index.
+  - **The fill is a post-dedup step** (after reconcile, before takedowns) replaying a pinned extract, so it only ever
+    touches a record whose abstract is still `null`, never an official one, and a takedown still withholds what it
+    filled.
+  - **No `QUERY_VERSION` change:** a query naming `abstract_kind:` was a `FIELD_UNKNOWN` error before.
+  - **Licence:** OpenAlex's data is CC0, but it ships no plaintext abstracts, so serving a rebuilt abstract carries the
+    publisher-abstract posture (this decision's fair-dealing basis, the takedown list and the pending copyright-office
+    consultation, TASK-135), not a CC0 one. The label and the filter let a review exclude them.
+  - **Fidelity:** OpenAlex agrees with the official abstract (exact or near-exact) for 83.1% of 2,122 records audited,
+    almost always for AAAI and AIES and far less for FAccT, where it likely carries ACM's published version; every
+    title-route attach for AAAI 1980–2008 was checked: on the final snapshot the route attaches 19 and 18 agree (2026-10-11 report); the earlier 2026-10-10 report checked 1,061, of which 1,052 agree. The exact title-key rule stands.
+    `docs/results/2026-10-11-openalex-audit.md` (final snapshot; the 2026-10-10 report is the earlier one); spec 07 §G.
+  - **As built, first rebuild (2026-10-10; superseded by the final rebuild below).** Extract sha256 `7fea58b983252594b9ad3fb4788022f81b64adf579ce9cee129abf91a9c5c49c` (5,808
+    candidates, 49 lookups, 3,005 works). Snapshot `2026-10-10-22a339940466` (173,253 records), which differs from
+    `2026-10-10-9efa49481112` only in 2,158 abstracts (`none` → `openalex`; 1,097 of 1,099 by DOI and 1,061 of 4,709 AAAI
+    1980–2008 by title, so 3,648 of those stay without one). Index `9977ed00669f` (schema 4): parity with 0
+    differences, and `abstract_kind:openalex` gives 2,158 on both engines. The four schema-2 indexes were deleted on
+    2026-10-10. The coverage gate passes (83 of 84 gated cells; ICLR 2013 is the accepted exception). The group-count
+    benchmark is within budget on the real corpus (worst p95 76.5 ms) and over it on the synthetic 80k for
+    `main-3-sources` (110.7 ms, 65 ms without group counts: TASK-176's counting, not schema 4), recorded in spec 03
+    §Performance budgets and followed up in TASK-230.
+  - **As built, final rebuild (2026-10-11, after decision-051's `aaai_library`).** Snapshot `2026-10-11-93c2937e2f29`
+    (173,253 records), which differs from `2026-10-10-9efa49481112` (before milestone C) only in 5,653 abstracts:
+    4,536 `none` → `official` (`aaai_library`) and 1,117 `none` → `openalex` (1,098 by DOI, 19 by title; AAAI 21, AIES
+    557, FAccT 539). The same OpenAlex extract. Index `b4f335e07e70` (schema 4): parity with 0 differences (214,499 terms,
+    344,268 phrases), and `abstract_kind:openalex` gives 1,117 on both engines. The coverage gate passes at 81 of 82
+    gated cells (ICLR 2013 the accepted exception), as the gate-row rule below expected:
+    `docs/results/2026-10-11-coverage.md`. Benchmarks: `docs/results/2026-10-11-bench-group-counts.md` and
+    `docs/results/2026-10-11-bench.md`.
+  - **Gate rows, one independence rule (milestone C review, gate C round 1, 2026-10-11; recorded here because the
+    backlog CLI can't edit TASK-219, which is completed; restated in gate C round 2).** A count of AAAI's own
+    accepted-paper list backs a gate row only when the list is independent of the proceedings. A list counts as independent of the proceedings when it either states that it is pre-camera-ready, or visibly differs from the proceedings in content (a different count or membership); either shows it was not derived from them. AAAI 2012, 2017, 2020 and 2021 are gated, each row naming its ground: 2020's lists say they were made
+    before camera-ready; 2012, 2017 and 2021 differ from the proceedings in count. AAAI 2010 (262), 2014 (398) and
+    2016 match the proceedings exactly and are not shown to predate them (2010's and 2014's only archived copies
+    were captured after publication, on 2010-08-30 and 2015-09-06), so each is an ungated cell with a cited note. `official_counts.py`, `docs/results/coverage-sources.md` and their tests are
+    updated, and the gate is expected at 81 of 82 cells once the coverage report is regenerated after the rebuild.
 - Spec 00's venue list says what is indexed now and what is in scope and planned; a venue-year appears in the
   coverage report only once it is crawled.
 - Licence posture is the one already used for PMLR and NeurIPS (titles and abstracts with links back; AAAI

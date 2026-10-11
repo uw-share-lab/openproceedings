@@ -19,8 +19,10 @@ import dataclasses
 import itertools
 import random
 from collections import Counter
+from collections.abc import Iterable
 from functools import cache
 
+from openproceedings.engine.protocol import Searchable
 from openproceedings.query.normalize import normalize
 from openproceedings.vocab import STATUSES
 from tests.corpus import Rec
@@ -134,17 +136,22 @@ def vocab() -> Vocab:
     """The corpus's term dictionary as a strategy vocabulary: the 600 most frequent terms and the rare ones (df 1-3)
     weighted in,
     stems from 2 characters up (those past the 200-term cap listed apart), and n-grams that really occur."""
+    return vocab_of(records(), ROOTS)
+
+
+def vocab_of(corpus: Iterable[Searchable], roots: tuple[str, ...] = ()) -> Vocab:
+    """`vocab()` for any corpus (`roots` added to its stems): at most 5,000 of its n-grams, sampled."""
     df: Counter[str] = Counter()
     ngrams: set[tuple[str, ...]] = set()
-    for r in records():
+    for r in corpus:
         for text in (r.title, r.abstract or ""):
             tokens = normalize(text)
             df.update(set(tokens))
             ngrams.update(tuple(tokens[i : i + k]) for k in (2, 3) for i in range(len(tokens) - k + 1))
     terms = sorted(df)
-    stems = sorted({t[:k] for t in terms for k in range(2, len(t))} | set(ROOTS))
+    stems = sorted({t[:k] for t in terms for k in range(2, len(t))} | set(roots))
     wide = tuple(s for s in stems if sum(t.startswith(s) for t in terms) > 200)  # `*` over them is refused
-    sample = random.Random(1).sample(sorted(ngrams), 5_000)
+    sample = random.Random(1).sample(sorted(ngrams), min(5_000, len(ngrams)))
     common = sorted(sorted(terms, key=lambda t: (-df[t], t))[:600])  # so most trees match something
     absent = ("zzqabsent", "notacorpusword", "trustq")  # terms no record holds: empty matches from a leaf
     rare = tuple(t for t in terms if df[t] <= 3) + absent

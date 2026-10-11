@@ -11,7 +11,7 @@ evaluation is a few lines that can be checked against spec 02 by eye:
 | Wildcard | some token of the field is one of its expansions over the snapshot vocabulary (every wildcard in the query is expanded first, so the 200 cap never depends on which records are reached) |
 | Phrase | its items match consecutive tokens of one field (a wildcard item at its position) |
 | Near(a, b, n) | occurrences of a and b in one field don't overlap and have ≤ n tokens between them |
-| Filter | the record's venue/track/status equals a value, or its year is in a range |
+| Filter | the record's venue/track/status/abstract_kind equals a value, or its year is in a range |
 | And / Or / Not | intersection / union / complement in the snapshot |
 """
 
@@ -57,6 +57,7 @@ class _Doc:
     year: int
     track: str
     status: str
+    abstract_kind: str
 
 
 def _matches_wildcard(token: str, w: Wildcard) -> bool:
@@ -85,6 +86,7 @@ class ReferenceEngine:
                 r.year,
                 r.track,
                 r.status,
+                r.abstract_kind,
             )
             for r in records
         )
@@ -114,10 +116,12 @@ class ReferenceEngine:
         ids = sorted(self.match_ids(ast))
         return SearchResult(total=len(ids), ids=tuple(ids[offset : offset + limit]))
 
-    def facets(self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS) -> dict[str, dict[str, int]]:
+    def facets(self, ast: Node, fields: tuple[str, ...] | None = None) -> dict[str, dict[str, int]]:
         """Disjunctive facets (spec 04, decision-001 rule 6): field F is counted over the matches of the query
         without F's own top-level conjuncts (a filter or NOT of one; nested ones stay). Top-level is judged
-        after flattening nested ANDs, as on the canonical tree."""
+        after flattening nested ANDs, as on the canonical tree. `fields` None is the oracle's own: every filter
+        field (FACET_FIELDS), since its records carry them all."""
+        fields = FACET_FIELDS if fields is None else fields
         unknown = [f for f in fields if f not in FACET_FIELDS]
         if unknown:
             raise EngineInputError(DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {FACET_FIELDS}")

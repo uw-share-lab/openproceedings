@@ -215,6 +215,7 @@ class CrossrefReport(ListingReport):
     site_unmatched: int = 0
     site_ambiguous: int = 0  # entries whose DOI or title key two entries, or two records, share
     site_dropped: int = 0  # page rows with no title or no usable abstract
+    site_surrogate: int = 0  # of site_dropped: an abstract refused for a lone UTF-16 surrogate (TASK-229)
 
     def to_manifest(self) -> dict[str, Any]:
         out = super().to_manifest() | {"window_works": self.window_works, "pages": self.pages,
@@ -225,6 +226,8 @@ class CrossrefReport(ListingReport):
             out |= {"sites": list(self.sites), "site_entries": self.site_entries,
                     "abstract_attached": self.abstract_attached, "site_unmatched": self.site_unmatched,
                     "site_ambiguous": self.site_ambiguous, "site_dropped": self.site_dropped}  # fmt: skip
+            if self.site_surrogate:  # listed only when above 0, so a page with none keeps its shape
+                out["site_surrogate"] = self.site_surrogate
         return dict(sorted(out.items()))
 
 
@@ -352,6 +355,7 @@ def mine_proceedings(
         report.sites = [site.page]
         report.site_entries = len(site.entries)
         report.site_dropped = site.dropped
+        report.site_surrogate = site.surrogate
         report.site_unmatched, report.site_ambiguous = matched.unmatched, matched.ambiguous
         report.fetched += site.fetched
     records: list[PaperRecord] = []
@@ -390,11 +394,14 @@ def mine_proceedings(
                                                   "site_unmatched": report.site_unmatched,
                                                   "site_ambiguous": report.site_ambiguous,
                                                   "site_dropped": report.site_dropped,
+                                                  "site_surrogate": report.site_surrogate,
                                                   "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
-    if report.no_authors or report.unnamed_authors:
+    if report.no_authors or report.unnamed_authors or report.site_surrogate:
         log.warning("listing_attention", extra={"venue": venue, "year": year, "listing": report.listing,
                                                 "no_authors": report.no_authors,
-                                                "unnamed_authors": report.unnamed_authors})  # fmt: skip
+                                                "unnamed_authors": report.unnamed_authors,
+                                                **({"site_surrogate": report.site_surrogate}
+                                                   if report.site_surrogate else {})})  # fmt: skip
     return ProceedingsResult(records, [report])
 
 

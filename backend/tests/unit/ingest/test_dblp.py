@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from openproceedings.ingest import dblp_table
 from openproceedings.ingest.dedup import dedup
-from openproceedings.ingest.record import PaperRecord
+from openproceedings.ingest.record import DERIVED, PaperRecord
 from openproceedings.ingest.sources import dblp, dblp_xml, icml_sites
 from openproceedings.ingest.sources.common import CrawlError
 from openproceedings.ingest.sources.http import CacheMiss
@@ -266,7 +266,7 @@ def test_a_dblp_id_outside_1988_to_2012_is_refused(tmp_path: Path, year: int) ->
     [r] = dblp.mine_year(1990, prepared(tmp_path), table=TABLE).records
     with pytest.raises(ValueError, match="ICML 1988-2012"):
         PaperRecord.model_validate(
-            r.model_dump(exclude={"venue_name"}) | {"id": f"op:icml:{year}:dblp-Synthetic90", "year": year},
+            r.model_dump(exclude=DERIVED) | {"id": f"op:icml:{year}:dblp-Synthetic90", "year": year},
             context={"rehash": True},
         )
 

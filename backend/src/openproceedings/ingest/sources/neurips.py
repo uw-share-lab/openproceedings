@@ -305,7 +305,7 @@ def _record(
     matches = parsed is not None and titles_match(title, parsed.title)
     cleaned = clean_abstract(parsed.abstract) if parsed is not None and matches else Cleaned(None)
     abstract = cleaned.text
-    missing = missing_reason(page.ok, matches, abstract)
+    missing = missing_reason(page.ok, matches, abstract, cleaned.refused)
     if abstract is not None:
         evidence = pdf_codes_evidence(
             controls_evidence("p.paper-abstract (citation_title matches the listing)", cleaned.spaced),
@@ -329,6 +329,7 @@ def _log_done(report: ListingReport, started: float) -> None:
         "year": report.year, "listing": report.listing, "listed": report.listed, "stated": report.stated,
         "records": report.records, "abstract_missing": report.abstract_missing,
         "abstract_control_characters": report.abstract_control_characters,
+        "abstract_surrogate": report.abstract_surrogate,
         "abstract_pdf_codes": report.abstract_pdf_codes, "abstract_short": report.abstract_short,
         "unknown_track": report.unknown_track, "ms": elapsed_ms(started, time.monotonic),
     }  # fmt: skip
@@ -337,9 +338,9 @@ def _log_done(report: ListingReport, started: float) -> None:
         log.warning(
             "listing_count_mismatch", extra={k: fields[k] for k in ("year", "listing", "listed", "stated")}
         )
-    if report.unknown_track or report.skipped:
+    if report.unknown_track or report.skipped or report.abstract_surrogate:
         log.warning(
             "listing_attention",
             extra={"year": report.year, "listing": report.listing, "unknown_track": report.unknown_track,
-                   "skipped": dict(report.skipped)},
+                   "skipped": dict(report.skipped), **report.surrogate_attention()},
         )  # fmt: skip

@@ -217,10 +217,12 @@ def _parses(q: str, monkeypatch: pytest.MonkeyPatch, mode: Mode = "native") -> t
     [
         ("trust", 1),  # every field written out by one wrap
         ("trust venue:ICLR", 2),  # + the typed clause's splice
-        ("trust venue:ICLR year:2024 track:main status:accepted", 4),  # one splice each, no wrap
-        ("a" * 1853, 5),  # the wrap is too long, so each field is checked alone (golden: venue still fits)
+        ("trust venue:ICLR year:2024 track:main status:accepted", 5),  # one splice each, abstract_kind's wrap
+        ("trust venue:ICLR year:2024 track:main status:accepted abstract_kind:none", 5),  # splices, no wrap
+        ("a" * 1853, 6),  # the wrap is too long, so each field is checked alone (golden: venue still fits)
         ("(" * 64 + "a" + ")" * 64, 1),  # too deep for one is too deep for all
-        ("a" * 1880 + " venue:ICLR year:2020 track:main", 4),  # one field left: its wrap is checked once
+        ("a" * 1880 + " venue:ICLR year:2020 track:main status:accepted", 5),  # one field left: one wrap
+        ("a" * 1880 + " venue:ICLR year:2020 track:main", 6),  # two left, too long together: each alone
     ],
 )
 def test_filter_clauses_cost_is_bounded(q: str, most: int, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -259,7 +261,7 @@ def _parsed(case: ParseCase) -> ParseResult | None:
 @settings(max_examples=60, deadline=None)
 def test_the_one_wrap_parse_answers_exactly_as_per_field_parses(case: ParseCase) -> None:
     """Old vs new: every field with no clause gets the reason its own wrap alone gives, and the cost is at
-    most one parse per typed clause plus one, or plus one more per field with no clause (five at most, spec 02)
+    most one parse per typed clause plus one, or plus one more per field with no clause (six at most, spec 02)
     when the combined wrap can't be written."""
     q, mode = case.q, case.mode
     if _parsed(case) is None:
@@ -278,7 +280,7 @@ def test_the_one_wrap_parse_answers_exactly_as_per_field_parses(case: ParseCase)
     )
     typed = len(FILTER_FIELDS) - len(wrapped)
     assert calls <= typed + (1 if together else 1 + len(wrapped))
-    assert calls <= 5  # spec 02: `/parse` adds at most five
+    assert calls <= 1 + len(FILTER_FIELDS) == 6  # spec 02: `/parse` adds at most six
 
 
 @pytest.mark.parametrize("depth", [62, 63, 64])

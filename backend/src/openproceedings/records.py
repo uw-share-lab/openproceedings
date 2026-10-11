@@ -22,6 +22,9 @@ PRISMA identification numbers (not on a bootstrap corpus), `total`, `excluded`, 
   has it (a loader's engine must *be* that version), else on the served one; `reproduced` / `mismatch`
   when the query version is also the record's, `drifted` otherwise. A mismatch breaks guarantee 4: ERROR
   `API_REPLAY_MISMATCH`, once per record per process (DEBUG after that).
+- `removals` says why each id a replay removed is gone, on the index it ran on (TASK-227): `not_in_index`, the
+  first top-level filter it now fails (`track_changed`, `status_changed`, `filter_changed`), or `still_eligible`.
+  It reads the ids' filter values from the index's value bitmaps and changes nothing a replay compares.
 
 Nothing here logs query text: the record stores it, the logs never do.
 """
@@ -38,12 +41,13 @@ import shutil
 import sqlite3
 import threading
 import zlib
+from collections import OrderedDict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import (
     BaseModel,
@@ -55,14 +59,16 @@ from pydantic import (
     model_validator,
 )
 
+from openproceedings.coverage import captured_windows
 from openproceedings.diagnostics import DiagnosticCode, InternalError, OpenProceedingsError
 from openproceedings.engine.exclusions import identified_total, unclassified_total
 from openproceedings.engine.index import VERSION_NAME
 from openproceedings.engine.index import index_version as index_version_of
 from openproceedings.engine.protocol import EngineInputError
-from openproceedings.engine.tantivy_engine import TantivyEngine
+from openproceedings.engine.tantivy_engine import TantivyEngine, passes
 from openproceedings.ingest.snapshot import SnapshotError, indexed_snapshot, utc_query_sources
 from openproceedings.query import QUERY_VERSION
+from openproceedings.query.ast import FILTER_FIELDS, And, Filter, FilterField, Node, Not
 from openproceedings.query.parser import Mode, ParseResult, parse
 from openproceedings.search import expansions_json, run
 from openproceedings.timestamps import CrawlWindow, Timestamp
@@ -286,7 +292,9 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
     as `/coverage` does (`coverage.crawl_dates`; a test compares the two). A bootstrap source's window (RIS:
     when the Scholar searches were run) is `scholar_query_dates`, not a crawl, or `scholar_query_dates_utc`
     when the manifest's `query_dates` says they were converted (TASK-077); `*` over bootstrap sources alone is
-    too, over both is `mixed` (`mixed_utc` with no local dates)."""
+    too, over both is `mixed` (`mixed_utc` with no local dates). A source entry's `capture_window` (an
+    archive's capture times of the copies it attached: `aaai_library`) replaces that source's window, kind
+    `archive_captures` (gate C round 1)."""
     try:
         _path, manifest = indexed_snapshot(data_dir, inputs)  # the name and hash rule of the API's load
         sources = sorted(manifest["sources"])  # required: no sources named is not "a crawl, citable"
@@ -300,7 +308,9 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
             if source == ALL_SOURCES:
                 raise ValueError("a source can't be named `*`")
             crawl[source] = _window(window)  # the claim window wins over the fetch window (TASK-122)
-        kinds = crawl_dates_kind(crawl, sources, ALL_SOURCES, utc_query_sources(manifest))
+        captured = captured_windows(manifest)  # `/coverage`'s one reading (gate C round 2)
+        crawl.update({source: _window(w) for source, w in captured.items()})  # the text's dates win (gate C)
+        kinds = crawl_dates_kind(crawl, sources, ALL_SOURCES, utc_query_sources(manifest), captured)
         conflicts = manifest["conflicts"]
         dedup = Dedup(
             merged=int(manifest["merges"]["total"]),
@@ -838,3 +848,133 @@ def replay(
         ids_match=ids_match,
         excluded_match=excluded_match,
     )
+
+
+# --- a drifted record's removed papers (TASK-227) -----------------------------------------------------------
+# why the replay no longer matches a paper the record holds, judged on the index the replay ran on: `not_in_index`
+# (the index doesn't hold it: left the corpus, or became a not-paper row); else the first of the effective query's
+# top-level filter clauses (the defaults included) its values there fail, track first, then status, then any
+# other field: `track_changed` (moved, e.g. to `iaai`, decision-050), `status_changed` (e.g. now `withdrawn`),
+# `filter_changed` (`venue`, `year` or `abstract_kind`, named); `still_eligible` when every one passes, so its
+# title, abstract or another searched field no longer matches
+RemovalCause = Literal["track_changed", "status_changed", "filter_changed", "not_in_index", "still_eligible"]
+REMOVAL_CAUSES: tuple[RemovalCause, ...] = get_args(RemovalCause)
+_PRECEDENCE: tuple[FilterField, ...] = (
+    "track",
+    "status",
+    *(f for f in FILTER_FIELDS if f not in ("track", "status")),
+)
+_FIELD_CAUSE: dict[str, RemovalCause] = {"track": "track_changed", "status": "status_changed"}
+
+
+@dataclass(frozen=True, slots=True)
+class Removal:
+    track: str | None  # its track on the replaying index; None when that index doesn't hold it
+    status: str | None  # its status there; None when not held
+    cause: RemovalCause
+    field: FilterField | None  # the filter field it now fails (the three `*_changed` causes); else None
+
+
+def filter_clauses(parsed: ParseResult) -> tuple[Node, ...]:
+    """The effective query's top-level filter clauses (a filter or `NOT` of one, the defaults included): what
+    the search admits by field. A nested filter decides nothing alone (a default still applies on top)."""
+    ast = parsed.effective_ast
+    if ast is None:
+        return ()
+    conjuncts = ast.children if isinstance(ast, And) else (ast,)
+    return tuple(c for c in conjuncts if isinstance(c.child if isinstance(c, Not) else c, Filter))
+
+
+def _field(clause: Node) -> FilterField:
+    inner = clause.child if isinstance(clause, Not) else clause
+    assert isinstance(inner, Filter)
+    return inner.field
+
+
+def removal_cause(
+    values: Mapping[str, str | int] | None, clauses: Sequence[Node]
+) -> tuple[RemovalCause, FilterField | None]:
+    """A removed paper's cause, and the filter field it now fails, from its filter values on the replaying index
+    (None: not held) and the search's `filter_clauses`, each decided as the compiled query decides a filter
+    (`passes`). A field the index has no value for (no clause of it can run there) fails nothing."""
+    if values is None:
+        return "not_in_index", None
+    failing = {_field(c) for c in clauses if _field(c) in values and not passes(c, values[_field(c)])}
+    for f in _PRECEDENCE:
+        if f in failing:
+            return _FIELD_CAUSE.get(f, "filter_changed"), f
+    return "still_eligible", None
+
+
+def removals(result: Replay) -> dict[str, Removal] | None:
+    """Each id the replay removed, with its track, status and cause on the index it ran on (`filter_values`: the
+    index's per-value document bitmaps, no stored document read and no index field). None when the replay
+    compared nothing (`refused`)."""
+    if result.removed is None:
+        return None
+    held = result.engine.filter_values(list(result.removed))
+    clauses = filter_clauses(result.parsed)
+    out: dict[str, Removal] = {}
+    for i in result.removed:
+        values = held.get(i)
+        cause, field = removal_cause(values, clauses)
+        track = str(values["track"]) if values is not None else None
+        status = str(values["status"]) if values is not None else None
+        out[i] = Removal(track, status, cause, field)
+    return out
+
+
+def removal_tally(found: Mapping[str, Removal]) -> dict[RemovalCause, int]:
+    """How many removed ids have each cause, every cause present (0 included), in `REMOVAL_CAUSES` order."""
+    out = dict.fromkeys(REMOVAL_CAUSES, 0)
+    for r in found.values():
+        out[r.cause] += 1
+    return out
+
+
+class RemovalMemo:
+    """`removals` and its tally per (record id, index_version), least recently used dropped first (gate C round 1):
+    a stored record never changes and a replay on one index always removes the same ids for the same reasons,
+    so `GET /records/{id}/diff` works out the causes once per record and index, not once per page. Bounded by
+    what it holds: each entry costs its removed ids plus one (gate C round 2: an unchanged record's entry, which
+    removed nothing, still counts), at most `max_ids` over every entry and at most `max_entries` entries; one
+    entry costing more than `max_ids` is answered and not stored, so it never evicts the others. Memory when full:
+    about 80 MB per API process at the default 500,000 (about 163 bytes per held id, a measurement:
+    `docs/results/2026-10-11-perf-regression.md` §Memory), and the entry cap keeps entries that removed nothing
+    (about 500 bytes each, measured there too) to about 5 MB. Thread-safe; two first requests may both compute an
+    entry, which is the same either way."""
+
+    def __init__(self, max_ids: int = 500_000, max_entries: int = 10_000) -> None:
+        self.max_ids = max_ids
+        self.max_entries = max_entries
+        self._held: OrderedDict[tuple[str, str], tuple[dict[str, Removal], dict[RemovalCause, int]]] = (
+            OrderedDict()
+        )
+        self._ids = 0
+        self._lock = threading.Lock()
+
+    def get(
+        self, record_id: str, result: Replay
+    ) -> tuple[dict[str, Removal], dict[RemovalCause, int]] | None:
+        """The removed ids' causes and their tally, or None when the replay compared nothing (`refused`)."""
+        if result.removed is None:
+            return None
+        key = (record_id, result.engine.index_version)
+        with self._lock:
+            kept = self._held.get(key)
+            if kept is not None:
+                self._held.move_to_end(key)
+                return kept
+        why = removals(result)
+        assert why is not None  # `result.removed` is not None
+        entry = (why, removal_tally(why))
+        cost = len(why) + 1
+        if cost <= self.max_ids:  # a larger entry is refused, never stored: it would evict every other one
+            with self._lock:
+                if key not in self._held:
+                    self._held[key] = entry
+                    self._ids += cost
+                    while self._ids > self.max_ids or len(self._held) > self.max_entries:
+                        _key, (dropped, _tally) = self._held.popitem(last=False)
+                        self._ids -= len(dropped) + 1
+        return entry

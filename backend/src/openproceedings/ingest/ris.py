@@ -77,9 +77,11 @@ from openproceedings.ingest.record import (
     abstract_text,
     controls_evidence,
     is_url,
+    lone_surrogate,
     title_evidence,
     title_text,
 )
+from openproceedings.ingest.sources.common import log_surrogate
 from openproceedings.ingest.sources.openreview_v1 import is_twin_outcome, submission_listing
 from openproceedings.ingest.urls import pmlr, proceedings, proceedings_native, proceedings_parts
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
@@ -151,6 +153,8 @@ class ImportReport:
     # records whose abstract had a control character replaced (decision-044, TASK-199), from the importer's own
     # count; in the manifest only when above 0, so a file with none keeps its shape
     abstract_control_characters: int = 0
+    # records with an abstract claim refused for a lone UTF-16 surrogate (TASK-229); in the manifest only when above 0
+    abstract_surrogate: int = 0
 
     def __post_init__(self) -> None:
         if set(self.skipped) != set(SKIP_REASONS):
@@ -171,6 +175,8 @@ class ImportReport:
         out["track_status"] = {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())}
         if not self.abstract_control_characters:
             del out["abstract_control_characters"]
+        if not self.abstract_surrogate:
+            del out["abstract_surrogate"]
         return dict(sorted(out.items()))
 
 
@@ -391,31 +397,36 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
     return "out_of_scope"
 
 
-def _abstract(entry: dict[str, Any]) -> tuple[str, str, int] | None:
+def _abstract(entry: dict[str, Any]) -> tuple[tuple[str, str, int] | None, bool]:
     """The first non-empty abstract claim in `_ABSTRACT_SOURCES` order, as a record stores it (whitespace
     collapsed, a control character a space: `record.abstract_text`, decision-044), its evidence, and how many
-    control characters it lost. The route and url lead the evidence (`dedup.attribution` reads them); a
-    replacement note follows. The report counts from that number, never from the evidence, whose text comes
-    from the file and could say anything (TASK-199)."""
+    control characters it lost; and whether a claim before it (or every claim) was refused for a lone UTF-16
+    surrogate (JSON's `"\\ud800"`, which no record may hold; TASK-229): passed over like an empty one, and counted.
+    The route and url lead the evidence (`dedup.attribution` reads them); a replacement note follows. The report
+    counts from that number, never from the evidence, whose text comes from the file and could say anything
+    (TASK-199)."""
+    refused = False
     for src in _ABSTRACT_SOURCES:
         for c in _claims(entry, "abstract", src):
-            if isinstance(c["value"], str) and (spaced := abstract_text(c["value"]))[0]:
-                text, replaced = spaced
-                return (
-                    text,
-                    controls_evidence(f"scholarmend:{c['source']} {c['evidence']}", replaced),
-                    replaced,
-                )
-    return None
+            if not isinstance(c["value"], str):
+                continue
+            text, replaced = abstract_text(c["value"])
+            if lone_surrogate(text):
+                refused = True
+            elif text:
+                evidence = controls_evidence(f"scholarmend:{c['source']} {c['evidence']}", replaced)
+                return (text, evidence, replaced), refused
+    return None, refused
 
 
 def _record(
     entry: dict[str, Any], ris: dict[str, list[str]], ident: _Identity, fetched: datetime
-) -> tuple[PaperRecord, int]:
-    """The record, and how many control characters its abstract lost (`_abstract`)."""
+) -> tuple[PaperRecord, int, bool]:
+    """The record, how many control characters its abstract lost, and whether an abstract claim was refused for a
+    lone surrogate (`_abstract`)."""
     title, replaced = title_text(entry["title"])  # a control character becomes a space (decision-036)
     authors = tuple(a for a in ris.get("AU", []) if a != _TRUNCATED)
-    abstract = _abstract(entry)
+    abstract, refused = _abstract(entry)
 
     def claim(fld: ClaimField, value: ClaimValue, evidence: str, url: str | None = None) -> Claim:
         return Claim(field=fld, value=value, source="ris", url=url, fetched_at=fetched, evidence=evidence)
@@ -457,7 +468,7 @@ def _record(
         urls=Urls(forum=urls.get("urls.forum"), proceedings=urls.get("urls.proceedings"), pdf=urls.get("urls.pdf")),
         provenance=tuple(provenance),
     )  # fmt: skip
-    return record, 0 if abstract is None else abstract[2]
+    return record, 0 if abstract is None else abstract[2], refused
 
 
 def _check_shape(name: str, entries: object) -> list[dict[str, Any]]:
@@ -504,7 +515,7 @@ def import_ris(
         raise ValueError(f"{name}: {len(ris)} RIS records but {len(entries)} resolved entries")
     skipped: Counter[str] = Counter(dict.fromkeys(SKIP_REASONS, 0))
     track_status: dict[str, Counter[str]] = {}
-    overrides = spaced = 0
+    overrides = spaced = surrogate = 0
     records: list[PaperRecord] = []
     for i, (rec, entry) in enumerate(zip(ris, entries, strict=True)):
         if rec.fields.get("TI", [None])[0] != entry["title"]:
@@ -520,9 +531,12 @@ def import_ris(
             log.debug("ris_skip", extra={"file": name, "index": i, "reason": "no_query_date"})
             continue
         queried = datetime.strptime(dates[0], "%Y-%m-%d %H:%M:%S").replace(tzinfo=zone).astimezone(UTC)
-        r, replaced = _record(entry, rec.fields, ident, queried)
+        r, replaced, refused = _record(entry, rec.fields, ident, queried)
         records.append(r)
         spaced += replaced > 0
+        if refused:
+            surrogate += 1
+            log_surrogate("ris", r.id)
         overrides += ident.status_override
         track_status.setdefault(r.track, Counter())[r.status] += 1
     report = ImportReport(
@@ -539,14 +553,18 @@ def import_ris(
         track_status={t: dict(c) for t, c in track_status.items()},
         utc_offset=utc_offset,
         abstract_control_characters=spaced,
+        abstract_surrogate=surrogate,
     )
     counts = {k: v for k, v in report.to_manifest().items() if k not in ("track_status",)}
     # always on the line, as on the crawl lines; the manifest lists it only when above 0
     counts["abstract_control_characters"] = report.abstract_control_characters
+    counts["abstract_surrogate"] = report.abstract_surrogate
     log.info("ris_import", extra=counts)
     attention = {
         k: skipped[k] for k in ("unresolved", "ambiguous", "conflict", "no_query_date") if skipped[k]
     }
+    if report.abstract_surrogate:
+        attention["abstract_surrogate"] = report.abstract_surrogate
     if attention or report.unknown_track or report.status_overrides:
         log.warning(
             "ris_import_attention",

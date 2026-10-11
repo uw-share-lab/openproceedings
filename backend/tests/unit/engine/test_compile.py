@@ -183,7 +183,7 @@ def test_facets_agree_with_the_oracle(engines: tuple[TantivyEngine, ReferenceEng
     for q in ("gamma", "gamma venue:ICLR", "alpha -year:2024", "alpha OR gamma", "(gamma venue:ICLR) delta"):
         result = parse(q)
         for ast in (result.ast, result.effective_ast):  # as typed, and with the default filters the API runs
-            assert engines[0].facets(ast) == engines[1].facets(ast), q  # type: ignore[arg-type]
+            assert engines[0].facets(ast) == engines[1].facets(ast, engines[0].filter_fields), q  # type: ignore[arg-type]
     # a nested AND is flattened: the venue filter inside it is still venue's own conjunct
     assert engines[0].facets(parse("(gamma venue:ICLR) delta").ast)["venue"] == {"ICLR": 1, "NeurIPS": 1}  # type: ignore[arg-type]
 

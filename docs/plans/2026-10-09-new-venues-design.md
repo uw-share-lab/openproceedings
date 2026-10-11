@@ -1,12 +1,12 @@
 # AAAI, AIES, FAccT and IASEAI — design
 
-Status: **approved; milestone A built (2026-10-09), milestone B built (2026-10-10), milestone C planned** · Decision: decision-049 ·
+Status: **approved; milestone A built (2026-10-09), milestone B built (2026-10-10), milestone C built (2026-10-10)** · Decision: decision-049 ·
 Supersedes: spec 00 §Scope's venue list and the "later extension" line · Sources checked live on 2026-10-09
 (facts recorded in `docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md`)
 
 Milestones A and B as built are documented in `docs/specs/01-ingestion.md` §Sources (the OJS, dblp, PMLR, Crossref
 and FAccT site rows; the "Milestone B as built" note below says where the build departs from this design). Everything
-below about milestone C (OpenAlex, `abstract_kind`) is the plan, not built.
+below about milestone C (OpenAlex, `abstract_kind`) is the plan; the "Milestone C as built" note at the end says where the build departs from it.
 
 ## Owner decisions (2026-10-09)
 
@@ -279,4 +279,83 @@ decisions of that plan, and these are where the build departs from, or settles, 
   2026-10-10-988e342c9c07 is +6,535 added, 0 changed, 0 removed), index 99c2e7ea2a0a, full parity 0 differences,
   coverage --check PASS (77/78); ICML's dblp extract hash unchanged.
 
-Milestone C (OpenAlex and `abstract_kind`) is still planned, as above.
+## Milestone C as built (2026-10-10)
+
+Milestone C is built ([spec 01](../specs/01-ingestion.md) §Sources, the OpenAlex row; `docs/plans/2026-10-10-new-venues-milestone-c.md`
+is its implementation plan). The controller accepted all the planner's decisions of that plan, and these are where the
+build departs from, or settles, this design:
+
+- **The fill is a post-dedup step, not a crawl source.** `op ingest openalex` (last in a full crawl) pins an extract;
+  `op snapshot build` replays it after dedup and reconcile and before takedowns, so it only ever touches a record whose
+  abstract is still `null` (it cannot displace an official one, and a takedown still withholds what it filled).
+  `openalex` is also the last text source in precedence, and the record model refuses an `openalex` claim on any field
+  but `abstract` or on a venue outside AAAI, AIES and FAccT (IASEAI's abstracts are all official).
+- **Two routes.** DOI batches of 50 for the records that have a DOI, and, for the 4,709 AAAI 1980–2008 records with none,
+  OpenAlex's per-year listings of the AAAI proceedings (`openalex_sources.toml`: 23 rows, source S4306420577, with the
+  verified work counts; a count that differs stops the crawl), joined only by exact title key, year and venue with
+  exactly one candidate on each side. Nothing is fuzzy-matched.
+- **No credentials are needed.** The design allowed for a `mailto` or key; the API answers keyless (a full crawl is
+  about 53 requests against 1,000 a day), `OPENALEX_API_KEY` is optional and goes in a header only, and **no contact
+  address is sent**.
+- **The RIS `N1` names OpenAlex with the paper's own page**, not "the work's URL" as this design said: the claim's own
+  url is the work's API URL (kept in the provenance), but the attribution links `urls.proceedings`, so a reader reaches the
+  paper. CSV and JSONL say `openalex` in `abstract_source` and `abstract_origin`, as designed, and `abstract_kind` is
+  the last CSV column.
+- **`abstract_kind`** is derived exactly as designed (`record.abstract_kind_of`), an open enum, the last filter field
+  (canonical order venue, year, track, status, `abstract_kind`), with no default. **`QUERY_VERSION` is unchanged**: a query
+  naming the field was an error before. A schema-3 index refuses it (`FIELD_NOT_INDEXED`, 422) and cannot be built from a
+  snapshot holding an OpenAlex abstract. Record schema 9 (8 was this milestone's OpenAlex step; TASK-232's `aaai_library`
+  source made it 9); index schema 4. **Schema 2 was retired first**, so schemas 3 and
+  4 are served; each engine's facets and combination aggregation are its own, and the combo memo's budget triples.
+- **Licence.** OpenAlex's data is CC0 with no personal-use carve-out, but it ships no plaintext abstracts, so a rebuilt
+  abstract is served on the publisher-abstract posture (decision-018, the takedown list, TASK-135), not a CC0 one.
+- **Counts (the real build, 2026-10-11, after `aaai_library`).** `aaai_library` fills first: of the 4,709 AAAI 1980–2008
+  records it attached 4,536 (126 by `title_near`), refusing 43 `title_mismatch`, 23 `layout_unknown`, 3 `undecodable`,
+  1 `capture_redirect` and 1 `no_abstract`. That leaves 1,272 records with no abstract after every official source: 1,099 with a DOI
+  (AIES 2018–2023: 557, FAccT 2019–2024 and 2026: 540, AAAI 2020: 2) and 173 AAAI 1980–2008. OpenAlex fills 1,117:
+  1,098 by DOI (a duplicate DOI with differing texts refuses one record in FAccT 2021; AIES 2019's is the cited
+  `duplicate_chosen`) and 19 by title; it refuses 155 (`doi_duplicate` 1, `inverted_gap` 2, `no_abstract` 10,
+  `title_ambiguous` 1, `title_unmatched` 141) and has a work for 1,305 records an official source already filled
+  (`official_won`). Before `aaai_library` (the 2026-10-10 build, snapshot `2026-10-10-22a339940466`) the title route
+  attached 1,061 of 4,709 and the DOI route 1,097 of 1,099, 2,158 in all, leaving 3,648 AAAI 1980–2008 records
+  without an abstract.
+- **The real build (2026-10-11).**
+  - **Crawl:** the OpenAlex extract is unchanged, sha256
+    `7fea58b983252594b9ad3fb4788022f81b64adf579ce9cee129abf91a9c5c49c` (5,808 candidates, 49 lookups and 3,005 works
+    in the crawl; the fill reads only the records still without an abstract). The archive harvest pinned 4,607 AAAI
+    library pages, none missing, one unavailable because its capture redirects.
+  - **Snapshot:** `2026-10-11-93c2937e2f29` (hash `93c2937e2f2936b851feb29b4e82114dd0c7c0a99de00500bfe2f2fb457e7ccb`),
+    173,253 records. `op snapshot diff` against `2026-10-10-9efa49481112` (the snapshot before milestone C) shows 5,653
+    changed, each in `abstract` only: `abstract_kind` `none` → `official` for 4,536 (`aaai_library`) and `none` →
+    `openalex` for 1,117; none added, removed or rekeyed; AAAI 4,557, AIES 557 and FAccT 539 records.
+  - **Index:** `b4f335e07e70` (schema 4, tokenizer 3, 173,253 documents). Full parity found 0 differences (214,499 terms,
+    344,268 phrases), and `abstract_kind:openalex` returns the same 1,117 documents on both engines. The four schema-2
+    indexes (05a0541717f6, 6508b8cf66ff, a7cfd04b656f, c76d7f26ee06) were retired first, on 2026-10-10.
+  - **Coverage:** `op eval coverage --index b4f335e07e70 --check` passes, 81 of 82 gated cells (ICLR 2013 is the
+    accepted exception); `docs/results/2026-10-11-coverage.md`. The earlier as-built report, index `9977ed00669f`
+    (83 of 84), stays as history: `docs/results/2026-10-10-coverage.md`.
+  - **Benchmarks (spec 03 §Performance budgets):** on the real corpus the worst first page with group counts is
+    67.4 ms p95 (`main-2-pop`; 76.5 ms before TASK-230), within 100 ms (`docs/results/2026-10-11-bench-group-counts.md`; TASK-220). On the
+    synthetic 80k corpus (`docs/results/2026-10-11-bench.md`) `main-3-sources` is **110.7 ms, over the budget**: it is
+    65 ms without group counts, so the excess is TASK-176's counting, not schema 4. Schema 4's own regression, a fifth
+    combo field multiplying every group-count aggregation, was found by that benchmark and fixed in `566cafcd`.
+    Follow-up: TASK-230, done: a counting job now shares its trees with a helper on the other counting worker, and
+    every synthetic 80k first page is within budget (`main-3-sources` 68.4 ms, worst `main-2-pop` 72.8 ms; the real
+    corpus's worst 67.4 ms; both reports regenerated on the final code and index).
+  - **Left for the owner or later:** nothing from TASK-231 (done) or TASK-232 (done: AAAI's own abstracts from Internet
+    Archive captures of the old aaai.org paper pages, decision-051, the `aaai_library` source, filled before OpenAlex).
+    The bisect and profiles behind the benchmark figures are in `docs/results/2026-10-11-perf-regression.md`.
+- **The audit** (`op eval openalex`, spec 07 §G, `docs/results/2026-10-10-openalex-audit.md`, on snapshot
+  `2026-10-10-22a339940466`, before `aaai_library`): over 2,122 records with
+  both abstracts, 83.1% exact or near-exact; AAAI 2010+ 99.3%, AIES 100%, FAccT 23–59% (OpenAlex likely carries ACM's
+  published version, which the `openalex` label covers). All 1,061 title-route attaches of that snapshot were checked
+  against OpenAlex's authors: 1,052 agree and 9 look wrong (mostly OCR variants of one surname); the controller's ruling
+  keeps the exact title-key rule. The final snapshot's title route attaches 19; the audit's re-run on it (`docs/results/2026-10-11-openalex-audit.md`) finds 18 agree and 1 an OCR variant of the same surname. The AAAI 1980–2008
+  archive-against-OpenAlex measure is TASK-235.
+- **Also built in milestone C.** The IAAI and EAAI track badges' expansions as visible text (paper page and syntax help);
+  a drifted search record's diff says why each removed paper left (`track_changed`, `status_changed`, `filter_changed`,
+  `not_in_index`, `still_eligible`) with a per-cause tally; cited notes on ungated coverage cells and six AAAI list-count
+  gate rows (2010, 2012, 2014, 2017, 2020, 2021: twelve gated cells in all); and one rule for a lone surrogate in an
+  abstract in every source (refused, counted as `abstract_surrogate`, never a stop).
+- **Follow-up:** IASEAI 2027 via OpenReview once decisions are public ([TASK-216](../../backlog/tasks/task-216%20-%20IASEAI-2027-papers-via-OpenReview-once-decisions-are-public-after-2026-11-20.md)).
+

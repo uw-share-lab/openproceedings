@@ -16,8 +16,8 @@ from typing import Any
 import pytest
 from openproceedings import cli, storage
 from openproceedings.ingest import snapshot as snap
-from openproceedings.ingest.dedup import DedupResult, attribution, dedup
-from openproceedings.ingest.record import PaperRecord
+from openproceedings.ingest.dedup import DedupResult, attribution, dedup, resolve
+from openproceedings.ingest.record import Claim, PaperRecord
 from openproceedings.ingest.snapshot import (
     DISPLAY,
     HASHED,
@@ -265,7 +265,7 @@ def test_build_writes_the_layout(cache: Path, tmp_path: Path) -> None:
     }
     assert (manifest["format_version"], manifest["record_schema_version"], manifest["tokenizer_version"]) == (
         "2",
-        "7",
+        "9",
         "3",
     )
     assert manifest["openproceedings_version"]
@@ -663,6 +663,8 @@ def test_diff_names_every_kind_of_change(cache: Path, tmp_path: Path) -> None:
         "display_only": 1,
         "provenance_only": 1,
         "abstract_withheld": {"added": [], "lifted": []},  # TASK-136
+        "abstract_kind": {},  # decision-049
+        "abstract_kind_transitions": {},
     }
     same = diff(a, a)
     assert (same["added"], same["removed"], same["rekeyed"], same["changed"]) == ([], [], {}, {})
@@ -955,3 +957,184 @@ def test_build_replays_a_marked_crossref_crawl(
     assert {"op:facct:2023:doi-3593013.3594011", "op:facct:2023:doi-3593013.3594012"} <= ids
     [listing] = manifest["sources"]["crossref"]["listings"]
     assert listing["count_ok"] is True
+
+
+def test_build_fills_a_null_abstract_from_the_pinned_openalex_extract_before_takedowns(
+    cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fill runs after dedup and reconcile (`openalex.apply`) and before `withhold`: the record carries
+    OpenAlex's abstract, the manifest its fill report, and a takedown of that id still withholds it."""
+    from openproceedings.ingest import acm_table
+    from openproceedings.ingest.sources import crawl, openalex
+
+    from tests.unit.ingest.crossref import api
+    from tests.unit.ingest.crossref.test_crossref_mine import D1, D2, NP, TABLE, _whole
+    from tests.unit.ingest.openalex import api as oa
+
+    monkeypatch.setattr(acm_table, "TABLE", TABLE)
+    _whole(cache, api.work(D1), api.work(D2), api.work(NP), total=3)
+    crawl.ingest_crossref([("FAccT", 2023)], cache, offline=True, table=TABLE)
+    works = openalex.parse_works(oa.page(oa.work("W1", D1, text="An OpenAlex abstract."))).works
+    at = datetime(2026, 10, 10, tzinfo=UTC)
+    sha = openalex.write_extract(
+        cache, (openalex.Lookup("doi", openalex.doi_url([D1, D2]), at, (D1, D2), None, None, works),)
+    )
+    rid = "op:facct:2023:doi-3593013.3594011"
+
+    result = build(cache, tmp_path / "snapshots", BUILT)
+    filled = load_records(result.path)[rid]
+    assert filled.abstract == "An OpenAlex abstract." and filled.abstract_kind == "openalex"
+    manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
+    [fills] = manifest["sources"]["openalex"]["fills"]
+    assert fills["attached_doi"] == 1 and fills["refused"] == {"doi_unmatched": 1}
+    assert fills["extract"] == sha
+
+    withheld = build(cache, tmp_path / "withheld", BUILT, takedowns=frozenset({rid}))
+    m = json.loads((withheld.path / "manifest.json").read_text(encoding="utf-8"))
+    gone = load_records(withheld.path)[rid]
+    assert m["withheld"] == [rid] and gone.abstract is None and gone.abstract_kind == "none"
+    assert "OpenAlex abstract" not in (withheld.path / "records.jsonl").read_text(encoding="utf-8")
+
+
+def test_build_fills_aaai_pages_before_openalex_after_reconcile(
+    cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TASK-232: AAAI's own archived pages fill first (`aaai_library.apply`), so OpenAlex fills only what they leave
+    null; both after reconcile, both before takedowns, and both reports reach the manifest."""
+    from openproceedings.ingest.sources import aaai_library, openalex
+    from openproceedings.ingest.sources.common import Report
+
+    order: list[str] = []
+
+    class Fills(Report):
+        manifest_key = "fills"
+
+        def to_manifest(self) -> dict[str, Any]:
+            return {"ran": True}
+
+    def fake(name: str) -> Any:
+        def apply(result: Any, _cache: Path) -> Any:
+            order.append(name)
+            return result, [Fills(source=name)]
+
+        return apply
+
+    from openproceedings.ingest import snapshot as snap
+
+    def recorded(name: str, real: Any) -> Any:
+        def call(*args: Any, **kwargs: Any) -> Any:
+            order.append(name)
+            return real(*args, **kwargs)
+
+        return call
+
+    monkeypatch.setattr(aaai_library, "apply", fake("aaai_library"))
+    monkeypatch.setattr(openalex, "apply", fake("openalex"))
+    monkeypatch.setattr(snap, "reconcile", recorded("reconcile", snap.reconcile))
+    monkeypatch.setattr(snap, "withhold", recorded("withhold", snap.withhold))
+    result = build(cache, tmp_path / "snapshots", BUILT)
+    # a reorder of `build` fails here: the fills after reconcile, AAAI's pages first, takedowns last
+    assert order == ["reconcile", "aaai_library", "openalex", "withhold"]
+    manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["sources"]["aaai_library"] == {"fills": [{"ran": True}]}
+    assert manifest["sources"]["openalex"] == {"fills": [{"ran": True}]}
+
+
+def test_build_fills_an_aaai_page_abstract_and_a_takedown_withholds_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TASK-232: a build fills an AAAI 1980-2008 dblp record from its cached capture (official), and a takedown of
+    that id withholds the filled abstract from records.jsonl."""
+    from openproceedings.ingest import aaai_library_table
+    from openproceedings.ingest.sources import aaai_library
+
+    from tests.unit.ingest.aaai_library.test_aaai_library import (
+        FIXTURES,
+        body,
+        record,
+        row_for,
+        seed,
+        table_of,
+    )
+
+    cache = tmp_path / "cache"
+    key = "conf/aaai/Araya84"
+    row = row_for(key)
+    seed(cache, row, body(FIXTURES[key]))
+    table = table_of(row)
+    monkeypatch.setattr(aaai_library_table, "TABLE", table)
+    aaai_library.write_done(cache, table, aaai_library.Harvest(pages=1))
+    rec = record(key)
+    monkeypatch.setattr(snap, "load_sources", lambda _cache: ([rec], [], []))
+
+    result = build(cache, tmp_path / "snapshots", BUILT)
+    filled = load_records(result.path)[rec.id]
+    assert filled.abstract is not None and filled.abstract_kind == "official"
+    assert {c.source for c in filled.claims("abstract")} == {"aaai_library"}
+    manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["sources"]["aaai_library"]["fills"][0]["attached"] == 1
+
+    withheld = build(cache, tmp_path / "withheld", BUILT, takedowns=frozenset({rec.id}))
+    gone = load_records(withheld.path)[rec.id]
+    assert gone.abstract is None and gone.abstract_kind == "none"
+    assert filled.abstract not in (withheld.path / "records.jsonl").read_text(encoding="utf-8")
+
+
+# --- abstract_kind (decision-049) ----------------------------------------------------------------------------
+
+
+def _aaai(
+    native: str, abstract: str | None = None, source: str = "ojs", year: int = 2020, **kw: Any
+) -> PaperRecord:
+    """An AAAI 2020 record whose other fields are OJS's; its abstract claim is `source`'s."""
+    base = paper(native, venue="AAAI", year=year, source="ojs", **kw)
+    if abstract is None:
+        return base
+    claim = Claim(field="abstract", value=abstract, source=source, fetched_at=base.provenance[0].fetched_at)  # type: ignore[arg-type]
+    record, _ = resolve(base.id, [*base.provenance, claim])
+    return record
+
+
+def _written(root: Path, name: str, records: list[PaperRecord]) -> Path:
+    out = root / name
+    out.mkdir(parents=True)
+    for fname, data in render(DedupResult(tuple(records), (), ()), [], BUILT).items():
+        (out / fname).write_bytes(data)
+    return out
+
+
+def test_diff_names_a_kind_change_even_when_no_hash_changes(tmp_path: Path) -> None:
+    """Same text, another source (OpenAlex's text, then the same text from OJS): content_hash is unchanged, so
+    `changed` can't see it; `abstract_kind` must."""
+    text = "Exactly the same abstract text."
+    a, b = (_written(tmp_path, src, [_aaai("ojs-1", text, src)]) for src in ("openalex", "ojs"))
+    out = diff(a, b)
+    assert out["changed"] == {} and out["abstract_kind"] == {"op:aaai:2020:ojs-1": ["openalex", "official"]}
+    assert out["abstract_kind_transitions"] == {"openalex->official": 1}
+    assert diff(a, a)["abstract_kind"] == {} and diff(a, a)["abstract_kind_transitions"] == {}
+
+
+def test_the_manifest_counts_openalex_abstracts_only_when_there_are_any() -> None:
+    plain = render(DedupResult((_aaai("ojs-1"),), (), ()), [], BUILT)
+    manifest = json.loads(plain["manifest.json"])
+    assert "abstract_openalex" not in manifest and "abstract_openalex_by_track" not in manifest
+    filled = render(
+        DedupResult((_aaai("dblp-A90", "Text.", "openalex", 1990),), (), ()),
+        [],
+        BUILT,
+    )
+    manifest = json.loads(filled["manifest.json"])
+    assert manifest["abstract_openalex"] == {"AAAI": {"1990": 1}}
+    assert manifest["abstract_openalex_by_track"] == {"AAAI": {"1990": {"main": 1}}}
+
+
+def test_a_record_file_counts_openalex_abstracts_from_the_claims(tmp_path: Path) -> None:
+    records = [
+        _aaai("ojs-1", "Official text."),
+        _aaai("ojs-2", "Filled text.", "openalex", title="Other"),
+        _aaai("ojs-3", title="Third"),
+    ]
+    file = RecordFile(_written(tmp_path, "s", records))
+    assert file.abstract_openalex == {("AAAI", 2020): 1} and file.track_openalex == {
+        ("AAAI", 2020, "main"): 1
+    }

@@ -33,6 +33,7 @@
   "year",
   "track",
   "status",
+  "abstract_kind",
   "source"
  ],
  "max_near": 100,

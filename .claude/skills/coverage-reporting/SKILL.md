@@ -28,6 +28,26 @@ As built (TASK-082): `GET /coverage` serves each venue-year's `statuses_indexed`
 apart from `abstract_missing`, which leaves them out. `op eval coverage` reports the snapshot's own counts and
 adds one line under its totals when the snapshot withheld any (`coverage_report.withheld_note`); the served
 `/coverage` also counts ids listed since the build, so it can move under one `index_version`: cite the report.
+TASK-222 adds each track's `gate_note` and `gate_note_citation`: an ungated cell's cited reason for having no
+official count (`official_counts.UNGATED_NOTES`, kept equal to `coverage-sources.md` §Ungated cells with a note by
+`test_official_counts.py`; `check_notes` refuses a note on a gated cell or one without a citation). The page shows it
+under the track's row (copy deck CV-9) and the report lists it under "Ungated cells with a note". A failing gated
+cell's cause still goes in `coverage-causes.toml`, never a note. A note is for an ungated cell only, in plain words with a
+citation a reader can check (a URL or a repo path); `coverage-sources.md` also holds the list-count rows that gate AAAI
+2012, 2017, 2020 and 2021 main (a count of AAAI's own published list: the row's description says "counted" and
+names the list, and the list must match our `main` definition and be independent of the proceedings, which means
+evidently made before them: a pre-camera-ready list that says so). An archived copy captured after publication is not
+evidence of independence (gate C round 1): AAAI 2010's and 2014's lists, like 2016's, are ungated cells with a note. On
+a public page a repo-path citation is rendered as a link to the file on the repository's default branch.
+
+**Abstract kinds (decision-049, milestone C).** Every cell, venue-year and the totals carry `abstract_official` and
+`abstract_openalex` beside `abstract_missing` and `abstract_withheld`, and they sum to `records`: official + OpenAlex +
+missing + withheld = records. They come from the snapshot manifest's `abstract_openalex` and `abstract_openalex_by_track`
+(written only when OpenAlex filled any), which the load checks against the records (`abstract_openalex_mismatch`); a
+takedown listed since the build moves its record out of the bucket its kind was in into `abstract_withheld`. The page adds
+the two columns and a "N abstracts from OpenAlex" suffix only above 0 (copy deck CV-2, CV-4, CV-8), the report adds the
+columns, a scope sentence and a line naming the venues whose abstracts OpenAlex filled. Never fold OpenAlex's into
+`abstract_missing`'s complement by hand: use the fields.
 
 ## The gate (M4)
 Exactly spec 07 §C: **every main-track and D&B cell for which an official accepted count exists is within

@@ -446,6 +446,7 @@ def test_a_canonical_that_no_longer_runs_is_refused_with_null_counts(
             None,
             None,
         )
+        assert diff["removed_causes"] is None  # no comparison: no causes, never a tally of zeros
     lines = mismatch_lines(logs)
     assert len(lines) == 1 and lines[0]["refused"] == "PARSE_UNBALANCED_PAREN"
 
@@ -524,13 +525,54 @@ def test_a_changed_snapshot_with_the_pinned_index_gone_is_drifted_with_exact_cou
 
     assert diff["status"] == "drifted" and diff["recorded_index_version"] == drift.before
     assert diff["changed"] == replay_["changed"] and diff["refused"] is None
-    titles = {as_paper(r).id: as_paper(r).title for r in drift.added}
-    assert diff["added"] == [{"id": i, "title": titles[i]} for i in added]
+    papers = {as_paper(r).id: as_paper(r) for r in drift.added}
+    assert diff["added"] == [
+        {
+            "id": i,
+            "title": papers[i].title,
+            "track": papers[i].track,
+            "status": papers[i].status,
+            "cause": None,
+            "failed_filter": None,
+        }
+        for i in added
+    ]  # an added paper has its track on the replaying index, and no cause
     # the removed papers are in no index this instance holds (the pinned one is gone): titles are null
-    assert diff["removed"] == [{"id": i, "title": None} for i in removed]
+    assert diff["removed"] == [
+        {
+            "id": i,
+            "title": None,
+            "track": None,
+            "status": None,
+            "cause": "not_in_index",
+            "failed_filter": None,
+        }
+        for i in removed
+    ]
+    assert diff["removed_causes"] == {
+        "track_changed": 0,
+        "status_changed": 0,
+        "filter_changed": 0,
+        "not_in_index": len(removed),
+        "still_eligible": 0,
+    }
     assert (diff["added_total"], diff["removed_total"]) == (len(added), len(removed))
     # a page: at most `limit` of each list from `offset`, the totals always in full
-    assert page["removed"] == [{"id": i, "title": None} for i in removed[1:2]] and page["added"] == []
+    assert (
+        page["removed"]
+        == [
+            {
+                "id": i,
+                "title": None,
+                "track": None,
+                "status": None,
+                "cause": "not_in_index",
+                "failed_filter": None,
+            }
+            for i in removed[1:2]
+        ]
+        and page["added"] == []
+    )
     assert (page["added_total"], page["removed_total"]) == (len(added), len(removed))
     assert mismatch_lines(logs) == []
     assert any(x["event"] == "pinned_index_unavailable" and x["reason"] == "absent" for x in logs())
@@ -554,6 +596,84 @@ def test_a_changed_query_version_replays_on_the_pinned_index_when_it_is_here(
     assert body["replay"]["status"] == "drifted" and body["replay"]["index_version"] == drift.before
     assert [c["input"] for c in diff["changed"]] == ["query_version"]
     assert diff["membership_identical"] is True and diff["removed"] == []
+
+
+def test_a_drifted_diff_gives_each_removed_papers_cause_and_the_tally(tmp_path: Path, logs: Logs) -> None:
+    """TASK-227: replayed on a second index where one paper moved to the IAAI track (decision-050's kind of
+    drift), one left the index, one was withdrawn, one lost its official abstract (the query's
+    `abstract_kind:official` limit) and one no longer matches, each removed paper says why, with its track and
+    status on the replaying index and the filter field it now fails, and the tally counts every cause (0
+    included) over the whole list, not the page."""
+    aaai = {"venue": "AAAI", "year": 2024}
+    text = "An abstract."
+    before = [
+        Rec("fx:0001", "trust moved", text, **aaai),
+        Rec("fx:0002", "trust gone", text, **aaai),
+        Rec("fx:0003", "trust reworded", text, **aaai),
+        Rec("fx:0004", "trust kept", text, **aaai),
+        Rec("fx:0005", "trust withdrawn", text, **aaai),
+        Rec("fx:0006", "trust unabstracted", text, **aaai),
+    ]
+    after = [
+        Rec("fx:0001", "trust moved", text, track="iaai", status="withdrawn", **aaai),  # track goes first
+        Rec("fx:0003", "reliance reworded", text, **aaai),
+        Rec("fx:0004", "trust kept", text, **aaai),
+        Rec("fx:0005", "trust withdrawn", text, status="withdrawn", **aaai),
+        Rec("fx:0006", "trust unabstracted", None, **aaai),
+    ]
+    first, second = tmp_path / "first", tmp_path / "second"
+    for root, corpus, name in ((first, before, "before"), (second, after, "after")):
+        point_current(root, build(corpus, root / "snapshots", name, root / "indexes"))
+    with TestClient(make_app(first)) as client:
+        record_id = save(client, "trust abstract_kind:official")
+    shutil.copytree(first / RECORDS_DIR, second / RECORDS_DIR)  # the record moves; its index doesn't
+    moved, gone, reworded, _kept, withdrawn, unabstracted = (as_paper(r).id for r in before)
+    with TestClient(make_app(second)) as client:
+        assert replayed(client, record_id)["replay"]["removed_total"] == 5
+        diff = diffed(client, record_id)
+        page = diffed(client, record_id, offset=2, limit=1)
+    assert diff["status"] == "drifted" and diff["added"] == []
+
+    def entry(
+        i: str, title: str | None, track: str | None, status: str | None, cause: str, field: str | None
+    ):
+        return {
+            "id": i,
+            "title": title,
+            "track": track,
+            "status": status,
+            "cause": cause,
+            "failed_filter": field,
+        }
+
+    assert diff["removed"] == [
+        entry(moved, "trust moved", "iaai", "withdrawn", "track_changed", "track"),
+        entry(gone, None, None, None, "not_in_index", None),
+        entry(reworded, "reliance reworded", "main", "accepted", "still_eligible", None),
+        entry(withdrawn, "trust withdrawn", "main", "withdrawn", "status_changed", "status"),
+        entry(unabstracted, "trust unabstracted", "main", "accepted", "filter_changed", "abstract_kind"),
+    ]
+    tally = {
+        "track_changed": 1,
+        "status_changed": 1,
+        "filter_changed": 1,
+        "not_in_index": 1,
+        "still_eligible": 1,
+    }
+    assert diff["removed_causes"] == tally
+    assert page["removed_causes"] == tally and [x["id"] for x in page["removed"]] == [reworded]
+    # counts only on the access line: no title or query text
+    access = [x for x in logs() if x["event"] == "request" and x["route"].endswith("/diff")]
+    assert access and all("trust" not in json.dumps(x) for x in logs())
+    assert {k: access[0][f"removed_{k}"] for k in tally} == tally
+
+
+def test_a_reproduced_diff_tallies_no_causes(client: TestClient) -> None:
+    diff = diffed(client, save(client, "trust"))
+    assert diff["removed"] == []
+    assert diff["removed_causes"] == dict.fromkeys(
+        ("track_changed", "status_changed", "filter_changed", "not_in_index", "still_eligible"), 0
+    )
 
 
 def test_diff_of_a_reproduced_record_is_empty(client: TestClient) -> None:
@@ -693,7 +813,7 @@ FORMS_CORPUS = [
 ]
 
 
-@pytest.mark.parametrize("schema_version", ["2", "3"])
+@pytest.mark.parametrize("schema_version", ["3", "4"])
 def test_a_record_saved_on_a_tokenizer_2_index_reproduces_after_the_tokenizer_3_build(
     tmp_path: Path, schema_version: str
 ) -> None:
@@ -766,15 +886,15 @@ def test_a_record_saved_on_a_tokenizer_2_index_reproduces_after_the_tokenizer_3_
     assert (drift["changed"][0]["recorded"], drift["changed"][0]["current"]) == ("2", "3")
 
 
-# --- replay across a schema bump (TASK-167): a record pinned to a schema-2 index still reproduces ----------
+# --- replay across a schema bump (decision-049): a record pinned to a schema-3 index still reproduces ----------
 @pytest.mark.parametrize("tokenizer_version", ["2", "3"])
-def test_a_record_saved_on_a_schema_2_index_reproduces_after_the_schema_3_build(
+def test_a_record_saved_on_a_schema_3_index_reproduces_after_the_schema_4_build(
     tmp_path: Path, tokenizer_version: str
 ) -> None:
-    """Guarantee 4 across TASK-167's SCHEMA_VERSION bump: this code serves the schema-2 index a record pins (its
-    verified ids still filtered by a text-`id` term set) beside a schema-3 build of the same snapshot (a u64
-    term set on `ord`). Records saved on the schema-2 index replay `reproduced` on it after `current` moves
-    to the schema-3 one, and both indexes match the same ids for every query, verified clauses included."""
+    """Guarantee 4 across the schema 4 bump: this code serves the schema-3 index a record pins (no `abstract_kind`)
+    beside a schema-4 build of the same snapshot (no OpenAlex abstract, so schema 3 builds). Records saved on the
+    schema-3 index replay `reproduced` on it after `current` moves to the schema-4 one, and both indexes match the
+    same ids, with the same exclusion counts, for every query, verified clauses included."""
     data_dir = tmp_path / "data"
     corpus = list(records())
     old = build(
@@ -782,13 +902,13 @@ def test_a_record_saved_on_a_schema_2_index_reproduces_after_the_schema_3_build(
         data_dir / "snapshots",
         "snap",
         data_dir / "indexes",
-        schema_version="2",
+        schema_version="3",
         tokenizer_version=tokenizer_version,
     )
     new = build(
         corpus, data_dir / "snapshots", "snap", data_dir / "indexes", tokenizer_version=tokenizer_version
     )
-    assert old != new
+    assert old != new  # the schema is an index_version input
     point_current(data_dir, old)
     queries = [
         ("trust AND calibrat*", "native"),
@@ -802,7 +922,7 @@ def test_a_record_saved_on_a_schema_2_index_reproduces_after_the_schema_3_build(
         point_current(data_dir, new)
         state: IndexState = app.state.index
         assert state.load() and state.engine is not None and state.engine.index_version == new
-        assert state.engine.ord_indexed
+        assert state.engine.form.abstract_kind
         on_new = [save(client, q, mode) for q, mode in queries]
         for record_id, other in zip(saved, on_new, strict=True):
             body, again = replayed(client, record_id, ids=True), replayed(client, other, ids=True)
@@ -811,6 +931,6 @@ def test_a_record_saved_on_a_schema_2_index_reproduces_after_the_schema_3_build(
             assert again["replay"]["status"] == "reproduced" and again["replay"]["index_version"] == new
             # the same membership and exclusion counts on either schema
             mine, theirs = body["record"], again["record"]
-            assert theirs["schema_version"] == "3" and mine["schema_version"] == "2"
+            assert mine["schema_version"] == "3" and theirs["schema_version"] == "4"
             assert theirs["ids_hash"] == mine["ids_hash"] and theirs["ids"] == mine["ids"]
             assert theirs["excluded"] == mine["excluded"] and theirs["expansions"] == mine["expansions"]

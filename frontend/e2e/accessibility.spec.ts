@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import recordFixture from "../src/components/record/record-fixture.json";
 
 type Theme = "light" | "dark";
 type State = { name: string; open: (page: Page) => Promise<void> };
@@ -59,6 +60,52 @@ const seeAlso = (page: Page) => page.locator("p").filter({ hasText: /^See also \
 const SUBMITTED_QUERY = "trust venue:ICML";
 const submissionNote = (page: Page) =>
   page.locator("p").filter({ hasText: /^Submission-time abstract: as the authors submitted it/ });
+
+// The API the web build calls (playwright.config.ts): a state the fixture corpus can't reach is drawn from one of its
+// own answers with the one field it lacks set (gate C round 1), never an answer written whole in the browser.
+const API = `http://127.0.0.1:${process.env.OP_E2E_API_PORT ?? "8000"}`;
+
+/** Every answer of `pattern` with `edit` applied to its JSON body (the real answer otherwise). */
+async function editAnswers(page: Page, pattern: string, edit: (body: Record<string, unknown>) => void) {
+  await page.route(pattern, async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as Record<string, unknown>;
+    edit(body);
+    await route.fulfill({ response, json: body });
+  });
+}
+
+/** The synthetic corpus holds no AAAI, AIES or FAccT paper, so none has an OpenAlex abstract: the first hit with an
+ * abstract, and the paper page, are given `abstract_kind: openalex` (RH-20, PA-12). */
+async function openalexAbstracts(page: Page): Promise<void> {
+  await editAnswers(page, `${API}/api/v1/search?**`, (body) => {
+    const hits = body.hits as { abstract: string | null; abstract_kind: string }[];
+    const first = hits.find((h) => h.abstract !== null);
+    if (first) first.abstract_kind = "openalex";
+  });
+  await editAnswers(page, `${API}/api/v1/papers/**`, (body) => {
+    (body.paper as { abstract_kind: string }).abstract_kind = "openalex";
+  });
+}
+
+const openalexNote = (page: Page) => page.locator("p").filter({ hasText: /^Abstract via OpenAlex: / });
+
+/** The drifted record of `record-fixture.json` (real API answers, kept current by test_frontend_record_fixture.py),
+ * served for its id with its diff: the removed list with each paper's cause and the tally (TASK-227). */
+const DRIFT = recordFixture.drift;
+
+async function driftedRecord(page: Page): Promise<void> {
+  const id = DRIFT.stored.record.record_id;
+  await page.route(`${API}/api/v1/records/${id}**`, (route) =>
+    route.fulfill({
+      json: new URL(route.request().url()).pathname.endsWith("/diff") ? DRIFT.diff : DRIFT.replayed,
+    }),
+  );
+  await page.goto(`/record/${id}`);
+  await page.getByRole("button", { name: /See the \d+ added and \d+ removed papers/ }).click();
+  await expect(page.getByRole("region", { name: /^Removed \(\d+\)$/ })).toBeVisible();
+  await expect(page.getByText(/^Removed papers by cause/)).toBeVisible();
+}
 
 const states: State[] = [
   {
@@ -200,6 +247,60 @@ const states: State[] = [
     },
   },
   {
+    name: "coverage detail open, with an ungated cell's note",
+    open: async (page) => {
+      // the fixture's cells all have an official count or none: each venue-year's first track is given a note
+      // (CV-9), so whichever Details opens first shows one
+      await editAnswers(page, `${API}/api/v1/coverage**`, (body) => {
+        for (const vy of body.venue_years as { tracks: Record<string, unknown>[] }[]) {
+          Object.assign(vy.tracks[0]!, {
+            gated: false,
+            within_gate: null,
+            gate_note: "the list counts a different set of papers",
+            gate_note_citation:
+              "https://example.org/list and docs/results/coverage-sources.md §Ungated cells",
+            gate_note_accessed: "2026-10-10",
+          });
+        }
+      });
+      await page.goto("/coverage");
+      await page
+        .getByRole("button", { name: /^Details: track and status for / })
+        .first()
+        .click();
+      await expect(page.getByText(/ not gated: the list counts a different set of papers/)).toBeVisible();
+      await expect(page.getByRole("columnheader", { name: "OpenAlex abstract" }).last()).toBeVisible();
+    },
+  },
+  {
+    name: "OpenAlex abstract result",
+    open: async (page) => {
+      await openalexAbstracts(page);
+      await search(page);
+      await expect(openalexNote(page)).toHaveCount(1);
+      await expect(openalexNote(page)).toBeVisible();
+    },
+  },
+  {
+    name: "OpenAlex abstract paper",
+    open: async (page) => {
+      await openalexAbstracts(page);
+      await search(page);
+      await page
+        .locator("article")
+        .filter({ has: openalexNote(page) })
+        .getByRole("heading")
+        .getByRole("link")
+        .click();
+      await expect(page).toHaveURL(/\/paper\//);
+      await expect(page.getByRole("region", { name: "Abstract" }).locator(openalexNote(page))).toBeVisible();
+    },
+  },
+  {
+    name: "drifted record with its removed papers",
+    open: driftedRecord,
+  },
+  {
     name: "syntax help with instance limits",
     open: async (page) => {
       await page.goto("/help/syntax");
@@ -213,8 +314,8 @@ for (const theme of ["light", "dark"] as const) {
     test(`axe finds no WCAG 2.2 AA violations in selected UI states (${theme}, ${width}px)`, async ({
       page,
     }) => {
-      // twelve page loads and axe runs over pages of 50 results, each with its links and toggles
-      test.setTimeout(120_000);
+      // about twenty page loads and axe runs over pages of 50 results, each with its links and toggles
+      test.setTimeout(240_000);
       await page.setViewportSize({ width, height: 900 });
       await chooseTheme(page, theme);
       for (const state of states) {
@@ -222,6 +323,7 @@ for (const theme of ["light", "dark"] as const) {
           await state.open(page);
           const result = await new AxeBuilder({ page }).withTags(axeTags).analyze();
           expect(result.violations, `${state.name} in ${theme} at ${width}px`).toEqual([]);
+          await page.unrouteAll({ behavior: "wait" }); // a state's edited answers stay its own
         });
       }
     });
@@ -406,4 +508,13 @@ test("a comparison with a RIS file is run and read by keyboard, and fits 320px",
     scroll: document.documentElement.scrollWidth,
   }));
   expect(widths.scroll).toBeLessThanOrEqual(widths.client);
+});
+
+test("following the OpenAlex label lands on the coverage page's explanation, focused (gate C round 1)", async ({
+  page,
+}) => {
+  await page.goto("/coverage#openalex");
+  const explanation = page.locator("#openalex");
+  await expect(explanation).toBeFocused();
+  await expect(explanation).toBeInViewport();
 });

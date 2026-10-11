@@ -10,7 +10,9 @@ An OAI-PMH response (ojs.aaai.org) keeps its whole XML structure; only its free-
 
 A Crossref answer (api.crossref.org) is kept as JSON text: titles, subtitles and person names become synthetic,
 while DOIs, types, pages, dates, ISBNs, cursors and totals stay (`scrub_crossref`; a capture's `"toc"` trims a
-work-list page to that proceedings' works plus 3 others). A CSV (the FAccT final paper lists) keeps its id, type
+work-list page to that proceedings' works plus 3 others). An OpenAlex `/works` answer (api.openalex.org) keeps its work ids, DOIs, years, primary
+location and `meta`; titles become synthetic and every `abstract_inverted_index` is rebuilt from synthetic text of
+the same word count (`scrub_openalex`). A CSV (the FAccT final paper lists) keeps its id, type
 and URL columns and loses its titles, abstracts and authors (`scrub_csv`; `"keep"` or `"per_type"` trims it). The
 FAccT 2022 accepted-papers page keeps its whole HTML but its entries (`"keep_ids"`, `"keep"`). A capture may state
 its own `"scrubbed"` line.
@@ -450,6 +452,47 @@ def _iclr_index(page: str, c: _Counter) -> tuple[str, str]:
     )
 
 
+_AAAI_PLACEHOLDER = re.compile(r"\s*None\s*-")  # `None - 2 page paper is an abstract`: no text of the paper's
+
+
+def _synthetic_lines(text: str, c: _Counter) -> str:
+    """Each line's words replaced by as many synthetic words, its line breaks and edge whitespace kept."""
+    out = []
+    for line in text.split("\n"):
+        words = line.split()
+        lead, trail = line[: len(line) - len(line.lstrip())], line[len(line.rstrip()) :]
+        out.append(lead + " ".join(f"synthetic{c.next()}" for _ in words) + trail if words else line)
+    return "\n".join(out)
+
+
+def _aaai_library_page(page: str, c: _Counter) -> str:
+    """An archived aaai.org paper page (TASK-232): its whole HTML structure kept; the `<title>` and `<h1>` title (one
+    synthetic title for both), the authors' `<i>` and the abstract paragraphs' words (line breaks kept) synthetic. A
+    `None - …` placeholder and the `Subjects:` / `Submitted:` paragraphs (AAAI's subject list, a date) stay real."""
+    n = c.next()
+    page = re.sub(r"(<title>)(.*?)(</title>)", rf"\g<1>Synthetic title {n}\g<3>", page, count=1, flags=re.S)
+    page = re.sub(r"(<h1><a [^>]*>)(.*?)(</a></h1>)", rf"\g<1>Synthetic title {n}\g<3>", page, count=1,
+                  flags=re.S)  # fmt: skip
+    head, sep, rest = page.partition("</h1>")
+    rest = re.sub(r"(<p[^>]*>\s*<i>)(.*?)(</i>)", lambda m: f"{m.group(1)}Synthetic Author {c.next()}{m.group(3)}",
+                  rest, count=1, flags=re.S)  # fmt: skip
+    authors_end = rest.find("</p>") + len("</p>")
+    body = rest[authors_end:]
+    stop = min((i for i in (body.find("<div"), body.find("<hr"), body.find('<p class="eight-center"'))
+                if i >= 0), default=len(body))  # fmt: skip
+
+    def paragraph(m: re.Match[str]) -> str:
+        inner = m.group(2)
+        if inner.lstrip().startswith("<i>") or _AAAI_PLACEHOLDER.match(
+            inner
+        ):  # Subjects:/Submitted:, a placeholder
+            return m.group(0)
+        return f"{m.group(1)}{_synthetic_lines(inner, c)}{m.group(3)}"
+
+    abstract = re.sub(r"(<p[^>]*>)(.*?)(</p>)", paragraph, body[:stop], flags=re.S)
+    return head + sep + rest[:authors_end] + abstract + body[stop:]
+
+
 def scrub_html(
     url: str, page: str, keep_ids: list[str] | None = None, keep: int | None = None
 ) -> tuple[str, str | None]:
@@ -463,6 +506,8 @@ def scrub_html(
             f"<!DOCTYPE html>\n<html><head>{title.group(0) if title else ''}</head><body>…</body></html>\n",
             ("challenge page reduced to its <title>; the real page loads a Turnstile widget"),
         )
+    if "web.archive.org/web/" in url and "www.aaai.org/Library/" in url:
+        return _aaai_library_page(page, c), None
     if "iclr.cc/archive/" in url:
         page, note = _iclr_index(page, c)
     elif "proceedings.neurips.cc" in url or "datasets-benchmarks-proceedings" in url:
@@ -596,6 +641,52 @@ def scrub_crossref(url: str, body: Any, toc: str | None = None) -> tuple[Any, st
     return {**body, "message": message}, trimmed
 
 
+# --- OpenAlex (api.openalex.org) ----------------------------------------------------------------------------
+
+# The words a scrubbed abstract is made of, cycled: synthetic text of the real abstract's word count.
+_OPENALEX_WORDS = ("synthetic", "abstract", "text", "of", "a", "recorded", "openalex", "work")
+# A work's free text beyond its title, dropped whole (`select` leaves these out of the census's answers anyway).
+_OPENALEX_DROP = ("display_name", "authorships", "keywords", "concepts", "topics", "mesh", "fulltext")
+
+
+def _openalex_inverted(index: Any) -> tuple[Any, bool]:
+    """A synthetic `abstract_inverted_index` of as many positions as the real one has (`None` stays `None`), and
+    whether the real one was readable as `{word: [position, ...]}` at all. The synthetic one is always dense
+    (positions 0..n-1), so a real gap or conflict is not carried over: the recorded test reads it as such."""
+    if index is None:
+        return None, True
+    if not isinstance(index, dict) or not all(isinstance(p, list) for p in index.values()):
+        return {}, False
+    positions = {p for ps in index.values() for p in ps if type(p) is int}
+    words = [f"{_OPENALEX_WORDS[i % len(_OPENALEX_WORDS)]}{'' if i < len(_OPENALEX_WORDS) else i}"
+             for i in range(len(positions))]  # fmt: skip
+    out: dict[str, list[int]] = {}
+    for i, w in enumerate(words):
+        out.setdefault(w, []).append(i)
+    return out, True
+
+
+def scrub_openalex(url: str, body: Any) -> tuple[Any, str | None]:
+    """An OpenAlex `/works` answer: every work's title synthetic and its `abstract_inverted_index` rebuilt from
+    synthetic text of the same word count (its number of positions); work ids, DOIs, years, the primary location
+    (the source id and venue name), `meta` (counts, cursor) real. No real abstract word survives."""
+    if not isinstance(body, dict) or not isinstance(body.get("results"), list):
+        raise ValueError(f"{url}: not an OpenAlex work list")
+    c = _Counter()
+    unreadable = 0
+    results = []
+    for work in body["results"]:
+        out = {k: v for k, v in work.items() if k not in _OPENALEX_DROP}
+        if isinstance(out.get("title"), str):
+            out["title"] = f"Synthetic title {c.next()}"
+        if "abstract_inverted_index" in out:
+            out["abstract_inverted_index"], ok = _openalex_inverted(out["abstract_inverted_index"])
+            unreadable += not ok
+        results.append(out)
+    note = f"{unreadable} unreadable inverted indexes replaced by {{}}" if unreadable else None
+    return {**body, "results": results}, note
+
+
 # CSV columns that hold ids, types or links, kept verbatim; every other non-empty value becomes synthetic.
 _CSV_KEEP = frozenset({"id", "paper id", "type", "url", "url-old", "doi"})
 _CSV_NAME_SPLIT = re.compile(r"(\s+and\s+|\s*;\s*)")
@@ -713,7 +804,10 @@ def fixture(capture: dict[str, Any]) -> dict[str, Any]:
     response: dict[str, Any] = {"status": capture["status"], "headers": headers}
     text = capture["body"]
     trimmed = None
-    if "api.crossref.org" in url:  # the miner reads the answer as text: kept as JSON text
+    if "api.openalex.org" in url:  # `openalex.parse_works` reads the answer as text: kept as JSON text
+        body, trimmed = scrub_openalex(url, json.loads(text))
+        response["text"] = json.dumps(body, ensure_ascii=False)
+    elif "api.crossref.org" in url:  # the miner reads the answer as text: kept as JSON text
         body, trimmed = scrub_crossref(url, json.loads(text), capture.get("toc"))
         response["text"] = json.dumps(body, ensure_ascii=False)
     elif url.endswith(".csv"):

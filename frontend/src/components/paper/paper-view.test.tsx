@@ -17,6 +17,7 @@ const PAPER: Paper["paper"] = {
   abstract: "We study trust.",
   authors: ["Ada Lovelace", "Alan Turing"],
   venue: "ICLR",
+  abstract_kind: "official",
   venue_name: "International Conference on Learning Representations (ICLR 2024)",
   year: 2024,
   track: "main",
@@ -200,6 +201,45 @@ describe("a submission-time abstract (TASK-210, PA-11)", () => {
   });
 });
 
+describe("an OpenAlex abstract (decision-049, PA-12)", () => {
+  const LABEL =
+    "Abstract via OpenAlex: this index holds no official abstract for this paper. OpenAlex's text can differ from the published one.";
+
+  it("labels it right under the text, OpenAlex linking to the coverage page's explanation", async () => {
+    draw(
+      null,
+      api(() => json(answer({ paper: { ...PAPER, abstract_kind: "openalex" } }))),
+    );
+    const heading = await screen.findByRole("heading", { level: 2, name: "Abstract" });
+    const section = heading.closest("section") as HTMLElement;
+    const label = within(section).getByText((_, el) => el?.tagName === "P" && el.textContent === LABEL);
+    expect(label.previousElementSibling?.textContent).toBe(PAPER.abstract);
+    expect(within(label).getByRole("link", { name: "OpenAlex" }).getAttribute("href")).toBe(
+      "/coverage#openalex",
+    );
+  });
+
+  it("says nothing for an official abstract, or a withheld one", async () => {
+    draw(
+      null,
+      api(() => json(answer())),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(document.body.textContent).not.toContain("via OpenAlex");
+    cleanup();
+    draw(
+      null,
+      api(() =>
+        json(
+          answer({ paper: { ...PAPER, abstract: null, abstract_kind: "openalex" }, abstract_withheld: true }),
+        ),
+      ),
+    );
+    await screen.findByText(ABSTRACT_WITHHELD);
+    expect(document.body.textContent).not.toContain("via OpenAlex");
+  });
+});
+
 describe("a record's twins (TASK-162, decision-029, PA-10)", () => {
   const COPY = "op:iclr:2024:Hy-Copy01";
   const COPY2 = "op:iclr:2024:Hy-Copy02";
@@ -379,5 +419,31 @@ describe("fetchedText", () => {
   it("writes an ISO time as date, minutes and UTC", () => {
     expect(fetchedText("2026-09-18T10:02:33Z")).toBe("2026-09-18 10:02 UTC");
     expect(fetchedText("not a date")).toBe("not a date");
+  });
+});
+
+describe("Track expansions (TASK-223)", () => {
+  it.each([
+    ["iaai", "IAAI (Innovative Applications of Artificial Intelligence)"],
+    ["eaai", "EAAI (Educational Advances in Artificial Intelligence)"],
+  ] as const)("prints the %s expansion as visible text beside the badge", async (track, shown) => {
+    draw(
+      null,
+      api(() => json(answer({ paper: { ...PAPER, venue: "AAAI", track } }))),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    const badge = within(screen.getByRole("list", { name: "Details" })).getByText(shown);
+    // visible text: not aria-hidden, not screen-reader-only, not only a title
+    expect(badge.closest("[aria-hidden='true']")).toBeNull();
+    expect(badge.closest(".sr-only")).toBeNull();
+  });
+
+  it("leaves a track with no expansion as its value", async () => {
+    draw(
+      null,
+      api(() => json(answer())),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(within(screen.getByRole("list", { name: "Details" })).getByText("main")).toBeTruthy();
   });
 });

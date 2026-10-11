@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * `/paper/[id]` (spec 05 §Pages; design P1–P5; copy PA-1–11): the full record, its twins as links (PA-10,
- * decision-029), a submission-time abstract's note under it (PA-11, TASK-210), with the query in the link
+ * `/paper/[id]` (spec 05 §Pages; design P1–P5; copy PA-1–12): the full record, its twins as links (PA-10,
+ * decision-029), an OpenAlex abstract's label (PA-12, decision-049) and a submission-time abstract's note (PA-11,
+ * TASK-210) under it, with the query in the link
  * (`?q=&mode=`) drawn as `GET /papers/{id}?q=&mode=` returns it: `matched` and `highlights`, the API's spans
  * only (never re-matched). Without `q` (a direct link) the record alone. A `q` the API refuses (422, 429, 503
  * `API_BUSY`) is dropped: the paper is fetched without it and a one-line notice says why. 404 and 422
@@ -21,7 +22,7 @@ import { CopyButton } from "../copy-button";
 import { Highlighted } from "../highlighted";
 import { PaperBadges, statusWords } from "../paper-badges";
 import { PaperLinks } from "../paper-links";
-import { ABSTRACT_WITHHELD, AbstractNote, TwinLinks, WITHHELD_TERMS } from "../search/hit-item";
+import { ABSTRACT_WITHHELD, AbstractNote, OpenAlexNote, TwinLinks, WITHHELD_TERMS } from "../search/hit-item";
 import { FailureBlock } from "../search/search-states";
 
 export type PaperResponse = MethodResponse<Api, "get", "/api/v1/papers/{id}">;
@@ -193,6 +194,7 @@ function Paper({
         track={paper.track}
         presentation={paper.presentation}
         status={paper.status}
+        expandTrack
       />
       {paper.authors.length > 0 && <p className="text-sm">{paper.authors.join(", ")}</p>}
       {paper.status !== "accepted" && (
@@ -244,6 +246,7 @@ function Paper({
             <p className="text-sm break-words">
               <Highlighted text={paper.abstract} spans={abstract} />
             </p>
+            <OpenAlexNote kind={paper.abstract_kind} />
             <AbstractNote note={data.abstract_note} />
           </>
         )}

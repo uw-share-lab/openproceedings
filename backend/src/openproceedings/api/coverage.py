@@ -81,6 +81,13 @@ def compute(engine: TantivyEngine, records: RecordFile, listed: Withheld = NONE)
         raise SnapshotError(
             "the manifest's withheld abstracts don't count the records", reason="abstract_withheld_mismatch"
         )
+    openalex = {(vy["venue"], vy["year"]): vy["abstract_openalex"] for vy in data["venue_years"]}
+    if {k: n for k, n in openalex.items() if n} != dict(records.abstract_openalex) or {
+        k: t["abstract_openalex"] for k, t in per_track.items() if t["abstract_openalex"]
+    } != dict(records.track_openalex):
+        raise SnapshotError(
+            "the manifest's OpenAlex abstracts don't count the records", reason="abstract_openalex_mismatch"
+        )
     if len(records) != len(engine.ids):  # the cells sum to record_count and to the records (checked above)
         raise SnapshotError(
             "the snapshot's records and the index's documents differ", reason="doc_count_mismatch"
@@ -103,7 +110,8 @@ def compute(engine: TantivyEngine, records: RecordFile, listed: Withheld = NONE)
 
 def _withhold_listed(data: dict[str, Any], records: RecordFile, listed: Withheld) -> None:
     """Count, in `data` (a `breakdown`), each id of `listed` the snapshot holds but didn't withhold as withheld,
-    and no longer as missing if it had no abstract: one file read per such id (the list is short)."""
+    and no longer as missing, official or OpenAlex's by its abstract's kind: one file read per such id (the list
+    is short)."""
     rows = {(vy["venue"], vy["year"]): vy for vy in data["venue_years"]}
     for rid in sorted(listed - records.withheld):
         record = records.get(rid)
@@ -115,6 +123,10 @@ def _withhold_listed(data: dict[str, Any], records: RecordFile, listed: Withheld
             row["abstract_withheld"] += 1
             if record.abstract is None:
                 row["abstract_missing"] -= 1
+            elif record.abstract_kind == "openalex":
+                row["abstract_openalex"] -= 1
+            else:
+                row["abstract_official"] -= 1
 
 
 @router.get("/coverage", response_model=CoverageResponse)

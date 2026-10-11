@@ -330,7 +330,7 @@ export type FilterField = {
   [K in keyof ParsedFilters]: ParsedFilters[K] extends ParsedClause ? K : never;
 }[keyof ParsedFilters];
 
-const FILTER_FIELDS: readonly FilterField[] = ["venue", "track", "status"];
+const FILTER_FIELDS: readonly FilterField[] = ["venue", "track", "status", "abstract_kind"];
 
 function isFilterField(field: string): field is FilterField {
   return (FILTER_FIELDS as readonly string[]).includes(field);

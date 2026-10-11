@@ -183,7 +183,11 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   line names the forum and the count. Abstracts get the same rule through `openreview_v2._abstract` (evidence
   `content.abstract (<n> control characters replaced by a space)`; TASK-188, decision-044), and the crawl report
   counts those records in `abstract_control_characters` (TASK-199) from `_abstract`'s own count, through the
-  `spaced` set `note_record` fills, never by reading the evidence back; keywords keep theirs.
+  `spaced` set `note_record` fills, never by reading the evidence back; keywords keep theirs. An abstract holding a
+  lone UTF-16 surrogate (`"\ud800"`) is refused by `_abstract`, the note kept on its title, and counted as
+  `abstract_surrogate` through the `surrogate` set (records only; a DEBUG `abstract_surrogate_refused` line each;
+  TASK-229). The response cache writes such an entry as ASCII JSON, escaped as it came (`http.ResponseCache.put`),
+  where the UTF-8 write once stopped the crawl.
 - Logs (TASK-116; logging-standards skill §Crawl lines), the same for v1 and v2: `openreview_crawl_started`
   (`api`, `venue`, `year`, `offline`, `page_size`), `openreview_crawl_progress` at most every 30 s of the
   client's monotonic clock (`http.Heartbeat`; notes read, `forums` on v1, imported, skipped, `requests`,

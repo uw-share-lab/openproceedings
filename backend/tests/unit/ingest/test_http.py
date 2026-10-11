@@ -6,6 +6,7 @@ back-off, what is cached and how) stays in `test_fetch.py` and `test_openreview_
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 from collections.abc import Callable
@@ -348,3 +349,70 @@ def test_a_text_page_is_judged_by_its_stated_length(
     else:
         with pytest.raises(RetriesExhausted):
             f.get(CSV_URL)
+
+
+OPENALEX = "https://api.openalex.org/works?filter=doi:10.1145/3593013.3594011&per-page=50"
+SECRET = "Bearer sk-test-secret"
+
+
+def test_secret_headers_are_sent_and_never_stored_or_logged(tmp_path: Path, caplog) -> None:
+    sent: list[dict[str, str]] = []
+
+    def transport(request: Request, timeout: float) -> Response:
+        sent.append(dict(request.headers))
+        return response('{"meta": {"count": 0}, "results": []}', headers={"content-type": "application/json"})
+
+    caplog.set_level(logging.DEBUG)
+    f, _ = fetcher(tmp_path, transport, frozenset({"api.openalex.org"}), min_interval=0.0,
+                   accept="application/json", expect="json", keep_query=True,
+                   headers={"Authorization": SECRET})  # fmt: skip
+    assert f.get(OPENALEX).ok
+    assert sent[0]["Authorization"] == SECRET
+    assert "sk-test-secret" not in caplog.text
+    assert all("sk-test-secret" not in p.read_text() for p in tmp_path.rglob("*.json"))
+
+
+def test_a_refused_request_never_names_a_secret_header(tmp_path: Path) -> None:
+    # a plain transport: `FakeTransport` keys its script without the query, which OpenAlex's URL needs
+    f, _ = fetcher(tmp_path, lambda request, timeout: response("", status=403), frozenset({"api.openalex.org"}), min_interval=0.0, attempts=1,
+                   accept="application/json", expect="json", keep_query=True,
+                   headers={"Authorization": SECRET})  # fmt: skip
+    with pytest.raises(HTTPRefused) as e:
+        f.get(OPENALEX)
+    assert "sk-test-secret" not in str(e.value)
+
+
+def test_secret_headers_ride_every_retry_and_stay_out_of_logs_and_errors(tmp_path: Path, caplog) -> None:
+    sent: list[str | None] = []
+
+    def transport(request: Request, timeout: float) -> Response:
+        sent.append(request.headers.get("Authorization"))
+        return response("", status=503)
+
+    caplog.set_level(logging.DEBUG)
+    f, _ = fetcher(tmp_path, transport, frozenset({"api.openalex.org"}), min_interval=0.0, attempts=3,
+                   accept="application/json", expect="json", keep_query=True,
+                   headers={"Authorization": SECRET})  # fmt: skip
+    with pytest.raises(RetriesExhausted) as e:
+        f.get(OPENALEX)
+    assert sent == [SECRET] * 3
+    assert "sk-test-secret" not in str(e.value) + repr(e.value) + caplog.text
+    assert not list(tmp_path.rglob("*.json"))
+
+
+def test_a_request_never_echoes_its_headers(tmp_path: Path) -> None:
+    r = Request("GET", OPENALEX, {"Authorization": SECRET})
+    assert "sk-test-secret" not in repr(r) + str(r)
+
+
+def test_a_transport_error_quoting_the_header_stays_out_of_the_error(tmp_path: Path, caplog) -> None:
+    def transport(request: Request, timeout: float) -> Response:
+        raise OSError(f"bad header {request.headers['Authorization']}")
+
+    caplog.set_level(logging.DEBUG)
+    f, _ = fetcher(tmp_path, transport, frozenset({"api.openalex.org"}), min_interval=0.0, attempts=2,
+                   accept="application/json", expect="json", keep_query=True,
+                   headers={"Authorization": SECRET})  # fmt: skip
+    with pytest.raises(RetriesExhausted) as e:
+        f.get(OPENALEX)
+    assert "sk-test-secret" not in str(e.value) + caplog.text

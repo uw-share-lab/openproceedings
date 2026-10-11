@@ -44,8 +44,16 @@ Every replay returns **HTTP 200** with a `status`:
 | Only a different index or query version is available | `drifted` | *which* inputs changed (`snapshot_hash` = corpus drift; tokenizer, schema, ranking or query version = method drift), `+added / −removed`, the version it ran on. `+0 / −0` is reported as "membership-identical", not hidden |
 | Same `index_version` and `query_version`, but `ids_hash` or `excluded` differ | `mismatch` | This breaks guarantee 4: log at ERROR with code `API_REPLAY_MISMATCH` and treat it as a Must bug. Never report it as `drifted`. The record page shows "do not cite" (05) |
 
+Every `GET /records/{id}` answer also carries `openalex_abstracts` (gate C round 2): how many of the record's own
+ids are `abstract_kind:openalex` on its own index, derived from the ids (never stored, never a search's facet), null
+on schema 3 or when that index isn't loaded for the request. The methods text's OpenAlex sentence reads only it, so
+the save panel and the record page write the same text.
+
 The diff behind `drifted` is `GET /api/v1/records/{id}/diff`: added and removed ids (with titles), and
-which `index_version` inputs changed. An export pinned to a `mismatch` record (`/export?record_id=`) is
+which `index_version` inputs changed. Each entry also has its `track` and `status` on the replaying index,
+and each removed one a `cause` (`track_changed`, `status_changed`, `filter_changed` with `failed_filter`,
+`not_in_index`, `still_eligible`: the first top-level filter it now fails, track then status then the rest;
+`records.removals`, a read of the index's value bitmaps, never an index field), and `removed_causes` tallies them over the whole list (TASK-227; spec 04 §Search records). An export pinned to a `mismatch` record (`/export?record_id=`) is
 refused with 409 `API_RECORD_MISMATCH` (spec 04 §Error handling).
 
 **A withheld replay** (decision-010, round 3): a canonical with more position-verified clauses than

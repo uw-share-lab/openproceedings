@@ -34,6 +34,7 @@ const HIT: Hit = {
   abstract_withheld: false,
   twins: [],
   abstract_note: null,
+  abstract_kind: "official",
 };
 
 /** The API's `abstract_note` for a submission-time abstract (TASK-210; `ingest/dedup.py::SUBMISSION_NOTE`). */
@@ -49,6 +50,49 @@ function show(over: Partial<Hit> = {}) {
 function attribution(article: HTMLElement): HTMLElement | undefined {
   return [...article.querySelectorAll("p")].find((p) => p.textContent?.startsWith("Abstract:"));
 }
+
+describe("an OpenAlex abstract (decision-049, RH-20)", () => {
+  it("labels it under the attribution, OpenAlex linking to the coverage page's explanation", () => {
+    const article = show({
+      abstract_kind: "openalex",
+      abstract_source: { source: "openalex", origin: "openalex", url: PMLR_PAGE },
+    });
+    const label = within(article).getByText(
+      (_, el) =>
+        el?.tagName === "P" &&
+        el.textContent ===
+          "Abstract via OpenAlex: this index holds no official abstract for this paper. OpenAlex's text can differ from the published one.",
+    );
+    expect(label.previousElementSibling).toBe(attribution(article));
+    expect(within(label).getByRole("link", { name: "OpenAlex" }).getAttribute("href")).toBe(
+      "/coverage#openalex",
+    );
+  });
+
+  it("says nothing for an official abstract, a missing one or a withheld one", () => {
+    expect(show().textContent).not.toContain("via OpenAlex");
+    cleanup();
+    expect(show({ abstract: null, abstract_source: null, abstract_kind: "none" }).textContent).not.toContain(
+      "via OpenAlex",
+    );
+    cleanup();
+    expect(
+      show({ abstract: null, abstract_source: null, abstract_withheld: true, abstract_kind: "openalex" })
+        .textContent,
+    ).not.toContain("via OpenAlex");
+  });
+});
+
+describe("an archived AAAI page's abstract (TASK-232, decision-051)", () => {
+  it("names AAAI and links AAAI's own paper page, never the archive's copy", () => {
+    const page = "http://www.aaai.org/Library/AAAI/1984/aaai84-047.php";
+    const article = show({ abstract_source: { source: "aaai_library", origin: "aaai_library", url: page } });
+    const link = within(attribution(article)!).getByRole("link", { name: /^AAAI, abstract source for / });
+    expect(link.getAttribute("href")).toBe(page);
+    expect(attribution(article)!.textContent).toBe("Abstract: AAAI");
+    expect(article.textContent).not.toContain("via OpenAlex");
+  });
+});
 
 describe("authors (ui-design-system §Result item, RH-13)", () => {
   it("shows the first three and et al., and the full list behind a button that says how many", () => {

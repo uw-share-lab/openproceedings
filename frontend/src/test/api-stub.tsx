@@ -134,6 +134,7 @@ export const META: Schemas["MetaResponse"] = {
     venue: ["NeurIPS", "ICLR", "ICML", "AAAI", "AIES", "FAccT", "IASEAI"],
     track: ["main", "datasets_benchmarks", "position", "workshop"],
     status: ["accepted", "rejected"],
+    abstract_kind: ["official", "openalex", "none"],
   },
 };
 

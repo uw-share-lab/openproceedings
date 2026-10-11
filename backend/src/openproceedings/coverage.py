@@ -20,6 +20,11 @@ nothing. Every venue-year, track and the totals carry `abstract_withheld`, 0 inc
 `abstract_missing` (a withheld record is not counted missing). The API adds the ids listed after the snapshot
 was built (`api/coverage.py::compute`), so `/coverage` counts what it withholds when it serves.
 
+Abstract origin (decision-049): the manifest's `abstract_openalex` and `abstract_openalex_by_track`, written only
+when OpenAlex filled any, count the abstracts that came from it. Every venue-year, track and the totals carry
+`abstract_openalex` and `abstract_official` (the records with an abstract from an official source: records less
+missing, withheld and OpenAlex's), 0 included. A manifest without the keys has no OpenAlex abstract.
+
 Order (stable JSON): venue-years by venue name, then year; within one, cells by the vocabulary order of
 track, then of status (`vocab.py`: `main` first, `unknown` last); tracks in vocabulary order. `unknown` is never merged into another
 bucket: it is a cell of its own, and every venue-year also carries `unknown_track` and `unknown_status`,
@@ -34,7 +39,14 @@ from typing import Any
 
 from openproceedings.ingest.snapshot import SnapshotError, utc_query_sources
 from openproceedings.ingest.statuses import statuses_indexed
-from openproceedings.official_counts import GATED_TRACKS, OFFICIAL_ACCEPTED, OfficialTable, within_gate
+from openproceedings.official_counts import (
+    GATED_TRACKS,
+    OFFICIAL_ACCEPTED,
+    UNGATED_NOTES,
+    OfficialTable,
+    UngatedNote,
+    within_gate,
+)
 from openproceedings.vocab import STATUSES, TRACKS, VENUES, bootstrap_only, crawl_dates_kind
 
 ALL_SOURCES = "*"  # records.ALL_SOURCES: the corpus-wide window's key (a test pins them equal)
@@ -82,7 +94,20 @@ def crawl_dates(manifest: Mapping[str, Any]) -> dict[str, dict[str, str]]:
         if isinstance(entry, Mapping) and "crawl_window" in entry:
             dates[source] = _window(entry["crawl_window"])
     dates.update({source: _window(window) for source, window in sorted(claims.items())})
+    dates.update(
+        {source: _window(w) for source, w in captured_windows(manifest).items()}
+    )  # the text's dates win
     return dates
+
+
+def captured_windows(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Each source entry's `capture_window` (an archive's capture times of what it attached, `aaai_library`'s):
+    shown for that source instead of its fetch or claim window, kind `archive_captures` (gate C round 1)."""
+    return {
+        source: entry["capture_window"]
+        for source, entry in sorted(_map(manifest["sources"], "sources").items())
+        if isinstance(entry, Mapping) and "capture_window" in entry
+    }
 
 
 type TrackKey = tuple[str, int, str]  # (venue, year, track)
@@ -161,6 +186,27 @@ def _withheld(manifest: Mapping[str, Any]) -> tuple[dict[tuple[str, int], int], 
     return per_year, per_track
 
 
+def _openalex(manifest: Mapping[str, Any]) -> tuple[dict[tuple[str, int], int], dict[TrackKey, int]]:
+    """The manifest's abstracts OpenAlex filled (decision-049) per venue-year and per track; none when it has
+    no such keys (written only when there are any). A manifest that has one of the two keys has both."""
+    if ("abstract_openalex" in manifest) != ("abstract_openalex_by_track" in manifest):
+        raise SnapshotError(
+            "the snapshot manifest counts OpenAlex abstracts per venue-year or per track, not both"
+        )
+    per_year: dict[tuple[str, int], int] = {}
+    per_track: dict[TrackKey, int] = {}
+    for venue, years in _map(manifest.get("abstract_openalex", {}), "abstract_openalex").items():
+        for year, n in _map(years, "abstract_openalex per venue").items():
+            per_year[(venue, _year(year))] = _count(n)
+    for venue, years in _map(
+        manifest.get("abstract_openalex_by_track", {}), "abstract_openalex_by_track"
+    ).items():
+        for year, tracks in _map(years, "abstract_openalex_by_track per venue").items():
+            for track, n in _map(tracks, "abstract_openalex_by_track per venue-year").items():
+                per_track[(venue, _year(year), track)] = _count(n)
+    return per_year, per_track
+
+
 def _track_row(
     key: TrackKey,
     cells: list[dict[str, Any]],
@@ -168,18 +214,25 @@ def _track_row(
     sources: list[str],
     official: OfficialTable,
     withheld: int = 0,
+    openalex: int = 0,
+    notes: Mapping[TrackKey, UngatedNote] | None = None,
 ) -> dict[str, Any]:
-    """One spec 07 §C cell (venue × year × track): its indexed counts beside the official accepted count."""
+    """One spec 07 §C cell (venue × year × track): its indexed counts beside the official accepted count, and an
+    ungated cell's note saying why it has none (TASK-222)."""
     mine = [c for c in cells if c["track"] == key[2]]
     accepted = sum(c["count"] for c in mine if c["status"] == "accepted")
+    records = sum(c["count"] for c in mine)
     row = official.get(key)
     gated = row is not None and key[2] in GATED_TRACKS
+    note = None if gated else (notes or {}).get(key)
     return {
         "track": key[2],
-        "records": sum(c["count"] for c in mine),
+        "records": records,
         "indexed_accepted": accepted,
         "abstract_missing": missing,
         "abstract_withheld": withheld,
+        "abstract_openalex": openalex,
+        "abstract_official": records - missing - withheld - openalex,
         "sources": sources,
         "official_accepted": row.accepted if row else None,
         "official_counts": row.counts if row else None,
@@ -189,6 +242,9 @@ def _track_row(
         "delta_pct": 100 * (accepted - row.accepted) / row.accepted if row else None,
         "gated": gated,
         "within_gate": within_gate(accepted, row.accepted) if row and gated else None,
+        "gate_note": note.note if note else None,
+        "gate_note_citation": note.citation if note else None,
+        "gate_note_accessed": note.accessed.isoformat() if note else None,
     }
 
 
@@ -197,13 +253,16 @@ def breakdown(
     name: str,
     facts: TrackFacts | None = None,
     official: OfficialTable = OFFICIAL_ACCEPTED,
+    notes: Mapping[TrackKey, UngatedNote] = UNGATED_NOTES,
 ) -> dict[str, Any]:
     """The coverage of snapshot `name` (its directory) from its manifest: `snapshot` (name, hash, crawl
     date and windows, build time, sources), `totals` and `venue_years` (see the module docstring), each
-    venue-year with its statuses indexed and its `tracks` (spec 07 §C cells, beside `official`'s counts).
+    venue-year with its statuses indexed and its `tracks` (spec 07 §C cells, beside `official`'s counts and, for an
+    ungated cell, its note from `notes`).
     `facts` stands in for the per-track keys of a format-1 manifest (and is otherwise unused)."""
     missing_by_track, sources_by_track, statuses = _per_track(manifest, facts)
     withheld_by_year, withheld_by_track = _withheld(manifest)
+    openalex_by_year, openalex_by_track = _openalex(manifest)
     try:
         counts = _map(manifest["counts"], "counts")
         missing = _map(manifest["abstract_missing"], "abstract_missing")
@@ -218,7 +277,9 @@ def breakdown(
             "built_at": manifest["built_at"],
             "sources": sources,
             # derived exactly as a search record's (TASK-091; `records.snapshot_facts`)
-            "crawl_dates_kind": crawl_dates_kind(windows, sources, ALL_SOURCES, utc_query_sources(manifest)),
+            "crawl_dates_kind": crawl_dates_kind(
+                windows, sources, ALL_SOURCES, utc_query_sources(manifest), captured_windows(manifest)
+            ),
             "identification_citable": not bootstrap_only(sources),
         }
         record_count = _count(manifest["record_count"])
@@ -262,12 +323,19 @@ def breakdown(
                 raise SnapshotError("a track is in the manifest's counts but not in its per-track maps")
             rows = [
                 _track_row(
-                    k, cells, missing_by_track[k], sources_by_track[k], official, withheld_by_track.get(k, 0)
+                    k,
+                    cells,
+                    missing_by_track[k],
+                    sources_by_track[k],
+                    official,
+                    withheld_by_track.get(k, 0),
+                    openalex_by_track.get(k, 0),
+                    notes,
                 )
                 for k in keys
             ]
             if sum(r["abstract_missing"] for r in rows) != abstract_missing or any(
-                r["abstract_missing"] + r["abstract_withheld"] > r["records"] for r in rows
+                r["abstract_official"] < 0 for r in rows
             ):
                 raise SnapshotError(
                     "the manifest's missing abstracts per track disagree with its venue-year's"
@@ -276,6 +344,11 @@ def breakdown(
             if sum(r["abstract_withheld"] for r in rows) != abstract_withheld:
                 raise SnapshotError(
                     "the manifest's withheld abstracts per track disagree with its venue-year's"
+                )
+            abstract_openalex = openalex_by_year.get((venue, y), 0)
+            if sum(r["abstract_openalex"] for r in rows) != abstract_openalex:
+                raise SnapshotError(
+                    "the manifest's OpenAlex abstracts per track disagree with its venue-year's"
                 )
             held = (
                 statuses_indexed(
@@ -293,6 +366,8 @@ def breakdown(
                     "records": records,
                     "abstract_missing": abstract_missing,
                     "abstract_withheld": abstract_withheld,
+                    "abstract_official": records - abstract_missing - abstract_withheld - abstract_openalex,
+                    "abstract_openalex": abstract_openalex,
                     "unknown_track": unknown_track,
                     "unknown_status": sum(c["count"] for c in cells if c["status"] == "unknown"),
                     "cells": cells,
@@ -316,9 +391,21 @@ def breakdown(
         (v, y) for v, y, _t in in_cells
     }:
         raise SnapshotError("the snapshot manifest counts withheld abstracts where it holds no records")
+    if not set(openalex_by_track) <= in_cells or not set(openalex_by_year) <= {
+        (v, y) for v, y, _t in in_cells
+    }:
+        raise SnapshotError("the snapshot manifest counts OpenAlex abstracts where it holds no records")
     totals = {
         key: sum(vy[key] for vy in venue_years)
-        for key in ("records", "abstract_missing", "abstract_withheld", "unknown_track", "unknown_status")
+        for key in (
+            "records",
+            "abstract_missing",
+            "abstract_withheld",
+            "abstract_official",
+            "abstract_openalex",
+            "unknown_track",
+            "unknown_status",
+        )
     }
     if totals["records"] != record_count:
         raise SnapshotError("the snapshot manifest's counts don't add up to its record_count")

@@ -14,6 +14,7 @@ offline; a marked crawl whose responses are no longer cached is an error, never 
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -24,8 +25,10 @@ from typing import Any, ClassVar, Protocol
 
 from openproceedings import storage
 from openproceedings.ingest.dedup import resolve, title_key
-from openproceedings.ingest.record import Claim, PaperRecord, abstract_text
+from openproceedings.ingest.record import Claim, PaperRecord, abstract_text, lone_surrogate
 from openproceedings.ingest.sources.http import FetchError, SourceError
+
+log = logging.getLogger(__name__)
 
 _LEADING_MATH = re.compile(r"^\s*\$[^$]+\$[\s:,.-]*")
 SNIPPET = "…"
@@ -59,6 +62,11 @@ class Report:
     def crawl_window(self) -> dict[str, str] | None:
         return window(self.fetched)
 
+    def captured(self) -> list[datetime]:
+        """When the text this report attached was captured, for a source that reads an archive's copies
+        (`aaai_library`: the Internet Archive capture times of the pages it attached); empty for a live crawl."""
+        return []
+
     def to_manifest(self) -> dict[str, Any]:
         raise NotImplementedError
 
@@ -70,7 +78,9 @@ def window(fetched: Iterable[datetime]) -> dict[str, str] | None:
 
 def sources_manifest(reports: Iterable[Report]) -> dict[str, Any]:
     """manifest.json's `sources` entries for the crawlers: per source, its reports under the report type's
-    `manifest_key` (`crawls`, `listings`) and, when any crawl fetched something, its `crawl_window`."""
+    `manifest_key` (`crawls`, `listings`) and, when any crawl fetched something, its `crawl_window`; for a source
+    that reads archived copies, the range of their capture times too (`capture_window`, which `/coverage` and a
+    search record show for that source instead of when the copies were fetched; gate C round 1)."""
     grouped: dict[str, list[Report]] = {}
     for r in reports:
         grouped.setdefault(r.source, []).append(r)
@@ -79,6 +89,8 @@ def sources_manifest(reports: Iterable[Report]) -> dict[str, Any]:
         entry: dict[str, Any] = {mine[0].manifest_key: [r.to_manifest() for r in mine]}
         if span := window(t for r in mine for t in r.fetched):
             entry["crawl_window"] = span
+        if captured := window(t for r in mine for t in r.captured()):
+            entry["capture_window"] = captured
         out[source] = entry
     return out
 
@@ -194,6 +206,9 @@ PLACEHOLDERS = frozenset({"abstract unavailable", "abstract missing"})
 _SOFT_HYPHEN_CODE = re.compile(r"\(cid:173\)\s*")
 _PDF_CODE = re.compile(r"\(cid:[0-9]+\)")
 SHORT_ABSTRACT_WORDS = 5  # fewer words than this: counted (`abstract_short`), never dropped by a guess
+# Why an abstract claim was refused when its text holds a lone UTF-16 surrogate (TASK-229): every source's report
+# counts it under this name, and the paper is kept on its title
+SURROGATE = "abstract_surrogate"
 
 
 def repair_pdf_codes(text: str) -> tuple[str, int]:
@@ -219,26 +234,43 @@ class Cleaned:
     text: str | None
     spaced: int = 0  # control characters that became a space (decision-044)
     pdf_codes: int = 0  # `(cid:N)` codes repaired (decision-047)
+    refused: str | None = None  # why a text was refused rather than missing (`SURROGATE`); None otherwise
 
 
 def clean_abstract(text: str | None) -> Cleaned:
     """An abstract as a record may hold it, or None, and how many control characters became a space
     (`record.abstract_text`, decision-044) and `(cid:N)` codes were repaired (`repair_pdf_codes`, decision-047);
     the claim's evidence says both. Empty, a page's placeholder (`PLACEHOLDERS`), or starting or ending with `…`
-    (a snippet, not an abstract; spec 01), is missing. An ellipsis inside (`x₁, …, x_n`) is kept."""
+    (a snippet, not an abstract; spec 01), is missing. An ellipsis inside (`x₁, …, x_n`) is kept. A text holding a
+    lone UTF-16 surrogate, which no record may hold, is refused (`refused=SURROGATE`, TASK-229): the caller keeps
+    the paper on its title and its report counts the refusal (`log_surrogate`), never a crash or a silent gap."""
     repaired, codes = repair_pdf_codes(text or "")
     text, replaced = abstract_text(repaired)
+    if lone_surrogate(text):
+        return Cleaned(None, refused=SURROGATE)
     if not text or text.startswith(SNIPPET) or text.endswith(SNIPPET) or text.casefold() in PLACEHOLDERS:
         return Cleaned(None)
     return Cleaned(text, replaced, codes)
 
 
-def missing_reason(page_ok: bool, title_matches: bool, abstract: str | None) -> str | None:
+def missing_reason(
+    page_ok: bool, title_matches: bool, abstract: str | None, refused: str | None = None
+) -> str | None:
     """Why a record has no abstract (None when it has one): `page_missing` (404/410), `title_mismatch` (the
-    page's citation_title isn't the listed title), or `no_abstract` (empty, or a snippet)."""
+    page's citation_title isn't the listed title), `refused` when cleaning refused the page's text
+    (`Cleaned.refused`: `abstract_surrogate`), or `no_abstract` (empty, or a snippet)."""
     if abstract is not None:
         return None
-    return "page_missing" if not page_ok else "title_mismatch" if not title_matches else "no_abstract"
+    if not page_ok:
+        return "page_missing"
+    return "title_mismatch" if not title_matches else refused or "no_abstract"
+
+
+def log_surrogate(source: str, record: str) -> None:
+    """The DEBUG line for an abstract claim refused for a lone surrogate (TASK-229; a record-level anomaly,
+    logging-standards §Crawl lines): which source and which record (or page row), never the text. The source's
+    report counts it (`abstract_surrogate`, or `site_surrogate` for an official page's row)."""
+    log.debug("abstract_surrogate_refused", extra={"source": source, "record": record, "reason": SURROGATE})
 
 
 def record_from_claims(record_id: str, claims: list[Claim]) -> PaperRecord:
@@ -270,6 +302,7 @@ class ListingReport(Report):
     abstract_missing: int = 0
     abstract_title_mismatch: int = 0  # of abstract_missing: the page's citation_title isn't the listed title
     page_missing: int = 0  # of abstract_missing: the paper page answered 404/410
+    abstract_surrogate: int = 0  # of abstract_missing: refused for a lone surrogate (TASK-229)
     unknown_track: int = 0
     abstract_control_characters: int = (
         0  # records whose abstract had a control character replaced (decision-044)
@@ -299,6 +332,13 @@ class ListingReport(Report):
             self.abstract_missing += 1
             self.page_missing += missing == "page_missing"
             self.abstract_title_mismatch += missing == "title_mismatch"
+            if missing == SURROGATE:
+                self.abstract_surrogate += 1
+                log_surrogate(self.source, record.id)
+
+    def surrogate_attention(self) -> dict[str, int]:
+        """`abstract_surrogate` for the listing's `listing_attention` WARNING when above 0 (TASK-229), else nothing."""
+        return {"abstract_surrogate": self.abstract_surrogate} if self.abstract_surrogate else {}
 
     @property
     def count_ok(self) -> bool:
@@ -315,7 +355,12 @@ class ListingReport(Report):
             "unknown_track": self.unknown_track,
         }  # fmt: skip
         # each listed only when there are any, so a listing's shape is kept
-        for key in ("abstract_control_characters", "abstract_pdf_codes", "abstract_short"):
+        for key in (
+            "abstract_control_characters",
+            "abstract_pdf_codes",
+            "abstract_short",
+            "abstract_surrogate",
+        ):
             if value := getattr(self, key):
                 out[key] = value
         if self.volume is not None:

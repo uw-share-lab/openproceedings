@@ -21,17 +21,21 @@ Track = Literal[
     "student_abstract",  # AAAI and AIES student abstracts and posters (decision-049)
     "consortium",  # AAAI doctoral and undergraduate consortia
     "demo",  # AAAI demonstrations
-    "iaai",  # Innovative Applications of AI, printed in the AAAI volumes (AAAI only)
-    "eaai",  # Educational Advances in AI, printed in the AAAI volumes (AAAI only)
+    "iaai",  # Innovative Applications of Artificial Intelligence, printed in the AAAI volumes (AAAI only)
+    "eaai",  # Educational Advances in Artificial Intelligence, printed in the AAAI volumes (AAAI only)
     "other",
     "unknown",
 ]
 Status = Literal["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"]
+# where a record's abstract came from (decision-049): an official source, OpenAlex's fallback, or none. Derived
+# from the abstract's claims (`record.abstract_kind_of`), never stored; an open set (a later fallback adds one)
+AbstractKind = Literal["official", "openalex", "none"]
 
 # canonical spelling, keyed by the lowercase form a query may use (`venue:` is case-insensitive)
 VENUES: dict[str, str] = {v.lower(): v for v in get_args(Venue)}
 TRACKS: tuple[str, ...] = get_args(Track)
 STATUSES: tuple[str, ...] = get_args(Status)
+ABSTRACT_KINDS: tuple[str, ...] = get_args(AbstractKind)
 # the searched fields (guarantee 2): every module that names them imports this one tuple
 TEXT_FIELDS: tuple[Literal["title", "abstract"], ...] = ("title", "abstract")
 QUERY_FILTER_FIELDS = (  # every filter field a query may name, incl. Scholar's `source:` (cf. ast.FILTER_FIELDS)
@@ -39,6 +43,7 @@ QUERY_FILTER_FIELDS = (  # every filter field a query may name, incl. Scholar's 
     "year",
     "track",
     "status",
+    "abstract_kind",
     "source",
 )
 
@@ -62,6 +67,9 @@ def bootstrap_only(sources: Iterable[str]) -> bool:
 # the offset `ingest/ris_offsets.toml` records (TASK-077, decision-025); or the corpus-wide window over a crawl
 # and query dates, `mixed` while any of those query dates is local
 CRAWL = "crawl"
+# an archive's capture times of the copies a source read, not when they were fetched (`aaai_library`: the Internet
+# Archive's; the manifest's `capture_window`, gate C round 1)
+ARCHIVE_CAPTURES = "archive_captures"
 SCHOLAR_QUERY_DATES = "scholar_query_dates"
 SCHOLAR_QUERY_DATES_UTC = "scholar_query_dates_utc"
 MIXED = "mixed"
@@ -91,15 +99,24 @@ def window_kind(sources: Iterable[str], utc: Iterable[str] = ()) -> str:
 
 
 def crawl_dates_kind(
-    windows: Iterable[str], sources: Iterable[str], everything: str = "*", utc: Iterable[str] = ()
+    windows: Iterable[str],
+    sources: Iterable[str],
+    everything: str = "*",
+    utc: Iterable[str] = (),
+    captures: Iterable[str] = (),
 ) -> dict[str, str]:
     """Per `crawl_dates` key (`windows`), its window's kind: `everything` (`*`, the corpus-wide window) over
     every one of `sources`, any other key over that source alone; `utc` are the bootstrap sources whose query
-    dates are UTC (the manifest's `query_dates`). The one derivation a search record and `/coverage` share
-    (TASK-091)."""
+    dates are UTC (the manifest's `query_dates`), and `captures` the sources whose window is an archive's capture
+    times (`archive_captures`; the manifest's `capture_window`). The one derivation a search record and
+    `/coverage` share (TASK-091)."""
     named = list(sources)
     converted = list(utc)
-    return {k: window_kind(named if k == everything else [k], converted) for k in windows}
+    archived = set(captures)
+    return {
+        k: ARCHIVE_CAPTURES if k in archived else window_kind(named if k == everything else [k], converted)
+        for k in windows
+    }
 
 
 # The venue string, RIS `T2` and BibTeX `booktitle` (spec 04 §Exports, task-004, which cites the sources):

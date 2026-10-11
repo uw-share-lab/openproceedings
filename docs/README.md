@@ -24,10 +24,10 @@ guarantees are the review standard for everything else.
 
 | Directory | Holds |
 |---|---|
-| [`results/`](results/) | dated reports: coverage (`op eval coverage`), the Scholar comparison (`op eval scholar`, with its `-review.csv` rows for a person), benchmarks, audits and data checks; `coverage-sources.md` and `coverage-causes.toml` feed the coverage report, `scholar-comparison-notes.md` and `scholar-comparison-strings.txt` the Scholar comparison |
+| [`results/`](results/) | dated reports: coverage (`op eval coverage`, latest [2026-10-11](results/2026-10-11-coverage.md); the milestone-C as-built report of 2026-10-10 stays as history), the Scholar comparison (`op eval scholar`, with its `-review.csv` rows for a person), the OpenAlex fidelity audit (`op eval openalex`, [2026-10-11](results/2026-10-11-openalex-audit.md) on the final snapshot; the 2026-10-10 report on the pre-`aaai_library` snapshot stays as history), benchmarks (the group-count report on the real corpus, [2026-10-11](results/2026-10-11-bench-group-counts.md), and the synthetic 80k report, [2026-10-11](results/2026-10-11-bench.md), every first page within the 100 ms budget since TASK-230, spec 03; schema 4's group-count regression, its bisect and TASK-230's measurements, [2026-10-11](results/2026-10-11-perf-regression.md)), audits and data checks; `coverage-sources.md` and `coverage-causes.toml` feed the coverage report, `scholar-comparison-notes.md` and `scholar-comparison-strings.txt` the Scholar comparison |
 | [`design/`](design/) | UX design docs and the copy deck behind spec 05 |
 | [`plans/`](plans/) | written designs and implementation plans for multi-milestone work, before it is built into the specs |
-| [`research/`](research/) | verified facts about the sources (OpenReview, the proceedings sites, ojs.aaai.org, and the AAAI/AIES/FAccT/IASEAI note with the dblp AAAI, ACM/Crossref and FAccT-site censuses of milestone B) |
+| [`research/`](research/) | verified facts about the sources (OpenReview, the proceedings sites, ojs.aaai.org, and the AAAI/AIES/FAccT/IASEAI note with the dblp AAAI, ACM/Crossref and FAccT-site censuses of milestone B and the OpenAlex census and licence of milestone C) |
 | [`releases.toml`](releases.toml) | each release's data table (spec 08 §Release) |
 
 Decisions are Backlog.md records in [`../backlog/decisions/`](../backlog/decisions/). Tasks are in

@@ -34,7 +34,12 @@
       "other",
       "unknown"
     ],
-    "status": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"]
+    "status": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+    "abstract_kind": ["official", "openalex", "none"]
+  },
+  "track_expansions": {
+    "iaai": "Innovative Applications of Artificial Intelligence",
+    "eaai": "Educational Advances in Artificial Intelligence"
   },
   "defaults": [
     {
@@ -265,6 +270,11 @@
         "canonical": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:(accepted OR withdrawn))"
       },
       {
+        "q": "trust abstract_kind:official",
+        "mode": "native",
+        "canonical": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted AND abstract_kind:official)"
+      },
+      {
         "q": "trust NOT venue:ICML",
         "mode": "native",
         "canonical": "(trust AND NOT venue:ICML AND track:(datasets_benchmarks OR main OR position) AND status:accepted)"
@@ -377,6 +387,16 @@
       "note": null
     },
     {
+      "code": "FIELD_NOT_INDEXED",
+      "kind": "error",
+      "mode": "native",
+      "example": "trust abstract_kind:openalex",
+      "display": null,
+      "message": "This index (0123456789ab) doesn't record each paper's abstract source yet; it was built before it was recorded. Search the current index, or remove the `abstract_kind:` filter.",
+      "fix": "trust",
+      "note": "The message names the index the search ran on; this one names an example index. Only an older index, pinned by a saved search, lacks the field."
+    },
+    {
       "code": "FIELD_RANGE_INVERTED",
       "kind": "error",
       "mode": "native",
@@ -392,7 +412,7 @@
       "mode": "native",
       "example": "author:smith",
       "display": null,
-      "message": "`author:` is not a field — use one of `title:`, `abstract:`, `venue:`, `year:`, `track:`, `status:`, `source:`, or quote the text to search for it.",
+      "message": "`author:` is not a field — use one of `title:`, `abstract:`, `venue:`, `year:`, `track:`, `status:`, `abstract_kind:`, `source:`, or quote the text to search for it.",
       "fix": "\"author smith\"",
       "note": null
     },

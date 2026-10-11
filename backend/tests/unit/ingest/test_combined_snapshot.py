@@ -53,7 +53,11 @@ SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bd
 # manifest's record_schema_version, from 964d2bd7…; with it set back to "5" the files hash to that (checked 2026-10-09).
 # Task 1 of milestone B changed it again: record schema v7 (the `crossref` and `facct_site` sources); with the version
 # set back to "6" the files hash to the value above (checked 2026-10-10).
-FILES_HASH = "93bf0aef899205cc5ce645534f2a0483da67e15876e8a1f221b007259b35b062"
+# Task 2 of milestone C changed it again: record schema v8 (the `openalex` source and the derived `abstract_kind`);
+# with the version set back to "7" the files hash to 93bf0aef… (checked 2026-10-10). SNAPSHOT_HASH is unchanged.
+# TASK-232 changed it again: record schema v9 (the `aaai_library` source); with the version set back to "8" the files
+# hash to aad4fd98… (checked 2026-10-11). SNAPSHOT_HASH is unchanged.
+FILES_HASH = "37f369e3250d4d1b2e536794ed163307a60e25c90f0e79f443a7f915118b5a13"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:

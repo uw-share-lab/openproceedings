@@ -21,7 +21,8 @@ ICLR archive, NeurIPS proceedings and PMLR) fetches through `HttpClient`, and on
   crawl (`cap_waits`). Any other response is returned for the source to judge; retries are bounded.
 - **Cache.** `ResponseCache`: one JSON file per canonical URL under `<root>/[<subdir>/]<sha256[:2]>/<sha256>.json`,
   naming its URL, written atomically (`storage.write_json`), so a crash never leaves half an entry and a crawl
-  resumes where it stopped. A codec shapes the entry, so each source's on-disk layout is unchanged: the
+  resumes where it stopped. An entry holding a lone surrogate (JSON's `"\\ud800"`) is written as ASCII JSON,
+  escaped as it came, never a crash (TASK-229). A codec shapes the entry, so each source's on-disk layout is unchanged: the
   proceedings' fixture-shaped pages (`PageCodec`), OpenReview's `{key, payload}` documents. A client without a
   transport reads the cache only; a miss is `CacheMiss`, never a network call. The entry's fetch time is what
   every claim built from it carries.
@@ -145,6 +146,9 @@ class TransportError(Exception):
 
 @dataclass(frozen=True)
 class Request:
+    """`headers`: sent on every request (an API key); never in the URL, so never in the cache key, a cache
+    entry, a `Page`, a log line or an error."""
+
     method: str
     url: str
     headers: Mapping[str, str] = field(repr=False)
@@ -347,7 +351,13 @@ class ResponseCache[T]:
         return entry
 
     def put(self, entry: T) -> None:
-        storage.write_json(self.path(self.codec.key(entry)), self.codec.encode(entry))
+        path, document = self.path(self.codec.key(entry)), self.codec.encode(entry)
+        try:
+            storage.write_json(path, document)
+        except UnicodeEncodeError:  # nothing written yet: encoding comes first
+            # a lone surrogate a JSON API sent (`"\\ud800"`; OpenReview's entries hold the parsed payload): kept as
+            # it came, escaped, so the source's own rule sees it (TASK-229). Every other entry's bytes are unchanged.
+            storage.write_json(path, document, ensure_ascii=True)
 
 
 # --- the client --------------------------------------------------------------------------------------------
@@ -408,9 +418,12 @@ class HttpClient[T]:
                  extra={"url": url, "age_s": round(age), "ttl_s": round(ttl)})  # fmt: skip
         return True
 
-    def send(self, request: Request, *, by_length: bool = False) -> Response:
+    def send(
+        self, request: Request, *, by_length: bool = False, whole: Callable[[bytes], bool] | None = None
+    ) -> Response:
         """One request, paced, retried on 429, 5xx, a network error and a truncated 200 (`_truncated`; with
-        `by_length`, judged by the stated `Content-Length` when there is one); any other response is returned for
+        `by_length`, judged by the stated `Content-Length` when there is one; a 200 is truncated unless `whole`
+        vouches for the bytes); any other response is returned for
         the source to judge."""
         assert self.transport is not None
         policy, url = self.policy, self.check(request.url)
@@ -442,7 +455,7 @@ class HttpClient[T]:
                 if response.status == 429 or response.status >= 500:
                     why, hint = f"http_{response.status}", retry_after(response.headers, self.clock.now())
                     last_status = response.status
-                elif response.status == 200 and (cut := self._truncated(response, by_length)):
+                elif response.status == 200 and (cut := self._truncated(response, by_length, whole)):
                     why = cut
                 else:
                     if response.status == 200:
@@ -457,9 +470,14 @@ class HttpClient[T]:
             status=last_status,
         )
 
-    def _truncated(self, response: Response, by_length: bool = False) -> str | None:
+    def _truncated(
+        self, response: Response, by_length: bool = False, whole: Callable[[bytes], bool] | None = None
+    ) -> str | None:
         """Why a 200 is not whole (`truncated`; `truncated_no_length` for a page judged by length that states none
-        and lacks `</html>` too), or None when it is."""
+        and lacks `</html>` too), or None when it is. `whole` lets a source vouch for the exact bytes (an archived
+        capture whose pinned digest they match, TASK-232): those bytes are whole whatever else is missing."""
+        if whole is not None and whole(response.body):
+            return None
         stated = response.headers.get("content-length", "").strip()
         # a capture's bytes are fixed: whole when all there. A length that isn't 1-19 ASCII digits (`²`, or past
         # int()'s digit limit) is no length, never a crash
@@ -633,7 +651,7 @@ class Fetcher(HttpClient[Page]):
         min_interval: float = 1.0, attempts: int = 5, max_wait: float = 3600.0, timeout: float = 30.0,
         clock: Clock | None = None, accept: str = "text/html",
         expect: Literal["html", "json", "xml", "text"] = "html", keep_query: bool = False,
-        user_agent: str | None = None,
+        user_agent: str | None = None, headers: Mapping[str, str] | None = None,
     ) -> None:  # fmt: skip
         policy = replace(PROCEEDINGS, hosts=hosts, min_interval=min_interval, attempts=attempts,
                          max_wait=max_wait, timeout=timeout, accept=accept, expect=expect,
@@ -641,29 +659,63 @@ class Fetcher(HttpClient[Page]):
         super().__init__(cache, transport, policy, clock)
         # a source's own (Crossref's polite pool); it never reaches the cache, a log line or an error message
         self.user_agent = user_agent or USER_AGENT
+        # `headers`: sent on every request (an API key); never in the URL, so never in the cache key, a cache
+        # entry, a `Page`, a log line or an error (`Request` keeps them out of its repr)
+        self._headers = dict(headers or {})
 
     def get(
         self, url: str, *, refresh: bool = False, keep_absent: bool = False, charset: str = "utf-8",
-        by_length: bool = False,
+        by_length: bool = False, exact_bytes: bool = False, verify: Callable[[Page], bool] | None = None,
+        redirect: Callable[[str, Response], Page] | None = None, whole: Callable[[bytes], bool] | None = None,
     ) -> Page:  # fmt: skip
         """The page at `url`: from the cache unless `refresh`, else fetched (and cached when it is a 200, or a
         404/410 with `keep_absent`). Offline, a miss raises instead of fetching. `charset` decodes a body whose
         `Content-Type` names none (a 1990s-2000s page served as bare `text/html`, TASK-206); one the response
         names always wins. `by_length` judges a 200 whole by its `Content-Length` rather than a closing `</html>`
-        (an archived capture of a page that never had one: ICML 1997/1998, TASK-207)."""
+        (an archived capture of a page that never had one: ICML 1997/1998, TASK-207). `exact_bytes` reads the body
+        as ISO-8859-1 whatever the response names, so `text.encode("latin-1")` is the body byte for byte: for a
+        source that checks a digest of the bytes and decodes them itself (an archived aaai.org page, TASK-232). `verify`
+        judges a freshly fetched 200 before it is stored: a falsy answer returns the page uncached, so one bad answer
+        never stays in the cache (the caller then refuses it); a cached page is returned as it is, unjudged.
+        `redirect` judges a 3xx (otherwise `HTTPRefused`): it is called with the canonical URL and the response
+        (its `location` header) and returns the page to keep for that URL, cached either way: a 200 the source
+        vouches for (still judged by `verify`), or a 3xx kept as the URL's stable answer. This layer never follows a
+        redirect itself (an Internet Archive capture replayed from another timestamp, TASK-232). `whole` vouches
+        for a fetched 200's exact bytes when no length or closing tag can (`send`, `_truncated`)."""
 
         def fetch(canonical_url: str) -> tuple[Page, bool]:
-            page = self._page(canonical_url, charset, by_length)
-            return page, page.ok or (keep_absent and page.status in _ABSENT)
+            page = self._page(canonical_url, charset, by_length, exact_bytes, redirect, whole)
+            if page.ok and verify is not None and not verify(page):
+                return page, False
+            kept_redirect = redirect is not None and _is_redirect(page.status)
+            return page, page.ok or (keep_absent and page.status in _ABSENT) or kept_redirect
 
         return self.through_cache(url, fetch, refresh=refresh)
 
-    def _page(self, url: str, default_charset: str = "utf-8", by_length: bool = False) -> Page:
-        request = Request("GET", url, {"User-Agent": self.user_agent, "Accept": self.policy.accept})
-        resp = self.send(request, by_length=by_length)
+    def fetch(
+        self, url: str, *, charset: str = "utf-8", by_length: bool = False, exact_bytes: bool = False,
+        whole: Callable[[bytes], bool] | None = None,
+    ) -> Page:  # fmt: skip
+        """One live request for `url` (`check`ed against the hosts), never read from or written to the cache: a 200
+        or a 404/410 as a `Page`; a 3xx is `HTTPRefused`, never followed. For a source that judges what a
+        redirect's target holds before keeping anything (`get(redirect=)`). Offline, a `CacheMiss`."""
+        if self.transport is None:
+            raise CacheMiss(url)
+        return self._page(self.check(url), charset, by_length, exact_bytes, whole=whole)
+
+    def _page(
+        self, url: str, default_charset: str = "utf-8", by_length: bool = False, exact_bytes: bool = False,
+        redirect: Callable[[str, Response], Page] | None = None, whole: Callable[[bytes], bool] | None = None,
+    ) -> Page:  # fmt: skip
+        request = Request(
+            "GET", url, {**self._headers, "User-Agent": self.user_agent, "Accept": self.policy.accept}
+        )
+        resp = self.send(request, by_length=by_length, whole=whole)
         if resp.status == 200:
             content_type = resp.headers.get("content-type", "text/html; charset=utf-8")
             charset = m.group(1) if (m := _CHARSET.search(content_type)) else default_charset
+            if exact_bytes:
+                charset = "latin-1"  # every byte is one character: nothing to refuse, nothing lost
             try:
                 text = resp.body.decode(charset)
             except (LookupError, UnicodeDecodeError) as e:
@@ -671,7 +723,13 @@ class Fetcher(HttpClient[Page]):
             return Page(url, 200, text, self.clock.now(), content_type)
         if resp.status in _ABSENT:
             return Page(url, resp.status, "", self.clock.now(), resp.headers.get("content-type", ""))
+        if redirect is not None and _is_redirect(resp.status):
+            return redirect(url, resp)
         raise HTTPRefused(url, resp.status)
+
+
+def _is_redirect(status: int) -> bool:
+    return 300 <= status < 400
 
 
 # --- progress lines -----------------------------------------------------------------------------------------

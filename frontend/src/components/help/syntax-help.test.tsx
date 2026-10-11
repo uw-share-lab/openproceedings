@@ -186,6 +186,44 @@ describe("the sections", () => {
   });
 });
 
+describe("Filters: abstract_kind: (decision-049)", () => {
+  it("lists the golden's abstract kinds, says it drops whole papers, and names no schema (gate C round 1)", () => {
+    page();
+    const items = [...document.getElementById("filters")!.querySelectorAll("li")].map((li) => li.textContent);
+    const row = items.find((t) => t?.startsWith("abstract_kind:"));
+    expect(row).toBe(
+      `abstract_kind: ${golden.values.abstract_kind.join(", ")}. It keeps or drops whole papers: ` +
+        "abstract_kind:official drops a paper whose abstract is OpenAlex's even when its title matches (to keep " +
+        "those, write (term abstract_kind:official) OR title:term). An index built before the abstract source was " +
+        "recorded doesn't hold it, so a saved search pinned to one refuses the filter: run it on the current index.",
+    );
+    expect(row).not.toMatch(/schema/);
+    cleanup();
+    const changed = structuredClone(golden);
+    changed.values.abstract_kind = ["official", "openalex", "none", "future_kind"];
+    page(changed);
+    expect(document.getElementById("filters")!.textContent).toContain("future_kind");
+  });
+});
+
+describe("Filters: the track expansions (TASK-223)", () => {
+  it("writes each expansion in the track row as visible text, from the golden", () => {
+    page();
+    const row = [...document.getElementById("filters")!.querySelectorAll("li")].find((li) =>
+      li.textContent?.startsWith("track:"),
+    )!;
+    expect(row.textContent).toContain("iaai: Innovative Applications of Artificial Intelligence");
+    expect(row.textContent).toContain("eaai: Educational Advances in Artificial Intelligence");
+    // visible text, not a title or an aria-label
+    expect(row.querySelector("[title],[aria-label]")).toBeNull();
+    cleanup();
+    const changed = structuredClone(golden);
+    (changed.track_expansions as Record<string, string>).demo = "Demonstrations";
+    page(changed);
+    expect(document.getElementById("filters")!.textContent).toContain("demo: Demonstrations");
+  });
+});
+
 describe("Limits", () => {
   it("shows this instance's limits from /meta", async () => {
     page();
