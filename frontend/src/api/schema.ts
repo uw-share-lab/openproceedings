@@ -1805,6 +1805,11 @@ export interface components {
              */
             gate_note: string | null;
             /**
+             * Gate Note Accessed
+             * @description When `gate_note_citation` was read; null exactly when `gate_note` is.
+             */
+            gate_note_accessed: string | null;
+            /**
              * Gate Note Citation
              * @description Where `gate_note`'s facts come from: a URL or citation; null exactly when `gate_note` is.
              */

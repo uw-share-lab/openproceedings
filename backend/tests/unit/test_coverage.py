@@ -72,6 +72,7 @@ def _track(track: str, records: int, accepted: int, missing: int, sources: list[
         "within_gate": None,
         "gate_note": None,  # TASK-222: no note says why it is not gated
         "gate_note_citation": None,
+        "gate_note_accessed": None,
     }
 
 
@@ -520,10 +521,11 @@ def test_an_ungated_cell_carries_its_note_and_a_cell_without_one_nulls() -> None
         "the list counts a different set",
         "https://example.org/list",
     )
+    assert noted["gate_note_accessed"] == "2026-10-10"  # shown beside the citation, as an official row's is
     assert rows[("NeurIPS", 2024, "main")]["gated"] is True
     assert rows[("NeurIPS", 2024, "main")]["gate_note"] is None
     assert all(
-        (t["gate_note"], t["gate_note_citation"]) == (None, None)
+        (t["gate_note"], t["gate_note_citation"], t["gate_note_accessed"]) == (None, None, None)
         for k, t in rows.items()
         if k != ("ICLR", 2024, "main")
     )

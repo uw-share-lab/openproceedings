@@ -782,6 +782,9 @@ class TrackCoverage(Model):
     gate_note_citation: str | None = Field(
         description="Where `gate_note`'s facts come from: a URL or citation; null exactly when `gate_note` is."
     )
+    gate_note_accessed: date | None = Field(  # gate C round 1: additive
+        description="When `gate_note_citation` was read; null exactly when `gate_note` is."
+    )
 
 
 class VenueYearCoverage(Model):

@@ -228,6 +228,20 @@ def test_the_title_section_counts_wrong_attaches_whose_surname_is_a_near_spellin
     )
     assert ("2 of the 3 that look wrong have a first-author surname close to ours (a character ratio of at least "
             "0.75): by the look of them, spelling or OCR variants of the same surname.") in text  # fmt: skip
+    # gate C round 1: the residual is an estimate, stated as one under Caveats
+    assert "## Caveats" in text
+    assert ("an estimate, not a measured bound: 2 of the 3 attaches that look wrong have a first-author surname "
+            "close to ours, judged by a character ratio, not checked by a person. If they are the same authors, 1 "
+            "of the 3 sampled attaches (33.3%) would be wrong.") in text  # fmt: skip
+
+
+def test_the_caveats_say_aaai_fidelity_before_2010_is_unmeasured_and_the_sample_is_sorted_after_a_draw() -> (
+    None
+):
+    text = oa.render(oa.AuditResult(rows={}), oa.Meta(snapshot="s", commit="c", seed=49, aaai_sample=10))
+    assert "## Caveats" in text and "OpenAlex's fidelity for AAAI before 2010 is unmeasured" in text
+    assert "sorted by id after a seeded draw" in text and "drawn in id order" not in text
+    assert "residual wrong-attach risk" not in text  # no title check, no estimate
 
 
 def test_the_title_check_calls_a_work_with_no_authors_unverifiable(tmp_path: Path) -> None:

@@ -488,7 +488,8 @@ def render(result: AuditResult, meta: Meta) -> str:
         f"- Snapshot: `{meta.snapshot}`",
         f"- Code: commit `{meta.commit}`",
         f"- Sample: seed {meta.seed}; every record with an official abstract and a DOI of {named}; and "
-        f"{meta.aaai_sample:,}{pool} such AAAI {AAAI_FROM}+ records, drawn in id order. Title-route check: "
+        f"{meta.aaai_sample:,}{pool} such AAAI {AAAI_FROM}+ records, sorted by id after a seeded draw. Title-route "
+        "check: "
         f"{meta.title_sample:,} attaches.",
         *([f"- Date: {meta.day.isoformat()}"] if meta.day else []),
         "",
@@ -534,4 +535,32 @@ def render(result: AuditResult, meta: Meta) -> str:
         lines += ["", _FACCT_NOTE]
     if result.title is not None:
         lines += ["", *_title_section(result.title, meta)]
+    lines += ["", *_caveats(result)]
     return "\n".join(lines) + "\n"
+
+
+def _caveats(result: AuditResult) -> list[str]:
+    """What the audit does not measure (gate C round 1): OpenAlex's fidelity where no official abstract exists to
+    compare (AAAI 1980–2008), and the title route's residual wrong-attach risk, which is a judgement."""
+    lines = [
+        "## Caveats",
+        "",
+        f"- OpenAlex's fidelity for AAAI before {AAAI_FROM} is unmeasured. The DOI route compares only records that "
+        "also have an official abstract, and the title route checks authors, not abstract text. Where AAAI's "
+        "archived aaai.org pages (`aaai_library`) and OpenAlex both give an abstract for an AAAI 1980–2008 paper, "
+        "the two can be compared; that measure is a follow-up.",
+    ]
+    check = result.title
+    if check is None:
+        return lines
+    wrong = [a for a in check.sampled if a.verdict == "wrong"]
+    if wrong:
+        near = sum(_near_spelling(a) for a in wrong)
+        left, sampled = len(wrong) - near, len(check.sampled)
+        lines.append(
+            f"- The title route's residual wrong-attach risk is an estimate, not a measured bound: {near:,} of the "
+            f"{len(wrong):,} attaches that look wrong have a first-author surname close to ours, judged by a "
+            f"character ratio, not checked by a person. If they are the same authors, {left:,} of the "
+            f"{sampled:,} sampled attaches ({_pct(left, sampled)}) would be wrong."
+        )
+    return lines

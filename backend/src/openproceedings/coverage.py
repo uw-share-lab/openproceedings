@@ -244,6 +244,7 @@ def _track_row(
         "within_gate": within_gate(accepted, row.accepted) if row and gated else None,
         "gate_note": note.note if note else None,
         "gate_note_citation": note.citation if note else None,
+        "gate_note_accessed": note.accessed.isoformat() if note else None,
     }
 
 

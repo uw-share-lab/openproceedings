@@ -4098,6 +4098,19 @@
             "description": "For an ungated cell, why it has no official count to gate on (e.g. the official figure counts a different set of papers); null for a gated cell and where no note is recorded.",
             "title": "Gate Note"
           },
+          "gate_note_accessed": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When `gate_note_citation` was read; null exactly when `gate_note` is.",
+            "title": "Gate Note Accessed"
+          },
           "gate_note_citation": {
             "anyOf": [
               {
@@ -4250,7 +4263,8 @@
           "gated",
           "within_gate",
           "gate_note",
-          "gate_note_citation"
+          "gate_note_citation",
+          "gate_note_accessed"
         ],
         "title": "TrackCoverage",
         "type": "object"

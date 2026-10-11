@@ -76,7 +76,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "blogpost",
@@ -96,7 +97,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -137,7 +139,8 @@
           "gated": true,
           "within_gate": false,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -188,7 +191,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "blogpost",
@@ -208,7 +212,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -254,7 +259,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "other",
@@ -274,7 +280,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -315,7 +322,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -356,7 +364,8 @@
           "gated": true,
           "within_gate": false,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -407,7 +416,8 @@
           "gated": true,
           "within_gate": false,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "competition",
@@ -427,7 +437,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "unknown",
@@ -447,7 +458,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -488,7 +500,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -544,7 +557,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "workshop",
@@ -564,7 +578,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "competition",
@@ -584,7 +599,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -635,7 +651,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "tiny_papers",
@@ -655,7 +672,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "blogpost",
@@ -675,7 +693,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -721,7 +740,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "other",
@@ -741,7 +761,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -787,7 +808,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -828,7 +850,8 @@
           "gated": true,
           "within_gate": false,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -869,7 +892,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -920,7 +944,8 @@
           "gated": true,
           "within_gate": false,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "other",
@@ -940,7 +965,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "unknown",
@@ -960,7 +986,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -1006,7 +1033,8 @@
           "gated": true,
           "within_gate": false,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "position",
@@ -1026,7 +1054,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -1082,7 +1111,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "workshop",
@@ -1102,7 +1132,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "competition",
@@ -1122,7 +1153,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "other",
@@ -1142,7 +1174,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -1188,7 +1221,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "other",
@@ -1208,7 +1242,8 @@
           "gated": false,
           "within_gate": null,
           "gate_note": null,
-          "gate_note_citation": null
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     }
