@@ -12,11 +12,14 @@ from __future__ import annotations
 import dataclasses
 import heapq
 import json
-from collections import Counter
+import threading
+from collections import Counter, deque
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
 from importlib.metadata import version
+from itertools import repeat
+from operator import itemgetter
 from pathlib import Path
 from typing import Any
 
@@ -496,6 +499,7 @@ class TantivyEngine:
         scope: Scope | None = None,
         check: Callable[[], None] | None = None,
         compiled: tuple[Node, Compiled] | None = None,
+        spread: Spread | None = None,
     ) -> list[int]:
         """How many documents match each of `trees`, without reading an id (TASK-176: a query's concept groups,
         each alone and the query without each; `search.run`). Counted as a facet is: a tree's top-level
@@ -525,7 +529,18 @@ class TantivyEngine:
 
         `check` is called before each tree and before each conjunct's collection: a caller that no longer
         wants the counts raises from it, so the work stops within one collection (what is already collected
-        stays memoised)."""
+        stays memoised).
+
+        `spread` (TASK-230) offers the trees to a helper: it is called once with a job to start on another
+        thread (`search.run` starts it on an idle counting worker), and the job and this call then take the
+        trees one at a time from a shared queue until none is left (`_Shared`). Each tree is still counted
+        exactly as above, by whichever thread takes it, so the counts are the same (`test_group_counts.py`'s
+        differential); only the wall time drops, the trees' collections running two at a time (Tantivy's
+        collection releases the GIL). The caller never waits for a helper that hasn't started: it takes what is
+        left itself, and then waits only for a tree the helper is counting. The job is given a `yielding`
+        callable and stops before its next tree once it returns True. On the bitwise path the two threads share
+        the call's conjunct bitmaps: each is still collected once, a thread needing one the other is collecting
+        waiting for it (`_Parts.matches`), and the per-value bitmaps are built before the helper is offered."""
         for ast in trees:  # every tree before any is counted: a refused call counts nothing
             self.admit(ast)
         parts = _Parts(self, scope, check, compiled)
@@ -542,15 +557,20 @@ class TantivyEngine:
         # (schema 4's abstract_kind cost the synthetic 80k `/search` first page its budget: 2026-10-10 perf report)
         filtered = {f for tops in split for c in tops if (f := _filter_field(c)) is not None}
         over = self._aggregated(tuple(filtered) or UNFILTERED)
-        out: list[int] = []
-        for ast, tops, base in zip(trees, split, bases, strict=True):
+
+        def one(i: int) -> int:
             if check is not None:
                 check()
-            self.expansions(ast)  # the cap applies, as for every tree an engine is given
-            filters = [(over.index(f), c) for c in tops if (f := _filter_field(c)) is not None]
-            combos = self.combos(base, scope, over, parts=parts)
-            out.append(sum(n for combo, n in combos if all(passes(c, combo[at]) for at, c in filters)))
-        return out
+            self.expansions(trees[i])  # the cap applies, as for every tree an engine is given
+            filters = [(over.index(f), c) for c in split[i] if (f := _filter_field(c)) is not None]
+            combos = self.combos(bases[i], scope, over, parts=parts)
+            return sum(n for combo, n in combos if all(passes(c, combo[at]) for at, c in filters))
+
+        if spread is None or len(trees) < 2:
+            return [one(i) for i in range(len(trees))]
+        if parts.bitwise:
+            self._value_masks(check)  # built here, once, before two threads could each build them
+        return _Shared(len(trees), one).counted(spread)
 
     def combos(
         self,
@@ -671,10 +691,12 @@ class TantivyEngine:
         hits = self.searcher.search(
             query, max(1, self.searcher.num_docs), count=False, order_by_field="ord"
         ).hits
-        bits = bytearray(len(self.ids) // 8 + 1)
-        for o, _address in hits:  # an int (the column is u64; `_ord` per hit would double the loop's cost)
-            bits[o >> 3] |= 1 << (o & 7)
-        return int.from_bytes(bits, "little")
+        # one byte per document, set without a Python-level loop (an `ord` is an int: the column is u64), then read
+        # as the base-2 digits of the bitmap, highest `ord` first: half the time of a per-hit loop setting bits,
+        # all of it holding the GIL a concurrent page needs (TASK-230)
+        marks = bytearray(len(self.ids))
+        deque(map(marks.__setitem__, map(itemgetter(0), hits), repeat(1)), maxlen=0)
+        return int(marks[::-1].translate(_BINARY_DIGITS) or b"0", 2)
 
     # --- compilation and explain ---------------------------------------------------------------------
     def candidates(self, ast: Node) -> list[tuple[Phrase | Near, TextField, int]]:
@@ -853,9 +875,22 @@ class _Parts:
     (`compiled`) or compiled once (`_fresh`: never stored in `compiled`), on first need, and a base's query built
     from them; with `bitwise`, each one's bitmap, collected once, and a base's bitmap built from them (see
     `counts`). A call's bitmaps are dropped with it: one bit per document per conjunct, charged to no memo.
-    Used by one thread."""
+    Shared by a spread call's two threads (`counts`' `spread`): its dicts are read and written one item at a
+    time, so a race only builds the same conjunct's query twice, and a bitmap, a whole collection, is collected
+    by one thread while the other waits for it (`matches`)."""
 
-    __slots__ = ("bitwise", "built", "check", "engine", "keys", "known", "matched", "scope")
+    __slots__ = (
+        "bitwise",
+        "built",
+        "check",
+        "collecting",
+        "engine",
+        "keys",
+        "known",
+        "lock",
+        "matched",
+        "scope",
+    )
 
     def __init__(
         self,
@@ -869,6 +904,10 @@ class _Parts:
         self.built: dict[int, tantivy.Query] = {}  # by the conjunct's identity: the call's trees share nodes
         self.keys: dict[int, str] = {}  # each conjunct's memo-key part, serialised once for all the trees
         self.matched: dict[int, int] = {}  # each conjunct's bitmap (a NOT's: its child's), by identity
+        self.lock = threading.Lock()
+        self.collecting: dict[
+            int, threading.Event
+        ] = {}  # under `lock`: the bitmaps a thread is collecting now
         # each conjunct's query and, for a NOT, its child's, as the request's compile built them
         self.known: dict[int, tuple[tantivy.Query, tantivy.Query | None]] = {}
         if compiled is not None:
@@ -910,19 +949,97 @@ class _Parts:
         return out
 
     def matches(self, c: Node) -> int:
-        """The bitmap of what `c` matches (a NOT: what its child matches), collected once per call."""
-        bits = self.matched.get(id(c))
-        if bits is None:
-            if self.check is not None:
-                self.check()
-            if isinstance(c, Not):
-                known = self.known.get(id(c))
-                child = known[1] if known is not None else None
-                query = child if child is not None else self.engine._fresh(c.child, self.scope).query
-            else:
-                query = self.conjunct(c)
-            bits = self.matched[id(c)] = self.engine._bitmap(query)
+        """The bitmap of what `c` matches (a NOT: what its child matches), collected once per call: by the first
+        thread to need it, the other waiting for it (and collecting it itself should that collection fail)."""
+        while True:
+            bits = self.matched.get(id(c))
+            if bits is not None:
+                return bits
+            with self.lock:
+                if id(c) in self.matched:
+                    continue
+                other = self.collecting.get(id(c))
+                if other is None:
+                    mine = self.collecting[id(c)] = threading.Event()
+            if other is not None:
+                other.wait()
+                continue
+            try:
+                return self._collect(c)
+            finally:
+                with self.lock:
+                    del self.collecting[id(c)]
+                mine.set()
+
+    def _collect(self, c: Node) -> int:
+        if self.check is not None:
+            self.check()
+        if isinstance(c, Not):
+            known = self.known.get(id(c))
+            child = known[1] if known is not None else None
+            query = child if child is not None else self.engine._fresh(c.child, self.scope).query
+        else:
+            query = self.conjunct(c)
+        bits = self.matched[id(c)] = self.engine._bitmap(query)
         return bits
+
+
+_BINARY_DIGITS = bytes.maketrans(b"\x00\x01", b"01")  # a document's byte in `_bitmap` → its bit's digit
+
+# `counts`' `spread`: given the helper's job, starts it on another thread (or drops it); the job takes a `yielding`
+# callable, asked before each tree it would take
+type Spread = Callable[[Callable[[Callable[[], bool]], None]], None]
+
+
+class _Shared:
+    """One spread `counts` call's trees, taken one at a time by the caller and a helper (`counts`' `spread`).
+    Each tree is taken once, under a lock; its count, or the error counting it raised, is kept by its index."""
+
+    def __init__(self, n: int, count: Callable[[int], int]) -> None:
+        self.count = count
+        self.lock = threading.Lock()
+        self.next = 0  # the next tree to take, under `lock`
+        self.out: list[int] = [0] * n
+        self.done = [threading.Event() for _ in range(n)]  # set when the tree is counted, or failed
+        self.failed: BaseException | None = None  # the helper's error (the caller's own is raised as it is)
+        self.stop = False  # set on any failure: neither thread takes another tree
+
+    def take(self) -> int | None:
+        with self.lock:
+            if self.stop or self.next == len(self.out):
+                return None
+            self.next += 1
+            return self.next - 1
+
+    def run(self, i: int) -> None:
+        try:
+            self.out[i] = self.count(i)
+        except BaseException:
+            self.stop = True
+            raise
+        finally:
+            self.done[i].set()
+
+    def helper(self, yielding: Callable[[], bool]) -> None:
+        """The helper's job: trees until none is left, the call fails, or `yielding()`; never raises (its error
+        is the caller's to raise)."""
+        try:
+            while not yielding() and (i := self.take()) is not None:
+                self.run(i)
+        except BaseException as e:
+            self.failed = e
+
+    def counted(self, spread: Spread) -> list[int]:
+        """Every tree's count: the helper offered, the caller taking trees until none is left, then waiting for
+        any the helper is still counting (one collection each)."""
+        spread(self.helper)
+        while (i := self.take()) is not None:
+            self.run(i)
+        for done in self.done[: self.next]:  # a tree taken is counted or failed, so set, soon
+            done.wait()
+        if self.failed is not None:
+            raise self.failed
+        return self.out
 
 
 def _indexes_ord(schema: tantivy.Schema, searcher: tantivy.Searcher) -> bool:

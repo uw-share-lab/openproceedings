@@ -352,13 +352,19 @@ Two readings follow from "the canonical form decides", and are worth knowing:
     per engine, by the first count that needs them (about 30 collections, each after `check`, so a stopped job
     stops within one and keeps none), and kept, as the `ord` table is. The job runs on **the counts' own two workers** (`search.GROUP_WORKERS`), never on the facet
     pool: a search waits for its facets without a timeout, so no counting job, however slow or however many,
-    may hold a thread the facets need. After the page, the facets and the exclusion accounting are done, a
+    may hold a thread the facets need. A job offers its trees to a **helper** on the other counting worker
+    (TASK-230, `search._spread`): the two take the trees one at a time from a shared queue, each tree counted
+    exactly as before by whichever thread takes it (a bitwise call's conjunct bitmaps are shared, each still
+    collected once), so the counts are the same and only the wall time drops. The job never waits for a helper
+    that has not started (it takes what is left itself), and a helper takes no further tree while another
+    search's counting job waits for a worker, so it delays that job by at most the one collection it is in. After the page, the facets and the exclusion accounting are done, a
     search waits for its counts **at most 50 ms if no worker has taken its job** (then `busy`, the job
     cancelled), and **at most 2 s if one has** (then `timed_out`); an abandoned job that is running is
     **stopped before its next collection** (`counts`' `check`), keeping what it had collected in the memo.
     So the **worst case other clients' counting can add to a search is the 50 ms grace** (and its counts);
     the 2 s is only ever spent on a search's own running job, whose work the two bounds above cap; and a job
-    nobody waits for does at most one more collection. No rate-limit token, no verification slot.
+    nobody waits for does at most one more collection on each counting thread it holds (its own and its
+    helper's). No rate-limit token, no verification slot.
 
   Measured (`docs/results/2026-10-06-bench-group-counts.md`, `backend/tests/bench/group_counts_report.py`:
   `search.run` with facets and highlights as `/search` runs it, with and without its counts at the default

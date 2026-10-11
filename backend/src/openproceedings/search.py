@@ -280,7 +280,8 @@ def _alone(
 ) -> tuple[Pair, ...]:
     """Each group's two counts, in query order: alone, and the query without it (`TantivyEngine.counts`: at
     most two collections a group, memoised; every conjunct compiled at most once for all of them, or taken
-    from `compiled`, the request's compile of the query, when given; TASK-197). Sets
+    from `compiled`, the request's compile of the query, when given; TASK-197), the trees shared with a helper
+    on the other counting worker (`_spread`, TASK-230), which yields to another search's waiting job. Sets
     `started` when it begins (a worker took the job), and stops before its next collection once `abandoned`
     is set (`_Abandoned`): nobody is waiting for the rest."""
     if started is not None:
@@ -292,7 +293,12 @@ def _alone(
 
     n = len(found.groups)
     trees = [*map(found.alone, found.groups), *map(found.without, found.groups)]
-    totals = engine.counts(trees, scope=scope, check=wanted, compiled=compiled)
+    helpers: list[Future[None]] = []
+    try:
+        totals = engine.counts(trees, scope=scope, check=wanted, compiled=compiled, spread=_spread(helpers))
+    finally:
+        for h in helpers:
+            h.cancel()  # still queued: never runs (running: it has nothing left to take)
     return tuple(zip(totals[:n], totals[n:], strict=True))
 
 
@@ -416,6 +422,9 @@ _POOL: ThreadPoolExecutor | None = None
 _GROUP_POOL: ThreadPoolExecutor | None = None
 _POOL_LOCK = threading.Lock()
 GROUP_WORKERS = 2
+# how many searches' counting jobs are queued for a counting worker (not helpers), under `_POOL_LOCK`; a list, so
+# the fork handler and the tests reset it in place
+_WAITING = [0]
 
 
 def _submit(engine: TantivyEngine, ast: Node, scope: Scope) -> Future[dict[str, dict[str, int]]] | None:
@@ -424,9 +433,10 @@ def _submit(engine: TantivyEngine, ast: Node, scope: Scope) -> Future[dict[str, 
     return _start(partial(engine.facets, ast, scope=scope.reader()))
 
 
-def _start[T](job: Callable[[], T], *, counts: bool = False) -> Future[T] | None:
+def _start[T](job: Callable[[], T], *, counts: bool = False, helper: bool = False) -> Future[T] | None:
     """`job` started on a worker (a facet worker, or with `counts` a group-count worker), in a copy of the
-    caller's context, or None if the pool is shutting down."""
+    caller's context, or None if the pool is shutting down. A counting job is counted in `_WAITING` until a
+    worker takes it, unless it is a `helper` (`_spread`), which yields to such a job rather than being one."""
     global _POOL, _GROUP_POOL
     with _POOL_LOCK:
         if counts:
@@ -437,10 +447,57 @@ def _start[T](job: Callable[[], T], *, counts: bool = False) -> Future[T] | None
             if _POOL is None:
                 _POOL = ThreadPoolExecutor(max(4, os.cpu_count() or 4), thread_name_prefix="op-facets")
             pool = _POOL
+    if counts and not helper:
+        job, left = _queued(job)
     try:
-        return pool.submit(contextvars.copy_context().run, job)
+        started = pool.submit(contextvars.copy_context().run, job)
     except RuntimeError:  # shut down between the lock and the submit (interpreter exit, or `shutdown()`)
+        if counts and not helper:
+            left()
         return None
+    if counts and not helper:
+        started.add_done_callback(lambda _f: left())  # cancelled before it ran: it left the queue too
+    return started
+
+
+def _queued[T](job: Callable[[], T]) -> tuple[Callable[[], T], Callable[[], None]]:
+    """`job`, counted in `_WAITING` until it starts (or is cancelled, or never submitted: `left`, called once
+    however often), so a running helper knows another search's counting job waits for its worker."""
+    with _POOL_LOCK:
+        _WAITING[0] += 1
+    gone = threading.Event()
+
+    def left() -> None:
+        with _POOL_LOCK:
+            if not gone.is_set():
+                gone.set()
+                _WAITING[0] -= 1
+
+    def run() -> T:
+        left()
+        return job()
+
+    return run, left
+
+
+def _yield() -> bool:
+    """A helper's `yielding` (`TantivyEngine.counts`' `spread`): another search's counting job is waiting for a
+    worker, so the helper takes no further tree. Other searches' counting then waits on a helper for at most
+    the one collection it is doing, well within their 50 ms grace."""
+    return _WAITING[0] > 0
+
+
+def _spread(helpers: list[Future[None]]) -> Callable[[Callable[[Callable[[], bool]], None]], None]:
+    """`counts`' `spread` for a counting job (TASK-230): the helper's job started on the other counting worker
+    (queued if that worker is counting for another search, and then usually finding nothing left), its future
+    kept in `helpers` so the job cancels it once its counts are in."""
+
+    def spread(job: Callable[[Callable[[], bool]], None]) -> None:
+        started = _start(partial(job, _yield), counts=True, helper=True)
+        if started is not None:
+            helpers.append(started)
+
+    return spread
 
 
 def shutdown() -> None:
@@ -457,6 +514,7 @@ def shutdown() -> None:
 def _forget_after_fork() -> None:
     global _POOL, _GROUP_POOL, _POOL_LOCK
     _POOL, _GROUP_POOL, _POOL_LOCK = None, None, threading.Lock()
+    _WAITING[0] = 0
 
 
 atexit.register(shutdown)
