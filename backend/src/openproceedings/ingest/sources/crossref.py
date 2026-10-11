@@ -125,7 +125,7 @@ def author_name(a: Mapping[str, Any]) -> str | None:
 def _message(text: str, kind: str) -> Mapping[str, Any]:
     try:
         body = json.loads(text)
-    except ValueError as e:
+    except (ValueError, RecursionError) as e:  # RecursionError: nested past the decoder's depth
         raise CrawlError("a Crossref answer is not JSON", reason="crossref_unreadable") from e
     if not isinstance(body, dict):
         raise CrawlError("a Crossref answer is not a JSON object", reason="crossref_unreadable")

@@ -66,6 +66,17 @@ def test_a_page_that_is_not_a_work_list_stops(text: str) -> None:
     assert e.value.reason in ("crossref_unreadable", "crossref_error")
 
 
+NESTED = "[" * 100_000 + "]" * 100_000  # json.loads raises RecursionError, not ValueError
+
+
+@pytest.mark.parametrize("parse", [crossref.parse_works, crossref.parse_proceedings], ids=["works", "proceedings"])
+@pytest.mark.parametrize("text", [NESTED, '{"a": ' * 100_000 + "1" + "}" * 100_000], ids=["array", "object"])
+def test_a_deeply_nested_answer_is_unreadable_never_a_raw_recursion_error(parse, text: str) -> None:
+    with pytest.raises(CrawlError) as e:
+        parse(text)
+    assert e.value.reason == "crossref_unreadable"
+
+
 def test_the_works_url_is_stable_and_quotes_the_cursor() -> None:
     assert crossref.works_url(ROW) == (
         "https://api.crossref.org/works?filter=prefix:10.1145,from-pub-date:2023-06-01,until-pub-date:2023-06-30"
