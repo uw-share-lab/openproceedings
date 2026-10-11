@@ -16,9 +16,10 @@ import hashlib
 import json
 import re
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, Self
+from types import MappingProxyType
+from typing import Annotated, Any, Literal, Protocol, Self
 from urllib.parse import urlparse
 
 from pydantic import (
@@ -34,16 +35,61 @@ from pydantic import (
     model_validator,
 )
 
+from openproceedings.ingest import acm_table
+from openproceedings.ingest import volumes as _volumes
 from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
-from openproceedings.vocab import Status, Track, Venue, venue_name
+from openproceedings.vocab import AbstractKind, Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
-RECORD_SCHEMA_VERSION = "4"  # 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-029)
+# 9: the `aaai_library` source (abstract claims only, AAAI 1980-2008 dblp records: archived aaai.org paper pages;
+# decision-051, TASK-232); 8: the `openalex` source (abstract claims only, AAAI/AIES/FAccT) and the derived `abstract_kind` (decision-049,
+# milestone C); 7: the `crossref` and `facct_site` sources, the `doi-<toc>.<n>` native id (FAccT, AIES), `dblp-` ids for AAAI
+# 1980-2008, and the `pmlr-` native id widened from ICML to FAccT (v81) (decision-049, milestone B); 6: the AAAI,
+# AIES, FAccT and IASEAI venues, five tracks, the `ojs` source and the `ojs-<article id>` native id
+# (decision-049); 5: the `dblp` and `icml_site` sources and the `dblp-<key>` native id (TASK-205/206, decision-047);
+# 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-029)
+RECORD_SCHEMA_VERSION = "9"
 # Sent with a record, never stored: computed from its fields, so a snapshot line never holds it (`record_line`)
 # and the shape above is unchanged (TASK-112). Output only: a dump that is validated again excludes it.
-DERIVED = frozenset({"venue_name"})
+DERIVED = frozenset({"venue_name", "abstract_kind"})
 
-Source = Literal["openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris"]
+Source = Literal[
+    "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site", "ojs",
+    "crossref", "facct_site", "ris", "openalex", "aaai_library",
+]  # fmt: skip
+# the venues an OpenAlex abstract may fill (decision-049): never NeurIPS, ICLR or ICML (spec 01's rule), nor IASEAI
+OPENALEX_VENUES: frozenset[str] = frozenset({"AAAI", "AIES", "FAccT"})
+
+
+class _HoldsText(Protocol):
+    @property
+    def source(self) -> Any: ...
+    @property
+    def value(self) -> Any: ...
+
+
+ABSTRACT_KIND_DOC = (
+    "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the "
+    "proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or "
+    "FAccT paper no official source gives one), or `none` (no abstract, or one withheld: `abstract_withheld` "
+    "tells the two apart). The `abstract_kind:` filter and the `abstract_kind` facet use the kind the index "
+    "was built with, so a takedown listed after the build shows `none` on the hit without changing which "
+    "searches match it or how the facet counts it, until the next build (TASK-136). Derived from the "
+    "abstract's claims; never stored in the record, never hashed. Distinct from `abstract_source`, the claim "
+    "the abstract came from."
+)  # the one wording of a hit's and a paper's field
+
+
+def abstract_kind_of(abstract: str | None, claims: Iterable[_HoldsText]) -> AbstractKind:
+    """`none` without an abstract; `openalex` when at least one of the abstract claims holds its exact text and
+    every such claim is OpenAlex's; else `official` (a record without provenance, as fixtures are, included).
+    `claims` are abstract claims (a `Claim`, or the snapshot reader's raw view of one)."""
+    if abstract is None:
+        return "none"
+    held = {c.source for c in claims if c.value == abstract}
+    return "openalex" if held == {"openalex"} else "official"
+
+
 Presentation = Literal["oral", "spotlight", "poster"]
 ClaimField = Literal[
     "title", "abstract", "authors", "venue", "year", "track", "status", "presentation", "venue_id_raw",
@@ -53,17 +99,30 @@ ClaimField = Literal[
     "twin", "invitation",
 ]  # fmt: skip
 
-_ID = re.compile(r"op:(neurips|iclr|icml):([0-9]{4}):(\S+)")
+_ID = re.compile(r"op:(neurips|iclr|icml|aaai|aies|facct|iaseai):([0-9]{4}):(\S+)")
 # Native ids (record-schema skill): an OpenReview forum id, or a proceedings form tied to its venue.
-PROCEEDINGS_NATIVE = {
-    "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), "ICML"),
+PROCEEDINGS_NATIVE: dict[str, tuple[re.Pattern[str], frozenset[str]]] = {
+    "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), frozenset({"ICML", "FAccT"})),
     # `-round1`/`-round2`: the 2021 D&B host, which numbers each round separately (urls.proceedings_native)
     "nips": (
         re.compile(rf"nips-[0-9a-f]{{32}}(?:-(?:{'|'.join(sorted(NEURIPS_DB_2021_ROUNDS))}))?"),
-        "NeurIPS",
+        frozenset({"NeurIPS"}),
     ),
-    "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), "ICLR"),
+    "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), frozenset({"ICLR"})),
+    # the dblp key after `conf/icml/` (ICML 1988-2012) or `conf/aaai/` (AAAI 1980-2008) in the pinned dblp release
+    # (sources/dblp.py, decision-047, decision-049)
+    "dblp": (re.compile(r"dblp-[A-Za-z0-9_-]+"), frozenset({"ICML", "AAAI"})),
+    # an ojs.aaai.org article id (`oai:ojs.aaai.org:article/<id>`), unique across its journals (sources/ojs.py)
+    "ojs": (re.compile(r"ojs-[0-9]+"), frozenset({"AAAI", "AIES", "IASEAI"})),
+    # an ACM paper DOI's suffix, `10.1145/<toc>.<n>` → `doi-<toc>.<n>` (FAccT, AIES; sources/crossref.py)
+    "doi": (re.compile(r"doi-[0-9]+\.[0-9]+"), frozenset({"FAccT", "AIES"})),
 }
+# tracks only one venue has (decision-049): IAAI and EAAI are printed in the AAAI volumes alone
+VENUE_ONLY_TRACKS: Mapping[str, str] = MappingProxyType({"iaai": "AAAI", "eaai": "AAAI"})
+# the years a `dblp-` id may name: ICML before PMLR (v28, 2013); AAAI before OJS (Vol. 24, 2010)
+DBLP_YEARS: Mapping[str, range] = MappingProxyType({"ICML": range(1988, 2013), "AAAI": range(1980, 2009)})
+# the years a `doi-` id may name (acm_table.DOI_YEARS, defined there so the table needs no import of this module)
+DOI_YEARS = acm_table.DOI_YEARS
 
 
 def is_paper_id(text: str) -> bool:
@@ -80,11 +139,19 @@ _REHASH = "rehash"  # validation-context key: only `build` and `model_copy` set 
 _HASH_PLACEHOLDER = "0" * 64
 
 
-def _utf8(v: str) -> str:
+def lone_surrogate(text: str) -> bool:
+    """Whether `text` holds a lone UTF-16 surrogate (U+D800-U+DFFF on its own, as JSON's `"\\ud800"` decodes), which
+    no record may hold (`_utf8`). A pair JSON escaped (`"\\ud83d\\ude00"`) decodes to one code point and is valid."""
     try:
-        v.encode("utf-8")
-    except UnicodeEncodeError as e:  # a lone surrogate
-        raise ValueError("text must be valid Unicode (no lone surrogates)") from e
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return True
+    return False
+
+
+def _utf8(v: str) -> str:
+    if lone_surrogate(v):
+        raise ValueError("text must be valid Unicode (no lone surrogates)")
     return v
 
 
@@ -277,6 +344,11 @@ class PaperRecord(BaseModel):
     def venue_name(self) -> str:
         return venue_name(self.venue, self.year)
 
+    @computed_field(description=ABSTRACT_KIND_DOC)  # type: ignore[prop-decorator]
+    @property
+    def abstract_kind(self) -> AbstractKind:
+        return abstract_kind_of(self.abstract, self.claims("abstract"))
+
     @field_validator("title")
     @classmethod
     def _title(cls, v: str) -> str:
@@ -321,20 +393,67 @@ class PaperRecord(BaseModel):
         if m.group(1) != self.venue.lower() or int(m.group(2)) != self.year:
             raise ValueError(f"id {self.id!r} disagrees with venue {self.venue} / year {self.year}")
         venue_name(self.venue, self.year)  # a year the venue wasn't held: refused here, never mid-export
+        for c in self.provenance:
+            if c.source == "openalex" and (c.field != "abstract" or self.venue not in OPENALEX_VENUES):
+                raise ValueError(
+                    f"an OpenAlex claim may only fill an abstract of an AAAI, AIES or FAccT record, not "
+                    f"{c.field} of {self.venue}"
+                )
+            if c.source == "aaai_library" and (
+                c.field != "abstract"
+                or self.venue != "AAAI"
+                or self.year not in DBLP_YEARS["AAAI"]
+                or not m.group(3).startswith("dblp-")
+            ):
+                raise ValueError(
+                    f"an aaai_library claim may only give the abstract of an AAAI 1980-2008 dblp record, not "
+                    f"{c.field} of {self.venue}"
+                )
         native = m.group(3)
         form = PROCEEDINGS_NATIVE.get(native.split("-", 1)[0])
         if form is not None:
-            pattern, venue = form
-            if not pattern.fullmatch(native) or venue != self.venue:
+            pattern, venues = form
+            if not pattern.fullmatch(native) or self.venue not in venues:
                 raise ValueError(
-                    f"native id {native!r} is not a valid {venue} proceedings id for {self.venue}"
+                    f"native id {native!r} is not a valid {'/'.join(sorted(venues))} proceedings id for {self.venue}"
                 )
+            if native.startswith("pmlr-"):
+                number = int(native.split("-", 2)[1][1:])
+                listed = _volumes.PMLR_NATIVE_VOLUMES.get(number)
+                if self.venue == "ICML":  # any ICML volume, as before; never another venue's (FAccT's v81)
+                    if listed is not None and listed[0] != "ICML":
+                        raise ValueError(
+                            f"native id {native!r} is not an ICML PMLR volume's (pmlr_volumes.toml)"
+                        )
+                elif (listed or ("", 0, ""))[:2] != (self.venue, self.year):
+                    raise ValueError(
+                        f"native id {native!r} is not a {self.venue} {self.year} PMLR volume's (pmlr_volumes.toml)"
+                    )
+            if native.startswith("dblp-") and self.year not in DBLP_YEARS[self.venue]:
+                raise ValueError(
+                    f"native id {native!r} is not a valid id for {self.venue} {self.year}: dblp ids are ICML "
+                    "1988-2012 and AAAI 1980-2008"
+                )
+            if native.startswith("doi-") and self.year not in DOI_YEARS[self.venue]:
+                raise ValueError(
+                    f"native id {native!r} is not a valid id for {self.venue} {self.year}: doi ids are AIES "
+                    "2018-2023 and FAccT 2019 on"
+                )
+            if native.startswith("doi-"):  # the table read at call time: a test may swap it
+                row = acm_table.TABLE.by_toc(native.removeprefix("doi-").split(".", 1)[0])
+                if row is None or (row.venue, row.year) != (self.venue, self.year):
+                    raise ValueError(
+                        f"native id {native!r} is not a {self.venue} {self.year} ACM proceedings' DOI "
+                        "(acm_proceedings.toml)"
+                    )
             if native.rsplit("-", 1)[-1] in NEURIPS_DB_2021_ROUNDS and self.year != 2021:
                 raise ValueError(
                     f"native id {native!r} is not a valid id for {self.year}: D&B rounds are 2021 only"
                 )
         elif not FORUM_ID.fullmatch(native):
             raise ValueError(f"native id {native!r} is neither an OpenReview forum id nor a proceedings id")
+        if (only := VENUE_ONLY_TRACKS.get(self.track)) is not None and only != self.venue:
+            raise ValueError(f"track {self.track!r} is only an {only} track, not {self.venue}'s")
         expected = content_hash(
             title=self.title,
             abstract=self.abstract,

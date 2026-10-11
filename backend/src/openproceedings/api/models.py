@@ -14,18 +14,24 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.engine.index import VERSION_NAME
-from openproceedings.ingest.dedup import Origin
-from openproceedings.ingest.record import PaperRecord, Presentation, Source, Urls
+from openproceedings.ingest.dedup import SUBMISSION_NOTE, Origin
+from openproceedings.ingest.record import (
+    ABSTRACT_KIND_DOC,
+    PaperRecord,
+    Presentation,
+    Source,
+    Urls,
+)
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import MIN_YEAR, FilterField, Node, TextField
 from openproceedings.query.clauses import ParsedFilters
 from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode
 from openproceedings.query.wordforms import SkippedTerm, WordForm
 from openproceedings.records import Excluded as Excluded  # one schema for the exclusion accounting
-from openproceedings.records import SearchRecord
+from openproceedings.records import RemovalCause, SearchRecord
 from openproceedings.search import NotCounted
 from openproceedings.timestamps import CrawlWindow, Timestamp
-from openproceedings.vocab import Status, Track, Venue
+from openproceedings.vocab import AbstractKind, Status, Track, Venue
 
 Sort = Literal["relevance", "year_desc", "year_asc", "title"]  # tantivy_engine.SORTS (a test pins them equal)
 MAX_LIMIT = 200  # spec 04: `limit` above it is a 422 API_BAD_PARAM, never clamped
@@ -131,6 +137,12 @@ class QueryInfo(Model):
     expansions: dict[str, list[str]]  # "<stem><op>" → every term it expands to (guarantee 6)
 
 
+FACET_KIND_DOC = (
+    "Each abstract kind's count (`official`, `openalex`, `none`; decision-049), counted like the other fields. "
+    'null on an index of schema 3, which holds no such field (not "no records").'
+)
+
+
 class Facets(Model):
     """Disjunctive (decision-001): each field counted without its own top-level conjuncts. Values that
     occur only; years as strings."""
@@ -139,6 +151,7 @@ class Facets(Model):
     year: dict[str, int]
     track: dict[str, int]
     status: dict[str, int]
+    abstract_kind: dict[str, int] | None = Field(description=FACET_KIND_DOC)  # decision-049: additive
 
 
 class Highlights(Model):
@@ -157,16 +170,33 @@ ABSTRACT_SOURCE_DOC = (
 )
 ORIGIN_DOC = (
     "The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` "
-    "can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources)."
+    "can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources). `icml_site`: an official ICML "
+    "conference page (live, or a pinned Internet Archive capture), for ICML 1988-2012 (decision-047). `ojs`: the "
+    "AAAI Digital Library (ojs.aaai.org), for AAAI, AIES and IASEAI; its url is the paper's own article page "
+    "(decision-049). `crossref` and `facct_site`: FAccT and AIES (ACM proceedings via Crossref, the official FAccT "
+    "pages); the url is the paper's DOI link (decision-049). `openalex`: an AAAI, AIES or FAccT abstract no "
+    "official source gives, filled from OpenAlex (decision-049); the url is the paper's own page, never OpenAlex's "
+    "API. `aaai_library`: AAAI's own abstract for AAAI 1980-2008, read from an Internet Archive capture of the "
+    "paper's old aaai.org page (decision-051); the url is that aaai.org page, never the archive. Open set: new values "
+    "may be added within /api/v1; "
+    "handle a value you don't know."
+)
+
+ABSTRACT_NOTE_DOC = (
+    "TASK-210 (additive): what to know about the abstract beside its source; null when there is nothing, or "
+    "when `abstract` is null or withheld. Today only a submission-time abstract has one (an `icml_site` claim "
+    "read from an official ICML 1997 or 1998 submission page, TASK-207), and it reads, word for word as in "
+    f"every export: {SUBMISSION_NOTE} It is read from the abstract's claim when the snapshot is loaded "
+    "(`ingest/dedup.py`), never stored in the record."
 )
 
 
 ABSTRACT_WITHHELD_DOC = (
     "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, "
-    "decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight "
-    "spans empty, though an older index version may still match the query on the withheld text (decision-022: "
-    "a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources "
-    "gave none."
+    "decision-018, decision-022): `abstract` is then null, `abstract_source` and `abstract_note` null and the "
+    "abstract's highlight spans empty, though an older index version may still match the query on the withheld "
+    "text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false "
+    "means the sources gave none."
 )
 TWINS_DOC = (
     "The ids of this paper's twins (decision-029): another record of the same paper that the index keeps "
@@ -183,6 +213,15 @@ MISSING_COUNT_DOC = (
 WITHHELD_COUNT_DOC = (
     "Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, "
     "decision-022): counted here, not in `abstract_missing`."
+)
+OFFICIAL_COUNT_DOC = (
+    "Of `records`, those whose abstract came from an official source (the venue's own proceedings, OpenReview "
+    "or another publisher or index listed in `sources`)."
+)
+OPENALEX_COUNT_DOC = (
+    "Of `records`, those whose abstract came from OpenAlex's fallback (decision-049), filled only where no "
+    "official source gives one. Together with `abstract_official`, `abstract_missing` and `abstract_withheld` "
+    "these add up to `records`."
 )
 
 
@@ -208,6 +247,8 @@ class Hit(Model):
     abstract_source: AbstractSource | None = Field(description=ABSTRACT_SOURCE_DOC)  # TASK-134: additive
     abstract_withheld: bool = Field(description=ABSTRACT_WITHHELD_DOC)  # TASK-136: additive
     twins: list[str] = Field(description=TWINS_DOC)  # TASK-162: additive
+    abstract_note: str | None = Field(description=ABSTRACT_NOTE_DOC)  # TASK-210: additive
+    abstract_kind: AbstractKind = Field(description=ABSTRACT_KIND_DOC)  # decision-049: additive
 
 
 IDENTIFIED_DOC = (
@@ -463,6 +504,7 @@ class PaperResponse(Versioned):
     )
     abstract_withheld: bool = Field(description=ABSTRACT_WITHHELD_DOC)  # TASK-136: additive
     twins: list[str] = Field(description=TWINS_DOC)  # TASK-162: additive
+    abstract_note: str | None = Field(description=ABSTRACT_NOTE_DOC)  # TASK-210: additive
 
 
 # --- /records (task-037; spec 04 §Search records) -----------------------------------------------------
@@ -531,11 +573,49 @@ class RecordResponse(Versioned):
         description="The replay check (HTTP 200 whatever its status). Null exactly when the request asked "
         "`replay=false`; never null otherwise (decision-014)."
     )
+    openalex_abstracts: int | None = Field(  # gate C round 2: additive, derived, never stored
+        description="How many of the record's own saved ids have an abstract from OpenAlex (`abstract_kind` "
+        "`openalex`) on the record's own `index_version`, read per id from that index (the built kind, as the "
+        "filter and facet read it). Derived, not stored: the same for the same record ids and index. Null when "
+        "that index has no `abstract_kind` (schema 3) or isn't loaded for this request: with a replay, when "
+        "the replay didn't run on the record's own index; with `replay=false`, when the served index isn't "
+        "the record's. The methods text's OpenAlex sentence (spec 05) reads this value only."
+    )
 
 
 class DiffEntry(Model):
     id: str
     title: str | None  # null when no index on this instance still holds the paper
+    track: Track | None = Field(  # TASK-227: additive
+        description="Its track on the index the replay ran on; null when that index doesn't hold it."
+    )
+    status: Status | None = Field(  # TASK-227: additive
+        description="Its status on the index the replay ran on; null when that index doesn't hold it."
+    )
+    cause: RemovalCause | None = Field(  # TASK-227: additive
+        description="Why the replay no longer matches a removed paper (null on an added one), judged on the "
+        "index the replay ran on against the replayed query's top-level filter clauses (the defaults included), "
+        "track first, then status, then any other field. `track_changed`: held on a track those clauses don't "
+        "admit, e.g. moved to `iaai`. `status_changed`: held with a status they don't admit, e.g. now "
+        "`withdrawn`. `filter_changed`: held, but another filter (`failed_filter`: `venue`, `year` or "
+        "`abstract_kind`) no longer admits it. `not_in_index`: that index doesn't hold it (it left the corpus, "
+        "or is counted as not a paper). `still_eligible`: every filter admits it, so its title, abstract or "
+        "another searched field no longer matches."
+    )
+    failed_filter: FilterField | None = Field(  # TASK-227: additive
+        description="The filter field a removed paper now fails: `track` for `track_changed`, `status` for "
+        "`status_changed`, the field for `filter_changed`; null otherwise."
+    )
+
+
+class RemovalCauses(Model):
+    """How many of the whole removed list (not just the page) have each cause; every cause, 0 included."""
+
+    track_changed: int
+    status_changed: int
+    filter_changed: int
+    not_in_index: int
+    still_eligible: int
 
 
 class RecordDiff(Versioned):
@@ -550,8 +630,11 @@ class RecordDiff(Versioned):
     added_total: int | None
     removed_total: int | None
     added: list[DiffEntry]  # sorted by id
-    removed: list[DiffEntry]
+    removed: list[DiffEntry]  # each with its track and cause (TASK-227)
     membership_identical: bool | None
+    removed_causes: RemovalCauses | None = Field(
+        description="The removed list's causes, counted over the whole list (TASK-227). Null when `refused`."
+    )
 
 
 # --- /meta -------------------------------------------------------------------------------------------
@@ -559,6 +642,7 @@ class Vocabularies(Model):
     venue: list[Venue]
     track: list[Track]
     status: list[Status]
+    abstract_kind: list[AbstractKind] = Field(description="The `abstract_kind` values (decision-049).")
 
 
 class Limits(Model):
@@ -650,8 +734,13 @@ class MetaResponse(Versioned):
         "code can't open (another tokenizer, schema or Tantivy version) or one currently refused is left out"
     )
     text_fields: list[TextField]
-    filter_fields: list[FilterField]
-    values: Vocabularies
+    filter_fields: list[FilterField] = Field(
+        description="the filter fields the served index holds, in canonical order: `abstract_kind` only on an index "
+        "built since it existed (a query naming a field it lacks is 422 `FIELD_NOT_INDEXED`)"
+    )
+    values: Vocabularies = Field(
+        description="each filter field's whole vocabulary, as the query grammar accepts it"
+    )
     limits: Limits
 
 
@@ -671,6 +760,8 @@ class TrackCoverage(Model):
     indexed_accepted: int = Field(description="Of `records`, those with status `accepted`.")
     abstract_missing: int = Field(description=MISSING_COUNT_DOC)
     abstract_withheld: int = Field(description=WITHHELD_COUNT_DOC)  # TASK-136: additive
+    abstract_official: int = Field(description=OFFICIAL_COUNT_DOC)  # decision-049: additive
+    abstract_openalex: int = Field(description=OPENALEX_COUNT_DOC)  # decision-049: additive
     sources: list[Source] = Field(description="The sources the track's records came from (claim sources).")
     official_accepted: int | None = Field(
         description="The official accepted count for this venue, year and track; null where none is sourced."
@@ -692,6 +783,16 @@ class TrackCoverage(Model):
     within_gate: bool | None = Field(
         description="For a gated cell, whether |`delta`| is at most 1% of `official_accepted`; null otherwise."
     )
+    gate_note: str | None = Field(  # TASK-222: additive
+        description="For an ungated cell, why it has no official count to gate on (e.g. the official figure "
+        "counts a different set of papers); null for a gated cell and where no note is recorded."
+    )
+    gate_note_citation: str | None = Field(
+        description="Where `gate_note`'s facts come from: a URL or citation; null exactly when `gate_note` is."
+    )
+    gate_note_accessed: date | None = Field(  # gate C round 1: additive
+        description="When `gate_note_citation` was read; null exactly when `gate_note` is."
+    )
 
 
 class VenueYearCoverage(Model):
@@ -703,6 +804,8 @@ class VenueYearCoverage(Model):
     records: int
     abstract_missing: int = Field(description=MISSING_COUNT_DOC)
     abstract_withheld: int = Field(description=WITHHELD_COUNT_DOC)  # TASK-136: additive
+    abstract_official: int = Field(description=OFFICIAL_COUNT_DOC)  # decision-049: additive
+    abstract_openalex: int = Field(description=OPENALEX_COUNT_DOC)  # decision-049: additive
     unknown_track: int
     unknown_status: int
     cells: list[CoverageCell]
@@ -720,6 +823,8 @@ class CoverageTotals(Model):
     records: int  # = the index's document count
     abstract_missing: int = Field(description=MISSING_COUNT_DOC)
     abstract_withheld: int = Field(description=WITHHELD_COUNT_DOC)  # TASK-136: additive
+    abstract_official: int = Field(description=OFFICIAL_COUNT_DOC)  # decision-049: additive
+    abstract_openalex: int = Field(description=OPENALEX_COUNT_DOC)  # decision-049: additive
     unknown_track: int
     unknown_status: int
 

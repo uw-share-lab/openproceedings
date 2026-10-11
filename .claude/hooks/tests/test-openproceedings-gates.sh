@@ -234,6 +234,46 @@ check_cmd err "BOM + spaced [ MUST ], undispositioned" python3 "$RECORD" APPROVE
 : > "$TMP/empty.md"
 check_cmd err "empty dispositions file"               python3 "$RECORD" APPROVE "$TMP/empty.md"
 
+echo "== record-review.py --attest (a fake gh; --pr reads over REST, TASK-213)"
+mkdir -p "$TMP/ghbin"
+# the fake gh: logs each call; `api repos/o/r/pulls/5` prints $TMP/pr5.json; `pr view` fails as $GH_VIEW says
+cat > "$TMP/ghbin/gh" <<EOF
+#!/bin/sh
+printf '%s\n' "\$*" >> "$TMP/gh.log"
+case "\$1 \$2" in
+  "api repos/o/r/pulls/5") cat "$TMP/pr5.json"; exit 0 ;;
+  "api -X") exit 0 ;;
+  "pr view") echo "\$GH_VIEW" >&2; exit 1 ;;
+esac
+exit 3
+EOF
+chmod +x "$TMP/ghbin/gh"
+HEADSHA=$(g rev-parse HEAD)
+OTHERSHA=$(printf 'f%.0s' $(seq 40))
+# attest_case <want: ok|err> <PATCH sent: yes|no> <message (grep -E)> <label> <pr state|garbage> <pr head> [args...]
+attest_case() {
+  local want="$1" patch="$2" msg="$3" label="$4" state="$5" prhead="$6" got sent; shift 6
+  if [ "$state" = garbage ]; then printf 'not json' > "$TMP/pr5.json"
+  else printf '{"state":"%s","head":{"sha":"%s"},"body":"Summary"}' "$state" "$prhead" > "$TMP/pr5.json"; fi
+  : > "$TMP/gh.log"
+  if (cd "$REPO" && env PATH="$TMP/ghbin:$PATH" GH_VIEW="${GH_VIEW-}" python3 "$RECORD" APPROVE "$TMP/none.md" "$@" >"$TMP/attest.out" 2>&1); then got=ok; else got=err; fi
+  if grep -q '^api -X PATCH' "$TMP/gh.log"; then sent=yes; else sent=no; fi
+  if [ "$got" = "$want" ] && [ "$sent" = "$patch" ] && grep -Eq -- "$msg" "$TMP/attest.out"; then
+    pass=$((pass+1)); printf '  ok   %-24s %-60s -> %s\n' "script" "$label" "$got"
+  else fail=$((fail+1)); printf '  FAIL %-24s %-60s -> %s, PATCH %s: %s\n' "script" "$label" "$got" "$sent" "$(cat "$TMP/attest.out")"; fi
+}
+attest_case ok  yes "PR #5 body attested"              "--pr: an open PR at HEAD is attested"     open "$HEADSHA" --attest --pr 5 --repo o/r
+if grep -q "op-review: $HEADSHA APPROVE" "$TMP/gh.log" && grep -q '^api -X PATCH repos/o/r/pulls/5' "$TMP/gh.log"; then pass=$((pass+1)); echo "  ok   --pr: the PATCH carries the attestation for HEAD"
+else fail=$((fail+1)); echo "  FAIL --pr: no PATCH with the attestation: $(cat "$TMP/gh.log")"; fi
+attest_case err no  "head is f{10}, not HEAD"         "--pr: a PR at another head is refused"   open "$OTHERSHA" --attest --pr 5 --repo o/r
+attest_case err no  "is closed, not open"             "--pr: a closed PR is refused"            closed "$HEADSHA" --attest --pr 5 --repo o/r
+attest_case err no  "isn't a pull request"            "--pr: an answer that isn't a PR is refused" garbage "$HEADSHA" --attest --pr 5 --repo o/r
+GH_VIEW="no pull requests found for branch \"feat\"" attest_case ok no "no open PR for this branch yet" "no PR yet: told to attest after gh pr create" open "$HEADSHA" --attest
+GH_VIEW="GitHub GraphQL is not available from Claude Code sessions" attest_case err no "could not find this branch's PR .*--pr <n> --repo" "gh pr view failing otherwise is an error" open "$HEADSHA" --attest
+attest_case err no  "--pr needs --repo"               "--pr without --repo is refused"          open "$HEADSHA" --attest --pr 5
+attest_case err no  "only apply with --attest"        "--pr without --attest is refused"        open "$HEADSHA" --pr 5 --repo o/r
+attest_case err no  "--repo only applies with --pr"   "--repo without --pr is refused"          open "$HEADSHA" --attest --repo o/r
+
 echo "== protect-data-dir.sh"
 P=protect-data-dir.sh
 check $P block "Write into data/indexes/"             "$(payload_file Write "$REPO/data/indexes/abc/meta.json")"
@@ -541,6 +581,20 @@ if grep -q prettier "$TMP/npx.log"; then fail=$((fail+1)); echo "  FAIL prettier
 rm -f "$REPO/frontend/.prettierrc.json"; : > "$TMP/npx.log"
 payload_file Edit "$REPO/frontend/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
 if grep -q prettier "$TMP/npx.log"; then pass=$((pass+1)); echo "  ok   prettier runs when its config is unchanged"; else fail=$((fail+1)); echo "  FAIL prettier did not run with a clean config"; fi
+# the tools autofix and pre-push run load installed dependencies: none sees the GitHub token (decision-048, TASK-211)
+mkdir -p "$TMP/bin2" "$REPO/.venv/bin"
+printf '#!/bin/sh\necho "${GH_TOKEN-unset} ${GITHUB_TOKEN-unset} ${GH_CONFIG_DIR-none} $1" >> "%s/cred.log"\n' "$TMP" > "$TMP/bin2/npx"
+chmod +x "$TMP/bin2/npx"; cp "$TMP/bin2/npx" "$REPO/.venv/bin/ruff"; cp "$TMP/bin2/npx" "$TMP/bin2/make"
+printf 'x=1\n' > "$REPO/cred.py"; : > "$TMP/cred.log"
+payload_file Edit "$REPO/frontend/a.ts" | GH_TOKEN=probe-token GITHUB_TOKEN=probe-token PATH="$TMP/bin2:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+payload_file Edit "$REPO/cred.py" | GH_TOKEN=probe-token GITHUB_TOKEN=probe-token PATH="$TMP/bin2:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+if [ "$(grep -c '^unset unset /' "$TMP/cred.log")" = 4 ] && ! grep -q probe-token "$TMP/cred.log"; then pass=$((pass+1)); echo "  ok   autofix runs ruff, prettier and eslint without the GitHub token"
+else fail=$((fail+1)); echo "  FAIL autofix tools saw the token: $(cat "$TMP/cred.log")"; fi
+: > "$TMP/cred.log"
+( cd "$REPO" && GH_TOKEN=probe-token GITHUB_TOKEN=probe-token PATH="$TMP/bin2:$PATH" bash "$HOOKS/../../.githooks/pre-push" >/dev/null 2>&1 )
+if [ "$(grep -c '^unset unset /' "$TMP/cred.log")" = 2 ] && ! grep -q probe-token "$TMP/cred.log"; then pass=$((pass+1)); echo "  ok   pre-push runs make lint and make tooling without the GitHub token"
+else fail=$((fail+1)); echo "  FAIL pre-push's make saw the token: $(cat "$TMP/cred.log")"; fi
+rm -rf "$REPO/.venv" "$REPO/cred.py" "$REPO/__pycache__"   # py_compile writes __pycache__/cred.*.pyc
 rm -rf "$REPO/node_modules" "$REPO/frontend/eslint.config.js" "$REPO/frontend/a.ts"
 
 echo "== round-4 rows (git clean precision, arithmetic, heredoc edges)"

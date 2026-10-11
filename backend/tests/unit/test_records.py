@@ -12,7 +12,8 @@ import zlib
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from openproceedings import records
@@ -591,6 +592,28 @@ def test_a_claim_window_narrower_than_the_fetch_window_saves_a_record_like_cover
     assert facts.crawl_dates == crawl_dates(manifest)
 
 
+def test_an_archive_sources_window_is_its_capture_dates_like_coverage(data_dir: Path) -> None:
+    """Gate C round 1: `aaai_library` reads Internet Archive copies, so its window in a record is the range of their
+    capture times (`capture_window`, kind `archive_captures`), not when the harvest fetched them, as
+    `/coverage` shows it."""
+    from openproceedings.coverage import breakdown, crawl_dates
+
+    path = data_dir / "snapshots" / "snap" / "manifest.json"
+    harvest = {"from": "2026-10-10T00:00:00+00:00", "to": "2026-10-11T00:00:00+00:00"}
+    captures = {"from": "2016-03-01T12:00:00+00:00", "to": "2022-06-01T08:00:00+00:00"}
+    edit(path, sources={"openreview_v2": {"crawl_window": OWN_WINDOW},
+                        "aaai_library": {"fills": [], "crawl_window": harvest, "capture_window": captures}},
+         crawl_windows={"aaai_library": harvest})  # fmt: skip
+    facts = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+    assert facts.crawl_dates["aaai_library"] == captures
+    assert facts.crawl_dates_kind["aaai_library"] == "archive_captures"
+    assert facts.crawl_dates_kind["openreview_v2"] == "crawl"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    assert facts.crawl_dates == crawl_dates(manifest)
+    served = breakdown(manifest, "snap")["snapshot"]
+    assert served["crawl_dates_kind"] == facts.crawl_dates_kind
+
+
 @pytest.mark.parametrize("where", ["sources", "crawl_windows"])
 def test_a_source_named_star_is_refused_in_either_map(data_dir: Path, where: str) -> None:
     """`*` is the corpus-wide key, so no source may take it, as `coverage.crawl_dates` refuses too."""
@@ -812,3 +835,223 @@ def test_the_cli_says_the_scholar_dates_zone(store: RecordStore, kind: str, line
 
     saved = store.insert(fields(crawl_dates_kind={"*": kind}), IDS)
     assert _record_lines(saved)[1] == f"{line} · sources openreview_v2"
+
+
+# --- a drifted record's removed papers: each one's cause (TASK-227) --------------------------------------
+ALL_STATUSES = (
+    "status:(accepted OR rejected OR withdrawn OR desk_rejected OR unknown)"  # `status:*` doesn't parse
+)
+
+
+def held(**over: str | int) -> dict[str, str | int]:
+    """A paper's filter values on the replaying index: a default-eligible AAAI paper unless overridden."""
+    return {
+        "venue": "AAAI",
+        "year": 2024,
+        "track": "main",
+        "status": "accepted",
+        "abstract_kind": "none",
+        **over,
+    }
+
+
+@pytest.mark.parametrize(
+    ("q", "values", "cause", "field"),
+    [
+        ("trust", None, "not_in_index", None),  # absent from the replaying index, whatever the query
+        ("trust", held(track="iaai"), "track_changed", "track"),  # the default track filter doesn't admit it
+        ("trust", held(track="student_abstract"), "track_changed", "track"),
+        ("trust", held(), "still_eligible", None),  # every filter passes: its text or abstract changed
+        ("trust", held(track="position"), "still_eligible", None),
+        ("trust AND track:(main OR iaai)", held(track="iaai"), "still_eligible", None),  # the reader's tracks
+        ("trust AND track:(main OR iaai)", held(track="demo"), "track_changed", "track"),
+        ("trust NOT track:workshop", held(track="demo"), "still_eligible", None),  # a negated track clause
+        ("trust NOT track:workshop", held(track="workshop"), "track_changed", "track"),
+        ("trust AND track:main AND track:(main OR demo)", held(track="demo"), "track_changed", "track"),
+        ("trust OR track:demo", held(track="demo"), "track_changed", "track"),  # nested: the default applies
+        ("trust OR track:demo", held(), "still_eligible", None),
+        # status is a default clause too (review I-1): withdrawn, rejected, desk_rejected fail it
+        ("trust", held(status="withdrawn"), "status_changed", "status"),
+        ("trust", held(status="desk_rejected"), "status_changed", "status"),
+        (f"trust {ALL_STATUSES}", held(status="withdrawn"), "still_eligible", None),  # the reader's statuses
+        ("trust NOT status:rejected", held(status="withdrawn"), "still_eligible", None),
+        ("trust NOT status:rejected", held(status="rejected"), "status_changed", "status"),
+        ("trust", held(track="iaai", status="withdrawn"), "track_changed", "track"),  # track takes precedence
+        # any other top-level filter that now fails is `filter_changed`, naming the field
+        ("trust abstract_kind:official", held(abstract_kind="openalex"), "filter_changed", "abstract_kind"),
+        ("trust abstract_kind:official", held(abstract_kind="official"), "still_eligible", None),
+        (
+            "trust abstract_kind:official",
+            held(abstract_kind="none", status="rejected"),
+            "status_changed",
+            "status",
+        ),
+        ("trust year:2020..2023", held(), "filter_changed", "year"),
+        ("trust venue:AIES", held(), "filter_changed", "venue"),
+        # a field the replaying index has no value for (schema 3 holds no abstract_kind) fails nothing
+        (
+            "trust abstract_kind:official",
+            {k: v for k, v in held().items() if k != "abstract_kind"},
+            "still_eligible",
+            None,
+        ),
+    ],
+)
+def test_removal_cause(q: str, values: dict[str, str | int] | None, cause: str, field: str | None) -> None:
+    parsed = parse(q, "native", TOKENIZER_VERSION)
+    assert parsed.errors == []
+    assert records.removal_cause(values, records.filter_clauses(parsed)) == (cause, field)
+
+
+def test_removal_tally_counts_every_cause_zero_included() -> None:
+    found = {
+        "a": records.Removal("iaai", "accepted", "track_changed", "track"),
+        "b": records.Removal(None, None, "not_in_index", None),
+        "c": records.Removal("demo", "accepted", "track_changed", "track"),
+        "d": records.Removal("main", "withdrawn", "status_changed", "status"),
+    }
+    assert records.removal_tally(found) == {
+        "track_changed": 2,
+        "status_changed": 1,
+        "filter_changed": 0,
+        "not_in_index": 1,
+        "still_eligible": 0,
+    }
+    assert list(records.removal_tally({})) == list(records.REMOVAL_CAUSES)
+
+
+class _CountingEngine:
+    """A replaying engine that counts `filter_values` calls (the memo's work)."""
+
+    def __init__(self, index_version: str) -> None:
+        self.index_version = index_version
+        self.calls = 0
+
+    def filter_values(self, ids: list[str]) -> dict[str, dict[str, str | int]]:
+        self.calls += 1
+        return {i: held() for i in ids}
+
+
+def _replay_on(engine: _CountingEngine, removed: tuple[str, ...] | None) -> records.Replay:
+    parsed = parse("trust", "native", TOKENIZER_VERSION)
+    return cast(records.Replay, SimpleNamespace(engine=engine, parsed=parsed, removed=removed))
+
+
+def test_the_removal_memo_works_out_a_records_causes_once_per_index() -> None:
+    """Gate C round 1: `GET /records/{id}/diff` pages a long removed list; the causes are worked out once per
+    (record id, index_version), the same answer every page, and again on another index."""
+    memo = records.RemovalMemo()
+    one, two = _CountingEngine("aaaaaaaaaaaa"), _CountingEngine("bbbbbbbbbbbb")
+    first = memo.get("rec", _replay_on(one, ("x", "y")))
+    assert memo.get("rec", _replay_on(one, ("x", "y"))) == first and one.calls == 1
+    assert first is not None and first[1]["still_eligible"] == 2
+    memo.get("rec", _replay_on(two, ("x", "y")))
+    memo.get("other", _replay_on(one, ("x",)))
+    assert two.calls == 1 and one.calls == 2
+    assert memo.get("rec", _replay_on(one, None)) is None  # refused: nothing compared, nothing kept
+
+
+def test_the_removal_memo_is_bounded_by_the_ids_it_holds() -> None:
+    """Each entry costs its removed ids plus one (gate C round 2), least recently used dropped first."""
+    memo = records.RemovalMemo(max_ids=5)
+    engine = _CountingEngine("aaaaaaaaaaaa")
+    memo.get("a", _replay_on(engine, ("1", "2")))  # costs 3
+    memo.get("b", _replay_on(engine, ("3",)))  # costs 2: 5 held
+    memo.get("a", _replay_on(engine, ("1", "2")))  # a used last: b goes first
+    memo.get("c", _replay_on(engine, ("4",)))  # 7 > 5: b dropped
+    assert engine.calls == 3
+    memo.get("a", _replay_on(engine, ("1", "2")))
+    assert engine.calls == 3  # a kept
+    memo.get("b", _replay_on(engine, ("3",)))
+    assert engine.calls == 4  # b was dropped
+
+
+def test_an_entry_over_the_bound_is_answered_and_refused_never_flushing_the_others() -> None:
+    """Gate C round 2 (qa nit): an entry costing more than the bound is not stored, so it never evicts the
+    entries already kept."""
+    memo = records.RemovalMemo(max_ids=5)
+    engine = _CountingEngine("aaaaaaaaaaaa")
+    memo.get("a", _replay_on(engine, ("1", "2")))
+    big = ("5", "6", "7", "8", "9")  # costs 6 > 5
+    assert memo.get("d", _replay_on(engine, big)) is not None
+    memo.get("d", _replay_on(engine, big))
+    assert engine.calls == 3  # answered twice, never kept
+    memo.get("a", _replay_on(engine, ("1", "2")))
+    assert engine.calls == 3  # a is still answered from the memo
+
+
+def test_entries_that_removed_nothing_still_count_against_the_bound() -> None:
+    """Gate C round 2 (performance): an unchanged record's entry (nothing removed) costs one, so more than
+    `max_ids` of them stay bounded instead of growing with every record asked for."""
+    memo = records.RemovalMemo(max_ids=3)
+    engine = _CountingEngine("aaaaaaaaaaaa")
+    for i in range(10):
+        assert memo.get(f"r{i}", _replay_on(engine, ())) is not None
+    assert len(memo._held) <= 3
+    capped = records.RemovalMemo(max_ids=100, max_entries=2)  # and the entry cap holds however cheap they are
+    for i in range(5):
+        capped.get(f"r{i}", _replay_on(engine, ()))
+    assert list(capped._held) == [("r3", "aaaaaaaaaaaa"), ("r4", "aaaaaaaaaaaa")]
+
+
+def test_filter_clauses_of_a_single_node_tree() -> None:
+    """An effective tree that is one node, not an `And` (the defaults always make one today): a lone filter is
+    its one clause, a lone term has none."""
+    from openproceedings.query.ast import Filter, Term
+
+    lone = Filter(field="track", values=("main",), span=(0, 10))
+    assert records.filter_clauses(cast(Any, SimpleNamespace(effective_ast=lone))) == (lone,)
+    assert (
+        records.filter_clauses(cast(Any, SimpleNamespace(effective_ast=Term(token="trust", span=(0, 5)))))
+        == ()
+    )
+    assert records.filter_clauses(cast(Any, SimpleNamespace(effective_ast=None))) == ()
+
+
+class _KindEngine:
+    """An engine stub for `OpenAlexCounts`: its own index_version, schema 4's fields, and `count_value` only (a
+    call to anything else, `filter_values` included, fails the test)."""
+
+    filter_fields = ("venue", "year", "track", "status", "abstract_kind")
+
+    def __init__(self, version: str, openalex: set[str]) -> None:
+        self.index_version, self.openalex, self.calls = version, openalex, 0
+
+    def count_value(self, ids: Any, field: str, value: str) -> int:
+        assert (field, value) == ("abstract_kind", "openalex")
+        self.calls += 1
+        return len(set(ids) & self.openalex)
+
+
+def _rec(record_id: str, version: str, ids: tuple[str, ...]) -> Any:
+    return SimpleNamespace(record_id=record_id, index_version=version, ids=ids)
+
+
+def test_openalex_counts_read_one_field_and_are_keyed_by_record_and_index() -> None:
+    """Gate C round 3: the count reads `abstract_kind` alone (`count_value`), is kept per (record id,
+    index_version), and is null on any engine but the record's own."""
+    from openproceedings.api.records import OpenAlexCounts
+
+    counts = OpenAlexCounts()
+    a, b = _KindEngine("aaaaaaaaaaaa", {"x", "y"}), _KindEngine("bbbbbbbbbbbb", {"x"})
+    ids = ("x", "y", "z")
+    assert counts.of(_rec("r", a.index_version, ids), a) == 2
+    assert counts.of(_rec("r", a.index_version, ids), a) == 2 and a.calls == 1  # kept
+    assert counts.of(_rec("r", b.index_version, ids), b) == 1  # same id, another index: its own count
+    assert counts.of(_rec("r", a.index_version, ids), b) is None  # not the record's index
+    assert counts.of(_rec("r", a.index_version, None), a) is None  # no stored ids
+
+
+def test_openalex_counts_keep_at_most_their_cap_and_answer_the_same(monkeypatch: pytest.MonkeyPatch) -> None:
+    from openproceedings.api import records as api_records
+
+    assert (
+        api_records.MAX_OPENALEX_COUNTS == 10_000 and records.RemovalMemo().max_entries == 10_000
+    )  # the bounds
+    monkeypatch.setattr(api_records, "MAX_OPENALEX_COUNTS", 3)
+    counts = api_records.OpenAlexCounts()
+    engine = _KindEngine("aaaaaaaaaaaa", {"x"})
+    first = [counts.of(_rec(f"r{i}", engine.index_version, ("x",) * (i % 2)), engine) for i in range(6)]
+    assert len(counts.kept) == 3 and list(counts.kept) == [(f"r{i}", engine.index_version) for i in (3, 4, 5)]
+    again = [counts.of(_rec(f"r{i}", engine.index_version, ("x",) * (i % 2)), engine) for i in range(6)]
+    assert again == first == [0, 1, 0, 1, 0, 1]

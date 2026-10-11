@@ -11,6 +11,7 @@ import pytest
 from openproceedings import cli
 from openproceedings.ingest import snapshot as snap
 from openproceedings.ingest import status_check as sc
+from openproceedings.ingest.dedup import PRECEDENCE
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.statuses import EVERY_STATUS, SOURCE_STATUSES
 
@@ -104,7 +105,20 @@ def test_cells_come_in_venue_year_status_order() -> None:
 
 def test_every_claim_source_has_a_row() -> None:
     for source in SOURCE_STATUSES:
-        assert sc.unexpected_statuses([paper("SyntheticA1", source=source)]) == []
+        if source in PRECEDENCE["status"]:
+            assert sc.unexpected_statuses([paper("SyntheticA1", source=source)]) == []
+    # an official ICML page (TASK-206) or FAccT page claims only an abstract, on a dblp or Crossref record, and so do
+    # OpenAlex and an archived aaai.org page (TASK-232): none answers a status
+    assert set(SOURCE_STATUSES) - set(PRECEDENCE["status"]) == {
+        "icml_site",
+        "facct_site",
+        "openalex",
+        "aaai_library",
+    }
+    accepted = (("accepted",), ("accepted",))
+    assert SOURCE_STATUSES["icml_site"] == SOURCE_STATUSES["dblp"] == accepted
+    assert SOURCE_STATUSES["facct_site"] == SOURCE_STATUSES["crossref"] == accepted
+    assert SOURCE_STATUSES["openalex"] == ((), ())  # an abstract fill (milestone C): no status at all
 
 
 # --- the build ----------------------------------------------------------------------------------------------

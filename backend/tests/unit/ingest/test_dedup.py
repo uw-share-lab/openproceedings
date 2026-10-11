@@ -12,9 +12,11 @@ from hypothesis import example, given
 from hypothesis import strategies as st
 from openproceedings.ingest import urls
 from openproceedings.ingest.dedup import (
+    AS_SUBMITTED,
     CONFLICT_FIELDS,
     MIN_ABSTRACT_TOKENS,
     PRECEDENCE,
+    SUBMISSION_NOTE,
     Attribution,
     Conflict,
     Merge,
@@ -39,8 +41,9 @@ def nips(n: int) -> str:
     return f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{H[n]}-Abstract-Conference.html"
 
 
-def self_url(native: str, year: int) -> str | None:
-    """The proceedings URL a proceedings-id record names itself by (dedup requires one)."""
+def self_url(native: str, year: int, venue: str = "ICML") -> str | None:
+    """The proceedings URL a proceedings-id record names itself by (dedup requires one); `venue` picks a `dblp-`
+    key's dblp page (ICML's or AAAI's)."""
     prefix, _, rest = native.partition("-")
     if prefix == "nips" and rest.endswith(("-round1", "-round2")):  # the 2021 D&B host (TASK-118)
         sha, _, rnd = rest.partition("-")
@@ -52,6 +55,12 @@ def self_url(native: str, year: int) -> str | None:
     if prefix == "pmlr":
         volume, _, key = rest.partition("-")
         return f"https://proceedings.mlr.press/{volume}/{key}.html"
+    if prefix == "dblp":
+        return f"https://dblp.org/rec/conf/{'aaai' if venue == 'AAAI' else 'icml'}/{rest}"
+    if prefix == "doi":  # an ACM paper of an acm_proceedings.toml row (FAccT 2019 on, AIES 2018-2023)
+        return f"https://doi.org/10.1145/{rest}"
+    if prefix == "ojs":  # article ids are unique across the site's journals: any table journal names it
+        return f"https://ojs.aaai.org/index.php/AAAI/article/view/{rest}"
     return None
 
 
@@ -72,7 +81,7 @@ def paper(
 ) -> PaperRecord:
     """A record whose fields are exactly what its claims say (as every importer builds them); a
     proceedings-id record names itself in `urls.proceedings` unless the caller says otherwise."""
-    extra.setdefault("urls_proceedings", self_url(native, year))
+    extra.setdefault("urls_proceedings", self_url(native, year, venue))
     values: dict[str, Any] = {"title": title, "venue": venue, "year": year, "track": track, "status": status,
                               "abstract": abstract, **{k.replace("urls_", "urls.", 1): v for k, v in extra.items()}}  # fmt: skip
     claims = [
@@ -84,10 +93,10 @@ def paper(
     return record
 
 
-def own_page(native: str, year: int) -> str:
+def own_page(native: str, year: int, venue: str = "ICML") -> str:
     """A RIS abstract claim's evidence as `ingest/ris.py` writes it when scholarmend read the abstract from the
     record's own page: its proceedings page, or its forum."""
-    page = self_url(native, year)
+    page = self_url(native, year, venue)
     return (
         f"scholarmend:proceedings_page {page}" if page else f"scholarmend:openreview_api openreview:{native}"
     )
@@ -157,11 +166,15 @@ def test_a_decomposed_title_keys_as_its_composed_form(title: str, key: str) -> N
 
 
 def test_the_precedence_table_is_decision_005() -> None:
-    text = ("openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris")
+    text = ("openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "dblp", "icml_site",
+            "ojs", "aaai_library", "crossref", "facct_site", "ris", "openalex")  # fmt: skip
     assert PRECEDENCE["status"] == (
         "iclr_archive",
         "neurips_proceedings",
         "pmlr",
+        "dblp",  # decision-047: ICML 1988-2012, where no other source holds the venue-year
+        "ojs",  # decision-049: AAAI, AIES, IASEAI, where no other source holds the venue-year
+        "crossref",  # decision-049: FAccT 2019+, AIES 2018-2023
         "openreview_v2",
         "openreview_v1",
         "ris",
@@ -1119,6 +1132,15 @@ def test_attribution_names_the_site_and_its_page(
     assert attribution(None, [claim], forum=forum, proceedings=proceedings, native=NATIVE) is None
 
 
+def test_an_ojs_abstract_is_credited_to_the_papers_article_page_not_the_oai_page() -> None:
+    """decision-049: the claim's url is the OAI ListRecords page (a token url that expires); the credit links the
+    record's numeric article url."""
+    article = "https://ojs.aaai.org/index.php/AAAI/article/view/25561"
+    oai = "https://ojs.aaai.org/index.php/AAAI/oai?verb=ListRecords&resumptionToken=abc"
+    got = attribution("T", [_abstract("ojs", "T", oai)], forum=None, proceedings=article, native="ojs-25561")
+    assert got == Attribution("ojs", "ojs", article)
+
+
 def _via(page: str) -> Claim:
     return _abstract("ris", "T", evidence=f"scholarmend:proceedings_page {page}")
 
@@ -1148,6 +1170,56 @@ def test_when_the_evidence_and_the_proceedings_link_name_different_sites_the_evi
     assert both == Attribution("ris", "neurips_proceedings", None)
     agree = attribution("T", [_via(NIPS_CUT)], forum=None, proceedings=NIPS_PAGE, native=NATIVE)
     assert agree == Attribution("ris", "neurips_proceedings", NIPS_PAGE)  # same site: the record's link
+
+
+# --- a submission-time abstract (TASK-210) ----------------------------------------------------------------------
+CAPTURE_98 = (
+    "https://web.archive.org/web/19991009084141id_/http://www.cs.wisc.edu:80/icml98/papers/paper2.html"
+)
+SUBMITTED_EVIDENCE = (
+    "official ICML 1998 page http://www.cs.wisc.edu:80/icml98/papers/paper2.html, Internet Archive capture "
+    f"{CAPTURE_98}: {AS_SUBMITTED}; the page's contact details are not kept"
+)
+
+
+def test_an_icml_submission_pages_abstract_says_it_is_as_submitted() -> None:
+    """The claim's evidence (as `icml_sites._evidence` writes it for 1997 and 1998) is read when the snapshot is
+    loaded: the attribution says so, and its note is the one sentence the API and every export carry."""
+    got = attribution("T", [_abstract("icml_site", "T", CAPTURE_98, SUBMITTED_EVIDENCE)], forum=None,
+                      proceedings=None, native="dblp-X98")  # fmt: skip
+    assert got == Attribution("icml_site", "icml_site", CAPTURE_98, as_submitted=True)
+    assert got.note == SUBMISSION_NOTE
+    assert SUBMISSION_NOTE.startswith("Submission-time abstract: ") and "published paper's" in SUBMISSION_NOTE
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        # another year's official page (2001-2007): as published, no note
+        _abstract("icml_site", "T", CAPTURE_98, "official ICML 2003 page http://example.org/a.html"),
+        _abstract("icml_site", "T", CAPTURE_98),  # no evidence at all
+        # the words in another source's evidence don't make its abstract a submission's: only `icml_site` says so
+        _abstract("pmlr", "T", PMLR_PAGE, SUBMITTED_EVIDENCE),
+        _abstract("ris", "T", evidence=f"scholarmend:proceedings_page {PMLR_PAGE} {AS_SUBMITTED}"),
+    ],
+)
+def test_any_other_abstract_has_no_note(claim: Claim) -> None:
+    got = attribution("T", [claim], forum=None, proceedings=PMLR_PAGE, native="pmlr-v162-a22a")
+    assert got is not None and not got.as_submitted and got.note is None
+
+
+def test_the_note_follows_the_claim_precedence_took_the_abstract_from() -> None:
+    """A submission page's claim beside a higher-ranked one with the same text: the abstract is credited to the
+    higher one, so no note; with different text, the record's abstract decides which claim is credited."""
+    submitted = _abstract("icml_site", "T", CAPTURE_98, SUBMITTED_EVIDENCE)
+    pmlr = _abstract("pmlr", "T", PMLR_PAGE)
+    both = attribution("T", [submitted, pmlr], forum=None, proceedings=PMLR_PAGE, native="pmlr-v162-a22a")
+    assert both == Attribution("pmlr", "pmlr", PMLR_PAGE) and both.note is None
+    other = _abstract("pmlr", "Other text.", PMLR_PAGE)
+    credited = attribution(
+        "T", [submitted, other], forum=None, proceedings=PMLR_PAGE, native="pmlr-v162-a22a"
+    )
+    assert credited is not None and credited.note == SUBMISSION_NOTE
 
 
 # --- imported copies (TASK-179) -------------------------------------------------------------------------------
@@ -1738,3 +1810,64 @@ def test_a_title_partner_set_aside_by_the_track_rule_still_keeps_the_title_merge
     assert [r.id for r in result.records] == [workshop.id, own.id]
     assert rules(result) == [(own.id, copy.id, "title_venue_year")]
     assert not_merged(result) == [("title_key", "track_not_merged")]
+
+
+# --- over-yielding (TASK-201): decision-045 asks that NO title partner keep the abstract --------------------------
+
+
+def test_one_title_partner_keeping_the_abstract_keeps_the_title_merge_whatever_the_others_keep() -> None:
+    """The main note keeps the import's abstract, a same-title workshop note of another forum keeps another: the
+    import is the main paper's, merged on its title (the workshop note set aside). Yielding because some partner
+    lacks the abstract would move the merge to step 3: the same record, by the wrong rule."""
+    main = paper("AbCd1234", "One", abstract=LONG, **ICLR)
+    workshop = paper("EfGh5678", "One", abstract=OTHER, track="workshop", **ICLR)
+    copy = imported(f"iclr-{H[1]}", "One", abstract=LONG, **ICLR)
+    result = dedup([main, workshop, copy])
+    assert [r.id for r in result.records] == [main.id, workshop.id]
+    assert rules(result) == [(main.id, copy.id, "title_venue_year")]
+
+
+def test_a_lone_title_partner_keeping_the_abstract_keeps_the_title_merge() -> None:
+    """The partner is itself the crawled holder of the import's abstract: nothing names another paper."""
+    note = paper("AbCd1234", "One", abstract=LONG, **ICLR)
+    copy = imported(f"iclr-{H[1]}", "One", abstract=LONG, **ICLR)
+    assert rules(dedup([note, copy])) == [(note.id, copy.id, "title_venue_year")]
+
+
+def test_two_dblp_records_sharing_a_title_are_never_merged() -> None:
+    """decision-047: two dblp papers of one ICML year with the same title key are two proceedings ids: kept apart,
+    with a conflicts.csv row, never folded."""
+    a = paper("dblp-Smith09", "Trust in AI", source="dblp", venue="ICML", year=2009)
+    b = paper("dblp-Smith09b", "trust in AI!", source="dblp", venue="ICML", year=2009)
+    result = dedup([a, b])
+    assert sorted(r.id for r in result.records) == ["op:icml:2009:dblp-Smith09", "op:icml:2009:dblp-Smith09b"]
+    assert not result.merges and result.conflicts
+
+
+def test_two_ojs_records_sharing_a_title_stay_apart_and_never_join_another_venue() -> None:
+    """decision-049: two ojs papers of one AAAI year with one title key are two proceedings ids (a conflicts.csv
+    `ambiguous_not_merged` row); an ojs AAAI paper and a PMLR ICML paper of the same year and title are two
+    venues, never compared."""
+    a = paper("ojs-101", "Trust in AI", source="ojs", venue="AAAI", year=2024)
+    b = paper("ojs-102", "trust in AI!", source="ojs", venue="AAAI", year=2024)
+    aies = paper("ojs-103", "Trust in AI", source="ojs", venue="AIES", year=2024)
+    icml = paper("pmlr-v235-key1", "Trust in AI", source="pmlr", venue="ICML", year=2024)
+    result = dedup([a, b, aies, icml])
+    assert sorted(r.id for r in result.records) == sorted(r.id for r in (a, b, aies, icml))
+    assert not result.merges
+    assert [(c.field, c.resolution) for c in result.conflicts] == [("title_key", "ambiguous_not_merged")]
+
+
+@pytest.mark.parametrize(
+    ("source", "url"),
+    [("crossref", "https://api.crossref.org/works/10.1145/3593013.3594011"),
+     ("facct_site", "https://facctconference.org/static/docs/facct2025-final.csv")],
+)  # fmt: skip
+def test_an_acm_abstract_is_credited_to_the_doi_link_never_an_api_or_listing_url(
+    source: str, url: str
+) -> None:
+    doi = "https://doi.org/10.1145/3593013.3594011"
+    got = attribution(
+        "T", [_abstract(source, "T", url)], forum=None, proceedings=doi, native="doi-3593013.3594011"
+    )
+    assert got == Attribution(source, source, doi)

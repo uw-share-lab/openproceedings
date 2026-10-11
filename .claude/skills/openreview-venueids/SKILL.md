@@ -1,6 +1,6 @@
 ---
 name: openreview-venueids
-description: Every known OpenReview content.venueid form for NeurIPS, ICLR and ICML (main, Datasets & Benchmarks, workshops including satellite-city paths, position, Tiny Papers, Blogposts, and the Rejected/Withdrawn/Desk_Rejected submission suffixes) with the track and status each maps to, plus the parsing rules, which forms were verified live (2026-09-27) and why a v1 venueid never gives status. Use when writing or reviewing the venueid parser in backend/src/openproceedings/ingest/classify.py or its table test, or when a crawl logs an unparseable venueid.
+description: Every known OpenReview content.venueid form for NeurIPS, ICLR and ICML (OpenReview hosts no AAAI, AIES or IASEAI 2026 papers: those come from ojs.aaai.org, so none of their venues has a venueid; main, Datasets & Benchmarks, workshops including satellite-city paths, position, Tiny Papers, Blogposts, and the Rejected/Withdrawn/Desk_Rejected submission suffixes) with the track and status each maps to, plus the parsing rules, which forms were verified live (2026-09-27) and why a v1 venueid never gives status. Use when writing or reviewing the venueid parser in backend/src/openproceedings/ingest/classify.py or its table test, or when a crawl logs an unparseable venueid.
 ---
 
 # OpenReview venueid forms (spec 01 §Track taxonomy)

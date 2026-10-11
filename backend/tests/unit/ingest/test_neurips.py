@@ -21,7 +21,12 @@ from openproceedings.ingest.dedup import dedup
 from openproceedings.ingest.record import Claim, PaperRecord
 from openproceedings.ingest.snapshot import build
 from openproceedings.ingest.sources import neurips
-from openproceedings.ingest.sources.common import MinerError, titles_match
+from openproceedings.ingest.sources.common import (
+    MinerError,
+    pdf_codes_evidence,
+    repair_pdf_codes,
+    titles_match,
+)
 from openproceedings.ingest.sources.crawl import ingest_neurips, load_crawls
 from openproceedings.ingest.sources.html import MAX_DEPTH, HTMLBudgetError, text_of, unescape
 from openproceedings.ingest.sources.http import canonical
@@ -106,6 +111,105 @@ def test_2013_listing_gives_accepted_main_records_with_their_evidence(tmp_path: 
     assert (report.stated, report.listed, report.records, report.count_ok) == (360, 2, 2, False)  # trimmed
     assert (report.abstract_missing, report.page_missing, report.abstract_title_mismatch) == (1, 1, 0)
     assert report.role == "primary" and dict(report.tracks) == {"main": 2}
+
+
+A87, B87 = "03004620ea802b9118dd44d69f07af56", "0316d8d63a0c252a3ec57921d7d2429b"
+Y87 = "neurips/1987/year-index.json"
+ABS87 = "neurips/1987/abstract.json"
+
+
+def test_1987_the_first_nips_is_mined_like_any_token_less_year(tmp_path: Path) -> None:
+    """decision-047 (TASK-204): the crawl starts at the first NIPS. The recorded 1987 year and abstract pages
+    have the shape of 2013's (`paper-list`, `paper-count`, token-less `-Abstract.html` links), so the same
+    host-and-year rule gives `main`, and the abstract page's citation_title matches its listing as recorded."""
+    cache = cache_of(tmp_path)
+    seed_fixture(cache, "neurips", Y87)
+    seed_fixture(cache, "neurips", ABS87, at=T1)
+    seed(cache, "neurips", neurips_abs(1987, B87), "", status=404, at=T1)
+    result = mine(cache, 1987)
+    records = by_id(result.records)
+    a, b = records[f"op:neurips:1987:nips-{A87}"], records[f"op:neurips:1987:nips-{B87}"]
+    assert {(r.venue, r.year, r.track, r.status) for r in (a, b)} == {("NeurIPS", 1987, "main", "accepted")}
+    assert (a.title, a.abstract) == ("Synthetic title 1", "Synthetic abstract 5")
+    assert a.authors == ("Synthetic Author 2", "Synthetic Author 3")
+    assert a.urls.pdf == f"https://{MAIN}/paper_files/paper/1987/file/{A87}-Paper.pdf"
+    assert a.venue_name == "Conference on Neural Information Processing Systems (NIPS 1987)"
+    assert (
+        claim(a, "track").evidence
+        == "proceedings.neurips.cc 1987: no track token, so the main track (host and year)"
+    )
+    assert b.abstract is None
+    [report] = result.reports
+    assert (report.stated, report.listed, report.records, report.role) == (90, 2, 2, "primary")
+    assert (report.abstract_missing, report.page_missing) == (1, 1)
+
+
+def mine_1987_with(tmp_path: Path, abstract: str) -> neurips.YearResult:
+    """Derived case: the recorded 1987 abstract page with its (scrubbed) abstract text replaced."""
+    cache = cache_of(tmp_path)
+    seed_fixture(cache, "neurips", Y87)
+    seed_fixture(cache, "neurips", ABS87, edit=lambda t: t.replace("Synthetic abstract 5", abstract), at=T1)
+    seed(cache, "neurips", neurips_abs(1987, B87), "", status=404, at=T1)
+    return mine(cache, 1987)
+
+
+@pytest.mark.parametrize(
+    "placeholder", ["Abstract Unavailable", "  abstract   unavailable ", "Abstract Missing"]
+)
+def test_an_old_pages_placeholder_is_no_abstract(tmp_path: Path, placeholder: str) -> None:
+    """NeurIPS 1987-2003 abstract pages show `Abstract Unavailable` where they have none (50 in the 2026-10-06
+    cache by 2003; decision-047): the record has no abstract, counted as missing, never a searchable placeholder."""
+    result = mine_1987_with(tmp_path, placeholder)
+    a = by_id(result.records)[f"op:neurips:1987:nips-{A87}"]
+    assert a.abstract is None and a.claims("abstract") == ()
+    [report] = result.reports
+    assert (report.abstract_missing, report.page_missing, report.abstract_short) == (2, 1, 0)
+
+
+def test_pdf_extraction_codes_are_repaired_and_counted(tmp_path: Path) -> None:
+    """`(cid:173)` is the extractor's soft hyphen at a line break: the word is joined again; any other `(cid:N)` is a
+    lost glyph and becomes a space (decision-047). The claim's evidence and the listing say so."""
+    text = "Unsu(cid:173) pervised learning of princi(cid:173)ples with (cid:3) marks and enough words here."
+    result = mine_1987_with(tmp_path, text)
+    a = by_id(result.records)[f"op:neurips:1987:nips-{A87}"]
+    assert a.abstract == "Unsupervised learning of principles with marks and enough words here."
+    assert claim(a, "abstract").evidence == (
+        "p.paper-abstract (citation_title matches the listing) (3 PDF-extraction (cid:N) codes repaired)"
+    )
+    [report] = result.reports
+    assert (report.abstract_pdf_codes, report.abstract_short) == (1, 0)
+    assert report.to_manifest()["abstract_pdf_codes"] == 1
+
+
+@pytest.mark.parametrize(
+    ("raw", "text", "codes"),
+    [("a(cid:3)b c", "a b c", 1), ("princi(cid:173)\n  ples", "principles", 1), ("no codes", "no codes", 0),
+     ("(cid:173)(cid:12)x", " x", 2)],
+)  # fmt: skip
+def test_repair_pdf_codes(raw: str, text: str, codes: int) -> None:
+    assert repair_pdf_codes(raw) == (text, codes)
+
+
+def test_the_codes_note_counts_one_and_many() -> None:
+    assert pdf_codes_evidence("e", 0) == "e"
+    assert pdf_codes_evidence("e", 1) == "e (1 PDF-extraction (cid:N) code repaired)"
+    assert pdf_codes_evidence("e", 2) == "e (2 PDF-extraction (cid:N) codes repaired)"
+
+
+@pytest.mark.parametrize(("words", "short"), [(4, 1), (5, 0)])
+def test_short_means_fewer_than_five_words(tmp_path: Path, words: int, short: int) -> None:
+    result = mine_1987_with(tmp_path, " ".join(["word"] * words))
+    assert result.reports[0].abstract_short == short
+
+
+def test_a_short_abstract_is_kept_and_counted(tmp_path: Path) -> None:
+    """A fragment the extractor left (`Advances`, an author's name) is the page's text: kept, never guessed away, and
+    counted (`abstract_short`, fewer than 5 words) so a reviewer can see it."""
+    result = mine_1987_with(tmp_path, "Leslie Pack Kaelbling")
+    assert by_id(result.records)[f"op:neurips:1987:nips-{A87}"].abstract == "Leslie Pack Kaelbling"
+    [report] = result.reports
+    assert report.abstract_short == 1 and report.to_manifest()["abstract_short"] == 1
+    assert "abstract_pdf_codes" not in report.to_manifest()  # listed only when there are any
 
 
 def test_an_abstract_is_taken_only_when_citation_title_matches(tmp_path: Path) -> None:
@@ -498,7 +602,7 @@ def test_an_unpublished_year_and_one_before_the_window_are_refused(tmp_path: Pat
         ingest_neurips([2026], cache_of(tmp_path), transport=t, min_interval=0)
     assert e.value.reason == "no_listing"
     with pytest.raises(MinerError) as e:
-        ingest_neurips([2012], cache_of(tmp_path), transport=t, min_interval=0)
+        ingest_neurips([1986], cache_of(tmp_path), transport=t, min_interval=0)
     assert e.value.reason == "before_window"
 
 
@@ -620,12 +724,14 @@ def test_a_listed_title_with_a_control_character_keeps_its_paper() -> None:
     t0 = datetime(2026, 9, 29, tzinfo=UTC)
     index, page = Page(listing, 200, "", t0), Page(url, 404, "", t0)
     entry = neurips.Entry(url, "Induc\x02tive Trust", ("A One",))
-    record, _ = neurips._record(2024, native, entry, "main", "track token Conference", listing, index, page)
+    record, _, _ = neurips._record(
+        2024, native, entry, "main", "track token Conference", listing, index, page
+    )
     assert record.title == "Induc tive Trust"
     assert (
         claim(record, "title").evidence == f"year index {listing} (1 control character replaced by a space)"
     )
-    clean, _ = neurips._record(2024, native, neurips.Entry(url, "Inductive Trust", ("A One",)), "main",
+    clean, _, _ = neurips._record(2024, native, neurips.Entry(url, "Inductive Trust", ("A One",)), "main",
                                "track token Conference", listing, index, page)  # fmt: skip
     assert claim(clean, "title").evidence == f"year index {listing}"
 
@@ -644,10 +750,42 @@ def test_a_page_abstract_with_a_control_character_is_imported_with_a_space() -> 
     )
     index, page = Page(listing, 200, "", t0), Page(url, 200, html, t0)
     entry = neurips.Entry(url, "Inductive Trust", ("A One",))
-    record, missing = neurips._record(
+    record, missing, cleaned = neurips._record(
         2024, native, entry, "main", "track token Conference", listing, index, page
     )
-    assert (record.abstract, missing) == ("Quanti fying trust", None)
+    assert (record.abstract, missing, cleaned.spaced, cleaned.pdf_codes) == ("Quanti fying trust", None, 2, 0)
     assert claim(record, "abstract").evidence == (
         "p.paper-abstract (citation_title matches the listing) (2 control characters replaced by a space)"
     )
+
+
+def test_a_listing_counts_the_abstracts_that_lost_a_control_character(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """TASK-199 (decision-044): from the miner's own count, in the report, its manifest when above 0 and the
+    listing's done line; never a WARNING (the abstract is kept). A listing with none keeps its manifest shape."""
+    cache = cache_of(tmp_path)
+    seed_fixture(cache, "neurips", Y13)
+    edit = matching("Synthetic title 1")
+    seed_fixture(
+        cache,
+        "neurips",
+        ABS13,
+        edit=lambda t: edit(t).replace("Synthetic abstract 1", "Synthetic\x02abstract\x001"),
+        at=T1,
+    )
+    seed(cache, "neurips", neurips_abs(2013, B13), "", status=404, at=T1)
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+        result = mine(cache, 2013)
+    assert by_id(result.records)[f"op:neurips:2013:nips-{A13}"].abstract == "Synthetic abstract 1"
+    [report] = result.reports
+    assert report.abstract_control_characters == 1 == report.to_manifest()["abstract_control_characters"]
+    [done] = [r for r in caplog.records if r.getMessage() == "neurips_listing_mined"]
+    assert done.__dict__["abstract_control_characters"] == 1
+    # the fixture's own count mismatch warns; the counter is never part of a WARNING
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert not [r for r in warnings if "abstract_control_characters" in r.__dict__]
+    plain = cache_of(tmp_path / "plain")
+    seed_2013(plain)
+    [clean] = mine(plain, 2013).reports
+    assert clean.abstract_control_characters == 0 and "abstract_control_characters" not in clean.to_manifest()

@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { Schemas } from "@/api/client";
+import { blobUrl, REPO_PATH } from "@/lib/repo";
 import { CopyButton } from "./copy-button";
 import { ALL_SOURCES, corpusWindow, kindWindowText, count, minuteUtc, percent, signed } from "./format";
 
@@ -19,11 +20,117 @@ function None() {
   );
 }
 
-/** The snapshot facts and totals above the table (design C1; copy deck CV-1 to CV-3). */
+type Span = { venue: string; from: number; to: number; missing: number[] };
+
+/** Each venue's first and last indexed year, and the years between with no records, in venue order (copy deck
+ * CV-7). */
+export function yearSpans(venueYears: readonly VenueYear[]): Span[] {
+  const years = new Map<string, Set<number>>();
+  for (const vy of venueYears) years.set(vy.venue, (years.get(vy.venue) ?? new Set<number>()).add(vy.year));
+  return [...years.entries()]
+    .map(([venue, held]) => {
+      const from = Math.min(...held);
+      const to = Math.max(...held);
+      const missing = Array.from({ length: to - from + 1 }, (_, i) => from + i).filter((y) => !held.has(y));
+      return { venue, from, to, missing };
+    })
+    .sort((a, b) => (a.venue < b.venue ? -1 : a.venue > b.venue ? 1 : 0));
+}
+
+/** A venue and its years as both coverage surfaces write them: `AAAI 2010–2026`, one year alone (`IASEAI 2026`). */
+function spanRange(s: Span): string {
+  return s.from === s.to ? `${s.venue} ${s.from}` : `${s.venue} ${s.from}–${s.to}`;
+}
+
+/** A span in CV-7's words, with " (none in …)" after a span with years it holds no records for; the home line and
+ * `/coverage` write it alike (copy deck CV-1, CV-7). */
+export function spanText(s: Span): string {
+  return s.missing.length === 0 ? spanRange(s) : `${spanRange(s)} (none in ${s.missing.join(", ")})`;
+}
+
+/** Each venue's runs of indexed years in which no record has an abstract, missing or removed (CV-5's all-missing
+ * venue-years), A–Z: `AAAI 1980–2008`, `FAccT 2019–2021, 2023–2024`. A run spans the venue's indexed years only, so
+ * a year it wasn't held (CV-7's "none in") never breaks one. Derived from `venue_years`, never a fixed list (copy
+ * deck CV-8). */
+export function titleOnlySpans(venueYears: readonly VenueYear[]): string[] {
+  const byVenue = new Map<string, VenueYear[]>();
+  for (const vy of venueYears) byVenue.set(vy.venue, [...(byVenue.get(vy.venue) ?? []), vy]);
+  const out: string[] = [];
+  for (const venue of [...byVenue.keys()].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
+    const years = byVenue.get(venue)!.sort((a, b) => a.year - b.year);
+    const runs: [number, number][] = [];
+    let open = false;
+    for (const vy of years) {
+      const none = vy.records > 0 && vy.abstract_missing + vy.abstract_withheld === vy.records;
+      if (none && open) runs[runs.length - 1]![1] = vy.year;
+      else if (none) runs.push([vy.year, vy.year]);
+      open = none;
+    }
+    if (runs.length > 0)
+      out.push(`${venue} ${runs.map(([a, b]) => (a === b ? `${a}` : `${a}–${b}`)).join(", ")}`);
+  }
+  return out;
+}
+
+/** CV-8: the venue-years whose records can be found by title only, or nothing when every venue-year has an
+ * abstract somewhere. */
+export function titleOnlyText(venueYears: readonly VenueYear[]): string | null {
+  const spans = titleOnlySpans(venueYears);
+  return spans.length === 0
+    ? null
+    : `No abstracts in the index for ${spans.join(" · ")}: their records are found by title only.`;
+}
+
+/** A `year:` clause for a span: one year alone, else `from..to`. */
+function yearClause(from: number, to: number): string {
+  return from === to ? `year:${from}` : `year:${from}..${to}`;
+}
+
+/** "Years indexed: …", and when the venues cover different years, why that matters and what compares them: the
+ * `year:` clause of the years every venue holds, or, when no year is held by all, a per-venue clause (copy deck
+ * CV-7; decision-047 and decision-049: NeurIPS from 1987, ICML from 1988, ICLR from 2013, AAAI from 1980 (not
+ * held in seven of its years, listed under "none in"), AIES and FAccT from 2018, IASEAI 2026). Display only: the
+ * clause is a suggestion the reader may add to their query. */
+function YearSpans({ venueYears }: { venueYears: readonly VenueYear[] }) {
+  const spans = yearSpans(venueYears);
+  if (spans.length === 0) return null;
+  const differ = new Set(spans.map((s) => s.from)).size > 1 || new Set(spans.map((s) => s.to)).size > 1;
+  const common = { from: Math.max(...spans.map((s) => s.from)), to: Math.min(...spans.map((s) => s.to)) };
+  // the venue that starts last, as the example of a venue with its own years
+  const latest = spans.reduce((a, b) => (b.from > a.from ? b : a));
+  return (
+    <p className="tabular-nums">
+      Years indexed: {spans.map(spanText).join(" · ")}
+      {differ ? (
+        <>
+          . The venues cover different years, so a search without a <code className="font-mono">year:</code>{" "}
+          filter compares them over different years
+          {common.from <= common.to ? (
+            <>
+              . Add <code className="font-mono">{yearClause(common.from, common.to)}</code> to compare them
+              over the same years
+            </>
+          ) : (
+            <>
+              . No year is held by every venue: give each venue its own years, one clause per venue joined
+              with OR, as in{" "}
+              <code className="font-mono">{`(venue:${latest.venue} ${yearClause(latest.from, latest.to)})`}</code>
+            </>
+          )}
+          .
+        </>
+      ) : null}
+    </p>
+  );
+}
+
+/** The snapshot facts and totals above the table (design C1; copy deck CV-1 to CV-3, CV-7; CV-2's OpenAlex count,
+ * decision-049). */
 function Header({ coverage }: { coverage: Coverage }) {
   const { snapshot, totals } = coverage;
   const corpus = corpusWindow(snapshot);
   const perSource = Object.entries(snapshot.crawl_dates).filter(([key]) => key !== ALL_SOURCES);
+  const titleOnly = titleOnlyText(coverage.venue_years);
   return (
     <div className="space-y-1 text-sm">
       <p>
@@ -60,6 +167,8 @@ function Header({ coverage }: { coverage: Coverage }) {
       <p className="pt-2 tabular-nums">
         {count(totals.records)} records · {count(totals.abstract_missing)} without an abstract ·{" "}
         {count(totals.unknown_track)} of unknown track · {count(totals.unknown_status)} of unknown status
+        {totals.abstract_openalex > 0 &&
+          ` · ${count(totals.abstract_openalex)} ${totals.abstract_openalex === 1 ? "abstract" : "abstracts"} from OpenAlex`}
         {totals.abstract_withheld > 0 && (
           <>
             {" "}
@@ -67,8 +176,10 @@ function Header({ coverage }: { coverage: Coverage }) {
           </>
         )}
       </p>
+      <YearSpans venueYears={coverage.venue_years} />
       <p className="text-muted-foreground">
         Only titles and abstracts are indexed. A record without an abstract can be found by its title only.
+        {titleOnly === null ? null : ` ${titleOnly}`}
       </p>
     </div>
   );
@@ -95,17 +206,73 @@ function Official({ track }: { track: Track }) {
         <span className="block text-xs text-muted-foreground">
           {track.official_counts}
           {track.official_counts ? "; " : ""}
-          {/^https?:\/\//.test(track.official_citation) ? (
-            <a className="underline underline-offset-4" href={track.official_citation}>
-              {track.official_citation}
-            </a>
-          ) : (
-            track.official_citation
-          )}
+          <Citation text={track.official_citation} />
           {track.official_accessed ? `, read ${track.official_accessed}` : ""}
         </span>
       ) : null}
     </>
+  );
+}
+
+/** A citation with each URL in it a link and the rest as text (a citation may name two pages, or a repo path). A
+ * repo path (`docs/…/x.md`) is a link to its page in the public repository (gate C round 1): a bare path can't be
+ * opened from a public instance. */
+export function Citation({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(https?:\/\/[^\s)]+)/).map((part, i) => {
+        if (i % 2 === 0) return <RepoPaths key={i} text={part} />;
+        // sentence punctuation after a URL belongs to the sentence, not the link
+        const url = part.replace(/[.,;:]+$/, "");
+        return (
+          <Fragment key={i}>
+            <a className="underline underline-offset-4" href={url}>
+              {url}
+            </a>
+            {part.slice(url.length)}
+          </Fragment>
+        );
+      })}
+    </>
+  );
+}
+
+/** Text with each repository path in it a link to the file on the default branch, the rest as it is. */
+function RepoPaths({ text }: { text: string }) {
+  const parts = text.split(new RegExp(REPO_PATH.source, "g"));
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 0 ? (
+          part
+        ) : (
+          <a key={i} className="underline underline-offset-4" href={blobUrl(part)}>
+            {part}
+          </a>
+        ),
+      )}
+    </>
+  );
+}
+
+/** Why an ungated cell has no official count to gate on, under its track's row (TASK-222, copy deck CV-9). The
+ * sentence starts with the track, so a screen reader arriving at the row knows whose note it is, and the source
+ * says when it was read, as an official count's does (gate C round 1). */
+function GateNote({ track }: { track: Track }) {
+  if (track.gate_note === null) return null;
+  return (
+    <tr>
+      <td colSpan={5} className="px-2 pb-1 text-left text-xs text-muted-foreground">
+        <span className="font-mono">{track.track}</span> not gated: {track.gate_note}.
+        {track.gate_note_citation ? (
+          <>
+            {" "}
+            Source: <Citation text={track.gate_note_citation} />
+            {track.gate_note_accessed ? `, read ${track.gate_note_accessed}` : ""}
+          </>
+        ) : null}
+      </td>
+    </tr>
   );
 }
 
@@ -133,6 +300,12 @@ function Detail({ vy, id }: { vy: VenueYear; id: string }) {
               Records
             </th>
             <th scope="col" className="px-2 text-right">
+              Official abstract
+            </th>
+            <th scope="col" className="px-2 text-right">
+              OpenAlex abstract
+            </th>
+            <th scope="col" className="px-2 text-right">
               No abstract
             </th>
             <th scope="col" className="px-2 text-left">
@@ -155,6 +328,8 @@ function Detail({ vy, id }: { vy: VenueYear; id: string }) {
                 );
               })}
               <td className="px-2 text-right">{count(track.records)}</td>
+              <td className="px-2 text-right">{count(track.abstract_official)}</td>
+              <td className="px-2 text-right">{count(track.abstract_openalex)}</td>
               <td className="px-2 text-right">
                 {count(track.abstract_missing)}
                 <Withheld n={track.abstract_withheld} />
@@ -189,27 +364,30 @@ function Detail({ vy, id }: { vy: VenueYear; id: string }) {
         </thead>
         <tbody>
           {vy.tracks.map((track) => (
-            <tr key={track.track}>
-              <th scope="row" className="px-2 text-left font-normal">
-                {track.track}
-              </th>
-              <td className="px-2 text-right">{count(track.indexed_accepted)}</td>
-              <td className="px-2 text-left">
-                <Official track={track} />
-              </td>
-              <td className="px-2 text-right">
-                {track.delta === null || track.delta_pct === null ? (
-                  <None />
-                ) : (
-                  <>
-                    {signed(track.delta)} ({percent(track.delta_pct)})
-                  </>
-                )}
-              </td>
-              <td className="px-2 text-left">
-                <Gate track={track} />
-              </td>
-            </tr>
+            <Fragment key={track.track}>
+              <tr>
+                <th scope="row" className="px-2 text-left font-normal">
+                  {track.track}
+                </th>
+                <td className="px-2 text-right">{count(track.indexed_accepted)}</td>
+                <td className="px-2 text-left">
+                  <Official track={track} />
+                </td>
+                <td className="px-2 text-right">
+                  {track.delta === null || track.delta_pct === null ? (
+                    <None />
+                  ) : (
+                    <>
+                      {signed(track.delta)} ({percent(track.delta_pct)})
+                    </>
+                  )}
+                </td>
+                <td className="px-2 text-left">
+                  <Gate track={track} />
+                </td>
+              </tr>
+              <GateNote track={track} />
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -217,11 +395,84 @@ function Detail({ vy, id }: { vy: VenueYear; id: string }) {
   );
 }
 
-const COLUMNS = ["Records", "No abstract", "Unknown track", "Unknown status"] as const;
+const COLUMNS = [
+  "Records",
+  "Official abstract",
+  "OpenAlex abstract",
+  "No abstract",
+  "Unknown track",
+  "Unknown status",
+] as const;
+
+/** The OpenAlex fidelity audit (spec 07 §G), linked in the repository. */
+export const OPENALEX_AUDIT = blobUrl("docs/results/2026-10-11-openalex-audit.md");
+
+/** The venues OpenAlex can fill (decision-049), in this order. */
+const OPENALEX_VENUES = ["AAAI", "AIES", "FAccT"] as const;
+
+/** Each fillable venue's OpenAlex abstracts in this snapshot, from the API's per-venue-year counts; only those
+ * with any. */
+function openalexByVenue(venueYears: readonly VenueYear[]): string[] {
+  return OPENALEX_VENUES.flatMap((venue) => {
+    const n = venueYears
+      .filter((vy) => vy.venue === venue)
+      .reduce((sum, vy) => sum + vy.abstract_openalex, 0);
+    return n > 0 ? [`${venue} ${count(n)}`] : [];
+  });
+}
+
+/** Under the table, the anchor an OpenAlex abstract's label links to (copy CV-8, RH-20, PA-12; decision-049; the
+ * controller's rulings of gate C round 1): which venues OpenAlex can fill and that it fills only papers with no
+ * official abstract in the index, this snapshot's counts from the API (never years written into the page), that a
+ * publisher may publish an official abstract the index doesn't hold, how far the text can differ (the audit,
+ * linked; no figure here), and that `abstract_kind:official` drops the whole paper. Focusable, so following the
+ * label lands on it. */
+function OpenAlexExplanation({ coverage }: { coverage: Coverage }) {
+  const venues = openalexByVenue(coverage.venue_years);
+  return (
+    <p id="openalex" tabIndex={-1} className="text-sm text-muted-foreground">
+      OpenAlex can fill an abstract only for AAAI, AIES and FAccT, and only for a paper this index holds no
+      official abstract for.{" "}
+      {venues.length === 0
+        ? "No abstract in this snapshot is OpenAlex's."
+        : `OpenAlex abstracts in this snapshot: ${venues.join("; ")}.`}{" "}
+      OpenAlex is an open catalogue that gathers abstracts from publishers and repositories. ACM or another
+      publisher may publish an official abstract for such a paper that this index does not hold, and
+      OpenAlex&apos;s text can differ from the published one, sometimes substantially; how often varies by
+      venue (
+      <a className="underline underline-offset-4" href={OPENALEX_AUDIT}>
+        the OpenAlex audit
+      </a>
+      ). Each is labelled. <code className="font-mono">abstract_kind:official</code> drops the whole paper
+      from a search, including papers that matched on their title; to keep those, search{" "}
+      <code className="font-mono">(term abstract_kind:official) OR title:term</code>.
+    </p>
+  );
+}
+
+/** After the report is drawn, the element the URL's `#hash` names is scrolled to and focused (gate C round 1): the
+ * page draws after a client fetch, so the browser's own jump finds nothing (`/coverage#openalex`, the OpenAlex
+ * label's target). */
+function useHashTarget() {
+  useEffect(() => {
+    let id: string;
+    try {
+      id = decodeURIComponent(window.location.hash.slice(1));
+    } catch {
+      return; // a malformed hash (`#%`, a truncated link) is ignored: no scroll, no error (gate C round 2)
+    }
+    if (!id) return;
+    const target = document.getElementById(id);
+    if (target === null) return;
+    target.scrollIntoView?.({ block: "start" });
+    target.focus({ preventScroll: true });
+  }, []);
+}
 
 /** The whole `/coverage` report for one `GET /coverage` answer. Every number is an API field (design C1). */
 export function CoverageReport({ coverage }: { coverage: Coverage }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  useHashTarget();
   // venue A–Z, then newest year first (design C1); the API orders by venue, then year ascending
   const rows = [...coverage.venue_years].sort((a, b) =>
     a.venue === b.venue ? b.year - a.year : a.venue < b.venue ? -1 : 1,
@@ -282,6 +533,8 @@ export function CoverageReport({ coverage }: { coverage: Coverage }) {
                     </th>
                     <td className="px-2">{vy.year}</td>
                     <td className="px-2 text-right">{count(vy.records)}</td>
+                    <td className="px-2 text-right">{count(vy.abstract_official)}</td>
+                    <td className="px-2 text-right">{count(vy.abstract_openalex)}</td>
                     <td className="px-2 text-right">
                       {noAbstracts ? (
                         <span className="text-warn-fg">
@@ -331,6 +584,7 @@ export function CoverageReport({ coverage }: { coverage: Coverage }) {
           </tbody>
         </table>
       </div>
+      <OpenAlexExplanation coverage={coverage} />
     </div>
   );
 }

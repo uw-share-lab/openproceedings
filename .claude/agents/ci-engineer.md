@@ -37,7 +37,7 @@ tempted to bypass it.
    (2,000) under xdist; every property at 50k as a 5-part `properties` matrix under xdist (the near-cap replay
    property alone, the other oracle-backed ones, `unit/engine`, `unit/ingest`, and the rest with the exhaustive
    tokenizer check), split by the measured time per test, and the year-edit property as 4 seeded `year-edits` jobs
-   (`OP_YEAR_EDIT_SHARDS`); `differential`, 8 matrix jobs of 6,250 examples with their own `--hypothesis-seed`
+   (`OP_YEAR_EDIT_SHARDS`); `differential`, 12 matrix jobs of 4,166 or 4,167 examples (50,000 exactly, `OP_DIFFERENTIAL_SHARD`) with their own `--hypothesis-seed`
    (`OP_DIFFERENTIAL_SHARDS`); `benchmarks` (5k budgets asserted, then the ~80k report into the run summary and a
    `bench-80k` artifact); and `mutate`, 12 matrix jobs of `mutate.py --shard i/12` so every mutant runs each night, 140 min each (a surviving or stale mutant fails its shard, and so does a shard cut off at 140 min: raise the shard count). Long pytest steps set `OP_EARLY_FAILURES=1` (a failure's report and blob are printed when it fails) and run `-v` inside `timeout --signal=INT` a few
    minutes short of the job limit, so an overrun is an `::error::` with the unfinished test in the log.
@@ -48,7 +48,9 @@ tempted to bypass it.
    fixture manifest, `TOKENIZER_VERSION` and `SCHEMA_VERSION`.
 5. **claude-tooling:** `make tooling` — roster lint, `.claude/README.md` and learnings `INDEX.md`
    freshness (`--check`), `check_backlog.py` (no Done task left in `backlog/tasks/`, no task or decision
-   id used twice), and every hook case table.
+   id used twice), digest pins in `deploy/` (`check_digest_pins.py`), the npm manifests against the lock's
+   workspace entries (`dependabot/npm_specs.py`, TASK-212), `lint_probes.py`, and every case table under
+   `.claude/hooks/tests/` and `.claude/scripts/tests/`.
 6. **pr-gates** (three jobs): `attribution` scans every commit message in `base..head` and the PR
    title/body; `learnings` needs an added or extended `YYYY-MM-DD-<slug>.md` entry directly in
    `.claude/learnings/` unless labelled `no-learning`; `review-attested` compares `<!-- op-review: <sha>
@@ -69,7 +71,15 @@ tempted to bypass it.
 - Pinning: every action is pinned to a full commit SHA with a `# vX.Y.Z` version comment, and must stay
   that way. Dependabot (`.github/dependabot.yml`) bumps `github-actions`, `uv`, `npm` and the `docker`
   base-image digests in `deploy/` weekly, minor and patch grouped into one PR per ecosystem and semver-majors
-  ignored (a major is a deliberate, hand-made PR; spec 08 §CI); review its PRs like any other. Its `uv` entry
+  ignored (a major is a deliberate, hand-made PR; spec 08 §CI); review its PRs like any other, plus the
+  Dependabot checks in spec 08 §CI (release notes, supply chain, the manifest against the lock's
+  `packages["frontend"]`, which `make tooling` also checks on every PR with `npm_specs.py` (TASK-212),
+  `npm audit --omit=dev`, lock edits under the `.nvmrc` Node). A weekly routine runs
+  them as `/dependabot-review`, with the scripts in `.claude/scripts/dependabot/` (decision-048, TASK-211); a
+  change to a check changes the script, its rows in `.claude/scripts/tests/dependabot_cases.py` and its
+  mutants in `.claude/scripts/mutants/dependabot.json` together. The routine is a Claude Code cloud session,
+  which refuses GitHub GraphQL (so every `gh pr` command): the procedure and scripts call GitHub through REST
+  only, and queue through the session's CCR auto-merge route (TASK-213, decision-048's addendum). Its `uv` entry
   ignores `tantivy`, whose upgrade must bump `SCHEMA_VERSION` by hand (spec 08 §Release), and every image a
   `deploy/` build pulls stays digest-pinned (`check_digest_pins.py`, spec 08 §Deploy).
 - Secrets: CI never needs OpenReview credentials — tests use recorded HTTP fixtures. No `data/` in

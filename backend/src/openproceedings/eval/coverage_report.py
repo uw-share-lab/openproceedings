@@ -5,6 +5,8 @@
 What it adds to that data, and nothing else:
 - **Gaps.** A gated official cell (main or D&B with an official count) that the snapshot holds no record for is
   a row with 0 indexed and ✗, never a silent zero (spec 07 §C: a venue-year with no source is a reported gap).
+- **Ungated cells with a note.** Each cell `GET /coverage` serves with a `gate_note` (`official_counts.UNGATED_NOTES`,
+  TASK-222), with its note and citation: why it has no official count to gate on.
 - **The M4 gate verdict.** Every gated cell within ±1% (`official_counts.within_gate`), gaps included.
 - **Cause notes.** Every failing cell gets its cause from `causes` (a person's classification: source
   definition, classification, dedup or crawl gap), or `**unclassified**`: never adjust an official number to fit.
@@ -329,17 +331,23 @@ def _row(
     if cell is None:  # a gated official cell the snapshot holds nothing for
         assert row is not None
         return (f"| {year} | {track} | 0 | {row.accepted:,} | {_signed(-row.accepted)} | {_pct(-100.0)} "
-                f"| ✗ gap | 0 | {unknown} | {statuses} |")  # fmt: skip
+                f"| ✗ gap | 0 | 0 | 0 | {unknown} | {statuses} |")  # fmt: skip
     indexed = cell["indexed_accepted"]
     if cell["official_accepted"] is None:
-        verdict, off, delta, pct = ("no source" if track in GATED_TRACKS else "not gated"), "—", "—", "—"
+        verdict, off, delta, pct = (
+            ("no official count" if track in GATED_TRACKS else "not gated"),
+            "—",
+            "—",
+            "—",
+        )
     else:
         off, delta, pct = f"{cell['official_accepted']:,}", _signed(cell["delta"]), _pct(cell["delta_pct"])
         verdict = ("✓" if cell["within_gate"] else "✗") if cell["gated"] else "not gated"
         if accepted:  # outside ±1% by exactly the owner-accepted counts: passes, and says why
             verdict = "✓ accepted exception"
     return (f"| {year} | {track} | {indexed:,} | {off} | {delta} | {pct} | {verdict} | "
-            f"{cell['abstract_missing']:,} | {unknown} | {statuses} |")  # fmt: skip
+            f"{cell['abstract_missing']:,} | {cell['abstract_official']:,} | {cell['abstract_openalex']:,} "
+            f"| {unknown} | {statuses} |")  # fmt: skip
 
 
 def _listing_rows(manifest: Mapping[str, Any]) -> tuple[list[str], list[str]]:
@@ -418,6 +426,139 @@ def _reasons(skipped: Mapping[str, int]) -> str:
     return ", ".join(f"{k} {n:,}" for k, n in sorted(skipped.items())) or "—"
 
 
+OWN_COUNT = (
+    "the page's own count"  # how coverage-sources.md describes a row read off the crawled listing itself
+)
+
+
+def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
+    """The database scope a methods section cites (decision-047): each venue's indexed years (CV-7's spans), and,
+    when the snapshot holds the dblp release, which years come from that bibliography rather than a crawl."""
+    years: dict[str, set[int]] = {}
+    for vy in cov["venue_years"]:
+        if vy["records"]:
+            years.setdefault(vy["venue"], set()).add(vy["year"])
+
+    def span(v: str, ys: set[int]) -> str:
+        """CV-7's span: one year printed once ("IASEAI 2026"), and the years between with no records listed,
+        so a venue-year with no source is a reported gap, never a silent one (spec 07)."""
+        none = [y for y in range(min(ys), max(ys) + 1) if y not in ys]
+        return (f"{v} {min(ys)}" + (f"–{max(ys)}" if max(ys) != min(ys) else "")
+                + (f" (none in {', '.join(map(str, none))})" if none else ""))  # fmt: skip
+
+    spans = " · ".join(span(v, ys) for v, ys in sorted(years.items()))
+    out = [f"- Years indexed: {spans}" + (" (the venues start in different years)"
+                                          if len({min(ys) for ys in years.values()}) > 1 else "")]  # fmt: skip
+    listings = manifest.get("sources", {}).get("dblp", {}).get("listings", [])
+    dblp = [x for x in listings if x.get("venue", "ICML") == "ICML"]
+    aaai = [x for x in listings if x.get("venue") == "AAAI"]
+    if dblp:
+        held = sorted({int(x["year"]) for x in dblp})
+        releases = sorted({str(x["listing"]) for x in dblp})
+        sites = sorted({u for x in dblp for u in x.get("sites", [])})
+        attached = sum(int(x.get("abstract_attached", 0)) for x in dblp)
+        records = sum(int(x["records"]) for x in dblp)
+        submitted = [
+            x for x in dblp if x.get("abstracts_as_submitted") and int(x.get("abstract_attached", 0))
+        ]
+        as_submitted = (
+            f" Of the {attached:,} abstracts, {sum(int(x['abstract_attached']) for x in submitted):,} (ICML "
+            f"{', '.join(str(x['year']) for x in sorted(submitted, key=lambda x: int(x['year'])))}) are submission-time "
+            "abstracts from official pages that list the submissions, which can differ from the published papers' "
+            "(TASK-207)."
+            if submitted else ""
+        )  # fmt: skip
+        out.append(
+            f"- ICML {held[0]}–{held[-1]}: from the pinned dblp snapshot release {', '.join(releases)} (a "
+            "bibliography read from one pinned file, so it reflects that release, not a crawl on the dates above; "
+            f"decision-047). {attached:,} of its {records:,} records have an abstract, each from an official ICML "
+            f"page ({len(sites)} pages, live or Internet Archive captures: `ingest/icml_sites.toml`); the rest are "
+            "title-only. 1989, 1991 and 1992, held as the International Workshop on Machine Learning, are exported "
+            f"under the ICML name.{as_submitted}"
+        )
+    if aaai:
+        held = sorted({int(x["year"]) for x in aaai})
+        releases = sorted({str(x["listing"]) for x in aaai})
+        filled = sum(vy.get("abstract_openalex", 0) for vy in cov["venue_years"] if vy["venue"] == "AAAI")
+        pages = sum(int(x.get("attached", 0)) for x in manifest.get("sources", {}).get("aaai_library", {})
+                    .get("fills", []))  # fmt: skip
+        archived = (
+            f"; {pages:,} have AAAI's own abstract, read from the Internet Archive's copies of their old aaai.org "
+            "paper pages (official; decision-051)"
+            if pages else ""
+        )  # fmt: skip
+        if filled:
+            no_abstract = (f"come with no abstract from dblp{archived}; where "
+                           f"{'neither gives' if pages else 'no official AAAI source gives'} one, OpenAlex's is "
+                           "filled in (counted below)")  # fmt: skip
+        else:
+            no_abstract = (f"come with no abstract from dblp{archived}, and the rest have none" if pages
+                           else "have no abstract (dblp holds none)")  # fmt: skip
+        out.append(
+            f"- AAAI {held[0]}–{held[-1]}: from the pinned dblp snapshot release {', '.join(releases)} (a "
+            "bibliography read from one pinned file; decision-049). "
+            f"Its {sum(int(x['records']) for x in aaai):,} records {no_abstract}. Each "
+            "record's track comes from the section the official AAAI contents page prints it in: student "
+            "abstracts, the doctoral consortium, demonstrations, IAAI papers and the other non-technical "
+            f"sections have their own tracks, which a default search leaves out.{_not_indexed(aaai, 'invited talks and panels')}"
+        )
+    crossref = manifest.get("sources", {}).get("crossref", {}).get("listings", [])
+    for venue in sorted({str(x["venue"]) for x in crossref}):
+        mine = [x for x in crossref if x["venue"] == venue]
+        held = sorted({int(x["year"]) for x in mine})
+        records = sum(int(x["records"]) for x in mine)
+        attached = sum(int(x.get("abstract_attached", 0)) for x in mine)
+        what = (
+            f"{attached:,} with an abstract, each from an official FAccT page (only 2022, 2025 and 2026 have "
+            "one); the rest are title-only"
+            if venue == "FAccT"
+            else "no abstracts (title-only). Crossref carries no section data, so each paper's track comes from "
+            "its page position in the proceedings: student abstracts are `student_abstract`, which a default "
+            "search leaves out, and the rest `main`"
+        )
+        kinds = "tutorials and CRAFT sessions" if venue == "FAccT" else "keynotes"
+        out.append(
+            f"- {venue} {held[0]}–{held[-1]}: from Crossref's records of the ACM proceedings (decision-049): "
+            f"{records:,} records, {what}.{_not_indexed(mine, kinds)}"
+        )
+    filled = sorted({vy["venue"] for vy in cov["venue_years"] if vy.get("abstract_openalex")})
+    if filled:  # additive: a snapshot OpenAlex filled nothing in reads as before
+        n = sum(vy["abstract_openalex"] for vy in cov["venue_years"])
+        names = f"{', '.join(filled[:-1])} and {filled[-1]}" if len(filled) > 1 else filled[0]
+        out.append(
+            f"- {n:,} abstracts ({names}) are OpenAlex's, filled where no official source gives one, and "
+            "labelled `abstract_kind:openalex`."
+        )
+    return out
+
+
+def _not_indexed(listings: list[Mapping[str, Any]], kinds: str) -> str:
+    """The entries the listings counted as no papers (the tables' not-paper rows): printed in the proceedings,
+    counted, never indexed, so a reviewer can account for them."""
+    n = sum(int(x.get("skipped", {}).get("not_paper", 0)) for x in listings)
+    return (
+        f" {n:,} entries the proceedings print that are not papers ({kinds}) are counted, not indexed."
+        if n
+        else ""
+    )
+
+
+def _own_count_note(cov: Mapping[str, Any], official: OfficialTable) -> str:
+    """How many gated cells compare the crawl with the very listing it read (the listing's own stated count),
+    rather than an independent statement of accepted papers."""
+    own = sum(
+        1 for vy in cov["venue_years"] for t in vy["tracks"]
+        if (row := official.get((vy["venue"], vy["year"], t["track"]))) is not None and OWN_COUNT in row.counts
+    )  # fmt: skip
+    if not own:
+        return ""
+    cells, verb = ("cell", "compares") if own == 1 else ("cells", "compare")
+    return (
+        f" {own} gated {cells} {verb} the crawl with its listing page's own stated count (`{OWN_COUNT}` in "
+        "coverage-sources.md), not with an independent statement."
+    )
+
+
 def render(
     cov: Mapping[str, Any],
     manifest: Mapping[str, Any],
@@ -459,6 +600,7 @@ def render(
             else "none"
         ),
         f"- Command: `{meta.command}`",
+        *_scope(cov, manifest),
         "",
         f"**M4 gate: {'PASS' if verdict.passed else 'FAIL'}** — {verdict.passing} of {verdict.gated} gated cells "
         f"within ±1%; {verdict.gaps} gap{'' if verdict.gaps == 1 else 's'}; {len(verdict.accepted)} owner-accepted "
@@ -466,7 +608,8 @@ def render(
         "main-track and D&B cell with an official count; other cells are reported, not gated. An owner-accepted "
         "exception passes its cell only while the cell's counts are exactly the accepted ones and its papers are "
         "the gap. Δ% is rounded to "
-        "one decimal; the gate compares exactly (100 × |Δ| ≤ official), so a cell shown at 1.0% can still fail.",
+        "one decimal; the gate compares exactly (100 × |Δ| ≤ official), so a cell shown at 1.0% can still fail."
+        + _own_count_note(cov, official),
         "",
     ]
     keys = set(cells) | {k for k in official if k[2] in GATED_TRACKS}
@@ -475,8 +618,9 @@ def render(
             f"## {venue}",
             "",
             "| year | track | indexed accepted | official | Δ | Δ% | gate | missing abstracts "
+            "| Official abstract | OpenAlex abstract "
             "| unknown track (venue-year) | unknown status (venue-year) | statuses indexed |",
-            "|---|---|---|---|---|---|---|---|---|---|---|",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         mine = sorted((k for k in keys if k[0] == venue), key=lambda k: (k[1], TRACK_ORDER[k[2]]))
         lines += [
@@ -508,6 +652,20 @@ def render(
             "",
         ]
         lines += [f"- {v} {y} {t}: {causes[(v, y, t)]}" for v, y, t in stale]
+    lines += ["", "## Ungated cells with a note", ""]
+    noted = [
+        (vy["venue"], vy["year"], t) for vy in cov["venue_years"] for t in vy["tracks"] if t["gate_note"]
+    ]
+    if noted:  # why a cell has no official count to gate on (TASK-222), as `/coverage` serves it
+        lines += [
+            "These cells are reported, not gated: each has no official count that the index's cell can be checked "
+            "against, for the reason given (`docs/results/coverage-sources.md` §Ungated cells with a note).",
+            "",
+            *(f"- {v} {y} {t['track']}: {t['gate_note']} (source: {t['gate_note_citation']})"
+              for v, y, t in sorted(noted, key=lambda n: (n[0], n[1], TRACK_ORDER[n[2]["track"]]))),
+        ]  # fmt: skip
+    else:
+        lines.append("None: no ungated cell in this snapshot has a note.")
     lines += ["", "## Owner-accepted exceptions", ""]
     if verdict.accepted:
         lines += [

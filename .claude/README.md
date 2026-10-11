@@ -11,7 +11,7 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
   journal every session starts from.
 
 
-**49 agents · 53 skills · 17 commands**
+**49 agents · 53 skills · 18 commands**
 
 
 ## Global roles & process
@@ -91,8 +91,8 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 | Skill | What it's for |
 |---|---|
 | [`openreview-api`](skills/openreview-api/SKILL.md) | How openproceedings talks to OpenReview |
-| [`openreview-venueids`](skills/openreview-venueids/SKILL.md) | Every known OpenReview content.venueid form for NeurIPS, ICLR and ICML (main, Datasets & Benchmarks, workshops including satellite-city paths, position, Tiny Papers, Blogposts, and the Rejected/Withdrawn/Desk_Rejected submission suffixes) with the track and status each maps to, plus the parsing rules, which forms were verified live (2026-09-27) and why a v1 venueid never gives status. |
-| [`pmlr-proceedings`](skills/pmlr-proceedings/SKILL.md) | The PMLR (proceedings.mlr.press) source for ICML |
+| [`openreview-venueids`](skills/openreview-venueids/SKILL.md) | Every known OpenReview content.venueid form for NeurIPS, ICLR and ICML (OpenReview hosts no AAAI, AIES or IASEAI 2026 papers: those come from ojs.aaai.org, so none of their venues has a venueid |
+| [`pmlr-proceedings`](skills/pmlr-proceedings/SKILL.md) | The PMLR (proceedings.mlr.press) source for ICML and FAccT 2018 (v81) |
 | [`neurips-proceedings`](skills/neurips-proceedings/SKILL.md) | The proceedings.neurips.cc source |
 | [`record-schema`](skills/record-schema/SKILL.md) | The PaperRecord contract from spec 01 |
 | [`track-taxonomy`](skills/track-taxonomy/SKILL.md) | The track and status enums from spec 01 with the source signal that justifies each value, the never-default-to-main and unknown-stays-unknown rules, how evidence claims back every classification, and which tracks and statuses the default query filter includes per spec 02. |
@@ -276,3 +276,8 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 |---|---|
 | [`ci-engineer`](agents/ci-engineer.md) | Builds and maintains the GitHub Actions workflows (lint, test, claude-tooling, pr-gates, e2e, bench, nightly and the web-image Docker build), their SHA pins, permissions and Dependabot updates (base-image digests in deploy/ included), their caching, the Hypothesis CI/nightly profiles, the OpenAPI→TS freshness check and the .claude/ roster lint, keeping required check names stable for branch protection. |
 | [`release-manager`](agents/release-manager.md) | Runs releases and data promotions |
+
+
+| Command | What it's for |
+|---|---|
+| [`/dependabot-review`](commands/dependabot-review.md) | Review every open Dependabot PR into dev |

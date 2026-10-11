@@ -4,6 +4,7 @@ the per-track cells, statuses indexed and official counts of TASK-082."""
 from __future__ import annotations
 
 import copy
+from collections import Counter
 from collections.abc import Callable
 from datetime import date
 from fractions import Fraction
@@ -14,7 +15,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from openproceedings.coverage import TrackFacts, breakdown
 from openproceedings.ingest.snapshot import SnapshotError
-from openproceedings.official_counts import OfficialCount
+from openproceedings.official_counts import UNGATED_NOTES, OfficialCount, UngatedNote
 
 EVERY = ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"]
 MANIFEST: dict[str, Any] = {
@@ -58,6 +59,8 @@ def _track(track: str, records: int, accepted: int, missing: int, sources: list[
         "indexed_accepted": accepted,
         "abstract_missing": missing,
         "abstract_withheld": 0,  # TASK-136: a manifest without takedown keys withheld nothing
+        "abstract_official": records - missing,  # decision-049: no OpenAlex keys, so none is OpenAlex's
+        "abstract_openalex": 0,
         "sources": sources,
         "official_accepted": None,
         "official_counts": None,
@@ -67,6 +70,9 @@ def _track(track: str, records: int, accepted: int, missing: int, sources: list[
         "delta_pct": None,
         "gated": False,
         "within_gate": None,
+        "gate_note": None,  # TASK-222: no note says why it is not gated
+        "gate_note_citation": None,
+        "gate_note_accessed": None,
     }
 
 
@@ -92,6 +98,8 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
             "records": 12,
             "abstract_missing": 3,
             "abstract_withheld": 0,
+            "abstract_official": 9,
+            "abstract_openalex": 0,
             "unknown_track": 1,
             "unknown_status": 2,
         },
@@ -102,6 +110,8 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
                 "records": 5,
                 "abstract_missing": 1,
                 "abstract_withheld": 0,
+                "abstract_official": 4,
+                "abstract_openalex": 0,
                 "unknown_track": 0,
                 "unknown_status": 0,
                 "cells": [
@@ -120,6 +130,8 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
                 "records": 1,
                 "abstract_missing": 0,
                 "abstract_withheld": 0,
+                "abstract_official": 1,
+                "abstract_openalex": 0,
                 "unknown_track": 0,
                 "unknown_status": 0,
                 "cells": [{"track": "workshop", "status": "accepted", "count": 1}],
@@ -132,6 +144,8 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
                 "records": 6,
                 "abstract_missing": 2,
                 "abstract_withheld": 0,
+                "abstract_official": 4,
+                "abstract_openalex": 0,
                 "unknown_track": 1,
                 "unknown_status": 2,
                 "cells": [
@@ -354,3 +368,181 @@ def test_a_format_1_manifest_takes_its_per_track_facts_from_the_records() -> Non
     assert held == {("ICLR", 2024): EVERY, ("ICLR", 2025): ["accepted"], ("NeurIPS", 2024): EVERY}
     new = breakdown(MANIFEST, "s", facts)  # format 2: the manifest's own, never the facts
     assert new["venue_years"] == breakdown(MANIFEST, "s")["venue_years"]
+
+
+def _with_openalex() -> dict[str, Any]:
+    """The hand-counted manifest where ICLR 2024 main (4 records, 1 missing) has one abstract from OpenAlex."""
+    m = copy.deepcopy(MANIFEST)
+    m["abstract_openalex"] = {"ICLR": {"2024": 1}}
+    m["abstract_openalex_by_track"] = {"ICLR": {"2024": {"main": 1}}}
+    return m
+
+
+def test_official_openalex_missing_and_withheld_add_up_to_the_records_everywhere() -> None:
+    data = breakdown(_with_openalex(), "s", official={})
+    [iclr24] = [vy for vy in data["venue_years"] if (vy["venue"], vy["year"]) == ("ICLR", 2024)]
+    [main] = [t for t in iclr24["tracks"] if t["track"] == "main"]
+    for row in (main, iclr24, data["totals"]):
+        assert row["abstract_openalex"] == 1
+        assert (
+            row["abstract_official"]
+            + row["abstract_openalex"]
+            + row["abstract_missing"]
+            + row["abstract_withheld"]
+            == row["records"]
+        )
+    assert (main["abstract_official"], iclr24["abstract_official"], data["totals"]["abstract_official"]) == (
+        2,
+        3,
+        8,
+    )
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        _drop(("abstract_openalex_by_track",)),  # one key without the other
+        _set(("abstract_openalex", "ICLR", "2024"), 2),  # the venue-year disagrees with its tracks
+        _set(
+            ("abstract_openalex_by_track", "ICLR", "2024", "main"), 4
+        ),  # more than the records minus missing
+        _set(("abstract_openalex", "ICML"), {"2024": 1}),  # where it holds no records
+        _set(("abstract_openalex", "ICLR", "2024"), True),
+    ],
+)
+def test_an_inconsistent_openalex_count_is_refused(edit: Callable[[dict[str, Any]], None]) -> None:
+    manifest = _with_openalex()
+    edit(manifest)
+    with pytest.raises(SnapshotError):
+        breakdown(manifest, "s")
+
+
+class _Records:
+    """The `RecordFile` facts `api.coverage.compute` reads, derived from a manifest that agrees with its records."""
+
+    def __init__(self, manifest: dict[str, Any], held: dict[str, Any] | None = None) -> None:
+        from collections import Counter
+        from pathlib import Path
+
+        data = breakdown(manifest, "s", official={})
+        self.manifest = manifest
+        self.path = Path("/x/s/records.jsonl")
+        self.withheld: frozenset[str] = frozenset()
+        self._held = held or {}
+        vys = data["venue_years"]
+        self.cells = Counter(
+            {(v["venue"], v["year"], c["track"], c["status"]): c["count"] for v in vys for c in v["cells"]}
+        )
+        self.abstract_missing = Counter(
+            {(v["venue"], v["year"]): v["abstract_missing"] for v in vys if v["abstract_missing"]}
+        )
+        tracks = {(v["venue"], v["year"], t["track"]): t for v in vys for t in v["tracks"]}
+        self.track_missing = Counter({k: t["abstract_missing"] for k, t in tracks.items()})
+        self.track_sources = {k: set(t["sources"]) for k, t in tracks.items()}
+        self.abstract_withheld: Counter[tuple[str, int]] = Counter()
+        self.track_withheld: Counter[tuple[str, int, str]] = Counter()
+        self.abstract_openalex = Counter(
+            {(v["venue"], v["year"]): v["abstract_openalex"] for v in vys if v["abstract_openalex"]}
+        )
+        self.track_openalex = Counter(
+            {k: t["abstract_openalex"] for k, t in tracks.items() if t["abstract_openalex"]}
+        )
+        self._n = sum(self.cells.values())
+
+    def __len__(self) -> int:
+        return self._n
+
+    def get(self, rid: str) -> Any:
+        return self._held.get(rid)
+
+
+class _Engine:
+    index_version = "abc123def456"
+    tokenizer_version = "2"
+
+    def __init__(self, n: int) -> None:
+        self.ids = range(n)
+
+
+def test_a_per_track_openalex_count_that_disagrees_with_the_records_fails_the_load() -> None:
+    from openproceedings.api.coverage import compute
+
+    records = _Records(_with_openalex())
+    compute(_Engine(len(records)), records)  # type: ignore[arg-type]  # agrees: no error
+    records.track_openalex = Counter()  # the venue-year's count still agrees; only the track's does not
+    with pytest.raises(SnapshotError) as e:
+        compute(_Engine(len(records)), records)  # type: ignore[arg-type]
+    assert e.value.reason == "abstract_openalex_mismatch"
+
+
+def test_listing_one_openalex_and_one_official_id_moves_each_from_its_own_count() -> None:
+    from types import SimpleNamespace
+
+    from openproceedings.api.coverage import compute
+
+    held = {
+        "op:iclr:2024:a": SimpleNamespace(
+            venue="ICLR", year=2024, track="main", abstract="x", abstract_kind="openalex"
+        ),
+        "op:iclr:2024:b": SimpleNamespace(
+            venue="ICLR", year=2024, track="main", abstract="y", abstract_kind="official"
+        ),
+    }
+    manifest = _with_openalex()
+    manifest["abstract_openalex"] = {"ICLR": {"2024": 2}}
+    manifest["abstract_openalex_by_track"] = {"ICLR": {"2024": {"main": 2}}}
+    records = _Records(manifest, held)
+    out = compute(_Engine(len(records)), records, frozenset(held))  # type: ignore[arg-type]
+    [vy] = [v for v in out.venue_years if (v.venue, v.year) == ("ICLR", 2024)]
+    [main] = [t for t in vy.tracks if t.track == "main"]
+    for row in (main, vy, out.totals):
+        assert (row.abstract_withheld, row.abstract_openalex) == (2, 1)
+        assert (
+            row.abstract_official + row.abstract_openalex + row.abstract_missing + row.abstract_withheld
+            == row.records
+        )
+    assert (main.abstract_official, main.abstract_missing) == (0, 1)
+
+
+def test_an_ungated_cell_carries_its_note_and_a_cell_without_one_nulls() -> None:
+    """TASK-222: an ungated cell with a note (`official_counts.UNGATED_NOTES`) is served with the note and its
+    citation; every other cell with nulls. A note never rides on a gated cell."""
+    note = UngatedNote("the list counts a different set", "https://example.org/list", date(2026, 10, 10))
+    data = breakdown(
+        MANIFEST,
+        "s",
+        official={("NeurIPS", 2024, "main"): _official(3)},
+        notes={("ICLR", 2024, "main"): note, ("NeurIPS", 2024, "main"): note},
+    )
+    rows = {(vy["venue"], vy["year"], t["track"]): t for vy in data["venue_years"] for t in vy["tracks"]}
+    noted = rows[("ICLR", 2024, "main")]
+    assert (noted["gated"], noted["gate_note"], noted["gate_note_citation"]) == (
+        False,
+        "the list counts a different set",
+        "https://example.org/list",
+    )
+    assert noted["gate_note_accessed"] == "2026-10-10"  # shown beside the citation, as an official row's is
+    assert rows[("NeurIPS", 2024, "main")]["gated"] is True
+    assert rows[("NeurIPS", 2024, "main")]["gate_note"] is None
+    assert all(
+        (t["gate_note"], t["gate_note_citation"], t["gate_note_accessed"]) == (None, None, None)
+        for k, t in rows.items()
+        if k != ("ICLR", 2024, "main")
+    )
+
+
+def test_the_iaseai_2026_main_cell_carries_its_note_by_default() -> None:
+    """The served notes are `UNGATED_NOTES`: IASEAI 2026 main, 57 archival of 92 accepted, says why it is not gated."""
+    manifest = copy.deepcopy(MANIFEST)  # NeurIPS 2024 renamed IASEAI 2026 in every per-venue map
+    for value in manifest.values():
+        if isinstance(value, dict) and "NeurIPS" in value:
+            value["IASEAI"] = {"2026": value.pop("NeurIPS")["2024"]}
+    rows = {
+        (vy["venue"], vy["year"], t["track"]): t
+        for vy in breakdown(manifest, "s", official={})["venue_years"]
+        for t in vy["tracks"]
+    }
+    expected = UNGATED_NOTES[("IASEAI", 2026, "main")]
+    assert rows[("IASEAI", 2026, "main")]["gate_note"] == expected.note
+    assert rows[("IASEAI", 2026, "main")]["gate_note_citation"] == expected.citation
+    assert "57" in expected.note and "92" in expected.note

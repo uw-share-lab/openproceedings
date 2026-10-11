@@ -12,11 +12,14 @@ from __future__ import annotations
 import dataclasses
 import heapq
 import json
-from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
-from contextlib import AbstractContextManager, contextmanager, nullcontext
+import threading
+from collections import Counter, deque
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from importlib.metadata import version
+from itertools import repeat
+from operator import itemgetter
 from pathlib import Path
 from typing import Any
 
@@ -30,27 +33,37 @@ from openproceedings.engine.compile import (
     Expansions,
     combine,
     conjuncts,
-    id_set,
     verified_clauses,
     verifies,
     wildcards,
 )
 from openproceedings.engine.index import IDS, SERVED_SCHEMAS, SchemaForm, open_index, record_of, verify_index
 from openproceedings.engine.protocol import (
-    FACET_FIELDS,
     MAX_EXPANSIONS,
     Engine,
     EngineInputError,
     EngineInternalError,
     SearchResult,
 )
-from openproceedings.query.ast import And, Filter, Near, Node, Not, Phrase, TextField, Wildcard, YearRange
+from openproceedings.query.ast import And, Filter, Near, Node, Not, Or, Phrase, TextField, Wildcard, YearRange
 from openproceedings.query.normalize import SERVED_TOKENIZERS
 
 SORTS = ("relevance", "year_desc", "year_asc", "title")
-# a document's facet values, in this order: what every filter and facet depends on (task-086)
-COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
-# a document's values of the aggregated fields (`facets`' `over`; all of COMBO unless narrowed), in COMBO order:
+# every served schema's filter fields; an engine's own (`filter_fields`) add what its schema holds beyond them
+BASE_COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
+# a document's facet values, in this order: what every filter and facet depends on (task-086). Schema 4's; an
+# engine's own is `self.combo` (its `filter_fields`: schema 3's lacks `abstract_kind`)
+COMBO: tuple[str, ...] = (*BASE_COMBO, "abstract_kind")
+# the order a combos aggregation nests its fields in, fewest distinct values outermost (year, the most, innermost):
+# a few-valued field nested inside gives every leaf of the level above its own sub-aggregation (schema 4's
+# `abstract_kind` innermost doubled the 5k all-facets aggregation, PR #134). Only the collection's order: combos
+# are still keyed in `combo` order (`_aggregate`)
+NESTING: tuple[str, ...] = ("abstract_kind", "status", "track", "venue", "year")
+# what a filter field's values are called in `admit`'s refusal (FIELD_NOT_INDEXED), for a reader who never sees a schema
+_NOT_INDEXED: dict[str, str] = {"abstract_kind": "each paper's abstract source"}
+# what `counts` aggregates when none of its trees has a top-level filter: one field, its combos summed whole
+UNFILTERED: tuple[str, ...] = ("status",)
+# a document's values of the aggregated fields (`facets`' `over`; all of the engine's combo unless narrowed), in that order:
 # each a str, but `year`, an int; as many values as `over` has fields
 type Combo = tuple[str | int, ...]
 # (field, clause) → the ids that clause verified: the engine's memo, or one request's own (`Overlay`)
@@ -185,8 +198,12 @@ class TantivyEngine:
     # index, ~5 MB on 80k): it is cleared once the weights charged to it since its last clear pass its budget.
     # Weights, in ids/terms (~60 bytes each as Python strings): a verified clause, its ids + 1; an expansion,
     # its terms + 1 (an over-cap count, 1); a compiled query, `Compiled.held` + 1 (the ids and terms inside its
-    # Tantivy query: each verified clause's ids once for the list `Compiled.ids` keeps, plus whichever id list its query holds, the ids or the candidates that failed, none when none failed (TASK-076); plus the copies `Compiled.conjuncts` keeps, TASK-197; plus its explain lines); a base's facet combos, their number + 1. So ≲ 30 + 30 + 6 + a few MB per
-    # engine, and the API holds the served engine plus `pinned_indexes` more. Every memo is checked before each
+    # Tantivy query: each verified clause's ids once for the list `Compiled.ids` keeps, plus whichever id list its query holds, the ids or the candidates that failed, none when none failed (TASK-076); plus the copies `Compiled.conjuncts` keeps, TASK-197; plus its explain lines); a base's facet combos, their number + 1. So ≲ 30 + 30 + 6 MB for
+    # the first three, plus `faceted`'s: a memoised five-field combo with its count is about 204 bytes (a measurement,
+    # 2026-10-10 and 2026-10-11: docs/results/2026-10-11-perf-regression.md §Memory; a year above 256 is its own int
+    # object), so a full `faceted` is about 61 MB (about 18 MB at
+    # schema 3's 100,000), about 130 MB per engine in all; the API holds the served engine plus `pinned_indexes`
+    # more (4 by default: about 300 MB of `faceted` at worst, against about 90 MB before schema 4). Every memo is checked before each
     # entry is stored and charged right after (`verified` clause by clause, inside a compile: `_store_verified`),
     # so it exceeds its budget by at most one entry per thread storing concurrently (each thread's check may
     # predate the others' charges), never more; a single compile, however many verified clauses it has,
@@ -197,7 +214,11 @@ class TantivyEngine:
     MAX_COMPILED_UNITS = 500_000
     MAX_VERIFIED_IDS = 500_000
     MAX_EXPANDED_TERMS = 100_000
-    MAX_FACET_COMBOS = 100_000  # `faceted`: a base's (venue, year, track, status) combos, + 1 (a few hundred)
+    # `faceted`: a base's (venue, year, track, status, abstract_kind) combos, + 1: up to three times schema 3's.
+    # Measured: 352 combos per base on the 173k corpus (index 99c2e7ea2a0a, schema 3); a base has up to three
+    # times as many at schema 4, so tripling the budget keeps the number of bases memoised about the same (about
+    # 95 bases of 1,056 combos), at about 61 MB when full (see above).
+    MAX_FACET_COMBOS = 300_000
 
     def __init__(self, path: Path) -> None:
         manifest = verify_index(path)
@@ -212,11 +233,18 @@ class TantivyEngine:
         self.index = open_index(path)
         self.searcher = self.index.searcher()
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
-        # what this index's schema differs in (`SERVED_SCHEMAS`): schema 3 indexes `ord`, so a verified clause
-        # names its ids as a u64 term set; a schema-2 index (one a record may pin) keeps the term set on the text
-        # `id` it was served with (TASK-167, `id_set`)
-        self.form: SchemaForm = SERVED_SCHEMAS[manifest["schema_version"]]
-        if self.form.ord_indexed and not _indexes_ord(self.index.schema, self.searcher):
+        # what this index's schema differs in (`SERVED_SCHEMAS`); every served schema indexes `ord`, so a verified
+        # clause names its ids as a u64 term set (TASK-167, `id_set`)
+        self.schema_version: str = manifest["schema_version"]
+        self.form: SchemaForm = SERVED_SCHEMAS[self.schema_version]
+        # the filter fields this index holds, in the canonical filter order: a query naming another is refused
+        # (`admit`), and these are the fields `facets` counts by default
+        self.filter_fields: tuple[str, ...] = BASE_COMBO + (
+            ("abstract_kind",) if self.form.abstract_kind else ()
+        )
+        # the fields a document's combo holds (`combos`), in this order: the filter fields, already in COMBO's order
+        self.combo: tuple[str, ...] = self.filter_fields
+        if not _indexes_ord(self.index.schema, self.searcher):
             # a manifest that names a schema its files don't have: refused here, not query by query
             raise IndexUnservable(
                 DiagnosticCode.API_INTERNAL,
@@ -224,14 +252,19 @@ class TantivyEngine:
                 "build a new index",
                 reason="schema_version_mismatch",
             )
-        # id → ord (its position in `ids.txt`), built on the first verified clause a schema-3 compile names
+        # id → ord (its position in `ids.txt`), built on the first verified clause a compile names
         # (`id_set`), then kept: one dict entry per record (a few MB at 80k), never changed after
         self._ords: dict[str, int] | None = None
-        # each facet field's values (COMBO order), each with the bitmap of the documents (by ord) that have it, built
+        # each facet field's values (`combo` order), each with the bitmap of the documents (by ord) that have it, built
         # on the first count that collects its conjuncts as bitmaps (`counts`), then kept, never changed after:
         # values × documents / 8 bytes (~0.5 MB at 133k documents and 30 values; it grows with the index's facet
         # values, e.g. more track values, TASK-130)
         self._masks: tuple[tuple[tuple[str | int, int], ...], ...] | None = None
+        # each combo field's value number per document, from `_masks`, built on the first `filter_values` and kept
+        # (`_value_index`): documents bytes per field
+        self._index: tuple[tuple[tuple[tuple[str | int, int], ...], ...], tuple[bytes | None, ...]] | None = (
+            None
+        )
         self.compiled: dict[str, Compiled] = {}  # per tree (bounded), see compile()
         self.verified: Verified = {}  # position-verified clauses, per engine
         # each wildcard's terms, or just the count of an over-cap one
@@ -244,11 +277,6 @@ class TantivyEngine:
         # entered around each cold position verification (`Compiler.gate`); the API sets its own, which
         # bounds how many run at once (spec 04 §Rate limit)
         self.verification_gate: Callable[[], AbstractContextManager[object]] = nullcontext
-
-    @property
-    def ord_indexed(self) -> bool:
-        """Whether this index names a verified clause's ids by the indexed `ord` (schema 3) or the text `id`."""
-        return self.form.ord_indexed
 
     @property
     def universe(self) -> frozenset[str]:
@@ -284,6 +312,22 @@ class TantivyEngine:
 
     def match_ids(self, ast: Node) -> frozenset[str]:
         return self.ids_of(self.compile(ast).query)
+
+    def admit(self, ast: Node) -> None:
+        """Refuse, as the client's error (422), a query naming a filter field this index's schema doesn't hold:
+        `abstract_kind:` on a schema-3 index (one a search record pins), never a 500 from Tantivy. Every entry
+        point that reads a tree calls it first (`compile`, and so `match_ids`, `page`, `documents`; `facets`,
+        `counts`, `candidates`)."""
+        missing = sorted({f.field for f in _filters_in(ast)} - set(self.filter_fields))
+        if missing:
+            raise EngineInputError(
+                DiagnosticCode.FIELD_NOT_INDEXED,
+                # in the reader's words, not the schema's (gate C round 1): only `abstract_kind` can be missing
+                # and the sidebar's (gate C round 2: "Abstract source")
+                f"This index ({self.index_version}) doesn't record {_NOT_INDEXED.get(missing[0], missing[0])} "
+                f"yet; it was built before it was recorded. Search the current index, or remove the "
+                f"`{missing[0]}:` filter.",
+            )
 
     def search(self, ast: Node, *, sort: str = "relevance", offset: int = 0, limit: int = 50) -> SearchResult:
         """One page of the fully ordered match set (field-weighted-bm25 skill), so pages are stable and
@@ -345,8 +389,8 @@ class TantivyEngine:
         return [(float(sign * v), i, s) for v, s, i in zip(values, scores, ids, strict=True)]
 
     def documents(self, ast: Node) -> tuple[int, Iterator[dict[str, Any]]]:
-        """How many documents match, and every match's display record (id, venue, year, track, status, and
-        the stored title, abstract, authors, urls, presentation, keywords, venue_id_raw) in id order, read
+        """How many documents match, and every match's display record (id, venue, year, track, status, abstract_kind,
+        and the stored title, abstract, authors, urls, presentation, keywords, venue_id_raw) in id order, read
         one at a time: what an export streams (spec 04 §Exports). One collection of the match set."""
         addresses = self.hits(self.compile(ast).query)
         if not addresses:
@@ -362,43 +406,130 @@ class TantivyEngine:
         query = tantivy.Query.term_set_query(self.index.schema, "id", ids)
         return {r["id"]: r for r in map(self._display, self.hits(query))}
 
+    def filter_values(self, ids: list[str]) -> dict[str, dict[str, str | int]]:
+        """Each held id's value in every filter field (`combo`: venue, year, track, status, and abstract_kind on
+        schema 4), by id; an id the index doesn't hold is left out (a drifted record's removed papers, TASK-227).
+        Read from the per-value document bitmaps (`_value_masks`, built once from the indexed values and kept)
+        at each id's `ord`: no stored document is decoded and no search runs. Tantivy's Python binding reads only
+        numeric fast columns, so the text fields can't be read the way `ids_of` reads `ord`. A field in which a
+        document has no value (no value's bitmap holds it) is left out of that id's values."""
+        table = self._ord_table()
+        ords = {i: table[i] for i in ids if i in table}
+        if not ords:
+            return {}
+        masks = self._value_masks()
+        index = self._value_index(masks)
+        out: dict[str, dict[str, str | int]] = {}
+        for i, o in ords.items():
+            found: dict[str, str | int] = {}
+            for f, values, at in zip(self.combo, masks, index, strict=True):
+                if at is not None:  # O(1): the value's position + 1 at the document's ord, 0 for none
+                    k = at[o]
+                    if k:
+                        found[f] = values[k - 1][0]
+                    continue
+                bit = 1 << o  # a field with more values than a byte numbers: each value's bitmap, in turn
+                v = next((v for v, m in values if m & bit), None)
+                if v is not None:  # a field the document has no value in is left out, never a StopIteration
+                    found[f] = v
+            out[i] = found
+        return out
+
+    def count_value(self, ids: Iterable[str], field: str, value: str | int) -> int:
+        """How many distinct held `ids` have `value` in the filter field `field` (gate C round 3: a record's
+        `openalex_abstracts`). Reads only that field's byte per document (`_value_index`), or its value's bitmap
+        when the field has more values than a byte numbers: no per-id dict, no other field. Equals counting
+        `filter_values(ids)` for that field and value; an id the index doesn't hold counts as none."""
+        table = self._ord_table()
+        ords = {table[i] for i in ids if i in table}
+        if not ords:
+            return 0
+        masks = self._value_masks()
+        f = self.combo.index(field)
+        k = next((n for n, (v, _m) in enumerate(masks[f], start=1) if v == value), None)
+        if k is None:  # a value no document has
+            return 0
+        at = self._value_index(masks)[f]
+        if at is not None:
+            return sum(1 for o in ords if at[o] == k)
+        bits = masks[f][k - 1][1]
+        return sum(1 for o in ords if bits >> o & 1)
+
+    def _value_index(self, masks: tuple[tuple[tuple[str | int, int], ...], ...]) -> tuple[bytes | None, ...]:
+        """Per `combo` field, one byte per document (by ord): the position + 1 of its value in `masks`, 0 when it
+        has none, so `filter_values` reads a document's value in O(1) instead of ANDing every value's N-bit
+        bitmap (gate C round 1: about 60 µs an id at 173k documents before). Built once from the bitmaps, by
+        translating each bitmap's base-2 digits to its value's number and ORing them (a document has at most one
+        value per field), then kept: documents bytes per field (~0.9 MB for five fields at 173k). A field with
+        more values than a byte numbers (255) gets None and is read from the bitmaps."""
+        kept = self._index  # one read; it names the bitmaps it was built from
+        if kept is not None and kept[0] is masks:
+            return kept[1]
+        n = len(self.ids)
+        built: list[bytes | None] = []
+        for values in masks:
+            if len(values) > 255:
+                built.append(None)
+                continue
+            acc = 0
+            for k, (_v, m) in enumerate(values, start=1):
+                digits = format(m, f"0{n}b")[::-1].encode("ascii")  # ord order, b"0"/b"1"
+                acc |= int.from_bytes(digits.translate(_DIGIT_TO[k]), "little")
+            built.append(acc.to_bytes(n, "little"))
+        index = tuple(built)
+        self._index = (masks, index)  # one assignment; a race only builds the same index twice
+        return index
+
     def _display(self, address: tantivy.DocAddress) -> dict[str, Any]:
         doc = self.searcher.doc(address).to_dict()
+        shown = record_of(doc["record"][0])
+        # schema 3 stores no kind: derived from the stored abstract, exact because a schema-3 build refuses a
+        # record whose abstract is OpenAlex's (`index._add_all`)
+        kind = doc["abstract_kind"][0] if self.form.abstract_kind else (
+            "none" if shown.get("abstract") is None else "official")  # fmt: skip
         return {
             "id": doc["id"][0],
             **{f: doc[f][0] for f in ("venue", "track", "status", "year")},
-            **record_of(doc["record"][0]),
+            "abstract_kind": kind,
+            **shown,
         }
 
     def facets(
         self,
         ast: Node,
-        fields: tuple[str, ...] = FACET_FIELDS,
+        fields: tuple[str, ...] | None = None,
         *,
         scope: Scope | None = None,
-        over: tuple[str, ...] = COMBO,
+        over: tuple[str, ...] | None = None,
     ) -> dict[str, dict[str, int]]:
         """Disjunctive facets (spec 04, decision-001 rule 6): field F is counted over the matches of the
         query without F's own top-level conjuncts (a filter on F, or NOT of one; nested ones stay).
 
         One collection serves every field (task-086). The query's top-level facet-field filters (`Filter`,
         or `NOT` of one) are set aside, and the rest (the *base*) is collected once, counting its matches
-        per combination of (venue, year, track, status) with one nested terms aggregation over those fast
-        columns. A filter depends only on its field's value, so field F's count is exact from the combos:
-        those passing every set-aside filter not on F, summed by their F value. The combos are memoised per
+        per combination of the engine's `combo` fields ((venue, year, track, status), and `abstract_kind` on
+        schema 4) with one nested terms aggregation over those fast columns. A filter depends only on its field's
+        value, so field F's count is exact from the combos: those passing every set-aside filter not on F, summed by their F value. The combos are memoised per
         base (`faceted`, by its span-less, sorted conjuncts), so another page, exclusion accounting (whose
         trees differ only in top-level filters) and a later query with the same base never collect again.
         Proved equal to one collection per kept set, and to ReferenceEngine (`test_facets_equal.py`).
 
-        `over` narrows the aggregation to some of those fields (each counted field among them): only their
+        `over` (the engine's `combo` by default) narrows the aggregation to some of those fields (each counted
+        field among them): only their
         top-level filters are set aside, and every other field's stay in the collected query, so the combos
         are fewer. Exclusion accounting without facets passes the two default fields (`exclusions.ORDER`,
         `search.run`): a few combos to read instead of hundreds, and the base it collects is no wider than the
-        query's (TASK-166). The counts are the same either way (`test_facets_equal.py`)."""
-        unknown = [f for f in fields if f not in FACET_FIELDS]
+        query's (TASK-166). The counts are the same either way (`test_facets_equal.py`).
+
+        `fields` defaults to every filter field this index holds (`filter_fields`)."""
+        self.admit(ast)
+        fields = self.filter_fields if fields is None else fields
+        unknown = [f for f in fields if f not in self.filter_fields]
         if unknown:
-            raise EngineInputError(DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {FACET_FIELDS}")
-        over = _aggregated(over)
+            raise EngineInputError(
+                DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {self.filter_fields}"
+            )
+        over = self._aggregated(self.combo if over is None else over)
         if not set(fields) <= set(over):
             raise EngineInternalError(
                 DiagnosticCode.API_INTERNAL, f"facet fields {fields} must be among the aggregated {over}"
@@ -408,21 +539,24 @@ class TantivyEngine:
         filters = [c for c in tops if _filter_field(c) in over]
         base = [c for c in tops if _filter_field(c) not in over]
         combos = self.combos(base, scope, over)
-        # per field, whether each value that occurs passes every set-aside filter on that field
-        ok = [
-            {
-                v: all(_passes(c, v) for c in filters if _filter_field(c) == g)
+        # per field with a set-aside filter, whether each value that occurs passes every such filter on that field
+        # (a field without one passes every value, so it is never looked up: the combos' loop reads only these)
+        ok = {
+            i: {
+                v: all(passes(c, v) for c in filters if _filter_field(c) == g)
                 for v in {c[i] for c, _n in combos}
             }
             for i, g in enumerate(over)
-        ]
+            if any(_filter_field(c) == g for c in filters)
+        }
         out: dict[str, dict[str, int]] = {}
         for f in fields:
             at = over.index(f)
-            others = [i for i in range(len(over)) if i != at]  # every other field's filters apply; F's don't
+            # every other field's filters apply; F's don't
+            others = [(i, passing) for i, passing in ok.items() if i != at]
             counts: dict[str, int] = {}
             for combo, n in combos:
-                if all(ok[i][combo[i]] for i in others):
+                if all(passing[combo[i]] for i, passing in others):
                     value = str(combo[at])
                     counts[value] = counts.get(value, 0) + n
             out[f] = dict(sorted(counts.items()))
@@ -439,12 +573,14 @@ class TantivyEngine:
         scope: Scope | None = None,
         check: Callable[[], None] | None = None,
         compiled: tuple[Node, Compiled] | None = None,
+        spread: Spread | None = None,
     ) -> list[int]:
         """How many documents match each of `trees`, without reading an id (TASK-176: a query's concept groups,
         each alone and the query without each; `search.run`). Counted as a facet is: a tree's top-level
         filters (`Filter`, or `NOT` of one) are set aside, the rest (its *base*) is counted per combination of
-        (venue, year, track, status) (`combos`, memoised per base: another page, and the same group under
-        other filters, never collect again), and the combos passing every filter are summed. A filter
+        the fields the call's trees filter (`combos`, memoised per base and fields: another page, and the same
+        group under other filters on those fields, never collect again; `UNFILTERED` when none filters), and
+        the combos passing every filter are summed. A filter
         depends only on its field's value, so the sum is exact (`test_group_counts.py` holds it to
         `match_ids` and to ReferenceEngine).
 
@@ -467,7 +603,22 @@ class TantivyEngine:
 
         `check` is called before each tree and before each conjunct's collection: a caller that no longer
         wants the counts raises from it, so the work stops within one collection (what is already collected
-        stays memoised)."""
+        stays memoised).
+
+        `spread` (TASK-230) offers the trees to a helper: it is called once with a job to start on another
+        thread (`search.run` starts it on an idle counting worker), and the job and this call then take the
+        trees one at a time from a shared queue until none is left (`_Shared`). Each tree is still counted
+        exactly as above, by whichever thread takes it, so the counts are the same (`test_group_counts.py`'s
+        differential); only the wall time drops, the trees' collections running two at a time (Tantivy's
+        collection releases the GIL). The caller never waits for a helper that hasn't started: it takes what is
+        left itself, and then waits only for a tree the helper is counting. The job is given a `yielding`
+        callable and stops before its next tree once it returns True, so a search waiting for its worker waits
+        at most for the tree it is counting (one collection; on the bitwise path, one per conjunct of that tree not
+        yet collected). On the bitwise path the two threads share
+        the call's conjunct bitmaps: each is still collected once, a thread needing one the other is collecting
+        waiting for it (`_Parts.matches`), and the per-value bitmaps are built before the helper is offered."""
+        for ast in trees:  # every tree before any is counted: a refused call counts nothing
+            self.admit(ast)
         parts = _Parts(self, scope, check, compiled)
         split = [conjuncts(ast) for ast in trees]
         bases = [[c for c in tops if _filter_field(c) is None] for tops in split]
@@ -477,42 +628,62 @@ class TantivyEngine:
         parts.bitwise = len(shared) <= len(distinct) and any(
             shared[id(c)] > 1 and verifies(c) for base in bases for c in base
         )
-        out: list[int] = []
-        for ast, tops, base in zip(trees, split, bases, strict=True):
+        # a count reads only its filters' fields, so only those are aggregated (one set for the call, so its trees
+        # share memo keys); every field of `combo` would multiply the combos by the unread fields' values
+        # (schema 4's abstract_kind cost the synthetic 80k `/search` first page its budget: 2026-10-10 perf report)
+        filtered = {f for tops in split for c in tops if (f := _filter_field(c)) is not None}
+        over = self._aggregated(tuple(filtered) or UNFILTERED)
+
+        def one(i: int) -> int:
             if check is not None:
                 check()
-            self.expansions(ast)  # the cap applies, as for every tree an engine is given
-            filters = [(COMBO.index(f), c) for c in tops if (f := _filter_field(c)) is not None]
-            combos = self.combos(base, scope, parts=parts)
-            out.append(sum(n for combo, n in combos if all(_passes(c, combo[at]) for at, c in filters)))
-        return out
+            self.expansions(trees[i])  # the cap applies, as for every tree an engine is given
+            filters = [(over.index(f), c) for c in split[i] if (f := _filter_field(c)) is not None]
+            combos = self.combos(bases[i], scope, over, parts=parts)
+            return sum(n for combo, n in combos if all(passes(c, combo[at]) for at, c in filters))
+
+        if spread is None or len(trees) < 2:
+            return [one(i) for i in range(len(trees))]
+        if parts.bitwise:
+            self._value_masks(check)  # built here, once, before two threads could each build them
+        return _Shared(len(trees), one).counted(spread)
 
     def combos(
         self,
         base: list[Node],
         scope: Scope | None = None,
-        over: tuple[str, ...] = COMBO,
+        over: tuple[str, ...] | None = None,
         *,
         parts: _Parts | None = None,
     ) -> tuple[tuple[Combo, int], ...]:
         """How many matches of `base`'s conjunction (every document when empty) have each combination of the
-        `over` fields' values (a subsequence of COMBO: (venue, year, track, status) unless narrowed), from one
+        `over` fields' values (a subsequence of the engine's `combo`, the whole of it unless narrowed), from one
         collection (or, for `counts`, from its conjuncts' bitmaps: `_Parts.bitwise`); memoised per base and
         fields under task-080's rules."""
-        over = _aggregated(over)
+        over = self._aggregated(self.combo if over is None else over)
         spanless = _spanless if parts is None else parts.spanless
         key = "\x00".join((",".join(over), *sorted(spanless(c) for c in base)))
         hit = self.faceted.get(key)  # one read (task-080)
         if hit is not None:
             return hit
-        if parts is not None and parts.bitwise and over == COMBO:
-            combos = self._combos_of(parts.bits(base), parts.check)
+        if parts is not None and parts.bitwise:
+            combos = self._combos_of(parts.bits(base), parts.check, over)
         else:
             combos = self._aggregate(base, scope, over, parts)
         self._trim("faceted", self.faceted, self.MAX_FACET_COMBOS)
         self.faceted[key] = combos  # stored complete (an immutable tuple), never changed after
         self.charges["faceted"].append(len(combos) + 1)
         return combos
+
+    def _aggregated(self, over: tuple[str, ...]) -> tuple[str, ...]:
+        """`over` as the combos aggregate it: in the engine's `combo` order (one memo key per set of fields),
+        refused when empty or naming a field outside it (a caller's bug: an internal error, never a silent
+        drop)."""
+        if not over or not set(over) <= set(self.combo):
+            raise EngineInternalError(
+                DiagnosticCode.API_INTERNAL, f"the aggregated fields {over} must be some of {self.combo}"
+            )
+        return tuple(f for f in self.combo if f in over)
 
     def _aggregate(
         self, base: list[Node], scope: Scope | None, over: tuple[str, ...], parts: _Parts | None
@@ -525,20 +696,27 @@ class TantivyEngine:
             query = parts.query(base)  # `counts`: conjunct by conjunct, nothing stored in `compiled`
         else:
             query = self.compile(node, scope).query
+        nested = _nesting(over)  # (→ abstract_kind →) status → track → venue → year, innermost last
         aggs: dict[str, Any] = {}
-        for f in reversed(over):  # venue → year → track → status, innermost last
+        for f in reversed(nested):
             aggs = {f: {"terms": {"field": f, "size": 100_000}, **({"aggs": aggs} if aggs else {})}}
         found: list[tuple[Combo, int]] = []
-        _walk(self.searcher.aggregate(query, aggs), over, (), found)
+        _walk(self.searcher.aggregate(query, aggs), nested, (), found)
+        if nested != over:  # each combo's values back in `over` order
+            back = itemgetter(*(nested.index(f) for f in over))  # two fields or more: a tuple
+            found = [(back(combo), n) for combo, n in found]
         return tuple(sorted(found))
 
     def _combos_of(
-        self, documents: int, check: Callable[[], None] | None = None
+        self, documents: int, check: Callable[[], None] | None = None, over: tuple[str, ...] | None = None
     ) -> tuple[tuple[Combo, int], ...]:
-        """`combos` of a bitmap of documents (bit `ord` set for each), over every COMBO field: each combination's
-        documents are the AND of its values' bitmaps, walked field by field and pruned where none is left.
+        """`combos` of a bitmap of documents (bit `ord` set for each), over the `over` fields (in `combo` order;
+        every field of the engine's `combo` by default): each combination's documents are the AND of its values'
+        bitmaps, walked field by field and pruned where none is left.
         `check`, as `counts`': asked before each collection, should the per-value bitmaps be built now."""
-        masks = self._value_masks(check)
+        every = self._value_masks(check)
+        over = self.combo if over is None else self._aggregated(over)
+        masks = tuple(every[self.combo.index(f)] for f in over)
         found: list[tuple[Combo, int]] = []
 
         def walk(at: int, within: int, prefix: Combo) -> None:
@@ -557,7 +735,7 @@ class TantivyEngine:
     def _value_masks(
         self, check: Callable[[], None] | None = None
     ) -> tuple[tuple[tuple[str | int, int], ...], ...]:
-        """Each COMBO field's values, each with the bitmap of the documents that have it (`_masks`): the values
+        """Each `combo` field's values, each with the bitmap of the documents that have it (`_masks`): the values
         a terms aggregation over every document finds, and each one's documents collected by its own term (a
         year by its one-year range), so a document is in a value's bitmap exactly when the aggregation counts it
         under that value. Built lazily, by the first count that needs them (about 30 collections on the real
@@ -566,7 +744,7 @@ class TantivyEngine:
         masks = self._masks  # one read (task-080); built whole, then stored with one assignment
         if masks is None:
             built = []
-            for f in COMBO:
+            for f in self.combo:
                 found = self.searcher.aggregate(
                     tantivy.Query.all_query(), {f: {"terms": {"field": f, "size": 100_000}}}
                 )
@@ -593,10 +771,17 @@ class TantivyEngine:
         hits = self.searcher.search(
             query, max(1, self.searcher.num_docs), count=False, order_by_field="ord"
         ).hits
-        bits = bytearray(len(self.ids) // 8 + 1)
-        for o, _address in hits:  # an int (the column is u64; `_ord` per hit would double the loop's cost)
-            bits[o >> 3] |= 1 << (o & 7)
-        return int.from_bytes(bits, "little")
+        # one byte per document, set without a Python-level loop (an `ord` is an int: the column is u64), then read
+        # as the base-2 digits of the bitmap, highest `ord` first: half the time of a per-hit loop setting bits,
+        # all of it holding the GIL a concurrent page needs (TASK-230)
+        marks = bytearray(len(self.ids))
+        try:
+            deque(map(marks.__setitem__, map(itemgetter(0), hits), repeat(1)), maxlen=0)
+        except IndexError:  # an `ord` past `ids.txt`: the index and its id list disagree (never a silent bit)
+            raise EngineInternalError(
+                DiagnosticCode.API_INTERNAL, f"an ord is past the {len(self.ids):,} ids of {IDS}"
+            ) from None
+        return int(marks[::-1].translate(_BINARY_DIGITS) or b"0", 2)
 
     # --- compilation and explain ---------------------------------------------------------------------
     def candidates(self, ast: Node) -> list[tuple[Phrase | Near, TextField, int]]:
@@ -607,6 +792,7 @@ class TantivyEngine:
         running it (decision-010): that work is proportional to these counts, not to the clause count.
         Counts every clause, cached or not, so whether a query is refused never depends on the memos.
         Wildcards are expanded first (the 200 cap applies)."""
+        self.admit(ast)
         compiler = Compiler(self.index.schema, self.expansions(ast), self.read)
         return [
             (n, f, self._count(compiler.candidates(n, f)))
@@ -631,6 +817,7 @@ class TantivyEngine:
         """The compiled query, memoised per tree: the index is immutable, so a tree compiles the same way every
         time, and a search, its pages and its facets needn't build the Boolean again (task-076 headroom).
         `scope`: the request's own verified clauses, read first and added to (the class docstring)."""
+        self.admit(ast)  # before the memo: a refused tree is never compiled, so never in it
         # spans included: ` trust` and `trust` compile apart (a miss, never wrong)
         key = ast.model_dump_json()
         hit = self.compiled.get(key)  # one read: the memo may be cleared by another thread at any time
@@ -735,18 +922,20 @@ class TantivyEngine:
     # --- reading the index ---------------------------------------------------------------------------
     def id_set(self, ids: list[str]) -> tantivy.Query:
         """The documents with these ids, as a verified clause names them (`Compiler.exact`): a term set on the
-        indexed `ord` (schema 3; each id's position in `ids.txt`, which is in id order), or on the text `id`
-        for a schema-2 index. The same documents either way; Tantivy resolves the u64 set faster (TASK-167)."""
-        if not self.form.ord_indexed:
-            return id_set(self.index.schema, ids)
-        table = self._ords  # one read (task-080); built whole, then stored with one assignment
-        if table is None:
-            table = {i: at for at, i in enumerate(self.ids)}
-            self._ords = table  # a race only builds the same table twice
+        indexed `ord` (each id's position in `ids.txt`, which is in id order; TASK-167)."""
+        table = self._ord_table()
         ords = [table.get(i, -1) for i in ids]
         if -1 in ords:
             raise EngineInternalError(DiagnosticCode.API_INTERNAL, "a verified id is not in the index")
         return tantivy.Query.term_set_query(self.index.schema, "ord", ords)
+
+    def _ord_table(self) -> dict[str, int]:
+        """id → ord, built on first use, then kept (see `__init__`)."""
+        table = self._ords  # one read (task-080); built whole, then stored with one assignment
+        if table is None:
+            table = {i: at for at, i in enumerate(self.ids)}
+            self._ords = table  # a race only builds the same table twice
+        return table
 
     def hits(self, query: tantivy.Query) -> list[tantivy.DocAddress]:
         limit = max(1, self.searcher.num_docs)
@@ -771,9 +960,22 @@ class _Parts:
     (`compiled`) or compiled once (`_fresh`: never stored in `compiled`), on first need, and a base's query built
     from them; with `bitwise`, each one's bitmap, collected once, and a base's bitmap built from them (see
     `counts`). A call's bitmaps are dropped with it: one bit per document per conjunct, charged to no memo.
-    Used by one thread."""
+    Shared by a spread call's two threads (`counts`' `spread`): its dicts are read and written one item at a
+    time, so a race only builds the same conjunct's query twice, and a bitmap, a whole collection, is collected
+    by one thread while the other waits for it (`matches`)."""
 
-    __slots__ = ("bitwise", "built", "check", "engine", "keys", "known", "matched", "scope")
+    __slots__ = (
+        "bitwise",
+        "built",
+        "check",
+        "collecting",
+        "engine",
+        "keys",
+        "known",
+        "lock",
+        "matched",
+        "scope",
+    )
 
     def __init__(
         self,
@@ -787,6 +989,10 @@ class _Parts:
         self.built: dict[int, tantivy.Query] = {}  # by the conjunct's identity: the call's trees share nodes
         self.keys: dict[int, str] = {}  # each conjunct's memo-key part, serialised once for all the trees
         self.matched: dict[int, int] = {}  # each conjunct's bitmap (a NOT's: its child's), by identity
+        self.lock = threading.Lock()
+        self.collecting: dict[
+            int, threading.Event
+        ] = {}  # under `lock`: the bitmaps a thread is collecting now
         # each conjunct's query and, for a NOT, its child's, as the request's compile built them
         self.known: dict[int, tuple[tantivy.Query, tantivy.Query | None]] = {}
         if compiled is not None:
@@ -828,29 +1034,113 @@ class _Parts:
         return out
 
     def matches(self, c: Node) -> int:
-        """The bitmap of what `c` matches (a NOT: what its child matches), collected once per call."""
-        bits = self.matched.get(id(c))
-        if bits is None:
-            if self.check is not None:
-                self.check()
-            if isinstance(c, Not):
-                known = self.known.get(id(c))
-                child = known[1] if known is not None else None
-                query = child if child is not None else self.engine._fresh(c.child, self.scope).query
-            else:
-                query = self.conjunct(c)
-            bits = self.matched[id(c)] = self.engine._bitmap(query)
+        """The bitmap of what `c` matches (a NOT: what its child matches), collected once per call: by the first
+        thread to need it, the other waiting for it (and collecting it itself should that collection fail)."""
+        while True:
+            bits = self.matched.get(id(c))
+            if bits is not None:
+                return bits
+            with self.lock:
+                if id(c) in self.matched:
+                    continue
+                other = self.collecting.get(id(c))
+                if other is None:
+                    mine = self.collecting[id(c)] = threading.Event()
+            if other is not None:
+                other.wait()
+                continue
+            try:
+                return self._collect(c)
+            finally:
+                with self.lock:
+                    del self.collecting[id(c)]
+                mine.set()
+
+    def _collect(self, c: Node) -> int:
+        if self.check is not None:
+            self.check()
+        if isinstance(c, Not):
+            known = self.known.get(id(c))
+            child = known[1] if known is not None else None
+            query = child if child is not None else self.engine._fresh(c.child, self.scope).query
+        else:
+            query = self.conjunct(c)
+        bits = self.matched[id(c)] = self.engine._bitmap(query)
         return bits
 
 
-def _aggregated(over: tuple[str, ...]) -> tuple[str, ...]:
-    """`over` as the combos aggregate it: in COMBO's order (one memo key per set of fields), refused when empty
-    or naming a field outside COMBO (a caller's bug: an internal error, never a silent drop)."""
-    if not over or not set(over) <= set(COMBO):
-        raise EngineInternalError(
-            DiagnosticCode.API_INTERNAL, f"the aggregated fields {over} must be some of {COMBO}"
-        )
-    return tuple(f for f in COMBO if f in over)
+_BINARY_DIGITS = bytes.maketrans(b"\x00\x01", b"01")  # a document's byte in `_bitmap` → its bit's digit
+# `_value_index`: a bitmap's digit → 0, or the value's number k (1..255) where the bit is set
+_DIGIT_TO = tuple(bytes.maketrans(b"01", bytes((0, k))) for k in range(256))
+
+# `counts`' `spread`: given the helper's job, starts it on another thread (or drops it); the job takes a `yielding`
+# callable, asked before each tree it would take
+type Spread = Callable[[Callable[[Callable[[], bool]], None]], None]
+
+
+class _Shared:
+    """One spread `counts` call's trees, taken one at a time by the caller and a helper (`counts`' `spread`).
+    Each tree is taken once, under a lock; its count, or the error counting it raised, is kept by its index
+    before the tree is marked done, so the caller, once every taken tree is done, sees every error."""
+
+    def __init__(self, n: int, count: Callable[[int], int]) -> None:
+        self.count = count
+        self.lock = threading.Lock()
+        self.next = 0  # the next tree to take, under `lock`
+        self.out: list[int | None] = [None] * n
+        self.done = [threading.Event() for _ in range(n)]  # set when the tree is counted, or failed
+        self.errors: dict[
+            int, BaseException
+        ] = {}  # each failed tree's error, by its index, set before `done`
+        self.stop = False  # set on any failure: neither thread takes another tree
+
+    def take(self) -> int | None:
+        with self.lock:
+            if self.stop or self.next == len(self.out):
+                return None
+            self.next += 1
+            return self.next - 1
+
+    def run(self, i: int) -> None:
+        try:
+            self.out[i] = self.count(i)
+        except BaseException as e:
+            self.stop = True
+            self.errors[i] = e  # before `done`: a caller woken by it must find the error
+            raise
+        finally:
+            self.done[i].set()
+
+    def helper(self, yielding: Callable[[], bool]) -> None:
+        """The helper's job: trees until none is left, the call fails, or `yielding()`. Never raises: a tree's
+        error is kept by `run` for the caller to raise, and one outside any tree (from `yielding`) loses no tree,
+        since the caller counts every tree nobody took."""
+        with suppress(BaseException):
+            while not yielding() and (i := self.take()) is not None:
+                self.run(i)
+
+    def counted(self, spread: Spread) -> list[int]:
+        """Every tree's count: the helper offered, the caller taking trees until none is left or one fails, then
+        waiting for any the helper is still counting (the rest of that tree). Of every failed tree, the caller's
+        own included, the lowest-index tree's error is raised, once no taken tree is still running."""
+        spread(self.helper)
+        while (i := self.take()) is not None:
+            try:
+                self.run(i)
+            except BaseException:  # kept in `errors` by `run`, raised below once the helper's tree is done
+                break
+        # read under the lock (gate C round 2): a helper's `take` that passed the `stop` check before a failure
+        # finishes incrementing first; `stop` is set by then, so no later `take` succeeds
+        with self.lock:
+            taken = self.next
+        for done in self.done[:taken]:  # a tree taken is counted or failed, so set, soon
+            done.wait()
+        if self.errors:
+            raise self.errors[min(self.errors)]
+        out = [n for n in self.out if n is not None]
+        if len(out) != len(self.out):  # every tree was taken and none failed, so each has its count
+            raise EngineInternalError(DiagnosticCode.API_INTERNAL, "a spread count left a tree uncounted")
+        return out
 
 
 def _indexes_ord(schema: tantivy.Schema, searcher: tantivy.Searcher) -> bool:
@@ -870,6 +1160,11 @@ def _ord(value: object) -> int:
     return value
 
 
+def _nesting(over: tuple[str, ...]) -> tuple[str, ...]:
+    """`over`'s fields in the order a combos aggregation nests them (`NESTING`)."""
+    return tuple(sorted(over, key=NESTING.index))
+
+
 def _walk(result: dict[str, Any], over: tuple[str, ...], prefix: Combo, out: list[tuple[Combo, int]]) -> None:
     """The leaves of a nested terms aggregation over the `over` fields, as (their values, count)."""
     field = over[len(prefix)]
@@ -881,7 +1176,7 @@ def _walk(result: dict[str, Any], over: tuple[str, ...], prefix: Combo, out: lis
             _walk(bucket, over, key, out)
 
 
-def _passes(n: Node, value: str | int) -> bool:
+def passes(n: Node, value: str | int) -> bool:
     """Whether a document whose value in `n`'s field is `value` passes the top-level filter `n` (a `Filter` or
     `NOT` of one), as the compiled query decides it (compile.py `filter`): years in any range, inclusive;
     other fields equal to one of the values."""
@@ -906,6 +1201,17 @@ def _drop_spans(value: Any) -> Any:
     if isinstance(value, list):
         return [_drop_spans(v) for v in value]
     return value
+
+
+def _filters_in(n: Node) -> Iterator[Filter]:
+    """Every `Filter` in the tree, at any depth (a filter sits only under AND, OR and NOT)."""
+    if isinstance(n, Filter):
+        yield n
+    elif isinstance(n, Not):
+        yield from _filters_in(n.child)
+    elif isinstance(n, And | Or):
+        for c in n.children:
+            yield from _filters_in(c)
 
 
 def _filter_field(n: Node) -> str | None:

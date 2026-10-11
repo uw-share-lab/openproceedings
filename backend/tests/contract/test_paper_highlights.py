@@ -96,6 +96,7 @@ def test_without_q_matched_and_highlights_are_null(client: TestClient) -> None:
         "highlights",
         "abstract_withheld",  # TASK-136
         "twins",  # TASK-162
+        "abstract_note",  # TASK-210
     }
     assert (body["matched"], body["highlights"]) == (None, None) and body["twins"] == []
     assert paper(client, hit["id"], mode="native")["highlights"] is None  # the declared default: accepted

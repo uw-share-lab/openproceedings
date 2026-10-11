@@ -35,7 +35,7 @@ type Body = Schemas["SearchResponse"];
 type Hit = Schemas["Hit"];
 
 const clause = (
-  field: "venue" | "track" | "status",
+  field: "venue" | "track" | "status" | "abstract_kind",
   span: [number, number] | null,
   values: string[] | null,
 ) => ({
@@ -65,6 +65,7 @@ function unrestricted(q: string): ParsedFilters {
     year: year([end, end]),
     track: clause("track", [end, end], ["datasets_benchmarks", "main", "position"]),
     status: clause("status", [end, end], ["accepted"]),
+    abstract_kind: clause("abstract_kind", [end, end], ["none", "official", "openalex"]),
   };
 }
 
@@ -88,6 +89,8 @@ const HIT: Hit = {
   },
   abstract_withheld: false,
   twins: [],
+  abstract_note: null,
+  abstract_kind: "official",
 };
 
 function body(over: Partial<Body> = {}): Body {
@@ -117,6 +120,7 @@ function body(over: Partial<Body> = {}): Body {
       year: { "2024": 141, "2023": 88 },
       track: { main: 301, datasets_benchmarks: 64, position: 47, workshop: 205, competition: 4 },
       status: { accepted: 412, rejected: 88 },
+      abstract_kind: null,
     },
     groups: { counts: [], groups_total: 1, limit: 10, not_counted: "fewer_than_two_groups" },
     hits: [HIT],
@@ -297,7 +301,7 @@ describe("results header, hits and highlights (W5)", () => {
       within(badges)
         .getAllByRole("listitem")
         .map((li) => li.textContent),
-    ).toEqual(["ICLR", "2024", "D&Bdatasets and benchmarks", "poster"]);
+    ).toEqual(["ICLR", "2024", "D&BD&B, datasets and benchmarks", "poster"]);
     const links = screen.getByRole("list", { name: `Links for ${HIT.title}` });
     expect(
       within(links)
@@ -459,12 +463,33 @@ describe("Limits you wrote", () => {
   });
 });
 
+describe("a written abstract_kind: clause", () => {
+  it("counts as one written limit on the Filters button", async () => {
+    const q = "trust abstract_kind:(official)";
+    await setup(
+      stateOf({ q }),
+      handler({
+        parse: (text) =>
+          json(
+            parsed(text, {
+              filters: {
+                ...unrestricted(text),
+                abstract_kind: clause("abstract_kind", [6, 30], ["official"]),
+              },
+            }),
+          ),
+      }),
+    );
+    expect(screen.getByRole("button", { name: "Filters (1 active)" })).toBeTruthy();
+  });
+});
+
 describe("filter sidebar (spec 05 §4; W13)", () => {
   it("labels each option with its facet count; checked = the clause admits it; (default) on track and status", async () => {
     await setup();
     expect(box("workshop, 205 papers")).toHaveProperty("checked", false);
     expect(box("main, 301 papers")).toHaveProperty("checked", true);
-    expect(box("datasets and benchmarks, 64 papers")).toHaveProperty("checked", true);
+    expect(box("D&B, datasets and benchmarks, 64 papers")).toHaveProperty("checked", true);
     expect(box("ICML, 81 papers")).toHaveProperty("checked", true);
     expect(screen.getByText("All venues: untick one to leave it out.")).toBeTruthy();
     const track = screen.getByRole("group", { name: "Track (default)" });
@@ -556,6 +581,42 @@ describe("filter sidebar (spec 05 §4; W13)", () => {
     fireEvent.click(within(track).getByRole("button", { name: "Show the clauses in the editor" }));
     const sel = view.state.selection.main;
     expect(view.state.sliceDoc(sel.from, sel.to)).toBe("track:main");
+  });
+
+  it("shows the Abstract fieldset after Status, each value by its label with its count (SB-1, SB-12)", async () => {
+    const kinds = { official: 40, openalex: 7, none: 3 };
+    await setup(
+      stateOf(),
+      handler({ search: () => json(body({ facets: { ...body().facets, abstract_kind: kinds } })) }),
+    );
+    const legends = [...document.querySelectorAll("fieldset > legend")].map((l) => l.textContent);
+    expect(legends).toEqual(["Venue", "Year", "Track (default)", "Status (default)", "Abstract source"]);
+    const group = screen.getByRole("group", { name: "Abstract source" });
+    expect(within(group).getByRole("checkbox", { name: "OpenAlex, 7 papers" })).toHaveProperty(
+      "checked",
+      true,
+    );
+    expect(within(group).getByRole("checkbox", { name: "Official, 40 papers" })).toBeTruthy();
+    expect(within(group).getByRole("checkbox", { name: "No abstract, 3 papers" })).toBeTruthy();
+    expect(group.textContent).not.toContain("openalex");
+  });
+
+  it("an Abstract toggle writes the abstract_kind: clause into q", async () => {
+    const kinds = { official: 40, openalex: 7, none: 3 };
+    await setup(
+      stateOf(),
+      handler({ search: () => json(body({ facets: { ...body().facets, abstract_kind: kinds } })) }),
+    );
+    fireEvent.click(box("OpenAlex, 7 papers"));
+    expect(nav.push).toHaveBeenCalledWith(
+      searchHref(stateOf({ q: "(trust) AND abstract_kind:(none OR official)" })),
+    );
+  });
+
+  it("hides the Abstract fieldset on an index without the field (facets.abstract_kind null)", async () => {
+    await setup();
+    expect(screen.queryByRole("group", { name: "Abstract source" })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: /^OpenAlex/ })).toBeNull();
   });
 
   it("with no search that ever ran, a 422 says the query wasn't searched instead of an empty list (ER-2)", async () => {

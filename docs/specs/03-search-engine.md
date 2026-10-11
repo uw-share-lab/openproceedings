@@ -57,6 +57,7 @@ never logged. It runs on the synthetic 5k corpus in CI; on the real corpus it ru
 | `title` | text, positions | ✓ | ✓ | |
 | `abstract` | text, positions | ✓ | ✓ | |
 | `venue`, `track`, `status` | text (raw, facet) | ✓ | ✓ | ✓ |
+| `abstract_kind` | text (raw, facet): the record's derived `official` / `openalex` / `none` (decision-049) | ✓ from schema 4 | ✓ | ✓ |
 | `year` | u64 | ✓ | ✓ | ✓ |
 | `ord` | u64: the record's position in id order (`ids.txt` maps it back) | ✓ from schema 3 | | ✓ |
 | `title_rank` | u64: the record's position in display-title order (`sort=title`) | | | ✓ |
@@ -193,13 +194,11 @@ index_version = sha256( snapshot_hash, TOKENIZER_VERSION, SCHEMA_VERSION, rankin
 Indexes live at `data/indexes/<index_version>/`, are immutable, and several can be kept. The API serves one
 as "current" and can load a pinned older version to replay a search record.
 
-As built (TASK-167, SCHEMA_VERSION 3): new indexes index `ord`, and a position-verified clause names its ids
-as a u64 term set on `ord` rather than on the text `id`. The code serves both schemas: `index.SERVED_SCHEMAS`
-maps each served `schema_version` to its `SchemaForm`, and an index takes the form its manifest names. A
-schema-2 index keeps the text-`id` path, so a record pinned to one still replays `reproduced` on it (guarantee
-4). Records saved by the pre-change code on the real M4 index replayed 10/10 `reproduced`, and a contract test
-checks the same through the API. Every query gets the same ids and the same float scores on either schema:
-the differential suite, the Trust-Evals strings in every sort, and each verified clause's form.
+As built (TASK-167, SCHEMA_VERSION 3, since raised to 4, below): new indexes index `ord`, and a position-verified clause names its ids
+as a u64 term set on `ord` rather than on the text `id`. While schema 2 was served, `index.SERVED_SCHEMAS`
+mapped each served `schema_version` to its `SchemaForm`, and a schema-2 index kept the text-`id` path, so a record
+pinned to one still replayed `reproduced` on it (guarantee 4); both gave the same ids and the same float scores
+for every query. Schema 2 is now retired (below), and `SERVED_SCHEMAS` holds "3" and "4".
 
 Measured (`docs/results/2026-10-02-exclusions-and-verified-forms.md`, old and new alternated, load 30–155):
 
@@ -210,15 +209,37 @@ Measured (`docs/results/2026-10-02-exclusions-and-verified-forms.md`, old and ne
 | `main-2-pop` warm search, real M4 corpus, CPU p50 | 26.4 ms | 25.6 ms (no measurable gain under load) |
 
 These overloaded measurements show no measurable end-to-end gain. The isolated claim is historical;
-`tests.bench.id_sets` now separates construction and collection, including lazy lookup first-use and memory
+the retired `tests.bench.id_sets` separated construction and collection, including lazy lookup first-use and memory
 (`docs/results/2026-10-02-perf-recovery.md`). Inside a search, the id set is one MUST clause of an intersection that the rarer
 clauses drive, so most of its isolated cost (TASK-076's "about 10 ms a search") never reaches a search. The
 change was kept by owner decision, since it is exact and replay-safe (decision-030).
 
-Schema 2 is retired, and dropped from `SERVED_SCHEMAS` with its path and tests, only once no search record pins
-a schema-2 index. The order is: rebuild every served index at schema 3, repoint `current`, then `op index
-retire` each schema-2 version, which `op index retire` refuses while a record pins it. Any other schema is
-refused (`unservable`).
+Schema 2 was retired (decision-049 milestone C) once no search record pinned a schema-2 index: every served index
+was rebuilt at schema 3, `current` repointed, and each schema-2 version checked with `op index retire --dry-run`
+(0 pins). Its path and tests are dropped from the code; any other schema is refused (`unservable`). The four
+schema-2 indexes the real data directory held (05a0541717f6, 6508b8cf66ff, a7cfd04b656f and c76d7f26ee06) are
+deleted from the real data directory on 2026-10-10, with the owner's approval (no `data/records/` store
+existed, so nothing pinned them). Served schemas are now 3 and 4, in that order of age; the one the code writes is 4.
+
+**Schema 4 (decision-049 milestone C).** New indexes store the record's derived `abstract_kind` as a raw fast field,
+so `abstract_kind:` filters and facets. `SERVED_SCHEMAS` is `{"3": SchemaForm(abstract_kind=False), "4":
+SchemaForm(abstract_kind=True)}`, and `SchemaForm.facets` names each schema's raw fast text fields. An engine's
+`filter_fields` and its combo (`TantivyEngine.combo`: the fields one nested terms aggregation counts a base by) are
+its own: (venue, year, track, status), plus `abstract_kind` on schema 4 (the module's `COMBO`). A schema-3 engine
+refuses a query naming `abstract_kind:` (`FIELD_NOT_INDEXED`, 422). Its display records derive the kind from the
+stored abstract (`none` or `official`), which is exact because a schema-3 build refuses a record whose abstract
+is OpenAlex's (`IndexBuildError`, "needs index schema 4"). The combo memo's budget (`MAX_FACET_COMBOS`) triples to
+300,000, since a base can have up to three times schema 3's combos: the number of bases memoised stays about the
+same. A memoised five-field combo with its count is about 204 bytes (a measurement: `tracemalloc`, 2026-10-10 at load
+42.7 and 2026-10-11 at load 3.3; method in `docs/results/2026-10-11-perf-regression.md` §Memory), so a full
+`faceted` memo is about 61 MB per engine (about 18 MB at schema 3's 100,000); with the default `pinned_indexes` of 4
+the API's worst case for this memo is about 300 MB, against about 90 MB before. The record routes' `RemovalMemo`
+adds about 80 MB per API process when full (about 163 bytes per held id at the default 500,000, measured the same
+way, 2026-10-11 at loads 25 and 3.3), and its entry cap keeps entries that removed nothing to about 5 MB. Size a
+host for both. On schema 4, `op index parity` also checks that
+each document's stored `abstract_kind` equals its record's. On a corpus both can hold, the two schemas give the
+same ids, float scores and shared-field facets (`test_served_schemas.py`), and a record saved on a schema-3 index
+replays `reproduced` after the schema-4 build (`test_records.py`).
 
 **Served tokenizers (decision-033).** An index's terms are its tokenizer's, so a query is parsed, its canonical
 hashed and its hits highlighted with the tokenizer its index was built with (`TantivyEngine.tokenizer_version`,
@@ -239,6 +260,38 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
   exclusion accounting and each concept group's counts at the instance's default bounds, 04 §SearchResponse
   `groups`; `docs/results/2026-10-06-bench-group-counts.md`), and under 300 ms for `match_ids` with
   exclusion accounting.
+- **Milestone C re-measurement (decision-049).** Schema 4 aggregates five fields instead of four, so a base can
+  have up to three times schema 3's combinations (`MAX_FACET_COMBOS` 300,000), and a first page's facets and counts
+  are measured again on the new index with `tests.bench.group_counts_report` (from `backend/`, on a copy of the
+  index) and `tests.bench.report_80k`. A run counts only when the machine's 1-minute load average is under 5 at
+  its start and its end. The citable group-count report is `docs/results/<date>-bench-group-counts.md`, written by
+  that command and never edited by hand; the milestone's reports are linked from `docs/README.md`.
+- **Milestone C, as measured (index `b4f335e07e70`: schema 4, tokenizer 3, 173,253 documents; parity over the full
+  corpus found 0 differences in 214,499 terms and 344,268 phrases).**
+  - **Real corpus** (`docs/results/2026-10-11-bench-group-counts.md`, index `b4f335e07e70`, regenerated on the final
+    snapshot; a run counts only at a 1-minute load under 5 at the start and the end): every Trust-Evals string's first page with its group counts
+    is within the 100 ms budget, the worst being `main-2-pop` at p95 67.4 ms (76.5 ms before TASK-230). This is the
+    citable group-count report TASK-220 asked for.
+  - **Synthetic 80k** (`docs/results/2026-10-11-bench.md`, load 2.2 at the start and 2.6 at the end, commit
+    `e7740d08`, the final code): every first page's p95 is within the 100 ms budget, from 6.1 ms (`llm-as-judge`) to 72.8 ms
+    (`main-2-pop`); `main-3-sources` is 68.4 ms. It was 110.7 ms, over budget, after schema 4's fix below: its six
+    counted trees ran one after another on one counting worker (about 90 ms, each broad tree 15-30 ms of Tantivy
+    query evaluation), longer than the page itself (65 ms), so the counting job was the request's critical path.
+    TASK-230 shares a counting job's trees with a helper on the other counting worker (04 §SearchResponse `groups`,
+    Cost): the counts are the same, the wall time is the page's. It also sets a bitmap's bytes without a Python
+    loop, halving the GIL-held work a concurrent page waits on (`main-2-pop`, whose shared verified clause takes the
+    bitwise path, 96.1 → 74.2 ms). Full garbage collections were not the cause: with the corpus resident, as the
+    report holds it, one runs about once in 200 first pages, under the p95, so neither the report nor the API
+    freezes the collector (`docs/results/2026-10-11-perf-regression.md`).
+  - **Schema 4's own regression, found and fixed.** A fifth nested level in the facet combo multiplied every
+    aggregation that read the combo: `counts` aggregated each tree's base over the whole combo although a count sums
+    only the combos passing its trees' top-level filters. On the synthetic corpus, where abstract presence is random
+    per record, a counted base went from 1,080 combos to 1,250-1,722 and `main-3-sources` from 74.9 ms (before group
+    counts) to 632.8 ms p95. The real corpus hid it, because `abstract_kind` follows venue there. Commit `566cafcd`
+    makes `counts` aggregate only the fields its trees filter on (facets still aggregate the whole combo, since
+    `abstract_kind` is a facet), with membership and counts unchanged. The bisect, the profiles and the two-search
+    measurement are in `docs/results/2026-10-11-perf-regression.md`, which also records that dev was already about
+    121 ms p50 on the 80k first page after TASK-176/197 (the 2026-10-02 80k report predates group counts).
 - A wildcard expansion of up to 200 terms: under 50 ms.
 - **Group counts, as measured (TASK-197, closing decision-039's exception):** every Trust-Evals string's cold
   first page (the facet memo forgotten) with its group counts is within the 100 ms search budget on index

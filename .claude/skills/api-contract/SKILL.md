@@ -13,11 +13,11 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | GET | `/papers/{id}` | full record with provenance and its derived `venue_name` (the export venue string, TASK-112); optional `q` (+ `mode`) → `matched` and `highlights`, equal to `/search`'s for that paper (null without `q`; `matched: false` + empty lists when the query doesn't match it; `q` admitted exactly as `/search` admits it; task-087) |
 | GET | `/export` | `format=ris\|csv\|bibtex\|jsonl` plus either `q` (with `mode` and optional `index_version`) or `record_id` (with at most `mode=native`, the declared default some clients always send; `scholar` is 422 "with record_id, mode may only be native") → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; `record_id` → exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if gone, 409 `API_RECORD_MISMATCH` on a `mismatch`) |
 | POST | `/records` | freeze a search as an immutable search record → 201 `{record_id, page}` plus the three versions, + `Location: /api/v1/records/<id>` (`.claude/skills/search-records/SKILL.md`); optional `index_version` pin: 409 `API_INDEX_VERSION_UNAVAILABLE` unless it is the served index (TASK-091) |
-| GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`; a replay over this instance's verification limits is withheld: 200, `refused`, never a 422); `replay=false`: the stored record, `replay: null`, no run, one token without `include=ids` (full weight with ids; TASK-091, decision-014) |
-| GET | `/records/{id}/diff` | for a record of any status: added and removed ids (with titles, paged), and which `index_version` inputs changed |
+| GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`; a replay over this instance's verification limits is withheld: 200, `refused`, never a 422); `replay=false`: the stored record, `replay: null`, no run, one token without `include=ids` (full weight with ids; TASK-091, decision-014); `openalex_abstracts` (gate C round 2): how many of the record's ids are `abstract_kind:openalex` on its own index, derived not stored, null on schema 3 or when that index isn't loaded for the request |
+| GET | `/records/{id}/diff` | for a record of any status: added and removed ids (with titles, paged; each with its `track` and `status`, each removed one with its `cause` and `failed_filter`, and `removed_causes`, TASK-227), and which `index_version` inputs changed |
 | POST | `/compare` | `q, mode` + a RIS file as the body (`application/x-research-info-systems`; no form, no encoding) → `CompareResponse`: the file's papers the query keeps, drops (with `reason`/`detail`) and adds, the ones the index doesn't hold, the records not compared, `*_total` for each, `reason_totals`, each list as CSV text (`csv`) and the added papers as RIS (`added_ris`); `total` is `/search`'s; `next_comparison_seconds`, whole seconds until this network may start another (0 on a local instance). Off unless the operator turned it on (403 `API_COMPARE_DISABLED`, also to a proxied request on a local instance); spec 04 §Comparing with a RIS file, TASK-177 |
 | GET | `/coverage` | counts per venue × year × track × status, abstract-missing counts, snapshot date; `snapshot.crawl_dates_kind` and `identification_citable`, a record's derivation (TASK-091) |
-| GET | `/meta` | current and servable `index_version`s, field names, venue, track and status vocabularies, and `limits` (`max_query_length`, the parser's; `max_verified_clauses` and `max_verification_candidates`, the served config's, task-089; `max_counted_groups`, `max_counted_terms` and `max_counted_ids`, the bounds of `/search`'s group counts, TASK-176; `compare`: `POST /compare`'s caps, or null when comparisons are off, which is how a client knows not to offer them) |
+| GET | `/meta` | current and servable `index_version`s, field names (`filter_fields` is the served index's own: `abstract_kind` only on schema 4), venue, track and status vocabularies, and `limits` (`max_query_length`, the parser's; `max_verified_clauses` and `max_verification_candidates`, the served config's, task-089; `max_counted_groups`, `max_counted_terms` and `max_counted_ids`, the bounds of `/search`'s group counts, TASK-176; `compare`: `POST /compare`'s caps, or null when comparisons are off, which is how a client knows not to offer them) |
 | GET | `/healthz` | liveness, index loaded |
 | GET | `/near-misses` | M5 only (deferred to phase 2, decision-017; not in v1), a separate resource (`.claude/skills/specter2-embeddings/SKILL.md`) |
 
@@ -31,7 +31,17 @@ each concept group's count alone, the query with every other group removed, and 
 has `id, title, abstract, authors, venue, year, track, status, presentation, score, highlights{field:
 [[start,end]]}, urls, abstract_source{source, origin, url}|null` (the claim the abstract came from, the site that
 published it, for `ris` read from the claim's evidence, and the paper's page there; TASK-134, decision-018;
-computed per record at snapshot load, `RecordFile.attributions`).
+computed per record at snapshot load, `RecordFile.attributions`), and `abstract_note` (TASK-210, additive: the
+attribution's `note`, `ingest/dedup.py::SUBMISSION_NOTE` for an ICML 1997/1998 submission-time abstract, else null;
+`/papers/{id}` carries it at its top level), and `abstract_kind` (decision-049, additive: `official` | `openalex` |
+`none`; on `/papers/{id}` a derived field of `paper`; `facets.abstract_kind` is **nullable** (null on a schema-3 index,
+which holds no such field, so a client draws the Abstract facet only when it is not null); `/meta` `values.abstract_kind`
+lists the values; a query naming `abstract_kind:` on a schema-3 index is 422 `FIELD_NOT_INDEXED` on every route that runs
+it, while `/parse` accepts it; CSV's last column `abstract_kind` and a JSONL key, `none` for a withheld record as in a hit;
+`abstract_source.origin` gains `openalex`, `ojs`, `crossref` and `facct_site`, an open set; TASK-232 adds
+`aaai_library`, and the claim source enum gains it too). `/coverage` gains, additively,
+`abstract_official` and `abstract_openalex` (totals, venue-years and tracks, 0 included) and each track's `gate_note` and
+`gate_note_citation` (both null unless an ungated cell has a note, TASK-222).
 
 **Every response** (not only `/search`) carries `index_version`, `tokenizer_version` and `query_version`
 (spec 04 §Conventions; `.claude/skills/index-versioning/SKILL.md`).
@@ -119,7 +129,11 @@ same way; CSV appends `abstract_withheld_reason` (`takedown`, `source_unavailabl
 `/papers/{id}` also carry `twins` (TASK-162, additive; decision-029): the sorted ids of the record's twins (its
 `twin` claims, `RecordFile.twins`), usually `[]`; every export names them (RIS `N1  - See also: …`, BibTeX
 `openproceedings_twins`, a last CSV column `twins`, a JSONL `twins` list only on a record with one), and a
-record without one exports byte for byte as before except CSV's one more empty cell.
+record without one exports byte for byte as before except CSV's one more empty cell. A submission-time abstract
+(the hit's `abstract_note`, TASK-210) says so in every export in that one sentence (RIS one more `N1` right after
+`Abstract source:`, BibTeX `abstract_note` after `abstract_source`, a last CSV column `abstract_note`, a JSONL
+`abstract_note` key only on such a record); every other record is byte for byte what it was, but CSV's one more
+empty cell.
 
 ## A file as a request body (`POST /compare`, TASK-177)
 The one route that takes a file takes it as the raw body, never a form: no multipart parser runs (Starlette's

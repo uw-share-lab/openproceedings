@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Schemas } from "@/api/client";
 import {
   ABSTRACT_WITHHELD,
+  archiveCapture,
   attributionText,
   HitItem,
   seeAlsoLead,
@@ -32,7 +33,13 @@ const HIT: Hit = {
   abstract_source: { source: "pmlr", origin: "pmlr", url: PMLR_PAGE },
   abstract_withheld: false,
   twins: [],
+  abstract_note: null,
+  abstract_kind: "official",
 };
+
+/** The API's `abstract_note` for a submission-time abstract (TASK-210; `ingest/dedup.py::SUBMISSION_NOTE`). */
+const NOTE =
+  "Submission-time abstract: as the authors submitted it, which may differ from the published paper's.";
 
 function show(over: Partial<Hit> = {}) {
   render(<HitItem hit={{ ...HIT, ...over }} q="trust" mode="native" />);
@@ -43,6 +50,49 @@ function show(over: Partial<Hit> = {}) {
 function attribution(article: HTMLElement): HTMLElement | undefined {
   return [...article.querySelectorAll("p")].find((p) => p.textContent?.startsWith("Abstract:"));
 }
+
+describe("an OpenAlex abstract (decision-049, RH-20)", () => {
+  it("labels it under the attribution, OpenAlex linking to the coverage page's explanation", () => {
+    const article = show({
+      abstract_kind: "openalex",
+      abstract_source: { source: "openalex", origin: "openalex", url: PMLR_PAGE },
+    });
+    const label = within(article).getByText(
+      (_, el) =>
+        el?.tagName === "P" &&
+        el.textContent ===
+          "Abstract via OpenAlex: this index holds no official abstract for this paper. OpenAlex's text can differ from the published one.",
+    );
+    expect(label.previousElementSibling).toBe(attribution(article));
+    expect(within(label).getByRole("link", { name: "OpenAlex" }).getAttribute("href")).toBe(
+      "/coverage#openalex",
+    );
+  });
+
+  it("says nothing for an official abstract, a missing one or a withheld one", () => {
+    expect(show().textContent).not.toContain("via OpenAlex");
+    cleanup();
+    expect(show({ abstract: null, abstract_source: null, abstract_kind: "none" }).textContent).not.toContain(
+      "via OpenAlex",
+    );
+    cleanup();
+    expect(
+      show({ abstract: null, abstract_source: null, abstract_withheld: true, abstract_kind: "openalex" })
+        .textContent,
+    ).not.toContain("via OpenAlex");
+  });
+});
+
+describe("an archived AAAI page's abstract (TASK-232, decision-051)", () => {
+  it("names AAAI and links AAAI's own paper page, never the archive's copy", () => {
+    const page = "http://www.aaai.org/Library/AAAI/1984/aaai84-047.php";
+    const article = show({ abstract_source: { source: "aaai_library", origin: "aaai_library", url: page } });
+    const link = within(attribution(article)!).getByRole("link", { name: /^AAAI, abstract source for / });
+    expect(link.getAttribute("href")).toBe(page);
+    expect(attribution(article)!.textContent).toBe("Abstract: AAAI");
+    expect(article.textContent).not.toContain("via OpenAlex");
+  });
+});
 
 describe("authors (ui-design-system §Result item, RH-13)", () => {
   it("shows the first three and et al., and the full list behind a button that says how many", () => {
@@ -159,10 +209,62 @@ describe("the abstract's attribution (decision-018, RH-12)", () => {
     expect(attribution(show({ abstract_source: null }))).toBeUndefined();
   });
 
+  it("names an official ICML page, and says an Internet Archive capture is a copy and links its banner view", () => {
+    const live = "https://icml.cc/Conferences/2009/abstracts.html";
+    expect(attributionText({ source: "icml_site", origin: "icml_site", url: live })).toEqual({
+      site: "ICML conference site",
+      via: "",
+    });
+    const capture =
+      "https://web.archive.org/web/20040907123036id_/http://www.aicml.cs.ualberta.ca:80/banff04/icml/pages/abstracts/allAbstracts.html";
+    const line = attribution(
+      show({ abstract_source: { source: "icml_site", origin: "icml_site", url: capture } }),
+    );
+    expect(line?.textContent).toBe("Abstract: ICML conference site (Internet Archive copy, 2004-09-07)");
+    const link = within(line as HTMLElement).getByRole("link");
+    expect(link.getAttribute("href")).toBe(capture.replace("id_/", "/"));
+    expect(archiveCapture(live)).toBeNull();
+  });
+
   it("has no attribution when there is no abstract", () => {
     const article = show({ abstract: null, abstract_source: null });
     expect(within(article).getByText("No abstract in the index")).toBeTruthy();
     expect(attribution(article)).toBeUndefined();
+  });
+});
+
+describe("a submission-time abstract (TASK-210, RH-19)", () => {
+  const CAPTURE =
+    "https://web.archive.org/web/19991009084141id_/http://www.cs.wisc.edu:80/icml98/papers/paper2.html";
+  const SUBMITTED: Partial<Hit> = {
+    abstract_source: { source: "icml_site", origin: "icml_site", url: CAPTURE },
+    abstract_note: NOTE,
+  };
+
+  it("says so under its attribution, in the API's words", () => {
+    const article = show(SUBMITTED);
+    const line = attribution(article);
+    expect(line?.textContent).toBe("Abstract: ICML conference site (Internet Archive copy, 1999-10-09)");
+    const note = within(article).getByText(NOTE);
+    expect(note.tagName).toBe("P");
+    expect(line?.nextElementSibling).toBe(note); // right after the source it qualifies, before the links
+  });
+
+  it("says nothing for any other abstract", () => {
+    const article = show();
+    expect(article.textContent).not.toContain("Submission-time");
+    expect(attribution(article)?.nextElementSibling?.textContent).not.toContain("Submission-time");
+  });
+
+  it("says nothing when the abstract is withheld or missing, whatever a client was sent", () => {
+    for (const over of [
+      { ...SUBMITTED, abstract: null, abstract_withheld: true },
+      { ...SUBMITTED, abstract: null },
+    ]) {
+      const article = show(over);
+      expect(within(article).queryByText(NOTE)).toBeNull();
+      cleanup();
+    }
   });
 });
 

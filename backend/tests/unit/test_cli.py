@@ -89,7 +89,9 @@ def test_ingest_neurips_offline_from_a_seeded_cache(
         (["ingest", "neurips", "--year", "2013", "--delay=-inf"], "--delay must be finite"),
         (["ingest", "pmlr", "--year", "2013", "--dry-run", "--offline"], "don't combine"),
         (["ingest", "pmlr", "--year", "2026", "--offline"], "no verified PMLR volume"),
-        (["ingest", "neurips", "--year", "2012", "--offline"], "decision-013"),
+        (["ingest", "neurips", "--year", "1986", "--offline"], "the first NIPS (decision-047)"),
+        (["ingest", "dblp", "--year", "2013", "--offline"], "covers ICML 1988-2012 (PMLR from 2013)"),
+        (["ingest", "dblp", "--year", "1990", "--offline"], "not in the cache (offline)"),
         (["ingest", "neurips", "--year", "2013", "--offline"], "not in the cache (offline)"),
     ],
 )
@@ -194,3 +196,216 @@ def test_record_actions_take_their_options() -> None:
     ns = parser.parse_args(["record", "replay", "AAAAAAAAAAAA"])
     assert (ns.record_id, ns.index, ns.json, ns.action) == ("AAAAAAAAAAAA", None, False, "replay")
     assert cli.EXIT_MISMATCH not in (0, 1, 2)  # a mismatch is told apart from drift, refusal and usage
+
+
+def test_ingest_ojs_dispatches_the_journals_and_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    seen: dict[str, object] = {}
+
+    def fake(journals: object, cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(journals=journals, cache=cache, **kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(crawl, "ingest_ojs", fake)
+    argv = ["--data-dir", str(tmp_path), "ingest", "ojs", "--journal", "AAAI", "--offline"]
+    assert cli.main(argv) == 0
+    assert json.loads(capsys.readouterr().out) == {"ok": True}
+    assert seen["journals"] == ["AAAI"]
+    assert (seen["offline"], seen["dry_run"], seen["refresh"]) == (True, False, False)
+    assert seen["cache"] == tmp_path / "cache"
+
+
+def test_ingest_ojs_rejects_an_unknown_journal() -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["ingest", "ojs", "--journal", "AAAJ"])
+    assert exc.value.code == 2
+
+
+def test_ingest_ojs_journal_choices_come_from_the_table(capsys: pytest.CaptureFixture[str]) -> None:
+    from openproceedings.ingest import ojs_table
+
+    with pytest.raises(SystemExit):
+        cli.main(["ingest", "ojs", "--help"])
+    out = " ".join(capsys.readouterr().out.split())
+    assert "{" + ",".join(sorted(ojs_table.TABLE.journals)) + "}" in out
+    assert "first page, every GetRecord, and any cached failure" in out
+
+
+@pytest.mark.parametrize(
+    ("flags", "message"),
+    [
+        (["--dry-run", "--offline"], "don't combine"),
+        (["--delay", "0.1"], "--delay must be finite and at least"),
+        (["--delay", "nan"], "--delay must be finite and at least"),
+    ],
+)
+def test_ingest_ojs_usage_refusals(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], flags: list[str], message: str
+) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "ojs", *flags]) == 1
+    assert message in capsys.readouterr().err
+
+
+def test_ingest_crossref_dispatches_the_keys_and_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest import acm_table
+    from openproceedings.ingest.sources import crawl
+
+    from tests.unit.ingest.crossref import api
+
+    monkeypatch.setattr(
+        acm_table, "TABLE", acm_table.load(api.TABLE_TEXT)
+    )  # a small fixed table, independent of the shipped one
+    seen: dict[str, object] = {}
+
+    def fake(keys: object, cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(keys=keys, cache=cache, **kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(crawl, "ingest_crossref", fake)
+    argv = [
+        "--data-dir",
+        str(tmp_path),
+        "ingest",
+        "crossref",
+        "--venue",
+        "FAccT",
+        "--year",
+        "2023",
+        "--offline",
+    ]
+    assert cli.main(argv) == 0
+    assert json.loads(capsys.readouterr().out) == {"ok": True}
+    assert seen["keys"] == [("FAccT", 2023)]
+    assert (seen["offline"], seen["dry_run"], seen["refresh"]) == (True, False, False)
+    assert seen["cache"] == tmp_path / "cache"
+
+
+def test_ingest_crossref_rejects_a_venue_the_table_lacks() -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["ingest", "crossref", "--venue", "ICML"])
+    assert exc.value.code == 2
+
+
+def test_ingest_crossref_refuses_a_year_no_row_has(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "crossref", "--year", "2017"]) == 1
+    assert "no acm_proceedings.toml row" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("flags", "message"),
+    [(["--dry-run", "--offline"], "don't combine"), (["--delay", "0.1"], "--delay must be finite")],
+)
+def test_ingest_crossref_usage_refusals(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], flags: list[str], message: str
+) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "crossref", *flags]) == 1
+    assert message in capsys.readouterr().err
+
+
+def test_ingest_openalex_dispatches_the_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    seen: dict[str, object] = {}
+
+    def fake(cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(cache=cache, **kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(crawl, "ingest_openalex", fake)
+    argv = ["--data-dir", str(tmp_path), "ingest", "openalex", "--offline", "--delay", "2"]
+    assert cli.main(argv) == 0
+    assert json.loads(capsys.readouterr().out) == {"ok": True}
+    assert (seen["offline"], seen["dry_run"], seen["refresh"], seen["min_interval"]) == (
+        True,
+        False,
+        False,
+        2.0,
+    )
+    assert seen["cache"] == tmp_path / "cache"
+
+
+@pytest.mark.parametrize(
+    ("flags", "message"),
+    [(["--dry-run", "--offline"], "don't combine"), (["--delay", "0.1"], "--delay must be finite")],
+)
+def test_ingest_openalex_usage_refusals(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], flags: list[str], message: str
+) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "openalex", *flags]) == 1
+    assert message in capsys.readouterr().err
+
+
+def test_ingest_aaai_library_dispatches_the_flags_and_refuses_dry_run_with_offline(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    seen: dict[str, object] = {}
+
+    def fake(cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(cache=cache, **kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(crawl, "ingest_aaai_library", fake)
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "aaai-library", "--refresh"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"ok": True}
+    assert (seen["cache"], seen["offline"], seen["dry_run"], seen["refresh"]) == (tmp_path / "cache", False, False,
+                                                                                   True)  # fmt: skip
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "aaai-library", "--dry-run", "--offline"]) == 1
+    assert "don't combine" in capsys.readouterr().err
+
+
+def test_ingest_ojs_oai_error_exits_nonzero_with_the_refresh_hint(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest.sources import ojs
+
+    from tests.unit.ingest.ojs import oai
+    from tests.unit.ingest.ojs.test_ojs_mine import TABLE, _seed
+
+    monkeypatch.setattr(ojs, "TABLE", TABLE)
+    _seed(tmp_path / "cache", oai.error("badResumptionToken"))
+    argv = ["--data-dir", str(tmp_path), "ingest", "ojs", "--journal", "AAAI", "--offline"]
+    assert cli.main(argv) != 0
+    assert "--refresh" in capsys.readouterr().err
+
+
+def test_ingest_dblp_venue_aaai_dispatches_to_the_aaai_ingest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    seen: dict[str, object] = {}
+
+    def fake_aaai(years: object, cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(years=list(years), cache=cache, **kwargs)  # type: ignore[call-overload]
+        return {"aaai": True}
+
+    def fake_icml(years: object, cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(icml=list(years))  # type: ignore[call-overload]
+        return {"icml": True}
+
+    monkeypatch.setattr(crawl, "ingest_dblp_aaai", fake_aaai)
+    monkeypatch.setattr(crawl, "ingest_dblp", fake_icml)
+    base = ["--data-dir", str(tmp_path), "ingest", "dblp"]
+    assert cli.main([*base, "--venue", "AAAI", "--year", "1980-2008", "--offline"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"aaai": True}
+    assert seen["years"] == list(range(1980, 2009)) and seen["cache"] == tmp_path / "cache"
+    assert (seen["offline"], seen["dry_run"]) == (True, False)
+    assert cli.main([*base, "--year", "1990"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"icml": True} and seen["icml"] == [1990]
+
+
+def test_ingest_dblp_aaai_has_nothing_to_refresh(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    argv = ["--data-dir", str(tmp_path), "ingest", "dblp", "--venue", "AAAI", "--year", "1990", "--refresh"]
+    assert cli.main(argv) == 1  # a refusal of the user's own arguments (`_usage`), like every other one
+    assert "nothing to refresh" in capsys.readouterr().err

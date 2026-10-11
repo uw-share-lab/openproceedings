@@ -9,7 +9,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from openproceedings.ingest.sources.http import Fetcher, Page, PageCache, Request, Response, canonical
+from openproceedings.ingest.sources.http import (
+    Fetcher,
+    Page,
+    PageCache,
+    Request,
+    Response,
+    Transport,
+    canonical,
+)
 
 HTTP = Path(__file__).parents[2] / "fixtures" / "http"
 T0 = datetime(2026, 9, 27, 12, 0, tzinfo=UTC)
@@ -31,8 +39,17 @@ def fixture_url(rel: str) -> str:
     return str(fixture(rel)["request"]["url"])
 
 
-def seed(cache: Path, source_dir: str, url: str, text: str, *, status: int = 200, at: datetime = T0) -> None:
-    PageCache(cache / source_dir).put(Page(canonical(url), status, text, at))
+def seed(
+    cache: Path,
+    source_dir: str,
+    url: str,
+    text: str,
+    *,
+    status: int = 200,
+    at: datetime = T0,
+    keep_query: bool = False,
+) -> None:
+    PageCache(cache / source_dir).put(Page(canonical(url, keep_query=keep_query), status, text, at))
 
 
 def seed_fixture(
@@ -61,9 +78,11 @@ class FakeTransport:
     def __init__(self, script: Mapping[str, Response | list[Response]]) -> None:
         self.script = {canonical(k): v if isinstance(v, list) else [v] for k, v in script.items()}
         self.calls: list[str] = []
+        self.requests: list[Request] = []  # every request as sent (its headers too: an API key's route)
 
     def __call__(self, request: Request, timeout: float) -> Response:
         self.calls.append(request.url)
+        self.requests.append(request)
         queue = self.script[request.url]
         r = queue.pop(0) if len(queue) > 1 else queue[0]
         return Response(r.status, r.headers, r.body, r.url or request.url)
@@ -89,7 +108,7 @@ class Clock:
 
 
 def fetcher(
-    cache: Path, transport: FakeTransport | None, hosts: frozenset[str], **kw: Any
+    cache: Path, transport: Transport | None, hosts: frozenset[str], **kw: Any
 ) -> tuple[Fetcher, Clock]:
     clock = Clock()
     f = Fetcher(PageCache(cache), transport, hosts=hosts, clock=clock, **kw)

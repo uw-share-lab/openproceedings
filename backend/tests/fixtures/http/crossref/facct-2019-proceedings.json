@@ -1,0 +1,19 @@
+{
+ "_recorded": {
+  "date": "2026-10-10",
+  "run": "Census B live run, 2026-10-10 (scripts/acm_census.py, op ingest crossref|pmlr; milestone B Task 9)",
+  "scrubbed": "decision-004: titles, subtitles and person names synthetic; DOIs, types, pages, dates, ISBNs, cursors, totals and the proceedings title real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.crossref.org/works/10.1145/3287560",
+  "authenticated": false
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json"
+  },
+  "text": "{\"status\": \"ok\", \"message-type\": \"work\", \"message-version\": \"1.0.0\", \"message\": {\"indexed\": {\"date-parts\": [[2026, 9, 18]], \"date-time\": \"2026-09-18T08:32:45Z\", \"timestamp\": 1789720365131, \"version\": \"4.0.1\"}, \"publisher-location\": \"New York, NY, USA\", \"reference-count\": 0, \"publisher\": \"ACM\", \"isbn-type\": [{\"value\": \"9781450361255\", \"type\": \"print\"}], \"content-domain\": {\"domain\": [], \"crossmark-restriction\": false}, \"short-container-title\": [], \"published-print\": {\"date-parts\": [[2019, 1, 29]]}, \"DOI\": \"10.1145/3287560\", \"type\": \"proceedings\", \"created\": {\"date-parts\": [[2019, 1, 7]], \"date-time\": \"2019-01-07T14:44:51Z\", \"timestamp\": 1546872291000}, \"source\": \"Crossref\", \"is-referenced-by-count\": 10, \"title\": [\"Proceedings of the Conference on Fairness, Accountability, and Transparency\"], \"prefix\": \"10.1145\", \"member\": \"320\", \"published-online\": {\"date-parts\": [[2019, 1, 29]]}, \"event\": {\"name\": \"FAT* '19: Conference on Fairness, Accountability, and Transparency\", \"location\": \"Atlanta GA USA\", \"acronym\": \"FAT* '19\", \"sponsor\": [\"ACM Association for Computing Machinery\"]}, \"container-title\": [], \"original-title\": [], \"deposited\": {\"date-parts\": [[2023, 1, 9]], \"date-time\": \"2023-01-09T00:57:41Z\", \"timestamp\": 1673225861000}, \"score\": 1, \"resource\": {\"primary\": {\"URL\": \"https://dl.acm.org/doi/proceedings/10.1145/3287560\"}}, \"subtitle\": [], \"short-title\": [], \"issued\": {\"date-parts\": [[2019, 1, 29]]}, \"ISBN\": [\"9781450361255\"], \"references-count\": 0, \"alternative-id\": [\"10.1145/3287560\"], \"URL\": \"https://doi.org/10.1145/3287560\", \"relation\": {}, \"published\": {\"date-parts\": [[2019, 1, 29]]}}}"
+ }
+}

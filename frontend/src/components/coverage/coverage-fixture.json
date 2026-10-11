@@ -1,5 +1,5 @@
 {
-  "index_version": "d1472e683dea",
+  "index_version": "fb6700ff2de9",
   "tokenizer_version": "3",
   "query_version": "2",
   "snapshot": {
@@ -28,6 +28,8 @@
     "records": 39,
     "abstract_missing": 3,
     "abstract_withheld": 0,
+    "abstract_official": 36,
+    "abstract_openalex": 0,
     "unknown_track": 2,
     "unknown_status": 11
   },
@@ -38,6 +40,8 @@
       "records": 2,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 2,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 0,
       "cells": [
@@ -60,6 +64,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -68,7 +74,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "blogpost",
@@ -76,6 +85,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -84,7 +95,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -94,6 +108,8 @@
       "records": 1,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 1,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 1,
       "cells": [
@@ -111,6 +127,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": 860,
           "official_counts": "posters in the fact sheet, one per accepted paper (orals and spotlights included); the virtual-site list also has 860",
@@ -119,7 +137,10 @@
           "delta": -860,
           "delta_pct": -100.0,
           "gated": true,
-          "within_gate": false
+          "within_gate": false,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -129,6 +150,8 @@
       "records": 3,
       "abstract_missing": 1,
       "abstract_withheld": 0,
+      "abstract_official": 2,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 1,
       "cells": [
@@ -156,6 +179,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -164,7 +189,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "blogpost",
@@ -172,6 +200,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 1,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -180,7 +210,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -190,6 +223,8 @@
       "records": 2,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 2,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 1,
       "cells": [
@@ -212,6 +247,8 @@
           "indexed_accepted": 1,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -220,7 +257,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "other",
@@ -228,6 +268,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -236,7 +278,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -246,6 +291,8 @@
       "records": 1,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 1,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 0,
       "cells": [
@@ -263,6 +310,8 @@
           "indexed_accepted": 1,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -271,7 +320,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -281,6 +333,8 @@
       "records": 1,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 1,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 0,
       "cells": [
@@ -298,6 +352,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": 773,
           "official_counts": "papers in PMLR volume 97 (every accepted paper)",
@@ -306,7 +362,10 @@
           "delta": -773,
           "delta_pct": -100.0,
           "gated": true,
-          "within_gate": false
+          "within_gate": false,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -316,6 +375,8 @@
       "records": 3,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 3,
+      "abstract_openalex": 0,
       "unknown_track": 1,
       "unknown_status": 0,
       "cells": [
@@ -343,6 +404,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": 1084,
           "official_counts": "papers in PMLR volume 119 (every accepted paper)",
@@ -351,7 +414,10 @@
           "delta": -1084,
           "delta_pct": -100.0,
           "gated": true,
-          "within_gate": false
+          "within_gate": false,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "competition",
@@ -359,6 +425,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -367,7 +435,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "unknown",
@@ -375,6 +446,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -383,7 +456,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -393,6 +469,8 @@
       "records": 1,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 1,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 1,
       "cells": [
@@ -410,6 +488,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -418,7 +498,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -428,6 +511,8 @@
       "records": 4,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 4,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 1,
       "cells": [
@@ -460,6 +545,8 @@
           "indexed_accepted": 1,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -468,7 +555,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "workshop",
@@ -476,6 +566,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -484,7 +576,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "competition",
@@ -492,6 +587,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 2,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -500,7 +597,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -510,6 +610,8 @@
       "records": 4,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 4,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 0,
       "cells": [
@@ -537,6 +639,8 @@
           "indexed_accepted": 2,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 2,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -545,7 +649,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "tiny_papers",
@@ -553,6 +660,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -561,7 +670,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "blogpost",
@@ -569,6 +681,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -577,7 +691,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -587,6 +704,8 @@
       "records": 2,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 2,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 1,
       "cells": [
@@ -609,6 +728,8 @@
           "indexed_accepted": 1,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -617,7 +738,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "other",
@@ -625,6 +749,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -633,7 +759,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -643,6 +772,8 @@
       "records": 2,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 2,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 1,
       "cells": [
@@ -665,6 +796,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 2,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -673,7 +806,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -683,6 +819,8 @@
       "records": 1,
       "abstract_missing": 1,
       "abstract_withheld": 0,
+      "abstract_official": 0,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 0,
       "cells": [
@@ -700,15 +838,20 @@
           "indexed_accepted": 1,
           "abstract_missing": 1,
           "abstract_withheld": 0,
+          "abstract_official": 0,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": 1428,
-          "official_counts": "papers in the NeurIPS 2019 proceedings index (every accepted paper)",
+          "official_counts": "papers in the NeurIPS 2019 proceedings index (every accepted paper; the page's own count)",
           "official_citation": "https://proceedings.neurips.cc/paper_files/paper/2019",
           "official_accessed": "2026-09-27",
           "delta": -1427,
           "delta_pct": -99.92997198879551,
           "gated": true,
-          "within_gate": false
+          "within_gate": false,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -718,6 +861,8 @@
       "records": 1,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 1,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 1,
       "cells": [
@@ -735,6 +880,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -743,7 +890,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -753,6 +903,8 @@
       "records": 3,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 3,
+      "abstract_openalex": 0,
       "unknown_track": 1,
       "unknown_status": 0,
       "cells": [
@@ -780,6 +932,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": 174,
           "official_counts": "D&B papers in the 2021 D&B proceedings, round 1 (66) + round 2 (108); equals the fact sheet",
@@ -788,7 +942,10 @@
           "delta": -174,
           "delta_pct": -100.0,
           "gated": true,
-          "within_gate": false
+          "within_gate": false,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "other",
@@ -796,6 +953,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -804,7 +963,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "unknown",
@@ -812,6 +974,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -820,7 +984,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -830,6 +997,8 @@
       "records": 2,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 2,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 0,
       "cells": [
@@ -852,6 +1021,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": 163,
           "official_counts": "D&B papers in the NeurIPS 2022 proceedings index (equals the fact sheet)",
@@ -860,7 +1031,10 @@
           "delta": -163,
           "delta_pct": -100.0,
           "gated": true,
-          "within_gate": false
+          "within_gate": false,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "position",
@@ -868,6 +1042,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -876,7 +1052,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -886,6 +1065,8 @@
       "records": 4,
       "abstract_missing": 1,
       "abstract_withheld": 0,
+      "abstract_official": 3,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 1,
       "cells": [
@@ -918,6 +1099,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -926,7 +1109,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "workshop",
@@ -934,6 +1120,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -942,7 +1130,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "competition",
@@ -950,6 +1141,8 @@
           "indexed_accepted": 1,
           "abstract_missing": 1,
           "abstract_withheld": 0,
+          "abstract_official": 0,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -958,7 +1151,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "other",
@@ -966,6 +1162,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -974,7 +1172,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     },
@@ -984,6 +1185,8 @@
       "records": 2,
       "abstract_missing": 0,
       "abstract_withheld": 0,
+      "abstract_official": 2,
+      "abstract_openalex": 0,
       "unknown_track": 0,
       "unknown_status": 2,
       "cells": [
@@ -1006,6 +1209,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -1014,7 +1219,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         },
         {
           "track": "other",
@@ -1022,6 +1230,8 @@
           "indexed_accepted": 0,
           "abstract_missing": 0,
           "abstract_withheld": 0,
+          "abstract_official": 1,
+          "abstract_openalex": 0,
           "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
@@ -1030,7 +1240,10 @@
           "delta": null,
           "delta_pct": null,
           "gated": false,
-          "within_gate": null
+          "within_gate": null,
+          "gate_note": null,
+          "gate_note_citation": null,
+          "gate_note_accessed": null
         }
       ]
     }

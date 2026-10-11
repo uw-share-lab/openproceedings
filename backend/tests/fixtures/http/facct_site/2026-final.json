@@ -1,0 +1,20 @@
+{
+ "_recorded": {
+  "date": "2026-10-10",
+  "run": "Census B live run, 2026-10-10 (scripts/acm_census.py, op ingest crossref|pmlr; milestone B Task 9)",
+  "scrubbed": "decision-004: titles, authors and abstracts synthetic; ids, types, URLs, DOIs and the page structure real",
+  "trimmed": "20 of 325 rows kept (order kept)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://facctconference.org/static/docs/facct2026-final.csv",
+  "authenticated": false
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/octet-stream"
+  },
+  "text": "Paper ID,Title,Authors,Abstract\n10,Synthetic title 1,Synthetic Author 2; Synthetic Author 3; Synthetic Author 4; Synthetic Author 5; Synthetic Author 6; Synthetic Author 7,Synthetic abstract text 8.\n17,Synthetic title 9,Synthetic Author 10; Synthetic Author 11; Synthetic Author 12; Synthetic Author 13; Synthetic Author 14,Synthetic abstract text 15.\n22,Synthetic title 16,Synthetic Author 17; Synthetic Author 18; Synthetic Author 19; Synthetic Author 20,Synthetic abstract text 21.\n26,Synthetic title 22,Synthetic Author 23; Synthetic Author 24; Synthetic Author 25; Synthetic Author 26; Synthetic Author 27,Synthetic abstract text 28.\n29,Synthetic title 29,Synthetic Author 30; Synthetic Author 31; Synthetic Author 32; Synthetic Author 33,Synthetic abstract text 34.\n31,Synthetic title 35,Synthetic Author 36,Synthetic abstract text 37.\n34,Synthetic title 38,Synthetic Author 39,Synthetic abstract text 40.\n35,Synthetic title 41,Synthetic Author 42; Synthetic Author 43,Synthetic abstract text 44.\n37,Synthetic title 45,Synthetic Author 46; Synthetic Author 47,Synthetic abstract text 48.\n40,Synthetic title 49,Synthetic Author 50; Synthetic Author 51; Synthetic Author 52; Synthetic Author 53,Synthetic abstract text 54.\n41,Synthetic title 55,Synthetic Author 56; Synthetic Author 57; Synthetic Author 58; Synthetic Author 59; Synthetic Author 60; Synthetic Author 61,Synthetic abstract text 62.\n44,Synthetic title 63,Synthetic Author 64; Synthetic Author 65; Synthetic Author 66; Synthetic Author 67,Synthetic abstract text 68.\n59,Synthetic title 69,Synthetic Author 70; Synthetic Author 71; Synthetic Author 72; Synthetic Author 73; Synthetic Author 74,Synthetic abstract text 75.\n64,Synthetic title 76,Synthetic Author 77,Synthetic abstract text 78.\n66,Synthetic title 79,Synthetic Author 80; Synthetic Author 81,Synthetic abstract text 82.\n68,Synthetic title 83,Synthetic Author 84; Synthetic Author 85,Synthetic abstract text 86.\n83,Synthetic title 87,Synthetic Author 88; Synthetic Author 89; Synthetic Author 90; Synthetic Author 91; Synthetic Author 92,Synthetic abstract text 93.\n85,Synthetic title 94,Synthetic Author 95; Synthetic Author 96; Synthetic Author 97; Synthetic Author 98; Synthetic Author 99; Synthetic Author 100,Synthetic abstract text 101.\n87,Synthetic title 102,Synthetic Author 103; Synthetic Author 104; Synthetic Author 105; Synthetic Author 106; Synthetic Author 107; Synthetic Author 108,Synthetic abstract text 109.\n89,Synthetic title 110,Synthetic Author 111; Synthetic Author 112; Synthetic Author 113,Synthetic abstract text 114.\n"
+ }
+}

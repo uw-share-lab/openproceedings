@@ -14,7 +14,7 @@ Next.js (App Router) + TypeScript (strict). Tailwind + shadcn/ui for components.
 editor. TanStack Query for API state. Types are generated from 04's OpenAPI schema, not written by hand.
 Tests: Vitest + Testing Library (units), Playwright (e2e against the fixture API).
 
-As built (TASK-039): Next 16.3.7, React 19.3.0, Tailwind 4.3 (CSS-first `@theme`, no `tailwind.config`),
+As built (TASK-039): Next 16.3.8, React 19.3.0, Tailwind 4.3 (CSS-first `@theme`, no `tailwind.config`),
 shadcn/ui via `components.json` (`radix-nova`, CSS variables; components are added with `npx shadcn add`
 as pages need them), `next-themes` for the class-based theme, Vitest 5 with Testing Library
 (`@testing-library/react`). Node 22. TASK-041 added CodeMirror 6 (`@codemirror/*`, `@lezer/*`) and TanStack
@@ -119,8 +119,8 @@ an existing top-level AND instead of re-wrapping.
 | `/` | Search home: the editor, example queries (the review's strings), a coverage summary line |
 | `/search` | The main workspace (below) |
 | `/paper/[id]` | Full record: abstract with the current query's highlights, all links, provenance table. The result list links to `/paper/<id>?q=<q>&mode=<mode>` (the query rides in the URL, so a shared or reloaded link shows the same highlights), and the page calls `GET /papers/{id}?q=…&mode=…` (04 §Endpoints, task-087): it draws `highlights` exactly as the result list does (API spans only, never re-matched), and when `matched` is false it says the paper doesn't match that query (e.g. the default filters remove it) with nothing lit. A link without `q` (a direct link) calls `GET /papers/{id}` alone and shows the record with no highlights and no match line. If the `q` in the URL is refused (a 422 or 429), the page fetches the paper without `q` and shows it unhighlighted with a one-line notice that the query in the link couldn't be run; a 404, or a 422 `API_BAD_PARAM` for the id, is the not-found state |
-| `/record/[id]` | Search-record page: the input string as typed, its `mode`, and every translation notice (Scholar mode), the identification string and the default clauses, full index version, search date and the corpus-wide summary window (`crawl_dates["*"]`; per-source windows remain stored for audit; `crawl_dates_kind["*"]` chooses "crawl run <from> to <to>", "Scholar searches run <from> to <to> (local time)" ("(UTC)" in place of "(local time)" for `scholar_query_dates_utc`, TASK-077), or the mixed wording ("(UTC)" for `mixed_utc`), never calling Scholar dates a crawl), total, exclusions (`unknown` on its own line), replay status (`reproduced` / `drifted` with its reason and `+<added_total> / −<removed_total>`, or "membership-identical" on `+0 / −0` / `mismatch`; a replay whose canonical no longer runs reads "could not be re-run: `<refused code>`" with no counts; a replay this instance withholds (04 §Search records: `refused` `API_TOO_MANY_VERIFIED_CLAUSES` or `API_QUERY_TOO_COSTLY`, status `drifted`, `changed` empty) reads "could not be re-run: `API_TOO_MANY_VERIFIED_CLAUSES` — this instance's limit is below the record's <verified_clauses> position-verified clauses", or for `API_QUERY_TOO_COSTLY` "— its position checks would read more documents than this instance allows in one query", never as reproduced, as membership-identical or as a drift with no reason; its exports stay, the record's stored ids), a "Copy methods text" button, and export buttons that **must** call `/export?record_id=<id>` (the record's stored ids from its own index, never a re-run of `q`). When `identification_citable` is `false` the page shows the CLI's caution, "bootstrap corpus (sources: <sources>): these counts describe that corpus, not a database; they are not PRISMA identification numbers", and **no methods text** (exports stay); when it is null (a v1 record) the caution reads "not recorded whether this index is a bootstrap corpus: these counts may not be PRISMA identification numbers", also with no methods text. On `mismatch` the page is a blocking **"do not cite — replay mismatch"** state with no methods text and no export |
-| `/coverage` | Venue × year × track table with source and snapshot date, missing-abstract counts, `unknown` counts. As built (TASK-045): `GET /coverage` fetched on each visit (`components/coverage/`, client-side, so no server-side API address is needed); the window is worded by `crawl_dates_kind` ("Google Scholar searches run", never "crawled", for a bootstrap source, then the zone of its dates: "(local time)" with no recorded offset, "(UTC)" with one, or the mixed wording "(Scholar dates in local time)", TASK-077), a citability note when `identification_citable` is false, a statuses-indexed column, and a disclosure per venue-year with track × status (`–` for no cell) and each track against its official count (difference, gate verdict, citation). Every number is an API field; its tests render `coverage-fixture.json`, a real `GET /coverage` answer kept current by `test_frontend_coverage_fixture.py` |
+| `/record/[id]` | Search-record page: the input string as typed, its `mode`, and every translation notice (Scholar mode), the identification string and the default clauses, full index version, search date and the corpus-wide summary window (`crawl_dates["*"]`; per-source windows remain stored for audit; `crawl_dates_kind["*"]` chooses "crawl run <from> to <to>", "Scholar searches run <from> to <to> (local time)" ("(UTC)" in place of "(local time)" for `scholar_query_dates_utc`, TASK-077), or the mixed wording ("(UTC)" for `mixed_utc`), never calling Scholar dates a crawl), total, exclusions (`unknown` on its own line), replay status (`reproduced` / `drifted` with its reason and `+<added_total> / −<removed_total>`, its diff saying why each removed paper left and tallying the causes, TASK-227, copy RC-14a, or "membership-identical" on `+0 / −0` / `mismatch`; a replay whose canonical no longer runs reads "could not be re-run: `<refused code>`" with no counts; a replay this instance withholds (04 §Search records: `refused` `API_TOO_MANY_VERIFIED_CLAUSES` or `API_QUERY_TOO_COSTLY`, status `drifted`, `changed` empty) reads "could not be re-run: `API_TOO_MANY_VERIFIED_CLAUSES` — this instance's limit is below the record's <verified_clauses> position-verified clauses", or for `API_QUERY_TOO_COSTLY` "— its position checks would read more documents than this instance allows in one query", never as reproduced, as membership-identical or as a drift with no reason; its exports stay, the record's stored ids), a "Copy methods text" button, and export buttons that **must** call `/export?record_id=<id>` (the record's stored ids from its own index, never a re-run of `q`). When `identification_citable` is `false` the page shows the CLI's caution, "bootstrap corpus (sources: <sources>): these counts describe that corpus, not a database; they are not PRISMA identification numbers", and **no methods text** (exports stay); when it is null (a v1 record) the caution reads "not recorded whether this index is a bootstrap corpus: these counts may not be PRISMA identification numbers", also with no methods text. On `mismatch` the page is a blocking **"do not cite — replay mismatch"** state with no methods text and no export |
+| `/coverage` | Venue × year × track table (decision-049: the venues are whatever the snapshot holds, so AAAI, AIES and IASEAI appear with their tracks, none gated, spec 07 §C; the venue and track facets and the track badges are data-driven, with `student abstract`, `IAAI` and `EAAI` badge names, copy RH-11) with source and snapshot date, missing-abstract counts, `unknown` counts. As built (TASK-045): `GET /coverage` fetched on each visit (`components/coverage/`, client-side, so no server-side API address is needed); the window is worded by `crawl_dates_kind` ("Google Scholar searches run", never "crawled", for a bootstrap source, then the zone of its dates: "(local time)" with no recorded offset, "(UTC)" with one, or the mixed wording "(Scholar dates in local time)", TASK-077), a citability note when `identification_citable` is false, a statuses-indexed column, the abstract columns "Official abstract" and "OpenAlex abstract" between "Records" and "No abstract" in the main table and in each venue-year's track table (CV-4), " · N abstracts from OpenAlex" after the totals' missing-abstract count only when N is above 0 (CV-2), a paragraph under the table with the anchor `#openalex` saying what OpenAlex is and that `abstract_kind:official` leaves its abstracts out (CV-8; fixed copy, so the "no hard-coded numbers" test skips it), a "Not gated: …" row with its cited source under a track whose official count has a note (CV-9, `gate_note` and `gate_note_citation`; each URL in the citation is a link, the rest text, and a trailing `. , ; :` is not part of the link), each venue's indexed years with any year a span lacks and, when the venues' first years differ, the note that a search without `year:` compares them over different years and the `year:` clause that compares them over the same ones (copy deck CV-7, TASK-203), and a disclosure per venue-year with track × status (`–` for no cell) and each track against its official count (difference, gate verdict, citation). Every number is an API field; its tests render `coverage-fixture.json`, a real `GET /coverage` answer kept current by `test_frontend_coverage_fixture.py` |
 | `/help/syntax` | Language reference generated from the 02 golden table (it cannot drift from the tests). As built (TASK-045): rendered from `src/help/syntax-golden.json`, which `backend/tests/contract/help_golden.py` builds from the parser (an example, mode, registry message and fix per reader-facing code), the token goldens, spec 02's consequences table, the vocabularies, the default clauses and the limit constants; `test_frontend_help_golden.py` fails while it is stale or a code lacks an entry. Anchors are the code in lower case (`#slow-clauses` holds both slow-clause codes); Limits reads `/meta` at request time, else shows the defaults, said to be defaults |
 
 ## `/search` layout
@@ -250,8 +250,17 @@ warnings, the save's index check), the design doc says so; its open questions li
    the Builder tab: …" and a "Show group counts" button that opens the tab), and the syntax help's Google
    Scholar section names the three tools for a lower count than Scholar's in the order to use them: Add `$`,
    the group counts, Compare with your records.
-4. **Filter sidebar.** Venue, year range, track, status. Workshop is **off by default**. Each control shows
-   its count and **edits the `track:`/`status:` clauses in `q`**.
+4. **Filter sidebar.** Venue, year range, track, status, and (decision-049, milestone C) Abstract source. Workshop is
+   **off by default**. Each control shows its count and **edits the `track:`/`status:`/`abstract_kind:` clauses in
+   `q`**. *As built (milestone C, copy SB-1, SB-12).* The Abstract source fieldset ("Abstract" until gate C round
+   1) follows Status in
+   `src/components/search/filter-sidebar.tsx` and is drawn only when `facets.abstract_kind` is not null, that is,
+   on an index of schema 4 (a schema-3 index holds no such field, so nothing is offered that its server would
+   refuse). It never says "(default)", because the field has no default, and a click edits the `abstract_kind:`
+   clause like the other fieldsets (`search-state.ts` and `methods-text.ts` list the field, so a written
+   `abstract_kind:official` shows on the "Limits you wrote" line and in "Filters (n active)"). Its values read
+   "Official", "OpenAlex" and "No abstract" (SB-12: each checkbox's accessible name is "OpenAlex, 7 papers", and
+   the announcement after a click uses the label too); a value the code has no label for is shown as it came.
 5. **Exclusion banner.** "212 workshop · 4 competition · 88 rejected excluded by default filters", with
    `unknown` itemised on its own line ("3 unclassified"). Each has an "include" action, and **its label shows
    the number that clicking it will actually add**. That number is the facet count, which differs from the
@@ -275,6 +284,28 @@ warnings, the save's index check), the design doc says so; its open questions li
    and `/parse` only (no client arithmetic beyond reading them). Highlights and the abstract excerpt:
    `src/lib/excerpt.ts`. `/paper/[id]`: `src/components/paper/paper-view.tsx`.
 
+   *As built (TASK-210).* An abstract the API sends with an `abstract_note` (ICML 1997 and 1998, read from the
+   conference's submission pages, TASK-207) says so in the API's words, "Submission-time abstract: as the authors submitted it, which may differ from the published paper's."
+   (copy RH-19, PA-11): in the result, a line right under its "Abstract: ICML conference site …" attribution;
+   on the paper page, right under the abstract text. Not shown for a withheld or missing abstract. The text is the
+   API's, never the frontend's own, so the page and every export say the same sentence (`AbstractNote` in
+   `src/components/search/hit-item.tsx`).
+
+   *As built (milestone C, decision-049).* An abstract filled from OpenAlex (the API's `abstract_kind` is `openalex`)
+   says so (copy RH-20, PA-12): "Abstract via OpenAlex: this index holds no official abstract for this paper.
+   OpenAlex's text can differ from the published one." (gate C round 1: ACM and AAAI may publish an abstract the
+   index can't read, so "no official source publishes one" was untrue for some) in the result, a line right under the attribution, and on the paper page right after the abstract text, before the
+   submission-time line above; the word OpenAlex links to `/coverage#openalex` (`OpenAlexNote` and `OPENALEX_ANCHOR`
+   in `src/components/search/hit-item.tsx`). Nothing is shown for an official, missing or withheld abstract. The
+   attribution itself reads "Abstract: OpenAlex" and links the paper's own page (the hit's `abstract_source.origin`
+   is `openalex`; its `url` is `urls.proceedings`). The syntax help gains the `abstract_kind:` row (copy HS-4: it keeps
+   or drops whole papers, title matches included, with the query that keeps title matches, and says in plain words
+   that an index built before the abstract source was recorded doesn't hold it, never "schema 4") and an example,
+   `trust abstract_kind:official`, both from the generated golden. `/coverage#openalex` scrolls to and focuses the
+   explanation once the report is drawn (the page draws after a client fetch, so the browser's own jump finds
+   nothing; `useHashTarget` in `coverage-report.tsx`), and a citation's repository path links to the file on the
+   public repository (`src/lib/repo.ts`, the one place the repository URL is named).
+
    *As built (TASK-162, decision-029).* A record with twins (the API's `twins`: the same paper kept as two
    records, an ICLR 2017 workshop copy and its conference submission) says "See also (the same paper's other
    record): `<id>`" ("other records" for two) in the result, after the abstract, and on the paper page, after its
@@ -294,7 +325,9 @@ warnings, the save's index check), the design doc says so; its open questions li
    *As built (TASK-134, decision-018).* Each result shows its authors under the title (the first three and
    "et al.", with a "Show all n authors" button, `aria-expanded`, for the full list) and, under the abstract, its
    attribution "Abstract: `<site>`" linking to the paper's page there (the hit's `abstract_source.origin` and
-   `url`: OpenReview, NeurIPS Proceedings, ICLR Proceedings, PMLR), with " (via RIS import)" after it when the
+   `url`: OpenReview, NeurIPS Proceedings, ICLR Proceedings, PMLR, ICML conference site, AAAI Digital Library (ojs.aaai.org: AAAI, AIES and IASEAI), FAccT conference site (the official FAccT pages of 2022, 2025 and 2026) and Crossref (ACM proceedings; it gives no abstract today, so only `facct_site` occurs for one; decision-049), and AAAI (`aaai_library`: AAAI 1980–2008's own abstract from an archived aaai.org page, linking AAAI's page, the dblp `ee`, so no archive note shows; decision-051, TASK-232); an Internet Archive
+   capture adds " (Internet Archive copy, <YYYY-MM-DD>)" and links the archive's own view of the page, with its
+   banner, TASK-206), with " (via RIS import)" after it when the
    claim came through an imported RIS file; "an imported RIS file", unlinked, when its route names no known
    site; no line when the API names no source. The link's `aria-label` is its visible site plus ", abstract source for `<title>`", so it is told
    apart from the Links list's own "OpenReview"/"Proceedings". A PMLR
@@ -312,6 +345,15 @@ warnings, the save's index check), the design doc says so; its open questions li
    duplicates were merged at ingest, before indexing (merge counts, and look-alike pairs kept apart by
    track or venue-year, are in the search record). Database scope: coverage
    report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>."*
+   The coverage report this text cites states each venue's indexed years (AAAI from 1980, with a "none in" list of the years it was not held; AIES from 2018
+   and FAccT from 2018; IASEAI 2026; milestone B, decision-049), where the dblp, Crossref and FAccT years come from
+   (AAAI 1980–2008 has no abstracts, and its records' tracks come from the sections of the official contents pages;
+   Crossref carries no section data, so each AIES 2018–2023 paper's track comes from its page position, student
+   abstracts being `student_abstract`; each venue's entries that are not papers are counted, not indexed; FAccT's abstracts come from the official pages of 2022, 2025 and 2026
+   only), that AAAI, AIES and FAccT abstracts no official source gives are filled from OpenAlex and labelled (milestone C,
+   decision-049; the coverage report's columns say how many) and, for ICML 1988–2012, that the
+   records reflect the pinned dblp release (its DOI) and archived official pages, not a crawl on the window's
+   dates (decision-047): the window below is when the release was read, not when its data was current.
    The crawl clause is always the window `crawl_dates["*"]` from–to (a crawl spans days), never one date,
    and follows `crawl_dates_kind["*"]`: `crawl` → "built from a crawl run <from> to <to>";
    `scholar_query_dates` → "built from Scholar searches run <from> to <to> (local time)"; `mixed` → "built
@@ -337,9 +379,19 @@ warnings, the save's index check), the design doc says so; its open questions li
    (07 §C). A review may instead report the default filters as limits, citing the canonical string; the
    record stores both strings, so either framing can be cited.
 
+   *As built (gate C rounds 1 and 2).* The methods text says how many of the screened records have abstracts
+   supplied by OpenAlex ("`<n>` of the `<total>` records have abstracts supplied by OpenAlex
+   (`abstract_kind:openalex`), not by the venue."). `<n>` is the record GET's `openalex_abstracts` (spec 04 §Search
+   records): derived on the server from the record's own saved ids on its own `index_version`, never stored and
+   never taken from a search response. The save panel reads it from the record it has just saved, and the record
+   page from its replay read (else its stored read), so both write the same text for one record. Nothing is said
+   when the count is 0 or null (a schema-3 index, or the record's index isn't loaded for the request). The stored
+   record is unchanged.
+
    *As built (TASK-044).* The methods text is `frontend/src/lib/methods-text.ts` (`methodsText`), pure: every
-   number is a field of the record the API sent (`identified_total`, `excluded`, `unclassified_total`,
-   `total`), and the default and limit clauses are slices of `canonical` at the spans of `POST /parse`'s report
+   number comes from the record the API sent (`identified_total`, `excluded`, `unclassified_total`,
+   `total`) or is derived on the server from the record's own ids on its own index (`openalex_abstracts`, gate C
+   round 2), and the default and limit clauses are slices of `canonical` at the spans of `POST /parse`'s report
    of that same string (`clausesOf`: a field in `defaults` is a default clause; any other field with a clause
    of its own is a limit, and one written more than once is each clause behind it; a filter nested in an OR or
    NOT is part of the string, not a limit). Its test renders this section's example sentence from the spec
@@ -525,8 +577,10 @@ warnings, the save's index check), the design doc says so; its open questions li
   fixed `ubuntu-24.04` runner label (whose hosted image revision can still change). What an instance's
   configuration decides is left out of the baselines (`e2e/visual.css`): the footer's contact, and the
   "Compare with your records" button, offered only where comparisons are on. The Add `$` notice, the builder
-  with its group counts and an answered comparison are element baselines of their own
-  (`word-forms-*`, `group-counts-*`, `comparison-*`; TASK-182). New baselines are written by `npm run
+  with its group counts, an answered comparison and a result with a submission-time abstract's note are element
+  baselines of their own (`word-forms-*`, `group-counts-*`, `comparison-*`, TASK-182; `submission-note-*`,
+  TASK-210: the fixture server gives one paper of `trust venue:ICML`, off the default `trust` page, such an
+  abstract, and axe samples its result and its paper page). New baselines are written by `npm run
   e2e:update --workspace frontend`, on the platform they are for: the Linux ones on an amd64 `ubuntu-24.04`
   host or runner, never on an arm64 Mac. No workflow writes them: without such a host, take them from CI's
   own run. A test whose baseline is missing fails there and leaves its screenshot as

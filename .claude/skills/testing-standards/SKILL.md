@@ -16,7 +16,7 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 | Frontend unit | `frontend/**/*.test.ts(x)` (Vitest) | mocked API from generated types | builder↔AST, URL reducer |
 | e2e | Playwright | `backend/tests/e2e/fixture_server.py` builds/serves the temporary 5k index; production frontend build | the 05 §Testing flow end to end |
 | Bench | pytest-benchmark | fixture index (`bench` workflow, advisory), 80k report (`report_80k.py`) | >20% regression of the minimum fails the `bench` check |
-| Nightly | property/golden fixtures and exhaustive Unicode inputs | no full corpus | the whole backend suite at the `ci` profile (2,000), every property at 50k as a 5-part `properties` matrix, the year-edit property as 4 seeded `year-edits` jobs, exhaustive tokenizer check, differential@50k (8 parallel jobs), spec 03 benchmarks with their budgets plus the ~80k report (`benchmarks` job), gate/tooling mutation run of every mutant as 12 `mutate` shards (`mutate.py --shard i/12`; TASK-057, TASK-171) |
+| Nightly | property/golden fixtures and exhaustive Unicode inputs | no full corpus | the whole backend suite at the `ci` profile (2,000), every property at 50k as a 5-part `properties` matrix, the year-edit property as 4 seeded `year-edits` jobs, exhaustive tokenizer check, differential@50k (12 parallel jobs of 4,166 or 4,167), spec 03 benchmarks with their budgets plus the ~80k report (`benchmarks` job), gate/tooling mutation run of every mutant as 12 `mutate` shards (`mutate.py --shard i/12`; TASK-057, TASK-171) |
 
 ## Fixtures (`backend/tests/fixtures/`)
 - **Golden 200:** hand-built records whose text is written to be tricky (benchmark/benchmarking,
@@ -57,7 +57,9 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 - **e2e ports.** Playwright's fixture API and web server listen on 8000 and 3000 unless `OP_E2E_API_PORT` /
   `OP_E2E_WEB_PORT` are set (`playwright.config.ts`, `fixture_server.py`, and every spec that calls the API
   directly read the same two). Locally the config reuses a server already on its port, so with another
-  instance on 8000/3000 an unset run would test *that* instance: set both variables.
+  instance on 8000/3000 an unset run would test *that* instance: set both variables. The owner's dev servers
+  run `main`-branch code on the real index, so from a worktree an unset run failed all 66 tests; always run
+  `OP_E2E_API_PORT=8100 OP_E2E_WEB_PORT=3100 make e2e`.
 
 ## Rules
 1. **TDD.** Write the failing test first, watch it fail for the right reason, then implement. A bug fix
@@ -72,6 +74,14 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
    (`property-testing`). Its wall-clock checks (deadline, `too_slow`) are gates only on CI runners: the local
    `dev` profile turns them off, and `pr`, `ci` and `nightly` keep them (decision-024).
 6. **Claim only what you ran.** Report the command and its summary line (`412 passed in 9.1s`).
+7. **Untrusted input gets a timing-bounded test.** A regex over server output (an XML prolog skip) backtracked
+   exponentially; use a linear `find` loop, and test adversarial input (many PIs, unterminated) with a CPU
+   growth check (§CPU growth checks), in a daemon thread with a generous join when a hang is possible.
+8. **A failure that appears in one checkout only is a stored example.** The `.hypothesis` database holds an input
+   no `@example` covers. Extract the falsifying input and pin it as an `@example` before bisecting or calling it
+   pre-existing (a database copied between checkouts stores choice sequences, so the bisect proves nothing; the
+   idempotence bug of 2026-10-10 was real). Check "pre-existing" in a detached temporary worktree
+   (`git worktree add --detach`), never with `git stash`, which every worktree shares.
 
 ## Commands
 `uv run pytest backend/tests/unit backend/tests/golden -q` (fast loop) ·
@@ -107,4 +117,10 @@ and compare the median paired growth ratio. Independent fastest calls at each si
 CPU/allocation phases even though thread CPU time excludes preemption. Keep allocation and GC costs in
 the measurement. Before changing a sampling method, demonstrate that the former quadratic behavior
 still fails the same cutoff; a green optimized implementation alone does not prove the check works.
-`backend/tests/unit/test_latex_scan.py` applies this to unclosed math openers (TASK-171 recovery).
+`backend/tests/timing.py` is the one implementation (`growth`, `assert_near_linear`: 4x the input under 8x
+the CPU time, median of paired rounds; `backend/tests/unit/test_timing.py` shows a quadratic cost fails it);
+use it for every linear-time test. Never assert a wall-clock bound at one size: on a shared runner, beside four
+xdist workers running 50,000-example properties, a 17 ms parse took 1.9 s and a 5 ms page 2.5 s (nightlies
+37943547380, 38056534247). A wall-clock bound in a concurrency test is set by the hold it tells apart (under
+the 2 s wait it would otherwise wait), never tighter. `backend/tests/unit/test_latex_scan.py` applies this to
+unclosed math openers (TASK-171 recovery).

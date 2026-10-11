@@ -10,7 +10,8 @@ table never rewrites what an existing snapshot says.
 - An OpenReview note's `content.venueid` can carry every status (`classify.classify_venueid`: the bare
   path is `accepted`, the `…Submission` suffixes `rejected`, `withdrawn`, `desk_rejected` or `unknown`).
 - A proceedings listing (the ICLR archive, NeurIPS proceedings, or a PMLR volume) holds accepted papers only
-  (`classify.classify_proceedings`).
+  (`classify.classify_proceedings`), and so does the pinned dblp release's ICML 1988-2012 (published papers)
+  with the official ICML pages that give some of them abstracts (decision-047).
 - The RIS bootstrap resolves each record through a venueid or a listing (spec 01 §Sources, RIS row), so a
   venue-year it covers can carry every status where OpenReview holds that venue-year, and only `accepted`
   outside it: pre-2021 NeurIPS, ICML before 2023 and ICLR 2015 come from proceedings only.
@@ -35,6 +36,20 @@ SOURCE_STATUSES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "iclr_archive": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "neurips_proceedings": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "pmlr": (ACCEPTED_ONLY, ACCEPTED_ONLY),
+    # ICML 1988-2012: published papers only (decision-047), and an official ICML page's abstract of one (TASK-206)
+    "dblp": (ACCEPTED_ONLY, ACCEPTED_ONLY),
+    "icml_site": (ACCEPTED_ONLY, ACCEPTED_ONLY),
+    # AAAI 2010+, AIES 2024+, IASEAI 2026+ from ojs.aaai.org: published papers only (decision-049)
+    "ojs": (ACCEPTED_ONLY, ACCEPTED_ONLY),
+    # FAccT 2019+ and AIES 2018-2023 from Crossref's ACM proceedings records, and the official FAccT pages'
+    # abstracts of some of them: published papers only (decision-049, milestone B)
+    "crossref": (ACCEPTED_ONLY, ACCEPTED_ONLY),
+    "facct_site": (ACCEPTED_ONLY, ACCEPTED_ONLY),
+    # AAAI, AIES and FAccT abstracts no official source gives (decision-049, milestone C): abstract claims only,
+    # never a status
+    "openalex": ((), ()),
+    # AAAI 1980-2008 abstracts from the archived aaai.org paper pages (decision-051, TASK-232): abstract claims only
+    "aaai_library": ((), ()),
     "ris": (EVERY_STATUS, ACCEPTED_ONLY),
 }
 if set(SOURCE_STATUSES) != set(get_args(Source)):  # a new claim source needs a row before it can build

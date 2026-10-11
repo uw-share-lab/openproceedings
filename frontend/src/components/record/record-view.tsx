@@ -427,7 +427,17 @@ export function RecordView({ id }: { id: string }) {
         statusId={statusId}
       />
       <RecordDetails record={record} />
-      {settled && <MethodsBlock record={record} url={url} />}
+      {settled && (
+        <MethodsBlock
+          record={record}
+          url={url}
+          // the save panel's value: the replay read's (its own index loaded), else the stored read's
+          openalex={
+            (answer?.kind === "ok" ? answer.data.openalex_abstracts : null) ??
+            stored.outcome.data.openalex_abstracts
+          }
+        />
+      )}
       {settled && (
         <RecordExports
           recordId={record.record_id}

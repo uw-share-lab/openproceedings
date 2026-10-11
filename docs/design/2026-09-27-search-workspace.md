@@ -333,7 +333,7 @@ Component rules:
   its facet count (`facets.<field>[value]`, `tabular-nums`, right-aligned). Checked = the value is in the
   field's clause (`filters[field].values`). Track and status show `(default)` after the heading while the
   field's clause is the default (`defaults` includes it). Track values display as the `/meta` vocabulary,
-  with `datasets_benchmarks` shown `D&B` (accessible name "datasets and benchmarks"). A value with facet
+  with `datasets_benchmarks` shown `D&B` (accessible name "D&B, datasets and benchmarks"). A value with facet
   count 0 is listed (the vocabulary is complete) but dimmed, still operable.
   - **Year** had no reducer action when this was designed (decision-011); TASK-092 added the year actions and
     **TASK-042 built the control on them** (Open questions 2): the year facet as checkboxes with counts,

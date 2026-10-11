@@ -28,7 +28,10 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
 3. Docs, specs and READMEs as-built in the same branch.
 4. `/record-learnings` → commit the entry and regenerated `INDEX.md`.
 5. `/review-gate` → routed reviewers, every finding dispositioned, `record-review.py APPROVE` for HEAD.
-6. `git push -u origin <branch>`, then `/open-pr` (writes the body, creates the PR, `--attest`s it).
+6. Before the first push, `git log -p origin/dev..HEAD | grep -i` for the owner's contact address and any other
+   personal data (plans, rulings and briefs say "the address in `.env`", never the address; a leak found
+   after commit is removed by rewriting the unpushed branch, never after push). Then
+   `git push -u origin <branch>`, then `/open-pr` (writes the body, creates the PR, `--attest`s it).
 7. Once its checks are green, the PR goes into the merge queue (§Merge method). Once it merges:
    `git worktree remove <its worktree>` and `git branch -d <branch>` (GitHub deletes the remote branch). A
    worktree left behind goes stale; one with uncommitted work is archived as a patch before it is removed,
@@ -42,7 +45,7 @@ break. `make lint` and `make tooling` always run (the pre-push hook runs them to
 
 | The diff touches | Run locally before pushing |
 |---|---|
-| `backend/src/**`, `**/pyproject.toml`, `uv.lock`, `**/package.json`, `package-lock.json` | `make test` (the full suite) |
+| `backend/src/**`, `**/pyproject.toml`, `uv.lock`, `**/package.json`, `package-lock.json` | `make test` (the full suite; always for `vocab.py`: venues and tracks feed the differential suite's combination counts, which unit and contract tests don't run) |
 | `frontend/src/**`, frontend root config (`frontend/*.config.*` but `playwright.config.ts`, `frontend/tsconfig.json`), or the API contract `backend/tests/contract/openapi.json` | `npm test --workspace frontend`; and when it touches a file a backend test reads (any `frontend/src/**/*.json`, the goldens and fixtures, `src/api/schema.ts`, or `openapi.json`; the last two change only through `make openapi`), also `uv run pytest` (the whole backend suite); and for `next.config.ts` or `postcss.config.mjs`, which change the production build, also `npm run build --workspace frontend` (and `make e2e` when its `headers()` or `src/lib/security-headers.ts` change: a bad CSP builds but blocks scripts at runtime) |
 | `frontend/e2e/**`, `frontend/playwright.config.ts`, `backend/tests/e2e/**` | `make e2e` (CI's `e2e` job is advisory, so this is the only run that must pass) |
 | shared test code: any `conftest.py`, `backend/tests/{strategies,corpus}.py`, `backend/tests/fixtures/**`, or any `backend/tests` module another test imports (`grep -rn "<module name>" backend/tests --include='*.py'` finds both `from tests.x.<module> import …` and `from tests.x import <module>`) | `make test` (both suites: a frontend test reads `backend/tests/fixtures/queries/`) |
@@ -83,14 +86,16 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
   `op-reviews/`); fix what the script names.
 - Records are **per-sha**: an approval covers exactly one commit.
 - `--attest` adds `<!-- op-review: <sha> APPROVE -->` to the PR body; CI's `review-attested` step compares
-  it to the PR head sha. After pushing a fix to an open PR, re-run the gate and `--attest` again.
+  it to the PR head sha. After pushing a fix to an open PR, re-run the gate and `--attest` again. It finds the
+  branch's PR with `gh pr view` (GraphQL); `--attest --pr <n> --repo <owner>/<name>` reads it over REST instead,
+  for a Claude Code cloud session, which refuses GraphQL, and refuses a PR that isn't open at HEAD (TASK-213).
 
 ## Required CI checks (six)
 | Check (workflow) | Covers |
 |---|---|
-| `lint` (`lint.yml`) | `make lint`: ruff format/check, mypy --strict (once `backend/src` exists), shellcheck; prettier, eslint, tsc; then actionlint |
+| `lint` (`lint.yml`) | `make lint`: ruff format/check, mypy --strict (`backend/src` and the `/dependabot-review` scripts), shellcheck; prettier, eslint, tsc; then actionlint |
 | `test` (`test.yml`) | pytest unit/golden/differential/contract under pytest-xdist, properties at the `pr` profile (200 examples, 2 s deadline); vitest; OpenAPI→TS freshness |
-| `claude-tooling` (`claude-tooling.yml`) | `make tooling`: roster lint, `.claude/README.md` + learnings index freshness, backlog hygiene (no Done task in `tasks/`, no id used twice), every hook case table |
+| `claude-tooling` (`claude-tooling.yml`) | `make tooling`: roster lint, `.claude/README.md` + learnings index freshness, backlog hygiene (no Done task in `tasks/`, no id used twice), digest pins in `deploy/`, the npm manifests against the lock (`npm_specs.py`, TASK-212), every case table |
 | `attribution` (`pr-gates.yml`) | no AI attribution in any commit message or the PR title/body |
 | `learnings` (`pr-gates.yml`) | the branch adds or extends a learnings entry, or is labelled `no-learning` |
 | `review-attested` (`pr-gates.yml`) | the PR body attests APPROVE for the head sha |

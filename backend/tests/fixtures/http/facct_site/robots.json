@@ -1,0 +1,19 @@
+{
+ "_recorded": {
+  "date": "2026-10-10",
+  "run": "Census B live run, 2026-10-10 (scripts/acm_census.py, op ingest crossref|pmlr; milestone B Task 9)",
+  "scrubbed": "nothing to scrub (robots.txt)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://facctconference.org/robots.txt",
+  "authenticated": false
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "text/plain"
+  },
+  "text": "\nUser-agent: *\nDisallow:\n\nSitemap: sitemap.xml\n\n"
+ }
+}

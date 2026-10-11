@@ -18,6 +18,7 @@ from typing import NamedTuple
 from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.query.ast import (
+    FILTER_FIELDS,
     And,
     Filter,
     Near,
@@ -33,7 +34,7 @@ from openproceedings.query.ast import (
 from openproceedings.query.clauses import ClauseReason, _widest_clause
 from openproceedings.query.normalize import normalize
 from openproceedings.query.parser import Mode, parse
-from openproceedings.vocab import STATUSES, TRACKS
+from openproceedings.vocab import ABSTRACT_KINDS, STATUSES, TRACKS, VENUES
 
 _ROWS = [
     json.loads(line)
@@ -129,9 +130,13 @@ def leaves(
     return Phrase(span=SPAN, items=tuple(items), field=field)
 
 
+# the filter fields a schema-3 index holds: what a tree drawn for one may name (`TantivyEngine.filter_fields`)
+SCHEMA_3_FIELDS: tuple[str, ...] = ("venue", "year", "track", "status")
+
+
 @st.composite
-def filters(draw: st.DrawFn) -> Filter:
-    field = draw(st.sampled_from(["venue", "year", "track", "status"]))
+def filters(draw: st.DrawFn, fields: tuple[str, ...] = FILTER_FIELDS) -> Filter:
+    field = draw(st.sampled_from(fields))
     if field == "year":
         values: list[str | YearRange] = [
             YearRange(lo=lo, hi=lo + span)
@@ -141,16 +146,19 @@ def filters(draw: st.DrawFn) -> Filter:
         ]
     else:
         pool = {
-            "venue": ["NeurIPS", "ICLR", "ICML"],
+            "venue": list(VENUES.values()),
             "track": list(TRACKS),
             "status": list(STATUSES),
+            "abstract_kind": list(ABSTRACT_KINDS),
         }[field]
         values = list(draw(st.lists(st.sampled_from(pool), min_size=1, max_size=3)))
     return Filter(span=SPAN, field=field, values=tuple(values))  # type: ignore[arg-type]
 
 
 @st.composite
-def _node(draw: st.DrawFn, depth: int, vocab: Vocab = FIXTURE) -> Node:
+def _node(
+    draw: st.DrawFn, depth: int, vocab: Vocab = FIXTURE, fields: tuple[str, ...] = FILTER_FIELDS
+) -> Node:
     options = ["leaf", "near", "filter"] + (["not", "and", "or"] if depth < 3 else [])
     kind = draw(st.sampled_from(options))
     if kind == "leaf":
@@ -164,33 +172,34 @@ def _node(draw: st.DrawFn, depth: int, vocab: Vocab = FIXTURE) -> Node:
             distance=draw(st.integers(0, 5)),
         )
     if kind == "filter":
-        return draw(filters())
+        return draw(filters(fields))
     if kind == "not":
-        return Not(span=SPAN, child=draw(_node(depth + 1, vocab)))
-    children = tuple(draw(st.lists(_node(depth + 1, vocab), min_size=2, max_size=3)))
+        return Not(span=SPAN, child=draw(_node(depth + 1, vocab, fields)))
+    children = tuple(draw(st.lists(_node(depth + 1, vocab, fields), min_size=2, max_size=3)))
     return And(span=SPAN, children=children) if kind == "and" else Or(span=SPAN, children=children)
 
 
 @st.composite
-def negative_asts(draw: st.DrawFn, vocab: Vocab = FIXTURE) -> Node:
+def negative_asts(draw: st.DrawFn, vocab: Vocab = FIXTURE, fields: tuple[str, ...] = FILTER_FIELDS) -> Node:
     """A tree with no positive part (NOT x, or an OR with a negated branch): must be PARSE_ALL_NEGATIVE."""
-    negated = Not(span=SPAN, child=draw(_node(1, vocab)))
+    negated = Not(span=SPAN, child=draw(_node(1, vocab, fields)))
     if draw(st.booleans()):
         return negated
-    return Or(span=SPAN, children=(draw(_node(1, vocab)), negated))
+    return Or(span=SPAN, children=(draw(_node(1, vocab, fields)), negated))
 
 
-def engine_asts(vocab: Vocab = FIXTURE) -> st.SearchStrategy[Node]:
+def engine_asts(vocab: Vocab = FIXTURE, fields: tuple[str, ...] = FILTER_FIELDS) -> st.SearchStrategy[Node]:
     """Any tree an engine may be handed: parser-valid ones, and bare or all-negative ones the parser would
-    refuse (an engine takes any AST; spec 03 §Two engines, one contract)."""
-    return st.one_of(asts(vocab), _node(0, vocab), negative_asts(vocab))
+    refuse (an engine takes any AST; spec 03 §Two engines, one contract). `fields`: the filter fields it may
+    name (`SCHEMA_3_FIELDS` for a schema-3 index, which refuses `abstract_kind:`)."""
+    return st.one_of(asts(vocab, fields), _node(0, vocab, fields), negative_asts(vocab, fields))
 
 
 @st.composite
-def asts(draw: st.DrawFn, vocab: Vocab = FIXTURE) -> Node:
+def asts(draw: st.DrawFn, vocab: Vocab = FIXTURE, fields: tuple[str, ...] = FILTER_FIELDS) -> Node:
     """A valid tree with a positive part (a term ANDed in front), so its canonical string parses."""
     anchor = _term(draw(vocab.term()))
-    return And(span=SPAN, children=(anchor, draw(_node(0, vocab))))
+    return And(span=SPAN, children=(anchor, draw(_node(0, vocab, fields))))
 
 
 # Each decision that changes how much a query strategy draws after it is drawn by its own strategy, so it has its
@@ -213,6 +222,7 @@ _FILTER_STRINGS = (
     "year:2019..2021",
     "track:main",
     "status:accepted",
+    "abstract_kind:official",
 )
 FILTER_STRINGS = st.sampled_from(_FILTER_STRINGS)
 
@@ -283,9 +293,10 @@ def near_cap_queries(draw: st.DrawFn, low: int = 1_500, high: int = 2_000) -> st
 # (`track:(main OR workshop)(x OR y)`), and sometimes padded toward the 2,000-code-point cap or nested toward
 # the depth limit.
 CLAUSE_VALUES: dict[str, tuple[str, ...]] = {
-    "venue": ("ICLR", "ICML", "NeurIPS"),
+    "venue": tuple(sorted(VENUES.values())),
     "track": tuple(TRACKS),
     "status": tuple(STATUSES),
+    "abstract_kind": tuple(ABSTRACT_KINDS),
 }
 _CLAUSE_WORDS = (
     "trust",
@@ -372,10 +383,18 @@ class YearEditCase(NamedTuple):
 
 
 def _join(parts: list[str], sep: str) -> str:
-    """`parts` joined by `sep`; written together (`sep` "") only where a `)` meets a `(`, else by a space."""
+    """`parts` joined by `sep`; written together (`sep` "") only where a `)` meets a `(`, else by a space. Not
+    where both sides' unspaced runs hold a `$` either: `(a model$)(model$ b)` is LaTeX math from `$)` to `(model$`,
+    as the tokenizer reads it, not two groups (nightly 37793521347). Conservative: math across the join needs a
+    `$` on each side, but a `$` there need not open or close one (a closed `$x$)` before `(model$` would glue
+    safely). With this vocabulary's one `$` word, `model$`, the two rules give the same queries; a closed-math
+    word added to `_CLAUSE_WORDS` would lose those glued cases, never gain a wrong one."""
     out = parts[0]
     for part in parts[1:]:
-        out += (sep or ("" if out.endswith(")") and part.startswith("(") else " ")) + part
+        together = out.endswith(")") and part.startswith("(")
+        if together and "$" in out.split()[-1] and "$" in part.split()[0]:
+            together = False
+        out += (sep or ("" if together else " ")) + part
     return out
 
 

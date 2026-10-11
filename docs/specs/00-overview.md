@@ -5,7 +5,8 @@ Status: **draft for review** · 2026-09-25 · SHARE Lab, University of Waterloo
 ## Why this exists
 
 Systematic reviews of ML research need a search they can *report*: a query string, a date, and a hit
-count that anyone can re-run. Google Scholar can't give that for NeurIPS, ICLR and ICML:
+count that anyone can re-run. Google Scholar can't give that for these venues (NeurIPS, ICLR and ICML, with AAAI, AIES and IASEAI added by
+decision-049 and FAccT planned):
 
 | Problem with Scholar | What openproceedings does instead |
 |---|---|
@@ -23,7 +24,22 @@ venues.
 ## Scope
 
 **In scope (v1):**
-- Venues: NeurIPS (including the Datasets & Benchmarks track), ICLR, ICML (on OpenReview and in PMLR).
+- Venues **indexed now**: NeurIPS (including the Datasets & Benchmarks track; from 1987), ICLR (from 2013), ICML
+  (from 1988: on OpenReview, in PMLR, and before 2013 from a pinned dblp release; decision-047), AAAI (from 1980:
+  1980-2008 from the same pinned dblp release, 23 held years, none in 1981, 1985, 1989, 1995, 2001, 2003 or 2009;
+  2010-2026 from ojs.aaai.org), AIES (from 2018: 2018-2023 from Crossref's records of the ACM proceedings,
+  2024-2025 from ojs.aaai.org), FAccT (from 2018: FAT\* 2018 from PMLR v81, 2019-2026 from Crossref, with the
+  official abstracts of 2022, 2025 and 2026 from facctconference.org) and IASEAI (2026; its archival papers only,
+  57 of the 92 accepted, the other 35 being non-archival and unpublished) (decision-049, milestones A and B). Milestone C fills the abstracts of AAAI, AIES and FAccT records that no
+  official source holds from OpenAlex, labelled, with an `abstract_kind:` filter (the
+  [design](../plans/2026-10-09-new-venues-design.md)).
+- Venues **in scope and planned** (decision-049): IASEAI 2027 once its accepted papers are public. Until a venue-year is built it is absent from the index and the coverage page, which says so (copy deck CV-7).
+  Most records of AAAI 1980-2008 and of FAccT 2019-2021, 2023 and 2024 and AIES 2018-2023 have a title and no
+  abstract unless OpenAlex's labelled fallback (milestone C) fills one, and many stay without one; the coverage page and
+  the home page name these venue-years (copy deck CV-8). AIES 2018-2023's student abstracts are
+  `student_abstract` by their page position (Crossref labels no section) and its keynotes are counted, not indexed,
+  so a default search leaves them out as it does AIES 2024+'s; AAAI 1993-2008's non-technical sections take their
+  tracks from the official contents pages (decision-050).
 - Content: title and abstract, plus metadata (authors, venue, year, track, acceptance status, links).
 - Search: exact-token Boolean search with phrases, proximity, explicit wildcards, field scopes, and
   filters written inside the query itself.
@@ -32,8 +48,8 @@ venues.
 
 **Out of scope (for now):**
 - Full text.
-- Venues outside the three above. ACL, EMNLP, NAACL, FAccT, CHI and CSCW are a later extension; the
-  record schema is designed for it.
+- Venues outside the seven above. ACL, EMNLP, NAACL, CHI and CSCW are a later extension; the record schema is
+  designed for it. (FAccT, once listed here, moved into scope in decision-049.)
 - User accounts.
 - Citation graphs.
 - Any matching that goes beyond the literal query: stemming, synonyms, or embeddings deciding what
@@ -63,7 +79,8 @@ venues.
 ```
             ┌──────────────── ingestion (01) ────────────────┐
  OpenReview │ API v2 / v1 crawlers ─┐                         │
- PMLR       │ proceedings miners ───┼─► normalize ─► dedup ─► │ corpus snapshot
+ PMLR, dblp,│ proceedings miners ───┼─► normalize ─► dedup ─► │ corpus snapshot
+ ICML sites │                       │                         │
  NeurIPS    │ RIS importer (M2) ────┘   + track/status        │ (JSONL, content-hashed)
             └─────────────────────────────────────────────────┘
                                    │
@@ -133,9 +150,13 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
    public rejected, withdrawn and desk-rejected submission is indexed with `status:rejected`,
    `status:withdrawn` or `status:desk_rejected` and excluded by the default `status:accepted`, counted
    in the exclusion banner. ICLR publishes all of them; NeurIPS and ICML only those whose authors opt in.
-3. ~~**Earliest year (M4).**~~ **Closed 2026-09-27 (decision-013):** every venue is crawled from 2013
-   (ICLR's first year, when it was already on OpenReview) wherever a spec 01 source holds the
-   venue-year; the query's `year:` filter narrows it. OpenReview cannot establish conference acceptance
+3. ~~**Earliest year (M4).**~~ **Closed 2026-09-27 (decision-013), reopened and closed again 2026-10-06
+   (decision-047):** every venue is crawled from its first year a spec 01 source holds: NeurIPS from 1987 (its
+   proceedings), ICML from 1988 (the pinned dblp snapshot release until 2012, then PMLR and OpenReview; its
+   pre-2013 abstracts only where an official ICML page gives one) and ICLR from 2013 (its first year, when it
+   was already on OpenReview); the query's `year:` filter narrows it. decision-047 superseded decision-013's
+   "years before 2013 stay out" at the owner's request, for the full history of both venues. So per-venue year
+   coverage differs before 2013, which the coverage page says. OpenReview cannot establish conference acceptance
    for ICLR 2014–2016, so the public ICLR archive supplies those accepted main-track records (TASK-096).
 4. **Planning tool (M0).** Backlog.md CLI (as in Kreate) or GitHub Issues.
 5. **Hosting (M6).** A lab VM, a university server, or a PaaS.

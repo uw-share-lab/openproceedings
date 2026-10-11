@@ -45,8 +45,21 @@ BUILT = datetime(2026, 9, 28, tzinfo=UTC)
 # reverting that one value in memory restores the prior files hash. The corpus hash is unchanged.
 # Release 0.2.0 likewise changed only openproceedings_version, "0.1.0" to "0.2.0": setting it back to "0.1.0" in
 # memory returns the files hash to ce0f3eba… (checked 2026-10-06), and SNAPSHOT_HASH is unchanged.
+# TASK-205/206 changed FILES_HASH: record schema v5 (the `dblp` and `icml_site` sources and the `dblp-<key>` native
+# id, decision-047) changed the manifest's record_schema_version, from e0caaefc…, and each proceedings listing's
+# report gained `abstract_short` (abstracts under 5 words: the scrubbed fixtures' synthetic ones); no record changed.
 SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bdd"
-FILES_HASH = "e0caaefc10aa977accd790098a9179eb2896f4272bbc3c2b9b10a1c0f238e2f6"
+# Task 2 of the new-venues milestone changed FILES_HASH: record schema v6 (the `ojs` source, decision-049) changed the
+# manifest's record_schema_version, from 964d2bd7…; with it set back to "5" the files hash to that (checked 2026-10-09).
+# Task 1 of milestone B changed it again: record schema v7 (the `crossref` and `facct_site` sources); with the version
+# set back to "6" the files hash to the value above (checked 2026-10-10).
+# Task 2 of milestone C changed it again: record schema v8 (the `openalex` source and the derived `abstract_kind`);
+# with the version set back to "7" the files hash to 93bf0aef… (checked 2026-10-10). SNAPSHOT_HASH is unchanged.
+# TASK-232 changed it again: record schema v9 (the `aaai_library` source); with the version set back to "8" the files
+# hash to aad4fd98… (checked 2026-10-11). SNAPSHOT_HASH is unchanged.
+# Release 0.3.0 changed only openproceedings_version, "0.2.0" to "0.3.0": with it set back to "0.2.0" the files hash
+# to 37f369e3… (the value before). SNAPSHOT_HASH is unchanged.
+FILES_HASH = "7c20f8f9c2ae747ce38c3e7862f28d4a40197dd6a3e3d3f4e018cac0131a897b"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:

@@ -3,7 +3,7 @@
 `canonicalize` puts an AST in normal form without changing what it matches:
 - nested AND in AND (and OR in OR) is flattened;
 - in every AND, text conjuncts keep their order and filter conjuncts (`venue:x`, `NOT track:y`) follow,
-  ordered venue, year, track, status, a positive filter before a negated one of the same field;
+  ordered venue, year, track, status, abstract_kind, a positive filter before a negated one of the same field;
 - an OR whose branches are all filters of one field becomes one filter; filter values are sorted and
   deduplicated.
 
@@ -40,13 +40,14 @@ from openproceedings.query.ast import (
 )
 from openproceedings.query.lexer import OPERATOR_WORDS
 from openproceedings.query.normalize import TOKENIZER_VERSION
-from openproceedings.vocab import STATUSES, TRACKS, VENUES
+from openproceedings.vocab import ABSTRACT_KINDS, STATUSES, TRACKS, VENUES
 
 FILTER_ORDER = FILTER_FIELDS
 _VALUE_WORDS = {  # tokens a bare word could be mistaken for, next to a filter of that field (WARN_FILTER_SCOPE)
     "venue": frozenset(VENUES),
     "track": frozenset(TRACKS),
     "status": frozenset(STATUSES),
+    "abstract_kind": frozenset(ABSTRACT_KINDS),
 }
 
 

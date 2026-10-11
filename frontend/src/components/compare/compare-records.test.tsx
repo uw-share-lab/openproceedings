@@ -217,11 +217,11 @@ describe("CompareRecords", () => {
     expect(item.textContent).toContain("to check: is it in the index under another title, venue or year?");
     expect(item.textContent).not.toContain("no forum id, proceedings id");
     const out = screen.getByRole("region", { name: `Not compared, ${R.not_compared_total} record` });
-    // never "not NeurIPS, ICLR or ICML": a Web of Science venue string with its volume is not recognised (CM-16)
-    expect(out.textContent).toContain("whose venue is not recognised as NeurIPS, ICLR or ICML");
+    // never "not an indexed venue": a Web of Science venue string with its volume is not recognised (CM-16)
+    expect(out.textContent).toContain("whose venue is not recognised as one of the indexed venues");
     fireEvent.click(within(out).getByRole("button", { name: /^List the/ }));
     expect(within(out).getByRole("listitem").textContent).toContain(
-      "its venue is not recognised as NeurIPS, ICLR or ICML, and no link or DOI names an indexed paper",
+      "its venue is not recognised as one of the indexed venues, and no link or DOI names an indexed paper",
     );
   });
 

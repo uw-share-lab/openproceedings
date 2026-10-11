@@ -19,6 +19,8 @@ from openproceedings.ingest.dedup import (
     PROCEEDINGS_SOURCES,
     PROCEEDINGS_TRACKS,
     DedupResult,
+    _cluster,
+    _link,
     abstract_key,
     dedup,
     is_absence,
@@ -37,13 +39,26 @@ PROCEEDINGS = {  # native id → its venue
     **{f"nips-{H[n]}": "NeurIPS" for n in (1, 2)},
     **{f"iclr-{H[n]}": "ICLR" for n in (1, 2)},
     **{f"pmlr-v202-key{n}": "ICML" for n in (1, 2)},
+    **{f"dblp-Key0{n}": "ICML" for n in (1, 2)},  # ICML 1988-2012 (decision-047): years 2009-2010 below
+    "ojs-101": "AAAI",  # ojs.aaai.org (decision-049)
+    "ojs-102": "AIES",
+    # milestone B (decision-049): ACM DOIs from Crossref (FAccT 2019's and AIES 2019's tables of contents), FAccT
+    # 2018's PMLR volume, and AAAI 1980-2008's dblp key; dblp-Key01 is ICML's key too (venue drawn below)
+    "doi-3287560.1": "FAccT",
+    "doi-3306618.1": "AIES",
+    "pmlr-v81-key1": "FAccT",
 }
+# the years each new form may name (records() draws from them); dblp keys overlap ICML and AAAI in 1990
+YEARS = {"doi-3287560.1": [2019], "doi-3306618.1": [2019], "pmlr-v81-key1": [2018]}
 SOURCE_NATIVES = {
     "openreview_v2": FORUMS,
     "openreview_v1": FORUMS,
     "iclr_archive": [n for n in PROCEEDINGS if n.startswith("iclr-")],
     "neurips_proceedings": [n for n in PROCEEDINGS if n.startswith(("nips-", "iclr-"))],
     "pmlr": [n for n in PROCEEDINGS if n.startswith("pmlr-")],
+    "dblp": [n for n in PROCEEDINGS if n.startswith("dblp-")],
+    "ojs": [n for n in PROCEEDINGS if n.startswith("ojs-")],
+    "crossref": [n for n in PROCEEDINGS if n.startswith("doi-")],
     "ris": [*FORUMS, *PROCEEDINGS],
 }
 
@@ -53,6 +68,8 @@ def records(draw: st.DrawFn) -> PaperRecord:
     source = draw(st.sampled_from(sorted(SOURCE_NATIVES)))
     native = draw(st.sampled_from(SOURCE_NATIVES[source]))
     venue = PROCEEDINGS.get(native) or draw(st.sampled_from(["NeurIPS", "ICLR", "ICML"]))
+    if native == "dblp-Key01" and draw(st.booleans()):
+        venue = "AAAI"  # AAAI 1980-2008's dblp key: the same key as ICML's, never the same paper
     extra = {}
     if native in FORUMS and draw(st.booleans()):
         extra["urls_proceedings"] = nips(draw(st.sampled_from([1, 2])))  # an OpenReview note linking a paper
@@ -64,14 +81,17 @@ def records(draw: st.DrawFn) -> PaperRecord:
         draw(st.integers(0, 3)) == 0
     ):  # a forum link: a listing's (PMLR v235), a note's own, or a contradicting one
         extra["urls_forum"] = forum_url(draw(st.sampled_from(FORUMS)))
-    year = draw(st.sampled_from([2023, 2024]))
+    if native.startswith("dblp-"):
+        year = draw(st.sampled_from([1990] if venue == "AAAI" else [1990, 2009, 2010]))
+    else:
+        year = draw(st.sampled_from(YEARS.get(native, [2023, 2024])))
     return paper(
         native,
         draw(st.sampled_from(TITLES)),
         source=source,
         venue=venue,
         year=year,
-        abstract_evidence=own_page(native, year) if source == "ris" else None,
+        abstract_evidence=own_page(native, year, venue) if source == "ris" else None,
         track=draw(
             st.sampled_from(["main", "workshop", "position", "datasets_benchmarks", "unknown", "other"])
         ),
@@ -268,6 +288,48 @@ def creative(draw: st.DrawFn) -> tuple[list[PaperRecord], list[str], bool, int]:
     return xs + noise, aside, blocked, year
 
 
+@st.composite
+def yields(draw: st.DrawFn) -> list[PaperRecord]:
+    """decision-045's shapes (TASK-201): an imported record with its own-page abstract, title partners under its
+    title (a crawled note of any track and status, a forum id's RIS row, a crawled listing) that keep its abstract,
+    another or none, and records of other titles (a note, a listing, a workshop or rejected one, or a note whose
+    RIS row alone keeps it) that hold its abstract, all in one venue-year, plus noise."""
+    venue, prefix, archive_source = draw(
+        st.sampled_from([("NeurIPS", "nips", "neurips_proceedings"), ("ICLR", "iclr", "iclr_archive")])
+    )
+    year = draw(st.sampled_from([2023, 2024]))
+    where = dict(venue=venue, year=year)
+    title, other_title = draw(st.permutations(TITLES[1:3]))  # two keys, never punctuation alone
+    abstracts = st.sampled_from([LONG, LONG, OTHER, None])
+    tracks = st.sampled_from(["main", "main", "workshop", "unknown"])
+    statuses = st.sampled_from(["accepted", "accepted", "rejected", "unknown"])
+    native = draw(st.sampled_from([f"{prefix}-{H[1]}", f"{prefix}-{H[1]}", FORUMS[2]]))
+    xs = [imported(native, title, abstract=LONG, **where)]
+    partners = st.sampled_from(["note", "note", "ris", "listing"])
+    for fid, kind in zip(FORUMS[:2], draw(st.lists(partners, min_size=1, max_size=2)), strict=False):
+        if kind == "note":
+            xs.append(paper(fid, title, source=draw(st.sampled_from(["openreview_v2", "openreview_v1"])),
+                            track=draw(tracks), status=draw(statuses), abstract=draw(abstracts), **where))  # fmt: skip
+        elif kind == "ris":
+            xs.append(imported(fid, title, abstract=draw(abstracts), **where))
+        else:
+            xs.append(
+                paper(f"{prefix}-{H[2]}", title, source=archive_source, abstract=draw(abstracts), **where)
+            )
+    for n, kind in enumerate(draw(st.lists(st.sampled_from(["note", "listing", "ris_only"]), max_size=2))):
+        fid = ["MnOp3456", "QrSt7890"][n]
+        if kind == "listing":
+            xs.append(
+                paper(f"{prefix}-{H[3 + n]}", other_title, source=archive_source, abstract=LONG, **where)
+            )
+        else:  # a note holding it, or a note whose RIS row alone keeps it (never a crawler's text)
+            xs.append(paper(fid, other_title, track=draw(tracks), status=draw(statuses),
+                            abstract=OTHER if kind == "ris_only" else LONG, **where))  # fmt: skip
+            if kind == "ris_only":
+                xs.append(imported(fid, other_title, abstract=LONG, **where))
+    return xs + draw(st.lists(records(), max_size=2))
+
+
 pools = st.one_of(
     st.lists(records(), max_size=10),
     chains(),
@@ -387,6 +449,26 @@ YIELD_TO_A_REPLACED_RIS_ABSTRACT = [
     paper(f"nips-{H[2]}", "Trust in AI", source="neurips_proceedings", year=2023, abstract=LONG),
 ]
 
+# Hypothesis example database (2026-10-10): an import titled like a note and a listing makes their title group
+# ambiguous (two proceedings ids), then step 3 merges it by abstract into a newer RIS row of another title, whose
+# title claim replaces its own; run again, the title group is the note and the listing alone, and they merge
+WORDS, TERMS = (" ".join(f"{w}{i}" for i in range(50)) for w in ("word", "term"))
+TITLE_LOST_TO_A_NEWER_RIS_ROW = [
+    imported(f"nips-{H[1]}", "Trust in Machines", year=2023, abstract=WORDS),
+    imported("AbCd1234", year=2023, abstract=WORDS, fetched=T1),
+    paper("EfGh5678", "Trust in Machines", year=2023, abstract=TERMS),
+    paper(f"nips-{H[2]}", "Trust in Machines", source="neurips_proceedings", year=2023, abstract=TERMS),
+]
+# the same through step 2 alone (dedup-auditor, 2026-10-10): a note's two RIS rows merge on its title, and the newer
+# row's title replaces the older's, which had made another note and a listing's title group hold two forum ids
+STEP2_ONLY = [
+    paper("EfGh5678", "Calibrated Trust", year=2023),
+    imported("EfGh5678", "Trust in Machines", year=2023, fetched=T0),
+    imported(f"nips-{H[1]}", "Calibrated Trust", year=2023, fetched=T1),
+    paper("IjKl9012", "Trust in Machines", year=2023),
+    paper(f"nips-{H[2]}", "Trust in Machines", source="neurips_proceedings", year=2023),
+]
+
 
 @given(pools)
 @example(TWO_PROCEEDINGS_IDS)
@@ -399,11 +481,15 @@ YIELD_TO_A_REPLACED_RIS_ABSTRACT = [
 @example(RIS_BRIDGE)
 @example(NOTE_BRIDGE)
 @example(YIELD_TO_A_REPLACED_RIS_ABSTRACT)
+@example(TITLE_LOST_TO_A_NEWER_RIS_ROW)
+@example(STEP2_ONLY)
 def test_idempotent(xs: list[PaperRecord]) -> None:
     once = dedup(xs)
     note(once)
     twice = dedup(once.records)
     assert twice.records == once.records
+    assert not [m for m in twice.merges if m.merged_id != m.survivor_id]  # no merge but each id's own copies
+    assert not _link([_cluster([r]) for r in once.records])[1]  # the forum link over the output links nothing
     # every row but the superseded-claim ones (the merged record no longer holds those claims) repeats
     stable = [c for c in once.conflicts if not c.resolution.startswith(("newest:", "tie:"))]
     assert [c for c in twice.conflicts if not c.resolution.startswith(("newest:", "tie:"))] == stable
@@ -514,7 +600,10 @@ def test_a_creative_ai_listing_merges_with_its_own_note_and_nothing_else(
             assert is_creative_ai(x)
 
 
-OPENREVIEW, OFFICIAL = ("openreview_v2", "openreview_v1"), ("iclr_archive", "neurips_proceedings", "pmlr")
+OPENREVIEW, OFFICIAL = (
+    ("openreview_v2", "openreview_v1"),
+    ("iclr_archive", "neurips_proceedings", "pmlr", "dblp", "ojs", "crossref"),
+)
 
 
 @given(pools)
@@ -702,7 +791,7 @@ REJECTED_PARTNER = [
 ]
 
 
-@given(pools)
+@given(st.one_of(pools, yields()))  # yields(): the shapes a pool rarely reaches (TASK-201)
 @example(TITLE_OF_ANOTHER)
 @example(SET_ASIDE_PARTNER)
 @example(REJECTED_PARTNER)

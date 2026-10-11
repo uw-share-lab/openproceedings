@@ -380,9 +380,30 @@ export function SyntaxHelp({
           </li>
           <li>
             <code className={CODE}>track:</code> <Values values={data.values.track} />
+            {Object.keys(data.track_expansions).length > 0 && (
+              <>
+                {" "}
+                (
+                {Object.entries(data.track_expansions).map(([track, expansion], i) => (
+                  <span key={track}>
+                    {i > 0 ? "; " : ""}
+                    <code className={CODE}>{track}</code>: {expansion}
+                  </span>
+                ))}
+                )
+              </>
+            )}
           </li>
           <li>
             <code className={CODE}>status:</code> <Values values={data.values.status} />
+          </li>
+          <li>
+            <code className={CODE}>abstract_kind:</code> <Values values={data.values.abstract_kind} />. It
+            keeps or drops whole papers: <code className={CODE}>abstract_kind:official</code> drops a paper
+            whose abstract is OpenAlex&apos;s even when its title matches (to keep those, write{" "}
+            <code className={CODE}>(term abstract_kind:official) OR title:term</code>). An index built before
+            the abstract source was recorded doesn&apos;t hold it, so a saved search pinned to one refuses the
+            filter: run it on the current index.
           </li>
         </ul>
         <p>Values take no wildcards or quotes; join several with OR inside parentheses.</p>

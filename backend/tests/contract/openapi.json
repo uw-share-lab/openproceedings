@@ -12,7 +12,13 @@
                   "neurips_proceedings",
                   "iclr_proceedings",
                   "pmlr",
-                  "iclr_archive"
+                  "iclr_archive",
+                  "icml_site",
+                  "ojs",
+                  "crossref",
+                  "facct_site",
+                  "openalex",
+                  "aaai_library"
                 ],
                 "type": "string"
               },
@@ -20,7 +26,7 @@
                 "type": "null"
               }
             ],
-            "description": "The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources).",
+            "description": "The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources). `icml_site`: an official ICML conference page (live, or a pinned Internet Archive capture), for ICML 1988-2012 (decision-047). `ojs`: the AAAI Digital Library (ojs.aaai.org), for AAAI, AIES and IASEAI; its url is the paper's own article page (decision-049). `crossref` and `facct_site`: FAccT and AIES (ACM proceedings via Crossref, the official FAccT pages); the url is the paper's DOI link (decision-049). `openalex`: an AAAI, AIES or FAccT abstract no official source gives, filled from OpenAlex (decision-049); the url is the paper's own page, never OpenAlex's API. `aaai_library`: AAAI's own abstract for AAAI 1980-2008, read from an Internet Archive capture of the paper's old aaai.org page (decision-051); the url is that aaai.org page, never the archive. Open set: new values may be added within /api/v1; handle a value you don't know.",
             "title": "Origin"
           },
           "source": {
@@ -31,7 +37,14 @@
               "iclr_archive",
               "neurips_proceedings",
               "pmlr",
-              "ris"
+              "dblp",
+              "icml_site",
+              "ojs",
+              "crossref",
+              "facct_site",
+              "ris",
+              "openalex",
+              "aaai_library"
             ],
             "title": "Source",
             "type": "string"
@@ -221,7 +234,14 @@
               "iclr_archive",
               "neurips_proceedings",
               "pmlr",
-              "ris"
+              "dblp",
+              "icml_site",
+              "ojs",
+              "crossref",
+              "facct_site",
+              "ris",
+              "openalex",
+              "aaai_library"
             ],
             "title": "Source",
             "type": "string"
@@ -743,6 +763,11 @@
               "competition",
               "tiny_papers",
               "blogpost",
+              "student_abstract",
+              "consortium",
+              "demo",
+              "iaai",
+              "eaai",
               "other",
               "unknown"
             ],
@@ -804,6 +829,16 @@
             "title": "Abstract Missing",
             "type": "integer"
           },
+          "abstract_official": {
+            "description": "Of `records`, those whose abstract came from an official source (the venue's own proceedings, OpenReview or another publisher or index listed in `sources`).",
+            "title": "Abstract Official",
+            "type": "integer"
+          },
+          "abstract_openalex": {
+            "description": "Of `records`, those whose abstract came from OpenAlex's fallback (decision-049), filled only where no official source gives one. Together with `abstract_official`, `abstract_missing` and `abstract_withheld` these add up to `records`.",
+            "title": "Abstract Openalex",
+            "type": "integer"
+          },
           "abstract_withheld": {
             "description": "Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.",
             "title": "Abstract Withheld",
@@ -826,6 +861,8 @@
           "records",
           "abstract_missing",
           "abstract_withheld",
+          "abstract_official",
+          "abstract_openalex",
           "unknown_track",
           "unknown_status"
         ],
@@ -975,6 +1012,7 @@
           "FIELD_RANGE_INVERTED",
           "FIELD_FILTER_SYNTAX",
           "FIELD_COMPAT_ONLY",
+          "FIELD_NOT_INDEXED",
           "WARN_LOWERCASE_OPERATOR",
           "WARN_MIXED_AND_OR",
           "WARN_NESTED_FILTER",
@@ -1016,9 +1054,69 @@
       },
       "DiffEntry": {
         "properties": {
+          "cause": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "track_changed",
+                  "status_changed",
+                  "filter_changed",
+                  "not_in_index",
+                  "still_eligible"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the replay no longer matches a removed paper (null on an added one), judged on the index the replay ran on against the replayed query's top-level filter clauses (the defaults included), track first, then status, then any other field. `track_changed`: held on a track those clauses don't admit, e.g. moved to `iaai`. `status_changed`: held with a status they don't admit, e.g. now `withdrawn`. `filter_changed`: held, but another filter (`failed_filter`: `venue`, `year` or `abstract_kind`) no longer admits it. `not_in_index`: that index doesn't hold it (it left the corpus, or is counted as not a paper). `still_eligible`: every filter admits it, so its title, abstract or another searched field no longer matches.",
+            "title": "Cause"
+          },
+          "failed_filter": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "venue",
+                  "year",
+                  "track",
+                  "status",
+                  "abstract_kind"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The filter field a removed paper now fails: `track` for `track_changed`, `status` for `status_changed`, the field for `filter_changed`; null otherwise.",
+            "title": "Failed Filter"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "accepted",
+                  "rejected",
+                  "withdrawn",
+                  "desk_rejected",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its status on the index the replay ran on; null when that index doesn't hold it.",
+            "title": "Status"
           },
           "title": {
             "anyOf": [
@@ -1030,11 +1128,44 @@
               }
             ],
             "title": "Title"
+          },
+          "track": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "main",
+                  "datasets_benchmarks",
+                  "position",
+                  "workshop",
+                  "competition",
+                  "tiny_papers",
+                  "blogpost",
+                  "student_abstract",
+                  "consortium",
+                  "demo",
+                  "iaai",
+                  "eaai",
+                  "other",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its track on the index the replay ran on; null when that index doesn't hold it.",
+            "title": "Track"
           }
         },
         "required": [
           "id",
-          "title"
+          "title",
+          "track",
+          "status",
+          "cause",
+          "failed_filter"
         ],
         "title": "DiffEntry",
         "type": "object"
@@ -1089,6 +1220,7 @@
           "FIELD_RANGE_INVERTED",
           "FIELD_FILTER_SYNTAX",
           "FIELD_COMPAT_ONLY",
+          "FIELD_NOT_INDEXED",
           "API_BAD_PARAM",
           "API_PAPER_NOT_FOUND",
           "API_RECORD_NOT_FOUND",
@@ -1159,6 +1291,21 @@
       "Facets": {
         "description": "Disjunctive (decision-001): each field counted without its own top-level conjuncts. Values that\noccur only; years as strings.",
         "properties": {
+          "abstract_kind": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Each abstract kind's count (`official`, `openalex`, `none`; decision-049), counted like the other fields. null on an index of schema 3, which holds no such field (not \"no records\").",
+            "title": "Abstract Kind"
+          },
           "status": {
             "additionalProperties": {
               "type": "integer"
@@ -1192,7 +1339,8 @@
           "venue",
           "year",
           "track",
-          "status"
+          "status",
+          "abstract_kind"
         ],
         "title": "Facets",
         "type": "object"
@@ -1206,7 +1354,8 @@
               "venue",
               "year",
               "track",
-              "status"
+              "status",
+              "abstract_kind"
             ],
             "title": "Field",
             "type": "string"
@@ -1404,6 +1553,28 @@
             ],
             "title": "Abstract"
           },
+          "abstract_kind": {
+            "description": "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld: `abstract_withheld` tells the two apart). The `abstract_kind:` filter and the `abstract_kind` facet use the kind the index was built with, so a takedown listed after the build shows `none` on the hit without changing which searches match it or how the facet counts it, until the next build (TASK-136). Derived from the abstract's claims; never stored in the record, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "official",
+              "openalex",
+              "none"
+            ],
+            "title": "Abstract Kind",
+            "type": "string"
+          },
+          "abstract_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "TASK-210 (additive): what to know about the abstract beside its source; null when there is nothing, or when `abstract` is null or withheld. Today only a submission-time abstract has one (an `icml_site` claim read from an official ICML 1997 or 1998 submission page, TASK-207), and it reads, word for word as in every export: Submission-time abstract: as the authors submitted it, which may differ from the published paper's. It is read from the abstract's claim when the snapshot is loaded (`ingest/dedup.py`), never stored in the record.",
+            "title": "Abstract Note"
+          },
           "abstract_source": {
             "anyOf": [
               {
@@ -1416,7 +1587,7 @@
             "description": "Where the hit's `abstract` came from, for attribution (decision-018). `source`: the provenance claim precedence took it from (decision-005), as `GET /papers/{id}` lists it; `ris` means it came through an imported RIS file. `origin`: the site that published it, for a `ris` claim read from the claim's evidence (`scholarmend:openreview_api` → `openreview`, `scholarmend:proceedings_page` → the proceedings its `urls.proceedings` names), null when that names no known site. `url`: the paper's page at `origin` (the OpenReview forum, or the proceedings page; PMLR's CC BY 4.0 terms ask for this link), null when there is none. The whole object is null when `abstract` is null or no claim holds its text."
           },
           "abstract_withheld": {
-            "description": "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.",
+            "description": "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` and `abstract_note` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.",
             "title": "Abstract Withheld",
             "type": "boolean"
           },
@@ -1481,6 +1652,11 @@
               "competition",
               "tiny_papers",
               "blogpost",
+              "student_abstract",
+              "consortium",
+              "demo",
+              "iaai",
+              "eaai",
               "other",
               "unknown"
             ],
@@ -1503,7 +1679,11 @@
             "enum": [
               "NeurIPS",
               "ICLR",
-              "ICML"
+              "ICML",
+              "AAAI",
+              "AIES",
+              "FAccT",
+              "IASEAI"
             ],
             "title": "Venue",
             "type": "string"
@@ -1529,7 +1709,9 @@
           "urls",
           "abstract_source",
           "abstract_withheld",
-          "twins"
+          "twins",
+          "abstract_note",
+          "abstract_kind"
         ],
         "title": "Hit",
         "type": "object"
@@ -1601,13 +1783,15 @@
       "MetaResponse": {
         "properties": {
           "filter_fields": {
+            "description": "the filter fields the served index holds, in canonical order: `abstract_kind` only on an index built since it existed (a query naming a field it lacks is 422 `FIELD_NOT_INDEXED`)",
             "items": {
               "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
               "enum": [
                 "venue",
                 "year",
                 "track",
-                "status"
+                "status",
+                "abstract_kind"
               ],
               "type": "string"
             },
@@ -1650,7 +1834,8 @@
             "type": "string"
           },
           "values": {
-            "$ref": "#/components/schemas/Vocabularies"
+            "$ref": "#/components/schemas/Vocabularies",
+            "description": "each filter field's whole vocabulary, as the query grammar accepts it"
           }
         },
         "required": [
@@ -1945,6 +2130,17 @@
             ],
             "title": "Abstract"
           },
+          "abstract_kind": {
+            "description": "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld: `abstract_withheld` tells the two apart). The `abstract_kind:` filter and the `abstract_kind` facet use the kind the index was built with, so a takedown listed after the build shows `none` on the hit without changing which searches match it or how the facet counts it, until the next build (TASK-136). Derived from the abstract's claims; never stored in the record, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "official",
+              "openalex",
+              "none"
+            ],
+            "readOnly": true,
+            "title": "Abstract Kind",
+            "type": "string"
+          },
           "authors": {
             "items": {
               "type": "string"
@@ -2019,6 +2215,11 @@
               "competition",
               "tiny_papers",
               "blogpost",
+              "student_abstract",
+              "consortium",
+              "demo",
+              "iaai",
+              "eaai",
               "other",
               "unknown"
             ],
@@ -2034,7 +2235,11 @@
             "enum": [
               "NeurIPS",
               "ICLR",
-              "ICML"
+              "ICML",
+              "AAAI",
+              "AIES",
+              "FAccT",
+              "IASEAI"
             ],
             "title": "Venue",
             "type": "string"
@@ -2077,15 +2282,28 @@
           "keywords",
           "provenance",
           "content_hash",
-          "venue_name"
+          "venue_name",
+          "abstract_kind"
         ],
         "title": "PaperRecord",
         "type": "object"
       },
       "PaperResponse": {
         "properties": {
+          "abstract_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "TASK-210 (additive): what to know about the abstract beside its source; null when there is nothing, or when `abstract` is null or withheld. Today only a submission-time abstract has one (an `icml_site` claim read from an official ICML 1997 or 1998 submission page, TASK-207), and it reads, word for word as in every export: Submission-time abstract: as the authors submitted it, which may differ from the published paper's. It is read from the abstract's claim when the snapshot is loaded (`ingest/dedup.py`), never stored in the record.",
+            "title": "Abstract Note"
+          },
           "abstract_withheld": {
-            "description": "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.",
+            "description": "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` and `abstract_note` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.",
             "title": "Abstract Withheld",
             "type": "boolean"
           },
@@ -2145,7 +2363,8 @@
           "matched",
           "highlights",
           "abstract_withheld",
-          "twins"
+          "twins",
+          "abstract_note"
         ],
         "title": "PaperResponse",
         "type": "object"
@@ -2256,7 +2475,8 @@
                 "venue",
                 "year",
                 "track",
-                "status"
+                "status",
+                "abstract_kind"
               ],
               "type": "string"
             },
@@ -2428,7 +2648,7 @@
         "type": "object"
       },
       "ParsedClause": {
-        "description": "A `venue`, `track` or `status` clause.",
+        "description": "A `venue`, `track`, `status` or `abstract_kind` clause.",
         "properties": {
           "blocking_spans": {
             "description": "For `reason` `multiple_clauses`, `nested` or `mixed_fields`: the clauses behind it, as half-open code-point ranges in `q`, in order: each top-level conjunct (AND groups flattened) that holds a filter of this field, so the UI can point at them. Empty for any other clause (TASK-091).",
@@ -2454,7 +2674,8 @@
               "venue",
               "year",
               "track",
-              "status"
+              "status",
+              "abstract_kind"
             ],
             "title": "Field",
             "type": "string"
@@ -2544,6 +2765,9 @@
       "ParsedFilters": {
         "description": "Every filter field's clause (`POST /parse` `filters`).",
         "properties": {
+          "abstract_kind": {
+            "$ref": "#/components/schemas/ParsedClause"
+          },
           "status": {
             "$ref": "#/components/schemas/ParsedClause"
           },
@@ -2561,7 +2785,8 @@
           "venue",
           "year",
           "track",
-          "status"
+          "status",
+          "abstract_kind"
         ],
         "title": "ParsedFilters",
         "type": "object"
@@ -2593,7 +2818,8 @@
               "venue",
               "year",
               "track",
-              "status"
+              "status",
+              "abstract_kind"
             ],
             "title": "Field",
             "type": "string"
@@ -2953,6 +3179,17 @@
             "title": "Removed",
             "type": "array"
           },
+          "removed_causes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RemovalCauses"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The removed list's causes, counted over the whole list (TASK-227). Null when `refused`."
+          },
           "removed_total": {
             "anyOf": [
               {
@@ -3005,7 +3242,8 @@
           "removed_total",
           "added",
           "removed",
-          "membership_identical"
+          "membership_identical",
+          "removed_causes"
         ],
         "title": "RecordDiff",
         "type": "object"
@@ -3055,6 +3293,18 @@
             "title": "Index Version",
             "type": "string"
           },
+          "openalex_abstracts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How many of the record's own saved ids have an abstract from OpenAlex (`abstract_kind` `openalex`) on the record's own `index_version`, read per id from that index (the built kind, as the filter and facet read it). Derived, not stored: the same for the same record ids and index. Null when that index has no `abstract_kind` (schema 3) or isn't loaded for this request: with a replay, when the replay didn't run on the record's own index; with `replay=false`, when the served index isn't the record's. The methods text's OpenAlex sentence (spec 05) reads this value only.",
+            "title": "Openalex Abstracts"
+          },
           "query_version": {
             "title": "Query Version",
             "type": "string"
@@ -3083,9 +3333,44 @@
           "tokenizer_version",
           "query_version",
           "record",
-          "replay"
+          "replay",
+          "openalex_abstracts"
         ],
         "title": "RecordResponse",
+        "type": "object"
+      },
+      "RemovalCauses": {
+        "description": "How many of the whole removed list (not just the page) have each cause; every cause, 0 included.",
+        "properties": {
+          "filter_changed": {
+            "title": "Filter Changed",
+            "type": "integer"
+          },
+          "not_in_index": {
+            "title": "Not In Index",
+            "type": "integer"
+          },
+          "status_changed": {
+            "title": "Status Changed",
+            "type": "integer"
+          },
+          "still_eligible": {
+            "title": "Still Eligible",
+            "type": "integer"
+          },
+          "track_changed": {
+            "title": "Track Changed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "track_changed",
+          "status_changed",
+          "filter_changed",
+          "not_in_index",
+          "still_eligible"
+        ],
+        "title": "RemovalCauses",
         "type": "object"
       },
       "ReplayInfo": {
@@ -3775,6 +4060,16 @@
             "title": "Abstract Missing",
             "type": "integer"
           },
+          "abstract_official": {
+            "description": "Of `records`, those whose abstract came from an official source (the venue's own proceedings, OpenReview or another publisher or index listed in `sources`).",
+            "title": "Abstract Official",
+            "type": "integer"
+          },
+          "abstract_openalex": {
+            "description": "Of `records`, those whose abstract came from OpenAlex's fallback (decision-049), filled only where no official source gives one. Together with `abstract_official`, `abstract_missing` and `abstract_withheld` these add up to `records`.",
+            "title": "Abstract Openalex",
+            "type": "integer"
+          },
           "abstract_withheld": {
             "description": "Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.",
             "title": "Abstract Withheld",
@@ -3803,6 +4098,43 @@
             ],
             "description": "`delta` as a percentage of `official_accepted` (unrounded); null without one.",
             "title": "Delta Pct"
+          },
+          "gate_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For an ungated cell, why it has no official count to gate on (e.g. the official figure counts a different set of papers); null for a gated cell and where no note is recorded.",
+            "title": "Gate Note"
+          },
+          "gate_note_accessed": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When `gate_note_citation` was read; null exactly when `gate_note` is.",
+            "title": "Gate Note Accessed"
+          },
+          "gate_note_citation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where `gate_note`'s facts come from: a URL or citation; null exactly when `gate_note` is.",
+            "title": "Gate Note Citation"
           },
           "gated": {
             "description": "Whether the M4 coverage gate applies: a main-track or D&B cell with an official count.",
@@ -3878,7 +4210,14 @@
                 "iclr_archive",
                 "neurips_proceedings",
                 "pmlr",
-                "ris"
+                "dblp",
+                "icml_site",
+                "ojs",
+                "crossref",
+                "facct_site",
+                "ris",
+                "openalex",
+                "aaai_library"
               ],
               "type": "string"
             },
@@ -3895,6 +4234,11 @@
               "competition",
               "tiny_papers",
               "blogpost",
+              "student_abstract",
+              "consortium",
+              "demo",
+              "iaai",
+              "eaai",
               "other",
               "unknown"
             ],
@@ -3920,6 +4264,8 @@
           "indexed_accepted",
           "abstract_missing",
           "abstract_withheld",
+          "abstract_official",
+          "abstract_openalex",
           "sources",
           "official_accepted",
           "official_counts",
@@ -3928,7 +4274,10 @@
           "delta",
           "delta_pct",
           "gated",
-          "within_gate"
+          "within_gate",
+          "gate_note",
+          "gate_note_citation",
+          "gate_note_accessed"
         ],
         "title": "TrackCoverage",
         "type": "object"
@@ -3997,6 +4346,16 @@
             "title": "Abstract Missing",
             "type": "integer"
           },
+          "abstract_official": {
+            "description": "Of `records`, those whose abstract came from an official source (the venue's own proceedings, OpenReview or another publisher or index listed in `sources`).",
+            "title": "Abstract Official",
+            "type": "integer"
+          },
+          "abstract_openalex": {
+            "description": "Of `records`, those whose abstract came from OpenAlex's fallback (decision-049), filled only where no official source gives one. Together with `abstract_official`, `abstract_missing` and `abstract_withheld` these add up to `records`.",
+            "title": "Abstract Openalex",
+            "type": "integer"
+          },
           "abstract_withheld": {
             "description": "Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.",
             "title": "Abstract Withheld",
@@ -4050,7 +4409,11 @@
             "enum": [
               "NeurIPS",
               "ICLR",
-              "ICML"
+              "ICML",
+              "AAAI",
+              "AIES",
+              "FAccT",
+              "IASEAI"
             ],
             "title": "Venue",
             "type": "string"
@@ -4066,6 +4429,8 @@
           "records",
           "abstract_missing",
           "abstract_withheld",
+          "abstract_official",
+          "abstract_openalex",
           "unknown_track",
           "unknown_status",
           "cells",
@@ -4077,6 +4442,20 @@
       },
       "Vocabularies": {
         "properties": {
+          "abstract_kind": {
+            "description": "The `abstract_kind` values (decision-049).",
+            "items": {
+              "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+              "enum": [
+                "official",
+                "openalex",
+                "none"
+              ],
+              "type": "string"
+            },
+            "title": "Abstract Kind",
+            "type": "array"
+          },
           "status": {
             "items": {
               "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
@@ -4103,6 +4482,11 @@
                 "competition",
                 "tiny_papers",
                 "blogpost",
+                "student_abstract",
+                "consortium",
+                "demo",
+                "iaai",
+                "eaai",
                 "other",
                 "unknown"
               ],
@@ -4117,7 +4501,11 @@
               "enum": [
                 "NeurIPS",
                 "ICLR",
-                "ICML"
+                "ICML",
+                "AAAI",
+                "AIES",
+                "FAccT",
+                "IASEAI"
               ],
               "type": "string"
             },
@@ -4128,7 +4516,8 @@
         "required": [
           "venue",
           "track",
-          "status"
+          "status",
+          "abstract_kind"
         ],
         "title": "Vocabularies",
         "type": "object"
@@ -5147,7 +5536,7 @@
     },
     "/api/v1/records/{id}": {
       "get": {
-        "description": "The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless\n`include=ids`; `/export?record_id=` streams the papers themselves. With `replay=false`, the stored record\nalone (`replay` null; the top-level versions are the served index's).",
+        "description": "The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless\n`include=ids`; `/export?record_id=` streams the papers themselves. With `replay=false`, the stored record\nalone (`replay` null; the top-level versions are the served index's). `openalex_abstracts` is derived from\nthe record's ids on its own index when this request has that index (`OpenAlexCounts`): the replay's\nengine, or with `replay=false` the served one (nothing else is loaded).",
         "operationId": "get_record",
         "parameters": [
           {
@@ -5277,7 +5666,7 @@
     },
     "/api/v1/records/{id}/diff": {
       "get": {
-        "description": "The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each\nlist is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A\ntitle comes from the index the replay ran on, null if it doesn't hold the paper. A refused replay\ncompared nothing: empty lists, null totals.",
+        "description": "The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each\nlist is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A\ntitle comes from the index the replay ran on, null if it doesn't hold the paper. Each entry also has its\ntrack and status there, each removed one its cause and failed filter, and `removed_causes` counts the\ncauses over the whole list (`removals`, TASK-227: a byte read per id per filter field, worked out once\nper record and index and kept, `RemovalMemo`; the counts go on the access line too, never a title). A refused replay compared nothing: empty lists,\nnull totals and `removed_causes`.",
         "operationId": "get_record_diff",
         "parameters": [
           {

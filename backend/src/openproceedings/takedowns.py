@@ -103,21 +103,30 @@ def load(path: Path, *, required: bool = False) -> Withheld:
     return parse(text, name=path.name)
 
 
-# native ids unique only within their venue-year: a proceedings hash is md5 of a per-year paper number
-# the proceedings hash forms (`record.PROCEEDINGS_NATIVE` but PMLR's, whose key names its volume)
-_LOCAL_NATIVE = tuple(f"{prefix}-" for prefix in PROCEEDINGS_NATIVE if prefix != "pmlr")
+# The proceedings hash forms (`record.PROCEEDINGS_NATIVE`) name a paper only within its venue-year: a NeurIPS hash
+# is md5 of a per-year paper number. Every other form is global, so the exclusion below names them: PMLR's key
+# names its volume, dblp's key is unique across dblp (decision-047), and ojs's article id is unique across
+# ojs.aaai.org, and a DOI is unique everywhere.
+_LOCAL_NATIVE = tuple(
+    f"{prefix}-" for prefix in PROCEEDINGS_NATIVE if prefix not in ("pmlr", "dblp", "ojs", "doi")
+)
 
 
 def global_native(rid: str) -> str | None:
     """A record id's native part (`op:<venue>:<year>:<native>`) when it names one paper in every venue and year,
-    so a corrected venue or year leaves the paper recognisable by it: an OpenReview forum id or a PMLR volume
-    and key. None for a proceedings hash (`nips-…`, `iclr-…`), which names one paper only within its
-    venue-year (TASK-067 review, measured): a NeurIPS hash is md5 of a per-year paper number, and 1,281 of them
-    name two to five papers each in the 2026-09-29 snapshot; ICLR proceedings hashes collided across years too
-    (5 in the 2026-09-23 snapshot). The 2014-2016 ICLR archive's `iclr-<sha256(target)>` ids are unique but share
-    the form, so they lose the rekey link too (a merge still links them)."""
-    native = rid.split(":", 3)[-1]
-    return None if native.startswith(_LOCAL_NATIVE) else native
+    so a corrected venue or year leaves the paper recognisable by it: an OpenReview forum id, a PMLR volume
+    and key, a dblp key (`dblp-<key>`), or an ojs article id (`ojs-<id>`). None for a proceedings hash
+    (`nips-…`, `iclr-…`), which names one paper only within its venue-year (TASK-067 review, measured): a NeurIPS
+    hash is md5 of a per-year paper number, and 1,281 of them name two to five papers each in the 2026-09-29
+    snapshot; ICLR proceedings hashes collided across years too (5 in the 2026-09-23 snapshot). The 2014-2016
+    ICLR archive's `iclr-<sha256(target)>` ids are unique but share the form, so they lose the rekey link too
+    (a merge still links them). A DOI (`doi-<toc>.<n>`) is unique everywhere. A dblp key is unique within its
+    venue's `conf/<venue>/` stream only (an ICML and an AAAI tail can coincide), so a dblp id is scoped by its
+    venue (`aaai:dblp-<key>`)."""
+    _, venue, _, native = rid.split(":", 3)
+    if native.startswith(_LOCAL_NATIVE):
+        return None
+    return f"{venue}:{native}" if native.startswith("dblp-") else native
 
 
 def twin_ids(record: PaperRecord) -> tuple[str, ...]:
@@ -140,7 +149,8 @@ def same_paper(
     (TASK-067): linked to a listed id by `merges` ((survivor, merged) pairs, from any build: the same paper
     found twice), or by `twins` ((record, twin) pairs of `twin` claims: decision-029's two records of one
     paper, never merged, which a takedown follows too, TASK-163), or holding its globally unique native id
-    (`global_native`: the same paper rekeyed by a corrected venue or year), transitively. The list names one
+    (`global_native`: the same paper rekeyed by a corrected year, and venue except for a `dblp-` key, which is
+    venue-scoped), transitively. The list names one
     id; an older version may hold the paper under an id it had before, or as a duplicate a later build merged,
     and a newer one under the id it has now: each is withheld. A proceedings hash links nothing by itself: in
     another year it is another paper."""

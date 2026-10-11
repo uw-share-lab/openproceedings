@@ -57,7 +57,8 @@ def test_a_hit_and_a_paper_record_agree_on_their_shared_fields() -> None:
     for field in shared:
 
         def shape(schema: dict[str, Any]) -> dict[str, Any]:
-            return {k: v for k, v in schema.items() if k not in ("title", "default")}  # always sent anyway
+            # "title"/"default": always sent anyway; "readOnly": a derived field is read-only on the paper only
+            return {k: v for k, v in schema.items() if k not in ("title", "default", "readOnly")}
 
         assert shape(hit["properties"][field]) == shape(paper["properties"][field]), field
     assert shared <= set(hit["required"]) and shared <= set(paper["required"])

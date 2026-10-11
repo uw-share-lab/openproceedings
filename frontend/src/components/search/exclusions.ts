@@ -151,7 +151,7 @@ export function bannerOf(
 }
 
 /** The filter fields a reader can write, in the sidebar's order. */
-export const FILTER_FIELDS = ["venue", "year", "track", "status"] as const;
+export const FILTER_FIELDS = ["venue", "year", "track", "status", "abstract_kind"] as const;
 
 export interface Limit {
   readonly field: (typeof FILTER_FIELDS)[number];
@@ -164,7 +164,7 @@ export interface Limit {
 /**
  * The clauses of the searched `q` that are not defaults (design W5 "Limits line"): each field `/parse`
  * reports with a non-zero-width span, sliced from `q`, or with no single span (several clauses). For a single
- * venue, track or status clause, the values it leaves out come from `facets[field]` (exact: a field's facet
+ * venue, track, status or abstract_kind clause, the values it leaves out come from `facets[field]` (exact: a field's facet
  * is counted without its own clause), for every value outside the clause, in vocabulary order.
  */
 export function limitsOf(
@@ -194,7 +194,8 @@ export function limitsOf(
     const leavesOut: [string, number][] = [];
     if (field !== "year" && !clause.negated && "values" in clause && clause.values !== null) {
       const admitted = new Set(clause.values);
-      const counts = facets[field];
+      // null: an index without the field counts none (schema 3), so the limit is listed alone
+      const counts = facets[field] ?? {};
       const values = [...(vocabulary[field] ?? []), ...Object.keys(counts)];
       for (const v of new Set(values)) {
         const n = counts[v] ?? 0;

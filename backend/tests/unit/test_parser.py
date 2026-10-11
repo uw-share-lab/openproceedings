@@ -10,7 +10,9 @@ from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode, by_position, clip
 from openproceedings.query.ast import And, Filter, Near, Node, Not, Or, Phrase, Term, Wildcard, YearRange
 from openproceedings.query.canonical import canonicalize, render
-from openproceedings.query.parser import MAX_DEPTH, MAX_PER_CODE, MAX_QUERY_LENGTH, parse
+from openproceedings.query.parser import MAX_DEPTH, MAX_PER_CODE, MAX_QUERY_LENGTH, Mode, parse
+
+from tests.timing import assert_near_linear
 
 
 def show(n: Node) -> str:
@@ -101,6 +103,11 @@ GOLDEN: list[tuple[str, str]] = [
     ("venue:ＩＣＬＲ", "venue:ICLR"),
     ("venue:İCLR", "venue:ICLR"),
     ("track:ＭＡＩＮ", "track:main"),
+    # abstract_kind (decision-049): a filter like track's, case-blind values, field names too
+    ("abstract_kind:openalex", "abstract_kind:openalex"),
+    ("Abstract_Kind:OFFICIAL", "abstract_kind:official"),
+    ("abstract_kind:(official OR none)", "abstract_kind:official|none"),
+    ("trust NOT abstract_kind:none", "(AND trust (NOT abstract_kind:none))"),
     ("NOT NOT a", "(NOT (NOT a))"),  # positive: not all-negative
     ("a OR NOT NOT b", "(OR a (NOT (NOT b)))"),
     ("a NEAR/3 (b)", "(NEAR/3 a b)"),  # a one-word group counts as a word
@@ -323,7 +330,7 @@ QUOTED: list[tuple[str, DiagnosticCode, tuple[int, int], str]] = [
         "venue:IC\x07LR",
         DiagnosticCode.FIELD_UNKNOWN_VALUE,
         (6, 11),
-        "`IC\\x07LR` is not a venue (values take no wildcards or quotes) — use one of `NeurIPS`, `ICLR`, `ICML`.",
+        "`IC\\x07LR` is not a venue (values take no wildcards or quotes) — use one of `NeurIPS`, `ICLR`, `ICML`, `AAAI`, `AIES`, `FAccT`, `IASEAI`.",
     ),
     (
         "trust NEAR/x`y b",
@@ -474,6 +481,9 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ("NOT venue:ICLR", DiagnosticCode.PARSE_ALL_NEGATIVE, (0, 14)),
     ("year:2026..2020", DiagnosticCode.FIELD_RANGE_INVERTED, (5, 15)),
     ("track:foo", DiagnosticCode.FIELD_UNKNOWN_VALUE, (6, 9)),
+    ("abstract_kind:crossref", DiagnosticCode.FIELD_UNKNOWN_VALUE, (14, 22)),
+    ("abstract_kind:(none AND official)", DiagnosticCode.FIELD_FILTER_SYNTAX, (20, 23)),
+    ("NOT abstract_kind:none", DiagnosticCode.PARSE_ALL_NEGATIVE, (0, 22)),
     ("venue:NIPS", DiagnosticCode.FIELD_UNKNOWN_VALUE, (6, 10)),
     ("status:accept*", DiagnosticCode.FIELD_UNKNOWN_VALUE, (7, 14)),
     ("year:abc", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 8)),
@@ -694,45 +704,45 @@ def test_messages_quote_at_most_40_characters_of_input() -> None:
         "title:(abstract:" + w + ")",
         "source:" + w,
     ]
+    # the longest message has a fixed text (the `source:` list) around one clipped quote of the input: its length
+    # with a two-character input quoted, minus those two characters, plus the clip's width, bounds every message
+    probe = next(
+        d for d in parse("source:qq", "scholar").errors if d.code is DiagnosticCode.FIELD_UNKNOWN_VALUE
+    )
+    bound = len(probe.message) - len("qq") + len(clip("x" * 1000))
     for q in inputs:
         for mode in ("native", "scholar"):
             result = parse(q[:2000], mode)  # type: ignore[arg-type]
             for d in result.errors + result.warnings + result.translations:
-                assert len(d.message) < 500, (
-                    q[:20],
-                    d.code,
-                    len(d.message),
-                )  # longest fixed text: the source list
+                assert len(d.message) <= bound, (q[:20], d.code, len(d.message), bound)
 
 
-def test_parsing_is_linear_in_the_query_length() -> None:
-    import time
+# every lexer-side shape found, and the parser-side ones that were slow: `a ` (11 s at the cap before the M1 gate
+# fix), a phrase of `$x ` and `\\((` (11.8 s without run caching; in this check since task-070 made the tokenizer's
+# LaTeX scan linear)
+_LINEAR_SHAPES = {
+    "w ": lambda k: "w " * k,
+    "$x ": lambda k: "$x " * k,
+    "$a b ": lambda k: "$a b " * k,
+    "a. b ": lambda k: "a. b " * k,
+    "a(b)": lambda k: "a(b)" * k,
+    "a|": lambda k: "a|" * k,
+    ")a": lambda k: ")a" * k,
+    "\\((": lambda k: "\\((" * k,
+    '"$x …"': lambda k: '"' + "$x " * k + '"',
+}
 
-    def cost(q: str) -> float:
-        best = float("inf")
-        for _ in range(3):
-            start = time.thread_time()  # CPU time: other load on a shared runner doesn't count
-            parse(q)
-            best = min(best, time.thread_time() - start)
-        return best
 
-    for unit in (
-        "w ",
-        "$x ",
-        "$a b ",
-        "a. b ",
-        "a(b)",
-        "a|",
-        ")a",
-    ):  # every lexer-side shape found; `\\((`-like shapes stay out of this ratio check until task-070
-        # makes the tokenizer's LaTeX scan linear (they flake under load); the absolute bound below pins the cache
-        n = 2000 // len(unit) - 1
-        small, large = cost(unit * (n // 5)), cost(unit * n)  # 5x the input
-        assert large < small * 15 + 0.01, (unit, small, large)  # quadratic would be ~25x
-    for q in ('"' + "$x " * 666 + '"', "a " * 999, "\\((" * 666):  # the last was 11.8 s without run caching
-        start = time.perf_counter()
-        parse(q, "scholar")
-        assert time.perf_counter() - start < 0.5, q[:10]  # was 11 s before the M1 gate fix
+@pytest.mark.parametrize("mode", ["native", "scholar"])
+@pytest.mark.parametrize("shape", sorted(_LINEAR_SHAPES))
+def test_parsing_is_linear_in_the_query_length(shape: str, mode: Mode) -> None:
+    """4x the input costs about 4x the CPU time, never quadratic's ~16x, up to the 2,000-code-point cap
+    (tests/timing.py: a wall-clock bound at one size flaked in nightly 37943547380)."""
+    build = _LINEAR_SHAPES[shape]
+    unit = len(build(2)) - len(build(1))
+    n = (MAX_QUERY_LENGTH - 2) // unit // 4
+    assert len(build(4 * n)) <= MAX_QUERY_LENGTH
+    assert_near_linear(lambda q: parse(q, mode), build, n)
 
 
 def test_a_malformed_filter_group_is_skipped_as_a_whole() -> None:
@@ -1122,3 +1132,34 @@ def test_an_open_year_range_value_is_refused_without_a_text_warning() -> None:
         assert result.warnings == [], q
     assert [w.code for w in parse("..2022").warnings] == [DiagnosticCode.WARN_SYMBOLS_DROPPED]
     assert [w.code for w in parse("title:..2022").warnings] == [DiagnosticCode.WARN_SYMBOLS_DROPPED]
+
+
+# --- the decision-049 venues and tracks (spec 02 §Default filters) -------------------------------------------
+@pytest.mark.parametrize(
+    ("q", "canonical"),
+    [
+        # a new venue keeps the default track and status, written out: the non-main tracks are excluded visibly
+        (
+            "venue:AAAI",
+            "(venue:AAAI AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+        ),
+        (
+            "venue:facct",
+            "(venue:FAccT AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+        ),
+        # a track clause replaces the track default; values are canonical and sorted
+        ("track:iaai", "(track:iaai AND status:accepted)"),
+        ("track:(main OR iaai)", "(track:(iaai OR main) AND status:accepted)"),
+        ("track:Student_Abstract", "(track:student_abstract AND status:accepted)"),
+        # valid and empty: IAAI is AAAI-only, so no ICML record holds it
+        ("venue:ICML track:eaai", "(venue:ICML AND track:eaai AND status:accepted)"),
+    ],
+)
+def test_new_venue_and_track_values_canonicalize_with_the_defaults_shown(q: str, canonical: str) -> None:
+    result = parse(q)
+    assert result.errors == [] and result.canonical == canonical
+
+
+@pytest.mark.parametrize("q", ["venue:FAT*", "venue:FAT", "venue:AAAI*"])
+def test_a_former_or_wildcard_venue_name_is_an_unknown_value(q: str) -> None:
+    assert [e.code for e in parse(q).errors] == [DiagnosticCode.FIELD_UNKNOWN_VALUE]

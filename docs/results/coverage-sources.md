@@ -1,15 +1,87 @@
 # Official accepted counts per venue × year × track (coverage gate sources)
 
-This is the cited table behind spec 07 §C's coverage gate (TASK-108; `coverage-reporting` skill). It has
-one row per main-track and D&B cell from 2013 (decision-013): ICLR, ICML and NeurIPS main 2013–2025, and
-NeurIPS D&B 2021–2025. That is 44 cells, and **all 44 are sourced**. Every one of those numbers was read on
+This is the cited table behind spec 07 §C's coverage gate (TASK-108; `coverage-reporting` skill). It has one row
+per main-track and D&B cell with an official count: ICLR, ICML and NeurIPS main 2013–2025 and NeurIPS D&B 2021–2025
+(44 cells, all sourced, from decision-013's 2013 floor), the 2026 rows, and NeurIPS main 1987–2012 (decision-047). Each of the 44 was read on
 2026-09-27 from a public page, on the conference's own site or in its proceedings, with no login.
 The 2026 crawl (TASK-178) adds two rows, ICLR 2026 main and ICML 2026 main: 46 rows in all. Both were fetched
 and counted on 2026-10-05 by the AI assistant session working for the project owner, which recorded the sha256
 of each fetched page below so the count can be repeated. NeurIPS 2026 has published nothing; §Not covered here says so.
+Since decision-047 (2026-10-06) the corpus also holds NeurIPS from 1987 and ICML from 1988. The 26 NeurIPS main
+rows for 1987–2012 are each year page's own count (`N papers`), read on 2026-10-07 (UTC) by the crawl that indexed them
+(TASK-204): 72 rows in all. ICML 1988–2012 has no row: its records come from the pinned dblp release, a
+bibliography, and no ICML statement of accepted counts was found for those years (the official pages of 2001–2012
+list papers, but not every year's full set), so those cells are reported, not gated.
+
+Since decision-049 (2026-10-09) the corpus also holds AAAI 2010–2026, AIES 2024–2025 and IASEAI 2026, from
+ojs.aaai.org. Six of their `main` cells have a row, read on 2026-10-09: AAAI 2013, 2015, 2018 and 2019, and AIES 2024
+and 2025, 78 rows in all. Each is the program chairs' own statement of the papers accepted (a proceedings preface, an
+issue's front-matter description, the AI Magazine conference report, the AIES program), not a count of the OAI
+listing the crawl indexes, though the AAAI ones and AIES 2024's share its host. For AAAI, `main` is the section
+mapping of `ingest/ojs_sections.toml` (technical, special and Journal tracks). AAAI 2013's 203 is the technical
+program with its four special tracks, one of them AI and Robotics, which is why the 2011 and 2013 "Robotics Program"
+sections map to `main`. AAAI 2015's report says 539 papers were "selected … and presented" from the main technical
+and topical tracks' submissions; the row reads that as the accepted count (the weakest of the six).
+
+Four more AAAI `main` rows, read on 2026-10-10, are **counts of AAAI's own published accepted-paper list**, not a
+stated figure: for these years no AAAI document states an accepted count (prefaces, conference pages and press
+releases give submissions only). They are AAAI 2012 (292), 2017 (637), 2020 (1,614) and 2021 (1,696), 82 rows in
+all. Each row's "what it counts" says "counted", names the list and names its ground for independence. A list counts as independent of the proceedings when it either states that it is pre-camera-ready, or visibly differs from the proceedings in content (a different count or membership); either shows it was not derived from them. Its
+definition must also be our `main` cell (the controller's rulings for the owner, 2026-10-10, and gate C rounds 1
+and 2, 2026-10-11). Under this rule AAAI 2020's lists are independent because they say they were made before
+camera-ready, and 2012's, 2017's and 2021's because each differs from the proceedings in count. AAAI 2010's, 2014's
+and 2016's lists match the proceedings exactly and are not shown to predate them (2010's and 2014's only archived
+copies were captured after publication, on 2010-08-30 and 2015-09-06), so each is an ungated cell with a note. Deltas of the four on snapshot
+`2026-10-11-93c2937e2f29` (index `b4f335e07e70`, `docs/results/2026-10-11-coverage.md`): +2 (0.68%), +2 (0.31%), −4 (0.25%)
+and −2 (0.12%), the same as on `2026-10-10-9efa49481112`: the abstract fills change no count.
+
+The other AAAI `main` cells and IASEAI 2026 are reported, not gated, each with a note in §Ungated cells with a
+note: AAAI 2010's and 2014's lists match the proceedings and survive only as copies captured after publication;
+AAAI 2011's list leaves out the Robotics Program the cell holds (240 against 248); AAAI 2016's list matches the
+proceedings section by section and doesn't say it predates them, so it may be derived from them and would check
+nothing; AAAI 2022–2026
+have only the chairs' notification emails quoted elsewhere and aggregator figures, which are never a row and seem
+to count the main technical track alone; and IASEAI 2026 states 92 accepted papers of which only the 57 archival
+ones are published. The research note (`docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md` §Official
+counts) classifies every venue-year.
+
+**What the 1987–2012 NeurIPS rows check.** Each is the `N papers` the year page states, and the crawl indexes that
+same page, so these 26 cells check the crawl against its own listing's stated count (every entry parsed and made a
+record), not against an independent statement of accepted papers; their "what it counts" says "the page's own
+count", and the coverage report says how many gated cells are of this kind. The same holds for NeurIPS 2013–2019,
+whose proceedings index is also their only public count, and their rows say so too (33 such cells); 2020's count
+equals the conference's fact sheet, an independent statement. The sha256 of each year page's text as the crawl cached it
+(UTF-8; fetched 2026-10-07 UTC), so the count can be repeated against the very page read:
+
+- NeurIPS 1987: `3e6384327d5de59bc05f4f40b81e7a67854fd4e911f59df8616e7d24c19e28b5` (fetched 2026-10-07)
+- NeurIPS 1988: `369aed0c1937226780ffccda049e3d27ef97e021fd87d60bb04d18f5da108fb9` (fetched 2026-10-07)
+- NeurIPS 1989: `7f0d77133c07bf4084482cbc451f25a3ec87013955d0bd24f4bcb22eb7e20a56` (fetched 2026-10-07)
+- NeurIPS 1990: `c60ed75146205a81bff300d71d7b74283f4f65944b32f9c3f974d10e90a777a6` (fetched 2026-10-07)
+- NeurIPS 1991: `42db09d0d308b6778ee95389d9510219dd4c6011d4308e9f03a1d0f07bdbb1f1` (fetched 2026-10-07)
+- NeurIPS 1992: `5742a561e84af4865aaa7fb1170de427339ba166e1c4720b009b46022c646058` (fetched 2026-10-07)
+- NeurIPS 1993: `82cd6a9d0b927fd6913881a61212b959f679c467510bb30011f8a5418a40342e` (fetched 2026-10-07)
+- NeurIPS 1994: `68557afb931db50881dc1d7b9fff1100b3f6bc7814359e567d88189edd3ff256` (fetched 2026-10-07)
+- NeurIPS 1995: `51dd5cfdea45503fcf7fdcb37977ec59a5fd54d76aca1ca51c4fc36ddf86b7b4` (fetched 2026-10-07)
+- NeurIPS 1996: `0e8e1436764fda1f91d43a91d07264672948eb05b7b522760c4706c009061ca0` (fetched 2026-10-07)
+- NeurIPS 1997: `901e63451a97455577224a5174f72903132f6f3a515846a8529f50b0d75e6112` (fetched 2026-10-07)
+- NeurIPS 1998: `e0acaabcfcec8e4844c09658c924334ce74133e93ffeb5c2fb4cbdabce288ea2` (fetched 2026-10-07)
+- NeurIPS 1999: `4a37cef3815ee97cb2cfa9f3526ec9553d7e7401ddf1fec97b5d4cfd9dba2208` (fetched 2026-10-07)
+- NeurIPS 2000: `85cf2d4aa29c064602d93fe39dee7cf0e5244a59a3a091ff5c8cfd5f4d8b134e` (fetched 2026-10-07)
+- NeurIPS 2001: `87a5ce6ed1e16b857a66a7ebafe86f2defd847421fad3b7ea4c6447c4e47cff0` (fetched 2026-10-07)
+- NeurIPS 2002: `4eeaa1a865f9e7cb64651366e87ab5ee8624643f7a36da40a0b6f67603e985a9` (fetched 2026-10-07)
+- NeurIPS 2003: `81681cbfaede49742c57aba71d2d7a57184d58a6b4546b2a6c6a094efb758d98` (fetched 2026-10-07)
+- NeurIPS 2004: `45f577b378e2431edbd4ca9193212113dac8aed7bf98ac4eea43541909e2a73d` (fetched 2026-10-07)
+- NeurIPS 2005: `55208ab1948369f26ddd6c51b3c397b6a682bb3359bd52cfe0827f563cc0bc5b` (fetched 2026-10-07)
+- NeurIPS 2006: `9df3570a1c6d12b2df5ca7f6bb84f2690d0205f83c8d564b09d08aad1c8ed545` (fetched 2026-10-07)
+- NeurIPS 2007: `a37b46a90d2c17bed0abe5c5ed4ab02079643e1384b60f25813f3f7b6ce0c066` (fetched 2026-10-07)
+- NeurIPS 2008: `67fee009c1fd410d60bc233f510788045922cbf17504a1ceb84b216176d9739a` (fetched 2026-10-07)
+- NeurIPS 2009: `a0863b2a70f98427e155b1d624c628afb6727c7eb20a0ef1e1e09ea5ea023e3b` (fetched 2026-10-07)
+- NeurIPS 2010: `90fbc045c04f678428f23a963a9ca41c85892f37841322ed3b8e3eff4ecbf9c0` (fetched 2026-10-07)
+- NeurIPS 2011: `2da06b422da875c54bd10182ac5813bfc036e7dc548e106cd986a00502441b6b` (fetched 2026-10-07)
+- NeurIPS 2012: `e21f89a97f97cc035ba7c0f404bbf03c8fc0de77c04912834658e6587e530828` (fetched 2026-10-07)
 The `official_counts.OFFICIAL_ACCEPTED` machine-readable copy is kept equal to this table by a test, and
 `GET /coverage` joins it to each matching cell to compute the gate verdict. This file deliberately holds
-exactly one Markdown table so the equality test can read every line starting with `|` as a data row.
+two Markdown tables, this one and §Ungated cells with a note's, which the equality test tells apart by their header rows.
 
 **Which number a row uses:**
 
@@ -30,6 +102,16 @@ skipped NeurIPS 2021, because its D&B listing states no count, so no NeurIPS 202
 
 | venue | year | track | official_accepted | what it counts | source (URL or citation) | accessed |
 |---|---|---|---|---|---|---|
+| AAAI | 2012 | main | 292 | papers counted on AAAI's own accepted-paper list (the AAAI-12 accepted-papers PDF on aaai.org): 220 main technical, poster-only full papers included, plus 26 AI and the Web, 11 Cognitive Systems, 21 Computational Sustainability and AI, and 14 Robotics; independent of the proceedings because it differs from them in count (+2 on snapshot 2026-10-10-9efa49481112) | https://aaai.org/wp-content/uploads/2023/01/aaai12accepted-papers.pdf (linked from https://aaai.org/conference/aaai/aaai12/) | 2026-10-10 |
+| AAAI | 2013 | main | 203 | papers accepted for publication in the proceedings from the 690 technical-program submissions, the four special tracks included (AI and the Web, Cognitive Systems, Computational Sustainability, AI and Robotics); late-breaking papers and spotlights excluded | https://ojs.aaai.org/index.php/AAAI/article/view/8512 (AAAI-13 preface) | 2026-10-09 |
+| AAAI | 2015 | main | 539 | papers selected from the 1,991 main technical and topical track submissions and presented (AI Magazine conference report); student abstracts, IAAI, demos and the doctoral consortium excluded | https://ojs.aaai.org/index.php/aimagazine/article/view/2606/2500 (submissions: https://ojs.aaai.org/index.php/AAAI/issue/view/304) | 2026-10-09 |
+| AAAI | 2017 | main | 637 | papers counted on AAAI's own accepted-paper list (the AAAI-17 accepted-papers PDF on aaai.org): 599 main technical plus 38 in three special tracks (Cognitive Systems, Computational Sustainability, Integrated Systems); independent of the proceedings because it differs from them in count (+2 on snapshot 2026-10-10-9efa49481112) | https://aaai.org/wp-content/uploads/2023/01/aaai17accepted-papers.pdf (linked from https://aaai.org/conference/aaai/aaai17/aaai-17-program-overview/) | 2026-10-10 |
+| AAAI | 2018 | main | 938 | original research publications in the proceedings, selected from 3,800 well-formed submissions (acceptance rate 24.7%); student abstracts, IAAI and EAAI excluded | https://ojs.aaai.org/index.php/AAAI/issue/view/301 | 2026-10-09 |
+| AAAI | 2019 | main | 1,147 | original research publications in the proceedings, selected from 7,095 original full paper submissions (acceptance rate 16.2%); senior member, doctoral consortium, student abstracts and demos excluded | https://ojs.aaai.org/index.php/AAAI/issue/view/246 | 2026-10-09 |
+| AAAI | 2020 | main | 1,614 | papers counted on AAAI's own accepted-paper lists (the AAAI-20 PDFs on aaai.org): 1,589 main technical plus 25 AI for Social Impact; sister conference track, student abstracts, IAAI and EAAI excluded; independent of the proceedings because the list says it was made before camera-ready | https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-Paper-List.pdf and https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-AISI-Papers.pdf (linked from https://aaai.org/conference/aaai/aaai-20/) | 2026-10-10 |
+| AAAI | 2021 | main | 1,696 | papers counted on AAAI's own accepted-paper list (the AAAI-21 main technical track PDF on aaai.org): 1,656 main technical plus 40 AI for Social Impact; independent of the proceedings because it differs from them in count (−2 on snapshot 2026-10-10-9efa49481112) | https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (linked from https://aaai.org/conference/aaai/aaai-21/) | 2026-10-10 |
+| AIES | 2024 | main | 150 | full archival papers accepted, per the chairs' statement ('sent 468 papers out for review and accepted 150'); student abstracts excluded | https://ojs.aaai.org/index.php/AIES/article/view/31763 (AIES 2024 front matter); same figure in the table of https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 2026-10-09 |
+| AIES | 2025 | main | 238 | full archival papers accepted, per the chairs' welcome ('sent 748 papers out for review and accepted 238 of them'); student abstracts excluded | https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 2026-10-09 |
 | ICLR | 2013 | main | 24 | conference-track papers on the ICLR 2013 accepted list (workshop track excluded) | https://iclr.cc/archive/2013/conference-proceedings.html | 2026-09-27 |
 | ICLR | 2014 | main | 35 | conference-track papers on the ICLR 2014 accepted list (workshop track excluded) | https://iclr.cc/archive/2014/conference-proceedings | 2026-09-27 |
 | ICLR | 2015 | main | 31 | distinct conference-track papers on the accepted list (11 orals also listed as posters, counted once; workshop papers excluded) | https://iclr.cc/archive/www/doku.php%3Fid=iclr2015:accepted-main.html | 2026-09-27 |
@@ -58,13 +140,39 @@ skipped NeurIPS 2021, because its D&B listing states no count, so no NeurIPS 202
 | ICML | 2024 | main | 2,610 | papers in PMLR volume 235, including the 75 position papers (fact sheet), which ICML 2024 did not publish as a separate track | https://proceedings.mlr.press/v235/ | 2026-09-27 |
 | ICML | 2025 | main | 3,260 | main-track accepted papers in the fact sheet; the 73 position papers are counted separately | https://media.icml.cc/Conferences/ICML2025/ICML2025_Fact_Sheet.pdf | 2026-09-27 |
 | ICML | 2026 | main | 6,341 | papers on the ICML 2026 virtual-site paper list that link an OpenReview forum (6,554 of its 6,628 posters; the 74 TMLR/JMLR journal-track posters excluded) and are not among the 213 on the site's position-papers listing; both lists counted entry by entry | https://icml.cc/static/virtual/data/icml-2026-orals-posters.json and https://icml.cc/virtual/2026/events/2026-position-papers | 2026-10-05 |
-| NeurIPS | 2013 | main | 360 | papers in the NeurIPS 2013 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2013 | 2026-09-27 |
-| NeurIPS | 2014 | main | 411 | papers in the NeurIPS 2014 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2014 | 2026-09-27 |
-| NeurIPS | 2015 | main | 403 | papers in the NeurIPS 2015 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2015 | 2026-09-27 |
-| NeurIPS | 2016 | main | 569 | papers in the NeurIPS 2016 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2016 | 2026-09-27 |
-| NeurIPS | 2017 | main | 679 | papers in the NeurIPS 2017 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2017 | 2026-09-27 |
-| NeurIPS | 2018 | main | 1,009 | papers in the NeurIPS 2018 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2018 | 2026-09-27 |
-| NeurIPS | 2019 | main | 1,428 | papers in the NeurIPS 2019 proceedings index (every accepted paper) | https://proceedings.neurips.cc/paper_files/paper/2019 | 2026-09-27 |
+| NeurIPS | 1987 | main | 90 | papers in the NeurIPS 1987 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1987 | 2026-10-07 |
+| NeurIPS | 1988 | main | 94 | papers in the NeurIPS 1988 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1988 | 2026-10-07 |
+| NeurIPS | 1989 | main | 101 | papers in the NeurIPS 1989 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1989 | 2026-10-07 |
+| NeurIPS | 1990 | main | 143 | papers in the NeurIPS 1990 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1990 | 2026-10-07 |
+| NeurIPS | 1991 | main | 144 | papers in the NeurIPS 1991 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1991 | 2026-10-07 |
+| NeurIPS | 1992 | main | 127 | papers in the NeurIPS 1992 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1992 | 2026-10-07 |
+| NeurIPS | 1993 | main | 158 | papers in the NeurIPS 1993 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1993 | 2026-10-07 |
+| NeurIPS | 1994 | main | 140 | papers in the NeurIPS 1994 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1994 | 2026-10-07 |
+| NeurIPS | 1995 | main | 152 | papers in the NeurIPS 1995 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1995 | 2026-10-07 |
+| NeurIPS | 1996 | main | 152 | papers in the NeurIPS 1996 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1996 | 2026-10-07 |
+| NeurIPS | 1997 | main | 150 | papers in the NeurIPS 1997 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1997 | 2026-10-07 |
+| NeurIPS | 1998 | main | 151 | papers in the NeurIPS 1998 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1998 | 2026-10-07 |
+| NeurIPS | 1999 | main | 150 | papers in the NeurIPS 1999 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/1999 | 2026-10-07 |
+| NeurIPS | 2000 | main | 152 | papers in the NeurIPS 2000 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2000 | 2026-10-07 |
+| NeurIPS | 2001 | main | 197 | papers in the NeurIPS 2001 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2001 | 2026-10-07 |
+| NeurIPS | 2002 | main | 207 | papers in the NeurIPS 2002 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2002 | 2026-10-07 |
+| NeurIPS | 2003 | main | 198 | papers in the NeurIPS 2003 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2003 | 2026-10-07 |
+| NeurIPS | 2004 | main | 207 | papers in the NeurIPS 2004 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2004 | 2026-10-07 |
+| NeurIPS | 2005 | main | 207 | papers in the NeurIPS 2005 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2005 | 2026-10-07 |
+| NeurIPS | 2006 | main | 204 | papers in the NeurIPS 2006 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2006 | 2026-10-07 |
+| NeurIPS | 2007 | main | 217 | papers in the NeurIPS 2007 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2007 | 2026-10-07 |
+| NeurIPS | 2008 | main | 250 | papers in the NeurIPS 2008 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2008 | 2026-10-07 |
+| NeurIPS | 2009 | main | 262 | papers in the NeurIPS 2009 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2009 | 2026-10-07 |
+| NeurIPS | 2010 | main | 292 | papers in the NeurIPS 2010 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2010 | 2026-10-07 |
+| NeurIPS | 2011 | main | 306 | papers in the NeurIPS 2011 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2011 | 2026-10-07 |
+| NeurIPS | 2012 | main | 370 | papers in the NeurIPS 2012 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2012 | 2026-10-07 |
+| NeurIPS | 2013 | main | 360 | papers in the NeurIPS 2013 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2013 | 2026-09-27 |
+| NeurIPS | 2014 | main | 411 | papers in the NeurIPS 2014 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2014 | 2026-09-27 |
+| NeurIPS | 2015 | main | 403 | papers in the NeurIPS 2015 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2015 | 2026-09-27 |
+| NeurIPS | 2016 | main | 569 | papers in the NeurIPS 2016 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2016 | 2026-09-27 |
+| NeurIPS | 2017 | main | 679 | papers in the NeurIPS 2017 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2017 | 2026-09-27 |
+| NeurIPS | 2018 | main | 1,009 | papers in the NeurIPS 2018 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2018 | 2026-09-27 |
+| NeurIPS | 2019 | main | 1,428 | papers in the NeurIPS 2019 proceedings index (every accepted paper; the page's own count) | https://proceedings.neurips.cc/paper_files/paper/2019 | 2026-09-27 |
 | NeurIPS | 2020 | main | 1,898 | papers in the NeurIPS 2020 proceedings index (equals the 2020 fact sheet) | https://proceedings.neurips.cc/paper_files/paper/2020 | 2026-09-27 |
 | NeurIPS | 2021 | main | 2,334 | main-track papers in the NeurIPS 2021 proceedings index (equals the fact sheet); D&B is on its own site | https://proceedings.neurips.cc/paper_files/paper/2021 | 2026-09-27 |
 | NeurIPS | 2022 | main | 2,671 | main-track (Conference) papers in the NeurIPS 2022 proceedings index; D&B excluded | https://proceedings.neurips.cc/paper_files/paper/2022 | 2026-09-27 |
@@ -76,6 +184,27 @@ skipped NeurIPS 2021, because its D&B listing states no count, so no NeurIPS 202
 | NeurIPS | 2023 | datasets_benchmarks | 322 | D&B papers in the NeurIPS 2023 proceedings index (equals the fact sheet) | https://proceedings.neurips.cc/paper_files/paper/2023 | 2026-09-27 |
 | NeurIPS | 2024 | datasets_benchmarks | 459 | D&B papers in the NeurIPS 2024 proceedings index (fact sheet announced 460) | https://proceedings.neurips.cc/paper_files/paper/2024 | 2026-09-27 |
 | NeurIPS | 2025 | datasets_benchmarks | 497 | D&B (`datasets_and_benchmarks_track`) papers in the published vol38 proceedings companion | https://proceedings.neurips.cc/paper_files/paper/2025/vol38-main-conference | 2026-09-27 |
+
+## Ungated cells with a note
+
+A main cell with no row above is reported, not gated. Where the reason is known, the cell carries a cited note
+(TASK-222), and `official_counts.UNGATED_NOTES` is this table's machine-readable copy, kept equal by the same test.
+`GET /coverage` serves the note and its citation on the cell (`gate_note`, `gate_note_citation`), the `/coverage`
+page shows them under the track's row, and the coverage report lists them. A gated cell never has a note: a
+failing one takes its cause in `coverage-causes.toml`.
+
+| venue | year | track | why it is not gated | source (URL or citation) | accessed |
+|---|---|---|---|---|---|
+| AAAI | 2010 | main | AAAI's own AAAI-10 papers page lists 262 papers, the same as the proceedings, and nothing on it says it was made before them (its only archived copy was captured on 2010-08-30, after they were published); like AAAI 2016's list it may be derived from the proceedings, so a gate on it could check the proceedings against themselves | https://web.archive.org/web/20100830185521/http://www.aaai.org/Conferences/AAAI/2010/aaai10papers.php | 2026-10-11 |
+| AAAI | 2011 | main | AAAI's own accepted-paper list has 240 papers and leaves out the Robotics Program; the index's main track holds 248, those 240 plus the 8 Robotics Program papers, so the list counts a different set of papers | https://web.archive.org/web/20120605015434/http://www.aaai.org/Conferences/AAAI/2011/aaai11accepts.php | 2026-10-10 |
+| AAAI | 2014 | main | AAAI's own AAAI-14 accepted-papers page lists 398 papers, the same as the proceedings, and nothing on it says it was made before them (its only archived copy was captured on 2015-09-06, after they were published); like AAAI 2016's list it may be derived from the proceedings, so a gate on it could check the proceedings against themselves | https://web.archive.org/web/20150906033202/http://www.aaai.org/Conferences/AAAI/2014/aaai14accepts.php | 2026-10-11 |
+| AAAI | 2016 | main | AAAI's own accepted-paper list is the same as the proceedings, section by section, and nothing on it says it was made before them, so it may be derived from them; a gate on it would check the proceedings against themselves | https://ojs.aaai.org/index.php/AAAI/issue/view/303 (the proceedings the list matches; docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts) | 2026-10-10 |
+| AAAI | 2022 | main | no official accepted count was found: the only figure, 1,349, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
+| AAAI | 2023 | main | no official accepted count was found: the only figure, 1,721, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
+| AAAI | 2024 | main | no official accepted count was found: the only figure, 2,342, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
+| AAAI | 2025 | main | no official accepted count was found: the only figure, 3,032, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
+| AAAI | 2026 | main | no official accepted count was found: the only figure, 4,167, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
+| IASEAI | 2026 | main | 57 archival papers are published in the proceedings; the conference accepted 92, and the 35 non-archival ones have no findable listing, so no official count of what the index can hold exists | https://ojs.aaai.org/index.php/IASEAI/issue/view/741 (docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §IASEAI) | 2026-10-09 |
 
 ## Disagreements between sources
 
@@ -197,6 +326,9 @@ the official main-track counts above, so these cells are now ordinary ±1% gate 
 
 2026: NeurIPS 2026 has no row because its main conference is not public yet. The index holds its workshop
 submissions and 95 Creative_AI_Track notes (track `other`, status `unknown`), neither gated.
+
+AAAI 2010, 2011, 2014, 2016 and 2022–2026 main and IASEAI 2026 main have no row (above; each has a note in §Ungated cells with a note); AAAI's and AIES's
+other tracks (`student_abstract`, `consortium`, `demo`, `iaai`, `eaai`, `other`) are not gated.
 
 Other tracks are reported on the coverage page but not gated (spec 07 §C), so they have no rows here. These
 are position, workshop, competition, Creative AI, Tiny Papers and blog posts. ICML 2013–2023 had no track

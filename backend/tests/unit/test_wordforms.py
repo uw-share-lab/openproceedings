@@ -9,7 +9,6 @@ together, parses to the same query with exactly those terms made `$` wildcards.
 from __future__ import annotations
 
 import re
-import time
 from collections import Counter
 from itertools import combinations, pairwise, product
 from pathlib import Path
@@ -27,6 +26,7 @@ from openproceedings.query.parser import MAX_QUERY_LENGTH, ParseResult, parse
 from openproceedings.query.wordforms import WordForm, apply, word_forms
 
 from tests.strategies import queries
+from tests.timing import cpu
 
 ROOT = Path(__file__).resolve().parents[3]
 LINES = (ROOT / "backend" / "tests" / "fixtures" / "queries" / "trust-evals.txt").read_text().split("\n")
@@ -509,16 +509,11 @@ def test_word_forms_near_the_cap_stay_cheap(name: str, monkeypatch: pytest.Monke
     assert renders <= 2  # the query undeduped, and one term's own change: never a second term's
     monkeypatch.undo()
     # the rendering count above is the guarantee; this ceiling is only a backstop against a far worse cost than
-    # the old one rendering per term (0.9 s on a laptop, now about 30 ms), never against a slow CI runner
-    best = min(_timed(lambda: wordforms.report(q, result)) for _ in range(3))
+    # the old one rendering per term (0.9 s on a laptop, now about 30 ms), never against a slow CI runner, so it is
+    # CPU time (tests/timing.py): time spent preempted by other jobs doesn't count
+    best = min(cpu(lambda: wordforms.report(q, result)) for _ in range(3))
     assert best < 2.0, f"{name}: {best * 1000:.0f} ms"
     check_fits(q, exact=False)
-
-
-def _timed(f: Any) -> float:
-    start = time.perf_counter()
-    f()
-    return time.perf_counter() - start
 
 
 def test_terms_refused_elsewhere_share_one_bound_away_from_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:

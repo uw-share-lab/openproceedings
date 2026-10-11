@@ -53,7 +53,7 @@ from openproceedings.engine.compile import FIELDS, Compiled, verified_clauses, w
 from openproceedings.engine.exclusions import ORDER, Excluded, excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInputError, EngineInternalError, Expansions
-from openproceedings.engine.tantivy_engine import COMBO, Scope, TantivyEngine, WouldVerify
+from openproceedings.engine.tantivy_engine import Scope, TantivyEngine, WouldVerify
 from openproceedings.logs import frames, reason_of
 from openproceedings.query.ast import Node, Span, TextField
 from openproceedings.query.groups import Groups, split
@@ -101,10 +101,17 @@ class Shown:
     year: int
     track: str
     status: str
+    abstract_kind: str
 
     @classmethod
     def of(cls, record: Mapping[str, Any]) -> Shown:
-        return cls(**{f: record[f] for f in ("id", "title", "abstract", "venue", "year", "track", "status")})
+        # every display record carries `abstract_kind` (a schema-3 one derives it: `TantivyEngine._display`)
+        return cls(
+            **{
+                f: record[f]
+                for f in ("id", "title", "abstract", "venue", "year", "track", "status", "abstract_kind")
+            }
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,7 +192,7 @@ def run(
     if found is not None and countable and _ids_read(found, scope) > groups_ids:
         why, countable = "too_costly", False  # known only now: the ids are the compile's
     if found is not None and countable:
-        job = partial(_alone, engine, found, scope.reader(), abandoned, taken, (ast, compiled))
+        job = partial(_alone, engine, found, scope.reader(), abandoned, taken, (ast, compiled), spread=True)
         counting = _start(job, counts=True)
     # from here to `_grouped`, whatever fails takes the workers' jobs with it: the facets' is cancelled, and
     # the counting job, which nobody will wait for, is cancelled or stops before its next collection
@@ -216,7 +223,7 @@ def run(
         elif facets:  # no worker (the pool is shutting down): counted here instead
             counted = engine.facets(ast, scope=scope)
         # with facets, the combos the worker just collected; without, only the default fields' (TASK-166)
-        over = COMBO if facets else ORDER
+        over = engine.combo if facets else ORDER
         gone = excluded(engine, parsed, total, facets=partial(engine.facets, scope=scope, over=over))
     except BaseException:
         abandoned.set()  # a counting job already running stops before its next collection
@@ -270,10 +277,15 @@ def _alone(
     abandoned: threading.Event,
     started: threading.Event | None = None,
     compiled: tuple[Node, Compiled] | None = None,
+    spread: bool = False,
 ) -> tuple[Pair, ...]:
     """Each group's two counts, in query order: alone, and the query without it (`TantivyEngine.counts`: at
     most two collections a group, memoised; every conjunct compiled at most once for all of them, or taken
-    from `compiled`, the request's compile of the query, when given; TASK-197). Sets
+    from `compiled`, the request's compile of the query, when given; TASK-197), and with `spread` (only the
+    counting worker's job: `run`) the trees shared with a helper on the other counting worker (`_spread`,
+    TASK-230), which yields to another search's waiting job. Counted in the caller (no worker, or a recount
+    after `WouldVerify`), they are never spread: a helper on a counting worker would verify with the caller's
+    scope there (04 §Cost), and with the pools shut down it would start them again. Sets
     `started` when it begins (a worker took the job), and stops before its next collection once `abandoned`
     is set (`_Abandoned`): nobody is waiting for the rest."""
     if started is not None:
@@ -285,7 +297,14 @@ def _alone(
 
     n = len(found.groups)
     trees = [*map(found.alone, found.groups), *map(found.without, found.groups)]
-    totals = engine.counts(trees, scope=scope, check=wanted, compiled=compiled)
+    helpers: list[Future[None]] = []
+    try:
+        totals = engine.counts(
+            trees, scope=scope, check=wanted, compiled=compiled, spread=_spread(helpers) if spread else None
+        )
+    finally:
+        for h in helpers:
+            h.cancel()  # still queued: never runs (running: it has nothing left to take)
     return tuple(zip(totals[:n], totals[n:], strict=True))
 
 
@@ -357,7 +376,9 @@ def highlight(engine: TantivyEngine, parsed: ParseResult, shown: Mapping[str, An
 def _runnable(engine: TantivyEngine, parsed: ParseResult) -> Node:
     """`parsed`'s effective tree, if it can run on `engine`: it parsed (a query with errors never reaches an
     engine, spec 03 §Error handling), and with the tokenizer `engine`'s index was built with (its terms are
-    that tokenizer's; a caller that parsed with another one is a bug, never the client's)."""
+    that tokenizer's; a caller that parsed with another one is a bug, never the client's), and naming only filter
+    fields `engine`'s schema holds (`TantivyEngine.admit`: a 422 on every route, `/papers/{id}?q=` included,
+    whose highlights never compile)."""
     ast = parsed.effective_ast
     if ast is None:
         raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "a search needs a query that parses.")
@@ -367,6 +388,7 @@ def _runnable(engine: TantivyEngine, parsed: ParseResult) -> Node:
             f"a query parsed with tokenizer {parsed.tokenizer_version} can't run on an index built with "
             f"tokenizer {engine.tokenizer_version}",
         )
+    engine.admit(ast)
     return ast
 
 
@@ -406,6 +428,9 @@ _POOL: ThreadPoolExecutor | None = None
 _GROUP_POOL: ThreadPoolExecutor | None = None
 _POOL_LOCK = threading.Lock()
 GROUP_WORKERS = 2
+# how many searches' counting jobs are queued for a counting worker (not helpers), under `_POOL_LOCK`; a list, so
+# the fork handler and the tests reset it in place
+_WAITING = [0]
 
 
 def _submit(engine: TantivyEngine, ast: Node, scope: Scope) -> Future[dict[str, dict[str, int]]] | None:
@@ -414,9 +439,10 @@ def _submit(engine: TantivyEngine, ast: Node, scope: Scope) -> Future[dict[str, 
     return _start(partial(engine.facets, ast, scope=scope.reader()))
 
 
-def _start[T](job: Callable[[], T], *, counts: bool = False) -> Future[T] | None:
+def _start[T](job: Callable[[], T], *, counts: bool = False, helper: bool = False) -> Future[T] | None:
     """`job` started on a worker (a facet worker, or with `counts` a group-count worker), in a copy of the
-    caller's context, or None if the pool is shutting down."""
+    caller's context, or None if the pool is shutting down. A counting job is counted in `_WAITING` until a
+    worker takes it, unless it is a `helper` (`_spread`), which yields to such a job rather than being one."""
     global _POOL, _GROUP_POOL
     with _POOL_LOCK:
         if counts:
@@ -427,10 +453,59 @@ def _start[T](job: Callable[[], T], *, counts: bool = False) -> Future[T] | None
             if _POOL is None:
                 _POOL = ThreadPoolExecutor(max(4, os.cpu_count() or 4), thread_name_prefix="op-facets")
             pool = _POOL
+    if counts and not helper:
+        job, left = _queued(job)
     try:
-        return pool.submit(contextvars.copy_context().run, job)
+        started = pool.submit(contextvars.copy_context().run, job)
     except RuntimeError:  # shut down between the lock and the submit (interpreter exit, or `shutdown()`)
+        if counts and not helper:
+            left()
         return None
+    if counts and not helper:
+        started.add_done_callback(lambda _f: left())  # cancelled before it ran: it left the queue too
+    return started
+
+
+def _queued[T](job: Callable[[], T]) -> tuple[Callable[[], T], Callable[[], None]]:
+    """`job`, counted in `_WAITING` until it starts (or is cancelled, or never submitted: `left`, called once
+    however often), so a running helper knows another search's counting job waits for its worker."""
+    with _POOL_LOCK:
+        _WAITING[0] += 1
+    gone = threading.Event()
+
+    def left() -> None:
+        with _POOL_LOCK:
+            if not gone.is_set():
+                gone.set()
+                _WAITING[0] -= 1
+
+    def run() -> T:
+        left()
+        return job()
+
+    return run, left
+
+
+def _yield() -> bool:
+    """A helper's `yielding` (`TantivyEngine.counts`' `spread`): another search's counting job is waiting for a
+    worker, so the helper takes no further tree. Other searches' counting then waits on a helper for at most
+    the tree it is counting: one collection, or on the bitwise path one per conjunct of that tree not yet
+    collected (none answered `busy` in TASK-230's two-search measurement,
+    `docs/results/2026-10-11-perf-regression.md`)."""
+    return _WAITING[0] > 0
+
+
+def _spread(helpers: list[Future[None]]) -> Callable[[Callable[[Callable[[], bool]], None]], None]:
+    """`counts`' `spread` for a counting job (TASK-230): the helper's job started on the other counting worker
+    (queued if that worker is counting for another search, and then usually finding nothing left), its future
+    kept in `helpers` so the job cancels it once its counts are in."""
+
+    def spread(job: Callable[[Callable[[], bool]], None]) -> None:
+        started = _start(partial(job, _yield), counts=True, helper=True)
+        if started is not None:
+            helpers.append(started)
+
+    return spread
 
 
 def shutdown() -> None:
@@ -447,6 +522,7 @@ def shutdown() -> None:
 def _forget_after_fork() -> None:
     global _POOL, _GROUP_POOL, _POOL_LOCK
     _POOL, _GROUP_POOL, _POOL_LOCK = None, None, threading.Lock()
+    _WAITING[0] = 0
 
 
 atexit.register(shutdown)

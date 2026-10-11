@@ -15,10 +15,10 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 |---|---|
 | `id` | `op:<venue>:<year>:<native>`, with venue lower-cased: `op:iclr:2024:iilhN2MycO`. Never changes once a snapshot has shipped it. |
 | `title` | Raw, whitespace-collapsed. **No** search normalization here (spec 03 owns it). Capped by the snapshot build at 1,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
-| `abstract` | Raw text or `null` (never an empty or whitespace-only string). Reject a value that starts or ends with `…`: that's a Scholar snippet. An ellipsis inside a real abstract (`x₁, …, x_n`) is allowed. HTML stripped, LaTeX kept verbatim. Capped by the snapshot build at 20,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
+| `abstract` | Raw text or `null` (never an empty or whitespace-only string). For an AAAI 1980–2008 dblp record, AAAI's own paper page (an Internet Archive capture of the old aaai.org page, pinned by digest) supplies it after dedup (an `aaai_library` claim, official; decision-051). For an AAAI, AIES or FAccT record no official source gives one, the OpenAlex fill supplies it after that (an `openalex` claim; `abstract_kind` says so; spec 01 §Sources). Reject a value that starts or ends with `…`: that's a Scholar snippet. An ellipsis inside a real abstract (`x₁, …, x_n`) is allowed. HTML stripped, LaTeX kept verbatim. Capped by the snapshot build at 20,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
 | `authors` | Display order, as the source gives them. |
-| `venue` | `NeurIPS` \| `ICLR` \| `ICML` (enum; extensible later). |
-| `year` | Conference year. Never the arXiv or PDF year. Required: a record with no year is not a valid `PaperRecord`, nor is one for a year its venue was not held under its name (NeurIPS before 1987, ICLR before 2013, ICML before 1988; `vocab.CONFERENCES`, spec 04 §Exports). |
+| `venue` | `NeurIPS` \| `ICLR` \| `ICML` \| `AAAI` \| `AIES` \| `FAccT` \| `IASEAI` (`vocab.VENUES`; decision-049; extensible later). Every venue has a source: AAAI 1980–2008 (`dblp`) and 2010+ (`ojs`), AIES 2018–2023 (`crossref`) and 2024+ (`ojs`), FAccT 2018 (`pmlr`, v81) and 2019+ (`crossref`), IASEAI 2026 (`ojs`). |
+| `year` | Conference year. Never the arXiv or PDF year. Required: a record with no year is not a valid `PaperRecord`, nor is one for a year its venue was not held under its name (NeurIPS before 1987, ICLR before 2013, ICML before 1988, AAAI before 1980, AIES and FAccT before 2018, IASEAI before 2025; `vocab.CONFERENCES`, spec 04 §Exports). |
 | `track` | `.claude/skills/track-taxonomy/SKILL.md`. No default value in the model. |
 | `status` | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown`. No default. |
 | `presentation` | `oral` \| `spotlight` \| `poster` \| `null`, only when a source states it: a v1 decision note or venue string (`openreview_v1._PRESENTATION`); a v2 accepted, non-workshop note's `content.venue`, matched exactly per venue-year in `classify.V2_PRESENTATION` (an unlisted string is `null` and counted as `presentation_unmapped`; spec 01 §Presentation). Its claim's evidence is `content.venue=<string>`. `dedup.resolve` keeps it only when the resolved `status` is `accepted` (a reconcile-demoted `unknown` shows `null`; the claim stays). Never a track, never hashed. |
@@ -28,21 +28,33 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | `provenance` | `list[Claim]`, see below. |
 | `content_hash` | See below. |
 | `venue_name` | **Derived, never stored** (TASK-112): `vocab.venue_name(venue, year)`, a computed field. Sent with the record (`GET /papers/{id}`); `record.DERIVED` names it, and `snapshot.record_line` and `model_copy` dump with `exclude={*DERIVED}` (a set: mypy's `IncEx` refuses the frozenset itself). Stored data naming it is refused (`extra="forbid"`), so a dump you validate again must exclude it too. |
+| `abstract_kind` | **Derived, never stored** (decision-049, milestone C): `record.abstract_kind_of(abstract, abstract claims)`, a computed field beside `venue_name` and in `record.DERIVED`. `none` with no abstract; `openalex` when at least one abstract claim holds the abstract's exact text and every such claim is `openalex`; `official` otherwise (a record with no provenance too). No precedence is involved. Read by the record, the snapshot reader's counts and the index build alike, so never re-derive it elsewhere. Not hashed (adding it bumped nothing beyond the schema version that came with the `openalex` source). Open enum: `api/openapi.py` `OPEN_ENUMS["abstract kind"]`. |
 
 ## Native ids
 | Source | `native` |
 |---|---|
 | OpenReview (v1 or v2) | forum id, as-is (case-sensitive) |
-| PMLR only | `pmlr-v<N>-<key>` (ICML volumes only, `ingest/volumes.py`) |
+| PMLR only | `pmlr-v<N>-<key>` (ICML volumes, and FAccT 2018's v81: `ingest/volumes.py`; a non-ICML `pmlr-` id must name an ingested volume of its own venue and year, `volumes.PMLR_NATIVE_VOLUMES`) |
 | NeurIPS proceedings only | `nips-<hash>`, the 32-hex hash from the paper_files path; on the 2021 D&B host `nips-<hash>-round1`/`-round2` (its hash is md5 of a per-round paper number, so rounds and the main track reuse hashes; a D&B link without a round gets no id). One function, `urls.proceedings_native`, makes it for the miner, the RIS importer and dedup |
+| dblp release (ICML 1988–2012) | `dblp-<key>`, the dblp key after `conf/icml/` (`conf/icml/SzitaL09` → `dblp-SzitaL09`; one paper in every year, as dblp keys are unique); the record's `urls.proceedings` is its dblp page, `https://dblp.org/rec/conf/icml/<key>`, which `urls.native` reads back (never fetched) |
+| dblp release (AAAI 1980–2008) | `dblp-<key>`, the dblp key after `conf/aaai/` (`conf/aaai/Darden86` → `dblp-Darden86`); `record.DBLP_YEARS` bounds the years per venue (ICML 1988–2012, AAAI 1980–2008). A dblp key is unique within its venue's `conf/<venue>/` stream only (an ICML and an AAAI tail can coincide), so `takedowns.global_native` scopes it by venue (`aaai:dblp-<key>`); `urls.native` reads `https://dblp.org/rec/conf/aaai/<key>` back. No DOI |
+| Crossref (FAccT 2019+, AIES 2018–2023) | `doi-<toc>.<n>`, an ACM paper DOI `10.1145/<toc>.<n>` without its prefix, **digits only on both sides** (`acm_table.paper_doi`; a DOI that extends a listed toc any other way stops the crawl, `odd_doi`); `record.DOI_YEARS` bounds the years (AIES 2018–2023, FAccT 2019 on), and the record check ties the toc to the `acm_proceedings.toml` row of the record's own venue and year (as a non-ICML `pmlr-` id is tied to its volume). `urls.proceedings` is `https://doi.org/<doi>`, which `urls.native` reads back only for a toc that is a row of `acm_proceedings.toml`. A DOI is unique everywhere (global in `takedowns`) |
+| ojs.aaai.org (AAAI, AIES, IASEAI) | `ojs-<article id>`, the OJS article id (`oai:ojs.aaai.org:article/<id>`), unique across the three journals; `PROCEEDINGS_NATIVE["ojs"]` ties it to those three venues. `urls.proceedings` is the article page |
 | ICLR proceedings / archive | `iclr-<hash>` from a proceedings path; for the official 2014–2016 archive, an OpenReview target keeps its forum id and any other target is `iclr-<sha256(canonical-target)[:32]>` |
 | RIS import | a venueid plus its forum id → the forum id; else the proceedings or PMLR form above, from scholarmend's `proceedings_url` / `pmlr_url` claim (`ingest/urls.py`). A record with neither is skipped and counted (`unresolved` / `no_id`), never given a minted id. |
+
+A new source ships two tests before its first real run: **self-naming** (every record it yields has a
+`urls.proceedings`/`pdf` claim that `urls.native()` reads back to its own native id: OJS public-id URLs such as
+`/article/view/1678-1679` did not, so `urls.proceedings` is built from the numeric article id) and
+**attribution** (`dedup.attribution` links each abstract to the paper's page, never to the listing or
+resumption-token URL it was fetched from). Unit tests passed without either; the snapshot build and the
+final review found them (AAAI 2013 #8500; `learnings/2026-10-10-ojs-oai-pmh-quirks-and-real-data-runs.md`).
 
 A forum id and a PMLR `pmlr-v<N>-<key>` name one paper in every venue and year; a `nips-` or `iclr-` hash names
 one only within its venue-year (TASK-067, measured: a NeurIPS hash is md5 of a per-year paper number, and
 1,281 name two to five papers each in the 2026-09-29 snapshot; ICLR proceedings hashes collided across years
 in the 2026-09-23 one; the 2014–2016 archive's sha256 ids share the form, so they are treated the same). Only
-the first two link two ids by their native part (`takedowns.global_native`: the rekey rule of
+the first two link two ids by their native part, and so do `ojs-` and `doi-` ids, and a `dblp-` id scoped by its venue (`takedowns.global_native`: the rekey rule of
 `snapshot.withhold` and `snapshot.diff`, and the takedown list's `same_paper`).
 
 When records merge (`.claude/skills/dedup-rules/SKILL.md`), the surviving id uses the OpenReview forum id
@@ -52,7 +64,7 @@ forum the page links.
 
 ## Provenance claims
 One `Claim` per (field, source): `field`, `value`, `source` (`openreview_v2`, `openreview_v1`,
-`iclr_archive`, `neurips_proceedings`, `pmlr`, `ris`), `url`, `fetched_at` (**from the cache entry**, never `now()` at
+`iclr_archive`, `neurips_proceedings`, `pmlr`, `dblp`, `icml_site`, `ojs`, `aaai_library`, `crossref`, `facct_site`, `ris`, `openalex`), `url`, `fetched_at` (**from the cache entry**, never `now()` at
 build time), `evidence` (for example `venueid=ICLR.cc/2024/Conference`, or a decision note id). Evidence starting
 `not listed:` is **reserved** for reconcile's absence claims (`dedup.is_absence`, decision-005): no miner or
 importer may write it, or its claim would stop counting as a listing. Claims are
@@ -67,7 +79,7 @@ field may answer it, best first. A source not listed may never answer it. Decide
 |---|---|
 | `status` | the official proceedings where the venue-year's are published and crawled (listed → `accepted`; OpenReview-accepted but not listed → `unknown` + `conflicts.csv`), otherwise `openreview_v2` via `content.venueid`, `openreview_v1` via its year's adapter (`content.venue`, `content.decision`, the decision note or the withdrawn / desk-rejected invitation; never the v1 venueid); `ris` only through claims |
 | `track` | `openreview_v2` via `content.venueid`, `openreview_v1` via its year's adapter (the status evidence when it names a track, else the listing invitation the note was submitted under, checked against the venueid); proceedings only where OpenReview doesn't hold the venue-year's track (per track, decision-005, 2026-09-29): a record with an OpenReview track claim takes it; a record with no OpenReview track claim (the track isn't on OpenReview, or the paper's note didn't merge) takes its listing's |
-| `title`, `abstract`, `authors` | `openreview_v2`, `openreview_v1`, then `iclr_archive`, `neurips_proceedings`, `pmlr` (papers or years not on OpenReview), then `ris` |
+| `title`, `abstract`, `authors` | `openreview_v2`, `openreview_v1`, then `iclr_archive`, `neurips_proceedings`, `pmlr` (papers or years not on OpenReview), then `dblp` and `icml_site` (ICML 1988–2012 only: dblp's text, an official ICML page's abstract; decision-047), then `ris` |
 | `year`, `venue` | the source that defined the crawl scope and agrees with the venueid; a disagreement is a conflict |
 
 All claims are kept, including the losing ones. Two same-rank sources that disagree produce a
@@ -90,7 +102,8 @@ in Scholar. The abstract is never Scholar's (`null` instead).
 
 ## Versions
 `RECORD_SCHEMA_VERSION` (`record.py`) names this shape: the fields, native-id forms and content_hash
-rule. It is `4` since TASK-159/157 added two provenance-only claim fields, `twin` (a v1 copy's linked twins, a tuple of
+rule. It is `9` since TASK-232 added the `aaai_library` source (an `abstract` claim only, on AAAI 1980–2008 dblp records only: the model refuses it on any other field, venue or native id; decision-051); it was `8` from milestone C of decision-049, which added the `openalex` source (an `abstract` claim only, on AAAI, AIES and FAccT only: the model refuses it on any other field or venue, `record.OPENALEX_VENUES`) and the derived `abstract_kind`; it was `7` from milestone B of decision-049 added the `crossref` and `facct_site` sources, the `doi-<toc>.<n>` native id (FAccT and AIES) and `dblp-` ids for AAAI 1980–2008; it was `6` from decision-049's milestone A, which added the AAAI, AIES, FAccT and IASEAI venues, the tracks `student_abstract`, `consortium`, `demo`, `iaai` and `eaai`, the `ojs` source and the `ojs-<id>` native id (`iaai` and `eaai` are AAAI-only: `record.VENUE_ONLY_TRACKS`); it was `5` from TASK-205/206, which added the `dblp` and `icml_site` sources and the `dblp-<key>` native id (decision-047);
+it was `4` from TASK-159/157, which added two provenance-only claim fields, `twin` (a v1 copy's linked twins, a tuple of
 record ids, decision-029) and `invitation` (scholarmend 0.1.5's v1 submission invitation); it was `3` from TASK-118,
 which added the round-qualified `nips-<hash>-round1`/`-round2` form, and `2` from TASK-096, which added the
 `iclr_archive` provenance source. Change any of them and bump it;
@@ -115,7 +128,11 @@ re-checks it. Never use `model_construct` on a record: it skips every check. Loa
 lists and strings).
 
 Every string field (title, abstract, authors, keywords, venue_id_raw, urls, and a claim's value, url and
-evidence) must be valid Unicode (no lone surrogates), so a snapshot can always be written. A title has
+evidence) must be valid Unicode (no lone surrogates), so a snapshot can always be written. An abstract claim
+holding one (JSON's `"\ud800"`) is refused before the record is built, in every source: the paper is kept on its
+title and the source's report counts `abstract_surrogate` (`site_surrogate` for an official page's row;
+`common.clean_abstract`, `openreview_v2._abstract`, `ris._abstract`; TASK-229, spec 01 §Pipeline 2). A title
+holding one still makes the record invalid. A title has
 no control characters (every importer replaces each with a space before building the record,
 `record.title_text`, and says so in the title claim's evidence, `record.title_evidence`; TASK-180,
 decision-036). Every importer gives an abstract the same rule (`record.abstract_text`, its claim's evidence

@@ -4,6 +4,7 @@ counts from `identification_ast`, never from re-parsing `identification_query`."
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from openproceedings.engine.protocol import Engine, EngineInputError, EngineInte
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.ingest.dedup import DedupResult
+from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import render
 from openproceedings.query.defaults import DEFAULT_CLAUSES
 from openproceedings.query.parser import ParseResult, parse
@@ -43,12 +45,19 @@ QUERIES = [
 
 
 def tantivy_of(
-    records: list[Rec], root: Path, schema_version: str | None = None, tokenizer_version: str | None = None
+    records: Sequence[Rec | PaperRecord],
+    root: Path,
+    schema_version: str | None = None,
+    tokenizer_version: str | None = None,
 ) -> TantivyEngine:
-    """An engine over a fresh index of `records` (at `schema_version`, the current one by default)."""
+    """An engine over a fresh index of `records` (at `schema_version`, the current one by default). A fixture
+    `Rec` becomes a snapshot record (`as_paper`); a `PaperRecord` is indexed as it is, its provenance (and so its
+    `abstract_kind`) kept."""
     snap = root / "snap"
     snap.mkdir(parents=True)
-    papers = tuple(sorted((as_paper(r) for r in records), key=lambda p: p.id))
+    papers = tuple(
+        sorted((r if isinstance(r, PaperRecord) else as_paper(r) for r in records), key=lambda p: p.id)
+    )
     for name, data in render(DedupResult(papers, (), ()), [], BUILT).items():
         (snap / name).write_bytes(data)
     return TantivyEngine(
@@ -192,3 +201,43 @@ def test_buckets_that_do_not_add_up_are_an_internal_error(engines: tuple[Engine,
     assert isinstance(e.value, InternalError)  # a 5xx, logged at ERROR
     with pytest.raises(EngineInternalError, match="don't sum"):  # a total that isn't the search's
         excluded(engines[1], parsed("trust"), len(engines[1].match_ids(parsed("trust").effective_ast)) + 1)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("q", ["trust", "trust OR track:workshop", "trust track:workshop"])
+def test_a_cold_exclusion_only_call_aggregates_only_the_default_fields(tmp_path: Path, q: str) -> None:
+    """`excluded` with no `facets` on a TantivyEngine aggregates only `ORDER` (track, status), as `search.run`
+    does without facets (TASK-166): never schema 4's `abstract_kind` or the other combo fields, whose deeper
+    nested aggregation cost the cold bench a third of its time (PR #134), and it builds no per-value bitmaps, no
+    value table and, with no verified clause, no ord table. The counts are the brute-force ones."""
+    engine = tantivy_of(RECORDS, tmp_path)
+    assert "abstract_kind" in engine.combo  # schema 4: the field the exclusion path must not aggregate
+    result = parsed(q)
+    assert run(engine, result) == brute(RECORDS, result)
+    assert {key.split("\x00")[0] for key in engine.faceted} == {"track,status"}
+    assert engine._masks is None and engine._index is None and engine._ords is None
+
+
+def test_the_narrowed_path_keeps_an_abstract_kind_clause_in_the_base(tmp_path: Path) -> None:
+    """`abstract_kind` is not aggregated on the exclusion-only path (`ORDER`), so a top-level `abstract_kind:`
+    clause stays in the collected base, never set aside: the counts are the oracle's and the full combo's, over
+    the every-kind corpus with some workshop and rejected papers to remove."""
+    from tests.fixtures.corpus import abstract_kinds
+
+    corpus = [
+        # the OpenAlex `trust` papers are 0, 12, 24, 36, 48: three to workshops, one rejected, one kept
+        r.model_copy(
+            update={"track": "workshop"} if i % 24 == 0 else {"status": "rejected"} if i == 12 else {}
+        )
+        for i, r in enumerate(abstract_kinds.records())
+    ]
+    engine, oracle = tantivy_of(corpus, tmp_path), ReferenceEngine(corpus)
+    result = parsed("trust abstract_kind:openalex")
+    total = len(engine.match_ids(result.effective_ast))  # type: ignore[arg-type]
+    narrow = excluded(engine, result, total)
+    assert (total, narrow.to_json()) == (
+        1,
+        {"total": 4, "track": {"workshop": 3, "unknown": 0}, "status": {"rejected": 1, "unknown": 0}},
+    )
+    assert narrow == excluded(oracle, result, total) == excluded(engine, result, total, facets=engine.facets)
+    keys = [k for k in engine.faceted if k.startswith("track,status\x00")]
+    assert keys and all("abstract_kind" in k for k in keys)  # the clause is in each narrowed base

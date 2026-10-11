@@ -1,0 +1,6690 @@
+# ojs.aaai.org table (spec 01 §Sources, OJS row; decision-049). Data, not code: `ingest/ojs_table.py` loads and
+# checks it, and no other module holds a journal code, a volume or an OAI set.
+#
+# [[journal]] columns
+#   code         the OJS path: https://ojs.aaai.org/index.php/<code>/oai
+#   venue        AAAI | AIES | IASEAI (a spec 01 venue)
+#   year_offset  year = volume + year_offset
+#   verified     the date the row was checked live
+#   source       where the check is recorded
+#
+# [[section]] columns (one per journal, volume and OAI set)
+#   journal      a journal code above
+#   volume       the OJS volume
+#   set_spec     the OAI setSpec of the section (names change by year, so every row names its volume)
+#   kind         papers | front_matter (front matter is counted, never a record)
+#   track        a spec 01 track (papers only); the table's value is the record's track, never inferred
+#   label        the section's title on ojs.aaai.org, kept in the track claim's evidence
+#   papers       the records in this section of this volume when verified
+#   verified     the date the row was checked live
+#   source       where the check is recorded
+#
+# [[unavailable]] columns (an article the OAI list names that the server cannot serve: every OAI form and its
+# article page answer HTTP 5xx; it is listed in its volume, never a record; an unnamed one stops the crawl)
+#   journal      a journal code above
+#   article      the OJS article id
+#   set_spec     its OAI setSpec (from ListIdentifiers)
+#   volume       the volume whose section row counts it (that row must exist)
+#   reason       what was seen
+#   verified     the date it was checked live
+#   source       where the check is recorded
+#
+# A volume or section missing from this table stops the crawl.
+#
+# Sections: from the live census of 2026-10-09 (scripts/ojs_section_census.py: the journal-wide ListIdentifiers
+# inventory, every set's ListRecords, GetRecord for the rest; the research note has the reconciliation). Track by
+# the spec's mapping (docs/plans/2026-10-09-new-venues-design.md §Data model): technical, special and journal tracks
+# main; student abstracts student_abstract; doctoral and undergraduate consortia consortium; demonstrations demo;
+# IAAI iaai; EAAI eaai; senior member, new faculty highlights and emerging trends other. A section the mapping
+# doesn't name is other; the owner decided each on 2026-10-10 (TASK-218), marked "owner decision" here and in the research note.
+
+[[journal]]
+code = "AAAI"
+venue = "AAAI"
+year_offset = 1986
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[journal]]
+code = "AIES"
+venue = "AIES"
+year_offset = 2017
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[journal]]
+code = "IASEAI"
+venue = "IASEAI"
+year_offset = 2024
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:AIB"
+kind = "papers"
+track = "main"
+label = "AI and Bioinformatics Special Track"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:AIW"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: AI and the Web"
+papers = 31
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:CAI"
+kind = "papers"
+track = "main"
+label = "Challenges in AI Special Track"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:CON"
+kind = "papers"
+track = "main"
+label = "Constraints, Satisfiability, and Search"
+papers = 35
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:DP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track: Deployed Papers"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:EAAI-MOD"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium Model AI Assignments"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:EP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track: Emerging Papers"
+papers = 19
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:II"
+kind = "papers"
+track = "main"
+label = "Integrated Intelligence Special Track"
+papers = 10
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:KBI"
+kind = "papers"
+track = "main"
+label = "Knowledge-Based Information Systems"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:KR"
+kind = "papers"
+track = "main"
+label = "Knowledge Representation and Reasoning"
+papers = 23
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:MAS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Multiagent Systems"
+papers = 42
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:MDT"
+kind = "papers"
+track = "main"
+label = "Multidisciplinary Topics"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:ML"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Machine Learning"
+papers = 49
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# owner decision 2026-10-10 (TASK-218), kept: 'New Scientific and Technical Advances in Research' → other (NECTAR: digests of papers from other conferences)
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:NECTAR"
+kind = "papers"
+track = "other"
+label = "New Scientific and Technical Advances in Research"
+papers = 12
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:NLP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Natural Language Processing"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:PGAI"
+kind = "papers"
+track = "main"
+label = "Physically Grounded AI Special Track"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:PP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Poster Papers"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:ROB"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Robotics"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:RPPA"
+kind = "papers"
+track = "main"
+label = "Reasoning about Plans, Processes and Actions"
+papers = 17
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:RUU"
+kind = "papers"
+track = "main"
+label = "Reasoning Under Uncertainty"
+papers = 10
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:SENIOR"
+kind = "papers"
+track = "other"
+label = "Senior Member Papers"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# owner decision 2026-10-10 (TASK-218): 'Short Papers' → main (refereed, original AAAI-10 technical papers, shorter)
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:SHORT"
+kind = "papers"
+track = "main"
+label = "Short Papers"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:STUDENT"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstracts"
+papers = 24
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 24
+set_spec = "AAAI:TP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Full Papers"
+papers = 6
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:COMP"
+kind = "papers"
+track = "main"
+label = "Special Track on Computational Sustainability and AI"
+papers = 18
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:CON"
+kind = "papers"
+track = "main"
+label = "Constraints, Satisfiability, and Search"
+papers = 19
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:DP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track: Deployed Papers"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:EAAI-MOD"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium Model AI Assignments"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:EP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track: Emerging Papers"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:INTIN"
+kind = "papers"
+track = "main"
+label = "Special Track on Integrated Intelligence"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:KBIS"
+kind = "papers"
+track = "main"
+label = "Knowledge-Based Information Systems"
+papers = 6
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:KRR"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Knowledge Representation and Reasoning"
+papers = 20
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:MAS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Multiagent Systems"
+papers = 29
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:ML"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Machine Learning"
+papers = 48
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:MULTI"
+kind = "papers"
+track = "main"
+label = "Multidisciplinary Topics"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# owner decision 2026-10-10 (TASK-218), kept: 'New Scientific and Technical Advances in Research' → other (NECTAR: digests of papers from other conferences)
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:NECTAR"
+kind = "papers"
+track = "other"
+label = "New Scientific and Technical Advances in Research"
+papers = 12
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:NLP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Natural Language Processing"
+papers = 13
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:PGAI"
+kind = "papers"
+track = "main"
+label = "Physically Grounded AI Special Track"
+papers = 10
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:PP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Poster Papers"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:ROB"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Robotics"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# 'Robotics Program' → main: the AI and Robotics special track (AAAI-13's preface counts it in the technical program)
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:ROBOT"
+kind = "papers"
+track = "main"
+label = "Robotics Program"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:RPPA"
+kind = "papers"
+track = "main"
+label = "Reasoning about Plans, Processes and Actions"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:RUU"
+kind = "papers"
+track = "main"
+label = "Reasoning Under Uncertainty"
+papers = 9
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:STU"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstracts and Posters"
+papers = 44
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:TP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Full Papers"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 25
+set_spec = "AAAI:WEB"
+kind = "papers"
+track = "main"
+label = "Special Track on AI and the Web"
+papers = 28
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:AIW"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: AI and the Web"
+papers = 26
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:CONSS"
+kind = "papers"
+track = "main"
+label = "Constraints, Satisfiability, and Search"
+papers = 26
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:CS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Cognitive Systems"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:CSUS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Computational Sustainability"
+papers = 21
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:DC"
+kind = "papers"
+track = "consortium"
+label = "Doctoral Consortium"
+papers = 15
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:DP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track: Deployed Papers"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:EP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track: Emerging Papers"
+papers = 15
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:KBIS"
+kind = "papers"
+track = "main"
+label = "Knowledge-Based Information Systems"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:KRR"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Knowledge Representation and Reasoning"
+papers = 22
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:MAA"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Model AI Assignments"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:MAS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Multiagent Systems"
+papers = 38
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:ML"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Machine Learning"
+papers = 55
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:MULTI"
+kind = "papers"
+track = "main"
+label = "Multidisciplinary Topics"
+papers = 18
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:NLP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Natural Language Processing"
+papers = 13
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:PP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Poster Papers"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:RPPA"
+kind = "papers"
+track = "main"
+label = "Reasoning about Plans, Processes and Actions"
+papers = 17
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:RST"
+kind = "papers"
+track = "main"
+label = "Robotics"
+papers = 17
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:RUU"
+kind = "papers"
+track = "main"
+label = "Reasoning Under Uncertainty"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:SA"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstract Track"
+papers = 27
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# owner decision 2026-10-10 (TASK-218), kept: 'Spotlight' → other (unclear what the section held)
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:SPOT"
+kind = "papers"
+track = "other"
+label = "Spotlight"
+papers = 17
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 26
+set_spec = "AAAI:TP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Full Papers"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:AIW"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: AI and the Web"
+papers = 18
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:CHAL"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical: Challenge Papers"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:COG"
+kind = "papers"
+track = "main"
+label = "Cognitive Systems Special Track"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:CSAI"
+kind = "papers"
+track = "main"
+label = "Computational Sustainability and Artificial Intelligence"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:DC"
+kind = "papers"
+track = "consortium"
+label = "Doctoral Consortium"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:DP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track: Deployed Papers"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:EP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track: Emerging Papers"
+papers = 15
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:FRNT"
+kind = "front_matter"
+label = "Frontmatter"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:MAA"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Model AI Assignments"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:PP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Poster Papers"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:PSA"
+kind = "papers"
+track = "student_abstract"
+label = "Pre-PhD Student Abstracts"
+papers = 25
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# 'Robotics Program' → main: the AI and Robotics special track (AAAI-13's preface counts it in the technical program)
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:ROBOT"
+kind = "papers"
+track = "main"
+label = "Robotics Program"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:TECH"
+kind = "papers"
+track = "main"
+label = "Main Technical Papers"
+papers = 150
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 27
+set_spec = "AAAI:TP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Full Papers"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:AIW"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: AI and the Web"
+papers = 34
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:APP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Applications"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:CM"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Cognitive Modeling"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:CS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Cognitive Systems"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:CSAI"
+kind = "papers"
+track = "main"
+label = "Computational Sustainability and Artificial Intelligence"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:DC"
+kind = "papers"
+track = "consortium"
+label = "Doctoral Consortium"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:EAAI-Full"
+kind = "papers"
+track = "eaai"
+label = "EAAI Full Papers"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:EAAI-Model"
+kind = "papers"
+track = "eaai"
+label = "EAAI Model AI Assignments"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# ListSets names this spec for two sections; both names kept (spec is shared, volume differs)
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:EAAI-POS"
+kind = "papers"
+track = "eaai"
+label = "EAAI Poster Papers | EAAI Symposium Poster Paper"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:GPIE"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Game Playing and Interactive Entertainment"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:GTEP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Game Theory and Economic Paradigms"
+papers = 41
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:HAI"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Humans and AI"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:HCC"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Human-Computation and Crowd Sourcing"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:HSO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Heuristic Search and Optimization"
+papers = 9
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:IAAI-DEP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Deployed Papers"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:IAAI-EMERG"
+kind = "papers"
+track = "iaai"
+label = "IAAI Emerging Application Papers"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:KRR"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Knowledge Representation and Reasoning"
+papers = 26
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:MAS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Multiagent Systems"
+papers = 18
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:MLA"
+kind = "papers"
+track = "main"
+label = "Main Track: Machine Learning Applications"
+papers = 32
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:NLPKR"
+kind = "papers"
+track = "main"
+label = "Main Track: NLP and Knowledge Representation"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:NLPML"
+kind = "papers"
+track = "main"
+label = "Main Track: NLP and Machine Learning"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:NLPTM"
+kind = "papers"
+track = "main"
+label = "Main Track: NLP and Text Mining"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:NMLA"
+kind = "papers"
+track = "main"
+label = "Main Track: Novel Machine Learning Algorithms"
+papers = 77
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:PS"
+kind = "papers"
+track = "main"
+label = "Main Track: Planning and Scheduling"
+papers = 25
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:ROB"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Robotics"
+papers = 10
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:RU"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Reasoning under Uncertainty"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:SA"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstract Track"
+papers = 33
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:SCS"
+kind = "papers"
+track = "main"
+label = "Main Track: Search and Constraint Satisfaction"
+papers = 21
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 28
+set_spec = "AAAI:VIS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Vision"
+papers = 19
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:AIW"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: AI and the Web"
+papers = 59
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:APP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Applications"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:CM"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Cognitive Modeling"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:CS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Cognitive Systems"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:CSAI"
+kind = "papers"
+track = "main"
+label = "Computational Sustainability and Artificial Intelligence"
+papers = 20
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:DC"
+kind = "papers"
+track = "consortium"
+label = "Doctoral Consortium"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:DEMO"
+kind = "papers"
+track = "demo"
+label = "Demonstrations"
+papers = 19
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:GPIE"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Game Playing and Interactive Entertainment"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:GTEP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Game Theory and Economic Paradigms"
+papers = 44
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:HAI"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Humans and AI"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:HCC"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Human-Computation and Crowd Sourcing"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# owner decision 2026-10-10 (TASK-218), kept: "What's Hot Abstracts" → other (short abstracts summarising hot topics at other venues)
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:HOT"
+kind = "papers"
+track = "other"
+label = "What's Hot Abstracts"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:HSO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Heuristic Search and Optimization"
+papers = 24
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:IAAI-CHAL"
+kind = "papers"
+track = "iaai"
+label = "IAAI Challenge Papers"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:IAAI-DEP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Deployed Papers"
+papers = 6
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:IAAI-EMERG"
+kind = "papers"
+track = "iaai"
+label = "IAAI Emerging Application Papers"
+papers = 13
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:IS"
+kind = "papers"
+track = "main"
+label = "Integrated Systems"
+papers = 10
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:KRR"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Knowledge Representation and Reasoning"
+papers = 38
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:MAS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Multiagent Systems"
+papers = 22
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:MLA"
+kind = "papers"
+track = "main"
+label = "Main Track: Machine Learning Applications"
+papers = 43
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:NLPKR"
+kind = "papers"
+track = "main"
+label = "Main Track: NLP and Knowledge Representation"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:NLPML"
+kind = "papers"
+track = "main"
+label = "Main Track: NLP and Machine Learning"
+papers = 22
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:NLPTM"
+kind = "papers"
+track = "main"
+label = "Main Track: NLP and Text Mining"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:NMLA"
+kind = "papers"
+track = "main"
+label = "Main Track: Novel Machine Learning Algorithms"
+papers = 105
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:PS"
+kind = "papers"
+track = "main"
+label = "Main Track: Planning and Scheduling"
+papers = 30
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:ROB"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Robotics"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:RU"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Reasoning under Uncertainty"
+papers = 29
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:SA"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstract Track"
+papers = 45
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:SCS"
+kind = "papers"
+track = "main"
+label = "Main Track: Search and Constraint Satisfaction"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:SRM"
+kind = "papers"
+track = "other"
+label = "Senior Member Papers"
+papers = 20
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:VAD"
+kind = "papers"
+track = "demo"
+label = "Virtual Agent Demonstrations"
+papers = 6
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 29
+set_spec = "AAAI:VIS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Vision"
+papers = 18
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:BLUE"
+kind = "papers"
+track = "other"
+label = "Senior Member Blue Sky Papers"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:DC"
+kind = "papers"
+track = "consortium"
+label = "Doctoral Consortium"
+papers = 17
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:DEMO"
+kind = "papers"
+track = "demo"
+label = "Demonstrations"
+papers = 29
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:EAAI-FULL"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium Full Paper"
+papers = 10
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:EAAI-MOD"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium Model AI Assignments"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# ListSets names this spec for two sections; both names kept (spec is shared, volume differs)
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:EAAI-POS"
+kind = "papers"
+track = "eaai"
+label = "EAAI Poster Papers | EAAI Symposium Poster Paper"
+papers = 6
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# owner decision 2026-10-10 (TASK-218), kept: "What's Hot Abstracts" → other (short abstracts summarising hot topics at other venues)
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:HOT"
+kind = "papers"
+track = "other"
+label = "What's Hot Abstracts"
+papers = 9
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:IAAI-CHAL"
+kind = "papers"
+track = "iaai"
+label = "IAAI Challenge Papers"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:IAAI-DEP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Deployed Papers"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:IAAI-EMERG"
+kind = "papers"
+track = "iaai"
+label = "IAAI Emerging Application Papers"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:SMST"
+kind = "papers"
+track = "other"
+label = "Senior Member Summary Talks"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:ST-COGS"
+kind = "papers"
+track = "main"
+label = "Special Track: Cognitive Systems"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:ST-CS"
+kind = "papers"
+track = "main"
+label = "Special Track: Computational Sustainability"
+papers = 22
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:ST-IAC"
+kind = "papers"
+track = "main"
+label = "Special Track: Integrated AI Capabilities"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:STU"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstracts and Posters"
+papers = 48
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-AIW"
+kind = "papers"
+track = "main"
+label = "Technical Papers: AI and the Web"
+papers = 33
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-APP"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Applications"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-COGMOD"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Cognitive Modeling"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-CSAI"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Computational Sustainability and AI"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-GPIE"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Game Playing and Interactive Entertainment"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-GTEP"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Game Theory and Economic Paradigms"
+papers = 42
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-HAI"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Humans and AI"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-HCC"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Human-Computation and Crowd Sourcing"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-HSO"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Heuristic Search and Optimization"
+papers = 22
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-KRR"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Knowledge Representation and Reasoning"
+papers = 36
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-MAS"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Multiagent Systems"
+papers = 18
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-MLA"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Machine Learning Applications"
+papers = 46
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-MLM"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Machine Learning Methods"
+papers = 137
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-NLPKR"
+kind = "papers"
+track = "main"
+label = "Technical Papers: NLP and Knowledge Representation"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-NLPML"
+kind = "papers"
+track = "main"
+label = "Technical Papers: NLP and Machine Learning"
+papers = 28
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-NLPTM"
+kind = "papers"
+track = "main"
+label = "Technical Papers: NLP and Text Mining"
+papers = 32
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-PS"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Planning and Scheduling"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-ROB"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Robotics"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-RU"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Reasoning under Uncertainty"
+papers = 15
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-SCS"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Search and Constraint Satisfaction"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 30
+set_spec = "AAAI:TECH-VIS"
+kind = "papers"
+track = "main"
+label = "Technical Papers: Vision"
+papers = 35
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:AIW"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: AI and the Web"
+papers = 26
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:APP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Applications"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:CMCS"
+kind = "papers"
+track = "main"
+label = "Cognitive Modeling and Cognitive Systems"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:DC"
+kind = "papers"
+track = "consortium"
+label = "Doctoral Consortium"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:DEMO"
+kind = "papers"
+track = "demo"
+label = "Demonstrations"
+papers = 13
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:EAAI-FULL"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium Full Paper"
+papers = 9
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:EAAI-MAA"
+kind = "papers"
+track = "eaai"
+label = "EAAI Model AI Assignments"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# ListSets names this spec for two sections; both names kept (spec is shared, volume differs)
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:EAAI-POS"
+kind = "papers"
+track = "eaai"
+label = "EAAI Poster Papers | EAAI Symposium Poster Paper"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:GPIE"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Game Playing and Interactive Entertainment"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:GTEP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Game Theory and Economic Paradigms"
+papers = 65
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:HAAI"
+kind = "papers"
+track = "main"
+label = "Human-Aware Artificial Intelligence"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:HAI"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Humans and AI"
+papers = 6
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:HCC"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Human-Computation and Crowd Sourcing"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# owner decision 2026-10-10 (TASK-218), kept: "What's Hot Abstracts" → other (short abstracts summarising hot topics at other venues)
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:HOT"
+kind = "papers"
+track = "other"
+label = "What's Hot Abstracts"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:HSO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Heuristic Search and Optimization"
+papers = 25
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:IAAI-CHAL"
+kind = "papers"
+track = "iaai"
+label = "IAAI Challenge Papers"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:IAAI-DEP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Deployed Papers"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:IAAI-EMERG"
+kind = "papers"
+track = "iaai"
+label = "IAAI Emerging Application Papers"
+papers = 17
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:KRR"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Knowledge Representation and Reasoning"
+papers = 33
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:MAS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Multiagent Systems"
+papers = 9
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:MLA"
+kind = "papers"
+track = "main"
+label = "Main Track: Machine Learning Applications"
+papers = 57
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:MLM"
+kind = "papers"
+track = "main"
+label = "Machine Learning Methods"
+papers = 182
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:NLPKR"
+kind = "papers"
+track = "main"
+label = "Main Track: NLP and Knowledge Representation"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:NLPML"
+kind = "papers"
+track = "main"
+label = "Main Track: NLP and Machine Learning"
+papers = 38
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:NLPTM"
+kind = "papers"
+track = "main"
+label = "Main Track: NLP and Text Mining"
+papers = 18
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:PS"
+kind = "papers"
+track = "main"
+label = "Main Track: Planning and Scheduling"
+papers = 21
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:ROB"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Robotics"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:RU"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Reasoning under Uncertainty"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:SA"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstract Track"
+papers = 64
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:SCS"
+kind = "papers"
+track = "main"
+label = "Main Track: Search and Constraint Satisfaction"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:SMBLU"
+kind = "papers"
+track = "other"
+label = "Senior Member Blue Sky"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:SMSUM"
+kind = "papers"
+track = "other"
+label = "Senior Member Summary Talks"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:STCOGS"
+kind = "papers"
+track = "main"
+label = "Special Track on Cognitive Systems"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:STCOMPS"
+kind = "papers"
+track = "main"
+label = "Special Track on Computational Sustainability"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:STIS"
+kind = "papers"
+track = "main"
+label = "Special Track on Integrated Systems"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 31
+set_spec = "AAAI:VIS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Vision"
+papers = 53
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:AIW"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: AI and the Web"
+papers = 43
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:APP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Applications"
+papers = 29
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:CHAL"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical: Challenge Papers"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:CM"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Cognitive Modeling"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:CS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Cognitive Systems"
+papers = 13
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:CSAI"
+kind = "papers"
+track = "main"
+label = "Computational Sustainability and Artificial Intelligence"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:DC"
+kind = "papers"
+track = "consortium"
+label = "Doctoral Consortium"
+papers = 19
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:DEMO"
+kind = "papers"
+track = "demo"
+label = "Demonstrations"
+papers = 15
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:DEPL"
+kind = "papers"
+track = "iaai"
+label = "IAAI18 - Deployed"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:EAAIFP"
+kind = "papers"
+track = "eaai"
+label = "EAAI18 - Full Papers"
+papers = 9
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:EAAIMAA"
+kind = "papers"
+track = "eaai"
+label = "EAAI18 - Model AI Assignments"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:EAAIPP"
+kind = "papers"
+track = "eaai"
+label = "EAAI18 - Poster Papers"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:EMRG"
+kind = "papers"
+track = "iaai"
+label = "IAAI18 - Emerging"
+papers = 26
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:GPIE"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Game Playing and Interactive Entertainment"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:GTEP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Game Theory and Economic Paradigms"
+papers = 51
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:HAC"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Human-AI Collaboration"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:HAI"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Humans and AI"
+papers = 10
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:HCC"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Human-Computation and Crowd Sourcing"
+papers = 10
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:HSO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Heuristic Search and Optimization"
+papers = 19
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:KRR"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Knowledge Representation and Reasoning"
+papers = 41
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:MAS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Multiagent Systems"
+papers = 18
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:ML"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Machine Learning"
+papers = 241
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:MLA"
+kind = "papers"
+track = "main"
+label = "Main Track: Machine Learning Applications"
+papers = 75
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:NLPKR"
+kind = "papers"
+track = "main"
+label = "Main Track: NLP and Knowledge Representation"
+papers = 27
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:NLPML"
+kind = "papers"
+track = "main"
+label = "Main Track: NLP and Machine Learning"
+papers = 93
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:NLPTM"
+kind = "papers"
+track = "main"
+label = "Main Track: NLP and Text Mining"
+papers = 42
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:PS"
+kind = "papers"
+track = "main"
+label = "Main Track: Planning and Scheduling"
+papers = 26
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:ROB"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Robotics"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:RU"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Reasoning under Uncertainty"
+papers = 19
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:SA"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstract Track"
+papers = 73
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:SCS"
+kind = "papers"
+track = "main"
+label = "Main Track: Search and Constraint Satisfaction"
+papers = 13
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:SMT"
+kind = "papers"
+track = "other"
+label = "Senior Track"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 32
+set_spec = "AAAI:VIS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Vision"
+papers = 122
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:AISI"
+kind = "papers"
+track = "main"
+label = "AAAI Special Technical Track: AI for Social Impact"
+papers = 45
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:AIW"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: AI and the Web"
+papers = 57
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:APP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Applications"
+papers = 58
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:BSP"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation Track: Blue Sky Papers"
+papers = 9
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:CM"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Cognitive Modeling"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:CS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Cognitive Systems"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:CSO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Constraint Satisfaction and Optimization"
+papers = 33
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:CSUS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Computational Sustainability"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:DCTA"
+kind = "papers"
+track = "consortium"
+label = "Doctoral Consortium Track"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:DP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track: Deployed Papers"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:DTA"
+kind = "papers"
+track = "demo"
+label = "Demonstration Track"
+papers = 15
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:EP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track: Emerging Papers"
+papers = 36
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:GPIE"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Game Playing and Interactive Entertainment"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:GTEP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Game Theory and Economic Paradigms"
+papers = 67
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:HAC"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Human-AI Collaboration"
+papers = 17
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:HAI"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Humans and AI"
+papers = 9
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:HCC"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Human-Computation and Crowd Sourcing"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:HSO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Heuristic Search and Optimization"
+papers = 18
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:KRR"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Knowledge Representation and Reasoning"
+papers = 60
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:MAA"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Model AI Assignments"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:MAS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Multiagent Systems"
+papers = 22
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:ML"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Machine Learning"
+papers = 353
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:NLP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Natural Language Processing"
+papers = 162
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:PP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Poster Papers"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:PRS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Planning, Routing, and Scheduling"
+papers = 29
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:ROB"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Robotics"
+papers = 9
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:RU"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Reasoning under Uncertainty"
+papers = 31
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:SA"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstract Track"
+papers = 90
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:ST"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation Track: Summary Talks"
+papers = 6
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:TP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Full Papers"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 33
+set_spec = "AAAI:VIS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Vision"
+papers = 158
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:AISI"
+kind = "papers"
+track = "main"
+label = "AAAI Special Technical Track: AI for Social Impact"
+papers = 25
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:AIW"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: AI and the Web"
+papers = 42
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:APP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Applications"
+papers = 90
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:BSP"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation Track: Blue Sky Papers"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:CHAL"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical: Challenge Papers"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:CM"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Cognitive Modeling"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:CS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Cognitive Systems"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:CSO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Constraint Satisfaction and Optimization"
+papers = 34
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:CSUS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Computational Sustainability"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:DCTA"
+kind = "papers"
+track = "consortium"
+label = "Doctoral Consortium Track"
+papers = 17
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:DP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track: Deployed Papers"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:DTA"
+kind = "papers"
+track = "demo"
+label = "Demonstration Track"
+papers = 25
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:EP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track: Emerging Papers"
+papers = 27
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:GPIE"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Game Playing and Interactive Entertainment"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:GTEP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Game Theory and Economic Paradigms"
+papers = 71
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:HAC"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Human-AI Collaboration"
+papers = 13
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:HAI"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Humans and AI"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:HCC"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Human-Computation and Crowd Sourcing"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:HSO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Heuristic Search and Optimization"
+papers = 15
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:KRR"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Knowledge Representation and Reasoning"
+papers = 46
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:MAA"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Model AI Assignments"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:MAS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Multiagent Systems"
+papers = 38
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:ML"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Machine Learning"
+papers = 482
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:NLP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Natural Language Processing"
+papers = 299
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:PP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Poster Papers"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:PRS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Planning, Routing, and Scheduling"
+papers = 31
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:ROB"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Robotics"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:RU"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Reasoning under Uncertainty"
+papers = 38
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:SA"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstract Track"
+papers = 129
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# owner decision 2026-10-10 (TASK-218), kept: 'Sister Conference Track' → other (digests of papers from sister conferences)
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:SIS"
+kind = "papers"
+track = "other"
+label = "Sister Conference Track"
+papers = 15
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:ST"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation Track: Summary Talks"
+papers = 6
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:TP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Full Papers"
+papers = 12
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 34
+set_spec = "AAAI:VIS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Vision"
+papers = 333
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:AD"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Application Domains"
+papers = 88
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:AGENTS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Multiagent Systems"
+papers = 20
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:AI4SI"
+kind = "papers"
+track = "main"
+label = "AAAI Special Track on AI for Social Impact"
+papers = 40
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:CM-CS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Cognitive Modeling and Cognitive Systems"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:CSaO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Constraint Satisfaction and Optimization"
+papers = 34
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:CV-I"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision I"
+papers = 104
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:CV-II"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision II"
+papers = 102
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:CV-III"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision III"
+papers = 103
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:DMKM"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Data Mining and Knowledge Management"
+papers = 94
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:DOC"
+kind = "papers"
+track = "consortium"
+label = "The Twenty-Sixth AAAI/SIGAI Doctoral Consortium"
+papers = 18
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:DT"
+kind = "papers"
+track = "demo"
+label = "AAAI Demonstration Track"
+papers = 46
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:EAAI-FP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Full Papers"
+papers = 30
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:EAAI-MAIA"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Model AI Assignment Abstracts"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:FAAICOD"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track Focus Area on AI for Conference Organization and Delivery"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:FACOVID"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track Focus Area on AI Responses to the COVID-19 Pandemic"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:FANSAI"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track Focus Area on Neuro-Symbolic AI"
+papers = 18
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:GTaEP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Game Theory and Economic Paradigms"
+papers = 89
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:HCCS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Human-Computation and Crowd Sourcing"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:HUM"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Humans and AI"
+papers = 21
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:IAAI-APP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Highly Innovative Applications of AI"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:IAAI-EMERI"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Emerging Applications of AI"
+papers = 27
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:IAAI-PROB"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on AI Best Practices, Challenge Problems, Training AI Users"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:IAAI-TOOLS"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Innovative Tools for Enabling AI Application"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:IRO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Intelligent Robots"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:KRaR"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Knowledge Representation and Reasoning"
+papers = 43
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:ML-I"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning I"
+papers = 106
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:ML-II"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning II"
+papers = 106
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:ML-III"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning III"
+papers = 104
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:ML-IV"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning IV"
+papers = 105
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:ML-V"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning V"
+papers = 106
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:NLP-I"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Speech and Natural Language Processing I"
+papers = 82
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:NLP-II"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Speech and Natural Language Processing II"
+papers = 82
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:NLP-III"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Speech and Natural Language Processing III"
+papers = 83
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:PEAI"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Philosophy and Ethics of AI"
+papers = 34
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:PRaS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Planning, Routing, and Scheduling"
+papers = 39
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:REASUU"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Reasoning under Uncertainty"
+papers = 19
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:SA-PP"
+kind = "papers"
+track = "student_abstract"
+label = "AAAI Student Abstract and Poster Program"
+papers = 105
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:SAO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Search and Optimization"
+papers = 28
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:SMP-BS"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Blue Sky Papers"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:SMP-SUM"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Summary Papers"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 35
+set_spec = "AAAI:UC"
+kind = "papers"
+track = "consortium"
+label = "AAAI Undergraduate Consortium"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:2022-179"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Philosophy and Ethics of AI"
+papers = 15
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:AGENTS22"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Multiagent Systems"
+papers = 23
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:AI4SI"
+kind = "papers"
+track = "main"
+label = "AAAI Special Track on AI for Social Impact"
+papers = 50
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:CM+-+CS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Cognitive Modeling & Cognitive Systems"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:CSaO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Constraint Satisfaction and Optimization"
+papers = 25
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:CV-I"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision I"
+papers = 128
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:CV-II"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision II"
+papers = 136
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:CV-III"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision III"
+papers = 136
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:DMKM"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Data Mining and Knowledge Management"
+papers = 58
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:DOAP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Domain(s) Of Application"
+papers = 37
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:DOC22"
+kind = "papers"
+track = "consortium"
+label = "The Twenty - Seventh AAAI / SIGAI Doctoral Consortium"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:DT22"
+kind = "papers"
+track = "demo"
+label = "AAAI Demonstration Track"
+papers = 30
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:EAAI-FP"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Full Papers"
+papers = 22
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:EAAI-LIGHT"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Lightning Talk"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:EAAI-MAIA"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Model AI Assignment Abstracts"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:GTaEP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Game Theory and Economic Paradigms"
+papers = 63
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:HUM22"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Humans and AI"
+papers = 12
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:IAAI-APP"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Highly Innovative Applications of AI"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:IAAI-EMERI"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Emerging Applications of AI"
+papers = 31
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:IAAI-INT"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on AI Integration"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:IAAI-TOOLS"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Innovative Tools for Enabling AI Application"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:IROCS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Intelligent Robotics"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:KRaR2022"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Knowledge Representation and Reasoning"
+papers = 58
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:ML-I"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning I"
+papers = 125
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:ML-II"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning II"
+papers = 125
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:ML-III"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning III"
+papers = 125
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:PRaS22"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Planning, Routing, and Scheduling"
+papers = 40
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:REASUU22"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Reasoning under Uncertainty"
+papers = 14
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:SA-PP22"
+kind = "papers"
+track = "student_abstract"
+label = "AAAI Student Abstract and Poster Program"
+papers = 111
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:SAO22"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Search and Optimization"
+papers = 33
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:SMP-BS"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Blue Sky Papers"
+papers = 10
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:SMP-SUM"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Summary Papers"
+papers = 6
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:SNLP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Speech and Natural Language Processing"
+papers = 151
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 36
+set_spec = "AAAI:UC22"
+kind = "papers"
+track = "consortium"
+label = "AAAI Undergraduate Consortium"
+papers = 13
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:AGENTS-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Multiagent Systems"
+papers = 31
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:AI4SI-23"
+kind = "papers"
+track = "main"
+label = "AAAI Special Track on AI for Social Impact"
+papers = 66
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:CM-CS23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Cognitive Modeling & Cognitive Systems"
+papers = 17
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:CSaO"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Constraint Satisfaction and Optimization"
+papers = 27
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:CV-I"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision I"
+papers = 139
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:CV-II"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision II"
+papers = 138
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:CV-III"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision III"
+papers = 139
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:DM"
+kind = "papers"
+track = "demo"
+label = "Demonstrations"
+papers = 34
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:DMKM"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Data Mining and Knowledge Management"
+papers = 96
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:DOC23"
+kind = "papers"
+track = "consortium"
+label = "AAAI Doctoral Consortium Track"
+papers = 20
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:DOM-APP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Domain(s) of Application"
+papers = 52
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:EAAI-AIEDU23"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: AI for Education"
+papers = 10
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:EAAI-AIK12"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Resources for Teaching AI in K-12"
+papers = 10
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:EAAI-FP23"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Main Track"
+papers = 12
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:EAAI-MAIA23"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Model AI Assignment Abstracts"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:EAAI-SM"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Human-Aware AI in Sound and Music"
+papers = 6
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:Errata"
+kind = "front_matter"
+label = "Errata"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:GTaEP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Game Theory and Economic Paradigms"
+papers = 55
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:HUM23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Humans and AI"
+papers = 26
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:IAAI-APP23"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on deployed Highly Innovative Applications of AI"
+papers = 18
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:IAAI-DISC23"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on nnovative Inter-disciplinary AI Integration"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:IAAI-EMERI23"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on emerging Applications of AI"
+papers = 19
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:IAAI-TOOLS23"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Innovative Tools for Enabling AI Application"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:IROCS"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Intelligent Robotics"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:KRaR2023"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Knowledge Representation and Reasoning"
+papers = 48
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:ML-I-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning I"
+papers = 137
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:ML-II-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning II"
+papers = 138
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:ML-III-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning III"
+papers = 137
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:ML-IV-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning IV"
+papers = 135
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:NFH"
+kind = "papers"
+track = "other"
+label = "New Faculty Highlights"
+papers = 35
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:PEAI-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Philosophy and Ethics of AI"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:PRaS-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Planning, Routing, and Scheduling"
+papers = 26
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:REASUU-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Reasoning Under Uncertainty"
+papers = 19
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:SA-PP23"
+kind = "papers"
+track = "student_abstract"
+label = "AAAI Student Abstract and Poster Program"
+papers = 123
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:SAO-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Search and Optimization"
+papers = 22
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:SMP-BRG23"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Bridge Papers"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:SMP-BS23"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Blue Sky Papers"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:SMP-SUM23"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Summary Papers"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:SNLP-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Speech & Natural Language Processing"
+papers = 173
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 37
+set_spec = "AAAI:SRAI"
+kind = "papers"
+track = "main"
+label = "AAAI Special Track on Safe and Robust AI"
+papers = 76
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:2024-149"
+kind = "papers"
+track = "main"
+label = "Intelligent Robots (ROB)"
+papers = 16
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-1"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Application Domains"
+papers = 50
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-10"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Data Mining & Knowledge Management"
+papers = 135
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-11"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Game Theory and Economic Paradigms"
+papers = 65
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-12"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Humans and AI"
+papers = 31
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-14"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Knowledge Representation and Reasoning"
+papers = 38
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-15"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning I"
+papers = 124
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-16"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning II"
+papers = 123
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-17"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning III"
+papers = 122
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-18"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning IV"
+papers = 124
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-19"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning V"
+papers = 117
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-2"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Cognitive Modeling & Cognitive Systems"
+papers = 25
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-20"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning VI"
+papers = 118
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-21"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Multiagent Systems"
+papers = 39
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-22"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Natural Language Processing I"
+papers = 96
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Natural Language Processing II"
+papers = 144
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-24"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Philosophy and Ethics of AI"
+papers = 24
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-25"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Planning, Routing, and Scheduling"
+papers = 32
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-26"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Reasoning under Uncertainty"
+papers = 37
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-27"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Search and Optimization"
+papers = 32
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-28"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Safe, Robust and Responsible AI Track"
+papers = 109
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-29"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on AI for Social Impact Track"
+papers = 77
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-3"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision I"
+papers = 122
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-30"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Blue Sky Papers"
+papers = 6
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-31"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Bridge Sky Papers"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-32"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Summary Sky Papers"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-33"
+kind = "papers"
+track = "other"
+label = "New Faculty Highlights"
+papers = 29
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-34"
+kind = "papers"
+track = "main"
+label = "AAAI Journal Track"
+papers = 25
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-35"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Deployed Highly Innovative Applications of AI"
+papers = 13
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-36"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Emerging Applications of AI"
+papers = 22
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-37"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Deployed Innovative Tools for Enabling AI Applications"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-38"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Innovative Inter-disciplinary AI Integration"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-39"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on AI Incidents and Best Practices"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-4"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision II"
+papers = 123
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-40"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Main track"
+papers = 12
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-41"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: AI for Education"
+papers = 11
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-42"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Resources for Teaching AI in K-12"
+papers = 8
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-43"
+kind = "papers"
+track = "eaai"
+label = "EAAI: Mentored Undergraduate Research Challenge: AI for Accessibility in Comm"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-44"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Model AI Assignment Abstracts"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-45"
+kind = "papers"
+track = "consortium"
+label = "AAAI Doctoral Consortium Track"
+papers = 30
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-46"
+kind = "papers"
+track = "student_abstract"
+label = "AAAI Student Abstract and Poster Program"
+papers = 123
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-47"
+kind = "papers"
+track = "consortium"
+label = "AAAI Undergraduate Consortium"
+papers = 20
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-48"
+kind = "papers"
+track = "demo"
+label = "AAAI Demonstration Track"
+papers = 30
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-5"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision III"
+papers = 123
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-6"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision IV"
+papers = 123
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-7"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision V"
+papers = 156
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-8"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision VI"
+papers = 157
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 38
+set_spec = "AAAI:AI24-9"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Constraint Satisfaction and Optimization"
+papers = 35
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-1"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Application Domains"
+papers = 139
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-10"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision VIII"
+papers = 123
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-11"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision IX"
+papers = 121
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-12"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Constraint Satisfaction and Optimization"
+papers = 34
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-13"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Data Mining & Knowledge Management I"
+papers = 89
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-14"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Data Mining & Knowledge Management II"
+papers = 144
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-15"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Game Theory and Economic Paradigms"
+papers = 80
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-16"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Humans and AI"
+papers = 39
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-17"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Intelligent Robots"
+papers = 26
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-18"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Knowledge Representation and Reasoning"
+papers = 57
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-19"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning I"
+papers = 125
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-2"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Cognitive Modeling & Cognitive Systems"
+papers = 50
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-20"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning II"
+papers = 125
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-21"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning III"
+papers = 126
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-22"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning IV"
+papers = 126
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning V"
+papers = 126
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-24"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning VI"
+papers = 125
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-25"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning VII"
+papers = 123
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-26"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Multiagent Systems"
+papers = 32
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-27"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Natural Language Processing I"
+papers = 78
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-28"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Natural Language Processing II"
+papers = 115
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-29"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Natural Language Processing III"
+papers = 115
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-3"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision I"
+papers = 73
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-30"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Philosophy and Ethics of AI"
+papers = 27
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-31"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Planning, Routing, and Scheduling"
+papers = 35
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-32"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Reasoning under Uncertainty"
+papers = 13
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-33"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Search and Optimization"
+papers = 35
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-34"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on AI Alignment"
+papers = 66
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-35"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on AI for Social Impact Track"
+papers = 88
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-36"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Blue Sky Papers"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-37"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Bridge Sky Papers"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-38"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation: Summary Sky Papers"
+papers = 5
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-39"
+kind = "papers"
+track = "other"
+label = "New Faculty Highlights"
+papers = 35
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-4"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision II"
+papers = 124
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-40"
+kind = "papers"
+track = "main"
+label = "AAAI Journal Track"
+papers = 7
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-41"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Deployed Highly Innovative Applications of AI"
+papers = 9
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-42"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Emerging Applications of AI"
+papers = 9
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-43"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Deployed Innovative Tools for Enabling AI Applications"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-44"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Innovative Inter-disciplinary AI Integration"
+papers = 2
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-45"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on AI Incidents and Best Practices"
+papers = 3
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-46"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Main Track"
+papers = 17
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-47"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Resources for Teaching AI in K-12"
+papers = 17
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-49"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Model AI Assignments"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-5"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision III"
+papers = 118
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-50"
+kind = "papers"
+track = "consortium"
+label = "AAAI Doctoral Consortium Track"
+papers = 39
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-51"
+kind = "papers"
+track = "student_abstract"
+label = "AAAI Student Abstract and Poster Program"
+papers = 87
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-52"
+kind = "papers"
+track = "consortium"
+label = "AAAI Undergraduate Consortium"
+papers = 19
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-53"
+kind = "papers"
+track = "demo"
+label = "AAAI Demonstration Track"
+papers = 41
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-6"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision IV"
+papers = 117
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-7"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision V"
+papers = 123
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-8"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision VI"
+papers = 122
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 39
+set_spec = "AAAI:AI25-9"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision VII"
+papers = 123
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-10"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision VI"
+papers = 101
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-11"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision VII"
+papers = 100
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-12"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision VIII"
+papers = 100
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-13"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision IX"
+papers = 100
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-14"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision X"
+papers = 100
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-15"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision XI"
+papers = 101
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-16"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision XII"
+papers = 100
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-17"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision XIII"
+papers = 109
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-18"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Constraint Satisfaction and Optimization"
+papers = 35
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-19"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Data Mining & Knowledge Management I"
+papers = 67
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-2"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Application Domains I"
+papers = 94
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-20"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Data Mining & Knowledge Management II"
+papers = 90
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-21"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Data Mining & Knowledge Management III"
+papers = 84
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-22"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Game Theory and Economic Paradigms"
+papers = 85
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-23"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Humans and AI"
+papers = 87
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-24"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Intelligent Robotics"
+papers = 87
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-25"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Knowledge Representation and Reasoning"
+papers = 67
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-26"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning I"
+papers = 102
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-27"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning II"
+papers = 103
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-28"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning III"
+papers = 102
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-29"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning IV"
+papers = 102
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-3"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Application Domains II"
+papers = 94
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-30"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning V"
+papers = 102
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-31"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning VI"
+papers = 101
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-32"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning VII"
+papers = 103
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-33"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning VIII"
+papers = 103
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-34"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning IX"
+papers = 90
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-35"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning X"
+papers = 95
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-36"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Machine Learning XI"
+papers = 94
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-37"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Multiagent Systems"
+papers = 74
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-38"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Natural Language Processing I"
+papers = 101
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-39"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Natural Language Processing II"
+papers = 101
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-4"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Cognitive Modeling & Cognitive Systems"
+papers = 67
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-40"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Natural Language Processing III"
+papers = 100
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-41"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Natural Language Processing IV"
+papers = 107
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-42"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Natural Language Processing V"
+papers = 94
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-43"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Natural Language Processing VI"
+papers = 92
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-44"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Philosophy and Ethics of AI"
+papers = 91
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-45"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Planning, Routing, and Scheduling"
+papers = 54
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-46"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Reasoning under Uncertainty"
+papers = 21
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-47"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Search and Optimization"
+papers = 47
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-48"
+kind = "papers"
+track = "main"
+label = "AAAI Special Track on AI Alignment"
+papers = 106
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-49"
+kind = "papers"
+track = "main"
+label = "AAAI Special Track on AI for Social Impact I"
+papers = 88
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-5"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision I"
+papers = 100
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-50"
+kind = "papers"
+track = "main"
+label = "AAAI Special Track on AI for Social Impact II"
+papers = 74
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-51"
+kind = "papers"
+track = "other"
+label = "Senior Member Presentation"
+papers = 19
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-52"
+kind = "papers"
+track = "other"
+label = "New Faculty Highlights"
+papers = 29
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-53"
+kind = "papers"
+track = "main"
+label = "AAAI Journal Track"
+papers = 58
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-54"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Deployed Highly Innovative Applications of AI"
+papers = 29
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-55"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Emerging Applications of AI"
+papers = 41
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-56"
+kind = "papers"
+track = "iaai"
+label = "IAAI Technical Track on Tools and Methodologies for Moving Faster and Safer"
+papers = 4
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-57"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Main track"
+papers = 23
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-58"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Resources for Teaching AI in K-12"
+papers = 9
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-59"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: AI for Education"
+papers = 15
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-6"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision II"
+papers = 100
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-60"
+kind = "papers"
+track = "eaai"
+label = "EAAI Symposium: Model AI Assignments"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-61"
+kind = "papers"
+track = "other"
+label = "AAAI Emerging Trends in AI"
+papers = 10
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-62"
+kind = "papers"
+track = "consortium"
+label = "AAAI Doctoral Consortium Track"
+papers = 40
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-63"
+kind = "papers"
+track = "student_abstract"
+label = "AAAI Student Abstract and Poster Program"
+papers = 132
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-64"
+kind = "papers"
+track = "consortium"
+label = "AAAI Undergraduate Consortium"
+papers = 22
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-65"
+kind = "papers"
+track = "demo"
+label = "AAAI Demonstration Track"
+papers = 71
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-7"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision III"
+papers = 101
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-8"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision IV"
+papers = 100
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:AI26-9"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track on Computer Vision V"
+papers = 101
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# 39173 is the only record of this set in v40 and the server can't serve it: see [[unavailable]] below
+[[section]]
+journal = "AAAI"
+volume = 40
+set_spec = "AAAI:APP"
+kind = "papers"
+track = "main"
+label = "AAAI Technical Track: Applications"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AIES"
+volume = 7
+set_spec = "AIES:FMT"
+kind = "front_matter"
+label = "Frontmatter"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AIES"
+volume = 7
+set_spec = "AIES:FUL"
+kind = "papers"
+track = "main"
+label = "Full Archival Papers"
+papers = 150
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AIES"
+volume = 7
+set_spec = "AIES:STU"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstracts"
+papers = 20
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AIES"
+volume = 8
+set_spec = "AIES:A25-1"
+kind = "papers"
+track = "main"
+label = "Main Track I"
+papers = 81
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AIES"
+volume = 8
+set_spec = "AIES:A25-2"
+kind = "papers"
+track = "main"
+label = "Main Track II"
+papers = 85
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AIES"
+volume = 8
+set_spec = "AIES:A25-3"
+kind = "papers"
+track = "main"
+label = "Main Track III"
+papers = 72
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AIES"
+volume = 8
+set_spec = "AIES:A25-SA"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstracts 25"
+papers = 40
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AIES"
+volume = 8
+set_spec = "AIES:A25-SA-2"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstracts II"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "IASEAI"
+volume = 2
+set_spec = "IASEAI:FMT"
+kind = "front_matter"
+label = "Frontmatter"
+papers = 1
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "IASEAI"
+volume = 2
+set_spec = "IASEAI:IASEAI"
+kind = "papers"
+track = "main"
+label = "Main Track"
+papers = 57
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[unavailable]]
+journal = "AAAI"
+article = 39173
+set_spec = "AAAI:APP"
+volume = 40
+reason = "HTTP 500 on ojs.aaai.org (every format and its article page; again on 2026-10-10), absent from Crossref (404 for 10.1609/aaai.v40i24.39173 and v40i25) and from the pinned dblp release (its 4,920 AAAI 2026 DOIs, the issue pages' count, exclude it): a broken OAI entry, not a published paper"
+verified = 2026-10-09
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"

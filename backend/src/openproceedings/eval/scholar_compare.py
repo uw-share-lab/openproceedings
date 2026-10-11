@@ -57,9 +57,9 @@ from scholarmend.parse import parse_ris
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.protocol import EngineInputError, Searchable
 from openproceedings.engine.reference import ReferenceEngine
-from openproceedings.ingest import dedup, urls
+from openproceedings.ingest import acm_table, dedup, urls
+from openproceedings.ingest import volumes as _volumes
 from openproceedings.ingest.record import FORUM_ID, PaperRecord
-from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 from openproceedings.query.ast import (
     FILTER_FIELDS,
     And,
@@ -149,7 +149,7 @@ class RisRecord:
 
     key: str
     title: str
-    venue: str | None  # NeurIPS, ICLR or ICML when `venue_raw` is exactly one of Scholar mode's source names
+    venue: str | None  # an indexed venue when `venue_raw` is exactly one of Scholar mode's source names
     venue_raw: str
     year: int | None
     forum_ids: tuple[str, ...]  # OpenReview forum ids its URLs name
@@ -194,15 +194,22 @@ def openreview_id(url: str) -> str | None:
 
 def proceedings_key(url: str) -> ProceedingsKey | None:
     """The proceedings paper a URL names, or None: `urls.native`'s id with the venue and year the URL itself
-    carries (a NeurIPS or ICLR proceedings path; for PMLR, the ICML volume's year from the volume table)."""
+    carries (a NeurIPS or ICLR proceedings path; for PMLR, the volume's venue and year from the volume table). Any
+    other native names no key here: a dblp record page (`dblp-<key>`, ICML 1988-2012 and AAAI 1980-2008; decisions 047 and 049) and an
+    ojs.aaai.org article or galley (`ojs-<id>`, AAAI, AIES, IASEAI; decision-049) carry no year, so the row
+    is matched by its DOI or its title instead, never refused."""
     native = urls.native(url)
     if native is None:
         return None
     if (parts := urls.proceedings_parts(url)) is not None:
         return (parts[0], parts[1], native)
-    volume = urls.pmlr(url)
-    assert volume is not None  # `urls.native` names a NeurIPS/ICLR paper or an ICML volume's, nothing else
-    return ("ICML", ICML_PMLR_VOLUMES[volume[0]][0], native)
+    if (volume := urls.pmlr(url)) is not None and volume[0] in _volumes.PMLR_NATIVE_VOLUMES:
+        venue, year, _ = _volumes.PMLR_NATIVE_VOLUMES[volume[0]]
+        return (venue, year, native)
+    if native.startswith("doi-"):  # the proceedings row gives the venue and year the DOI itself lacks
+        row = acm_table.TABLE.by_toc(native.removeprefix("doi-").split(".", 1)[0])
+        return None if row is None else (row.venue, row.year, native)
+    return None  # dblp-<key>, ojs-<id>: no year in the URL
 
 
 def _named[T](read: Callable[[str], T | None], url: str) -> T | None:
@@ -384,9 +391,9 @@ class MatchIndex:
         """`r`'s index record by the merge rules, in their order: an id first (a forum id, then a proceedings
         id, then a DOI), then the title key within `r`'s venue and year. An id or a key that names two records
         is ambiguous, never a pick, and so are two ids that name different records; a record with no year, or
-        whose venue is not one of the three, is matched by id only. A DOI never matches across venue or year:
-        it names its record only when the file's year, if it gives one, and its venue, if it is one of the
-        three, are the record's (`doi_elsewhere` otherwise)."""
+        whose venue is no indexed venue's name, is matched by id only. A DOI never matches across venue or
+        year: it names its record only when the file's year, if it gives one, and its venue, if it names one,
+        are the record's (`doi_elsewhere` otherwise)."""
         by_forum = {rid for f in r.forum_ids for rid in self.forums.get(f, ())}
         by_listing = {rid for p in r.proceedings_ids for rid in self.proceedings.get(p, ())}
         named = {rid for d in r.dois for rid in self.dois.get(d, ())}
@@ -997,16 +1004,22 @@ def compare_query(
     forms = forms_of(oracle.vocabulary)
 
     memo: dict[str, frozenset[str]] = {}
+    # by identity too: a tree asked about again (once per row) is never serialised again (TASK-200). The tree is
+    # held beside its matches, so its id can't be reused by another object while the comparison runs
+    seen: dict[int, tuple[Node, frozenset[str]]] = {}
 
     def ids(n: Node | None) -> frozenset[str]:
         """The oracle's matches of a tree among the compared records (None: every record), computed once."""
         if n is None:
             return oracle.universe
+        if (hit := seen.get(id(n))) is not None and hit[0] is n:
+            return hit[1]
         key = n.model_dump_json()
         if key not in memo:
             if tick is not None:
                 tick()
             memo[key] = oracle.match_ids(n)
+        seen[id(n)] = (n, memo[key])
         return memo[key]
 
     # the readings: as run; as Scholar reads the string (each rewrite alone, and both); each with inflected forms
@@ -1035,16 +1048,25 @@ def compare_query(
     group_ids = [(ids(g), ids(with_variants(g, forms))) for g in groups]
     queried = sorted({t for tree in readings for t in _tokens(tree)})
     variants = {t: tuple(_other_forms(t, forms)) for t in queried if _other_forms(t, forms)}
+    # the trees a row's evidence asks about, built once so `ids` meets each again by identity
+    form_terms = {v: Term(span=(0, 0), token=v) for vs in variants.values() for v in vs}
+    # (a leaf's id, a text field) → the leaf and its copy searched in that field (held, as `seen` holds its trees)
+    in_field: dict[tuple[int, str], tuple[Node, Node]] = {}
 
     def fields(i: str, leaf: Term | Wildcard | Phrase | Near) -> str:
         """Where `leaf` matches record `i`: `title`, `abstract`, `title+abstract`, or "" for no match."""
         if isinstance(leaf, Near):
             return "title or abstract" if i in ids(leaf) else ""
-        return "+".join(
-            f
-            for f in TEXT_FIELDS
-            if leaf.field in (None, f) and i in ids(leaf.model_copy(update={"field": f}))
-        )
+        found = []
+        for f in TEXT_FIELDS:
+            if leaf.field not in (None, f):
+                continue
+            hit = in_field.get((id(leaf), f))
+            if hit is None or hit[0] is not leaf:
+                hit = in_field[(id(leaf), f)] = (leaf, leaf.model_copy(update={"field": f}))
+            if i in ids(hit[1]):
+                found.append(f)
+        return "+".join(found)
 
     def filters_failed(d: Searchable) -> str:
         failed = [f"{f}={getattr(d, f)}" for f in run.defaults if getattr(d, f) not in DEFAULT_CLAUSES[f]]
@@ -1069,7 +1091,7 @@ def compare_query(
         """The inflected forms that make record `i` match: for each group it fails as run and holds with forms,
         the forms of that group's words the record has. (Every form it has, when no single group explains it:
         the match then comes through Scholar's reading.)"""
-        held = {v for vs in variants.values() for v in vs if i in ids(Term(span=(0, 0), token=v))}
+        held = {v for v, term in form_terms.items() if i in ids(term)}
         named = {
             v
             for g, (exact, loose) in zip(groups, group_ids, strict=True)

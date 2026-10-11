@@ -28,13 +28,17 @@ esac
 
 report=""
 note() { report="${report}${1}"$'\n'; }
+# ruff, prettier and eslint load the installed dependencies, which a Dependabot PR may just have moved: they
+# run without the GitHub credential, as the pre-push hook's make lint does (decision-048, TASK-211)
+ghcfg=$(mktemp -d) && trap 'rm -rf "$ghcfg"' EXIT
+nocred=(env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN "GH_CONFIG_DIR=$ghcfg")
 
 case "$rel" in
   *.py)
     ruff="$root/.venv/bin/ruff"
     if [ -x "$ruff" ]; then
-      (cd "$root" && "$ruff" format --quiet -- "$rel" >/dev/null 2>&1)
-      out=$(cd "$root" && "$ruff" check --fix --quiet -- "$rel" 2>&1) || note "ruff check still fails on $rel:"$'\n'"$out"
+      (cd "$root" && "${nocred[@]}" "$ruff" format --quiet -- "$rel" >/dev/null 2>&1)
+      out=$(cd "$root" && "${nocred[@]}" "$ruff" check --fix --quiet -- "$rel" 2>&1) || note "ruff check still fails on $rel:"$'\n'"$out"
     else
       note "autofix: $root/.venv/bin/ruff not found — skipped ruff for $rel (run: uv sync)."
     fi
@@ -55,10 +59,10 @@ case "$rel" in
         # nested package.json's "prettier" key, names code to run): hand it the tracked one, or none (TASK-067)
         pcfg=$(git -C "$root" ls-files -- 'frontend/.prettierrc*' 'frontend/prettier.config.*' 2>/dev/null | head -1)
         if [ -n "$pcfg" ]; then popt=(--config "$root/$pcfg"); else popt=(--no-config); fi
-        (cd "$root/frontend" && npx --no-install prettier "${popt[@]}" --write -- "$sub" >/dev/null 2>&1)
+        (cd "$root/frontend" && "${nocred[@]}" npx --no-install prettier "${popt[@]}" --write -- "$sub" >/dev/null 2>&1)
         case "$sub" in
           *.ts|*.tsx|*.js|*.jsx)
-            out=$(cd "$root/frontend" && npx --no-install eslint --fix -- "$sub" 2>&1) || note "eslint still fails on $rel:"$'\n'"$out" ;;
+            out=$(cd "$root/frontend" && "${nocred[@]}" npx --no-install eslint --fix -- "$sub" 2>&1) || note "eslint still fails on $rel:"$'\n'"$out" ;;
         esac
       fi
     fi

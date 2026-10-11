@@ -9,7 +9,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "openproceedings", template: "%s · openproceedings" },
-  description: "Exact, reproducible Boolean search over NeurIPS, ICLR and ICML titles and abstracts.",
+  description:
+    "Exact, reproducible Boolean search over NeurIPS, ICLR, ICML, AAAI, AIES and IASEAI titles and abstracts.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -9,7 +9,7 @@ held to the oracle in `tests/unit/engine/test_served_schemas.py` (TASK-167). Tre
 weighted up, and stems at the 200-expansion cap's edge (`cap_records()`, 20 records added to the corpus the
 engines search, 5,020 in all, both parts hash-pinned: `qca*` expands to 199 terms, `qcb*` to 200, `qcc*` to 201
 and is refused; TASK-057). 200 examples per PR (`pr` profile); 50,000 in total in the nightly workflow's own
-`differential` job (`nightly`: 8 independent runs of 6,250, each with its own seed; TASK-057).
+`differential` job (`nightly`: 12 independent runs, eight of 4,167 and four of 4,166, each with its own seed; TASK-057).
 
 Saving a counterexample: every failure message ends with `regression: <the shrunk AST as JSON>`. Add
 `{"ast": <that JSON>, "note": "<what broke>"}` to `differential-regressions.json`, which
@@ -31,7 +31,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.exclusions import ORDER, excluded
-from openproceedings.engine.protocol import FACET_FIELDS, MAX_EXPANSIONS, EngineInputError
+from openproceedings.engine.protocol import MAX_EXPANSIONS, EngineInputError
 from openproceedings.engine.reference import ReferenceEngine, _conjuncts, _own_field
 from openproceedings.engine.tantivy_engine import SORTS, TantivyEngine
 from openproceedings.query.ast import And, Node, Not, Wildcard
@@ -91,7 +91,7 @@ def agree(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     got = frozenset(BACK[i] for i in got)
     only_t, only_r = sorted(got - expected)[:5], sorted(expected - got)[:5]  # type: ignore[operator]
     assert got == expected, f"only in tantivy: {only_t}\nonly in reference: {only_r}\n{q}"
-    assert expected_facets(reference, ast, got) == tantivy.facets(ast), q
+    assert expected_facets(reference, ast, got, tantivy.filter_fields) == tantivy.facets(ast), q
     for sort in SORTS:
         assert tantivy.search(ast, sort=sort, limit=0).total == len(got), (sort, q)
     page = [BACK[i] for i in tantivy.search(ast, sort="year_asc", limit=len(got)).ids]
@@ -100,7 +100,10 @@ def agree(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     parsed = parse(render(ast))
     if parsed.effective_ast is not None:  # a tree the parser accepts: its exclusion counts agree too
         total = len(tantivy.match_ids(parsed.effective_ast))
-        got_json = json.dumps(excluded(tantivy, parsed, total).to_json())  # order-sensitive: spec 04 pins it
+        # every combo field aggregated, as a search with facets counts them (`search.run`'s `over=engine.combo`)
+        got_json = json.dumps(
+            excluded(tantivy, parsed, total, facets=tantivy.facets).to_json()
+        )  # order-sensitive
         expected_json = json.dumps(brute_excluded(reference, parsed, got, ast))
         assert got_json == expected_json, q
         # what a search without facets counts (`search.run`: the default fields only, TASK-166)
@@ -144,13 +147,14 @@ def brute_excluded(
 
 
 def expected_facets(
-    reference: ReferenceEngine, ast: Node, matched: frozenset[str]
+    reference: ReferenceEngine, ast: Node, matched: frozenset[str], fields: tuple[str, ...]
 ) -> dict[str, dict[str, int]]:
-    """The oracle's disjunctive facets. A field with no top-level conjunct of its own is counted over the
-    match set, which is already known; only the others need the oracle's own pass (one per field)."""
+    """The oracle's disjunctive facets over `fields` (the index's). A field with no top-level conjunct of its
+    own is counted over the match set, which is already known; only the others need the oracle's own pass (one
+    per field)."""
     own = {_own_field(c) for c in _conjuncts(ast)}
-    out = reference.facets(ast, tuple(f for f in FACET_FIELDS if f in own))
-    for f in FACET_FIELDS:
+    out = reference.facets(ast, tuple(f for f in fields if f in own))
+    for f in fields:
         if f not in own:
             counts: dict[str, int] = {}
             for i in matched:
@@ -161,16 +165,44 @@ def expected_facets(
 
 
 # The nightly `differential` job splits the profile's examples across parallel jobs (TASK-057): with
-# OP_DIFFERENTIAL_SHARDS=n, each job runs 1/n of them under its own `--hypothesis-seed`.
+# OP_DIFFERENTIAL_SHARDS=n, job OP_DIFFERENTIAL_SHARD=i (0 <= i < n) runs its share under its own
+# `--hypothesis-seed`, and the n shares add up to exactly the profile's examples.
 SHARDS = int(os.environ.get("OP_DIFFERENTIAL_SHARDS", "1"))
+SHARD = int(os.environ.get("OP_DIFFERENTIAL_SHARD", "0"))
 assert SHARDS >= 1, "OP_DIFFERENTIAL_SHARDS is a positive count of jobs"
+assert 0 <= SHARD < SHARDS, "OP_DIFFERENTIAL_SHARD is this job's index, 0 <= i < OP_DIFFERENTIAL_SHARDS"
+
+
+def shard_examples(total: int, shards: int, index: int) -> int:
+    """Shard `index`'s share of `total` examples: the quotient, plus one for each of the first `total % shards`
+    shards, so the shares add up to `total` exactly."""
+    return total // shards + (index < total % shards)
+
+
+EXAMPLES = max(1, shard_examples(settings().max_examples, SHARDS, SHARD))
 
 
 # the oracle over 5k records, every sort and the facets per example: no per-example deadline
-@settings(deadline=None, max_examples=max(1, settings().max_examples // SHARDS))
+@settings(deadline=None, max_examples=EXAMPLES)
+# every filter field is drawn, but the 5k corpus holds no `openalex` record (NeurIPS, ICLR and ICML only), so
+# `abstract_kind:openalex` is always empty here; every kind meets the oracle in `test_abstract_kind_index.py`
 @given(ast=engine_asts(cap_vocab()))
 def test_tantivy_agrees_with_the_oracle(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     agree(engines, ast)
+
+
+def test_the_shards_cover_exactly_the_profiles_examples() -> None:
+    """The nightly shards run exactly the profile's total between them (50,000, not 12 x 4,166 = 49,992), the
+    remainder one each to the first shards, so no two differ by more than one; and this job runs its share."""
+    for total in (1, 11, 200, 2_000, 50_000):
+        for shards in range(1, 14):
+            sizes = [shard_examples(total, shards, i) for i in range(shards)]
+            assert sum(sizes) == total and max(sizes) - min(sizes) <= 1, (total, shards, sizes)
+            assert sizes == sorted(sizes, reverse=True)
+    assert [shard_examples(50_000, 12, i) for i in (0, 7, 8, 11)] == [4_167, 4_167, 4_166, 4_166]
+    assert max(1, shard_examples(settings().max_examples, SHARDS, SHARD)) == EXAMPLES
+    for prop in (test_tantivy_agrees_with_the_oracle, test_group_counts_agree_with_the_oracle):
+        assert prop._hypothesis_internal_use_settings.max_examples == EXAMPLES, prop.__name__  # type: ignore[attr-defined]
 
 
 def test_saved_regressions_still_agree(engines: tuple[ReferenceEngine, TantivyEngine]) -> None:
@@ -193,17 +225,20 @@ def test_the_cap_stems_sit_at_the_cap(engines: tuple[ReferenceEngine, TantivyEng
 
 
 def test_the_corpus_covers_every_filter_combination() -> None:
-    from openproceedings.vocab import STATUSES, TRACKS
+    from openproceedings.vocab import STATUSES
 
-    from tests.fixtures.corpus.synthetic_5k import VENUES, YEARS
+    # the corpus's own pinned track tuple, not vocab.TRACKS (which has grown since the corpus was pinned)
+    from tests.fixtures.corpus.synthetic_5k import TRACKS, VENUES, YEARS
 
     corpus_5k = records()
     seen = {(r.venue, r.year, r.track, r.status) for r in corpus_5k}
 
     def digest(rs: tuple[Rec, ...]) -> str:
-        return hashlib.sha256(
-            json.dumps([dataclasses.asdict(r) for r in rs], ensure_ascii=False).encode()
-        ).hexdigest()
+        # `abstract_kind` is derived from the abstract here (`Rec`), so it is left out: the hash pins the
+        # records as generated, and stays what it was before the field existed
+        assert all(r.abstract_kind == ("none" if r.abstract is None else "official") for r in rs)
+        rows = [{k: v for k, v in dataclasses.asdict(r).items() if k != "abstract_kind"} for r in rs]
+        return hashlib.sha256(json.dumps(rows, ensure_ascii=False).encode()).hexdigest()
 
     # pinned: a change here (to the generator, the golden fixture's n-grams, normalize() or the cap records) is
     # deliberate, and saved regressions must be re-checked against the new corpus
@@ -227,7 +262,7 @@ def grouped_asts(draw: st.DrawFn) -> Node:
 
 
 # up to nine trees through the oracle per example: no per-example deadline; sharded as the agreement property
-@settings(deadline=None, max_examples=max(1, settings().max_examples // SHARDS))
+@settings(deadline=None, max_examples=EXAMPLES)
 @given(tree=grouped_asts())
 def test_group_counts_agree_with_the_oracle(
     engines: tuple[ReferenceEngine, TantivyEngine], tree: Node

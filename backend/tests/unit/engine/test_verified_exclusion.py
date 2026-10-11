@@ -4,8 +4,8 @@ superset of the verified ids, so either form matches exactly the verified ids, a
 where the term set added 0.0: the scores are the same floats. Tantivy re-resolves an id term set on every
 search, so a clause most of whose candidates hold it was the warm search's main cost (`main-2-pop`).
 
-Every case runs on both served schemas (TASK-167): a schema-3 index names the ids as a u64 term set on `ord`
-(`TantivyEngine.id_set`), a schema-2 one as a term set on the text `id`, with the same matches and scores."""
+Every case runs on each served schema; a verified clause names its ids as a u64 term set on `ord`
+(`TantivyEngine.id_set`, TASK-167)."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from openproceedings.query.parser import parse
 from tests.corpus import Rec
 from tests.fixtures.corpus.synthetic_5k import records, vocab
 from tests.golden.test_tantivy_200 import as_paper
-from tests.strategies import engine_asts
+from tests.strategies import SCHEMA_3_FIELDS, engine_asts
 from tests.unit.engine.test_exclusions import tantivy_of
 
 TEXTS = {
@@ -41,9 +41,7 @@ CORPUS = [
 
 @pytest.fixture(scope="module", params=list(SERVED_SCHEMAS))
 def small(tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest) -> TantivyEngine:
-    engine = tantivy_of(CORPUS, tmp_path_factory.mktemp("exclusion"), request.param)
-    assert engine.ord_indexed == (request.param != "2")
-    return engine
+    return tantivy_of(CORPUS, tmp_path_factory.mktemp("exclusion"), request.param)
 
 
 @pytest.fixture(scope="module", params=list(SERVED_SCHEMAS))
@@ -131,7 +129,7 @@ def collected(engine: TantivyEngine, ast: Node, *, members: bool) -> list[tuple[
 
 # every tree the differential suite draws, on the 5k corpus: the same ids and the same float scores either way
 @settings(deadline=None)
-@given(engine_asts(vocab()))
+@given(engine_asts(vocab(), SCHEMA_3_FIELDS))  # a schema-3 index refuses `abstract_kind:`
 def test_generated_trees_match_and_score_the_same_either_way(synthetic: TantivyEngine, ast: Node) -> None:
     try:
         expected = collected(synthetic, ast, members=False)

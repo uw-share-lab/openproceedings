@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import hashlib
 import re
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, unquote, urlencode, urlparse, urlunparse
 
+from openproceedings.ingest import acm_table
+from openproceedings.ingest import volumes as _volumes
 from openproceedings.ingest.classify import NEURIPS_DB_2021_HOST, NEURIPS_DB_2021_ROUNDS
+from openproceedings.ingest.ojs_table import TABLE as OJS_TABLE
 from openproceedings.ingest.record import FORUM_ID
-from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
 _PROCEEDINGS_HOSTS = {
     "proceedings.neurips.cc": "NeurIPS",
@@ -104,13 +106,90 @@ def names_native(url: str, native_id: str) -> bool:
 
 
 def native(url: str) -> str | None:
-    """The proceedings native id a URL names (`proceedings_native`, or `pmlr-v<N>-<key>` for an ICML
-    volume), or None."""
+    """The proceedings native id a URL names (`proceedings_native`, `pmlr-v<N>-<key>` for an ingested PMLR volume (ICML, FAccT 2018),
+    `dblp-<key>` for an ICML or AAAI (1980-2008) record's dblp page, `ojs-<id>` for an ojs.aaai.org article, or
+    `doi-<toc>.<n>` for a listed ACM paper's doi.org link), or None."""
     if proceedings(url) is not None:
         return proceedings_native(url)
-    if (q := pmlr(url)) is not None and q[0] in ICML_PMLR_VOLUMES:
+    if (q := pmlr(url)) is not None and q[0] in _volumes.PMLR_NATIVE_VOLUMES:
         return f"pmlr-v{q[0]}-{q[1]}"
+    if (key := dblp_icml(url)) is not None:
+        return f"dblp-{key}"
+    if (key := dblp_aaai(url)) is not None:
+        return f"dblp-{key}"
+    if (article := ojs_article(url)) is not None:
+        return f"ojs-{article}"
+    if (doi := acm_doi(url)) is not None:
+        return "doi-" + doi.split("/", 1)[1]
     return None
+
+
+_DOI_HOSTS = frozenset({"doi.org", "dx.doi.org"})
+
+
+def acm_doi(url: str) -> str | None:
+    """The ACM paper DOI a doi.org link names (`10.1145/<toc>.<n>`, lower-case), when its proceedings are a row of
+    acm_proceedings.toml (FAccT, AIES; decision-049), else None. Only doi.org: the DOI is the paper's name."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.netloc.lower() not in _DOI_HOSTS:
+        return None
+    doi = unquote(parsed.path.removeprefix("/"))
+    if doi != doi.strip():
+        return None
+    doi = doi.lower()
+    parts = acm_table.paper_doi(doi)
+    if parts is None or acm_table.TABLE.by_toc(parts[0]) is None:
+        return None
+    return doi
+
+
+_OJS_HOST = "ojs.aaai.org"
+# the journals are the table's (`ojs_sections.toml`), so a journal added there is a journal whose URLs name articles
+_OJS_PATH = re.compile(
+    r"/index\.php/(?:" + "|".join(map(re.escape, sorted(OJS_TABLE.journals))) + r")/article/view/([0-9]+)"
+    r"(?:/[0-9]+)?/?"
+)
+
+
+def ojs_article(url: str) -> int | None:
+    """The article id of an ojs.aaai.org article or galley URL (AAAI, AIES, IASEAI; decision-049), or None. The
+    URL's journal is deliberately not matched to a record's venue: article ids are unique across the site's
+    journals, so the id alone names the paper (a record's self-naming check compares ids)."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.netloc.lower() != _OJS_HOST:
+        return None
+    m = _OJS_PATH.fullmatch(parsed.path)
+    return int(m.group(1)) if m else None
+
+
+_DBLP_REC = re.compile(r"/rec/conf/icml/([A-Za-z0-9_-]+)(?:\.html)?")
+
+
+def dblp_record_url(key: str) -> str:
+    """The dblp page of a record (`https://dblp.org/rec/conf/icml/<key>`): a link for people and the dblp
+    records' `urls.proceedings` (sources/dblp.py), never fetched (dblp.org forbids crawling; decision-047)."""
+    return f"https://dblp.org/rec/{key}"
+
+
+def dblp_icml(url: str) -> str | None:
+    """The key after `conf/icml/` of a dblp record page URL (any scheme and host case, `dblp.org`), or None."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.netloc.lower() != "dblp.org":
+        return None
+    m = _DBLP_REC.fullmatch(parsed.path)
+    return m.group(1) if m else None
+
+
+_DBLP_REC_AAAI = re.compile(r"/rec/conf/aaai/([A-Za-z0-9_-]+)(?:\.html)?")
+
+
+def dblp_aaai(url: str) -> str | None:
+    """The key after `conf/aaai/` of a dblp record page URL (AAAI 1980-2008; decision-049), or None."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.netloc.lower() != "dblp.org":
+        return None
+    m = _DBLP_REC_AAAI.fullmatch(parsed.path)
+    return m.group(1) if m else None
 
 
 def forum_id(url: str) -> str | None:

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { json, renderWithApi, type Call, type Handler } from "@/test/api-stub";
-import { copy, RECORDS, type RecordCase } from "@/test/record-fixture";
+import { copy, DRIFT, RECORDS, type RecordCase } from "@/test/record-fixture";
 import { methodsText, type RecordResponse } from "@/lib/methods-text";
 import { RecordView, windowRow } from "./record-view";
 
@@ -63,11 +63,41 @@ function api(c: RecordCase, replay: Response | ((call: Call) => Response) = json
         added_total: 2,
         removed_total: 1,
         added: [
-          { id: "op:iclr:2024:new1", title: "A new paper" },
-          { id: "op:iclr:2024:new2", title: null },
+          {
+            id: "op:iclr:2024:new1",
+            title: "A new paper",
+            track: "main",
+            status: "accepted",
+            cause: null,
+            failed_filter: null,
+          },
+          {
+            id: "op:iclr:2024:new2",
+            title: null,
+            track: null,
+            status: null,
+            cause: null,
+            failed_filter: null,
+          },
         ],
-        removed: [{ id: "op:iclr:2023:old1", title: "An old paper" }],
+        removed: [
+          {
+            id: "op:iclr:2023:old1",
+            title: "An old paper",
+            track: "main",
+            status: "accepted",
+            cause: "still_eligible",
+            failed_filter: null,
+          },
+        ],
         membership_identical: false,
+        removed_causes: {
+          track_changed: 0,
+          status_changed: 0,
+          filter_changed: 0,
+          not_in_index: 0,
+          still_eligible: 1,
+        },
         verified_clauses: 0,
       });
     }
@@ -263,6 +293,79 @@ describe("drifted (design R2, R5)", () => {
     expect(screen.getByText(/\(not in index/)).toBeTruthy();
     const diff = calls.find((x) => x.path.endsWith("/diff"));
     expect(diff?.query.get("limit")).toBe("50");
+  });
+
+  /** Renders the drift case (its `/diff` as given) and opens the diff; the Removed region. */
+  async function openDrift(c: typeof DRIFT) {
+    const handler = api(c);
+    renderWithApi(<RecordView id={c.stored.record.record_id} />, (call) =>
+      call.path.endsWith("/diff") ? json(c.diff) : handler(call),
+    );
+    const n = c.diff.removed_total ?? 0;
+    fireEvent.click(
+      await screen.findByRole("button", { name: new RegExp(`See the 0 added and ${n} removed papers`) }),
+    );
+    return screen.findByRole("region", { name: `Removed (${n})` });
+  }
+
+  /** The list item of the drift case's first removed paper with `cause`. */
+  function itemOf(region: HTMLElement, c: typeof DRIFT, cause: string): HTMLElement {
+    const e = c.diff.removed.find((x) => x.cause === cause);
+    if (e === undefined) throw new Error(`no ${cause} paper in the fixture`);
+    const item = within(region).getAllByRole("listitem")[c.diff.removed.indexOf(e)];
+    if (item === undefined) throw new Error(`no list item for the ${cause} paper`);
+    return item;
+  }
+
+  it("says why each removed paper left, and tallies the causes over the whole list (TASK-227)", async () => {
+    const c = copy(DRIFT);
+    const removed = await openDrift(c);
+    const t = c.diff.removed_causes;
+    if (t === null) throw new Error("the fixture's diff has no causes");
+    const n = c.diff.removed_total;
+    expect(within(removed).getByText(/^Removed papers by cause/).textContent).toBe(
+      `Removed papers by cause (${n} in all): ${t.track_changed} moved to a track this search doesn't include · ` +
+        `${t.status_changed} with a status this search doesn't include · ${t.filter_changed} failing another ` +
+        `of its filters · ${t.not_in_index} no longer in the index · ${t.still_eligible} no longer matching the query.`,
+    );
+    const moved = itemOf(removed, c, "track_changed");
+    expect(within(moved).getByRole("link").getAttribute("href")).toMatch(/^\/paper\//);
+    expect(moved.textContent).toMatch(/ — moved to the IAAI track \(not in this search's tracks\)$/);
+    expect(itemOf(removed, c, "status_changed").textContent).toMatch(
+      / — its status is now withdrawn \(not in this search's statuses\)$/,
+    );
+    const gone = itemOf(removed, c, "not_in_index");
+    expect(within(gone).queryByRole("link")).toBeNull();
+    expect(gone.textContent).toBe(
+      `${c.diff.removed.find((x) => x.cause === "not_in_index")?.id} — no longer in index ${c.diff.index_version} ` +
+        "(left the corpus, or now counted as not a paper)",
+    );
+    expect(itemOf(removed, c, "still_eligible").textContent).toMatch(
+      / — no longer matches the query \(its title, abstract or details changed\)$/,
+    );
+  });
+
+  it("names a track by the value the reader types when it has no short form", async () => {
+    const c = copy(DRIFT);
+    const moved = c.diff.removed.find((x) => x.cause === "track_changed");
+    if (moved === undefined) throw new Error("no track_changed paper in the fixture");
+    Object.assign(moved, { track: "student_abstract" });
+    await openDrift(c);
+    expect(await screen.findByText(/moved to the student_abstract track/)).toBeTruthy();
+  });
+
+  it("names the filter a paper now fails, and a status in words", async () => {
+    const c = copy(DRIFT);
+    const reworded = c.diff.removed.find((x) => x.cause === "still_eligible");
+    const withdrawn = c.diff.removed.find((x) => x.cause === "status_changed");
+    if (reworded === undefined || withdrawn === undefined) throw new Error("the fixture lacks a cause");
+    Object.assign(reworded, { cause: "filter_changed", failed_filter: "abstract_kind" });
+    Object.assign(withdrawn, { status: "desk_rejected" });
+    const removed = await openDrift(c);
+    expect(itemOf(removed, c, "filter_changed").textContent).toMatch(
+      / — no longer passes this search's abstract_kind: filter$/,
+    );
+    expect(itemOf(removed, c, "status_changed").textContent).toMatch(/ — its status is now desk rejected \(/);
   });
 
   it("says membership-identical on +0 / −0", async () => {

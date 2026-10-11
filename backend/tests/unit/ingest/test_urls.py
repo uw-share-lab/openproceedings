@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from openproceedings.ingest import urls
+from openproceedings.ingest import acm_table, urls, volumes
 from openproceedings.ingest.record import PaperRecord
+
+from tests.unit.ingest.crossref import api
 
 H = "0336dcbab05b9d5ad24f4333c7658a0e"
 DB = "https://datasets-benchmarks-proceedings.neurips.cc"
@@ -66,3 +68,92 @@ def check_native(native: str, ok: bool, year: int) -> None:
     else:
         with pytest.raises(ValueError, match="not a valid"):
             build()
+
+
+@pytest.mark.parametrize(
+    ("url", "key"),
+    [
+        ("https://dblp.org/rec/conf/icml/SzitaL09", "SzitaL09"),
+        ("http://dblp.org/rec/conf/icml/SzitaL09.html", "SzitaL09"),
+        ("https://DBLP.org/rec/conf/icml/Ng04", "Ng04"),
+        ("https://dblp.uni-trier.de/rec/conf/icml/SzitaL09", None),  # another host: no dblp key
+        ("https://example.org/rec/conf/icml/SzitaL09", None),
+        ("https://dblp.org/rec/conf/nips/SzitaL09", None),  # not the ICML stream
+        ("https://dblp.org/rec/conf/icml/bad key", None),
+        ("ftp://dblp.org/rec/conf/icml/SzitaL09", None),
+    ],
+)
+def test_a_dblp_record_page_names_its_icml_key(url: str, key: str | None) -> None:
+    """decision-047: a dblp record's `urls.proceedings` is its dblp page, which `urls.native` reads back as
+    `dblp-<key>` (dedup's proceedings-id check); only dblp.org's ICML pages name one."""
+    assert urls.dblp_icml(url) == key
+    assert urls.native(url) == (f"dblp-{key}" if key else None)
+    assert urls.dblp_record_url("conf/icml/SzitaL09") == "https://dblp.org/rec/conf/icml/SzitaL09"
+
+
+@pytest.mark.parametrize(
+    ("url", "article"),
+    [
+        ("https://ojs.aaai.org/index.php/AAAI/article/view/28000", 28000),
+        ("https://OJS.aaai.org/index.php/AIES/article/view/31600/33767", 31600),
+        ("http://ojs.aaai.org/index.php/IASEAI/article/view/43010?x=1", 43010),
+        ("https://ojs.aaai.org/index.php/AAAI/article/view/28000/", 28000),
+        ("https://ojs.aaai.org/index.php/AAAI/article/view/28000/35000/", 28000),
+        ("https://ojs.aaai.org/index.php/AAAI/issue/view/741", None),
+        ("https://example.org/index.php/AAAI/article/view/1", None),
+    ],
+)
+def test_ojs_article(url: str, article: int | None) -> None:
+    assert urls.ojs_article(url) == article
+    assert urls.native(url) == (None if article is None else f"ojs-{article}")
+
+
+def test_ojs_article_names_exactly_the_tables_journals() -> None:
+    """The URL pattern's journals are the table's: a journal added to `ojs_sections.toml` names its articles."""
+    from openproceedings.ingest import ojs_table
+
+    for journal in ojs_table.TABLE.journals:
+        assert urls.ojs_article(f"https://ojs.aaai.org/index.php/{journal}/article/view/7") == 7
+    assert (
+        urls.ojs_article("https://ojs.aaai.org/index.php/AIMAG/article/view/7") is None
+    )  # not a table journal
+
+
+@pytest.mark.parametrize(("url", "key"), [("https://dblp.org/rec/conf/aaai/Smith90", "Smith90"),
+    ("http://DBLP.org/rec/conf/aaai/Smith90.html", "Smith90"), ("https://dblp.org/rec/conf/icml/Smith90", None),
+    ("https://dblp.org/rec/conf/aaai/2006w", "2006w"), ("https://example.org/rec/conf/aaai/Smith90", None)])  # fmt: skip
+def test_dblp_aaai(url: str, key: str | None) -> None:
+    assert urls.dblp_aaai(url) == key
+
+
+def test_native_reads_an_aaai_dblp_page() -> None:
+    assert urls.native("https://dblp.org/rec/conf/aaai/Smith90") == "dblp-Smith90"
+
+
+def test_native_names_a_facct_v81_paper_only_while_the_table_has_the_volume(monkeypatch) -> None:
+    url = "https://proceedings.mlr.press/v81/one18a.html"
+    assert urls.native(url) == "pmlr-v81-one18a"  # the shipped table has v81 (census of 2026-10-10)
+    monkeypatch.setattr(
+        volumes, "PMLR_NATIVE_VOLUMES", {k: v for k, v in volumes.PMLR_NATIVE_VOLUMES.items() if k != 81}
+    )
+    assert urls.native(url) is None
+
+
+@pytest.fixture
+def acm(monkeypatch):
+    monkeypatch.setattr(acm_table, "TABLE", acm_table.load(api.TABLE_TEXT))
+
+
+@pytest.mark.parametrize("url", ["https://doi.org/10.1145/3593013.3594011", "http://dx.doi.org/10.1145/3593013.3594011",
+    "https://DOI.org/10.1145/3593013.3594011", "https://doi.org/10.1145%2F3593013.3594011",
+    "https://doi.org/10.1145/3593013.3594011?ref=x"])  # fmt: skip
+def test_a_listed_acm_paper_doi_link_names_its_doi_id(acm, url: str) -> None:
+    assert urls.native(url) == "doi-3593013.3594011"
+
+
+@pytest.mark.parametrize("url", ["https://doi.org/10.1145/3593013.3594011a", "https://doi.org/10.1145/3593013.3594011/x",
+    "https://doi.org/10.1145/3593013.359%204011", "https://doi.org/10.1145/3593013.3594011%0A",
+    "https://doi.org/10.1145/9999999.1", "https://doi.org/10.1145/3593013", "https://dl.acm.org/doi/10.1145/3593013.3594011",
+    "https://example.org/10.1145/3593013.3594011"])  # fmt: skip
+def test_a_link_that_is_not_a_listed_acm_paper_names_nothing(acm, url: str) -> None:
+    assert urls.native(url) is None

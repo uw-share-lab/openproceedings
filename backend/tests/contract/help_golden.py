@@ -17,19 +17,21 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from openproceedings.api.config import ApiConfig
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.engine.protocol import MAX_EXPANSIONS, EngineInputError
 from openproceedings.engine.reference import ReferenceEngine
+from openproceedings.engine.tantivy_engine import BASE_COMBO, TantivyEngine
 from openproceedings.query.ast import MAX_YEAR, MIN_YEAR, Wildcard
 from openproceedings.query.clauses import MAX_YEAR_RANGES
 from openproceedings.query.defaults import DEFAULT_CLAUSES
 from openproceedings.query.lexer import MAX_NEAR, MIN_STEM
 from openproceedings.query.normalize import normalize
 from openproceedings.query.parser import MAX_DEPTH, MAX_QUERY_LENGTH, Mode, parse
-from openproceedings.vocab import STATUSES, TEXT_FIELDS, TRACKS, VENUES
+from openproceedings.vocab import ABSTRACT_KINDS, STATUSES, TEXT_FIELDS, TRACKS, VENUES
 
 from tests.golden.test_tokens import GOLDEN as TOKEN_GOLDEN
 
@@ -83,6 +85,7 @@ SECTIONS: dict[str, tuple[tuple[str, Mode], ...]] = {
         ("trust year:(2020 OR 2024..2026)", "native"),
         ("trust track:(main OR workshop)", "native"),
         ("trust status:(accepted OR withdrawn)", "native"),
+        ("trust abstract_kind:official", "native"),
         ("trust NOT venue:ICML", "native"),
     ),
     "defaults": (
@@ -138,6 +141,7 @@ MESSAGES: tuple[tuple[DiagnosticCode, str, Mode, str | None, str | None], ...] =
         None,
     ),
     (DiagnosticCode.FIELD_COMPAT_ONLY, "trust source:PMLR", "native", "trust venue:ICML", None),
+    (DiagnosticCode.FIELD_NOT_INDEXED, "trust abstract_kind:openalex", "native", "trust", None),
     (DiagnosticCode.WARN_LOWERCASE_OPERATOR, "trust or reliance", "native", "trust OR reliance", None),
     (DiagnosticCode.WARN_MIXED_AND_OR, "trust AND LLM OR agent", "native", "trust AND (LLM OR agent)", None),
     (
@@ -166,7 +170,14 @@ NOTES = {
     DiagnosticCode.WILDCARD_TOO_MANY_EXPANSIONS: (
         "The count in the message is the index's own; this one comes from a small example index."
     ),
+    DiagnosticCode.FIELD_NOT_INDEXED: (
+        "The message names the index the search ran on; this one names an example index. Only an older index, "
+        "pinned by a saved search, lacks the field."
+    ),
 }
+# the codes whose message comes from the engine, not from `POST /parse` (each has a builder below)
+ENGINE_CODES = frozenset({DiagnosticCode.WILDCARD_TOO_MANY_EXPANSIONS, DiagnosticCode.FIELD_NOT_INDEXED})
+EXAMPLE_INDEX = "0123456789ab"  # the index version a FIELD_NOT_INDEXED example names
 # the two API codes a reader meets as a refused query: explained together, in the slow-clauses section
 SLOW_CLAUSES = (DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES, DiagnosticCode.API_QUERY_TOO_COSTLY)
 READER_PREFIXES = ("PARSE_", "FIELD_", "WILDCARD_", "WARN_", "COMPAT_")
@@ -185,6 +196,7 @@ class _Doc:
     def __init__(self, i: int, title: str) -> None:
         self.id, self.title, self.abstract = f"d{i}", title, None
         self.venue, self.year, self.track, self.status = "ICLR", 2024, "main", "accepted"
+        self.abstract_kind = "none"
 
 
 def _too_many(example: str) -> Diagnostic:
@@ -202,9 +214,24 @@ def _too_many(example: str) -> Diagnostic:
     raise AssertionError(f"{example} expanded within the cap")
 
 
+def _not_indexed(example: str) -> Diagnostic:
+    """The engine's refusal of a filter field the index's schema doesn't hold: `TantivyEngine.admit` itself, run
+    for a schema-3 index (its fields, an example version), so no index is built for one message."""
+    result = parse(example)
+    assert result.effective_ast is not None, example
+    index = SimpleNamespace(filter_fields=BASE_COMBO, index_version=EXAMPLE_INDEX, schema_version="3")
+    try:
+        TantivyEngine.admit(index, result.effective_ast)  # type: ignore[arg-type]
+    except EngineInputError as e:  # the registry code and message the API's 422 carries
+        return Diagnostic(code=e.code, message=e.message)
+    raise AssertionError(f"{example} was admitted by a schema-3 index")
+
+
 def _diagnostic(code: DiagnosticCode, example: str, mode: Mode) -> Diagnostic:
     if code is DiagnosticCode.WILDCARD_TOO_MANY_EXPANSIONS:
         return _too_many(example)
+    if code is DiagnosticCode.FIELD_NOT_INDEXED:
+        return _not_indexed(example)
     result = parse(example, mode)
     found = [d for d in (*result.errors, *result.warnings, *result.translations) if d.code is code]
     assert found, (
@@ -287,7 +314,13 @@ def build() -> dict[str, Any]:
             "max_counted_ids": config["max_counted_ids"].default,
         },
         "text_fields": list(TEXT_FIELDS),
-        "values": {"venue": list(VENUES.values()), "track": list(TRACKS), "status": list(STATUSES)},
+        "values": {
+            "venue": list(VENUES.values()),
+            "track": list(TRACKS),
+            "status": list(STATUSES),
+            "abstract_kind": list(ABSTRACT_KINDS),
+        },
+        "track_expansions": dict(TRACK_EXPANSIONS),
         "defaults": [
             {"field": field, "values": list(values), "canonical": _clause(field, values)}
             for field, values in DEFAULT_CLAUSES.items()
@@ -300,6 +333,14 @@ def build() -> dict[str, Any]:
         "messages": messages,
         "slow_clauses": [c.value for c in SLOW_CLAUSES],
     }
+
+
+# Track values whose acronym the help page spells out beside the value (TASK-223). The frontend's track badge
+# (`paper-badges.tsx`) uses the same words; a frontend test holds the two together.
+TRACK_EXPANSIONS: dict[str, str] = {
+    "iaai": "Innovative Applications of Artificial Intelligence",
+    "eaai": "Educational Advances in Artificial Intelligence",
+}
 
 
 def _clause(field: str, values: tuple[str, ...]) -> str:

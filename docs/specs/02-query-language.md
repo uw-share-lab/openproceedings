@@ -236,11 +236,12 @@ Rules:
 |---|---|---|
 | (none) | text | title OR abstract |
 | `title:` / `abstract:` | text | that field only |
-| `venue:` | filter | `NeurIPS`, `ICLR`, `ICML`. Case-insensitive, exact. |
+| `venue:` | filter | `NeurIPS`, `ICLR`, `ICML`, `AAAI`, `AIES`, `FAccT`, `IASEAI` (`vocab.VENUES`; decision-049). Case-insensitive, exact. A venue with no records yet is a valid value that matches nothing. |
 | `year:` | filter | `2024`, `2020..2026` (inclusive) |
-| `track:` | filter | 01 taxonomy (`main`, `datasets_benchmarks`, `workshop`, …). `datasets_benchmarks` includes NeurIPS 2026's renamed `Evaluations_and_Datasets_Track`, and `position` includes the NeurIPS and ICML position-paper tracks (TASK-094) |
+| `track:` | filter | 01 taxonomy (`main`, `datasets_benchmarks`, `workshop`, `student_abstract`, `consortium`, `demo`, `iaai`, `eaai`, …; the last two are AAAI-only). `datasets_benchmarks` includes NeurIPS 2026's renamed `Evaluations_and_Datasets_Track`, and `position` includes the NeurIPS and ICML position-paper tracks (TASK-094) |
 | `status:` | filter | `accepted`, `rejected`, `withdrawn`, … |
-| `source:` | compat | Scholar-style. Mapped to `venue:` through an alias table ("neural information processing systems", "PMLR" → ICML *with a warning* because PMLR hosts other venues). Unknown values are errors, never silent substrings. |
+| `abstract_kind:` | filter | `official`, `openalex`, `none` (`vocab.ABSTRACT_KINDS`; decision-049, milestone C): where a record's abstract came from (01 §Record schema, `abstract_kind`). Case-insensitive, exact. **No default**: a query without it counts every value. A filter and never text, so `abstract_kind:openalex` matches the kind, not a paper that says "openalex" (guarantee 2). The index must hold it: an index of schema 4 does, one of schema 3 does not, and a query naming it on a schema-3 index is refused with `FIELD_NOT_INDEXED` (HTTP 422) by every route that runs the query (`/search`, `/export`, `/records`, `/compare`, `GET /papers/{id}?q=`); `/parse` is engine-free and accepts it. It keeps or drops **whole papers**: `abstract_kind:official` drops a paper whose abstract is OpenAlex's even when its title matches (`(term abstract_kind:official) OR title:term` keeps those). The filter reads the kind the index was built with, so a takedown listed after the build changes the hit's shown kind (`none`) but not which searches match it, until the next build (04 §SearchResponse). |
+| `source:` | compat | Scholar-style. Mapped to `venue:` through an alias table ("neural information processing systems", "PMLR" → ICML *with a warning* because PMLR hosts other venues). Unknown values are errors, never silent substrings. The AAAI, AIES and IASEAI aliases are `aaai` and "association for the advancement of artificial intelligence" → AAAI, `aies` → AIES, `facct` → FAccT and `iaseai` → IASEAI; there is no `fat*` alias (the token contract reads `FAT*` as a wildcard stem). |
 
 ### Default filters
 
@@ -254,8 +255,28 @@ The UI toggles edit these same clauses; they are not a separate state.
   its own exclusion bucket (03 §Exclusion accounting). Those buckets are complete for ICLR, which
   publishes every submission, and a floor for NeurIPS and ICML, which publish rejected papers only when
   the authors opt in (01 §Status handling). `status:(accepted OR rejected)` or removing the default brings
-  them into the result set. The index covers every year from 2013 (decision-013); a year range is always
-  a `year:` clause the user writes, never a default.
+  them into the result set. The index covers each venue from its first year a source holds: NeurIPS from 1987, ICML from 1988,
+  ICLR from 2013, AAAI from 1980, AIES and FAccT from 2018, IASEAI from 2026 (decisions 047 and 049; 047 superseded decision-013's 2013 floor); a year range is always a `year:`
+  clause the user writes, never a default. Before 2013 only NeurIPS, ICML and AAAI are indexed, so a search without
+  a `year:` clause compares venues over different year spans (AAAI from 1980, AIES and FAccT from 2018 and IASEAI 2026;
+  the [new-venues design](../plans/2026-10-09-new-venues-design.md)).
+- **The tracks AAAI, AIES and IASEAI add are excluded by default** (decision-049, owner decision of 2026-10-09). The
+  default is unchanged, so `student_abstract`, `consortium`, `demo`, `iaai`, `eaai` and an AAAI `other` section are
+  not in a default result: each is indexed with its real track, and the exclusion accounting counts it in its
+  `track` bucket, as it counts `workshop`, `competition` and `tiny_papers`. One `track:` clause brings them back
+  (`track:(main OR iaai)`), and saved searches' canonical strings are unaffected. AAAI's special tracks, Journal
+  Track and AIES's and IASEAI's main papers are `main`, so a default search includes them. **AIES by era:**
+  2018–2023 comes from Crossref, which labels no section, so its student abstracts are `student_abstract` by a page
+  range per year and its keynotes are counted, not indexed (TASK-224, inferred from page position), and 2024–2025's
+  student abstracts are `student_abstract` by their OJS section: a default search excludes both eras' alike
+  (spec 01 `main` and `student_abstract` rows). AAAI 1993–2008's student abstracts, doctoral consortium,
+  demonstrations, IAAI papers and robot abstracts likewise take their tracks from the official contents (TASK-226). For these venues `main`
+  is the section mapping of `ingest/ojs_sections.toml` (technical, special and Journal tracks), not a track the
+  venue itself names, and four AAAI sections (NECTAR, What's Hot, Sister Conference, Spotlight) stay `other` by the owner's decision of 2026-10-10 (TASK-218; Short Papers 2010 is `main`; the research note has the table): a report
+  of a default AAAI search lists the excluded tracks with their counts (the `track` buckets are the records
+  removed before screening by automation, 03) and names the snapshot hash, which fixes that mapping. `track:iaai`
+  or `track:eaai` with any venue but AAAI (`venue:ICML track:eaai`) is valid and matches nothing: the two tracks
+  are AAAI-only, and the exclusion counts show 0.
 
 - **A default is recognised by its content, not by where it came from.** A top-level AND conjunct that
   exactly equals a default clause is treated as the automated default, whether the parser inserted it,
@@ -292,7 +313,8 @@ is `query/clauses.py::filter_clauses(q, parse(q, mode))`, a separate function ra
 field, because it parses the edited string, which `/search` and replay don't need.
 
 ```python
-ParsedFilters = {venue: ParsedClause, year: ParsedYearClause, track: ParsedClause, status: ParsedClause}
+ParsedFilters = {venue: ParsedClause, year: ParsedYearClause, track: ParsedClause, status: ParsedClause,
+                 abstract_kind: ParsedClause}
 ParsedClause  = {field, negated: bool, span: [start, end] | None, toggleable: bool,
                  reason: ClauseReason | None, blocking_spans: [[start, end]],
                  values: [str] | None}                                       # sorted
@@ -343,9 +365,9 @@ toggleable if the edited `q` does not end with exactly that one top-level clause
 and not the value clicked. Every field with no clause is checked by one parse that writes them all out at
 once, and each alone only when that edit can't be made (the answer is the per-field one; a property test
 compares them); a typed clause costs one parse of its own. So `/parse` adds one parse for a query with no
-typed clause, and at most five (`test_clauses.py` counts them), so the worst case, short words near the
-cap where the combined wrap is too long to write at once and each field is checked alone, is about six
-parses of `q`.
+typed clause, and at most six, one more than the five filter fields (`test_clauses.py` counts them), so the
+worst case, short words near the cap where the combined wrap is too long to write at once and each field is
+checked alone, is about seven parses of `q`.
 
 **Year edits** (TASK-092). The year control's actions (set a range, clear, add a range, remove a range) write
 the whole year clause from the reported `ranges`: sorted, with overlapping or adjacent ranges joined as the
@@ -489,7 +511,7 @@ ParseResult = {               # `query/parser.py`; every Optional below is None 
   ast: Node | None,            # the tree as typed (spans into q): Or, And, Not, Term, Phrase, Near, Wildcard, Filter
   effective_ast: Node | None,  # canonical tree with the default filters: what the engine runs
   canonical: str | None,       # render(effective_ast): fully parenthesised, uppercase operators, defaults
-                               #   explicit, filters ordered venue, year, track, status (§Canonical form)
+                               #   explicit, filters ordered venue, year, track, status, abstract_kind (§Canonical form)
   canonical_hash: str | None,
   identification_query: str | None,  # canonical without default conjuncts; "" = every record
   identification_ast: Node | None,    # the same set as a tree (None = every record): what counts use
@@ -522,7 +544,7 @@ keep their written order; a bare term that a sibling filter's field could read a
 words count toward a wildcard's stem). Semantically equal spellings
 (`trust venue:ICLR`, `venue:iclr Trust`) therefore share one hash. `QUERY_VERSION`
 (`openproceedings.query`) is `"2"` (decision-008: canonical overflow and folded-piece wildcard detachment; decision-028 left it at
-`"2"`, since refusing a range glued to `(` changes no canonical string).
+`"2"`, since refusing a range glued to `(` changes no canonical string). Milestone C's `abstract_kind:` left it at `"2"` too: before it, a query naming the field was a `FIELD_UNKNOWN` error, so no query that parsed changes meaning or canonical form, and the parse goldens pin that every existing canonical string is unchanged. The new field is last in the filter order, so a query that writes it gets `… AND status:accepted AND abstract_kind:openalex` (several values: `abstract_kind:(none OR openalex)`).
 
 ## Error handling
 

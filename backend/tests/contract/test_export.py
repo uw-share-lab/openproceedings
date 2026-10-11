@@ -557,10 +557,11 @@ def pinned(fmt: str, body: bytes, record_id: str, searched_at: str) -> bytes:
         )
     elif fmt == "csv":
         # this store's abstracts have no claims: the three abstract-source columns after them are empty,
-        # nothing is withheld, and no record has a twin
+        # nothing is withheld, no record has a twin and none a submission-time abstract (only the last
+        # column, `abstract_kind`, has a value)
         text = text.replace(
-            f",{DATE},,,,,,false,,\r\n",
-            f",{DATE},{exporter.csv_cell(record_id)},{searched_at},,,,false,,\r\n",
+            f",{DATE},,,,,,false,,,",  # then the row's `abstract_kind` cell
+            f",{DATE},{exporter.csv_cell(record_id)},{searched_at},,,,false,,,",
         )
     else:
         text = text.replace('"record_id": null', f'"record_id": "{record_id}"')

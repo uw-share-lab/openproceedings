@@ -20,10 +20,22 @@ for (const theme of ["light", "dark"] as const) {
 const FIXED_DAY = "2026-10-05";
 
 /**
- * The three surfaces TASK-175, TASK-176 and TASK-177 added, each as its own element (TASK-182): the page
+ * The surfaces TASK-175, TASK-176, TASK-177 and TASK-210 added, each as its own element (TASK-182): the page
  * around them is the baseline above. The fixture is fixed, so every number in them is.
  */
 const surfaces: { name: string; open: (page: Page) => Promise<Locator> }[] = [
+  {
+    // a result whose abstract is a submission's (TASK-210): its attribution and the note under it. The fixture
+    // gives one paper of this search such an abstract, off the default search's page (fixture_server.py)
+    name: "submission-note",
+    open: async (page) => {
+      await page.goto(`/search?${new URLSearchParams({ q: "trust venue:ICML" })}`);
+      await expect(page.getByText(/\d+ papers?/).first()).toBeVisible();
+      const note = page.locator("p").filter({ hasText: /^Submission-time abstract: / });
+      await expect(note).toHaveCount(1);
+      return page.locator("article").filter({ has: note });
+    },
+  },
   {
     name: "word-forms",
     open: async (page) => {

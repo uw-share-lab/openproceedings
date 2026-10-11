@@ -153,6 +153,7 @@ export function parseViewOf(outcome: ParseOutcome | null): ParseView | null {
         track: { ...f.track, ...spansOf(f.track) },
         status: { ...f.status, ...spansOf(f.status) },
         year: { ...f.year, ...spansOf(f.year) },
+        abstract_kind: { ...f.abstract_kind, ...spansOf(f.abstract_kind) },
       };
     } catch (e) {
       console.error("openproceedings: /parse sent a filter span that isn't one", e);

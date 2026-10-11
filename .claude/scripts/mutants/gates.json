@@ -3760,5 +3760,65 @@
   "file": ".claude/hooks/block-ai-attribution.sh",
   "old": "            if script:\n                script = False  # sed still",
   "new": "            if False:\n                script = False  # sed still"
+ },
+ {
+  "label": "autofix: ruff format sees the GitHub token",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "(cd \"$root\" && \"${nocred[@]}\" \"$ruff\" format",
+  "new": "(cd \"$root\" && \"$ruff\" format"
+ },
+ {
+  "label": "autofix: ruff check sees the GitHub token",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "out=$(cd \"$root\" && \"${nocred[@]}\" \"$ruff\" check",
+  "new": "out=$(cd \"$root\" && \"$ruff\" check"
+ },
+ {
+  "label": "autofix: prettier sees the GitHub token",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "\"${nocred[@]}\" npx --no-install prettier",
+  "new": "npx --no-install prettier"
+ },
+ {
+  "label": "autofix: eslint sees the GitHub token",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "\"${nocred[@]}\" npx --no-install eslint",
+  "new": "npx --no-install eslint"
+ },
+ {
+  "label": "autofix: GITHUB_TOKEN kept",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "nocred=(env -u GH_TOKEN -u GITHUB_TOKEN ",
+  "new": "nocred=(env -u GH_TOKEN "
+ },
+ {
+  "label": "pre-push: make lint sees the GitHub token",
+  "file": ".githooks/pre-push",
+  "old": "\"${nocred[@]}\" make --no-print-directory lint",
+  "new": "make --no-print-directory lint"
+ },
+ {
+  "label": "pre-push: make tooling sees the GitHub token",
+  "file": ".githooks/pre-push",
+  "old": "\"${nocred[@]}\" make --no-print-directory tooling",
+  "new": "make --no-print-directory tooling"
+ },
+ {
+  "label": "record: --pr attests a PR at another head",
+  "file": ".claude/scripts/record-review.py",
+  "old": "    if pr_head != head:\n",
+  "new": "    if False:\n"
+ },
+ {
+  "label": "record: --pr attests a closed PR",
+  "file": ".claude/scripts/record-review.py",
+  "old": "    if state != \"open\":\n",
+  "new": "    if False:\n"
+ },
+ {
+  "label": "record: any gh pr view failure read as no PR yet",
+  "file": ".claude/scripts/record-review.py",
+  "old": "                if \"no pull requests found\" in said.lower():\n",
+  "new": "                if True:\n"
  }
 ]

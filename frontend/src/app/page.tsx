@@ -8,7 +8,8 @@ export default function HomePage() {
     <section className="mx-auto max-w-5xl space-y-3">
       <h1 className="text-lg font-semibold">openproceedings</h1>
       <p className="text-sm text-muted-foreground">
-        Exact, reproducible Boolean search over NeurIPS, ICLR and ICML titles and abstracts.
+        Exact, reproducible Boolean search over NeurIPS, ICLR, ICML, AAAI, AIES and IASEAI titles and
+        abstracts.
       </p>
       <SearchWorkspace state={INITIAL_STATE} />
     </section>

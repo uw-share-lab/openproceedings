@@ -10,7 +10,7 @@ names), so the differential suite (task-028) compares two independent implementa
 | Wildcard | `SHOULD` of a `TermQuery` per expansion, per field (each scores as its own term); no expansions → `EmptyQuery` (never a dropped clause) |
 | Phrase of terms | `PhraseQuery(f, tokens, slop=0)`, per field: never across fields |
 | Near(a, b, n), a ≠ b single terms | `PhraseQuery([a,b], slop=n) OR PhraseQuery([b,a], slop=n)`, per field |
-| Phrase with a wildcard item; Near of a phrase, a wildcard or a term with itself | verified: the candidates (every item present in the field) are fetched and their stored token streams checked by position in Python; the verified ids become a `TermSetQuery` (the engine's `id_query`: on the indexed `ord` from schema 3, on the text `id` in a schema-2 index; TASK-167) (with the candidate query kept for scoring), or the candidates that failed, excluded, when they are fewer (`Compiler.exact`) |
+| Phrase with a wildcard item; Near of a phrase, a wildcard or a term with itself | verified: the candidates (every item present in the field) are fetched and their stored token streams checked by position in Python; the verified ids become a `TermSetQuery` (the engine's `id_query`, on the indexed `ord`; TASK-167) (with the candidate query kept for scoring), or the candidates that failed, excluded, when they are fewer (`Compiler.exact`) |
 | Filter | `ConstScoreQuery(0)` of a `TermSetQuery` on the facet, or of year `RangeQuery`s: never scores |
 | And / Or / Not | `BooleanQuery` MUST / SHOULD; Not → `MUST const-score-0 all_docs, MUST_NOT x` (a MUST_NOT-only query matches nothing; the all-docs clause adds no score) |
 
@@ -26,7 +26,6 @@ from bisect import bisect_left
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Protocol
 
 import tantivy
@@ -144,9 +143,9 @@ class Compiler:
         # the ids a query matches (the engine's): with `count`, lets a verified clause name the candidates that
         # don't hold it instead of the ids that do, when they are fewer (`exact`)
         self.members = members
-        # the documents with given ids (the engine's: a u64 term set on `ord` from schema 3, TASK-167); a term
-        # set on the text `id` when none is given
-        self.id_query = id_query if id_query is not None else partial(id_set, schema)
+        # the documents with given ids (the engine's: a u64 term set on `ord`, TASK-167); a Compiler given none
+        # can't compile a verified clause (it can still list candidates and verify them)
+        self.id_query = id_query if id_query is not None else _no_id_query
         self.out = Compiled(tantivy.Query.empty_query())
         self._allowed: dict[tuple[str, str], frozenset[str]] = {}  # per item: `allowed`
         # the top-level conjuncts being compiled, by identity, and the queries built for them (and NOTs' children),
@@ -435,10 +434,8 @@ def conjuncts(n: Node) -> list[Node]:
     return [x for c in n.children for x in conjuncts(c)] if isinstance(n, And) else [n]
 
 
-def id_set(schema: tantivy.Schema, ids: list[str]) -> tantivy.Query:
-    """The documents with these ids (a term set on the text `id`: a schema-2 index's form, and a Compiler's
-    default when no engine gives it `id_query`)."""
-    return tantivy.Query.term_set_query(schema, "id", ids)
+def _no_id_query(ids: list[str]) -> tantivy.Query:
+    raise TypeError("a Compiler that compiles a verified clause needs the engine's `id_query`")
 
 
 def combine(occur: tantivy.Occur, queries: list[tantivy.Query]) -> tantivy.Query:

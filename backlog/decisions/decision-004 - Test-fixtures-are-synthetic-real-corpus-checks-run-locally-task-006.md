@@ -29,4 +29,8 @@ fixtures at test time. The review lead chose synthetic fixtures (2026-09-26).
 - CI is fully reproducible and redistributable; no licence question blocks M2–M5.
 - Synthetic text can miss real-world oddities, so the local parity run (task-029) and the Scholar
   comparison (task-056) are where those surface; each oddity found becomes a golden row in synthetic form.
+- Bibliographic metadata of a whole proceedings stays real where the adapters don't parse it and every
+  committed recording already keeps it: a PMLR volume index's editors in `<title>`, the `og:`/meta tags and
+  the JSON-LD `description` (v28–v267 and FAccT 2018's v81, noted 2026-10-10 in milestone B's review); the
+  scrub replaces the `<p><strong>Editors: …` line only.
 - Revisit when question 1 is answered (M6): a CC BY subset could then join as a second fixture.

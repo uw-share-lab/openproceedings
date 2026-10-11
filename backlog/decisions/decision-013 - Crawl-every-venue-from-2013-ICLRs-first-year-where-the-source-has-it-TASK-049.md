@@ -45,3 +45,9 @@ OpenReview) and leave the year range to the query's `year:` filter.
   snapshot grows by the 2013–2017 years (PMLR v28–v70 alone hold 1,619 ICML papers; NeurIPS 2013 has
   360), well inside the 80k-record scale spec 03 benchmarks against.
 - Years before 2013 stay out; revisit only with a spec change and a reason from a review that needs them.
+
+## Superseded in part (2026-10-06)
+
+[decision-047](decision-047%20-%20NeurIPS-from-1987-and-ICML-from-1988-the-corpus-covers-each-venues-full-history-supersedes-decision-013s-pre-2013-exclusion.md)
+replaces the last consequence above: at the owner's request the corpus covers NeurIPS from 1987 and ICML from
+1988. The rest of this decision stands (ICLR from 2013; the year range is the query's `year:` filter).

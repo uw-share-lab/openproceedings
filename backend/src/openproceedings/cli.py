@@ -2,7 +2,7 @@
 implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
 Implemented: `op ingest ris`, `op ingest openreview` (API v2, task-050; API v1, task-051),
-`op ingest iclr|neurips|pmlr` (TASK-096, task-052/053), `op snapshot build`, `op snapshot diff` (task-022), `op index build`
+`op ingest iclr|neurips|pmlr|ojs` (TASK-096, task-052/053), `op snapshot build`, `op snapshot diff` (task-022), `op index build`
 (task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
 task-024/030), `op export` (task-030), `op serve` (task-034), `op openapi` (task-040), `op record save` /
 `op record replay` (task-083) and `op index retire` (TASK-085). Results go to stdout; logs go to stderr; a
@@ -110,7 +110,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
     ingest = sub.add_parser(
-        "ingest", help="fetch sources into the cache: ris | iclr | neurips | pmlr | openreview (spec 01)"
+        "ingest",
+        help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | ojs | crossref | openalex | aaai-library | "
+        "openreview "
+        "(spec 01)",
     )
     sources = ingest.add_subparsers(dest="source", metavar="<source>", required=True)
     ris = sources.add_parser(
@@ -140,9 +143,28 @@ def build_parser() -> argparse.ArgumentParser:
     for name, about in (
         ("iclr", "ICLR 2014-2016 accepted-paper archive pages (iclr.cc)"),
         ("neurips", "NeurIPS proceedings years (proceedings.neurips.cc; 2021 adds the D&B host)"),
-        ("pmlr", "ICML years from PMLR (the volume in ingest/pmlr_volumes.toml)"),
-    ):
-        crawl = sources.add_parser(name, help=f"crawl {about} into <data-dir>/cache/{name}")
+        ("pmlr", "ICML years, or FAccT 2018 (--venue FAccT), from PMLR (the volume in ingest/pmlr_volumes.toml)"),
+        ("dblp", "ICML 1988-2012 (--venue ICML, the default) or AAAI 1980-2008 (--venue AAAI) from the pinned "
+                 "dblp release (ingest/dblp_icml.toml, ingest/dblp_aaai.toml; downloaded once from "
+                 "drops.dagstuhl.de, never dblp.org); ICML with the abstracts the official ICML pages in "
+                 "ingest/icml_sites.toml give, AAAI with none"),
+    ):  # fmt: skip
+        dblp = name == "dblp"  # its own cache layout and flags' meaning (decision-047, spec 01 §CLI)
+        crawl = sources.add_parser(
+            name,
+            help=f"read {about} into <data-dir>/cache/dblp and <data-dir>/cache/icml_sites" if dblp
+            else f"crawl {about} into <data-dir>/cache/{name}",
+        )  # fmt: skip
+        if dblp:
+            crawl.add_argument(
+                "--venue", default="ICML", choices=("ICML", "AAAI"),
+                help="ICML 1988-2012 (default) or AAAI 1980-2008; both read the one pinned release",
+            )  # fmt: skip
+        if name == "pmlr":
+            crawl.add_argument(
+                "--venue", default="ICML", choices=("ICML", "FAccT"),
+                help="ICML 2013 on (default) or FAccT 2018 (v81); each year's volume is the table's row",
+            )  # fmt: skip
         crawl.add_argument(
             "--year", dest="years", action="append", required=True, type=_years, metavar="YYYY[-YYYY]",
             help="a year or an inclusive range; repeatable",
@@ -150,19 +172,126 @@ def build_parser() -> argparse.ArgumentParser:
         crawl.add_argument(
             "--dry-run",
             action="store_true",
-            help="read only the index pages; report what a crawl would fetch",
+            help="fetch nothing; say whether the release and its extract are on disk and how many ICML pages a "
+            "run would fetch"
+            if dblp
+            else "read only the index pages; report what a crawl would fetch",
         )
-        crawl.add_argument("--offline", action="store_true", help="use the page cache only (no network)")
         crawl.add_argument(
-            "--refresh", action="store_true", help="re-fetch the index pages (a newly published year)"
+            "--offline",
+            action="store_true",
+            help="use the release, extract and ICML pages already on disk (no network)" if dblp
+            else "use the page cache only (no network)",
+        )  # fmt: skip
+        crawl.add_argument(
+            "--refresh",
+            action="store_true",
+            help="re-fetch the year's ICML pages"
+            if dblp
+            else "re-fetch the index pages (a newly published year)",
         )
         crawl.add_argument(
             "--delay",
             type=float,
             default=1.0,
-            help=f"seconds between requests (default 1, at least {MIN_DELAY})",
-        )
+            help="seconds between requests to the ICML pages (never under 3: the Internet Archive's pace)" if dblp
+            else f"seconds between requests (default 1, at least {MIN_DELAY})",
+        )  # fmt: skip
         crawl.set_defaults(run=_ingest_crawl)
+    from openproceedings.ingest import ojs_table  # the journals the table names are the --journal choices
+
+    ojs_parser = sources.add_parser(
+        "ojs",
+        help="harvest ojs.aaai.org journals (AAAI 2010+, AIES 2024+, IASEAI 2026+; ingest/ojs_sections.toml) "
+        "through OAI-PMH into <data-dir>/cache/ojs",
+    )
+    ojs_parser.add_argument(
+        "--journal", dest="journals", action="append", default=[], choices=sorted(ojs_table.TABLE.journals),
+        help="repeatable; default every journal",
+    )  # fmt: skip
+    ojs_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="read only each journal's first ListSets page; report what a crawl would fetch",
+    )
+    ojs_parser.add_argument("--offline", action="store_true", help="use the page cache only (no network)")
+    ojs_parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="re-fetch each chain's first page, every GetRecord, and any cached failure",
+    )
+    ojs_parser.add_argument(
+        "--delay", type=float, default=1.0,
+        help=f"seconds between requests (default 1, at least {MIN_DELAY}; the host is never paced under 3)",
+    )  # fmt: skip
+    ojs_parser.set_defaults(run=_ingest_ojs)
+    from openproceedings.ingest import acm_table  # the venues the table names are the --venue choices
+
+    crossref_parser = sources.add_parser(
+        "crossref",
+        help="read the ACM proceedings of FAccT 2019+ and AIES 2018-2023 (ingest/acm_proceedings.toml) from "
+        "Crossref into <data-dir>/cache/crossref; CROSSREF_MAILTO (optional, env or .env) names a contact in "
+        "the User-Agent",
+    )
+    crossref_parser.add_argument(
+        "--venue", dest="venues", action="append", choices=sorted(acm_table.VENUES),
+        help="repeatable; default every venue the table lists",
+    )  # fmt: skip
+    crossref_parser.add_argument(
+        "--year", dest="years", action="append", type=_years, metavar="YYYY[-YYYY]",
+        help="a year or an inclusive range; repeatable; default every year the table lists",
+    )  # fmt: skip
+    crossref_parser.add_argument(
+        "--dry-run", action="store_true", help="no network, no contact: say what is cached; write nothing"
+    )
+    crossref_parser.add_argument(
+        "--offline", action="store_true", help="use the page cache only (no network)"
+    )
+    crossref_parser.add_argument(
+        "--refresh", action="store_true",
+        help="fetch the proceedings record and the chain again from cursor=*",
+    )  # fmt: skip
+    crossref_parser.add_argument(
+        "--delay", type=float, default=1.0,
+        help=f"seconds between requests (default 1, at least {MIN_DELAY}; Crossref is never paced under 1)",
+    )  # fmt: skip
+    crossref_parser.set_defaults(run=_ingest_crossref)
+    openalex_parser = sources.add_parser(
+        "openalex",
+        help="look up the AAAI, AIES and FAccT records the other crawls leave without an abstract in OpenAlex "
+        "(by DOI; AAAI 1980-2008 by ingest/openalex_sources.toml's listings) and pin what it read as an extract "
+        "under <data-dir>/cache/openalex, for op snapshot build to fill from; run it after the other crawls. "
+        "OPENALEX_API_KEY (optional, env or .env) goes in a request header only",
+    )
+    openalex_parser.add_argument(
+        "--dry-run", action="store_true", help="no network, no key: say what is cached; write nothing"
+    )
+    openalex_parser.add_argument(
+        "--offline", action="store_true", help="use the page cache only (no network)"
+    )
+    openalex_parser.add_argument(
+        "--refresh", action="store_true",
+        help="fetch every DOI batch again, and each listing's chain again from cursor=*",
+    )  # fmt: skip
+    openalex_parser.add_argument(
+        "--delay", type=float, default=1.0,
+        help=f"seconds between requests (default 1, at least {MIN_DELAY}; OpenAlex is never paced under 1)",
+    )  # fmt: skip
+    openalex_parser.set_defaults(run=_ingest_openalex)
+    aaai_library_parser = sources.add_parser(
+        "aaai-library",
+        help="cache the Internet Archive captures of the old aaai.org paper pages ingest/aaai_library.toml pins (AAAI "
+        "1980-2008; web.archive.org only, never aaai.org; one request every 3 s, each capture's SHA-1 checked) and "
+        "mark the harvest done, for op snapshot build to fill AAAI's own abstracts from (decision-051)",
+    )
+    aaai_library_parser.add_argument(
+        "--dry-run", action="store_true", help="no network: say how many captures are cached; write nothing"
+    )
+    aaai_library_parser.add_argument(
+        "--offline", action="store_true", help="use the page cache only (no network)"
+    )
+    aaai_library_parser.add_argument("--refresh", action="store_true", help="fetch every capture again")
+    aaai_library_parser.set_defaults(run=_ingest_aaai_library)
     for name, task in PLANNED_SOURCES.items():
         _stub(sources.add_parser(name, help=_stub_status(task)), f"ingest {name}", task)
 
@@ -178,7 +307,9 @@ def build_parser() -> argparse.ArgumentParser:
         "when it doesn't exist, until a snapshot has withheld an abstract: then it is required)",
     )
     b.set_defaults(run=_snapshot_build)
-    d = actions.add_parser("diff", help="ids added, removed and changed between two snapshots")
+    d = actions.add_parser(
+        "diff", help="ids added, removed and changed between two snapshots, and whose abstract_kind changed"
+    )
     d.add_argument("a", type=Path)
     d.add_argument("b", type=Path)
     d.set_defaults(run=_snapshot_diff)
@@ -405,7 +536,9 @@ def build_parser() -> argparse.ArgumentParser:
     openapi.add_argument("--out", type=Path, help="write to this file (default standard output)")
     openapi.set_defaults(run=_openapi)
 
-    ev = sub.add_parser("eval", help="evaluation reports: coverage | scholar | audit | near-miss (spec 07)")
+    ev = sub.add_parser(
+        "eval", help="evaluation reports: coverage | scholar | openalex | audit | near-miss (spec 07)"
+    )
     reports = ev.add_subparsers(dest="report", required=True, metavar="REPORT")
     cov = reports.add_parser(
         "coverage",
@@ -463,6 +596,28 @@ def build_parser() -> argparse.ArgumentParser:
     )  # fmt: skip
     sch.add_argument("--check", action="store_true", help="exit 1 when any `our_bug` row is found")
     sch.set_defaults(run=_eval_scholar)
+    oal = reports.add_parser(
+        "openalex",
+        help="write docs/results/<date>-openalex-audit.md: OpenAlex's abstracts against official ones per "
+        "venue-year, and the title route's attaches against OpenAlex's authors (keyless; --offline replays the "
+        "cache)",
+    )
+    oal.add_argument("--snapshot", help="a snapshot name, path or hash prefix (default the current index's)")
+    oal.add_argument(
+        "--aaai-sample", type=int, default=1000, help="AAAI 2010+ records sampled (default 1000)"
+    )
+    oal.add_argument("--title-sample", type=int, default=50, help="title-route attaches checked (default 50)")
+    oal.add_argument("--seed", type=int, default=49, help="the samples' seed (default 49)")
+    oal.add_argument("--offline", action="store_true", help="read only the OpenAlex cache: no network")
+    oal.add_argument(
+        "--out", type=Path, help="the report's directory (default the repository's docs/results)"
+    )
+    oal.add_argument("--date", help="the report's date, YYYY-MM-DD (default today, UTC)")
+    oal.add_argument(
+        "--ruling", metavar="TEXT",
+        help="the decision taken on the title route's findings, printed in the report as given",
+    )  # fmt: skip
+    oal.set_defaults(run=_eval_openalex)
     for name, task in PLANNED_EVALS.items():
         _stub(reports.add_parser(name, help=_stub_status(task)), f"eval {name}", task)
 
@@ -529,7 +684,8 @@ def _ingest_openreview(ns: argparse.Namespace) -> int:
 
 
 def _ingest_crawl(ns: argparse.Namespace) -> int:
-    from openproceedings.ingest.sources.crawl import ingest_iclr, ingest_neurips, ingest_pmlr
+    from openproceedings.ingest.sources import crawl as crawl_module
+    from openproceedings.ingest.sources.crawl import ingest_dblp, ingest_iclr, ingest_neurips, ingest_pmlr
 
     if not math.isfinite(ns.delay):
         raise _usage("--delay must be finite")
@@ -537,12 +693,79 @@ def _ingest_crawl(ns: argparse.Namespace) -> int:
         raise _usage(f"--delay must be at least {MIN_DELAY} seconds (politeness)")
     if ns.dry_run and ns.offline:
         raise _usage("--dry-run and --offline don't combine: a dry run reads the live index pages")
-    run = {"iclr": ingest_iclr, "neurips": ingest_neurips, "pmlr": ingest_pmlr}[ns.source]
     years = sorted({y for chunk in ns.years for y in chunk})
+    if ns.source == "dblp" and ns.venue == "AAAI":
+        if ns.refresh:
+            raise _usage(
+                "--refresh: nothing to refresh for AAAI (the release is pinned; no pages are fetched)"
+            )
+        _print(
+            crawl_module.ingest_dblp_aaai(
+                years, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run
+            )
+        )
+        return 0
+    run = {"iclr": ingest_iclr, "neurips": ingest_neurips, "pmlr": ingest_pmlr, "dblp": ingest_dblp}[
+        ns.source
+    ]
+    extra = {"venue": ns.venue} if ns.source == "pmlr" else {}
     _print(
         run(years, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run, refresh=ns.refresh,
-            min_interval=ns.delay)
+            min_interval=ns.delay, **extra)
     )  # fmt: skip
+    return 0
+
+
+def _ingest_ojs(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest.sources.crawl import ingest_ojs
+
+    if not math.isfinite(ns.delay) or ns.delay < MIN_DELAY:
+        raise _usage(f"--delay must be finite and at least {MIN_DELAY} seconds (politeness)")
+    if ns.dry_run and ns.offline:
+        raise _usage("--dry-run and --offline don't combine: a dry run reads the live first page")
+    _print(ingest_ojs(ns.journals, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
+                      refresh=ns.refresh, min_interval=ns.delay))  # fmt: skip
+    return 0
+
+
+def _ingest_crossref(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest import acm_table
+    from openproceedings.ingest.sources.crawl import ingest_crossref
+
+    if not math.isfinite(ns.delay) or ns.delay < MIN_DELAY:
+        raise _usage(f"--delay must be finite and at least {MIN_DELAY} seconds (politeness)")
+    if ns.dry_run and ns.offline:
+        raise _usage("--dry-run and --offline don't combine: a dry run already reads the cache only")
+    years = {y for chunk in ns.years or [] for y in chunk}
+    keys = [k for k in sorted(acm_table.TABLE.proceedings)
+            if (not ns.venues or k[0] in ns.venues) and (not years or k[1] in years)]  # fmt: skip
+    if not keys:
+        raise _usage(f"no acm_proceedings.toml row matches venues {sorted(ns.venues or [])} "
+                     f"and years {sorted(years)}")  # fmt: skip
+    _print(ingest_crossref(keys, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
+                           refresh=ns.refresh, min_interval=ns.delay))  # fmt: skip
+    return 0
+
+
+def _ingest_openalex(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest.sources import crawl
+
+    if not math.isfinite(ns.delay) or ns.delay < MIN_DELAY:
+        raise _usage(f"--delay must be finite and at least {MIN_DELAY} seconds (politeness)")
+    if ns.dry_run and ns.offline:
+        raise _usage("--dry-run and --offline don't combine: a dry run already reads the cache only")
+    _print(crawl.ingest_openalex(ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
+                                 refresh=ns.refresh, min_interval=ns.delay))  # fmt: skip
+    return 0
+
+
+def _ingest_aaai_library(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest.sources import crawl
+
+    if ns.dry_run and ns.offline:
+        raise _usage("--dry-run and --offline don't combine: a dry run already reads the cache only")
+    _print(crawl.ingest_aaai_library(ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
+                                     refresh=ns.refresh))  # fmt: skip
     return 0
 
 
@@ -1000,6 +1223,81 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
     if ns.check and stale_ex:  # a stale exception fails --check, as a gate failure does
         print(f"--check: {len(stale_ex)} stale accepted exception(s)", file=sys.stderr)
     return 1 if ns.check and (not verdict.passed or stale_ex) else 0
+
+
+def _audited_snapshot(ns: argparse.Namespace) -> Path:
+    """`--snapshot` (a name, path or hash prefix), else the snapshot the current index was built from."""
+    from openproceedings.ingest.snapshot import indexed_snapshot
+
+    if ns.snapshot:
+        return resolve_snapshot(ns.snapshot, ns.data_dir / "snapshots")
+    index = _index_path(argparse.Namespace(data_dir=ns.data_dir, index=None))
+    path, _manifest = indexed_snapshot(ns.data_dir, json.loads((index / "manifest.json").read_text("utf-8")))
+    return path
+
+
+def _commit() -> str:
+    """The checkout's commit (short), or `unknown` outside a git checkout."""
+    import subprocess
+
+    root = _repo_root()
+    try:
+        done = subprocess.run(["git", "rev-parse", "--short=12", "HEAD"], cwd=root, capture_output=True,
+                              text=True, timeout=10, check=True)  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return done.stdout.strip() or "unknown"
+
+
+def _eval_openalex(ns: argparse.Namespace) -> int:
+    """`op eval openalex` (milestone C Task 13): the OpenAlex fidelity audit, through the one OpenAlex fetcher
+    and cache. Keyless always: no key and no `.env` is read, and no contact address is sent."""
+    from datetime import UTC, date, datetime
+
+    from openproceedings import storage
+    from openproceedings.eval import openalex_audit as oa
+    from openproceedings.ingest.snapshot import iter_records
+    from openproceedings.ingest.sources import openalex
+    from openproceedings.ingest.sources.crawl import openalex_fetcher
+
+    started = time.perf_counter()
+    try:
+        day = date.fromisoformat(ns.date) if ns.date else datetime.now(UTC).date()
+    except ValueError:
+        raise _usage(f"--date must be YYYY-MM-DD, not {ns.date!r}") from None
+    if ns.aaai_sample < 0 or ns.title_sample < 0:
+        raise _usage("--aaai-sample and --title-sample must be 0 or more")
+    root = _repo_root()
+    out = ns.out or (root / "docs" / "results" if root else None)
+    if out is None:
+        raise _usage("pass --out: there is no checkout to write docs/results in")
+    snapshot = _audited_snapshot(ns)
+    records = list(iter_records(snapshot))  # verified whole before any is used
+    picked = oa.sample(records, aaai_sample=ns.aaai_sample, seed=ns.seed)
+    cache = ns.data_dir / "cache"
+    fetcher = openalex_fetcher(cache, offline=ns.offline)
+    log.info("openalex_audit_started", extra={"snapshot": snapshot.name, "sampled": len(picked),
+                                              "offline": ns.offline})  # fmt: skip
+    with storage.exclusive(cache / openalex.CACHE_DIR):
+        result = oa.audit(picked, fetcher)
+        result.title = oa.title_check(records, fetcher, seed=ns.seed, size=ns.title_sample)
+    meta = oa.Meta(snapshot=snapshot.name, commit=_commit(), seed=ns.seed, aaai_sample=ns.aaai_sample, day=day,
+                   aaai_pool=oa.aaai_pool(records), title_sample=ns.title_sample,
+                   ruling=" ".join(ns.ruling.split()) if ns.ruling else None)  # fmt: skip
+    path = out / f"{day.isoformat()}-openalex-audit.md"
+    replaced = path.exists()
+    storage.write_bytes(path, oa.render(result, meta).encode("utf-8"))
+    title = result.title
+    log.info("openalex_audit_written", extra={
+        "snapshot": snapshot.name, "sampled": len(picked), "differs": len(result.differs),
+        "title_attached": title.attached if title else 0,
+        "title_wrong": sum(a.verdict == "wrong" for a in title.sampled) if title else 0,
+        "requests": fetcher.stats.network, "cached": fetcher.stats.cached, "replaced": replaced,
+        "ms": elapsed_ms(started),
+    })  # fmt: skip
+    print(f"wrote {path} ({fetcher.stats.network} OpenAlex requests, {fetcher.stats.cached} from the cache)",
+          file=sys.stderr)  # fmt: skip
+    return 0
 
 
 def _scholar_scope(ns: argparse.Namespace) -> Scope:

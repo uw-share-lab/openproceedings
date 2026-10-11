@@ -38,6 +38,7 @@ lint: frontend-deps
 	uv run --locked ruff format --check $(PY_TARGETS)
 	uv run --locked ruff check $(PY_TARGETS)
 	@if [ -d backend/src ]; then uv run --locked mypy --strict backend/src; fi
+	uv run --locked mypy --strict .claude/scripts/dependabot .claude/scripts/tests/dependabot_cases.py .claude/scripts/tests/dependabot_fake.py
 	shellcheck -x $(SHELL_FILES)
 	@# next typegen writes the route types (PageProps, LayoutProps) that tsc needs; it reads only src/app
 	@if [ -f frontend/package.json ]; then cd frontend && npx --no-install prettier --check . && npx --no-install eslint . \
@@ -49,6 +50,7 @@ tooling:
 	python3 .claude/scripts/learnings_index.py --check
 	python3 .claude/scripts/check_backlog.py
 	python3 .claude/scripts/check_digest_pins.py
+	python3 .claude/scripts/dependabot/npm_specs.py
 	python3 .claude/scripts/lint_probes.py
 	@# case tables run in parallel; each writes its output to a temp file, and any failure prints in full
 	@d=$$(mktemp -d); pids=""; for t in .claude/hooks/tests/*.sh .claude/scripts/tests/*.sh; do \

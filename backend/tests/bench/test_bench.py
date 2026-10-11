@@ -261,7 +261,8 @@ def test_the_endpoint_bench_builds_attributions(served: tuple[TantivyEngine, Rec
 
 @pytest.mark.parametrize("name", list(STRINGS))
 def test_match_ids_with_exclusion_accounting(benchmark: Any, engine: TantivyEngine, name: str) -> None:
-    """Historical comparison protocol: verified/compiled/expanded cold, facets retained."""
+    """Historical comparison protocol: verified/compiled/expanded cold, facets retained. Counted from every
+    combo field, as a search with facets counts them (`search.run`); `excluded`'s own default is narrower."""
     result = trust_evals(name)
     ast = result.effective_ast
     assert ast is not None
@@ -271,7 +272,7 @@ def test_match_ids_with_exclusion_accounting(benchmark: Any, engine: TantivyEngi
         engine.compiled.clear()
         engine.expanded.clear()
         ids = engine.match_ids(ast)
-        return excluded(engine, result, len(ids))
+        return excluded(engine, result, len(ids), facets=engine.facets)
 
     measure(benchmark, run)
     time = p95(benchmark)
@@ -282,7 +283,8 @@ def test_match_ids_with_exclusion_accounting(benchmark: Any, engine: TantivyEngi
 def test_match_ids_with_exclusion_accounting_all_engine_caches_cold(
     benchmark: Any, engine: TantivyEngine, name: str
 ) -> None:
-    """First-query protocol, separately named because the historical benchmark retains facets."""
+    """First-query protocol, separately named because the historical benchmark retains facets: every engine
+    cache cold, exclusions counted from every combo field, as a search with facets counts them (`search.run`)."""
     result = trust_evals(name)
     ast = result.effective_ast
     assert ast is not None
@@ -294,7 +296,7 @@ def test_match_ids_with_exclusion_accounting_all_engine_caches_cold(
         engine.faceted.clear()
         engine._ords = None
         ids = engine.match_ids(ast)
-        return excluded(engine, result, len(ids))
+        return excluded(engine, result, len(ids), facets=engine.facets)
 
     measure(benchmark, run)
     time = p95(benchmark)
@@ -328,7 +330,8 @@ def test_match_ids_with_exclusions_on_a_broad_query(benchmark: Any, engine: Tant
     result = parse(BROAD)  # exclusions need the default filters, so the effective tree
     ast = result.effective_ast
     assert ast is not None
-    measure(benchmark, lambda: excluded(engine, result, len(engine.match_ids(ast))))
+    # every combo field, as a search with facets counts them; the exclusion-only caller is the next benchmark
+    measure(benchmark, lambda: excluded(engine, result, len(engine.match_ids(ast)), facets=engine.facets))
     time_ = p95(benchmark)
     assert time_ is None or time_ < 0.300, f"p95 {time_ * 1000:.1f} ms"
 

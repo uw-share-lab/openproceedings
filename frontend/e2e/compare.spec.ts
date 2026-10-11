@@ -147,7 +147,7 @@ test("a file's papers land in the four lists, each opens, and each downloads as 
   const out = panel(page).getByRole("region", { name: /^Not compared/ });
   await out.getByRole("button", { name: /^List the / }).click();
   await expect(out.getByRole("listitem").filter({ hasText: "benchmark at another venue" })).toContainText(
-    "its venue is not recognised as NeurIPS, ICLR or ICML, and no link or DOI names an indexed paper",
+    "its venue is not recognised as one of the indexed venues, and no link or DOI names an indexed paper",
   );
   const left = await saved(page, () => out.getByRole("button", { name: /^Download CSV/ }).click());
   expect(left.name).toBe(`${stem}-not-compared.csv`);

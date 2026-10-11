@@ -1,0 +1,19 @@
+{
+ "_recorded": {
+  "date": "2026-10-10",
+  "run": "manual ojs.aaai.org census (scripts/ojs_section_census.py), 2026-10-09",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://ojs.aaai.org/index.php/IASEAI/oai?verb=ListRecords&metadataPrefix=oai_dc&set=IASEAI:ART",
+  "authenticated": false
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "text/xml;charset=UTF-8"
+  },
+  "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<?xml-stylesheet type=\"text/xsl\" href=\"https://ojs.aaai.org/lib/pkp/xml/oai2.xsl\" ?>\n<OAI-PMH xmlns=\"http://www.openarchives.org/OAI/2.0/\"\n\txmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n\txsi:schemaLocation=\"http://www.openarchives.org/OAI/2.0/\n\t\thttp://www.openarchives.org/OAI/2.0/OAI-PMH.xsd\">\n\t<responseDate>2026-10-10T00:28:29Z</responseDate>\n\t<request verb=\"ListRecords\" metadataPrefix=\"oai_dc\" set=\"IASEAI:ART\">https://ojs.aaai.org/index.php/IASEAI/oai</request>\n\t<error code=\"noRecordsMatch\">No matching records in this repository</error></OAI-PMH>\n"
+ }
+}

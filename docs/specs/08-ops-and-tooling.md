@@ -13,10 +13,10 @@ openproceedings/
 ├── .claude/                     # committed: agents, skills, commands, hooks, learnings (roster: .claude/README.md)
 ├── .githooks/                   # commit-msg (attribution), pre-push (make lint + make tooling)
 ├── .github/                     # workflows (below), dependabot.yml
-├── backend/                     # uv workspace member: Python package `openproceedings` (Python 3.12, .python-version)
+├── backend/                     # uv workspace member: Python package `openproceedings` (Python 3.12.15, pinned by .python-version)
 │   ├── pyproject.toml
 │   ├── src/openproceedings/
-│   │   ├── ingest/              # 01: record.py, classify.py, urls.py, volumes.py (+ pmlr_volumes.toml), ris.py, dedup.py, snapshot.py (built); sources/ (M4 crawlers: http.py (the one HTTP layer), common.py, openreview_client.py, openreview_v2.py, openreview_v1.py, iclr.py, neurips.py, pmlr.py, crawl.py)
+│   │   ├── ingest/              # 01: record.py, classify.py, urls.py, volumes.py (+ pmlr_volumes.toml), dblp_table.py (+ dblp_icml.toml), dblp_aaai_table.py (+ dblp_aaai.toml), acm_table.py (+ acm_proceedings.toml), facct_site.toml, ris.py, dedup.py, snapshot.py (built); sources/ (M4 crawlers: http.py (the one HTTP layer), common.py, openreview_client.py, openreview_v2.py, openreview_v1.py, iclr.py, neurips.py, pmlr.py, dblp.py, dblp_aaai.py, ojs.py, crossref.py, facct_site.py, crawl.py)
 │   │   ├── query/               # 02: normalize.py, mathsyms.py, lexer.py, parser.py, ast.py, canonical.py, defaults.py, compat.py
 │   │   ├── engine/              # 03: protocol.py, reference.py, index.py, compile.py, tantivy_engine.py, exclusions.py, highlight.py, parity.py
 │   │   ├── semantic/            # 06 (deferred: phase 2, decision-017; not created)
@@ -46,12 +46,43 @@ openproceedings/
 into one `.venv` from one `uv.lock`. New Python packages join by adding their directory to
 `[tool.uv.workspace] members`. npm for the frontend. `scripts/setup-dev.sh` once per clone.
 
+**Python pin (TASK-208).** `.python-version` names one exact CPython patch release, 3.12.15, which uv installs
+for development and for every CI job (`setup-uv` brings the latest uv; a local uv must be 0.12.22 or later to
+know 3.12.15). `requires-python` (both `pyproject.toml`s, recorded in `uv.lock`) is `>=3.12.12`, the first 3.12
+with the fix for CVE-2025-6069 (quadratic time in `html.parser.HTMLParser` on malformed input, which every
+crawler parses pages with; CPython issue #135462, fixed in 3.12.12, 3.13.6 and 3.14.0). That floor still admits
+3.13.0-3.13.5, which lack the fix: the guarantee is the exact pin, checked by `test_python_pin.py`. The api
+image's `FROM python:3.12.15-slim-bookworm` names the same release (§Deploy).
+`backend/tests/unit/test_python_pin.py` holds them together and fails on an interpreter without the fix; a patch
+upgrade moves `.python-version`, the image tag and digest together (Dependabot's `docker` entry proposes the
+image half; its PR fails that test until `.python-version` follows, and the weekly routine leaves it for the
+owner, §CI "The weekly routine"). The minor stays 3.12 (security fixes until
+2028-10), so ruff's `py312` and mypy's `3.12` targets don't move; a new minor is a hand-made PR.
+
+The fix also changed how the parser reads malformed markup, so extracted text can depend on the release.
+`ingest/sources/html.py` keeps two of those readings as 3.12.9 had them. At the end of the input, 3.12.9's `close`
+kept an unterminated construct as text and 3.12.12+ drops it, which would cut `for all p<q we show` to `for all p`
+in a fragment: `_feed_all` hands such a tail to the parser as text when it holds no `>` (linear on either release).
+And 3.12.12+ reads `title`, `textarea`, `xmp`, `iframe`, `noembed`, `noframes` and `plaintext` bodies as raw text,
+so one unclosed `<title>` would swallow a listing's later rows: `_RawTextParser` keeps raw text to `script` and
+`style`. Since TASK-209 a `<` that doesn't start a real tag never reaches the parser as one (`escape_bare_lt`,
+spec 01 §Pipeline step 2), which also takes an unterminated quoted value (`a <b x='y > c`) out of the parser's
+hands: it stays text on every release. The rest is left to the parser, which 3.12.12+ reads differently: an unterminated construct whose tail
+holds a `>` (a comment, a `<![CDATA[`), the empty comment
+`<!-->` and `--!>`, `</script x>` as an end tag, an end tag with a quoted `>` in it, and some malformed attributes
+(`href==x` keeps the second `=` in the value). In the track paths such a change can only drop a listing entry (an
+unparsed link is skipped and counted, a lost section fails its count check), never reclassify one. The evidence
+(`docs/results/2026-10-07-python-upgrade.md`): the whole crawl cache replays to byte-identical records under 3.12.9
+and 3.12.15; an index built from the same snapshot has identical segment bytes and the same `index_version`; and
+over 200,000 seeded malformed strings the new `html.py` on 3.12.9 gives the old text and metas, while on 3.12.15 one
+in five still differs, nearly all through `<!` constructs.
+
 ## CLI (`op`)
 
 | Command | Does |
 |---|---|
-| `op ingest openreview\|iclr\|neurips\|pmlr\|ris … [--offline]` | fetch sources (`--offline`: cache only, no network) |
-| `op snapshot build [--takedowns <file>]` · `op snapshot diff <a> <b>` | build an immutable snapshot, or compare two. The build withholds every abstract on the takedown list (default `<data-dir>/takedowns/withheld.txt`, which may be absent until a snapshot, under the output directory or `<data-dir>/snapshots/`, has withheld an abstract: then it is required, as a file named with `--takedowns` always is; TASK-067; §Deploy, decision-022): a list that doesn't parse refuses it; its JSON names `withheld_ids` (the ids whose abstract it took out), `takedowns_followed` (a listed id this build holds under another id → that id, also withheld), `takedowns_unmatched` (listed ids it has no record of) and `takedowns_twins` (a twin of a withheld record → the id it is the twin of, also withheld: decision-029, TASK-163), the last three also said on stderr (a twin with what to list and log). The diff's `abstract_withheld` names the ids withheld (`added`) and no longer withheld (`lifted`) between the two. There is no prune or delete command: keep the snapshot of every index a search record pins (the versions `op index retire` refuses), since that record's exports read it to attribute each abstract and withhold every abstract without it (decision-021); a future prune command must refuse while a record pins an index built from the snapshot |
+| `op ingest openreview\|iclr\|neurips\|pmlr\|dblp\|ojs\|crossref\|aaai-library\|openalex\|ris … [--offline]` | fetch sources (`--offline`: cache only, no network). `ojs` (decision-049) harvests ojs.aaai.org's AAAI, AIES and IASEAI journals through OAI-PMH (`--journal AAAI\|AIES\|IASEAI`, repeatable, default all; `--dry-run`, `--offline`, `--refresh`, `--delay`, never under 3 s on that host; spec 01 §Sources). `op snapshot build` replays every marked crawl from the cache in one order: OpenReview API v2, v1, then the ICLR archive, NeurIPS, PMLR, dblp (ICML), OJS, dblp's AAAI 1980–2008 markers and Crossref last (`crawl.replay_all`; a full run orders …, ojs, crossref). Milestone B (decision-049) adds: `op ingest dblp --venue AAAI` (AAAI 1980–2008 from the pinned release; `--venue ICML` is the default), `op ingest pmlr --venue FAccT` (FAccT 2018, v81), and `op ingest crossref` (`--venue FAccT|AIES` and `--year`, both repeatable; `--dry-run`, `--offline`, `--refresh`, `--delay`, never under 1 s on that host), which reads FAccT 2019+ and AIES 2018–2023 from Crossref's `/works` and, for FAccT 2022, 2025 and 2026, the official abstract pages of facctconference.org. The design's separate `facct-site` target is folded into `crossref`: the pages are fetched and joined inside `op ingest crossref`, not by a command of their own. **`CROSSREF_MAILTO`** (`.env`, or the environment) is optional: it names a contact in Crossref's User-Agent (the polite pool); unset or blank, the public pool is used; a malformed value stops the crawl (`bad_contact`); the address is never committed, logged, cached or put in a URL. **`op ingest openalex`** (milestone C, decision-049; `--dry-run`, `--offline`, `--refresh`, `--delay`, never under 1 s) is **last in a full crawl**: it reads the other crawls' records from the cache to find the AAAI, AIES and FAccT records with no abstract, looks them up in OpenAlex (by DOI in batches of 50; AAAI 1980–2008 through the listings of `ingest/openalex_sources.toml`) and pins what it read as a content-addressed extract plus a marker under `<data-dir>/cache/openalex`; it is not a `crawl.SOURCES` member, so `op snapshot build` does not replay it with the other crawls but fills from the marked extract after dedup (spec 01 §Pipeline 4). A full run orders …, ojs, crossref, openalex. A full crawl is about 53 requests, a small part of a keyless day's budget. **`OPENALEX_API_KEY`** (`.env`, or the environment) is optional: it raises the daily budget and goes in an `Authorization` request header only, never in a URL, cache entry, claim, log line or error; a malformed value stops the crawl (`bad_key`). No contact address is sent to OpenAlex, so `CROSSREF_MAILTO` is not reused. **`op ingest aaai-library`** (TASK-232, decision-051; `--dry-run`, `--offline`, `--refresh`) caches the Internet Archive capture of each old aaai.org paper page `ingest/aaai_library.toml` pins (AAAI 1980–2008, about 4,607 captures) from `web.archive.org` only, never aaai.org, one request at least every 3 s with the generic User-Agent, each capture's SHA-1 checked against the table, then writes a marker under `<data-dir>/cache/aaai_library`; it needs no other crawl first and is not a `crawl.SOURCES` member: `op snapshot build` reads the cached captures after dedup and before the OpenAlex fill (spec 01 §Pipeline 4). A full harvest takes at least 3.8 hours; run it detached. `scripts/aaai_library_census.py` (two CDX requests) rewrites the table. The scheduled crawl of TASK-202 runs every source in scope, each driven by its table |
+| `op snapshot build [--takedowns <file>]` · `op snapshot diff <a> <b>` | build an immutable snapshot, or compare two. The build withholds every abstract on the takedown list (default `<data-dir>/takedowns/withheld.txt`, which may be absent until a snapshot, under the output directory or `<data-dir>/snapshots/`, has withheld an abstract: then it is required, as a file named with `--takedowns` always is; TASK-067; §Deploy, decision-022): a list that doesn't parse refuses it; its JSON names `withheld_ids` (the ids whose abstract it took out), `takedowns_followed` (a listed id this build holds under another id → that id, also withheld), `takedowns_unmatched` (listed ids it has no record of) and `takedowns_twins` (a twin of a withheld record → the id it is the twin of, also withheld: decision-029, TASK-163), the last three also said on stderr (a twin with what to list and log). The build fills AAAI 1980–2008 records from the cached archive captures of AAAI's own paper pages when `op ingest aaai-library` marked a harvest (`sources.aaai_library.fills`; TASK-232), then AAAI, AIES and FAccT records that still have no abstract from the marked OpenAlex extract, both after dedup and before the takedown list (milestone C; a snapshot with no marker has no fill), and the manifest says so (`sources.openalex.fills`, `abstract_openalex`). The diff's `abstract_withheld` names the ids withheld (`added`) and no longer withheld (`lifted`) between the two; since milestone C it also lists, as `abstract_kind`, each id whose derived kind differs (`[old, new]`) and counts them in `abstract_kind_transitions` (`{"none->openalex": n}`). There is no prune or delete command: keep the snapshot of every index a search record pins (the versions `op index retire` refuses), since that record's exports read it to attribute each abstract and withhold every abstract without it (decision-021); a future prune command must refuse while a record pins an index built from the snapshot |
 | `op index build --snapshot <dir\|name\|hash prefix> [--out <dir>]` · `op index parity --index <v> [--snapshot <id>]` · `op index retire <index_version> [--dry-run]` (TASK-085) | build an immutable index; check it holds `normalize()`'s tokens for its snapshot (local, over the real corpus); retire an old one: delete `<data-dir>/indexes/<index_version>/` under the indexes lock `op index build` holds: set aside as `.retiring-<index_version>` (no reader finds half an index, and no sweep deletes it), checked once more, then renamed to `.tmp-retire-<index_version>` (the commit point) and removed; the next build or retire sweeps a removal cut short. Refused, exit 1, one line to stderr, nothing touched: while any search record pins it (`RecordStore.pinned`, the count reported; a deleted pinned index would leave those records' replays permanently `drifted`), while `current` or any other symlink in `indexes/` points at it, when the record store can't be read, or when the name isn't an index_version directory directly under `indexes/` (the name is checked against the index_version format before any path is built, so `../x` never names a path). `--dry-run` runs the checks and reports the outcome with the same exit status, deleting nothing. Order: repoint `current` to the new version, SIGHUP the API, confirm `/api/v1/meta` reports the new version, then retire the old one (the API keeps serving the old version until its reload). It can't see an `op serve --index <index_version>` that serves the version by name: check what each running instance serves first. A promotion (`ln -sfn`) and a record save take no indexes lock, so after the rename the pins and every symlink's target are checked again and a hit, or anything raised (Ctrl-C included), renames the directory back and refuses or re-raises. If that rename-back fails, one ERROR `index_retire_restore_failed` names the `.retiring-` directory and the operator must `mv` it back to `<index_version>` before serving it or running another build or retire (no sweep touches it; until then every retire of that version, `--dry-run` included, is refused as `retire_cut_short`, whether `<index_version>` is absent or was rebuilt); what remains is the few syscalls between that check and the removal, after which a save or replay naming the version finds it absent. It says so when it waits for the lock. A chmod or removal that fails after the rename still retires the version (its name is gone) and reports `tmp_left`; a sweep that can't remove a leftover logs `tmp_sweep_failed` and carries on, so it never fails a later build. One log line: `index_retired` (INFO; WARNING with `tmp_left`), `index_retire_checked` (dry run) or `index_retire_refused` (WARNING; DEBUG for a malformed name, which is not logged), each with the version, the pinned count and the outcome or reason |
 | `op search "<q>" [--mode scholar] [--explain \| --ids] [--engine tantivy\|reference] [--sort <s>] [--limit <n>] [--index <dir\|version>]` | ranked hits under a PRISMA header (default): searched time, index, crawl window (first to last fetch), tokenizer and query versions; a bootstrap-corpus caution when the index holds only RIS, or a caution that the sources are unknown when its snapshot isn't in the data dir or its hash differs; identified, removed by default filters (ineligible and unclassified), screened; the canonical and identification strings; every wildcard's expansion (its count and first 10 terms; every term with `--explain`); the sorted id set (`--ids`; `--engine reference` runs the oracle over the index's snapshot, `--ids` only); or the compiled query (`--explain`), then each concept group's `total` (alone) and `total_without` under the bounds `/search` counts them under (`ApiConfig`'s `max_counted_groups`, `max_counted_terms`, `max_counted_ids`, `group_count_wait_seconds` and `group_count_grace_seconds` defaults), or the `not_counted` reason (spec 04 §SearchResponse, `groups`; TASK-194). Diagnostics go to stderr as user output; one `search_run` INFO line per run (task-030) |
 | `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--mode scholar] [--index <dir\|version>] [--out <file>]` | export the full matched set in id order (spec 04 §Exports), streamed to stdout or written whole to `--out` (never a partial file); the count is checked against the query's total. It verifies the index's snapshot to name each abstract's source (TASK-138); without it, every abstract is withheld and each record says so, with a warning on stderr and exit 0 (decision-021). It withholds the takedown list's abstracts as the API does (decision-022), under any other id the exported version holds a listed paper under (merges and globally unique native ids, `takedowns.same_paper`; a damaged snapshot's merges are skipped with a warning on stderr; TASK-067), and on its twins (the exported snapshot's and the current index's `twin` claims, TASK-163; a current index whose snapshot can't be read leaves its claims out, with one ERROR `takedown_twins_unavailable` and a warning on stderr), says on stderr how many records of the file it withheld, and a list that doesn't parse refuses it, as does a missing default list once a snapshot under `<data-dir>/snapshots/` has withheld an abstract (TASK-067) |
@@ -59,7 +90,7 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 | `op record save "<q>" [--mode scholar] [--index current\|<index_version>] [--json]` · `op record replay <id> [--index current\|<index_version>] [--json]` | freeze a search as a search record in `<data-dir>/records/records.sqlite` (the same functions as `POST /records`, `records.freeze` + `RecordStore.insert`: a record identical to the API's but for its id and time) and print its id, page and PRISMA summary, or the stored record (`--json`); replay one (the same function as `GET /records/{id}`, `records.replay`) on its own index when the data dir holds it, else on `--index` (default `current`), and print the status, `reproduced` / `drifted` / `mismatch`, the changed inputs and `+added / −removed`, or the API's `replay` block (`--json`). `--index` is a name under `<data-dir>/indexes`, never a directory: a record pins a version a replay must find by name. Left out, as serving policy: the rate limit, the save ceilings, and the verified-clause cap and candidate ceiling, so a CLI replay is never withheld (decision-010); the store's size cap and free-space floor (the API's defaults) apply (task-083) |
 | `op serve [--host] [--port] [--index current\|<index_version>] [--cors-origin …] [--trusted-proxy …] [--rate-capacity] [--rate-refill] [--export-weight] [--no-rate-limit] [--pinned-indexes] [--max-verified-clauses] [--max-verification-candidates] [--max-verification-seconds] [--max-counted-groups] [--max-counted-terms] [--max-counted-ids] [--compare\|--no-compare] [--compare-max-body-bytes] [--compare-max-records] [--compare-max-line-chars] [--compare-max-results] [--compare-max-response-bytes] [--compare-max-seconds] [--compare-upload-seconds] [--comparison-slots] [--compare-cooldown-factor] [--compare-upload-weight] [--compare-token-ms] [--log-query-text]` | run the API (04 §Implementation notes, as built): one uvicorn process over `<data-dir>/indexes/<index>`; SIGHUP reloads it. `--pinned-indexes` (default 4) sizes the LRU of older index versions held open: size it to the versions the instance holds (TASK-067). With a non-loopback `--host`, or any `--trusted-proxy`, the takedown list is required (§Deploy, TASK-067): a missing `withheld.txt` fails the load. Refused as usage, each option named with the validator's reason: a trusted proxy wider than /8 or /32, `--no-rate-limit` with a non-loopback `--host` (§Deploy), limits that could never be paid (decision-010), and a comparison flag (TASK-184) out of its field's range or not finite (the ranges: body and answer caps 1024 to 1 GiB, records and results 1 to 1,000,000, a line 64 to 16,777,216 code points, work and upload over 0 to 3,600 s, slots 1 to 16, cooldown factor 0 to 1,000, upload weight 1 to 100, token price at least 1 ms; a finite but extreme value overflowed the pause or the debit, or lifted the bound the flag is: security gate, batch B). The comparison flags set `POST /compare`'s caps (defaults: 16 MiB body, 5,000 records, 32,768-code-point lines, 5,000 results, 16 MiB answer, 60 s of work, 30 s for the upload, 1 slot; each stated in `GET /meta` `limits.compare`) and its costs, which `/meta` doesn't state (`--compare-cooldown-factor` 3, 0 for no pause; `--compare-upload-weight` 4; `--compare-token-ms` 500); 04 §Comparing with a RIS file and `deploy/README.md` §Comparisons say what each bounds |
 | `op embed build` (deferred with 06, decision-017; task-058) | build embeddings for the current index (06) |
-| `op eval coverage [--index <v>] [--out <dir>] [--date YYYY-MM-DD] [--check]` (TASK-054) · `op eval scholar --ris <file>… [--query-file <file>…] [--name <name>…] [--query <string>] [--mode native\|scholar] [--years LO..HI] [--venues V,…] [--index <v>] [--out <dir>] [--date YYYY-MM-DD] [--notes <file>] [--answers <name>] [--check]` (TASK-056) · `op eval audit` (planned, task-055) · `op eval near-miss` (deferred with 06, decision-017; task-061) | the 07 reports; `coverage` writes `docs/results/<date>-coverage.md` and `--check` exits 1 when the M4 gate fails; `scholar` writes `docs/results/<date>-scholar-comparison.md` and `<date>-scholar-comparison-review.csv` (07 §B; default strings: the Trust-Evals fixture; `--check` exits 1 on any `our_bug`); `near-miss` is 06's recall@25 |
+| `op eval coverage [--index <v>] [--out <dir>] [--date YYYY-MM-DD] [--check]` (TASK-054) · `op eval scholar --ris <file>… [--query-file <file>…] [--name <name>…] [--query <string>] [--mode native\|scholar] [--years LO..HI] [--venues V,…] [--index <v>] [--out <dir>] [--date YYYY-MM-DD] [--notes <file>] [--answers <name>] [--check]` (TASK-056) · `op eval openalex [--snapshot S] [--aaai-sample N] [--title-sample N] [--seed N] [--offline] [--out DIR] [--date D] [--ruling TEXT]` (milestone C) · `op eval audit` (planned, task-055) · `op eval near-miss` (deferred with 06, decision-017; task-061) | the 07 reports; `coverage` writes `docs/results/<date>-coverage.md` and `--check` exits 1 when the M4 gate fails; `scholar` writes `docs/results/<date>-scholar-comparison.md` and `<date>-scholar-comparison-review.csv` (07 §B; default strings: the Trust-Evals fixture; `--check` exits 1 on any `our_bug`); `openalex` writes `docs/results/<date>-openalex-audit.md` (07 §G): OpenAlex's abstracts against the official ones, and a check of the title-route attaches; always keyless, `--offline` replays the cache with no request and the same bytes; `near-miss` is 06's recall@25 |
 | `op openapi [--out <file>]` | print the OpenAPI document, sorted and stable, without loading an index (task-040); `make openapi` writes it to `backend/tests/contract/openapi.json` and regenerates `frontend/src/api/schema.ts` from it |
 
 `op search`, `op export` and `op record save` check raw query length before index I/O, then parse
@@ -83,10 +114,10 @@ The CLI and the API call the same functions, so the CLI alone is enough to run a
 ## Testing
 
 - Every hook has a case table under `.claude/hooks/tests/`, and every tooling script one under
-  `.claude/scripts/tests/` (the CI scripts, the network guard, `changelog.py`); `make tooling` and CI
-  `claude-tooling` run them all.
-- `make tooling` also runs the roster lint, the `.claude/README.md`, learnings-index and backlog checks, and
-  the digest-pin check on `deploy/` (§Deploy).
+  `.claude/scripts/tests/` (the CI scripts, the network guard, `changelog.py`, the `/dependabot-review`
+  scripts); `make tooling` and CI `claude-tooling` run them all.
+- `make tooling` also runs the roster lint, the `.claude/README.md`, learnings-index and backlog checks, the
+  digest-pin check on `deploy/` (§Deploy), and the npm manifest/lock check (`npm_specs.py`, §CI "Dependabot").
 - CLI commands are covered by the suites of the spec they call (07); the CLI adds only argument-parsing
   and exit-code tests.
 
@@ -114,11 +145,11 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 
 | Workflow → required check(s) | Runs |
 |---|---|
-| `lint` → `lint` | `make lint` (ruff format/check, mypy --strict once `backend/src` exists, shellcheck, frontend prettier/eslint/tsc), then actionlint |
+| `lint` → `lint` | `make lint` (ruff format/check, mypy --strict on `backend/src` and on the `/dependabot-review` scripts and their case table, shellcheck, frontend prettier/eslint/tsc), then actionlint |
 | `test` → `test` | pytest under pytest-xdist at the `pr` Hypothesis profile (200 examples, 2 s deadline) (unit, golden, differential@200, contract; the 2,000-example `ci` profile runs nightly, TASK-127); vitest; `next build` (the standalone server must exist); OpenAPI snapshot and TS types freshness (`make openapi`, then `git diff --exit-code` on `backend/tests/contract/openapi.json` and `frontend/src/api/schema.ts`; unconditional, TASK-040) |
-| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`, no task or decision id used twice: §Merge queue), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`) |
+| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`, no task or decision id used twice: §Merge queue), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), the npm manifests' dependency specs equal to the lock's workspace entries (`npm_specs.py`, §CI "Dependabot"), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`, the `/dependabot-review` scripts) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha. In a merge-queue build, `merge_group_gate.py` runs the same three checks on every PR in the group (§Merge queue) |
-| `nightly` (scheduled daily, and `workflow_dispatch`; not a PR check) | Parallel jobs, each with its own time limit (TASK-057): the whole backend suite but the differential at the `ci` profile (2,000 examples) under pytest-xdist, synthetic-corpus parity (`test_parity.py`) included; every property at 50,000 examples as a 5-part `properties` matrix under pytest-xdist, split by measured time per test (the near-cap replay property alone, the other oracle-backed properties, `unit/engine`, `unit/ingest`, and the rest with the exhaustive tokenizer check, `OP_EXHAUSTIVE=1`); the year-edit property (`test_clauses.py`), which ran past 90 min unsplit, as 4 seeded `year-edits` jobs of 12,500 (`OP_YEAR_EDIT_SHARDS`); differential@50k as 8 independent jobs of 6,250 examples, each with its own `--hypothesis-seed`, which its log prints with a rerun command; `benchmarks`: the spec 03 benchmarks with their budgets, then the ~80k report into the run summary and a `bench-80k` artifact (a budget miss there is a warning annotation); and the mutation run (`mutate.py`, every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent) as a 12-job `mutate` matrix (TASK-171; 8 until 2026-10-06): job i of n runs `mutate.py --shard i/n`, every n-th mutant from the i-th, so every mutant is checked every night (n is the matrix size, so adding a shard is one edit). Estimated from run 37017691575 (188 mutants in 140 min on a 4-CPU runner), the 694 mutants at TASK-171 need ~8.5 h of one runner, past GitHub's 6 h job cap, or ~65 min a shard of its 140 at 8 shards (2026-10-06: 778 mutants took 77–123 min a shard at 8, so 12); shard 1's first step prints the night's count, and shards are added before one nears 140 min. Shard 1's first step checks every mutant's pattern still exists (seconds), so a stale mutant anywhere fails the run each night; it also fails its own shard. A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min, with an `::error::` giving about how many of its mutants it checked (the step runs with `shell: bash`, i.e. pipefail, so the pipe through `tee` keeps the status). Long pytest steps run verbose with `OP_EARLY_FAILURES=1` (a failure's report, Hypothesis blob included, is printed when the test fails) and are interrupted before their job's limit, so an overrun fails with an `::error::` and shows which test was still running. The run has 31 jobs, past GitHub's limit of 20 at once for a free organization, so 11 (and more while a PR's CI runs) queue until running jobs finish (the short ones, `suite-ci`, `benchmarks` and the `differential` shards, took under 25 min in run 37017691575); a job's time limit starts when it runs. Full-corpus parity stays local (decision-004) |
+| `nightly` (scheduled daily, and `workflow_dispatch`; not a PR check) | Parallel jobs, each with its own time limit (TASK-057): the whole backend suite but the differential at the `ci` profile (2,000 examples) under pytest-xdist, synthetic-corpus parity (`test_parity.py`) included; every property at 50,000 examples as a 5-part `properties` matrix under pytest-xdist, split by measured time per test (the near-cap replay property alone, the other oracle-backed properties, `unit/engine`, `unit/ingest`, and the rest with the exhaustive tokenizer check, `OP_EXHAUSTIVE=1`); the year-edit property (`test_clauses.py`), which ran past 90 min unsplit, as 4 seeded `year-edits` jobs of 12,500 (`OP_YEAR_EDIT_SHARDS`); differential@50k as 12 independent jobs of 4,166 or 4,167 examples, exactly 50,000 between them (`OP_DIFFERENTIAL_SHARD` is each job's index; the remainder goes to the first shards) (8 until 2026-10-11, when the group-count property made a shard run past its 110 minutes), each with its own `--hypothesis-seed`, which its log prints with a rerun command; `benchmarks`: the spec 03 benchmarks with their budgets, then the ~80k report into the run summary and a `bench-80k` artifact (a budget miss there is a warning annotation); and the mutation run (`mutate.py`, every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent) as a 12-job `mutate` matrix (TASK-171; 8 until 2026-10-06): job i of n runs `mutate.py --shard i/n`, every n-th mutant from the i-th, so every mutant is checked every night (n is the matrix size, so adding a shard is one edit). Estimated from run 37017691575 (188 mutants in 140 min on a 4-CPU runner), the 694 mutants at TASK-171 need ~8.5 h of one runner, past GitHub's 6 h job cap, or ~65 min a shard of its 140 at 8 shards (2026-10-06: 778 mutants took 77–123 min a shard at 8, so 12); shard 1's first step prints the night's count, and shards are added before one nears 140 min. With 997 mutants (2026-10-09/10) four shards ran past 140 min, every mutant running all 13 case tables; since then a mutant runs the tables that name its file first and stops at the first failure, about a third of the time (§Mutation testing), so 12 shards have the room again. Shard 1's first step checks every mutant's pattern still exists (seconds), so a stale mutant anywhere fails the run each night; it also fails its own shard. A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min, with an `::error::` giving about how many of its mutants it checked (the step runs with `shell: bash`, i.e. pipefail, so the pipe through `tee` keeps the status). Long pytest steps run verbose with `OP_EARLY_FAILURES=1` (a failure's report, Hypothesis blob included, is printed when the test fails) and are interrupted before their job's limit, so an overrun fails with an `::error::` and shows which test was still running. The run has 35 jobs, past GitHub's limit of 20 at once for a free organization, so 15 (and more while a PR's CI runs) queue until running jobs finish (the short ones, `suite-ci`, `benchmarks` and the `differential` shards, took under 25 min in run 37017691575); a job's time limit starts when it runs. Full-corpus parity stays local (decision-004) |
 | `bench` → `bench` (advisory: not a required check yet) | pytest-benchmark on the 5k fixture index (`backend/tests/bench`, task-031): the PR's base and head on one runner; a minimum time over 20% slower than the base fails, and each benchmark asserts its spec 03 budget (p95). It becomes required once it has run green on a few PRs without false failures (runner noise); a maintainer adds it to `dev`'s required checks |
 | `web-image` → `web-image` (advisory: not a required check) | Only on PRs into, and pushes to, `dev` and `main` that touch `deploy/**`, `frontend/**`, `package.json`, `package-lock.json`, `.dockerignore` or the workflow itself (a workflow-level `paths` filter; TASK-148). `docker build -f deploy/web.Dockerfile .` three times on the runner's Docker, pushing nothing: a `private` image, a `public` one with the placeholder contact `takedown@example.org`, and a `public` one with no contact, which passes only when the build fails at `web-build-gate.sh` with its message. It stays advisory because the filter skips it on other PRs, and a required check that never starts stays pending forever; making it required means dropping the filter for a changed-files step inside the job, so it always reports |
 | `e2e` → `playwright` (advisory: not a required check yet) | `make e2e`: Playwright against the deterministic 5k fixture API (`backend/tests/e2e/`) and the standalone frontend: the spec 05 review flow, keyboard focus behavior, axe WCAG 2.2 AA in both themes at 1280 and 320 px, root reflow at 320 px, and platform-specific `/search` visual baselines in both themes on the fixed `ubuntu-24.04` CI label |
@@ -176,15 +207,103 @@ created last, after rebasing onto `dev`, and on a clash the unmerged PR drops it
 again (skill `task-hygiene`, §Ids). The rows are in `.claude/scripts/tests/test-tooling-scripts.sh` and the
 mutants in `.claude/scripts/mutants/backlog.json`.
 
-**Dependabot** (`.github/dependabot.yml`, weekly) watches `github-actions` (prefix `ci`), `uv` and `npm` (prefix
-`deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch version updates
-are grouped into one PR per ecosystem (a docker digest bump is not a version change and comes as its own PR),
-and semver-major updates are ignored (`dependency-name: "*"`,
-`version-update:semver-major`), so a major upgrade is a deliberate, hand-made PR; adopted 2026-10-01, after the
-npm entry's first run opened six PRs, majors among them. The `uv` entry also ignores `tantivy` entirely
-(§Release, "Upgrading Tantivy"), and the `docker` entry still bumps the base-image digests, which are not majors
-(§Deploy). GitHub applies `ignore` to security updates too, so a vulnerability whose fix is a major, or any
-Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
+**Dependabot** (`.github/dependabot.yml`, weekly, each version update held back 7 days after its release by
+`cooldown`; security updates aren't) watches `github-actions` (prefix `ci`), `uv` and `npm` (prefix
+`deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch version updates are
+grouped into one PR per ecosystem (a docker digest bump is not a version change and comes as its own PR), and
+semver-major updates are ignored (`dependency-name: "*"`, `version-update:semver-major`), so a major upgrade is a
+deliberate, hand-made PR; adopted 2026-10-01, after the npm entry's first run opened six PRs, majors among them. The
+`uv` entry also ignores `tantivy` entirely (§Release, "Upgrading Tantivy"), and the `docker` entry still bumps the
+base-image digests, which are not majors (§Deploy), and ignores a new `python` minor
+(`version-update:semver-minor`): the api image's tag names the patch release `.python-version` pins, so a patch bump
+arrives as a PR that must move `.python-version` too, and a minor is done by hand (§Monorepo layout, "Python pin").
+GitHub applies `ignore` to security updates too, so a vulnerability whose fix is a major, or any Tantivy fix, shows
+up as a Dependabot alert and is fixed by a hand-made PR.
+
+A Dependabot PR is reviewed and merged like any other (review gate, attestation, merge queue), with these checks
+added. Read the upstream release notes of every bumped package: a security release is not always in `npm audit`
+yet. Check the supply chain: the lock's resolved URLs stay on the registry, the integrity hashes match it, no
+package or install script is new, and the publisher is the one that published the previous version. For a docker
+bump, the registry resolves the tag to the pinned index digest. For npm, every entry in `frontend/package.json`
+equals `packages["frontend"]` in `package-lock.json`: Dependabot's npm updater can write a caret there (PR #124's
+`eslint-config-next`, PR #100's Vitest), and `npm ci` accepts it. `.claude/scripts/dependabot/npm_specs.py` checks
+it on every PR (`make tooling`, CI `claude-tooling`; TASK-212): each spec in the four dependency sections of
+`package.json` and `frontend/package.json` must be written exactly as the lock's `packages[""]` and
+`packages["frontend"]` hold it (same string, same JSON type), none missing and none extra; it exits 1 naming
+each mismatch, and also on a file it can't read, a manifest with no lock entry (or the reverse), a section that
+isn't an object, a root `workspaces` entry other than `frontend` (add it to the script's `WORKSPACES`), a
+`--root` that isn't a directory, and a checkout with neither file (so a routine that forgets `--root .` fails on
+dev's copy's scratch directory instead of reading it as a match); case rows in `test-tooling-scripts.sh`.
+`npm_lock.py` reports the same mismatches, from the same function, as FIX lines (a section that isn't an object,
+or a workspace entry missing from the lock, is a PROBLEM). Run `npm audit --omit=dev` and report any advisory
+that predates the bump. A lockfile edit runs under the `.nvmrc` Node, because an older npm drops the `libc`
+fields. Docs that state a bumped version move in the same PR.
+
+**The weekly routine** (decision-048, TASK-211). A scheduled Claude Code routine (a cloud session on a fresh clone,
+no access to the owner's machine) runs `/dependabot-review` (`.claude/commands/dependabot-review.md`) once a week.
+Its checks are scripted in `.claude/scripts/dependabot/` and run from `dev`'s copy, never the PR branch's.
+`prs.py check` gates each PR before anything of it runs: open, by Dependabot, into `dev`, its head still the sha
+fetched, its head branch a plain `dependabot/<ecosystem>/…` name, every changed file one its ecosystem touches
+(computed by git, and GitHub's file and commit lists equal to git's), every commit Dependabot's with a signature
+GitHub verified. The checkers then run the checks above, and the shape of the change: `uv_lock.py`,
+`npm_lock.py`, `docker_digest.py` and `actions_pins.py` allow no change in a file beyond its dependency versions
+and pins (no script, build requirement, `RUN` line or `permissions:` rides along). `restore_libc.py` repairs dropped
+`libc` fields; `prs.py` also checks the environment (`preflight`), lists the PRs, queues them and watches the queue. The routine then runs the tests the ecosystem
+calls for (without the GitHub credential in their environment; `.githooks/pre-push` strips it from its `make lint`
+and `make tooling` as well), the reviewers, the dispositions, the review
+record and attestation (`record-review.py --attest --pr <n> --repo <owner>/<name>`), the `no-learning` label unless something was
+learned, and `prs.py queue <n> --head <sha>`. It fixes what the PR itself can fix: a manifest/lock pin, dropped `libc` fields, a doc
+that states the old version, a review finding. It may merge, through the queue only, a PR that passes all of
+that. It never merges, and leaves open with a comment for the owner, a PR with:
+
+- a commit that isn't Dependabot's, a file outside its ecosystem, or a change beyond versions and pins;
+- an integrity, hash or URL mismatch, or a file off the registry;
+- a new publisher, or provenance the previous version had and the new one lacks;
+- a new install script, or a new or removed package;
+- a uv or npm release younger than 7 days (the `cooldown` every ecosystem sets holds version updates back that
+  long, so this is a security update, which ignores it; for actions and docker images the hold is the `cooldown`
+  alone);
+- a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
+- a red required check it can't fix, or a Must it can't fix;
+- any semver-major, anything touching `tantivy`, or a new Python release, patch or minor: a patch changes how the
+  crawlers parse pages (§Monorepo layout, "Python pin"), and the crawl-cache replay that shows records unchanged
+  needs the owner's `data/`. A new digest for the same `python` tag is merged like any other.
+
+The checkers (and `prs.py check`) print `ok`, `FIX` (the routine repairs it) or `PROBLEM` (a hard stop) per
+finding, and exit 0, 3 (only FIX lines), 1 (a PROBLEM) or 2 (the check couldn't run, also a hard stop). Every
+outside call goes through `git`, `curl`, `npm` or `gh`, so the case table `.claude/scripts/tests/test-dependabot.sh`
+(in `make tooling`) runs them against fakes; the mutants are in `.claude/scripts/mutants/dependabot.json`. The run
+ends with a summary for its log: merged, left open (with the reason), not reviewed, and what the owner should look
+at. The gates stay on for Dependabot PRs; exempting `dependabot[bot]` from `learnings` and `review-attested` was
+considered and rejected (decision-048). The routine's GitHub token is fine-grained: this repository only,
+`contents`, `pull requests`, `issues` and `actions` read and write, nothing else (no `administration`, no
+`workflows`); it is the only credential the command uses. Without `workflows` the routine
+reviews and attests a github-actions PR but leaves the queueing to the owner (`gh pr merge <n> --auto --match-head-commit <sha>`), named in
+its summary. The pre-push hook and the autofix hook run their tools without the token.
+
+*Cloud and local* (TASK-213). A Claude Code cloud session refuses every GitHub GraphQL call with HTTP 403 ("GitHub
+GraphQL is not available from Claude Code sessions; …"), so `gh pr list`, `view`, `checks` and `merge` all fail
+there, and its token is a network secret: `GH_TOKEN` and `GITHUB_TOKEN` hold placeholders (`gh auth status` calls
+them invalid) and an egress proxy adds the real token to requests for api.github.com, so no process in the session
+holds it. The procedure therefore uses REST only (`gh api repos/<repo>/...`) and checks auth with a real call (`gh
+api user`). `prs.py preflight` tells the environment by asking GraphQL for the viewer: the session's 403 message
+is **cloud**, an answer is **local** (a maintainer's clone with a real `gh` login), anything else stops the run; in
+the cloud it also requires that `gh` has no stored login (a file dependency code could read). Turning auto-merge
+on is the one step that differs: `prs.py queue` uses the session's CCR route in the cloud (`PUT
+repos/<repo>/pulls/<n>/ccr/auto_merge`; `DELETE` turns it off) and `gh pr merge <n> --auto --match-head-commit
+<sha>` locally. The CCR route's request shape isn't documented, so any non-2xx leaves the PR open for the owner,
+and it has no `--match-head-commit`: `queue` reads the head before and after the PUT and turns auto-merge off
+again if it moved (or if GitHub shows nothing set to merge, or a failed call left it set). A push between that
+second read and GitHub acting on the PUT is a residual race; the merge queue's `review-attested` check closes it
+against anyone who can't also rewrite the PR body, since the queue build requires each PR's body to attest the
+exact head it merges, and the routine attested only the head it reviewed (decision-048). Dependency code left
+running in a cloud session could use the proxy to do both; the routine looks for leftover dependency processes
+before it queues, which catches accidents but not code that hides itself, so what bounds it is that only
+registry-verified versions run and the token's scope is narrow. The routine runs `record-review.py` from `dev`'s
+copy, like the checkers, because a PR branch based on an older `dev` carries an older recorder. `prs.py watch`
+polls REST: the PR's `merged` and `auto_merge`, the timeline's latest merge-queue event, the queue's
+`gh-readonly-queue/dev/pr-<n>-<sha>` build branch, and the check runs, and
+names a queue build run that hangs so the routine can cancel and rerun it through the Actions REST endpoints.
 
 ## Git and PR rules
 
@@ -210,7 +329,7 @@ Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
   commit as the behaviour. Finished tasks leave `backlog/tasks/` via `backlog task complete <id>`. New task
   and decision ids created during the work are created last, after rebasing onto `dev` (§Merge queue).
 - **No AI authorship** in commits or PRs (project decision 2026-09-25). `.claude/` is committed.
-- Secrets (OpenReview credentials) live only in `.env` (gitignored, mode 600). `data/` is never committed.
+- Secrets (OpenReview credentials, and the optional `OPENALEX_API_KEY` and `CROSSREF_MAILTO`) live only in `.env` (gitignored, mode 600). `data/` is never committed.
 
 ## Deploy (M6: the web image, TASK-136, built in CI, TASK-148; compose, Caddy, the api image and the runbook, TASK-065; the host, TASK-064)
 
@@ -366,19 +485,22 @@ touches the paths §CI lists (`deploy/`, the frontend, the npm manifests, `.dock
 must fail at `web-build-gate.sh` (TASK-148).
 
 **Base images are digest-pinned (TASK-149).** Every `FROM` in `deploy/` names its base image as
-`name:tag@sha256:<digest>`, the tag kept for readers and the digest that of the multi-arch index (not of one
-platform's manifest), so a rebuild uses the image that was reviewed; a `FROM` naming an earlier build stage, or
-`scratch`, needs none. The same holds for every other image a build pulls: a `# syntax=` parser directive
-(the BuildKit frontend; `web.Dockerfile` has none, so the builder's built-in one is used), `COPY --from=` and
-`RUN --mount=…,from=`. `.claude/scripts/check_digest_pins.py` (`make tooling`, CI `claude-tooling`; case rows
-in `test-tooling-scripts.sh`) reads every `*Dockerfile*` or `*Containerfile*` under `deploy/` as BuildKit does
-(a BOM dropped, continuation lines glued, the `escape` directive honoured) and fails on any of those images
-without a digest, or with an `ARG` in its name. Dependabot's `docker` entry for `/deploy` and its
-subdirectories (weekly, prefix `build`; §CI, "Dependabot") bumps the `FROM` digests; it reads no other line, so a pinned `syntax`,
-`COPY --from` or `RUN --mount` image (none today) is bumped by hand; a new Node major (`22-…` → `24-…`) is
-ignored there, like every semver-major update (§CI), and done by hand along with `.nvmrc` and CI. A digest is resolved from the registry,
-e.g. `docker buildx imagetools inspect node:22-bookworm-slim` (its top-level `Digest:`, with media type
-`…image.index…`), which needs no running daemon.
+`name:tag@sha256:<digest>`, the tag kept for readers (the api image's `python` tag names the patch release
+`.python-version` pins, and a bump of it fails `test_python_pin.py` until `.python-version` follows: "Python pin")
+and the digest that of the multi-arch index (not of one platform's manifest), so a rebuild uses the image that was
+reviewed; a `FROM` naming an earlier build stage, or `scratch`, needs none. The same holds for every other image a
+build pulls: a `# syntax=` parser directive (the BuildKit frontend; `web.Dockerfile` has none, so the builder's
+built-in one is used), `COPY --from=` and `RUN --mount=…,from=`. `.claude/scripts/check_digest_pins.py` (`make
+tooling`, CI `claude-tooling`; case rows in `test-tooling-scripts.sh`) reads every `*Dockerfile*` or
+`*Containerfile*` under `deploy/` as BuildKit does (a BOM dropped, continuation lines glued, the `escape` directive
+honoured) and fails on any of those images without a digest, or with an `ARG` in its name. Dependabot's `docker`
+entry for `/deploy` and its subdirectories (weekly, prefix `build`; §CI, "Dependabot") bumps the `FROM` digests; it
+reads no other line, so a pinned `syntax`, `COPY --from` or `RUN --mount` image (none today) is bumped by hand; a
+new Node major (`22-…` → `24-…`) is ignored there, like every semver-major update (§CI), and done by hand along with
+`.nvmrc` and CI. A digest is resolved from the registry, e.g. `docker buildx imagetools inspect
+node:22-bookworm-slim` (its top-level `Digest:`, with media type `…image.index…`), which needs no running daemon;
+where that hangs, the registry answers directly (a token from `auth.docker.io`, then a `HEAD` on
+`/v2/library/<name>/manifests/<tag>` with the OCI index `Accept` header returns `docker-content-digest`).
 
 The e2e suite
 builds with the placeholder `takedown@example.org` (`frontend/playwright.config.ts`); `frontend/.env.example`
@@ -647,7 +769,12 @@ retention (step 8) matter (guarantee 4).
    `QUERY_VERSION` reports `drifted` even when the index remains supported. Keep the pinned data in all
    cases. To find the historical release for a
    record, match its pinned index's manifest (`tokenizer_version`, `schema_version`, `tantivy_version`) and the
-   record's `query_version` against the releases' Data sections.
+   record's `query_version` against the releases' Data sections. The code serves index schemas 3 and 4 (spec 03
+   §Versioning). Schema 2 was retired in milestone C, once `op index retire --dry-run` showed no search record pinned
+   any of the four schema-2 indexes the data directory held (05a0541717f6, 6508b8cf66ff, a7cfd04b656f and
+   c76d7f26ee06); they were deleted from the real data directory on 2026-10-10. A schema-3 index is not rebuilt: an
+   OpenAlex-filled snapshot cannot be indexed at schema 3 (the build refuses it), so promoting one needs an index
+   at schema 4 (`op index build` writes schema 4), after which the schema-3 index stays until no record pins it.
 9. **After.** Deploying the release, and promoting an index, follow §Deploy and its runbook, `deploy/README.md` (together, for a release that
    changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy).
 
@@ -666,8 +793,8 @@ Kreate splits `.claude/` per project. Our parts share one query contract, so thi
 
 **The authoritative list is [`.claude/README.md`](../../.claude/README.md).** It is generated from the
 files' frontmatter by `.claude/scripts/roster_index.py`, and CI fails if it is stale. This spec deliberately
-does not repeat the list, because a hand-kept copy is how counts drift. As of M0 there are **49 agents,
-53 skills and 17 commands** (target range 25–150 of each), across these areas:
+does not repeat the list, because a hand-kept copy is how counts drift. At TASK-211 (2026-10-07) there are
+**49 agents, 53 skills and 18 commands** (target range 25–150 of each), across these areas:
 - global roles and process (including `learning-recorder` and the review gate);
 - engineering standards (including `autolint`, `logging-standards`, `observability-reviewer`);
 - ingestion;
@@ -679,7 +806,7 @@ does not repeat the list, because a hand-kept copy is how counts drift. As of M0
   auditor, data-viz designer);
 - semantic layer;
 - evaluation and research;
-- ops.
+- ops (including `/dependabot-review`, the weekly Dependabot routine, §CI).
 
 New agents and skills are added when a milestone brings a new recurring task, never speculatively. Each
 needs an area in `roster_index.py` and a path reference from something that uses it (the lint rejects
@@ -791,7 +918,7 @@ deliberate evasion.
 `.claude/scripts/mutate.py` (`make mutate`, `make mutate-changed`, `--match <text>`) proves the case tables
 have teeth. Each mutant in `.claude/scripts/mutants/*.json` breaks one piece of gate or tooling logic, and at
 least one table must fail. Survivors are either fixed with a new row or documented as `equivalent`, with
-the reason. Mutants run in parallel, each against a copy of every case table: the full set (694 at TASK-171) takes hours (188 in 140 min on a 4-CPU runner, nightly run 37017691575), and `--changed` only the mutants of the files a diff touches. `--shard i/n` runs every n-th selected mutant from the i-th (1 <= i <= n), so n shards partition the set the same way every run; `--list` prints the selected labels and runs nothing. Reviews run
+the reason. Mutants run in parallel, each in a copy of the repo: the full set (997 on 2026-10-10) takes hours of one runner, and `--changed` only the mutants of the files a diff touches. A mutant is killed when any table fails, so it runs first the tables that name its file (its name, or its stem as a word, in the table or in a helper beside it that the table names), then the rest only if those all pass, and each phase stops at its first failure: the verdict of running every table (a survivor runs them all) in about a third of the time on the nightly logs of 2026-10-09/10. A table that runs past its timeout (10x its own baseline time, at least 60 s) is stopped with everything it started (its own process group) and run again alone: if it hangs again it has hung under the mutant, an infinite loop, and the mutant is `TIMEOUT`, which counts as killed; if not, that run's verdict stands, since a table slowed by the other jobs is not a hang. `--table-timeout` sets one timeout for every table, and is refused (exit 2) under 10x any table's baseline, where a slow survivor would count as killed. Ctrl-C, CI's `timeout --signal=INT` and SIGTERM stop the running tables too. `.claude/scripts/tests/test-mutate-run.sh` is the case table for all this. `--shard i/n` runs every n-th selected mutant from the i-th (1 <= i <= n), so n shards partition the set the same way every run; `--list` prints the selected labels and runs nothing. Reviews run
 `make mutate-changed`; the nightly workflow runs every mutant as 12 shards in parallel jobs (§CI; 8 until 2026-10-06, when a shard ran past its 140 minutes).
 Hook probes stay data (TASK-169): `.claude/scripts/lint_probes.py` (in `make tooling`)
 fails on a case-table row whose probe, label or command holds a `$(…)` or backquote bash would run while the

@@ -20,7 +20,9 @@ and its abstract claims (`takedowns.withhold_record`), with `abstract_withheld` 
 withheld text still reports `matched: true` there, as `/search` still counts the paper.
 
 `twins` (TASK-162, decision-029) names the paper's other records the index keeps separate (`RecordFile.twins`, the
-ids its `twin` claims name), each a paper of this same index.
+ids its `twin` claims name), each a paper of this same index. `abstract_note` (TASK-210) is the abstract's
+attribution's `note` (`RecordFile.attributions`, as on `/search`): the submission-time sentence for an abstract read
+from an ICML 1997 or 1998 submission page, else null (null too when withheld).
 """
 
 from __future__ import annotations
@@ -88,6 +90,8 @@ def get_paper(
     if withheld:
         record = withhold_record(record)
     twins = list(served.records.twins.get(id, ()))  # its `twin` claims' ids (TASK-162)
+    credit = None if withheld else served.records.attributions.get(id)
+    note = None if credit is None else credit.note  # TASK-210
     if result is None:
         return PaperResponse(
             **versions(engine.index_version, engine.tokenizer_version),
@@ -96,6 +100,7 @@ def get_paper(
             highlights=None,
             abstract_withheld=withheld,
             twins=twins,
+            abstract_note=note,
         )
     assert result.effective_ast is not None  # searchable refuses a query that doesn't parse
     check_candidates(request, engine, result.effective_ast)  # 422 API_QUERY_TOO_COSTLY, as /search
@@ -109,4 +114,5 @@ def get_paper(
         else Highlights(title=spans["title"], abstract=[] if withheld else spans["abstract"]),
         abstract_withheld=withheld,
         twins=twins,
+        abstract_note=note,
     )

@@ -139,3 +139,8 @@ clause is `crawl_dates["*"]` from–to, both dates (a crawl spans days; spec 04)
   record's ids never change for a takedown (its pinned index still matches the withheld text, decision-022),
   but what an export of it contains can: cite the export date (the provenance `N1` carries it). The coverage
   report's missing-abstract count leaves withheld ones out and names them under its totals.
+- **Submission-time abstracts** (TASK-207, TASK-210). ICML 1997 and 1998 abstracts come from the conferences'
+  submission pages, so they are the abstracts as submitted, which may differ from the published papers'. Each such
+  record says so in every export (RIS `N1`, BibTeX `abstract_note`, CSV and JSONL `abstract_note`) and in the web
+  app. Covidence shows screeners no `N1`: read the CSV's `abstract_note` before import, and report how many records
+  were screened on a submission-time abstract (the coverage report's scope line counts them per snapshot).

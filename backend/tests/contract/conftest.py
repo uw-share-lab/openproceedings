@@ -75,6 +75,10 @@ def attributed(r: Rec) -> PaperRecord:
             "ICML": f"https://proceedings.mlr.press/v{paper.year - 1800}/{paper.native.lower()}.html",
             "ICLR": f"https://proceedings.iclr.cc/paper_files/paper/{paper.year}/hash/{digest}-Abstract-Conference.html",
             "NeurIPS": f"https://proceedings.neurips.cc/paper_files/paper/{paper.year}/hash/{digest}-Abstract-Conference.html",
+            "AAAI": f"https://ojs.aaai.org/index.php/AAAI/article/view/{n}",
+            "AIES": f"https://ojs.aaai.org/index.php/AIES/article/view/{n}",
+            "FAccT": f"https://dl.acm.org/doi/10.1145/{n}",
+            "IASEAI": f"https://ojs.aaai.org/index.php/IASEAI/article/view/{n}",
         }[paper.venue]
         if n % 7 == 0:
             by_api = paper.venue == "ICLR" and n % 2 == 0
@@ -256,4 +260,21 @@ def make_app(
 def client(store: Store) -> Iterator[TestClient]:
     """The app over the store's `current` (the 5k index), loaded before the first request."""
     with TestClient(make_app(store.indexes.parent)) as c:
+        yield c
+
+
+@pytest.fixture(scope="session")
+def schema_3_data(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A data directory whose `current` is a schema-3 index (the previous served schema: no `abstract_kind`) of the
+    5k corpus's first 300 records."""
+    root = tmp_path_factory.mktemp("api-schema-3")
+    version = build(list(records())[:300], root / "snapshots", "small", root / "indexes", schema_version="3")
+    (root / "indexes" / "current").symlink_to(version)
+    return root
+
+
+@pytest.fixture
+def schema_3_client(schema_3_data: Path) -> Iterator[TestClient]:
+    """The app serving a schema-3 index, as before a schema-4 build is promoted (or a pinned older index)."""
+    with TestClient(make_app(schema_3_data)) as c:
         yield c

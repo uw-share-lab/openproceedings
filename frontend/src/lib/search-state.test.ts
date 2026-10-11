@@ -390,6 +390,25 @@ describe("facetToggle rewrites q exactly", () => {
   });
 });
 
+describe("facetToggle on abstract_kind (decision-049)", () => {
+  it("adds a value to the typed clause through /parse's clause, as for status", () => {
+    const q = "trust abstract_kind:official";
+    const parsed: ParsedClause = {
+      field: "abstract_kind",
+      negated: false,
+      span: [6, 28],
+      toggleable: true,
+      reason: null,
+      blocking_spans: [],
+      values: ["official"],
+    };
+    const choice = clauseFromParse(parsed, q, "native");
+    expect(choice.clause).not.toBeNull();
+    const next = reduce(at(q), { type: "facetToggle", field: "abstract_kind", value: "none", ...choice });
+    expect(next.q).toBe("trust abstract_kind:(official OR none)");
+  });
+});
+
 describe("includeExcluded rewrites q exactly", () => {
   it("adds the excluded value to the default clause", () => {
     const next = reduce(at("trust"), {

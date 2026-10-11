@@ -7,7 +7,11 @@ cache proceedings pages (`sources/crawl.py`). `build` imports everything cached 
 OpenReview crawl replayed from its cached responses, and each finished ICLR/NeurIPS/PMLR crawl re-mined from its cached
 pages), dedups, reconciles OpenReview acceptance against the crawled proceedings (`reconcile.py`: an
 OpenReview-accepted paper a complete listing doesn't hold becomes `unknown`, decision-005), adds the conflicts a
-crawl found inside one source (`with_crawl_conflicts`), and writes
+crawl found inside one source (`with_crawl_conflicts`), then fills AAAI 1980-2008 abstracts from the cached
+archive captures of AAAI's own paper pages (`sources/aaai_library.apply`, decision-051), then OpenAlex abstracts from
+the pinned extract
+(`sources/openalex.apply`: only a null abstract of an AAAI, AIES or FAccT record, before takedowns are withheld, so a
+takedown still withholds a filled abstract), and writes
 `<snapshots>/<crawl date>-<shorthash>/` with `records.jsonl`, `manifest.json`, `merges.csv` and
 `conflicts.csv`. It never fetches, so it works offline. It also reports (and logs) each venue-year status
 its records hold that their sources can't supply (`status_check`, TASK-109), without changing the snapshot.
@@ -47,7 +51,7 @@ from openproceedings import __version__, storage
 from openproceedings.ingest.caps import cap_records, is_trimmed
 from openproceedings.ingest.dedup import Attribution, Conflict, DedupResult, Merge, attribution, dedup
 from openproceedings.ingest.reconcile import crawled, reconcile
-from openproceedings.ingest.record import DERIVED, RECORD_SCHEMA_VERSION, PaperRecord
+from openproceedings.ingest.record import DERIVED, RECORD_SCHEMA_VERSION, PaperRecord, abstract_kind_of
 from openproceedings.ingest.ris import ImportReport, import_ris
 from openproceedings.ingest.sources.common import Report, sources_manifest
 from openproceedings.ingest.status_check import UnexpectedStatus, unexpected_statuses
@@ -254,6 +258,33 @@ def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], li
             "`op ingest openreview --venue <V> --years <Y>` or `op ingest iclr|neurips|pmlr ...` first"
         )
     return records, reports, crawls
+
+
+def fill_aaai_library(result: DedupResult, cache: Path) -> tuple[DedupResult, list[Report]]:
+    """AAAI's own abstracts for AAAI 1980-2008 from the cached archive captures (`sources/aaai_library.apply`),
+    offline, before the OpenAlex fill; a capture that can't be read (a `SourceError`: not cached, its digest
+    changed, an unreadable marker) refuses the build, as `load_sources` does."""
+    from openproceedings.ingest.sources import aaai_library
+    from openproceedings.ingest.sources.http import SourceError
+
+    try:
+        filled, fills = aaai_library.apply(result, cache)
+    except SourceError as e:
+        raise SnapshotError(f"the aaai_library captures can't be read: {e}", reason=e.reason) from e
+    return filled, list(fills)
+
+
+def fill_openalex(result: DedupResult, cache: Path) -> tuple[DedupResult, list[Report]]:
+    """The OpenAlex fill from the pinned extract (`sources/openalex.apply`), offline; an extract that can't be
+    replayed (a `SourceError`: missing, changed, malformed) refuses the build, as `load_sources` does."""
+    from openproceedings.ingest.sources import openalex
+    from openproceedings.ingest.sources.http import SourceError
+
+    try:
+        filled, fills = openalex.apply(result, cache)
+    except SourceError as e:
+        raise SnapshotError(f"the OpenAlex extract can't be replayed: {e}", reason=e.reason) from e
+    return filled, list(fills)
 
 
 def record_line(record: PaperRecord) -> str:
@@ -556,6 +587,11 @@ def render(
     # any: a snapshot trimming nothing has the manifest it had before. Additive, like WITHHELD_KEYS
     if trimmed := [r.id for r in records if is_trimmed(r)]:
         manifest["trimmed"] = trimmed
+    # the records whose abstract OpenAlex filled (decision-049), per venue-year and per track, written only when
+    # there are any (additive): a snapshot with none has the manifest it had before
+    if any(r.abstract_kind == "openalex" for r in records):
+        manifest["abstract_openalex"] = _nested(records, lambda r: r.abstract_kind == "openalex")
+        manifest["abstract_openalex_by_track"] = _by_track(records, lambda r: r.abstract_kind == "openalex")
     if withheld:
         manifest["withheld"] = sorted(withheld)
         manifest["abstract_withheld"] = _nested(records, lambda r: r.id in withheld)
@@ -611,6 +647,11 @@ def build(
     began = time.monotonic()
     records, reports, crawls = load_sources(cache)
     result = with_crawl_conflicts(reconcile(dedup(records), crawled(crawls)).result, crawls)
+    # after reconcile, before withhold (a takedown still applies): AAAI's own pages first, so OpenAlex fills only
+    # what they leave null
+    result, pages = fill_aaai_library(result, cache)
+    result, fills = fill_openalex(result, cache)
+    crawls = [*crawls, *pages, *fills]
     withholding = withhold(result, takedowns)
     result = withholding.result
     unexpected = tuple(unexpected_statuses(result.records))
@@ -857,6 +898,9 @@ class RecordFile:
         # the abstracts a takedown withheld (TASK-136): (venue, year) and (venue, year, track) → withheld
         self.abstract_withheld: Counter[tuple[str, int]] = Counter()
         self.track_withheld: Counter[tuple[str, int, str]] = Counter()
+        # the abstracts OpenAlex filled (decision-049), counted from the claims by `abstract_kind_of`
+        self.abstract_openalex: Counter[tuple[str, int]] = Counter()
+        self.track_openalex: Counter[tuple[str, int, str]] = Counter()
         # id → the ids its `twin` claims name (decision-029; TASK-162, TASK-163), only for a record that has one
         self.twins: dict[str, tuple[str, ...]] = {}
         try:
@@ -894,6 +938,7 @@ class RecordFile:
                         elif c["field"] == "twin":
                             linked.update(_id_list(c["value"]))
                     twins = sorted(linked - {rid})
+                    from_openalex = abstract_kind_of(line["abstract"], about) == "openalex"
                     urls = line["urls"]
                     credit = attribution(
                         line["abstract"],
@@ -924,6 +969,9 @@ class RecordFile:
                 self.cells[cell] += 1
                 track = (line["venue"], line["year"], line["track"])
                 self.track_missing[track] += no_abstract
+                if from_openalex:
+                    self.abstract_openalex[(line["venue"], line["year"])] += 1
+                    self.track_openalex[track] += 1
                 self.track_sources.setdefault(track, set()).update(claimed)
                 if no_abstract:
                     self.abstract_missing[(line["venue"], line["year"])] += 1
@@ -982,23 +1030,27 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
     paper, its venue or year corrected so its id changed), with the fields that differ; `changed` ids
     naming the hashed fields that differ; counts of display-only and provenance-only changes; and
     `abstract_withheld`, the ids whose abstract a takedown withheld in `b` but not `a` (`added`) and the reverse
-    (`lifted`), from the manifests' `withheld` (TASK-136)."""
+    (`lifted`), from the manifests' `withheld` (TASK-136); `abstract_kind`, each id in both whose derived
+    `abstract_kind` differs, as `[old, new]` (it is derived and never hashed, so a same-text change of source
+    shows nowhere else), and `abstract_kind_transitions`, those changes counted by `"old->new"`."""
     old, new = load_records(a), load_records(b)  # each verified against its manifest's snapshot_hash
     was, now = _withheld(a), _withheld(b)
     added, removed = new.keys() - old.keys(), old.keys() - new.keys()
     # a rekey only when exactly one removed and one added id share a globally unique native id: anything else
     # (two papers into one, one into two, a proceedings hash, which in another year is another paper; TASK-067)
     # is reported as added and removed, so a lost record is never hidden
-    gone_by_native = Counter(old[i].native for i in removed)
+    # keyed by `global_native`, which scopes a dblp key by its venue: an AAAI and an ICML `dblp-X` are two papers
+    gone_by_native = Counter(g for i in removed if (g := global_native(i)) is not None)
     new_by_native: dict[str, list[str]] = {}
     for i in added:
-        new_by_native.setdefault(new[i].native, []).append(i)
+        if (g := global_native(i)) is not None:  # a hash never rekeys
+            new_by_native.setdefault(g, []).append(i)
     rekeyed = {
-        i: new_by_native[old[i].native][0]
+        i: new_by_native[g][0]
         for i in sorted(removed)
-        if global_native(i) is not None  # the one place the rule is applied: a hash never rekeys
-        and gone_by_native[old[i].native] == 1
-        and len(new_by_native.get(old[i].native, [])) == 1
+        if (g := global_native(i)) is not None
+        and gone_by_native[g] == 1
+        and len(new_by_native.get(g, [])) == 1
     }
 
     def hashed_diff(x: PaperRecord, y: PaperRecord) -> list[str]:
@@ -1014,6 +1066,11 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
             display_only += 1
         elif x.provenance != y.provenance:
             provenance_only += 1
+    kinds = {
+        rid: [old[rid].abstract_kind, new[rid].abstract_kind]
+        for rid in sorted(old.keys() & new.keys())
+        if old[rid].abstract_kind != new[rid].abstract_kind
+    }
     return {
         "from": a.name,
         "to": b.name,
@@ -1024,6 +1081,8 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
         "display_only": display_only,
         "provenance_only": provenance_only,
         "abstract_withheld": {"added": sorted(now - was), "lifted": sorted(was - now)},
+        "abstract_kind": kinds,
+        "abstract_kind_transitions": dict(sorted(Counter(f"{x}->{y}" for x, y in kinds.values()).items())),
     }
 
 

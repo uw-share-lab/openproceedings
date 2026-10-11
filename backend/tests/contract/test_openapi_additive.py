@@ -84,6 +84,15 @@ def _compare(old: Any, new: Any, where: str, request: bool, out: list[tuple[str,
         if {k: v for k, v in old.items() if k not in rest} != {k: v for k, v in new.items() if k not in rest}:
             out.append((where, "changed"))
         return
+    if isinstance(old.get("items"), dict) and isinstance(new.get("items"), dict):
+        # an array: its items judged by these rules (a new value in an open enum's array is additive; TASK-205
+        # added `dblp` and `icml_site` to the claim sources `TrackCoverage.sources` lists), the rest compared
+        _compare(old["items"], new["items"], f"{where}[]", request, out)
+        if {k: v for k, v in _bare(old).items() if k != "items"} != {
+            k: v for k, v in _bare(new).items() if k != "items"
+        }:
+            out.append((where, "changed"))
+        return
     options_old, options_new = old.get("anyOf"), new.get("anyOf")
     if (
         isinstance(options_old, list)
@@ -241,6 +250,14 @@ def _record_get(d: dict[str, Any]) -> dict[str, Any]:
             lambda d: _schemas(d)["CompareRow"]["properties"]["reason"]["anyOf"][1].update(type="integer"),
             ("CompareRow.reason", "changed"),
         ),
+        (
+            lambda d: _schemas(d)["TrackCoverage"]["properties"]["sources"]["items"]["enum"].remove("pmlr"),
+            ("TrackCoverage.sources[]", "enum value removed"),  # an array's items are judged by these rules
+        ),
+        (
+            lambda d: _schemas(d)["TrackCoverage"]["properties"]["sources"].update(type="object"),
+            ("TrackCoverage.sources", "changed"),
+        ),
         (lambda d: d["paths"].pop("/api/v1/coverage"), ("GET /api/v1/coverage", "removed")),
         (
             lambda d: _record_get(d)["parameters"].append(
@@ -260,6 +277,9 @@ def test_each_breaking_change_is_found(doc: dict[str, Any], edit: Any, expected:
         lambda d: _schemas(d)["SearchResponse"]["properties"].update(new_total={"type": "integer"}),
         lambda d: _schemas(d)["Hit"]["properties"]["track"]["enum"].append("oral_only"),  # open
         lambda d: _schemas(d)["CompareRow"]["properties"]["reason"]["anyOf"][0]["enum"].append("a_new_class"),
+        lambda d: _schemas(d)["TrackCoverage"]["properties"]["sources"]["items"]["enum"].append(
+            "a_new_source"
+        ),
         lambda d: _record_get(d)["parameters"].append(
             {
                 "in": "query",
@@ -275,6 +295,7 @@ def test_each_breaking_change_is_found(doc: dict[str, Any], edit: Any, expected:
         "new response field",
         "open enum value",
         "nullable open enum value",
+        "open enum value in an array",
         "optional parameter",
         "reworded",
         "new schema",

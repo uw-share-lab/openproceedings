@@ -80,7 +80,7 @@
           "toggleable": true,
           "reason": null,
           "blocking_spans": [],
-          "values": ["ICLR", "ICML", "NeurIPS"]
+          "values": ["AAAI", "AIES", "FAccT", "IASEAI", "ICLR", "ICML", "NeurIPS"]
         }
       },
       "click": {
@@ -88,7 +88,7 @@
         "field": "venue",
         "value": "ICML"
       },
-      "expected": "(trust) AND venue:(ICLR OR NeurIPS)"
+      "expected": "(trust) AND venue:(AAAI OR AIES OR FAccT OR IASEAI OR ICLR OR NeurIPS)"
     },
     {
       "name": "canonical string pasted back",
@@ -377,7 +377,7 @@
           "toggleable": true,
           "reason": null,
           "blocking_spans": [],
-          "values": ["ICLR", "ICML", "NeurIPS"]
+          "values": ["AAAI", "AIES", "FAccT", "IASEAI", "ICLR", "ICML", "NeurIPS"]
         }
       },
       "click": {
@@ -476,14 +476,14 @@
       "refused": "TOO_DEEP"
     },
     {
-      "name": "1,852 code points: the widest track wrap fits the canonical cap",
-      "q_parts": [["a", 1852]],
+      "name": "1,794 code points: the widest track wrap fits the canonical cap",
+      "q_parts": [["a", 1794]],
       "mode": "native",
       "filters": {
         "track": {
           "field": "track",
           "negated": false,
-          "span": [1852, 1852],
+          "span": [1794, 1794],
           "toggleable": true,
           "reason": null,
           "blocking_spans": [],
@@ -497,19 +497,19 @@
       },
       "expected_parts": [
         ["(", 1],
-        ["a", 1852],
+        ["a", 1794],
         [") AND track:(datasets_benchmarks OR main OR position OR workshop)", 1]
       ]
     },
     {
-      "name": "1,853 code points: the widest track wrap's canonical form is over 2,000",
-      "q_parts": [["a", 1853]],
+      "name": "1,795 code points: the widest track wrap's canonical form is over 2,000",
+      "q_parts": [["a", 1795]],
       "mode": "native",
       "filters": {
         "track": {
           "field": "track",
           "negated": false,
-          "span": [1853, 1853],
+          "span": [1795, 1795],
           "toggleable": false,
           "reason": "too_long",
           "blocking_spans": [],
@@ -518,11 +518,11 @@
         "venue": {
           "field": "venue",
           "negated": false,
-          "span": [1853, 1853],
+          "span": [1795, 1795],
           "toggleable": true,
           "reason": null,
           "blocking_spans": [],
-          "values": ["ICLR", "ICML", "NeurIPS"]
+          "values": ["AAAI", "AIES", "FAccT", "IASEAI", "ICLR", "ICML", "NeurIPS"]
         }
       },
       "click": {
@@ -533,9 +533,9 @@
       "refused": "TOO_LONG"
     },
     {
-      "name": "1,901 code points ending in a typed venue clause: its widest splice fits the canonical cap",
+      "name": "1,866 code points ending in a typed venue clause: its widest splice fits the canonical cap",
       "q_parts": [
-        ["a", 1890],
+        ["a", 1855],
         [" venue:ICLR", 1]
       ],
       "mode": "native",
@@ -543,7 +543,7 @@
         "venue": {
           "field": "venue",
           "negated": false,
-          "span": [1891, 1901],
+          "span": [1856, 1866],
           "toggleable": true,
           "reason": null,
           "blocking_spans": [],
@@ -556,14 +556,14 @@
         "value": "NeurIPS"
       },
       "expected_parts": [
-        ["a", 1890],
+        ["a", 1855],
         [" venue:(ICLR OR NeurIPS)", 1]
       ]
     },
     {
-      "name": "1,902 code points ending in a typed venue clause: its widest splice's canonical form is over 2,000",
+      "name": "1,867 code points ending in a typed venue clause: its widest splice's canonical form is over 2,000",
       "q_parts": [
-        ["a", 1891],
+        ["a", 1856],
         [" venue:ICLR", 1]
       ],
       "mode": "native",
@@ -571,7 +571,7 @@
         "venue": {
           "field": "venue",
           "negated": false,
-          "span": [1892, 1902],
+          "span": [1857, 1867],
           "toggleable": false,
           "reason": "too_long",
           "blocking_spans": [],
