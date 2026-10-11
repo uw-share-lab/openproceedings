@@ -385,7 +385,10 @@ class YearEditCase(NamedTuple):
 def _join(parts: list[str], sep: str) -> str:
     """`parts` joined by `sep`; written together (`sep` "") only where a `)` meets a `(`, else by a space. Not
     where both sides' unspaced runs hold a `$` either: `(a model$)(model$ b)` is LaTeX math from `$)` to `(model$`,
-    as the tokenizer reads it, not two groups (nightly 37793521347)."""
+    as the tokenizer reads it, not two groups (nightly 37793521347). Conservative: math across the join needs a
+    `$` on each side, but a `$` there need not open or close one (a closed `$x$)` before `(model$` would glue
+    safely). With this vocabulary's one `$` word, `model$`, the two rules give the same queries; a closed-math
+    word added to `_CLAUSE_WORDS` would lose those glued cases, never gain a wrong one."""
     out = parts[0]
     for part in parts[1:]:
         together = out.endswith(")") and part.startswith("(")

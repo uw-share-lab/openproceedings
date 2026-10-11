@@ -418,9 +418,25 @@ HOSTILE: dict[str, Callable[[int], str]] = {
 }
 
 
+# the capture each parser reads its page as, where CAPTURE (a 2007 page) would make it return at once: the 1998
+# parser takes the submission number from a 1998 paper's URL
+HOSTILE_CAPTURES = {
+    "icml1998_paper": "https://web.archive.org/web/19991009084141id_/http://www.cs.wisc.edu:80/icml98/papers/paper1.html"
+}
+
+
 def _read_hostile(parser: str, page: str) -> None:
     with contextlib.suppress(HTMLBudgetError):  # the shared tree's nesting bound: a refusal, fine, and fast
-        icml_sites.PARSERS[parser](page, CAPTURE)
+        icml_sites.PARSERS[parser](page, HOSTILE_CAPTURES.get(parser, CAPTURE))
+
+
+def test_the_hostile_1998_page_is_read_as_a_1998_paper() -> None:
+    """Read as CAPTURE, the 1998 parser returned at once (about 1 µs at either size), so its growth row measured
+    nothing; read as a 1998 paper it parses the submission."""
+    assert icml_sites.PARSERS["icml1998_paper"](HOSTILE["icml1998_paper"](10), CAPTURE) == []
+    assert icml_sites.PARSERS["icml1998_paper"](
+        HOSTILE["icml1998_paper"](10), HOSTILE_CAPTURES["icml1998_paper"]
+    )
 
 
 @pytest.mark.parametrize("parser", sorted(HOSTILE))
