@@ -177,8 +177,8 @@ MAX_OPENALEX_COUNTS = 10_000  # (record id, index_version) pairs whose `openalex
 
 @dataclass
 class OpenAlexCounts:
-    """Each record's `openalex_abstracts` on its own index, worked out once (a byte read per id,
-    `TantivyEngine.filter_values`) and kept: a stored record's ids never change and an index is immutable, so
+    """Each record's `openalex_abstracts` on its own index, worked out once (`abstract_kind`'s byte per id alone,
+    `TantivyEngine.count_value`) and kept: a stored record's ids never change and an index is immutable, so
     the count is a function of (record id, index_version). An LRU of `MAX_OPENALEX_COUNTS` ints."""
 
     kept: OrderedDict[tuple[str, str], int] = field(default_factory=OrderedDict)
@@ -199,8 +199,9 @@ class OpenAlexCounts:
             if key in self.kept:
                 self.kept.move_to_end(key)
                 return self.kept[key]
-        values = engine.filter_values(list(record.ids))  # outside the lock: a race only counts twice
-        n = sum(v.get("abstract_kind") == "openalex" for v in values.values())
+        # one field's byte per id, outside the lock (a race only counts twice); about 117 ms for all 173,253 ids
+        # through `filter_values` before gate C round 3, less now that no per-id dict is built
+        n = engine.count_value(record.ids, "abstract_kind", "openalex")
         with self.lock:
             self.kept[key] = n
             while len(self.kept) > MAX_OPENALEX_COUNTS:

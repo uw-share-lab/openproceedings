@@ -964,13 +964,18 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   the new opt-in parameter produces the null). The access line carries `canonical_hash`, never `q`.
 - **`openalex_abstracts`** (gate C round 2, additive; `int | null` on every `GET /records/{id}` answer) is how
   many of the record's own saved ids have `abstract_kind` `openalex` on the record's own `index_version`, read
-  per id from that index (`TantivyEngine.filter_values`, the built kind, as the filter and facet read it). It is
+  per id from that index (`TantivyEngine.count_value`: `abstract_kind`'s byte per id alone, the built kind, as the filter and facet read it). It is
   derived, never stored: a function of the record's ids and its index, worked out once per (record id,
   index_version) and kept (`api/records.py` `OpenAlexCounts`, an LRU of 10,000 ints). It is null when that index
   holds no `abstract_kind` (schema 3) or isn't loaded for the request: with a replay, when the replay didn't run
   on the record's own index; with `replay=false`, when the served index isn't the record's (nothing else is
   loaded on that read). The methods text's OpenAlex sentence (spec 05 §Components 8) reads only this value, in
   the save panel and on the record page alike, so the two texts are the same for one record.
+  A `replay=false` read stays one token although its first read of a record can count every id (gate C round 3,
+  the simpler option): the count is paid once per (record id, index_version) and then kept, it reads one byte
+  per id and builds nothing per id, and records are bounded by the save ceilings and the store's cap. For scale,
+  all 173,253 ids of the real index `9977ed00669f` took about 117 ms through `filter_values` (five fields, a dict
+  per id; load about 5, 2026-10-11), the upper bound of what `count_value` now does.
 - **`ids_hash`** is `sha256("\n".join(sorted(ids)))`, code-point order, no trailing newline, with
   known-answer tests (the empty set is `sha256("")`).
 - **Record ids** are `secrets.token_urlsafe(9)`: 12 characters of `[A-Za-z0-9_-]`, about 72 random bits,

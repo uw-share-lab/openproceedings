@@ -14,7 +14,7 @@ import heapq
 import json
 import threading
 from collections import Counter, deque
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from importlib.metadata import version
@@ -429,6 +429,26 @@ class TantivyEngine:
                     found[f] = v
             out[i] = found
         return out
+
+    def count_value(self, ids: Iterable[str], field: str, value: str | int) -> int:
+        """How many distinct held `ids` have `value` in the filter field `field` (gate C round 3: a record's
+        `openalex_abstracts`). Reads only that field's byte per document (`_value_index`), or its value's bitmap
+        when the field has more values than a byte numbers: no per-id dict, no other field. Equals counting
+        `filter_values(ids)` for that field and value; an id the index doesn't hold counts as none."""
+        table = self._ord_table()
+        ords = {table[i] for i in ids if i in table}
+        if not ords:
+            return 0
+        masks = self._value_masks()
+        f = self.combo.index(field)
+        k = next((n for n, (v, _m) in enumerate(masks[f], start=1) if v == value), None)
+        if k is None:  # a value no document has
+            return 0
+        at = self._value_index(masks)[f]
+        if at is not None:
+            return sum(1 for o in ords if at[o] == k)
+        bits = masks[f][k - 1][1]
+        return sum(1 for o in ords if bits >> o & 1)
 
     def _value_index(self, masks: tuple[tuple[tuple[str | int, int], ...], ...]) -> tuple[bytes | None, ...]:
         """Per `combo` field, one byte per document (by ord): the position + 1 of its value in `masks`, 0 when it

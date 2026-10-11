@@ -223,3 +223,25 @@ def test_a_schema_3_build_refuses_an_openalex_record(tmp_path: Path) -> None:
     with pytest.raises(IndexBuildError, match="needs index schema 4"):
         tantivy_of(CORPUS, tmp_path, "3")
     assert not [p for p in (tmp_path / "indexes").iterdir() if not p.name.startswith(".")]  # nothing placed
+
+
+@settings(max_examples=50, deadline=None)
+@given(picked=st.lists(st.sampled_from([*sorted(KIND), "op:aaai:1990:not-held"]), max_size=40))
+def test_count_value_reads_one_fields_byte_and_equals_filter_values(
+    engine: TantivyEngine, picked: list[str]
+) -> None:
+    """Gate C round 3: `count_value` (what `openalex_abstracts` reads) counts the held ids with one field's value,
+    from that field's byte per document alone, and equals a count over `filter_values`, on the byte path and on
+    the bitmap fallback; an id the index doesn't hold, or listed twice, counts as `filter_values` reads it."""
+    want = {
+        kind: sum(v.get("abstract_kind") == kind for v in engine.filter_values(picked).values())
+        for kind in ("official", "openalex", "none")
+    }
+    assert {k: engine.count_value(picked, "abstract_kind", k) for k in want} == want
+    assert want["openalex"] == len({i for i in picked if KIND.get(i) == "openalex"})
+    masks = engine._value_masks()
+    engine._index = (masks, (None,) * len(engine.combo))  # every field by the bitmaps
+    try:
+        assert {k: engine.count_value(picked, "abstract_kind", k) for k in want} == want
+    finally:
+        engine._index = None

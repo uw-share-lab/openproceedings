@@ -14,6 +14,7 @@ from tests.fixtures.corpus import abstract_kinds
 
 CORPUS = abstract_kinds.records()
 PLAIN = [r for r in CORPUS if r.abstract_kind != "openalex"]  # what a schema-3 index may hold
+KINDS = {r.id: r.abstract_kind for r in CORPUS}
 
 
 def _paper(r: PaperRecord) -> PaperRecord:
@@ -146,3 +147,30 @@ def test_a_record_on_a_schema_3_index_has_no_openalex_count(tmp_path: Path) -> N
         for params in ({}, {"replay": "false"}):
             body = client.get(f"/api/v1/records/{rid}", params=params).json()
             assert body["openalex_abstracts"] is None, body
+
+
+def test_a_records_openalex_count_is_only_ever_its_own_indexs(tmp_path: Path) -> None:
+    """Gate C round 3 (qa): saved on index A, read while B is served. Without a replay the served index isn't the
+    record's, so the count is null; the replay runs on A, pinned on demand, and gives A's count; with A gone the
+    replay drifts to B, and the count is null again, never B's count of the record's ids."""
+    data = tmp_path / "data"
+    a = build(CORPUS, data / "snapshots", "snap", data / "indexes", paper=_paper)
+    b = build(CORPUS[1:], data / "snapshots", "snap2", data / "indexes", paper=_paper)
+    assert a != b
+    point_current(data, a)
+    with TestClient(make_app(data)) as client:
+        rid = client.post("/api/v1/records", json={"q": "paper"}).json()["record_id"]
+        on_a = client.get(f"/api/v1/records/{rid}", params={"include": "ids"}).json()
+    want = sum(KINDS[i] == "openalex" for i in on_a["record"]["ids"])
+    assert on_a["openalex_abstracts"] == want > 0
+    point_current(data, b)
+    with TestClient(make_app(data)) as client:
+        stored = client.get(f"/api/v1/records/{rid}", params={"replay": "false"}).json()
+        pinned = client.get(f"/api/v1/records/{rid}").json()
+    assert stored["openalex_abstracts"] is None  # B served, A not loaded by this read
+    assert pinned["replay"]["index_version"] == a and pinned["openalex_abstracts"] == want
+    (data / "indexes" / a).rename(tmp_path / "gone")  # A no longer on this instance
+    with TestClient(make_app(data)) as client:
+        drifted = client.get(f"/api/v1/records/{rid}").json()
+    assert drifted["replay"]["index_version"] == b and drifted["replay"]["status"] == "drifted"
+    assert drifted["openalex_abstracts"] is None

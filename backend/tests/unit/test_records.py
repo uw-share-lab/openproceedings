@@ -1006,3 +1006,52 @@ def test_filter_clauses_of_a_single_node_tree() -> None:
         == ()
     )
     assert records.filter_clauses(cast(Any, SimpleNamespace(effective_ast=None))) == ()
+
+
+class _KindEngine:
+    """An engine stub for `OpenAlexCounts`: its own index_version, schema 4's fields, and `count_value` only (a
+    call to anything else, `filter_values` included, fails the test)."""
+
+    filter_fields = ("venue", "year", "track", "status", "abstract_kind")
+
+    def __init__(self, version: str, openalex: set[str]) -> None:
+        self.index_version, self.openalex, self.calls = version, openalex, 0
+
+    def count_value(self, ids: Any, field: str, value: str) -> int:
+        assert (field, value) == ("abstract_kind", "openalex")
+        self.calls += 1
+        return len(set(ids) & self.openalex)
+
+
+def _rec(record_id: str, version: str, ids: tuple[str, ...]) -> Any:
+    return SimpleNamespace(record_id=record_id, index_version=version, ids=ids)
+
+
+def test_openalex_counts_read_one_field_and_are_keyed_by_record_and_index() -> None:
+    """Gate C round 3: the count reads `abstract_kind` alone (`count_value`), is kept per (record id,
+    index_version), and is null on any engine but the record's own."""
+    from openproceedings.api.records import OpenAlexCounts
+
+    counts = OpenAlexCounts()
+    a, b = _KindEngine("aaaaaaaaaaaa", {"x", "y"}), _KindEngine("bbbbbbbbbbbb", {"x"})
+    ids = ("x", "y", "z")
+    assert counts.of(_rec("r", a.index_version, ids), a) == 2
+    assert counts.of(_rec("r", a.index_version, ids), a) == 2 and a.calls == 1  # kept
+    assert counts.of(_rec("r", b.index_version, ids), b) == 1  # same id, another index: its own count
+    assert counts.of(_rec("r", a.index_version, ids), b) is None  # not the record's index
+    assert counts.of(_rec("r", a.index_version, None), a) is None  # no stored ids
+
+
+def test_openalex_counts_keep_at_most_their_cap_and_answer_the_same(monkeypatch: pytest.MonkeyPatch) -> None:
+    from openproceedings.api import records as api_records
+
+    assert (
+        api_records.MAX_OPENALEX_COUNTS == 10_000 and records.RemovalMemo().max_entries == 10_000
+    )  # the bounds
+    monkeypatch.setattr(api_records, "MAX_OPENALEX_COUNTS", 3)
+    counts = api_records.OpenAlexCounts()
+    engine = _KindEngine("aaaaaaaaaaaa", {"x"})
+    first = [counts.of(_rec(f"r{i}", engine.index_version, ("x",) * (i % 2)), engine) for i in range(6)]
+    assert len(counts.kept) == 3 and list(counts.kept) == [(f"r{i}", engine.index_version) for i in (3, 4, 5)]
+    again = [counts.of(_rec(f"r{i}", engine.index_version, ("x",) * (i % 2)), engine) for i in range(6)]
+    assert again == first == [0, 1, 0, 1, 0, 1]
