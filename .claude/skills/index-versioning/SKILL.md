@@ -98,8 +98,8 @@ built by another Tantivy, so it strands old indexes whatever `SERVED_SCHEMAS` ho
 schema-3 build refuses an OpenAlex abstract. Schema 2 (a verified clause's ids as a term set on the text `id`) is
 gone, with `TantivyEngine.ord_indexed`, the text-`id` `id_set` and its tests and benches; an index of schema 2 is
 refused (`unservable`). The retirement is done: each of the four schema-2 indexes the data directory held was checked
-with `op index retire --dry-run` (0 pins, no `data/records/` store), and they are deleted locally in milestone C's
-real-data step (spec 03 §Versioning). A schema-3 index is never converted: an OpenAlex-filled snapshot can only be
+with `op index retire --dry-run` (0 pins, no `data/records/` store), and they were deleted from the real data directory on
+2026-10-10 (spec 03 §Versioning). A schema-3 index is never converted: an OpenAlex-filled snapshot can only be
 indexed at schema 4, so promoting one means building a schema-4 index, and the schema-3 index stays until no record
 pins it. A schema 5 first retires schema 3.
 

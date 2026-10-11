@@ -265,6 +265,9 @@ and that OpenAlex's is filled in where no official AAAI source gives one, and, w
 many abstracts (and for which venues) are OpenAlex's, labelled `abstract_kind:openalex`; a snapshot OpenAlex filled
 nothing in reads as it did. The coverage numbers come from the manifest's `abstract_openalex` and
 `abstract_openalex_by_track`, which the load checks against the records. How faithful those abstracts are is §G.
+As built, the milestone's report (`docs/results/2026-10-10-coverage.md`, index `9977ed00669f` on snapshot
+`2026-10-10-22a339940466`, 173,253 records) passes `op eval coverage --check`: 83 of 84 gated cells within ±1%, the
+84th being ICLR 2013's owner-accepted exception, and 2,158 abstracts labelled `abstract_kind:openalex`.
 The source of statuses indexed is spec 01's source table as `ingest/statuses.py` holds it (spec 01
 §Pipeline 5); the snapshot manifest records them per venue-year, and the missing abstracts and sources per
 cell (manifest format 2, TASK-082).
@@ -372,7 +375,7 @@ release gate. Both become required when the semantic layer is built.
 OpenAlex fills an abstract only where every official source gave none (spec 01 §Sources), so on the records it fills
 there is no official text to check it against. The audit measures it where both exist, and writes
 `docs/results/<date>-openalex-audit.md` (the milestone's report is
-[2026-10-10-openalex-audit.md](../results/2026-10-10-openalex-audit.md), on snapshot `2026-10-10-9efa49481112`).
+[2026-10-10-openalex-audit.md](../results/2026-10-10-openalex-audit.md), on snapshot `2026-10-10-22a339940466`, the one holding the fill).
 It feeds nothing: it writes no extract, touches no snapshot and gates nothing, and the rates are not thresholds.
 
 **Method (`eval/openalex_audit.py`).**

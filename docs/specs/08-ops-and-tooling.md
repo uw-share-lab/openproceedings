@@ -772,7 +772,7 @@ retention (step 8) matter (guarantee 4).
    record's `query_version` against the releases' Data sections. The code serves index schemas 3 and 4 (spec 03
    §Versioning). Schema 2 was retired in milestone C, once `op index retire --dry-run` showed no search record pinned
    any of the four schema-2 indexes the data directory held (05a0541717f6, 6508b8cf66ff, a7cfd04b656f and
-   c76d7f26ee06); they are deleted locally in milestone C's real-data step. A schema-3 index is not rebuilt: an
+   c76d7f26ee06); they were deleted from the real data directory on 2026-10-10. A schema-3 index is not rebuilt: an
    OpenAlex-filled snapshot cannot be indexed at schema 3 (the build refuses it), so promoting one needs an index
    at schema 4 (`op index build` writes schema 4), after which the schema-3 index stays until no record pins it.
 9. **After.** Deploying the release, and promoting an index, follow §Deploy and its runbook, `deploy/README.md` (together, for a release that

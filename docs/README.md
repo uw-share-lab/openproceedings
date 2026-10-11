@@ -24,7 +24,7 @@ guarantees are the review standard for everything else.
 
 | Directory | Holds |
 |---|---|
-| [`results/`](results/) | dated reports: coverage (`op eval coverage`), the Scholar comparison (`op eval scholar`, with its `-review.csv` rows for a person), the OpenAlex fidelity audit (`op eval openalex`, [2026-10-10](results/2026-10-10-openalex-audit.md)), benchmarks, audits and data checks; `coverage-sources.md` and `coverage-causes.toml` feed the coverage report, `scholar-comparison-notes.md` and `scholar-comparison-strings.txt` the Scholar comparison |
+| [`results/`](results/) | dated reports: coverage (`op eval coverage`), the Scholar comparison (`op eval scholar`, with its `-review.csv` rows for a person), the OpenAlex fidelity audit (`op eval openalex`, [2026-10-10](results/2026-10-10-openalex-audit.md)), benchmarks (the group-count report on the real corpus, [2026-10-10](results/2026-10-10-bench-group-counts.md), and the synthetic 80k report, [2026-10-11](results/2026-10-11-bench.md), whose `main-3-sources` first page is over the 100 ms budget, spec 03), audits and data checks; `coverage-sources.md` and `coverage-causes.toml` feed the coverage report, `scholar-comparison-notes.md` and `scholar-comparison-strings.txt` the Scholar comparison |
 | [`design/`](design/) | UX design docs and the copy deck behind spec 05 |
 | [`plans/`](plans/) | written designs and implementation plans for multi-milestone work, before it is built into the specs |
 | [`research/`](research/) | verified facts about the sources (OpenReview, the proceedings sites, ojs.aaai.org, and the AAAI/AIES/FAccT/IASEAI note with the dblp AAAI, ACM/Crossref and FAccT-site censuses of milestone B and the OpenAlex census and licence of milestone C) |

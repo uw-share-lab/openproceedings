@@ -218,7 +218,7 @@ Schema 2 was retired (decision-049 milestone C) once no search record pinned a s
 was rebuilt at schema 3, `current` repointed, and each schema-2 version checked with `op index retire --dry-run`
 (0 pins). Its path and tests are dropped from the code; any other schema is refused (`unservable`). The four
 schema-2 indexes the real data directory held (05a0541717f6, 6508b8cf66ff, a7cfd04b656f and c76d7f26ee06) are
-deleted locally in milestone C's real-data step, with the owner's approval of 2026-10-10 (no `data/records/` store
+deleted from the real data directory on 2026-10-10, with the owner's approval (no `data/records/` store
 existed, so nothing pinned them). Served schemas are now 3 and 4, in that order of age; the one the code writes is 4.
 
 **Schema 4 (decision-049 milestone C).** New indexes store the record's derived `abstract_kind` as a raw fast field,
@@ -259,6 +259,25 @@ combining-mark and Hangul boundaries. Versioned properties and raw-span goldens 
   index) and `tests.bench.report_80k`. A run counts only when the machine's 1-minute load average is under 5 at
   its start and its end. The citable group-count report is `docs/results/<date>-bench-group-counts.md`, written by
   that command and never edited by hand; the milestone's reports are linked from `docs/README.md`.
+- **Milestone C, as measured (index `9977ed00669f`: schema 4, tokenizer 3, 173,253 documents; parity over the full
+  corpus found 0 differences in 212,911 terms and 340,773 phrases).**
+  - **Real corpus** (`docs/results/2026-10-10-bench-group-counts.md`, a 1-minute load under 5 at the start and the
+    end): every Trust-Evals string's first page with its group counts is within the 100 ms budget, the worst being
+    `main-2-pop` at p95 76.5 ms. This is the citable group-count report TASK-220 asked for.
+  - **Synthetic 80k** (`docs/results/2026-10-11-bench.md`, load 2.6 at the start and 2.8 at the end): the first page's
+    p95 ranges from 8.4 ms to 110.7 ms. **`main-3-sources` at 110.7 ms is over the 100 ms budget, and this section
+    does not claim otherwise.** Without group counts the same page is 65 ms, so the excess is the group counting
+    TASK-176 added (six counted trees run one after another on one worker, each broad tree costing 15-20 ms), not
+    index schema 4. It is also a harness effect in part: the report process keeps the 80k corpus resident, which makes
+    full garbage collections frequent. The real corpus does not show it. Follow-up: TASK-230.
+  - **Schema 4's own regression, found and fixed.** A fifth nested level in the facet combo multiplied every
+    aggregation that read the combo: `counts` aggregated each tree's base over the whole combo although a count sums
+    only the combos passing its trees' top-level filters. On the synthetic corpus, where abstract presence is random
+    per record, a counted base went from 1,080 combos to 1,250-1,722 and `main-3-sources` from 74.9 ms (before group
+    counts) to 632.8 ms p95. The real corpus hid it, because `abstract_kind` follows venue there. Commit `566cafcd`
+    makes `counts` aggregate only the fields its trees filter on (facets still aggregate the whole combo, since
+    `abstract_kind` is a facet), with membership and counts unchanged. The bisect and numbers are in the milestone's
+    perf report (`.superpowers/sdd/2026-10-10-new-venues-milestone-c/perf-report.md`, not committed).
 - A wildcard expansion of up to 200 terms: under 50 ms.
 - **Group counts, as measured (TASK-197, closing decision-039's exception):** every Trust-Evals string's cold
   first page (the facet memo forgotten) with its group counts is within the 100 ms search budget on index

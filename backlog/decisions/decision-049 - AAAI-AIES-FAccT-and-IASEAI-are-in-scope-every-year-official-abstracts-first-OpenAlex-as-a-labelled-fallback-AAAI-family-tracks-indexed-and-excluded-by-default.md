@@ -77,6 +77,15 @@ NAACL, CHI and CSCW remain out of scope for now.
     almost always for AAAI and AIES and far less for FAccT, where it likely carries ACM's published version; every
     title-route attach for AAAI 1980–2008 was checked (1,052 of 1,061 agree; the exact title-key rule stands).
     `docs/results/2026-10-10-openalex-audit.md`; spec 07 §G.
+  - **As built (2026-10-10).** Extract sha256 `7fea58b983252594b9ad3fb4788022f81b64adf579ce9cee129abf91a9c5c49c` (5,808
+    candidates, 49 lookups, 3,005 works). Snapshot `2026-10-10-22a339940466` (173,253 records), which differs from
+    `2026-10-10-9efa49481112` only in 2,158 abstracts (`none` → `openalex`; 1,097 of 1,099 by DOI and 1,061 of 4,709 AAAI
+    1980–2008 by title, so 3,648 of those stay without one). Index `9977ed00669f` (schema 4): parity with 0
+    differences, and `abstract_kind:openalex` gives 2,158 on both engines. The four schema-2 indexes were deleted on
+    2026-10-10. The coverage gate passes (83 of 84 gated cells; ICLR 2013 is the accepted exception). The group-count
+    benchmark is within budget on the real corpus (worst p95 76.5 ms) and over it on the synthetic 80k for
+    `main-3-sources` (110.7 ms, 65 ms without group counts: TASK-176's counting, not schema 4), recorded in spec 03
+    §Performance budgets and followed up in TASK-230.
 - Spec 00's venue list says what is indexed now and what is in scope and planned; a venue-year appears in the
   coverage report only once it is crawled.
 - Licence posture is the one already used for PMLR and NeurIPS (titles and abstracts with links back; AAAI
