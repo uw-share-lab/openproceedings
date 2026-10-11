@@ -10,6 +10,45 @@ papers a query matches: a search record pins its `index_version`, `tokenizer_ver
 it with the same QUERY_VERSION; otherwise as `drifted`, naming what changed. Each release's Data section
 names the index it was verified on and which saved records still reproduce.
 
+## 0.3.0
+
+**Changed replay inputs since 0.2.0: SCHEMA_VERSION 3 → 4. Replay against changed inputs reports `drifted`; retained supported pins reproduce when QUERY_VERSION matches. Incompatible pins require the matching historical release.**
+
+### Added
+
+- NeurIPS from 1987 and ICML from 1988 (dblp release + official ICML abstracts) ([#120](https://github.com/uw-share-lab/openproceedings/pull/120))
+- ingest: ICML 1997 and 1998 abstracts from the official submission pages, contact details never kept (TASK-207) ([#121](https://github.com/uw-share-lab/openproceedings/pull/121))
+- /dependabot-review, the weekly routine's Dependabot procedure, with scripted supply-chain checks (TASK-211) ([#127](https://github.com/uw-share-lab/openproceedings/pull/127))
+- index AAAI 2010-2026, AIES 2024-2025 and IASEAI 2026 from ojs.aaai.org (decision-049, milestone A) ([#130](https://github.com/uw-share-lab/openproceedings/pull/130))
+- index AAAI 1980-2008, FAccT 2018-2026 and AIES 2018-2023 (decision-049, milestone B) ([#131](https://github.com/uw-share-lab/openproceedings/pull/131))
+- OpenAlex and archived AAAI abstracts, the abstract_kind filter and index schema 4 (milestone C, decision-049/051) ([#134](https://github.com/uw-share-lab/openproceedings/pull/134))
+
+### Changed
+
+- engine: exclusion accounting's default aggregates only track and status; combo aggregation nested fewest-valued first ([#135](https://github.com/uw-share-lab/openproceedings/pull/135))
+
+### Fixed
+
+- pin Python 3.12.15 repo-wide for CVE-2025-6069 (TASK-208) ([#122](https://github.com/uw-share-lab/openproceedings/pull/122))
+- keep text after a bare \< (TASK-209); say submission-time abstract everywhere (TASK-210) ([#126](https://github.com/uw-share-lab/openproceedings/pull/126))
+- ingest: AAAI 1980-2008 and AIES 2018-2023 sections take their own tracks (TASK-224, TASK-225, TASK-226) ([#133](https://github.com/uw-share-lab/openproceedings/pull/133))
+
+### Internal
+
+- follow-ups TASK-199/200/201 and file TASK-202 (scheduled crawl and promotion) ([#119](https://github.com/uw-share-lab/openproceedings/pull/119))
+- bump astral-sh/uv from 0.12.22 to 0.12.23 in /deploy in the docker-minor-patch group across 1 directory ([#123](https://github.com/uw-share-lab/openproceedings/pull/123))
+- bump the npm-minor-patch group with 4 updates ([#124](https://github.com/uw-share-lab/openproceedings/pull/124))
+- bump the uv-minor-patch group with 2 updates ([#125](https://github.com/uw-share-lab/openproceedings/pull/125))
+- fail make tooling when the npm manifests and the lock's workspace entries disagree ([#128](https://github.com/uw-share-lab/openproceedings/pull/128))
+- /dependabot-review runs in a Claude Code cloud session (REST only, CCR auto-merge route) ([#129](https://github.com/uw-share-lab/openproceedings/pull/129))
+
+### Data
+
+- index_version `b4f335e07e70`, snapshot `93c2937e2f2936b851feb29b4e82114dd0c7c0a99de00500bfe2f2fb457e7ccb`
+- TOKENIZER_VERSION 3 · SCHEMA_VERSION 4 · Tantivy 0.26.2 · QUERY_VERSION 2
+- Replay against changed inputs reports `drifted` (SCHEMA_VERSION 3 → 4). Retained supported pins reproduce when QUERY_VERSION matches; incompatible pins require the matching historical release.
+- Verified on a new schema-4 index of the 173,253-paper snapshot of 2026-10-11: AAAI (1980+), AIES, FAccT and IASEAI join the corpus (decision-049), 4,536 AAAI 1980-2008 papers gain AAAI's own abstracts from archived aaai.org pages (decision-051) and 1,117 gain labelled OpenAlex abstracts (abstract_kind:openalex). Default searches shrank where AAAI 1980-2008 and AIES 2018-2023 entries outside the technical program took their own tracks (decision-050: 1,197 track changes, 39 not-paper removals), so a search record saved on an earlier index replays as drifted, naming each removed paper's cause. Index schema 2 is retired; schema-3 indexes stay replayable. Promotion does not deploy data.
+
 ## 0.2.0
 
 ### Added
