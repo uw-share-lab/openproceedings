@@ -331,12 +331,12 @@ def test_the_harvest_logs_a_start_a_heartbeat_and_each_fallback_once(tmp_path, c
 
 # --- a chain that never ends (a new token on every page) stops past a ceiling ------------------------------------
 class _Endless:
-    """A server whose every list page names a new resumption token, one deleted header (or one set) a page, stating
-    `completeListSize` `size` (0: none stated, as OJS's own form does when it doesn't know). With `fail_records`,
-    every ListRecords page answers HTTP 500 (the set falls back to ListIdentifiers)."""
+    """A server whose every list page names a new resumption token, `per_page` deleted headers (or sets) a page,
+    stating `completeListSize` `size` (0: none stated, as OJS's own form does when it doesn't know). With
+    `fail_records`, every ListRecords page answers HTTP 500 (the set falls back to ListIdentifiers)."""
 
-    def __init__(self, size: int, *, fail_records: bool = False) -> None:
-        self.size, self.fail_records, self.n = size, fail_records, 0
+    def __init__(self, size: int, *, per_page: int = 1, fail_records: bool = False) -> None:
+        self.size, self.per_page, self.fail_records, self.n = size, per_page, fail_records, 0
         self.calls: list[str] = []
 
     def __call__(self, request, timeout):
@@ -345,23 +345,32 @@ class _Endless:
         if "verb=ListRecords" in url and self.fail_records:
             return response("", status=500, headers=XML)
         self.n += 1
-        token, article = f"tok{self.n}", 1000 + self.n
+        token = f"tok{self.n}"
+        articles = [1000 * self.n + i for i in range(self.per_page)]
         if "verb=ListIdentifiers" in url:
-            text = oai.identifiers_page((article, True, "AAAI:APP"), token=token, size=self.size)
+            text = oai.identifiers_page(
+                *((a, True, "AAAI:APP") for a in articles), token=token, size=self.size
+            )
         elif "verb=ListRecords" in url:
-            text = oai.page(oai.deleted(article, "AAAI:APP"), token=token, size=self.size)
+            text = oai.page(*(oai.deleted(a, "AAAI:APP") for a in articles), token=token, size=self.size)
         else:
-            text = oai.sets_page(f"AAAI:S{self.n}", token=token, size=self.size)
+            text = oai.sets_page(*(f"AAAI:S{a}" for a in articles), token=token, size=self.size)
         return response(text, headers=XML)
 
 
 @pytest.mark.parametrize("chain", ["inventory", "set", "fallback", "sets"])
-@pytest.mark.parametrize(("size", "pages"), [(3, 13), (0, 25)], ids=["stated", "unstated"])
+@pytest.mark.parametrize(
+    ("size", "per_page", "pages"),
+    [(3, 1, 13), (35, 10, 14), (999_999_999, 1, 25), (0, 1, 25)],
+    ids=["stated", "stated-several-a-page", "stated-huge", "unstated"],
+)
 def test_a_chain_that_never_ends_stops_past_its_ceiling(tmp_path, monkeypatch, chain: str, size: int,
-                                                         pages: int) -> None:  # fmt: skip
-    # stated: ceil(3 / 1 a page) + a margin of 10 pages; unstated: the constant ceiling, kept small here
+                                                         per_page: int, pages: int) -> None:  # fmt: skip
+    """stated: ceil(3 / 1 a page) + a margin of 10 pages; several a page: ceil(35 / 10) = 4 (never the floor, 3, and
+    never a page size pinned to 1) + 10; huge: a hostile size is capped at MAX_CHAIN_PAGES; unstated: the constant
+    ceiling. MAX_CHAIN_PAGES is kept small here."""
     monkeypatch.setattr(ojs, "MAX_CHAIN_PAGES", 25)
-    server = _Endless(size, fail_records=chain == "fallback")
+    server = _Endless(size, per_page=per_page, fail_records=chain == "fallback")
     f, _clock = fetcher(tmp_path / "ojs", server, ojs.HOSTS, min_interval=0, expect="xml", keep_query=True)
     run = {
         "inventory": lambda: ojs_harvest.inventory("AAAI", f),
