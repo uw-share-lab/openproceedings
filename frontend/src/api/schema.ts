@@ -258,15 +258,15 @@ export interface components {
         AbstractSource: {
             /**
              * Origin
-             * @description The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources). `icml_site`: an official ICML conference page (live, or a pinned Internet Archive capture), for ICML 1988-2012 (decision-047). `ojs`: the AAAI Digital Library (ojs.aaai.org), for AAAI, AIES and IASEAI; its url is the paper's own article page (decision-049). `crossref` and `facct_site`: FAccT and AIES (ACM proceedings via Crossref, the official FAccT pages); the url is the paper's DOI link (decision-049). `openalex`: an AAAI, AIES or FAccT abstract no official source gives, filled from OpenAlex (decision-049); the url is the paper's own page, never OpenAlex's API. Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @description The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources). `icml_site`: an official ICML conference page (live, or a pinned Internet Archive capture), for ICML 1988-2012 (decision-047). `ojs`: the AAAI Digital Library (ojs.aaai.org), for AAAI, AIES and IASEAI; its url is the paper's own article page (decision-049). `crossref` and `facct_site`: FAccT and AIES (ACM proceedings via Crossref, the official FAccT pages); the url is the paper's DOI link (decision-049). `openalex`: an AAAI, AIES or FAccT abstract no official source gives, filled from OpenAlex (decision-049); the url is the paper's own page, never OpenAlex's API. `aaai_library`: AAAI's own abstract for AAAI 1980-2008, read from an Internet Archive capture of the paper's old aaai.org page (decision-051); the url is that aaai.org page, never the archive. Open set: new values may be added within /api/v1; handle a value you don't know.
              */
-            origin: ("openreview" | "neurips_proceedings" | "iclr_proceedings" | "pmlr" | "iclr_archive" | "icml_site" | "ojs" | "crossref" | "facct_site" | "openalex") | null;
+            origin: ("openreview" | "neurips_proceedings" | "iclr_proceedings" | "pmlr" | "iclr_archive" | "icml_site" | "ojs" | "crossref" | "facct_site" | "openalex" | "aaai_library") | null;
             /**
              * Source
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            source: "openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "dblp" | "icml_site" | "ojs" | "crossref" | "facct_site" | "ris" | "openalex";
+            source: "openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "dblp" | "icml_site" | "ojs" | "crossref" | "facct_site" | "ris" | "openalex" | "aaai_library";
             /** Url */
             url: string | null;
         };
@@ -325,7 +325,7 @@ export interface components {
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            source: "openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "dblp" | "icml_site" | "ojs" | "crossref" | "facct_site" | "ris" | "openalex";
+            source: "openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "dblp" | "icml_site" | "ojs" | "crossref" | "facct_site" | "ris" | "openalex" | "aaai_library";
             /** Url */
             url: string | null;
             value: components["schemas"]["ClaimValue"];
@@ -872,7 +872,7 @@ export interface components {
             abstract: string | null;
             /**
              * Abstract Kind
-             * @description Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @description Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             abstract_kind: "official" | "openalex" | "none";
@@ -1073,7 +1073,7 @@ export interface components {
             abstract: string | null;
             /**
              * Abstract Kind
-             * @description Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @description Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             readonly abstract_kind: "official" | "openalex" | "none";
@@ -1844,7 +1844,7 @@ export interface components {
              * Sources
              * @description The sources the track's records came from (claim sources).
              */
-            sources: ("openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "dblp" | "icml_site" | "ojs" | "crossref" | "facct_site" | "ris" | "openalex")[];
+            sources: ("openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "dblp" | "icml_site" | "ojs" | "crossref" | "facct_site" | "ris" | "openalex" | "aaai_library")[];
             /**
              * Track
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.

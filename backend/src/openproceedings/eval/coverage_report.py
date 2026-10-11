@@ -480,12 +480,20 @@ def _scope(cov: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[str]:
         held = sorted({int(x["year"]) for x in aaai})
         releases = sorted({str(x["listing"]) for x in aaai})
         filled = sum(vy.get("abstract_openalex", 0) for vy in cov["venue_years"] if vy["venue"] == "AAAI")
-        no_abstract = (
-            "come with no abstract from dblp; where no official AAAI source gives one, OpenAlex's is filled in "
-            "(counted below)"
-            if filled
-            else "have no abstract (dblp holds none)"
-        )
+        pages = sum(int(x.get("attached", 0)) for x in manifest.get("sources", {}).get("aaai_library", {})
+                    .get("fills", []))  # fmt: skip
+        archived = (
+            f"; {pages:,} have AAAI's own abstract, read from the Internet Archive's copies of their old aaai.org "
+            "paper pages (official; decision-051)"
+            if pages else ""
+        )  # fmt: skip
+        if filled:
+            no_abstract = (f"come with no abstract from dblp{archived}; where "
+                           f"{'neither gives' if pages else 'no official AAAI source gives'} one, OpenAlex's is "
+                           "filled in (counted below)")  # fmt: skip
+        else:
+            no_abstract = (f"come with no abstract from dblp{archived}, and the rest have none" if pages
+                           else "have no abstract (dblp holds none)")  # fmt: skip
         out.append(
             f"- AAAI {held[0]}–{held[-1]}: from the pinned dblp snapshot release {', '.join(releases)} (a "
             "bibliography read from one pinned file; decision-049). "

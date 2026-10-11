@@ -82,6 +82,17 @@ describe("an OpenAlex abstract (decision-049, RH-20)", () => {
   });
 });
 
+describe("an archived AAAI page's abstract (TASK-232, decision-051)", () => {
+  it("names AAAI and links AAAI's own paper page, never the archive's copy", () => {
+    const page = "http://www.aaai.org/Library/AAAI/1984/aaai84-047.php";
+    const article = show({ abstract_source: { source: "aaai_library", origin: "aaai_library", url: page } });
+    const link = within(attribution(article)!).getByRole("link", { name: /^AAAI, abstract source for / });
+    expect(link.getAttribute("href")).toBe(page);
+    expect(attribution(article)!.textContent).toBe("Abstract: AAAI");
+    expect(article.textContent).not.toContain("via OpenAlex");
+  });
+});
+
 describe("authors (ui-design-system §Result item, RH-13)", () => {
   it("shows the first three and et al., and the full list behind a button that says how many", () => {
     const article = show();

@@ -38,7 +38,8 @@ attribution's `note`, `ingest/dedup.py::SUBMISSION_NOTE` for an ICML 1997/1998 s
 which holds no such field, so a client draws the Abstract facet only when it is not null); `/meta` `values.abstract_kind`
 lists the values; a query naming `abstract_kind:` on a schema-3 index is 422 `FIELD_NOT_INDEXED` on every route that runs
 it, while `/parse` accepts it; CSV's last column `abstract_kind` and a JSONL key, `none` for a withheld record as in a hit;
-`abstract_source.origin` gains `openalex`, `ojs`, `crossref` and `facct_site`, an open set). `/coverage` gains, additively,
+`abstract_source.origin` gains `openalex`, `ojs`, `crossref` and `facct_site`, an open set; TASK-232 adds
+`aaai_library`, and the claim source enum gains it too). `/coverage` gains, additively,
 `abstract_official` and `abstract_openalex` (totals, venue-years and tracks, 0 included) and each track's `gate_note` and
 `gate_note_citation` (both null unless an ungated cell has a note, TASK-222).
 

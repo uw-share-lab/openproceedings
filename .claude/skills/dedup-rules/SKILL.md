@@ -211,6 +211,14 @@ safe direction.
   already won). It claims no status, track or title, and the record model refuses an `openalex` claim on any other
   field, or on a venue outside `record.OPENALEX_VENUES` (AAAI, AIES, FAccT). A takedown still withholds a filled
   abstract, and the record's `abstract_kind` then becomes `none`.
+- **AAAI's archived pages come after `ojs` and fill before OpenAlex** (decision-051, TASK-232). `aaai_library` sits
+  after `ojs` in `dedup._TEXT` (before `crossref`, `facct_site`, `ris` and `openalex`). Its fill runs after dedup and
+  reconcile and before the OpenAlex fill and takedowns (`sources/aaai_library.apply`, `snapshot.fill_aaai_library`),
+  joining each AAAI 1980–2008 dblp record to its pinned capture by dblp key: a record whose abstract only a source
+  ranked after it gave (RIS) takes the page's, one an earlier source gave keeps it, and OpenAlex then fills only what
+  is left null. Not in `crawl.SOURCES`, so it never takes part in a merge. The record model refuses an `aaai_library`
+  claim on any field but `abstract`, any venue but AAAI and any record but a `dblp-` one. Its attribution links the
+  aaai.org page the capture is a copy of (`dedup.archived_original` of the claim's url), never the archive.
 - **Abstract attribution** (`dedup.attribution`, spec 04 §Exports): an `ojs`, `crossref`, `facct_site` or `openalex` claim's url
   is an API page (an OAI resumption-token page, a Crossref work, an OpenAlex work) or a listing of every paper (a FAccT CSV), so each
   is credited to the record's own `urls.proceedings` (the article page, the DOI link), never to the claim's url. A

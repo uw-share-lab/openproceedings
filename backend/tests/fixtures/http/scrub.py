@@ -452,6 +452,47 @@ def _iclr_index(page: str, c: _Counter) -> tuple[str, str]:
     )
 
 
+_AAAI_PLACEHOLDER = re.compile(r"\s*None\s*-")  # `None - 2 page paper is an abstract`: no text of the paper's
+
+
+def _synthetic_lines(text: str, c: _Counter) -> str:
+    """Each line's words replaced by as many synthetic words, its line breaks and edge whitespace kept."""
+    out = []
+    for line in text.split("\n"):
+        words = line.split()
+        lead, trail = line[: len(line) - len(line.lstrip())], line[len(line.rstrip()) :]
+        out.append(lead + " ".join(f"synthetic{c.next()}" for _ in words) + trail if words else line)
+    return "\n".join(out)
+
+
+def _aaai_library_page(page: str, c: _Counter) -> str:
+    """An archived aaai.org paper page (TASK-232): its whole HTML structure kept; the `<title>` and `<h1>` title (one
+    synthetic title for both), the authors' `<i>` and the abstract paragraphs' words (line breaks kept) synthetic. A
+    `None - …` placeholder and the `Subjects:` / `Submitted:` paragraphs (AAAI's subject list, a date) stay real."""
+    n = c.next()
+    page = re.sub(r"(<title>)(.*?)(</title>)", rf"\g<1>Synthetic title {n}\g<3>", page, count=1, flags=re.S)
+    page = re.sub(r"(<h1><a [^>]*>)(.*?)(</a></h1>)", rf"\g<1>Synthetic title {n}\g<3>", page, count=1,
+                  flags=re.S)  # fmt: skip
+    head, sep, rest = page.partition("</h1>")
+    rest = re.sub(r"(<p[^>]*>\s*<i>)(.*?)(</i>)", lambda m: f"{m.group(1)}Synthetic Author {c.next()}{m.group(3)}",
+                  rest, count=1, flags=re.S)  # fmt: skip
+    authors_end = rest.find("</p>") + len("</p>")
+    body = rest[authors_end:]
+    stop = min((i for i in (body.find("<div"), body.find("<hr"), body.find('<p class="eight-center"'))
+                if i >= 0), default=len(body))  # fmt: skip
+
+    def paragraph(m: re.Match[str]) -> str:
+        inner = m.group(2)
+        if inner.lstrip().startswith("<i>") or _AAAI_PLACEHOLDER.match(
+            inner
+        ):  # Subjects:/Submitted:, a placeholder
+            return m.group(0)
+        return f"{m.group(1)}{_synthetic_lines(inner, c)}{m.group(3)}"
+
+    abstract = re.sub(r"(<p[^>]*>)(.*?)(</p>)", paragraph, body[:stop], flags=re.S)
+    return head + sep + rest[:authors_end] + abstract + body[stop:]
+
+
 def scrub_html(
     url: str, page: str, keep_ids: list[str] | None = None, keep: int | None = None
 ) -> tuple[str, str | None]:
@@ -465,6 +506,8 @@ def scrub_html(
             f"<!DOCTYPE html>\n<html><head>{title.group(0) if title else ''}</head><body>…</body></html>\n",
             ("challenge page reduced to its <title>; the real page loads a Turnstile widget"),
         )
+    if "web.archive.org/web/" in url and "www.aaai.org/Library/" in url:
+        return _aaai_library_page(page, c), None
     if "iclr.cc/archive/" in url:
         page, note = _iclr_index(page, c)
     elif "proceedings.neurips.cc" in url or "datasets-benchmarks-proceedings" in url:

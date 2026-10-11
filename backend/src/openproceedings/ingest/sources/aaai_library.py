@@ -1,0 +1,397 @@
+"""AAAI's own abstracts for AAAI 1980-2008, read from Internet Archive captures of the old aaai.org paper pages (spec
+01 §Sources, aaai_library row; decision-051, TASK-232).
+
+dblp gives AAAI 1980-2008 no abstracts, but each record's dblp `ee` is its aaai.org paper page
+(`www.aaai.org/Library/{AAAI,IAAI}/<yyyy>/<id>.php`), and those pages printed the abstract. aaai.org asks crawlers for
+a 43,200-second delay (robots.txt), and its 2023 site dropped the pages, so they are read from the archive's copies:
+`aaai_library.toml` (`aaai_library_table`) pins one capture per record by URL, timestamp and SHA-1 digest, and
+nothing but `web.archive.org` is ever fetched (`HOSTS`), never aaai.org itself.
+
+- **The harvest** (`op ingest aaai-library`, `harvest`): every row's exact capture,
+  `https://web.archive.org/web/<timestamp>id_/<url>` (`id_`: the bytes as archived, no banner or rewriting), one at a
+  time, `MIN_INTERVAL` apart, into `<cache>/aaai_library/pages` through the shared HTTP layer, read as exact bytes
+  (`Fetcher.get(exact_bytes=)`). A body whose SHA-1 is not the row's digest stops (`digest_mismatch`): no other capture
+  is ever tried in its place. A capture the archive answers 404/410 is kept as such and counted (`capture_missing`).
+  When every row is cached, the marker `<cache>/aaai_library/crawls/aaai_library.json` says so.
+- **The fill** (`op snapshot build`, `apply`): after dedup and reconcile and before the OpenAlex fill and takedowns,
+  offline. Each AAAI 1980-2008 dblp record (`op:aaai:<year>:dblp-<tail>`) is joined to the row of its dblp key
+  `conf/aaai/<tail>`, which is exact; its capture is read from the cache, its digest checked again, and the abstract
+  attached as an `aaai_library` claim. So an AAAI page's abstract fills the record before OpenAlex can, and an
+  OpenAlex abstract never displaces it (precedence: after `ojs`, before `ris` and `openalex`).
+
+The page (`parse_page`): `<div id="abstract"><h1>TITLE</h1><p><i>AUTHORS</i></p><p>ABSTRACT</p>…`, then the
+`Subjects:` / `Submitted:` paragraphs and the copyright line. The abstract is the paragraphs after the authors' up to
+the first that is none of them; entities are decoded and whitespace collapsed (2007's pages break lines inside it).
+The bytes are decoded by the charset the page's own `<meta>` names (UTF-8, or ISO-8859-1 read as Windows-1252), UTF-8
+when it names none (`decode`). Refusals, each counted, never forced: a page with another layout (`layout_unknown`) or
+bytes its charset can't decode (`undecodable`); a title whose key (`dedup.title_key`, `common.titles_match`) is not the
+record's (`title_mismatch`): the page is another paper's, or one title has a typo, and either way it is not attached;
+a placeholder (`None - 2 page paper is an abstract`), an empty text or one under `MIN_CHARS` characters after the
+shared cleaning (`no_abstract`); a lone surrogate (`abstract_surrogate`, `common.clean_abstract`).
+
+The claim: `source=aaai_library`, `url` the capture URL, evidence naming the dblp `ee`, the capture's timestamp and
+its digest. The attribution (`dedup.attribution`) links the `ee`, AAAI's own page, never the archive. The text is
+AAAI's copyright, served on the posture of decision-018 (with the takedown list) like ojs.aaai.org's abstracts.
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import logging
+import re
+import time
+from collections import Counter
+from collections.abc import Iterable
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+from typing import Any, ClassVar
+
+from openproceedings.ingest import aaai_library_table
+from openproceedings.ingest.aaai_library_table import Page as Row
+from openproceedings.ingest.aaai_library_table import Table
+from openproceedings.ingest.caps import cap_record
+from openproceedings.ingest.dedup import PRECEDENCE, DedupResult
+from openproceedings.ingest.record import DBLP_YEARS, Claim, PaperRecord, Source, controls_evidence
+from openproceedings.ingest.sources.common import (
+    SURROGATE,
+    Cleaned,
+    CrawlError,
+    Report,
+    clean_abstract,
+    log_surrogate,
+    pdf_codes_evidence,
+    read_markers,
+    titles_match,
+    write_marker,
+)
+from openproceedings.ingest.sources.html import Element, node_text, parse
+from openproceedings.ingest.sources.http import (
+    CacheMiss,
+    Fetcher,
+    Heartbeat,
+    Page,
+    PageCache,
+    Transport,
+    urllib_transport,
+)
+from openproceedings.logs import elapsed_ms
+
+log = logging.getLogger(__name__)
+
+SOURCE: Source = "aaai_library"
+CACHE_DIR = "aaai_library"  # <data>/cache/aaai_library
+HOST = "web.archive.org"
+HOSTS = frozenset({HOST})  # never aaai.org (decision-051)
+MIN_INTERVAL = 3.0  # seconds between requests, one at a time: the Internet Archive's polite pace
+MIN_CHARS = 40  # an abstract shorter than this after cleaning is no abstract (a placeholder, a fragment)
+MARKER = "aaai_library"  # <cache>/aaai_library/crawls/aaai_library.json: every row's capture is cached
+MARKER_FORMAT = "1"
+_PLACEHOLDER = re.compile(r"none\s*[-–—:]", re.IGNORECASE)  # `None - 2 page paper is an abstract`
+_STOP = ("subjects:", "submitted:")  # the paragraphs after the abstract
+_META_CHARSET = re.compile(rb"<meta\b[^>]{0,300}?charset\s*=\s*[\"']?([A-Za-z0-9_.:-]{1,40})", re.IGNORECASE)
+_HEAD = 4096  # bytes searched for the `<meta>` charset
+_LATIN = frozenset(
+    {"iso-8859-1", "iso8859-1", "latin1", "latin-1", "windows-1252", "cp1252", "us-ascii", "ascii"}
+)
+# the refusals worth a WARNING (`aaai_library_attention`): a page that is not what the table says it is
+_ATTENTION = ("capture_missing", "layout_unknown", "undecodable", "title_mismatch", SURROGATE)
+
+
+# --- the bytes ----------------------------------------------------------------------------------------------
+
+
+def digest(body: bytes) -> str:
+    """The archive's digest of a capture: SHA-1 of the bytes, base32 (as the CDX index gives it)."""
+    return base64.b32encode(hashlib.sha1(body).digest()).decode("ascii")
+
+
+def body_of(page: Page) -> bytes | None:
+    """A cached capture's exact bytes (`Fetcher.get(exact_bytes=True)` read them one character per byte), or None
+    when its text holds a character no byte gives (an entry this source never wrote)."""
+    try:
+        return page.text.encode("latin-1")
+    except UnicodeEncodeError:
+        return None
+
+
+def check_digest(page: Page, row: Row) -> bytes:
+    """The capture's bytes when they hash to the row's digest; else the crawl or the build stops
+    (`digest_mismatch`): another capture is never read in its place, and the message never quotes the body."""
+    body = body_of(page)
+    if body is None or digest(body) != row.digest:
+        raise CrawlError(f"{row.capture}: the bytes are not the capture aaai_library.toml pins for {row.key} (SHA-1 "
+                         f"{row.digest}); re-run op ingest aaai-library --refresh, and if it persists the archive "
+                         "changed the capture: re-run scripts/aaai_library_census.py", reason="digest_mismatch")  # fmt: skip
+    return body
+
+
+def decode(body: bytes) -> str | None:
+    """The page's text in the charset its own `<meta>` names (ISO-8859-1 and ASCII read as Windows-1252, as a browser
+    does; a byte Windows-1252 leaves undefined as ISO-8859-1), UTF-8 when it names none; None when the bytes are not
+    in it, or it names another charset."""
+    m = _META_CHARSET.search(body[:_HEAD])
+    named = m.group(1).decode("ascii").lower() if m else "utf-8"
+    try:
+        if named in ("utf-8", "utf8"):
+            return body.decode("utf-8")
+        if named in _LATIN:
+            try:
+                return body.decode("cp1252")
+            except UnicodeDecodeError:
+                return body.decode("latin-1")
+    except UnicodeDecodeError:
+        return None
+    return None
+
+
+# --- the page -----------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Parsed:
+    title: str | None
+    abstract: str | None  # the abstract paragraphs' text, as the page gives it (None: none)
+    refused: str | None = None  # layout_unknown | undecodable
+
+
+def _children(node: Element) -> list[Element]:
+    return [c for c in node.children if isinstance(c, Element)]
+
+
+def parse_page(text: str, url: str | None = None) -> Parsed:
+    """An aaai.org paper page's title and abstract (the module docstring's layout). A page without exactly one
+    `<div id="abstract">` holding an `<h1>` and then an authors paragraph (an `<i>` inside) is `layout_unknown`."""
+    root = parse(text, url)
+    divs = [d for d in root.iter("div") if d.attributes.get("id") == "abstract"]
+    if len(divs) != 1:
+        return Parsed(None, None, "layout_unknown")
+    kids = _children(divs[0])
+    at = next((i for i, k in enumerate(kids) if k.tag == "h1"), None)
+    if at is None or at + 1 >= len(kids) or kids[at + 1].tag != "p" or not kids[at + 1].iter("i"):
+        return Parsed(None, None, "layout_unknown")
+    paragraphs: list[str] = []
+    for k in kids[at + 2 :]:
+        if k.tag != "p" or k.has_class("eight-center"):  # a rule, the copyright line: the abstract has ended
+            break
+        said = node_text(k)
+        if said.casefold().startswith(_STOP):
+            break
+        if said:
+            paragraphs.append(said)
+    return Parsed(node_text(kids[at]) or None, " ".join(paragraphs) or None)
+
+
+def abstract_of(parsed: Parsed) -> tuple[Cleaned | None, str | None]:
+    """The page's abstract as a record may hold it (`common.clean_abstract`), or None with why: the page's own
+    refusal, `abstract_surrogate`, or `no_abstract` (none, a `None - …` placeholder, or under `MIN_CHARS`)."""
+    if parsed.refused:
+        return None, parsed.refused
+    cleaned = clean_abstract(parsed.abstract)
+    if cleaned.refused:
+        return None, cleaned.refused
+    text = cleaned.text
+    if text is None or len(text) < MIN_CHARS or _PLACEHOLDER.match(text):
+        return None, "no_abstract"
+    return cleaned, None
+
+
+def read(page: Page, row: Row) -> Parsed:
+    """A cached capture's page: the digest checked (`check_digest`, which stops on a mismatch), then decoded and
+    parsed."""
+    text = decode(check_digest(page, row))
+    return Parsed(None, None, "undecodable") if text is None else parse_page(text, row.capture)
+
+
+# --- the harvest (`op ingest aaai-library`) -------------------------------------------------------------------
+
+
+def fetcher(cache: Path, *, offline: bool, transport: Transport | None = None,
+            min_interval: float = MIN_INTERVAL) -> Fetcher:  # fmt: skip
+    """The one aaai_library fetcher: web.archive.org only, the repo's generic User-Agent (no contact string), one
+    request at a time, never under `MIN_INTERVAL` apart; offline, the cache alone."""
+    live = None if offline else (transport or urllib_transport)
+    return Fetcher(
+        PageCache(cache / CACHE_DIR), live, hosts=HOSTS, min_interval=max(min_interval, MIN_INTERVAL)
+    )
+
+
+def get(fetcher: Fetcher, row: Row, *, refresh: bool = False) -> Page:
+    """A row's capture, through the cache: exact bytes, judged whole by its stated length, a 404/410 kept."""
+    return fetcher.get(row.capture, refresh=refresh, keep_absent=True, by_length=True, exact_bytes=True)
+
+
+@dataclass
+class Harvest:
+    pages: int = 0
+    fetched: int = 0  # from the network this run
+    missing: int = 0  # the archive answered 404/410 (`capture_missing`)
+
+
+def harvest(table: Table, fetcher: Fetcher, *, refresh: bool = False) -> Harvest:
+    """Every row's capture into the cache, in key order, each digest checked as it arrives; then the marker, when
+    the fetcher is live or offline and every row was there. A progress line at most every 30 s."""
+    out = Harvest()
+    started = time.monotonic()
+    beat = Heartbeat(fetcher.clock.monotonic)
+    rows = list(table.pages.values())
+    log.info("aaai_library_harvest_started", extra={"pages": len(rows), "offline": fetcher.offline})
+    for row in rows:
+        before = fetcher.stats.network
+        page = get(fetcher, row, refresh=refresh)
+        out.pages += 1
+        out.fetched += fetcher.stats.network > before
+        if page.ok:
+            check_digest(page, row)
+        else:
+            out.missing += 1
+        if beat.due():
+            log.info("aaai_library_harvest_progress", extra={"done": out.pages, "of": len(rows),
+                                                             "requests": fetcher.stats.network,
+                                                             "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+    return out  # the end line is the command's (`aaai_library_ingested`)
+
+
+def write_done(cache: Path, table: Table, done: Harvest) -> None:
+    write_marker(cache / CACHE_DIR / "crawls", MARKER, {"source": SOURCE, "format": MARKER_FORMAT,
+                                                        "pages": done.pages, "missing": done.missing,
+                                                        "verified": table.verified.isoformat()})  # fmt: skip
+
+
+def harvested(cache: Path) -> bool:
+    """Whether a harvest finished (its marker): False, no fill. A marker of another format is `crawl_file_invalid`."""
+    marker = cache / CACHE_DIR / "crawls" / f"{MARKER}.json"
+    if not marker.exists():
+        return False
+    found = dict(read_markers(marker.parent)).get(marker.name)
+    if not found or found.get("source") != SOURCE or found.get("format") != MARKER_FORMAT:
+        raise CrawlError("the aaai_library crawl marker is unreadable; run op ingest aaai-library",
+                         reason="crawl_file_invalid")  # fmt: skip
+    return True
+
+
+# --- the fill (`op snapshot build`, after reconcile, before the OpenAlex fill and takedowns) -----------------
+
+
+@dataclass(kw_only=True)
+class FillReport(Report):
+    """The AAAI library fill of one build (manifest `sources.aaai_library.fills`)."""
+
+    pages: int = 0  # rows of the table
+    candidates: int = 0  # AAAI 1980-2008 dblp records in the build
+    no_page: int = 0  # of candidates: no row (no aaai.org Library `ee` in dblp, or no capture of it)
+    attached: int = 0  # abstracts attached from a page
+    replaced: int = 0  # of attached: an abstract only a source ranked after aaai_library (ris) gave, replaced
+    official_won: int = 0  # a page abstract, but the record's own abstract is from a source ranked before it
+    rows_unmatched: int = 0  # rows naming no record of the build
+    refused: Counter[str] = field(default_factory=Counter)
+
+    manifest_key: ClassVar[str] = "fills"
+
+    def to_manifest(self) -> dict[str, Any]:
+        return {"pages": self.pages, "candidates": self.candidates, "no_page": self.no_page,
+                "attached": self.attached, "replaced": self.replaced, "official_won": self.official_won,
+                "rows_unmatched": self.rows_unmatched, "refused": dict(sorted(self.refused.items()))}  # fmt: skip
+
+
+def key_of(record: PaperRecord) -> str | None:
+    """The dblp key of an AAAI 1980-2008 dblp record (`op:aaai:<year>:dblp-<tail>` → `conf/aaai/<tail>`), else None."""
+    native = record.id.split(":", 3)[3]
+    if record.venue != "AAAI" or record.year not in DBLP_YEARS["AAAI"] or not native.startswith("dblp-"):
+        return None
+    return f"conf/aaai/{native.removeprefix('dblp-')}"
+
+
+_RANK = PRECEDENCE["abstract"]
+
+
+def _outranked(record: PaperRecord) -> bool:
+    """Whether every claim holding the record's abstract is from a source ranked after aaai_library."""
+    held = [c.source for c in record.claims("abstract") if c.value == record.abstract]
+    return bool(held) and all(_RANK.index(s) > _RANK.index(SOURCE) for s in held)
+
+
+def _attach(r: PaperRecord, row: Row, page: Page, cleaned: Cleaned) -> PaperRecord:
+    assert cleaned.text is not None
+    evidence = (f"AAAI's paper page {row.url} (the dblp ee of {row.key}), Internet Archive capture {row.timestamp}, "
+                f"SHA-1 {row.digest}; joined by dblp key")  # fmt: skip
+    claim = Claim(field="abstract", value=cleaned.text, source=SOURCE, url=row.capture, fetched_at=page.fetched_at,
+                  evidence=pdf_codes_evidence(controls_evidence(evidence, cleaned.spaced), cleaned.pdf_codes))  # fmt: skip
+    # `model_copy` re-validates every field (record.py): the aaai_library guard (an AAAI 1980-2008 dblp record's
+    # abstract only) runs again, and the hash is recomputed
+    return cap_record(r.model_copy(update={"abstract": cleaned.text, "provenance": (*r.provenance, claim)}))
+
+
+def fill(
+    records: Iterable[PaperRecord], fetcher: Fetcher, table: Table | None = None
+) -> tuple[list[PaperRecord], FillReport]:
+    """Attach each AAAI 1980-2008 dblp record's page abstract, in record id order, from the cache alone (`fetcher`
+    is offline). A row whose capture is not cached stops (`not_cached`), and so does a digest mismatch; every other
+    refusal is counted, never forced. A record whose abstract a source ranked before aaai_library gave keeps it
+    (`official_won`); one only a source ranked after it gave (ris) takes the page's (`replaced`)."""
+    table = table or aaai_library_table.TABLE
+    report = FillReport(source=SOURCE, pages=len(table.pages))
+    out: list[PaperRecord] = []
+    seen: set[str] = set()
+    for r in sorted(records, key=lambda r: r.id):
+        key = key_of(r)
+        if key is None:
+            out.append(r)
+            continue
+        report.candidates += 1
+        row = table.pages.get(key)
+        if row is None:
+            report.no_page += 1
+            out.append(r)
+            continue
+        seen.add(key)
+        try:
+            page = get(fetcher, row)
+        except CacheMiss:
+            raise CrawlError(f"{row.capture} ({row.key}) is not in the cache; run op ingest aaai-library",
+                             reason="not_cached") from None  # fmt: skip
+        report.fetched.append(page.fetched_at)
+        refusal: str | None = None
+        cleaned: Cleaned | None = None
+        if not page.ok:
+            refusal = "capture_missing"
+        else:
+            parsed = read(page, row)
+            if parsed.refused is None and not titles_match(r.title, parsed.title):
+                refusal = "title_mismatch"
+            else:
+                cleaned, refusal = abstract_of(parsed)
+        if refusal is not None or cleaned is None:
+            report.refused[refusal or "no_abstract"] += 1
+            if refusal == SURROGATE:
+                log_surrogate(SOURCE, r.id)
+            out.append(r)
+        elif r.abstract is None or _outranked(r):
+            report.replaced += r.abstract is not None
+            report.attached += 1
+            out.append(_attach(r, row, page, cleaned))
+        else:
+            report.official_won += 1
+            out.append(r)
+    report.rows_unmatched = len(set(table.pages) - seen)
+    report.fetched = sorted(set(report.fetched))
+    return out, report
+
+
+def apply(
+    result: DedupResult, cache: Path, table: Table | None = None
+) -> tuple[DedupResult, list[FillReport]]:
+    """`op snapshot build`'s fill, when a harvest finished (`harvested`; else nothing changes), offline. Returns the
+    result and its one fill report, after its INFO line (`aaai_library_filled`, every refusal by reason) and, when a
+    page was not what the table says it is, one WARNING (`aaai_library_attention`)."""
+    started = time.monotonic()
+    if not harvested(cache):
+        return result, []
+    records, report = fill(result.records, fetcher(cache, offline=True), table)
+    counts = {"candidates": report.candidates, "attached": report.attached, "replaced": report.replaced,
+              "official_won": report.official_won, "no_page": report.no_page,
+              "rows_unmatched": report.rows_unmatched, "refused": dict(sorted(report.refused.items()))}  # fmt: skip
+    log.info("aaai_library_filled", extra={**counts, "ms": elapsed_ms(started, time.monotonic)})
+    if attention := {k: report.refused[k] for k in _ATTENTION if report.refused[k]}:
+        log.warning("aaai_library_attention", extra=attention)
+    return replace(result, records=tuple(sorted(records, key=lambda r: r.id))), [report]

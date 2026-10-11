@@ -344,6 +344,26 @@ def test_ingest_openalex_usage_refusals(
     assert message in capsys.readouterr().err
 
 
+def test_ingest_aaai_library_dispatches_the_flags_and_refuses_dry_run_with_offline(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.ingest.sources import crawl
+
+    seen: dict[str, object] = {}
+
+    def fake(cache: Path, **kwargs: object) -> dict[str, object]:
+        seen.update(cache=cache, **kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(crawl, "ingest_aaai_library", fake)
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "aaai-library", "--refresh"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"ok": True}
+    assert (seen["cache"], seen["offline"], seen["dry_run"], seen["refresh"]) == (tmp_path / "cache", False, False,
+                                                                                   True)  # fmt: skip
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "aaai-library", "--dry-run", "--offline"]) == 1
+    assert "don't combine" in capsys.readouterr().err
+
+
 def test_ingest_ojs_oai_error_exits_nonzero_with_the_refresh_hint(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

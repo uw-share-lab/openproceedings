@@ -35,8 +35,8 @@ def _openalex(text: str = TEXT) -> Claim:
     return _claim("abstract", text, "openalex", "https://api.openalex.org/works/W123")
 
 
-def test_schema_is_8_and_the_kind_is_derived() -> None:
-    assert RECORD_SCHEMA_VERSION == "8" and frozenset({"venue_name", "abstract_kind"}) == DERIVED
+def test_schema_is_9_and_the_kind_is_derived() -> None:
+    assert RECORD_SCHEMA_VERSION == "9" and frozenset({"venue_name", "abstract_kind"}) == DERIVED
 
 
 @pytest.mark.parametrize(

@@ -163,14 +163,16 @@ can attribute it:
   `GET /papers/{id}` lists it). `ris` means it came through an imported RIS file (the Google Scholar
   bootstrap), which is most of the served corpus.
 - `origin`: the site that published it, an open set (`openreview`, `neurips_proceedings`, `iclr_proceedings`,
-  `pmlr`, `iclr_archive`, `icml_site`, `ojs`, `crossref`, `facct_site`, `openalex`; `iclr_archive` can't occur yet,
+  `pmlr`, `iclr_archive`, `icml_site`, `ojs`, `crossref`, `facct_site`, `openalex`, `aaai_library`; `iclr_archive` can't occur yet,
   since the ICLR archive supplies no abstracts; `icml_site` is an official ICML conference page, for ICML 1988–2012,
   decision-047, and its `url` is the page as fetched: live, or the Internet Archive capture,
   `https://web.archive.org/web/<timestamp>id_/<page>`; `ojs` is the AAAI Digital Library (AAAI, AIES and IASEAI) and
   `crossref` and `facct_site` are FAccT and AIES (ACM proceedings via Crossref, the official FAccT pages), each with
   the paper's own page or DOI link as `url`, decision-049; **`openalex`** is an AAAI, AIES or FAccT abstract no
   official source gives, filled from OpenAlex (decision-049, milestone C), whose `url` is the paper's own page
-  (`urls.proceedings`), never OpenAlex's API; `api/models.py::ORIGIN_DOC` is the schema's wording). A direct
+  (`urls.proceedings`), never OpenAlex's API; **`aaai_library`** is AAAI's own abstract for AAAI 1980–2008, read
+  from an Internet Archive capture of the paper's old aaai.org page (decision-051, TASK-232), whose `url` is that
+  aaai.org page (the dblp `ee`), never the archive's copy; `api/models.py::ORIGIN_DOC` is the schema's wording). A direct
   claim maps to its site. A `ris` claim's evidence names its route (`scholarmend:<route> <evidence>`,
   `ingest/ris.py`): `openreview_api` → `openreview`; `proceedings_page` → the site its evidence url's host
   names (NeurIPS, ICLR or PMLR proceedings), or `urls.proceedings`'s when the evidence has no url. Null when
@@ -199,7 +201,7 @@ snapshot is loaded, never stored in the record or the index: a record whose abst
 abstract is null or withheld (a takedown). `GET /papers/{id}` carries the same `abstract_note` at its top level.
 
 `abstract_kind` (decision-049, additive; open enum) says where a hit's abstract came from: `official` (the venue's own
-source), `openalex` (filled from OpenAlex, only for an AAAI, AIES or FAccT paper no official source gives one) or
+source, an archived aaai.org page included), `openalex` (filled from OpenAlex, only for an AAAI, AIES or FAccT paper no official source gives one) or
 `none` (no abstract, or one withheld by a takedown). `GET /papers/{id}` carries it on `paper` (a derived field, like
 `venue_name`). `facets.abstract_kind` counts it like the other facets, and is null on an index of schema 3, which holds
 no such field (a query naming `abstract_kind:` on one is 422 `FIELD_NOT_INDEXED`, spec 03 §Versioning). `GET /meta` `values.abstract_kind`
@@ -424,7 +426,8 @@ route execution.
   text out. The attribution is the record's `Attribution` from the exported index's snapshot, computed once
   when the snapshot is loaded (`RecordFile.attributions`, `ingest/dedup.py::attribution`), the same one
   `GET /search` sends as `abstract_source`; nothing recomputes it. `<site>` is the results list's name for the
-  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`, `ICML conference site`, `AAAI Digital Library` (ojs.aaai.org: AAAI, AIES and IASEAI, decision-049), `Crossref` and `FAccT conference site` (decision-049, milestone B: Crossref's records of the ACM proceedings, and the official FAccT pages; Crossref carries no abstract today, so a FAccT abstract's origin is `facct_site`, and both link the paper's DOI) and `OpenAlex` (decision-049, milestone C: an abstract filled from OpenAlex, linking the paper's own page, so the RIS line reads `N1  - Abstract source: OpenAlex <paper's page>`; the design said "the work's URL", but a reader who follows the link should reach the paper, not OpenAlex's API, so the claim's own API url is kept in the provenance only);
+  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`, `ICML conference site`, `AAAI Digital Library` (ojs.aaai.org: AAAI, AIES and IASEAI, decision-049), `Crossref` and `FAccT conference site` (decision-049, milestone B: Crossref's records of the ACM proceedings, and the official FAccT pages; Crossref carries no abstract today, so a FAccT abstract's origin is `facct_site`, and both link the paper's DOI) `AAAI` (decision-051, TASK-232: AAAI's own abstract from an archived aaai.org page, linking that aaai.org page, never
+the archive) and `OpenAlex` (decision-049, milestone C: an abstract filled from OpenAlex, linking the paper's own page, so the RIS line reads `N1  - Abstract source: OpenAlex <paper's page>`; the design said "the work's URL", but a reader who follows the link should reach the paper, not OpenAlex's API, so the claim's own API url is kept in the provenance only);
   `export.ORIGIN_NAMES`,
   pinned equal to `hit-item.tsx`'s), plus ` (via RIS import)` when the claim came through an imported RIS file;
   a route that names no known site reads `an imported RIS file`; the url is left out when there is none.

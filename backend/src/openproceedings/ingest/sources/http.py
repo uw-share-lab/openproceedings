@@ -657,21 +657,25 @@ class Fetcher(HttpClient[Page]):
 
     def get(
         self, url: str, *, refresh: bool = False, keep_absent: bool = False, charset: str = "utf-8",
-        by_length: bool = False,
+        by_length: bool = False, exact_bytes: bool = False,
     ) -> Page:  # fmt: skip
         """The page at `url`: from the cache unless `refresh`, else fetched (and cached when it is a 200, or a
         404/410 with `keep_absent`). Offline, a miss raises instead of fetching. `charset` decodes a body whose
         `Content-Type` names none (a 1990s-2000s page served as bare `text/html`, TASK-206); one the response
         names always wins. `by_length` judges a 200 whole by its `Content-Length` rather than a closing `</html>`
-        (an archived capture of a page that never had one: ICML 1997/1998, TASK-207)."""
+        (an archived capture of a page that never had one: ICML 1997/1998, TASK-207). `exact_bytes` reads the body
+        as ISO-8859-1 whatever the response names, so `text.encode("latin-1")` is the body byte for byte: for a
+        source that checks a digest of the bytes and decodes them itself (an archived aaai.org page, TASK-232)."""
 
         def fetch(canonical_url: str) -> tuple[Page, bool]:
-            page = self._page(canonical_url, charset, by_length)
+            page = self._page(canonical_url, charset, by_length, exact_bytes)
             return page, page.ok or (keep_absent and page.status in _ABSENT)
 
         return self.through_cache(url, fetch, refresh=refresh)
 
-    def _page(self, url: str, default_charset: str = "utf-8", by_length: bool = False) -> Page:
+    def _page(
+        self, url: str, default_charset: str = "utf-8", by_length: bool = False, exact_bytes: bool = False
+    ) -> Page:
         request = Request(
             "GET", url, {**self._headers, "User-Agent": self.user_agent, "Accept": self.policy.accept}
         )
@@ -679,6 +683,8 @@ class Fetcher(HttpClient[Page]):
         if resp.status == 200:
             content_type = resp.headers.get("content-type", "text/html; charset=utf-8")
             charset = m.group(1) if (m := _CHARSET.search(content_type)) else default_charset
+            if exact_bytes:
+                charset = "latin-1"  # every byte is one character: nothing to refuse, nothing lost
             try:
                 text = resp.body.decode(charset)
             except (LookupError, UnicodeDecodeError) as e:

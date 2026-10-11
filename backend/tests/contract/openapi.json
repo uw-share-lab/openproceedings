@@ -17,7 +17,8 @@
                   "ojs",
                   "crossref",
                   "facct_site",
-                  "openalex"
+                  "openalex",
+                  "aaai_library"
                 ],
                 "type": "string"
               },
@@ -25,7 +26,7 @@
                 "type": "null"
               }
             ],
-            "description": "The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources). `icml_site`: an official ICML conference page (live, or a pinned Internet Archive capture), for ICML 1988-2012 (decision-047). `ojs`: the AAAI Digital Library (ojs.aaai.org), for AAAI, AIES and IASEAI; its url is the paper's own article page (decision-049). `crossref` and `facct_site`: FAccT and AIES (ACM proceedings via Crossref, the official FAccT pages); the url is the paper's DOI link (decision-049). `openalex`: an AAAI, AIES or FAccT abstract no official source gives, filled from OpenAlex (decision-049); the url is the paper's own page, never OpenAlex's API. Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "description": "The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources). `icml_site`: an official ICML conference page (live, or a pinned Internet Archive capture), for ICML 1988-2012 (decision-047). `ojs`: the AAAI Digital Library (ojs.aaai.org), for AAAI, AIES and IASEAI; its url is the paper's own article page (decision-049). `crossref` and `facct_site`: FAccT and AIES (ACM proceedings via Crossref, the official FAccT pages); the url is the paper's DOI link (decision-049). `openalex`: an AAAI, AIES or FAccT abstract no official source gives, filled from OpenAlex (decision-049); the url is the paper's own page, never OpenAlex's API. `aaai_library`: AAAI's own abstract for AAAI 1980-2008, read from an Internet Archive capture of the paper's old aaai.org page (decision-051); the url is that aaai.org page, never the archive. Open set: new values may be added within /api/v1; handle a value you don't know.",
             "title": "Origin"
           },
           "source": {
@@ -42,7 +43,8 @@
               "crossref",
               "facct_site",
               "ris",
-              "openalex"
+              "openalex",
+              "aaai_library"
             ],
             "title": "Source",
             "type": "string"
@@ -238,7 +240,8 @@
               "crossref",
               "facct_site",
               "ris",
-              "openalex"
+              "openalex",
+              "aaai_library"
             ],
             "title": "Source",
             "type": "string"
@@ -1551,7 +1554,7 @@
             "title": "Abstract"
           },
           "abstract_kind": {
-            "description": "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "description": "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.",
             "enum": [
               "official",
               "openalex",
@@ -2126,7 +2129,7 @@
             "title": "Abstract"
           },
           "abstract_kind": {
-            "description": "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "description": "Where the abstract came from (decision-049): `official` (the venue's own source: OpenReview, the proceedings, ojs.aaai.org, PMLR, the FAccT site, AAAI's archived aaai.org paper pages), `openalex` (filled from OpenAlex only for an AAAI, AIES or FAccT paper no official source gives one), or `none` (no abstract, or one withheld). The `abstract_kind:` filter selects by it. Derived from the abstract's claims; never stored, never hashed. Distinct from `abstract_source`, the claim the abstract came from. Open set: new values may be added within /api/v1; handle a value you don't know.",
             "enum": [
               "official",
               "openalex",
@@ -4185,7 +4188,8 @@
                 "crossref",
                 "facct_site",
                 "ris",
-                "openalex"
+                "openalex",
+                "aaai_library"
               ],
               "type": "string"
             },

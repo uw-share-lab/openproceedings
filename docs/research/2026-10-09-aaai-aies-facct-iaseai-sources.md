@@ -1013,3 +1013,60 @@ Totals as built: FAccT 1,230 records (1,239 ACM DOIs, minus 26 FAccT 2020 tutori
 v81); AIES 2018–2023 575 records; AAAI 1980–2008 4,730 records in 23 held years. Since TASK-224/225/226: AIES
 2018–2023 557 records (449 `main`, 108 `student_abstract`), AAAI 1980–2008 4,709 records (3,567 `main`; §AAAI
 1993–2008 sections).
+
+## AAAI 1980–2008 abstracts: the archived aaai.org paper pages (TASK-232, decision-051, 2026-10-10)
+
+After the OpenAlex fill, 3,648 of the 4,709 AAAI 1980–2008 records had no abstract and the other 1,061 had
+OpenAlex's. dblp gives these years none, but each record's dblp `ee` is its old aaai.org paper page,
+`www.aaai.org/Library/{AAAI,IAAI}/<yyyy>/<id>.php`, which printed the abstract.
+
+**The crawl-delay decision.** aaai.org's robots.txt sets `Crawl-delay: 43200` (one request every 12 hours: about 6.3
+years for 4,609 pages), and its 2023 site dropped the Library pages. The owner approved reading the Internet
+Archive's captures instead (decision-051): the only host is `web.archive.org`, for the captures and its CDX index;
+aaai.org is never fetched, so the crawl delay is never in play and aaai.org bears no load. The archive is read one
+request at a time, at least 3 s apart, with the repo's generic User-Agent and no contact string. The text is AAAI's
+copyright, served on the same posture as the ojs.aaai.org abstracts (decision-018, the takedown list, TASK-135).
+
+**What the research showed** (`.superpowers/sdd/2026-10-10-new-venues-milestone-c/task232-research/`): 15 of 15
+sampled captures held the abstract, and the 4 that could be checked against the live new-site abstract were identical
+to it. `https://web.archive.org/web/<timestamp>id_/<url>` returns the archived bytes exactly, and their SHA-1 (base32)
+is the CDX digest. The old layout is `<div id="abstract"><h1><a href=…pdf>TITLE</a></h1><p class="left"><i>AUTHORS</i>
+</p><p>ABSTRACT</p>`; the 2007-style pages break lines inside the abstract and add `Subjects:` / `Submitted:`
+paragraphs. One placeholder was found, `None - 2 page paper is an abstract` (aaai06-329).
+
+**The census** (`scripts/aaai_library_census.py`, 2026-10-10; two CDX requests, nothing else fetched). It read the
+4,709 AAAI 1980–2008 dblp records of snapshot `2026-10-10-22a339940466` and their `ee` links from the pinned dblp
+extract (both offline), then every status-200 capture under `www.aaai.org/Library/AAAI/` (31,206) and `…/IAAI/`
+(3,275): 7,795 distinct pages, none set aside (no query, port, non-HTML type or missing digest).
+
+| | Records |
+|---|---|
+| AAAI 1980–2008 dblp records | 4,709 |
+| no `ee` at all (1996: 16, 1997: 37, 2000: 2, 2004: 24, 2005: 21) | 100 |
+| an `ee` that is a Library page | 4,609 |
+| of those, no 200 capture (MichelsonK06, ParkerFT06) | 2 |
+| **rows of `ingest/aaai_library.toml`** | **4,607** |
+| capture chosen: the latest `text/html` 200 before 2023-01-01 | 4,607 |
+| capture chosen: the earliest (none before 2023) | 0 |
+| capture's original URL differs from the `ee` (beyond scheme and `:80`) | 0 |
+
+Rows by year: 1980 95, 1982 104, 1983 92, 1984 69, 1986 188, 1987 149, 1988 150, 1990 165, 1991 144, 1992 134, 1993
+133, 1994 302, 1996 284, 1997 210, 1998 205, 1999 193, 2000 229, 2002 180, 2004 170, 2005 304, 2006 383, 2007 368, 2008
+356. The chosen captures date from 2016 (1,010) to 2022 (1,117). The 100 records with no `ee` and the two pages with
+no capture stay as they are (OpenAlex's abstract, or none); a follow-up can look for them elsewhere.
+
+**Five captures were recorded as fixtures** (Araya84 1984, DetermanB98 IAAI 1998, KimuraSN07 2007, TaylorS06 2006's
+placeholder, Lifschitz08 2008; captures from 2021-10 to 2022-12): every digest matched and none redirected, so the
+late-2022 captures still hold the old layout. They are scrubbed the OJS way (decision-004: synthetic title, authors
+and abstract words, the HTML structure, the placeholder and the `Subjects:`/`Submitted:` lines real;
+`backend/tests/fixtures/http/aaai_library/`).
+
+**The title check.** The page's `<h1>` must have the record's title key. dblp's titles carry OCR typos the pages
+don't: 2 of the 15 sampled pages fail the check for that reason alone (aaai80-016, dblp `Optimisation … Conputer` vs
+the page's `Optimization … Computer`; aaai93-015, dblp `Programrning`). So expect roughly a tenth of the pages to be
+refused as `title_mismatch` in the first build; the harvest's fill report counts them, for an owner ruling.
+
+**As built.** `ingest/aaai_library.toml` + `aaai_library_table.py`, `sources/aaai_library.py`, `op ingest
+aaai-library`, the `aaai_library` claim source (record schema 9; after `ojs`, before `openalex`), filled after dedup and
+before the OpenAlex fill (spec 01 §Sources, AAAI library row). The full harvest (about 4,607 requests, at least 3.8
+hours) and the rebuild are run after review; their counts go here then.

@@ -7,7 +7,9 @@ its crawl marker. A dry run reads only the index pages (through the cache) and r
 fetch; it writes no marker. `--offline` crawls from the cache alone. `replay_all` re-runs every marked crawl
 of every source (OpenReview API v2, then v1, then ICLR, NeurIPS, PMLR, dblp (ICML), OJS and dblp (AAAI); `common.Crawls`) with no
 transport at all, so a snapshot never fetches. `op ingest openalex` (`ingest_openalex`) is not one of them: it
-writes a pinned extract that `op snapshot build` replays after dedup (`openalex.apply`).
+writes a pinned extract that `op snapshot build` replays after dedup (`openalex.apply`). Nor is `op ingest
+aaai-library` (`ingest_aaai_library`): it caches the pinned Internet Archive captures of `aaai_library.toml` and
+writes a marker, and `op snapshot build` reads them after dedup, before the OpenAlex fill (`aaai_library.apply`).
 """
 
 from __future__ import annotations
@@ -20,13 +22,14 @@ from pathlib import Path
 from typing import Any
 
 from openproceedings import storage
-from openproceedings.ingest import acm_table, dblp_aaai_table, openalex_table
+from openproceedings.ingest import aaai_library_table, acm_table, dblp_aaai_table, openalex_table
 from openproceedings.ingest.dblp_table import TABLE as DBLP_TABLE
 from openproceedings.ingest.dblp_table import Table as DblpTable
 from openproceedings.ingest.ojs_table import TABLE as OJS_TABLE
 from openproceedings.ingest.ojs_table import Table as OjsTable
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources import (
+    aaai_library,
     crossref,
     dblp,
     dblp_aaai,
@@ -466,6 +469,33 @@ def ingest_openalex(
                                          "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
     return {"dry_run": False, "extract": sha, "lookups": len(lookups), "works": works, "candidates": candidates,
             "doi_unqueryable": unqueryable, "requests": f.stats.network, "cached": f.stats.cached}  # fmt: skip
+
+
+def ingest_aaai_library(
+    cache: Path, *, offline: bool = False, dry_run: bool = False, refresh: bool = False,
+    transport: Transport | None = None, min_interval: float = aaai_library.MIN_INTERVAL,
+    table: aaai_library_table.Table | None = None,
+) -> dict[str, Any]:  # fmt: skip
+    """Cache every `aaai_library.toml` row's pinned Internet Archive capture (web.archive.org only, one at a time,
+    never under `aaai_library.MIN_INTERVAL` apart; each digest checked as it arrives) under `<cache>/aaai_library`'s
+    lock, then write the marker `op snapshot build` reads (`aaai_library.apply`). Not a `SOURCES` crawl. A dry run
+    reads nothing live and writes nothing: it says how many captures are cached and how many a run would fetch."""
+    started = time.monotonic()
+    table = table or aaai_library_table.TABLE
+    if dry_run:
+        f = aaai_library.fetcher(cache, offline=True)
+        cached = sum(f.is_cached(row.capture) for row in table.pages.values())
+        return {"dry_run": True, "pages": len(table.pages), "cached": cached, "to_fetch": len(table.pages) - cached,
+                "requests": 0, "seconds_at_least": round((len(table.pages) - cached) * aaai_library.MIN_INTERVAL)}  # fmt: skip
+    f = aaai_library.fetcher(cache, offline=offline, transport=transport, min_interval=min_interval)
+    with storage.exclusive(cache / aaai_library.CACHE_DIR):
+        done = aaai_library.harvest(table, f, refresh=refresh)
+        aaai_library.write_done(cache, table, done)
+    log.info("aaai_library_ingested", extra={"pages": done.pages, "missing": done.missing,
+                                             "requests": f.stats.network, "cached": f.stats.cached,
+                                             "ms": elapsed_ms(started, time.monotonic)})  # fmt: skip
+    return {"dry_run": False, "pages": done.pages, "fetched": done.fetched, "missing": done.missing,
+            "requests": f.stats.network, "cached": f.stats.cached}  # fmt: skip
 
 
 SOURCES: tuple[Crawls[Any], ...] = (

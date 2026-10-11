@@ -55,7 +55,9 @@ SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bd
 # set back to "6" the files hash to the value above (checked 2026-10-10).
 # Task 2 of milestone C changed it again: record schema v8 (the `openalex` source and the derived `abstract_kind`);
 # with the version set back to "7" the files hash to 93bf0aef… (checked 2026-10-10). SNAPSHOT_HASH is unchanged.
-FILES_HASH = "aad4fd985d3a5c98e4a9805d7fb5ae9f4a6b2ff0621007511fb6ae8c6bec106b"
+# TASK-232 changed it again: record schema v9 (the `aaai_library` source); with the version set back to "8" the files
+# hash to aad4fd98… (checked 2026-10-11). SNAPSHOT_HASH is unchanged.
+FILES_HASH = "37f369e3250d4d1b2e536794ed163307a60e25c90f0e79f443a7f915118b5a13"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:

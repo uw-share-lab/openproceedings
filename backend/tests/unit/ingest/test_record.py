@@ -637,8 +637,8 @@ def _rec(rid: str, venue: str, year: int, track: str = "main") -> PaperRecord:
                              year=year, track=track, status="accepted")  # fmt: skip
 
 
-def test_schema_is_8() -> None:
-    assert RECORD_SCHEMA_VERSION == "8"
+def test_schema_is_9() -> None:
+    assert RECORD_SCHEMA_VERSION == "9"
 
 
 @pytest.mark.parametrize(

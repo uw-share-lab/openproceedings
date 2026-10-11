@@ -1,0 +1,19 @@
+{
+ "_recorded": {
+  "date": "2026-10-11",
+  "run": "op ingest aaai-library fixture run (TASK-232): conf/aaai/Lifschitz08, capture 20221225183130, real SHA-1 44T6Z7RCTQRRVZSDSYYR37LWYAVUZREO (the scrubbed bytes hash to another)",
+  "scrubbed": "decision-004: title, authors and abstract words synthetic (line breaks kept); the HTML structure, a None - placeholder, Subjects and Submitted real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://web.archive.org/web/20221225183130id_/http://www.aaai.org/Library/AAAI/2008/aaai08-270.php",
+  "authenticated": false
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "text": "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\r<html xmlns=\"http://www.w3.org/1999/xhtml\">\r<head>\r<meta http-equiv=\"content-type\" content=\"text/html; charset=utf-8\" />\r<meta http-equiv=\"Window-target\" content=\"_top\" />\r<meta name=\"revisit-after\" content=\"60 days\" />\r<meta name=\"robots\" content=\"all\" />\r<meta name=\"description\" content=\"AAAI advances the understanding of the mechanisms underlying thought and intelligent behavior and their embodiment in machines.\" />\r<meta name=\"keywords\" content=\"AAAI AI artificial intelligence\" />\r<link rel=\"stylesheet\" type=\"text/css\" media=\"print\" href=\"http://www.aaai.org/styles/printstyles.css\" />\r<script src=\"http://www.aaai.org/scripts/popupwindow.js\" type=\"text/javascript\"></script>\r<script src=\"http://www.aaai.org/scripts/external.js\" type=\"text/javascript\" ></script>\r<title>Synthetic title 1</title>\r<link href=\"http://www.aaai.org/styles/aaai.css\" rel=\"stylesheet\" type=\"text/css\" />\r<style type=\"text/css\">\r<!--\r\t@import url(\"http://www.aaai.org/styles/layout.css\");\r-->\r</style>\r</head>\r<body>\r<div id=\"abstract\">\r<h1><a href=\"../../../Papers/AAAI/2008/AAAI08-270.pdf\">Synthetic title 1</a></h1>\r<p><i>Synthetic Author 2</i></p>\r<p>synthetic3 synthetic4 synthetic5 synthetic6 synthetic7 synthetic8 synthetic9 synthetic10 synthetic11 synthetic12 synthetic13 synthetic14 synthetic15 synthetic16 synthetic17 synthetic18 synthetic19 synthetic20 synthetic21 synthetic22 synthetic23 synthetic24 synthetic25 synthetic26 synthetic27 synthetic28 synthetic29 synthetic30 synthetic31 synthetic32 synthetic33 synthetic34 synthetic35 synthetic36 synthetic37 synthetic38 synthetic39 synthetic40 synthetic41 synthetic42 synthetic43 synthetic44 synthetic45 synthetic46 synthetic47 synthetic48 synthetic49 synthetic50 synthetic51 synthetic52 synthetic53 synthetic54 synthetic55 synthetic56 synthetic57 synthetic58 synthetic59 synthetic60 synthetic61 synthetic62 synthetic63 synthetic64 synthetic65 synthetic66 synthetic67 synthetic68 synthetic69 synthetic70 synthetic71 synthetic72 synthetic73 synthetic74 synthetic75 synthetic76 </p>\r<p><i>Subjects: </i>11. Knowledge Representation; 3.3 Nonmonotonic Reasoning</p>\r<p><i>Submitted:</i> Apr 15, 2008</p>\r<div class=\"hr1\">\r<hr />\r</div>\r<p class=\"eight-center\">This page is copyrighted by AAAI. All rights reserved. Your use of this site constitutes acceptance of all of AAAI's terms and conditions and privacy policy.</p>\r</div> \r</body>\r</html>\r  "
+ }
+}

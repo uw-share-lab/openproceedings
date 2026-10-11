@@ -992,6 +992,36 @@ def test_the_aaai_line_stops_saying_dblp_holds_no_abstract_once_openalex_filled_
     assert "dblp holds none" not in some
 
 
+def test_the_aaai_line_counts_the_official_abstracts_from_archived_aaai_pages() -> None:
+    """TASK-232: the AAAI 1980-2008 line says, in plain words, how many records have AAAI's own abstract from an
+    archived aaai.org page (the build's `aaai_library` fill report), before OpenAlex's."""
+    from openproceedings.eval.coverage_report import _scope
+
+    doi = "https://doi.org/10.4230/dblp.xml.2026-10-03"
+    fills = {"pages": 6, "candidates": 7, "no_page": 1, "attached": 5, "replaced": 0, "official_won": 0,
+             "rows_unmatched": 0, "refused": {"title_mismatch": 1}}  # fmt: skip
+    manifest = {"sources": {"dblp": {"listings": [{"venue": "AAAI", "year": 1986, "listing": doi, "records": 7}]},
+                            "aaai_library": {"fills": [fills]}}}  # fmt: skip
+
+    def text(filled: int) -> str:
+        cov = {"venue_years": [{"venue": "AAAI", "year": 1986, "records": 7, "abstract_openalex": filled,
+                                "tracks": [{"track": "main"}]}]}  # fmt: skip
+        return "\n".join(_scope(cov, manifest))
+
+    none = text(0)
+    assert (
+        "Its 7 records come with no abstract from dblp; 5 have AAAI's own abstract, read from the Internet "
+        "Archive's copies of their old aaai.org paper pages (official; decision-051), and the rest have none."
+        in none
+    )
+    assert "dblp holds none" not in none
+    assert (
+        "5 have AAAI's own abstract, read from the Internet Archive's copies of their old aaai.org paper pages "
+        "(official; decision-051); where neither gives one, OpenAlex's is filled in (counted below)."
+        in text(1)
+    )
+
+
 def test_each_noted_ungated_cell_is_listed_with_its_note_and_citation() -> None:
     """TASK-222: an ungated cell with a note (`official_counts.UNGATED_NOTES`) is listed under its own heading,
     with the note and its citation, as `/coverage` serves them; without one the section says so."""

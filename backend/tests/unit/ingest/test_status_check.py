@@ -107,9 +107,14 @@ def test_every_claim_source_has_a_row() -> None:
     for source in SOURCE_STATUSES:
         if source in PRECEDENCE["status"]:
             assert sc.unexpected_statuses([paper("SyntheticA1", source=source)]) == []
-    # an official ICML page (TASK-206) or FAccT page claims only an abstract, on a dblp or Crossref record: it
-    # answers no status
-    assert set(SOURCE_STATUSES) - set(PRECEDENCE["status"]) == {"icml_site", "facct_site", "openalex"}
+    # an official ICML page (TASK-206) or FAccT page claims only an abstract, on a dblp or Crossref record, and so do
+    # OpenAlex and an archived aaai.org page (TASK-232): none answers a status
+    assert set(SOURCE_STATUSES) - set(PRECEDENCE["status"]) == {
+        "icml_site",
+        "facct_site",
+        "openalex",
+        "aaai_library",
+    }
     accepted = (("accepted",), ("accepted",))
     assert SOURCE_STATUSES["icml_site"] == SOURCE_STATUSES["dblp"] == accepted
     assert SOURCE_STATUSES["facct_site"] == SOURCE_STATUSES["crossref"] == accepted

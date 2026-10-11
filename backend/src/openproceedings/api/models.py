@@ -176,7 +176,9 @@ ORIGIN_DOC = (
     "(decision-049). `crossref` and `facct_site`: FAccT and AIES (ACM proceedings via Crossref, the official FAccT "
     "pages); the url is the paper's DOI link (decision-049). `openalex`: an AAAI, AIES or FAccT abstract no "
     "official source gives, filled from OpenAlex (decision-049); the url is the paper's own page, never OpenAlex's "
-    "API. Open set: new values may be added within /api/v1; "
+    "API. `aaai_library`: AAAI's own abstract for AAAI 1980-2008, read from an Internet Archive capture of the "
+    "paper's old aaai.org page (decision-051); the url is that aaai.org page, never the archive. Open set: new values "
+    "may be added within /api/v1; "
     "handle a value you don't know."
 )
 

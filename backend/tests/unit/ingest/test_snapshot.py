@@ -265,7 +265,7 @@ def test_build_writes_the_layout(cache: Path, tmp_path: Path) -> None:
     }
     assert (manifest["format_version"], manifest["record_schema_version"], manifest["tokenizer_version"]) == (
         "2",
-        "8",
+        "9",
         "3",
     )
     assert manifest["openproceedings_version"]
@@ -994,6 +994,38 @@ def test_build_fills_a_null_abstract_from_the_pinned_openalex_extract_before_tak
     gone = load_records(withheld.path)[rid]
     assert m["withheld"] == [rid] and gone.abstract is None and gone.abstract_kind == "none"
     assert "OpenAlex abstract" not in (withheld.path / "records.jsonl").read_text(encoding="utf-8")
+
+
+def test_build_fills_aaai_pages_before_openalex_after_reconcile(
+    cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TASK-232: AAAI's own archived pages fill first (`aaai_library.apply`), so OpenAlex fills only what they leave
+    null; both after reconcile, both before takedowns, and both reports reach the manifest."""
+    from openproceedings.ingest.sources import aaai_library, openalex
+    from openproceedings.ingest.sources.common import Report
+
+    order: list[str] = []
+
+    class Fills(Report):
+        manifest_key = "fills"
+
+        def to_manifest(self) -> dict[str, Any]:
+            return {"ran": True}
+
+    def fake(name: str) -> Any:
+        def apply(result: Any, _cache: Path) -> Any:
+            order.append(name)
+            return result, [Fills(source=name)]
+
+        return apply
+
+    monkeypatch.setattr(aaai_library, "apply", fake("aaai_library"))
+    monkeypatch.setattr(openalex, "apply", fake("openalex"))
+    result = build(cache, tmp_path / "snapshots", BUILT)
+    assert order == ["aaai_library", "openalex"]
+    manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["sources"]["aaai_library"] == {"fills": [{"ran": True}]}
+    assert manifest["sources"]["openalex"] == {"fills": [{"ran": True}]}
 
 
 # --- abstract_kind (decision-049) ----------------------------------------------------------------------------

@@ -318,7 +318,7 @@ warnings, the save's index check), the design doc says so; its open questions li
    *As built (TASK-134, decision-018).* Each result shows its authors under the title (the first three and
    "et al.", with a "Show all n authors" button, `aria-expanded`, for the full list) and, under the abstract, its
    attribution "Abstract: `<site>`" linking to the paper's page there (the hit's `abstract_source.origin` and
-   `url`: OpenReview, NeurIPS Proceedings, ICLR Proceedings, PMLR, ICML conference site, AAAI Digital Library (ojs.aaai.org: AAAI, AIES and IASEAI), FAccT conference site (the official FAccT pages of 2022, 2025 and 2026) and Crossref (ACM proceedings; it gives no abstract today, so only `facct_site` occurs for one; decision-049); an Internet Archive
+   `url`: OpenReview, NeurIPS Proceedings, ICLR Proceedings, PMLR, ICML conference site, AAAI Digital Library (ojs.aaai.org: AAAI, AIES and IASEAI), FAccT conference site (the official FAccT pages of 2022, 2025 and 2026) and Crossref (ACM proceedings; it gives no abstract today, so only `facct_site` occurs for one; decision-049), and AAAI (`aaai_library`: AAAI 1980–2008's own abstract from an archived aaai.org page, linking AAAI's page, the dblp `ee`, so no archive note shows; decision-051, TASK-232); an Internet Archive
    capture adds " (Internet Archive copy, <YYYY-MM-DD>)" and links the archive's own view of the page, with its
    banner, TASK-206), with " (via RIS import)" after it when the
    claim came through an imported RIS file; "an imported RIS file", unlinked, when its route names no known

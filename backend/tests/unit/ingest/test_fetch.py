@@ -240,3 +240,24 @@ def test_a_body_with_no_charset_decodes_with_the_one_asked_for_and_a_named_one_w
     named = Response(200, {"content-type": "text/html; charset=utf-8"}, "café</html>".encode())
     f, _ = fetcher(tmp_path / "c", FakeTransport({url: named}), frozenset({"icml.cc"}), min_interval=0)
     assert f.get(url, charset="cp1252").text == "café</html>"
+
+
+def test_exact_bytes_keeps_the_body_one_to_one_whatever_charset_the_response_names(tmp_path: Path) -> None:
+    """TASK-232: a source that checks a digest of the captured bytes (aaai_library) reads the body as ISO-8859-1,
+    whatever the response names, so `text.encode("latin-1")` is the body exactly, and a body the named charset
+    can't decode is still kept, never refused."""
+    url = "https://web.archive.org/web/20081121081132id_/http://www.aaai.org/Library/AAAI/1980/aaai80-001.php"
+    body = "<html>café ’ </html>".encode() + b"\xe9\xff</html>"  # UTF-8, then two bytes UTF-8 refuses
+    named = Response(200, {"content-type": "text/html; charset=utf-8"}, body)
+    f, _ = fetcher(
+        tmp_path / "a", FakeTransport({url: named}), frozenset({"web.archive.org"}), min_interval=0
+    )
+    page = f.get(url, exact_bytes=True)
+    assert page.text.encode("latin-1") == body
+    assert page.content_type == "text/html; charset=utf-8"  # the response's own, kept for the record
+    assert PageCache(tmp_path / "a").get(canonical(url)) == page  # cached as read
+    f, _ = fetcher(
+        tmp_path / "b", FakeTransport({url: named}), frozenset({"web.archive.org"}), min_interval=0
+    )
+    with pytest.raises(FetchError, match="not utf-8"):
+        f.get(url)  # without it, the named charset still decides

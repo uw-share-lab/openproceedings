@@ -114,6 +114,7 @@ const ORIGIN_NAMES: Readonly<Record<string, string>> = {
   crossref: "Crossref",
   facct_site: "FAccT conference site",
   openalex: "OpenAlex",
+  aaai_library: "AAAI",
 };
 
 type AbstractFrom = NonNullable<SearchHit["abstract_source"]>;

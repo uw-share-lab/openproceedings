@@ -7,7 +7,9 @@ cache proceedings pages (`sources/crawl.py`). `build` imports everything cached 
 OpenReview crawl replayed from its cached responses, and each finished ICLR/NeurIPS/PMLR crawl re-mined from its cached
 pages), dedups, reconciles OpenReview acceptance against the crawled proceedings (`reconcile.py`: an
 OpenReview-accepted paper a complete listing doesn't hold becomes `unknown`, decision-005), adds the conflicts a
-crawl found inside one source (`with_crawl_conflicts`), then fills OpenAlex abstracts from the pinned extract
+crawl found inside one source (`with_crawl_conflicts`), then fills AAAI 1980-2008 abstracts from the cached
+archive captures of AAAI's own paper pages (`sources/aaai_library.apply`, decision-051), then OpenAlex abstracts from
+the pinned extract
 (`sources/openalex.apply`: only a null abstract of an AAAI, AIES or FAccT record, before takedowns are withheld, so a
 takedown still withholds a filled abstract), and writes
 `<snapshots>/<crawl date>-<shorthash>/` with `records.jsonl`, `manifest.json`, `merges.csv` and
@@ -256,6 +258,20 @@ def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], li
             "`op ingest openreview --venue <V> --years <Y>` or `op ingest iclr|neurips|pmlr ...` first"
         )
     return records, reports, crawls
+
+
+def fill_aaai_library(result: DedupResult, cache: Path) -> tuple[DedupResult, list[Report]]:
+    """AAAI's own abstracts for AAAI 1980-2008 from the cached archive captures (`sources/aaai_library.apply`),
+    offline, before the OpenAlex fill; a capture that can't be read (a `SourceError`: not cached, its digest
+    changed, an unreadable marker) refuses the build, as `load_sources` does."""
+    from openproceedings.ingest.sources import aaai_library
+    from openproceedings.ingest.sources.http import SourceError
+
+    try:
+        filled, fills = aaai_library.apply(result, cache)
+    except SourceError as e:
+        raise SnapshotError(f"the aaai_library captures can't be read: {e}", reason=e.reason) from e
+    return filled, list(fills)
 
 
 def fill_openalex(result: DedupResult, cache: Path) -> tuple[DedupResult, list[Report]]:
@@ -631,8 +647,11 @@ def build(
     began = time.monotonic()
     records, reports, crawls = load_sources(cache)
     result = with_crawl_conflicts(reconcile(dedup(records), crawled(crawls)).result, crawls)
-    result, fills = fill_openalex(result, cache)  # after reconcile, before withhold: a takedown still applies
-    crawls = [*crawls, *fills]
+    # after reconcile, before withhold (a takedown still applies): AAAI's own pages first, so OpenAlex fills only
+    # what they leave null
+    result, pages = fill_aaai_library(result, cache)
+    result, fills = fill_openalex(result, cache)
+    crawls = [*crawls, *pages, *fills]
     withholding = withhold(result, takedowns)
     result = withholding.result
     unexpected = tuple(unexpected_statuses(result.records))

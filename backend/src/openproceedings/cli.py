@@ -111,7 +111,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest = sub.add_parser(
         "ingest",
-        help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | ojs | crossref | openalex | openreview "
+        help="fetch sources into the cache: ris | iclr | neurips | pmlr | dblp | ojs | crossref | openalex | aaai-library | "
+        "openreview "
         "(spec 01)",
     )
     sources = ingest.add_subparsers(dest="source", metavar="<source>", required=True)
@@ -277,6 +278,20 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"seconds between requests (default 1, at least {MIN_DELAY}; OpenAlex is never paced under 1)",
     )  # fmt: skip
     openalex_parser.set_defaults(run=_ingest_openalex)
+    aaai_library_parser = sources.add_parser(
+        "aaai-library",
+        help="cache the Internet Archive captures of the old aaai.org paper pages ingest/aaai_library.toml pins (AAAI "
+        "1980-2008; web.archive.org only, never aaai.org; one request every 3 s, each capture's SHA-1 checked) and "
+        "mark the harvest done, for op snapshot build to fill AAAI's own abstracts from (decision-051)",
+    )
+    aaai_library_parser.add_argument(
+        "--dry-run", action="store_true", help="no network: say how many captures are cached; write nothing"
+    )
+    aaai_library_parser.add_argument(
+        "--offline", action="store_true", help="use the page cache only (no network)"
+    )
+    aaai_library_parser.add_argument("--refresh", action="store_true", help="fetch every capture again")
+    aaai_library_parser.set_defaults(run=_ingest_aaai_library)
     for name, task in PLANNED_SOURCES.items():
         _stub(sources.add_parser(name, help=_stub_status(task)), f"ingest {name}", task)
 
@@ -741,6 +756,16 @@ def _ingest_openalex(ns: argparse.Namespace) -> int:
         raise _usage("--dry-run and --offline don't combine: a dry run already reads the cache only")
     _print(crawl.ingest_openalex(ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
                                  refresh=ns.refresh, min_interval=ns.delay))  # fmt: skip
+    return 0
+
+
+def _ingest_aaai_library(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest.sources import crawl
+
+    if ns.dry_run and ns.offline:
+        raise _usage("--dry-run and --offline don't combine: a dry run already reads the cache only")
+    _print(crawl.ingest_aaai_library(ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run,
+                                     refresh=ns.refresh))  # fmt: skip
     return 0
 
 
