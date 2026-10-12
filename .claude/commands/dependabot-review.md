@@ -30,8 +30,9 @@ A PR that hits a **hard stop** is never merged by this command: it is left open 
   and ghcr.io (nothing dates it), or a PR whose body carries Dependabot's "Cooldown could not be applied" notice
   (it found no publication date, which a failed Docker Hub lookup also causes; it gives none for ghcr.io, so every
   `ghcr.io/astral-sh/uv` PR, patch and digest bumps included, stops here: step 1 still runs `docker_digest.py
-  --head "origin/<head>"` for it and the §10 comment quotes its age, the owner's evidence). For actions and Docker Hub images
-  the 7-day hold is otherwise Dependabot's `cooldown`; no checker reads their age;
+  --head "origin/<head>"` for it and the §10 comment quotes its age, the owner's evidence).
+  For actions and Docker Hub images the 7-day hold is otherwise Dependabot's `cooldown`; no checker reads their
+  age;
 - a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
 - a red required check (`lint`, `test`, `claude-tooling`, `attribution`, `learnings`, `review-attested`) that
   the PR's own fix can't turn green;
@@ -155,7 +156,8 @@ signature GitHub verified, the title doesn't name `tantivy`, and the body has no
 notice. Any PROBLEM is a hard stop (§10). A docker PR whose only PROBLEM is that notice (every ghcr.io PR) first
 gets `python3 $RUN/.claude/scripts/dependabot/docker_digest.py --head "origin/<head>" > "$RUN/evidence-<n>.md"`
 (it only reads git objects, the registry and `gh attestation`, so it is safe before the switch; without `--head`
-it reads the dev checkout and finds no pins), and the §10 comment quotes its age and PROBLEM lines. A PR this
+it reads the dev checkout and finds no pins), and the §10 comment quotes its age and PROBLEM lines (exit 1 is
+expected; on exit 2 the comment says why it couldn't run). A PR this
 routine pushed to on an earlier run fails it too, by design: it is the owner's now. If `gh api
 repos/uw-share-lab/openproceedings/pulls/<n> --jq .mergeable_state` says `dirty` (a conflict; `unknown` or an empty
 answer means GitHub is still computing it: ask again in a minute), comment `@dependabot rebase` (`gh api -X POST
