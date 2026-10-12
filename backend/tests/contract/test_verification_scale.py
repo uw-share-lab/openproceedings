@@ -46,7 +46,7 @@ def wide(width: int, stem: str) -> str:
 
 
 def cold_ms(c: TestClient, q: str) -> float:
-    """A served query's cold verification time, from its access line's `verify_ms` (the slot time)."""
+    """A served query's cold time: the request's wall time in ms with the verification caches cleared."""
     engine = c.app.state.index.engine  # type: ignore[attr-defined]
     engine.verified.clear()
     engine.compiled.clear()
