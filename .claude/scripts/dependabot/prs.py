@@ -41,7 +41,8 @@ every one is Dependabot's (git author `dependabot[bot]`, committer GitHub, GitHu
 earlier run included) is left for the owner. The identity is defence in depth only (a writer can set those
 names, and GitHub verifies web-flow commits it makes for anyone); what stops a hostile push is that every
 checker allows no change beyond versions and pins. A title naming `tantivy` (hand-only,
-spec 08 §Release), or a head branch name that isn't plain, is a PROBLEM too.
+spec 08 §Release), a head branch name that isn't plain, or a body with Dependabot's "Cooldown could not be
+applied" notice (it found no publication date, so nothing held the release back 7 days), is a PROBLEM too.
 
 `queue` turns auto-merge on (on `dev` that puts the PR in the merge queue once its checks pass) only for an open
 Dependabot PR into `dev` whose head is still `<sha>` and whose branch name is plain, and never for a github-actions
@@ -93,6 +94,9 @@ ALLOWED = {
     ),
 }
 HAND_ONLY_WORDS = ("tantivy",)
+# The notice Dependabot puts in a PR's body when it found no publication date and so skipped `cooldown` (for docker,
+# any registry but Docker Hub, and a Docker Hub lookup that failed): nothing held the release back 7 days.
+COOLDOWN_SKIPPED = "cooldown could not be applied"
 BOT_LOGIN = "dependabot[bot]"
 DEPENDABOT = (
     "dependabot[bot]",
@@ -230,6 +234,11 @@ def check_pr(number: int, head: str) -> None:
     sha = run(["git", "rev-parse", "--verify", f"{head}^{{commit}}"]).stdout.strip()
     pr = get_pr(number)
     pr_problems(rep, pr, sha)
+    if COOLDOWN_SKIPPED in (pr.get("body") or "").lower():
+        rep.problem(
+            "Dependabot says its cooldown could not be applied (no publication date): nothing held this release"
+            " back 7 days (decision-048)"
+        )
     eco = ecosystem(pr["head"]["ref"])
     allowed = ALLOWED.get(eco)
     base, _ = resolve_refs(None, sha)

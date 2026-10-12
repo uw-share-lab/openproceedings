@@ -314,44 +314,86 @@
   {
     "label": "dependabot: docker: attestation failure ignored",
     "file": ".claude/scripts/dependabot/docker_digest.py",
-    "old": "        if r.returncode:\n",
-    "new": "        if False:\n"
+    "old": "    if r.returncode:\n        return None, r.stderr.strip()[:200]\n",
+    "new": "    if False:\n        return None, r.stderr.strip()[:200]\n"
   },
   {
     "label": "dependabot: docker: image age not checked",
     "file": ".claude/scripts/dependabot/docker_digest.py",
-    "old": "    elif (days := age_days(attested)) < COOLDOWN_DAYS:\n",
-    "new": "    elif (days := age_days(attested)) < 0:\n"
+    "old": "    elif (days := age_days(min(stamps, key=parse_time))) < COOLDOWN_DAYS:\n",
+    "new": "    elif (days := age_days(min(stamps, key=parse_time))) < 0:\n"
   },
   {
     "label": "dependabot: docker: image age read from the newest attestation",
     "file": ".claude/scripts/dependabot/docker_digest.py",
-    "old": "        return min(stamps, key=parse_time) if stamps else None\n",
-    "new": "        return max(stamps, key=parse_time) if stamps else None\n"
+    "old": "    elif (days := age_days(min(stamps, key=parse_time))) < COOLDOWN_DAYS:\n",
+    "new": "    elif (days := age_days(max(stamps, key=parse_time))) < COOLDOWN_DAYS:\n"
   },
   {
     "label": "dependabot: docker: image age compared as text, not as a time",
     "file": ".claude/scripts/dependabot/docker_digest.py",
-    "old": "        return min(stamps, key=parse_time) if stamps else None\n",
-    "new": "        return min(stamps) if stamps else None\n"
+    "old": "    elif (days := age_days(min(stamps, key=parse_time))) < COOLDOWN_DAYS:\n",
+    "new": "    elif (days := age_days(min(stamps))) < COOLDOWN_DAYS:\n"
   },
   {
     "label": "dependabot: docker: an undated attestation accepted",
     "file": ".claude/scripts/dependabot/docker_digest.py",
-    "old": "    if attested is None:\n",
-    "new": "    if attested is None:\n        return\n"
+    "old": "    if not stamps:\n",
+    "new": "    if not stamps:\n        return\n"
   },
   {
     "label": "dependabot: docker: age not checked after a verified attestation",
     "file": ".claude/scripts/dependabot/docker_digest.py",
-    "old": "            check_age(rep, pin, attested_at(r.stdout))\n",
-    "new": "            pass\n"
+    "old": "        check_age(rep, pin, found, publishers)\n",
+    "new": "        pass\n"
   },
   {
     "label": "dependabot: docker: an undated registry accepted",
     "file": ".claude/scripts/dependabot/docker_digest.py",
     "old": "    elif host == \"registry-1.docker.io\":\n",
     "new": "    elif True:\n"
+  },
+  {
+    "label": "dependabot: docker: an attestation by any publisher dates the image",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    ours = [stamps for publisher, stamps in found if publisher in publishers]\n",
+    "new": "    ours = [stamps for publisher, stamps in found]\n"
+  },
+  {
+    "label": "dependabot: docker: the signer's ref kept in the publisher",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "str(cert[\"buildSignerURI\"]).split(\"@\", 1)[0]",
+    "new": "str(cert[\"buildSignerURI\"])"
+  },
+  {
+    "label": "dependabot: docker: no previous publisher accepted",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    if not publishers:\n",
+    "new": "    if not publishers:\n        publishers = {publisher for publisher, _ in found}\n    if False:\n"
+  },
+  {
+    "label": "dependabot: docker: a 0.x minor accepted",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif version_tuple(old_tag)[:1] == (0,) and is_minor_or_more(old_tag, pin.tag):\n",
+    "new": "    elif False:\n"
+  },
+  {
+    "label": "dependabot: docker: a 0.x patch counted as a minor",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif version_tuple(old_tag)[:1] == (0,) and is_minor_or_more(old_tag, pin.tag):\n",
+    "new": "    elif version_tuple(old_tag)[:1] == (0,) and pin.tag != old_tag:\n"
+  },
+  {
+    "label": "dependabot: docker: image age threshold weakened",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif (days := age_days(min(stamps, key=parse_time))) < COOLDOWN_DAYS:\n",
+    "new": "    elif (days := age_days(min(stamps, key=parse_time))) < COOLDOWN_DAYS - 0.5:\n"
+  },
+  {
+    "label": "dependabot: docker: only the first attestation read",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "        for a in json.loads(output):\n",
+    "new": "        for a in json.loads(output)[:1]:\n"
   },
   {
     "label": "dependabot: docker: new image accepted",
@@ -430,6 +472,18 @@
     "file": ".claude/scripts/dependabot/restore_libc.py",
     "old": "    if repaired:\n        LOCK.write_text",
     "new": "    if True:\n        LOCK.write_text"
+  },
+  {
+    "label": "dependabot: prs: the skipped-cooldown notice ignored",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if COOLDOWN_SKIPPED in (pr.get(\"body\") or \"\").lower():\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: the skipped-cooldown notice matched by case",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if COOLDOWN_SKIPPED in (pr.get(\"body\") or \"\").lower():\n",
+    "new": "    if COOLDOWN_SKIPPED in (pr.get(\"body\") or \"\"):\n"
   },
   {
     "label": "dependabot: prs: tantivy title accepted",

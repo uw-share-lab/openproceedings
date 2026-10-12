@@ -224,22 +224,41 @@ def gh(args: list[str]) -> int:
         return gh_api(fx, args[1:])
     if args[:2] == ["attestation", "verify"]:
         key = f"attestation {args[2]} {args[args.index('--owner') + 1]}"
-        # 0: verified, attested long ago; {"timestamps": [...]}: verified, with those Rekor timestamps (an empty
-        # list: none); {"stdout": "..."}: verified, printing that; anything else, or no fixture: verification fails
+        # 0: verified, by uv's publishing workflow, attested long ago; {"timestamps": [...]}: verified, by that
+        # workflow, with those timestamps (an empty list: none); {"attestations": [{"repo", "signer", "timestamps"},
+        # ...]}: several, each by its own publisher (repo and signer default to uv's); {"stdout": "..."}: verified,
+        # printing that; anything else, or no fixture: verification fails, as the real `gh` does (exit 1)
         ans = fx.get(key)
         if isinstance(ans, dict) and "stdout" in ans:
             print(ans["stdout"])
             return 0
         if ans == 0:
-            stamps: Any = ["2020-01-01T00:00:00-04:00"]
+            atts: Any = [{"timestamps": ["2020-01-01T00:00:00-04:00"]}]
+        elif isinstance(ans, dict) and isinstance(ans.get("timestamps"), list):
+            atts = [{"timestamps": ans["timestamps"]}]
         else:
-            stamps = ans.get("timestamps") if isinstance(ans, dict) else None
-        if not isinstance(stamps, list):
+            atts = ans.get("attestations") if isinstance(ans, dict) else None
+        if not isinstance(atts, list):
             print("fake gh: attestation verification failed", file=sys.stderr)
             return 1
         if "--format" in args and args[args.index("--format") + 1] == "json":
-            ts = [{"type": "Tlog", "uri": "https://rekor.sigstore.dev", "timestamp": t} for t in stamps]
-            print(json.dumps([{"verificationResult": {"verifiedTimestamps": ts}}]))
+            out = []
+            for a in atts:
+                cert = {
+                    "sourceRepositoryURI": a.get("repo", "https://github.com/astral-sh/uv"),
+                    "buildSignerURI": a.get(
+                        "signer",
+                        "https://github.com/astral-sh/uv/.github/workflows/publish-docker-image.yml@refs/heads/main",
+                    ),
+                }
+                ts = [
+                    {"type": "Tlog", "uri": "https://rekor.sigstore.dev", "timestamp": t}
+                    for t in a["timestamps"]
+                ]
+                out.append(
+                    {"verificationResult": {"signature": {"certificate": cert}, "verifiedTimestamps": ts}}
+                )
+            print(json.dumps(out))
         return 0
     if args[:1] == ["pr"]:  # every `gh pr` command reads or writes through GraphQL
         if fx.get("cloud"):
