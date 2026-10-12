@@ -45,8 +45,9 @@ Get a green nightly on the exact `dev` head for the v0.3.0 release. No scheduled
   (`escape_bare_lt`) batched by hand, and `test_highlight_speed.py` compared unpaired minima, the method TASK-171's
   recovery showed flakes. All three now use `growth(..., calls=N)`. The differently shaped CPU bounds (the
   capped-abstract ceiling in `ingest/test_caps.py`, `test_many_searches_cost_no_more_than_one`, the long-field
-  NEAR ceiling in `engine/test_highlight.py`) time with `cpu`, so no timer in `backend/tests` but `timing.py`'s
-  remains.
+  NEAR ceiling in `engine/test_highlight.py`) time with `cpu`, so no CPU-time measurement in `backend/tests`
+  but `timing.py`'s remains (the wall-clock timers left are concurrency waits and HTTP latency bounds, not
+  linear-time checks).
 - **A test of "no collection inside the call" must count only inside the call.** The first version recorded every
   collection while its callback was installed; the test's own allocations after `cpu` returned could start a
   youngest-generation collection (code-reviewer reproduced it at 4 of 12 starting counts). A flag set only during

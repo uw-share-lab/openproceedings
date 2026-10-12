@@ -38,7 +38,8 @@ def test_a_quadratic_cost_fails() -> None:
 
 
 def test_a_quadratic_allocation_fails_with_the_collector_paused() -> None:
-    """Pausing the collector leaves allocating, copying and reference-counted freeing in the measure: ~16x for 4x the input."""
+    """Pausing the collector leaves allocating, copying and reference-counted freeing in the measure: ~16x for 4x
+    the input."""
     with pytest.raises(AssertionError):
         assert_near_linear(quadratic_allocation, lambda k: "x" * k, 3_000)
 
