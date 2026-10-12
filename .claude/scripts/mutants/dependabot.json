@@ -344,7 +344,7 @@
   {
     "label": "dependabot: docker: age not checked after a verified attestation",
     "file": ".claude/scripts/dependabot/docker_digest.py",
-    "old": "        check_age(rep, pin, found, publishers)\n",
+    "old": "        check_age(rep, pin, found, publishers, why)\n",
     "new": "        pass\n"
   },
   {
@@ -358,6 +358,12 @@
     "file": ".claude/scripts/dependabot/docker_digest.py",
     "old": "    ours = [stamps for publisher, stamps in found if publisher in publishers]\n",
     "new": "    ours = [stamps for publisher, stamps in found]\n"
+  },
+  {
+    "label": "dependabot: docker: a new publisher falls through to the age check",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "(a new publisher)\"\n        )\n        return\n",
+    "new": "(a new publisher)\"\n        )\n"
   },
   {
     "label": "dependabot: docker: the signer's ref kept in the publisher",
@@ -382,6 +388,12 @@
     "file": ".claude/scripts/dependabot/docker_digest.py",
     "old": "    elif version_tuple(old_tag)[:1] == (0,) and is_minor_or_more(old_tag, pin.tag):\n",
     "new": "    elif version_tuple(old_tag)[:1] == (0,) and pin.tag != old_tag:\n"
+  },
+  {
+    "label": "dependabot: docker: every minor stopped, not only 0.x",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif version_tuple(old_tag)[:1] == (0,) and is_minor_or_more(old_tag, pin.tag):\n",
+    "new": "    elif is_minor_or_more(old_tag, pin.tag):\n"
   },
   {
     "label": "dependabot: docker: image age threshold weakened",

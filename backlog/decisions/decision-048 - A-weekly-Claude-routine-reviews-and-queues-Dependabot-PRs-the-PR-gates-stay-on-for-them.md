@@ -39,7 +39,7 @@ review, the tests, the reviewers and every required check. It never merges, and 
 for the owner, a PR with a commit that isn't Dependabot's (signed and verified), a file outside its
 ecosystem or a change beyond dependency versions and pins, an integrity or URL mismatch, a new publisher or lost
 provenance, a new install script, a new package, a uv or npm release younger than 7 days (amended
-2026-10-11: or a ghcr.io image first attested under 7 days ago by its previous publisher, or without such an
+2026-10-11: or a ghcr.io image first attested under 7 days ago by the previous pin's publisher, or without such an
 attestation, an image on a registry other than Docker Hub and ghcr.io, a 0.x minor of an image, or a PR whose body
 says Dependabot couldn't apply its cooldown), a digest that
 doesn't resolve or a failed attestation, a red required check it can't fix, a Must it can't fix, any semver-major, anything

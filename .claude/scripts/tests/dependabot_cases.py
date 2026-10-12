@@ -1224,6 +1224,8 @@ def _(c: Case) -> None:
     c.expect(
         "docker_digest.py", args, PROBLEM, r"^PROBLEM .*attested only by .*astral-sh/other.*a new publisher"
     )
+    _, out = c.run("docker_digest.py", *args)
+    assert "no verified timestamp" not in out and "docker pins: 1 problem" in out, out
 
 
 @row("docker: the publisher's workflow run from another ref is the same publisher")
@@ -1238,7 +1240,12 @@ def _(c: Case) -> None:
 @row("docker: a ghcr.io image whose previous pin has no attestation is left for the owner")
 def _(c: Case) -> None:
     args = uv_image_case(c, True, old_attested=False)
-    c.expect("docker_digest.py", args, PROBLEM, r"^PROBLEM .*previous pin has no verified attestation")
+    c.expect(
+        "docker_digest.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM .*previous pin has no verified attestation.*\(gh: fake gh: attestation verification failed\)",
+    )
 
 
 @row("docker: a 0.x minor is hand-only")
@@ -1250,6 +1257,14 @@ def _(c: Case) -> None:
         PROBLEM,
         r"^PROBLEM .*uv:0\.13\.0.*a 0\.x minor from 0\.12\.23 is a breaking release",
     )
+
+
+@row("docker: a minor of a 1.x or later image is not a 0.x minor")
+def _(c: Case) -> None:
+    new = digest("caddy212")
+    registry(c, "registry-1.docker.io", "library/caddy", "2.12.0-alpine", new)
+    args = docker_case(c, f"caddy:2.11.4-alpine@{digest('c')}", f"caddy:2.12.0-alpine@{new}")
+    c.expect("docker_digest.py", args, OK, r"^docker pins: 0 problems")
 
 
 @row("docker: a 0.x patch passes")

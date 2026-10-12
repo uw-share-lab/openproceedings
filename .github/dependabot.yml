@@ -2,9 +2,9 @@ version: 2
 # Every ecosystem: minor and patch updates arrive as one grouped PR per ecosystem, and semver-major updates
 # are ignored, so a major upgrade is a deliberate, hand-made change (spec 08 §CI, "Dependabot"). A version update
 # waits 7 days after its release (`cooldown`; security updates don't; for docker only where Dependabot finds a
-# publication date, Docker Hub alone, so docker_digest.py dates a ghcr.io image by its attestation): a compromised
-# release is most often pulled within days, and the weekly /dependabot-review routine leaves a younger one for
-# the owner (decision-048).
+# publication date, Docker Hub alone: a ghcr.io PR says "Cooldown could not be applied", and the routine leaves
+# it for the owner with its attestation's age): a compromised release is most often pulled within days, and the
+# weekly /dependabot-review routine leaves a younger one for the owner (decision-048).
 updates:
   - package-ecosystem: github-actions
     directory: /

@@ -116,7 +116,9 @@ with no context and no access to the owner's machine can run it, and script its 
 - **A config option that silently degrades is a check to script.** "Cooldown could not be applied" is a
   per-PR notice nobody reads; the hold had been assumed for every docker image since TASK-149. A Docker Hub
   lookup that fails (timeout, 429, 403) skips the cooldown with the same notice, so `prs.py check` now stops any PR
-  whose body carries it (docs review).
+  whose body carries it (docs review). Dependabot gives no date for any ghcr.io update, so every
+  `ghcr.io/astral-sh/uv` PR (patches and digest bumps too) now goes to the owner, with `docker_digest.py`'s
+  attestation age as the evidence (docs review, round 2: a doc that called that age "the hold" overclaimed).
 - **An attestation dates an image only if it is the right publisher's.** `--owner astral-sh` accepts an
   attestation from any repository and workflow of the org (a PR preview build included), so the earliest
   timestamp of *any* attestation could make a new image look old (security review). The age now comes only from

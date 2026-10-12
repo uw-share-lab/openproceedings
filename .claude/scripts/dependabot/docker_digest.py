@@ -7,25 +7,26 @@ Reads every `name:tag@sha256:<digest>` pin in the files under `deploy/` that cha
 the merge base of origin/dev and HEAD) and `head` (default HEAD). For each pin that is new at `head`, it asks
 the image's registry anonymously (the token its 401 challenge names), with a HEAD request for
 `/v2/<repository>/manifests/<tag>` and the OCI-index `Accept` header, and requires `Docker-Content-Digest` to
-equal the pinned digest and the answer to be an index (a multi-arch pin, spec 08 §Deploy). An image on
-ghcr.io must also pass `gh attestation verify oci://<image>@<digest> --owner <its owner>`, be attested by the
-publisher that attested the previous pin (source repository and signing workflow, its ref aside), and the earliest
-verified (Rekor or timestamp-authority) timestamp of those attestations must be at least `COOLDOWN_DAYS` old:
-Dependabot dates a docker tag only on Docker Hub and skips its `cooldown` for every other registry
-(dependabot-core's docker update checker), so for a ghcr.io image this check is the 7-day hold. Each changed file must differ only in its pins' `:tag@digest` (the
-image names and every other line stay the same).
+equal the pinned digest and the answer to be an index (a multi-arch pin, spec 08 §Deploy). An image on ghcr.io
+must also pass `gh attestation verify oci://<image>@<digest> --owner <its owner>`, be attested by the
+publisher that attested the previous pin (source repository and signing workflow, its ref aside), and the
+earliest verified (Rekor or timestamp-authority) timestamp of those attestations must be at least
+`COOLDOWN_DAYS` old. Dependabot dates a docker tag or digest only on Docker Hub and skips its `cooldown` for
+every other registry (dependabot-core's docker update checker), so every ghcr.io PR carries its "Cooldown
+could not be applied" notice and `prs.py check` leaves it for the owner; this age is the evidence the owner
+decides on, and the hold should Dependabot ever date ghcr.io. Each changed file must differ only in its pins'
+`:tag@digest` (the image names and every other line stay the same).
 
 A PROBLEM, the PR stays open: a change outside the pins, a digest that doesn't resolve or differs, a non-index
-answer, a failed attestation, a ghcr.io image attested under `COOLDOWN_DAYS` ago (or with no verified timestamp),
-or not by the previous pin's publisher (or whose previous pin has no verified attestation), an image on a registry
-other than Docker Hub and ghcr.io (nothing dates it: neither Dependabot's cooldown nor an attestation), an image
-that wasn't pinned before, a semver-major tag change, a 0.x minor (`0.12.x` → `0.13.0`: a breaking release while a
-project is 0.x), or any change of
-the `python` image's tag (decision-048: a new Python release changes how the crawlers parse pages, spec 08
-§Monorepo layout "Python pin", and the replay that shows records unchanged needs the owner's `data/`; a new
-digest for the same tag is fine). An image reference
-that lost its digest is not this script's to find: `check_digest_pins.py` (in `make tooling`, which the command
-runs and CI's `claude-tooling` check runs) refuses any unpinned image a `deploy/` build pulls.
+answer, a failed attestation, a ghcr.io image attested under `COOLDOWN_DAYS` ago (or with no verified
+timestamp), or not by the previous pin's publisher (or whose previous pin has no verified attestation), an
+image on a registry other than Docker Hub and ghcr.io (nothing dates it: neither Dependabot's cooldown nor an
+attestation), an image that wasn't pinned before, a semver-major tag change, a 0.x minor (`0.12.x` → `0.13.0`:
+a breaking release while a project is 0.x), or any change of the `python` image's tag (decision-048: a new
+Python release changes how the crawlers parse pages, spec 08 §Monorepo layout "Python pin", and the replay
+that shows records unchanged needs the owner's `data/`; a new digest for the same tag is fine). An image
+reference that lost its digest is not this script's to find: `check_digest_pins.py` (in `make tooling`, which
+the command runs and CI's `claude-tooling` check runs) refuses any unpinned image a `deploy/` build pulls.
 """
 
 from __future__ import annotations
@@ -170,7 +171,11 @@ def verify(pin: Pin, owner: str) -> tuple[list[tuple[Publisher, list[str]]] | No
 
 
 def check_age(
-    rep: Report, pin: Pin, found: list[tuple[Publisher, list[str]]], publishers: set[Publisher]
+    rep: Report,
+    pin: Pin,
+    found: list[tuple[Publisher, list[str]]],
+    publishers: set[Publisher],
+    why: str = "",
 ) -> None:
     """The 7-day hold for a ghcr.io image: its age is the earliest verified timestamp of an attestation by the
     previous pin's publisher, so an old attestation from another workflow of the org can't make a new image look
@@ -178,6 +183,7 @@ def check_age(
     if not publishers:
         rep.problem(
             f"{pin}: the previous pin has no verified attestation, so its publisher can't be compared"
+            + (f" (gh: {why})" if why else "")
         )
         return
     ours = [stamps for publisher, stamps in found if publisher in publishers]
@@ -232,11 +238,13 @@ def check_pin(rep: Report, pin: Pin, before: set[Pin]) -> None:
             return
         rep.ok(f"{pin}: GitHub attestation verified for owner {owner}")
         publishers: set[Publisher] = set()
+        why = ""
         for old in before:
             if old.image == pin.image:
-                old_found, _ = verify(old, owner)
+                old_found, old_message = verify(old, owner)
                 publishers |= {publisher for publisher, _ in old_found or []}
-        check_age(rep, pin, found, publishers)
+                why = why or old_message
+        check_age(rep, pin, found, publishers, why)
     elif host == "registry-1.docker.io":
         rep.ok(
             f"{pin}: {host} publishes no GitHub attestations; the digest check is the check, and Dependabot's"
