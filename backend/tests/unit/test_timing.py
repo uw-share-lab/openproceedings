@@ -6,10 +6,11 @@ allocation, and no collection may run inside a timed call."""
 from __future__ import annotations
 
 import gc
+from collections.abc import Callable
 
 import pytest
 
-from tests.timing import assert_near_linear, cpu, growth
+from tests.timing import assert_near_linear, collector_paused, cpu, growth
 
 
 def linear(s: str) -> int:
@@ -91,3 +92,29 @@ def test_a_linear_but_far_too_slow_cost_fails_the_ceiling() -> None:
     ceiling (2 s by default), far above anything a call site costs."""
     with pytest.raises(AssertionError):
         assert_near_linear(linear, lambda k: "x" * k, 300, ceiling=0.001)
+
+
+def test_growth_takes_another_threads_measure() -> None:
+    """A side whose work runs on another thread is measured by what that thread reports (`width_is_free` reads
+    the server's `verify_cpu_ms`): `growth` pairs, alternates and takes the median of whatever `measure` gives,
+    warming each side once first, and passes it `calls`."""
+    seen: list[tuple[str, int]] = []
+    costs = {"small": 0.01, "large": 0.05}
+
+    def measure(side: Callable[[], object], calls: int) -> float:
+        name = str(side())
+        seen.append((name, calls))
+        return costs[name]
+
+    ratio, pairs = growth(lambda: "small", lambda: "large", rounds=3, calls=2, measure=measure)
+    assert ratio == pytest.approx(5.0) and pairs == [(0.01, 0.05)] * 3
+    assert seen == [("small", 2), ("large", 2), ("large", 2), ("small", 2), ("small", 2), ("large", 2)]
+
+
+def test_collector_paused_restores_the_collector() -> None:
+    with collector_paused():
+        assert not gc.isenabled()
+    assert gc.isenabled()
+    with pytest.raises(ZeroDivisionError), collector_paused():
+        1 / 0  # noqa: B018
+    assert gc.isenabled()

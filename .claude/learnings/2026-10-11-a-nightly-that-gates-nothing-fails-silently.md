@@ -49,7 +49,7 @@ Get a green nightly on the exact `dev` head for the v0.3.0 release. No scheduled
   suite but `timing.py`'s remains, the `backend/tests/bench/` scripts aside. The wall-clock timers left are
   concurrency waits and HTTP latency bounds, plus one growth check across threads:
   `contract/test_verification_scale.py`'s `width_is_free` times requests that `TestClient` serves on another
-  thread, where this thread's CPU clock sees nothing, so it stays on the wall clock with its 2x + 500 ms margin.
+  thread, where this thread's CPU clock sees nothing, so it stayed on the wall clock with its 2x + 500 ms margin (until TASK-240, below).
 - **A test of "no collection inside the call" must count only inside the call.** The first version recorded every
   collection while its callback was installed; the test's own allocations after `cpu` returned could start a
   youngest-generation collection (code-reviewer reproduced it at 4 of 12 starting counts). A flag set only during
@@ -57,3 +57,22 @@ Get a green nightly on the exact `dev` head for the v0.3.0 release. No scheduled
 - Propagated to: `backend/tests/timing.py` (docstring), `.claude/skills/testing-standards/SKILL.md` §CPU growth checks.
 - Dead end: raising the bound for the largest input. It hides what the collector costs, and that cost scales with
   whatever else the worker holds, so no constant bound is safe.
+
+## Addendum — 2026-10-12 (TASK-240)
+- **Work on another thread is timed by that thread's own CPU clock, and the server already reports it.**
+  `width_is_free` (`contract/test_verification_scale.py`) guards M3a round 4: a wide wildcard phrase rebuilt every
+  item's allowed-token set per candidate (84 s at 80k for 300 items against 3.8 s for 2). Its requests run on
+  TestClient's server thread, so the test thread's `thread_time` sees nothing, and `time.process_time` would
+  also count the facet and group-count workers, which can still be running after the response is sent and so
+  bleed into the next measurement. The access line's `verify_cpu_ms` is exactly the guarded cost: the verifying
+  thread's CPU time in its verification slot (85-90% of the request's CPU here: 53-58 ms of 58-66 ms). The check
+  now runs `timing.growth` with a `measure` that reads that field around a call made with the collector paused
+  (`collector_paused`; the collector is the process's, so the pause reaches the server thread), widest phrase
+  against narrowest, under 2x. No product change: the field existed (round 5, the rate-limit debit).
+- **Evidence.** Idle, five runs: ratio 0.94-0.96. Under ten `yes` burners on eight cores, five runs: 0.87-0.89,
+  each side 55-85 ms. Negative control (local, not committed): `Compiler.holder` replaced by the pre-round-4
+  per-candidate set rebuild fails at 6.25 idle and 5.7-6.2 under load (each wide request ~380-470 ms).
+- Propagated to: `backend/tests/timing.py` (docstring; `growth(measure=...)`, `collector_paused`),
+  `backend/tests/unit/test_timing.py`, `.claude/skills/testing-standards/SKILL.md` §CPU growth checks.
+- Dead end: whole-process CPU time (`process_time`) around the request. It covers the whole request, but pool
+  workers outliving a response make one pair's sides share CPU time.
