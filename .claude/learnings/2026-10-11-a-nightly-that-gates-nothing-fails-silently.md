@@ -75,8 +75,8 @@ Get a green nightly on the exact `dev` head for the v0.3.0 release. No scheduled
   over 10 ms: both sides under `growth`'s 2 ms floor would read 1.0 whatever the growth (code-reviewer,
   qa-auditor). qa-auditor's milder variants: re-deriving the parts per candidate fails at 4.63, rebuilding each
   distinct set per candidate at 4.43; only a C-level tuple copy per candidate (1.13) passes, not worth gating.
-- **Evidence.** The check alone, idle, five runs: ratio 0.94-0.96. Under ten `yes` burners on eight cores, five runs: 0.87-0.89,
-  each side 55-85 ms. With its neighbours (`test_abuse_limits_r4/_r5`, `test_timing`,
+- **Evidence.** The check alone, idle, five runs: ratio 0.94-0.96. Under ten `yes` burners on eight cores, five
+  runs: 0.87-0.89, each side 55-85 ms. With its neighbours (`test_abuse_limits_r4/_r5`, `test_timing`,
   `test_verification_cost`) at `-n 4`: three runs idle, three under ten burners, all green; the opt-in 80k
   run once. Negative control (local, not committed): `Compiler.holder` replaced by the pre-round-4
   per-candidate set rebuild fails at 6.25 idle and 5.7-6.2 under load (each wide request ~380-470 ms).

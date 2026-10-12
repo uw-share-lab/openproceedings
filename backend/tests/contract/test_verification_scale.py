@@ -99,7 +99,8 @@ def width_is_free(c: TestClient, logs: Logs, stem: str, widths: tuple[int, ...])
     narrow, widest = wide(widths[0], stem), wide(widths[-1], stem)
     ratio, pairs = growth(lambda: cold(c, narrow), lambda: cold(c, widest), measure=verify_cpu(logs))
     assert ratio < 2, (widths, ratio, pairs)
-    # both sides under `growth`'s 2 ms floor would read as 1.0 whatever the growth: the narrow side must be measured
+    # both sides under `growth`'s 2 ms floor would read as 1.0 whatever the growth: the narrow side must be
+    # measured
     assert min(a for a, _ in pairs) > 0.01, pairs
 
 

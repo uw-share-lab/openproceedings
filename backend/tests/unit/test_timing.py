@@ -110,8 +110,8 @@ def test_growth_takes_another_threads_measure() -> None:
 
         return call
 
-    def measure(side: Callable[[], object], calls: int) -> float:
-        name = str(side())
+    def measure(f: Callable[[], object], calls: int) -> float:
+        name = str(f())
         seen.append((name, calls))
         return costs[name]
 
