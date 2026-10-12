@@ -29,8 +29,8 @@ A PR that hits a **hard stop** is never merged by this command: it is left open 
   elsewhere: PR #132 came about 20 hours after its release), or a docker image on a registry other than Docker Hub
   and ghcr.io (nothing dates it), or a PR whose body carries Dependabot's "Cooldown could not be applied" notice
   (it found no publication date, which a failed Docker Hub lookup also causes; it gives none for ghcr.io, so every
-  `ghcr.io/astral-sh/uv` PR, patch and digest bumps included, stops here: still run step 2's `docker_digest.py`
-  into the evidence file and put its age in the comment, the owner's evidence). For actions and Docker Hub images
+  `ghcr.io/astral-sh/uv` PR, patch and digest bumps included, stops here: step 1 still runs `docker_digest.py
+  --head "origin/<head>"` for it and the §10 comment quotes its age, the owner's evidence). For actions and Docker Hub images
   the 7-day hold is otherwise Dependabot's `cooldown`; no checker reads their age;
 - a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
 - a red required check (`lint`, `test`, `claude-tooling`, `attribution`, `learnings`, `review-attested`) that
@@ -152,7 +152,10 @@ GitHub lists for the PR is one its ecosystem may touch (uv: `uv.lock` and the tw
 `package-lock.json` and the two `package.json`s; docker: a Dockerfile under `deploy/`; github-actions: a workflow or
 a composite action's `action.yml`), git's commits are exactly GitHub's for the PR, every one Dependabot's with a
 signature GitHub verified, the title doesn't name `tantivy`, and the body has no "Cooldown could not be applied"
-notice. Any PROBLEM is a hard stop (§10). A PR this
+notice. Any PROBLEM is a hard stop (§10). A docker PR whose only PROBLEM is that notice (every ghcr.io PR) first
+gets `python3 $RUN/.claude/scripts/dependabot/docker_digest.py --head "origin/<head>" > "$RUN/evidence-<n>.md"`
+(it only reads git objects, the registry and `gh attestation`, so it is safe before the switch; without `--head`
+it reads the dev checkout and finds no pins), and the §10 comment quotes its age and PROBLEM lines. A PR this
 routine pushed to on an earlier run fails it too, by design: it is the owner's now. If `gh api
 repos/uw-share-lab/openproceedings/pulls/<n> --jq .mergeable_state` says `dirty` (a conflict; `unknown` or an empty
 answer means GitHub is still computing it: ask again in a minute), comment `@dependabot rebase` (`gh api -X POST
@@ -379,7 +382,8 @@ one closed or dropped out of the queue, 2 when GitHub couldn't be asked (run it 
 ## 10. Leaving a PR open
 
 For each hard stop, comment once on the PR with what was found and the evidence (the checker's PROBLEM lines,
-the check and its run URL, the reviewer's Must), and what the owner would need to decide. The comment follows the
+the check and its run URL, the reviewer's Must, and for a docker PR stopped by the cooldown notice the
+`docker_digest.py` lines from step 1), and what the owner would need to decide. The comment follows the
 attribution rule too:
 
 ```bash

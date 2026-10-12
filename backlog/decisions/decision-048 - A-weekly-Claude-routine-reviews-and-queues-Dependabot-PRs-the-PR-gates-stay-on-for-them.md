@@ -57,8 +57,9 @@ The review gate of TASK-211 shaped three parts of this:
   tag only on Docker Hub and skips the `cooldown` for other registries (PR #132, uv 0.13.0 on ghcr.io, came about
   20 hours after its release), so `docker_digest.py` now stops a ghcr.io image first attested under 7 days ago
   (by the previous pin's publisher) and an image on any other registry, and `prs.py check` stops a PR whose body
-  carries Dependabot's "Cooldown could not be applied" notice (a failed Docker Hub lookup skips it too); for
-  actions and Docker Hub images the hold is otherwise the `cooldown` alone.
+  carries Dependabot's "Cooldown could not be applied" notice (a failed Docker Hub lookup skips it too;
+  Dependabot gives no date for any ghcr.io update, so every ghcr.io PR carries it and the attestation age is the
+  owner's evidence); for actions and Docker Hub images the hold is otherwise the `cooldown` alone.
 - **A new Python patch is the owner's.** Spec 08's "Python pin" says extracted text can depend on the release;
   TASK-208 proved 3.12.9 → 3.12.15 changed nothing by replaying the whole crawl cache, which needs `data/`, which
   the routine doesn't have. A new digest for the same tag carries no parser change and is merged like any other.

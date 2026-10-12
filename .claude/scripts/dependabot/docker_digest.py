@@ -177,9 +177,9 @@ def check_age(
     publishers: set[Publisher],
     why: str = "",
 ) -> None:
-    """The 7-day hold for a ghcr.io image: its age is the earliest verified timestamp of an attestation by the
-    previous pin's publisher, so an old attestation from another workflow of the org can't make a new image look
-    old."""
+    """The 7-day age check for a ghcr.io image (the owner's evidence; Dependabot's cooldown never dates ghcr.io):
+    its age is the earliest verified timestamp of an attestation by the previous pin's publisher, so an old
+    attestation from another workflow of the org can't make a new image look old."""
     if not publishers:
         rep.problem(
             f"{pin}: the previous pin has no verified attestation, so its publisher can't be compared"
@@ -202,7 +202,7 @@ def check_age(
             " date ghcr.io images; decision-048)"
         )
     else:
-        rep.ok(f"{pin}: first attested {days:.1f} days ago, past the {COOLDOWN_DAYS}-day cooldown")
+        rep.ok(f"{pin}: first attested {days:.1f} days ago, {COOLDOWN_DAYS} days or more")
 
 
 def check_pin(rep: Report, pin: Pin, before: set[Pin]) -> None:

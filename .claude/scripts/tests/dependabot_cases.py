@@ -1170,7 +1170,7 @@ def _(c: Case) -> None:
 @row("docker: a ghcr.io image attested exactly 7 days ago passes")
 def _(c: Case) -> None:
     args = uv_image_case(c, True, ["2026-09-30T12:00:00Z"])
-    c.expect("docker_digest.py", args, OK, r"^ok .*first attested 7\.0 days ago, past the 7-day cooldown")
+    c.expect("docker_digest.py", args, OK, r"^ok .*first attested 7\.0 days ago, 7 days or more")
 
 
 @row("docker: a ghcr.io image's age is its earliest attestation, compared as times across offsets")
