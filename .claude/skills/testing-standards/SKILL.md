@@ -124,9 +124,13 @@ the same cutoff; a green optimized implementation alone does not prove the check
 under 8x the CPU time, median of paired rounds, collector paused; `backend/tests/unit/test_timing.py` shows
 a quadratic in work and one in allocation fail it, and that no collection runs inside a timed call); use it
 (or its `cpu`, for a one-size CPU bound) for every linear-time test, including batched ones (`growth(...,
-calls=8)`). Never assert a wall-clock bound at one size: on a shared runner, beside four xdist workers
-running 50,000-example properties, a 17 ms parse took 1.9 s and a 5 ms page 2.5 s (nightlies 37943547380,
-38056534247). A wall-clock bound in a concurrency test is set by the hold it tells apart (under the 2 s wait
-it would otherwise wait), never tighter. `backend/tests/unit/test_latex_scan.py` (unclosed math openers,
-TASK-171 recovery), `backend/tests/unit/engine/test_highlight_speed.py` (tokenizer stretches) and
+calls=8)`). Work another thread does (a request TestClient serves) is invisible to this thread's CPU clock:
+pass `growth` a `measure` that reads that thread's own CPU time and pauses the collector (`collector_paused`),
+as `contract/test_verification_scale.py`'s `width_is_free` reads the server's `verify_cpu_ms` from each
+request's access line, never the request's wall time. Never assert a wall-clock bound at one size: on a shared
+runner, beside four xdist workers running 50,000-example properties, a 17 ms parse took 1.9 s and a 5 ms page
+2.5 s (nightlies 37943547380, 38056534247). A wall-clock bound in a concurrency test is set by the hold it
+tells apart (under the 2 s wait it would otherwise wait), never tighter.
+`backend/tests/unit/test_latex_scan.py` (unclosed math openers, TASK-171 recovery),
+`backend/tests/unit/engine/test_highlight_speed.py` (tokenizer stretches) and
 `backend/tests/unit/ingest/test_html.py` (`escape_bare_lt`) apply it in batches.

@@ -1,15 +1,17 @@
 """The linear-time tests' measure (tests/timing.py) fails quadratic growth and passes linear growth, at the cutoff
 the tests use (testing-standards §CPU growth checks: a sampling method is shown to fail the former quadratic). It
 pauses the cyclic garbage collector while it times a call, so a quadratic must fail whether its cost is work or
-allocation, and no collection may run inside a timed call."""
+allocation, and no collection may run inside a timed call. `growth` takes another thread's measure (`measure`,
+as `width_is_free` reads the server's CPU time), and `collector_paused` restores the collector as it was."""
 
 from __future__ import annotations
 
 import gc
+from collections.abc import Callable
 
 import pytest
 
-from tests.timing import assert_near_linear, cpu, growth
+from tests.timing import assert_near_linear, collector_paused, cpu, growth
 
 
 def linear(s: str) -> int:
@@ -91,3 +93,38 @@ def test_a_linear_but_far_too_slow_cost_fails_the_ceiling() -> None:
     ceiling (2 s by default), far above anything a call site costs."""
     with pytest.raises(AssertionError):
         assert_near_linear(linear, lambda k: "x" * k, 300, ceiling=0.001)
+
+
+def test_growth_takes_another_threads_measure() -> None:
+    """A side whose work runs on another thread is measured by what that thread reports (`width_is_free` reads
+    the server's `verify_cpu_ms`): `growth` pairs, alternates and takes the median of whatever `measure` gives,
+    warming each side once first, and passes it `calls`."""
+    seen: list[tuple[str, int]] = []
+    costs = {"small": 0.01, "large": 0.05}
+    called: list[str] = []
+
+    def side(name: str) -> Callable[[], object]:
+        def call() -> str:
+            called.append(name)
+            return name
+
+        return call
+
+    def measure(f: Callable[[], object], calls: int) -> float:
+        name = str(f())
+        seen.append((name, calls))
+        return costs[name]
+
+    ratio, pairs = growth(side("small"), side("large"), rounds=3, calls=2, measure=measure)
+    assert ratio == pytest.approx(5.0) and pairs == [(0.01, 0.05)] * 3
+    assert seen == [("small", 2), ("large", 2), ("large", 2), ("small", 2), ("small", 2), ("large", 2)]
+    assert called[:2] == ["small", "large"] and len(called) == 2 + 6  # one warm call each, then `measure`'s
+
+
+def test_collector_paused_restores_the_collector() -> None:
+    with collector_paused():
+        assert not gc.isenabled()
+    assert gc.isenabled()
+    with pytest.raises(ZeroDivisionError), collector_paused():
+        1 / 0  # noqa: B018
+    assert gc.isenabled()

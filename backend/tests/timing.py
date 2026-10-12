@@ -23,29 +23,49 @@ that heap-sized cost and one other: freeing the call's own cyclic garbage (the H
 every parsed tree a cycle), which the next collection after the call does, linear in what the call allocated.
 Allocating, copying and freeing what reference counting frees are still timed, so a quadratic in work or in
 allocation still costs ~16x (`tests/unit/test_timing.py` shows both fail).
+
+Work done on another thread is invisible to this thread's CPU clock, so `growth` takes the side's measure as an
+argument (`measure`, `cpu` by default). The one such check, `contract/test_verification_scale.py`'s
+`width_is_free`, times requests TestClient serves on its server thread: its measure reads the CPU time the
+server's verifying thread spent in its verification slot from the request's access line (`verify_cpu_ms`),
+around a call made with the collector paused (`collector_paused`, which `cpu` uses: the collector is the
+process's, so the pause reaches the server thread too). Pairing, alternation, the median and `floor` are
+`growth`'s as for every other check; no CPU-time growth check in the test suite has a timer of its own.
 """
 
 from __future__ import annotations
 
 import gc
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from statistics import median
+
+# one side's CPU seconds for a call, averaged over `calls` calls (`cpu`, or another thread's figure: `growth`)
+type Measure = Callable[[Callable[[], object], int], float]
+
+
+@contextmanager
+def collector_paused() -> Iterator[None]:
+    """The cyclic garbage collector paused for the block (in every thread: it is the process's) and restored as
+    it was, even if the block raises."""
+    enabled = gc.isenabled()
+    gc.disable()
+    try:
+        yield
+    finally:
+        if enabled:
+            gc.enable()
 
 
 def cpu(f: Callable[[], object], calls: int = 1) -> float:
     """This thread's CPU seconds for one call of `f`, averaged over `calls`: allocation and non-cyclic freeing
     included, the cyclic garbage collector paused (module docstring) and restored as it was."""
-    enabled = gc.isenabled()
-    gc.disable()
-    try:
+    with collector_paused():
         started = time.thread_time()
         for _ in range(calls):
             f()
         return (time.thread_time() - started) / calls
-    finally:
-        if enabled:
-            gc.enable()
 
 
 def growth(
@@ -54,20 +74,23 @@ def growth(
     rounds: int = 9,
     floor: float = 0.002,
     calls: int = 1,
+    measure: Measure = cpu,
 ) -> tuple[float, list[tuple[float, float]]]:
     """The median of `large`'s CPU time over `small`'s, `rounds` pairs measured side by side in alternating
     order, each side at least `floor` (each the average of `calls` calls, for a call too fast to time alone);
-    and the pairs, for the assertion message."""
+    and the pairs, for the assertion message. `measure(f, calls)` gives one side's CPU seconds: `cpu` (this
+    thread's), or for work another thread does, a measure of that thread's CPU time that also pauses the
+    collector (`collector_paused`), as the width check reads the server's own figure from its access line."""
     small()  # warm: a first call's caches and imports are not what is measured
     large()
     pairs = []
     for i in range(rounds):
         if i % 2:
-            b = cpu(large, calls)
-            a = cpu(small, calls)
+            b = measure(large, calls)
+            a = measure(small, calls)
         else:
-            a = cpu(small, calls)
-            b = cpu(large, calls)
+            a = measure(small, calls)
+            b = measure(large, calls)
         pairs.append((a, b))
     return median(max(b, floor) / max(a, floor) for a, b in pairs), pairs
 
