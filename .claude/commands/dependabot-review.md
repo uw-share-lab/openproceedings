@@ -23,8 +23,11 @@ A PR that hits a **hard stop** is never merged by this command: it is left open 
 - a new install script;
 - a new package (a new transitive dependency included), or a removed one;
 - a uv or npm release younger than 7 days (Dependabot's `cooldown` holds version updates back that long, so
-  this is a security update or a changed config: the owner decides). For actions and docker images the 7-day hold
-  is Dependabot's `cooldown` alone; no checker reads their age;
+  this is a security update or a changed config: the owner decides), or a ghcr.io image first attested under 7
+  days ago (Dependabot dates docker tags only on Docker Hub and skips the `cooldown` elsewhere: PR #132 came about
+  20 hours after its release), or a docker image on a registry other than Docker Hub and ghcr.io (nothing dates
+  it). For actions and Docker Hub images the 7-day hold is Dependabot's `cooldown` alone; no checker reads their
+  age;
 - a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
 - a red required check (`lint`, `test`, `claude-tooling`, `attribution`, `learnings`, `review-attested`) that
   the PR's own fix can't turn green;
@@ -165,7 +168,7 @@ the PR head with its merge base on `origin/dev`, so a PR behind `dev` shows only
 |---|---|
 | `uv` | `uv_lock.py`: each bumped package's sdist and wheel sha256 against PyPI's JSON API, every file on files.pythonhosted.org, nothing yanked, nothing younger than 7 days, the PEP 740 provenance publisher of every file against the previous version's; no added or removed package; `uv.lock` unchanged outside its package list, and each `pyproject.toml` changed only in specifiers of packages the lock moved; `tantivy` untouched |
 | `npm_and_yarn` | `npm_lock.py`: every changed lock entry's version, `resolved` and `integrity` against `npm view <pkg>@<ver>` on registry.npmjs.org (run outside the repo, so no `.npmrc` there applies), and its dependencies, `os`, `cpu` and `libc` against the manifest; nothing younger than 7 days; no package added or removed, none switched to another name or to a link; no field dropped; no install script appeared; publisher (`_npmUser`) and npm provenance (present, and from the same source repository) against the previous version's; the manifests and the lock's workspace entries changed only in dependency values of packages the lock moved, and equal to each other (step 3) |
-| `docker` | `docker_digest.py`: each changed Dockerfile differs only in its pins' `:tag@digest`; an anonymous token from the registry, then `HEAD /v2/<image>/manifests/<tag>` with the OCI-index `Accept` header must give the pinned digest, as an index; for a ghcr.io image, `gh attestation verify oci://<image>@<digest> --owner <org>`; any new `python` tag is a hard stop |
+| `docker` | `docker_digest.py`: each changed Dockerfile differs only in its pins' `:tag@digest`; an anonymous token from the registry, then `HEAD /v2/<image>/manifests/<tag>` with the OCI-index `Accept` header must give the pinned digest, as an index; for a ghcr.io image, `gh attestation verify oci://<image>@<digest> --owner <org>`, whose earliest verified timestamp must be 7 days old or more; an image on another registry than Docker Hub and ghcr.io, or any new `python` tag, is a hard stop |
 | `github_actions` | `actions_pins.py`: each changed file differs only in its pins' `@<sha> # <tag>`; each new pin must be the commit the tag `<tag>` names (`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`, annotated tags peeled); no new action, no unpinned `uses:` |
 
 For npm, once `npm_lock.py` exits 0 (or 3, before step 3's fix): `npm ci --ignore-scripts` (the PR's lock, not

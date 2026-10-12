@@ -224,10 +224,22 @@ def gh(args: list[str]) -> int:
         return gh_api(fx, args[1:])
     if args[:2] == ["attestation", "verify"]:
         key = f"attestation {args[2]} {args[args.index('--owner') + 1]}"
-        code = fx.get(key)
-        if code is None or code:
+        # 0: verified, attested long ago; {"timestamps": [...]}: verified, with those Rekor timestamps (an empty
+        # list: none); {"stdout": "..."}: verified, printing that; anything else, or no fixture: verification fails
+        ans = fx.get(key)
+        if isinstance(ans, dict) and "stdout" in ans:
+            print(ans["stdout"])
+            return 0
+        if ans == 0:
+            stamps: Any = ["2020-01-01T00:00:00-04:00"]
+        else:
+            stamps = ans.get("timestamps") if isinstance(ans, dict) else None
+        if not isinstance(stamps, list):
             print("fake gh: attestation verification failed", file=sys.stderr)
             return 1
+        if "--format" in args and args[args.index("--format") + 1] == "json":
+            ts = [{"type": "Tlog", "uri": "https://rekor.sigstore.dev", "timestamp": t} for t in stamps]
+            print(json.dumps([{"verificationResult": {"verifiedTimestamps": ts}}]))
         return 0
     if args[:1] == ["pr"]:  # every `gh pr` command reads or writes through GraphQL
         if fx.get("cloud"):

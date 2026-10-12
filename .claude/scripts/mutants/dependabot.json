@@ -318,6 +318,42 @@
     "new": "        if False:\n"
   },
   {
+    "label": "dependabot: docker: image age not checked",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif (days := age_days(attested)) < COOLDOWN_DAYS:\n",
+    "new": "    elif (days := age_days(attested)) < 0:\n"
+  },
+  {
+    "label": "dependabot: docker: image age read from the newest attestation",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "        return min(stamps, key=parse_time) if stamps else None\n",
+    "new": "        return max(stamps, key=parse_time) if stamps else None\n"
+  },
+  {
+    "label": "dependabot: docker: image age compared as text, not as a time",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "        return min(stamps, key=parse_time) if stamps else None\n",
+    "new": "        return min(stamps) if stamps else None\n"
+  },
+  {
+    "label": "dependabot: docker: an undated attestation accepted",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    if attested is None:\n",
+    "new": "    if attested is None:\n        return\n"
+  },
+  {
+    "label": "dependabot: docker: age not checked after a verified attestation",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "            check_age(rep, pin, attested_at(r.stdout))\n",
+    "new": "            pass\n"
+  },
+  {
+    "label": "dependabot: docker: an undated registry accepted",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif host == \"registry-1.docker.io\":\n",
+    "new": "    elif True:\n"
+  },
+  {
     "label": "dependabot: docker: new image accepted",
     "file": ".claude/scripts/dependabot/docker_digest.py",
     "old": "    if not olds:\n",

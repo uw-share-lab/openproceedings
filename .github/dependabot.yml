@@ -63,3 +63,7 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: python
         update-types: ["version-update:semver-minor"]
+      # ghcr.io/astral-sh/uv (the api image's uv stage): while uv is 0.x a minor is a breaking release (0.13.0
+      # shipped "Breaking changes"), so it is upgraded by hand like a major; its patches and digests still come here
+      - dependency-name: astral-sh/uv
+        update-types: ["version-update:semver-minor"]

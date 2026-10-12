@@ -8,11 +8,16 @@ the merge base of origin/dev and HEAD) and `head` (default HEAD). For each pin t
 the image's registry anonymously (the token its 401 challenge names), with a HEAD request for
 `/v2/<repository>/manifests/<tag>` and the OCI-index `Accept` header, and requires `Docker-Content-Digest` to
 equal the pinned digest and the answer to be an index (a multi-arch pin, spec 08 §Deploy). An image on
-ghcr.io must also pass `gh attestation verify oci://<image>@<digest> --owner <its owner>`. Each changed file
-must differ only in its pins' `:tag@digest` (the image names and every other line stay the same).
+ghcr.io must also pass `gh attestation verify oci://<image>@<digest> --owner <its owner>`, and its earliest
+verified (transparency-log) timestamp must be at least `COOLDOWN_DAYS` old: Dependabot dates a docker tag only on
+Docker Hub and skips its `cooldown` for every other registry (dependabot-core's docker update checker), so for a
+ghcr.io image this check is the 7-day hold. Each changed file must differ only in its pins' `:tag@digest` (the
+image names and every other line stay the same).
 
 A PROBLEM, the PR stays open: a change outside the pins, a digest that doesn't resolve or differs, a non-index
-answer, a failed attestation, an image that wasn't pinned before, a semver-major tag change, or any change of
+answer, a failed attestation, a ghcr.io image attested under `COOLDOWN_DAYS` ago (or with no verified timestamp),
+an image on a registry other than Docker Hub and ghcr.io (nothing dates it: neither Dependabot's cooldown nor an
+attestation), an image that wasn't pinned before, a semver-major tag change, or any change of
 the `python` image's tag (decision-048: a new Python release changes how the crawlers parse pages, spec 08
 §Monorepo layout "Python pin", and the replay that shows records unchanged needs the owner's `data/`; a new
 digest for the same tag is fine). An image reference
@@ -23,13 +28,16 @@ runs and CI's `claude-tooling` check runs) refuses any unpinned image a `deploy/
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import urllib.parse
 from dataclasses import dataclass
 
 from _common import (
+    COOLDOWN_DAYS,
     Report,
     ToolError,
+    age_days,
     changed_files,
     git_show,
     http,
@@ -37,6 +45,7 @@ from _common import (
     is_major,
     is_minor_or_more,
     main_guard,
+    parse_time,
     resolve_refs,
     run,
     version_tuple,
@@ -110,6 +119,33 @@ def is_python(image: str) -> bool:
     return registry(image) == ("registry-1.docker.io", "library/python")
 
 
+def attested_at(output: str) -> str | None:
+    """The earliest verified timestamp in `gh attestation verify --format json`'s output: when the digest was
+    first attested, so the image existed by then. None when no attestation carries one."""
+    try:
+        results = json.loads(output)
+        stamps = [
+            str(t["timestamp"])
+            for a in results
+            for t in a["verificationResult"].get("verifiedTimestamps") or []
+        ]
+        return min(stamps, key=parse_time) if stamps else None
+    except (ValueError, KeyError, TypeError, AttributeError) as e:  # JSONDecodeError is a ValueError
+        raise ToolError("gh attestation verify --format json printed no attestation list") from e
+
+
+def check_age(rep: Report, pin: Pin, attested: str | None) -> None:
+    if attested is None:
+        rep.problem(f"{pin}: the attestation has no verified timestamp, so nothing dates the image")
+    elif (days := age_days(attested)) < COOLDOWN_DAYS:
+        rep.problem(
+            f"{pin}: first attested {days:.1f} days ago (under {COOLDOWN_DAYS}; Dependabot's cooldown doesn't"
+            " date ghcr.io images; decision-048)"
+        )
+    else:
+        rep.ok(f"{pin}: first attested {days:.1f} days ago, past the {COOLDOWN_DAYS}-day cooldown")
+
+
 def check_pin(rep: Report, pin: Pin, before: set[Pin]) -> None:
     olds = sorted({p.tag for p in before if p.image == pin.image})
     if not olds:
@@ -136,15 +172,33 @@ def check_pin(rep: Report, pin: Pin, before: set[Pin]) -> None:
     if host == "ghcr.io":
         owner = repo.split("/", 1)[0]
         r = run(
-            ["gh", "attestation", "verify", f"oci://{pin.image}@{pin.digest}", "--owner", owner],
+            [
+                "gh",
+                "attestation",
+                "verify",
+                f"oci://{pin.image}@{pin.digest}",
+                "--owner",
+                owner,
+                "--format",
+                "json",
+            ],
             ok_codes=(0, 1),
         )
         if r.returncode:
             rep.problem(f"{pin}: gh attestation verify --owner {owner} failed: {r.stderr.strip()[:200]}")
         else:
             rep.ok(f"{pin}: GitHub attestation verified for owner {owner}")
+            check_age(rep, pin, attested_at(r.stdout))
+    elif host == "registry-1.docker.io":
+        rep.ok(
+            f"{pin}: {host} publishes no GitHub attestations; the digest check is the check, and Dependabot's"
+            " cooldown dates Docker Hub tags"
+        )
     else:
-        rep.ok(f"{pin}: {host} publishes no GitHub attestations; the digest check is the check")
+        rep.problem(
+            f"{pin}: nothing dates an image on {host} (Dependabot's cooldown skips it and it has no attestation"
+            " this script reads); the owner decides"
+        )
 
 
 def main() -> None:

@@ -217,14 +217,20 @@ deliberate, hand-made PR; adopted 2026-10-01, after the npm entry's first run op
 base-image digests, which are not majors (§Deploy), and ignores a new `python` minor
 (`version-update:semver-minor`): the api image's tag names the patch release `.python-version` pins, so a patch bump
 arrives as a PR that must move `.python-version` too, and a minor is done by hand (§Monorepo layout, "Python pin").
-GitHub applies `ignore` to security updates too, so a vulnerability whose fix is a major, or any Tantivy fix, shows
+It also ignores an `astral-sh/uv` minor (`ghcr.io/astral-sh/uv`, the api image's uv stage): while uv is 0.x a minor
+is a breaking release (0.13.0 shipped "Breaking changes"; PR #132), so it is upgraded by hand like a major, and only
+its patches and digest bumps arrive here. A docker image's `cooldown` holds only on Docker Hub: Dependabot dates a
+tag from Docker Hub's API and, for every other registry, skips the cooldown ("Cooldown could not be applied"; it
+opened PR #132 about 20 hours after uv 0.13.0's release), so `docker_digest.py` checks a ghcr.io image's age
+itself (below). GitHub applies `ignore` to security updates too, so a vulnerability whose fix is a major, or any Tantivy fix, shows
 up as a Dependabot alert and is fixed by a hand-made PR.
 
 A Dependabot PR is reviewed and merged like any other (review gate, attestation, merge queue), with these checks
 added. Read the upstream release notes of every bumped package: a security release is not always in `npm audit`
 yet. Check the supply chain: the lock's resolved URLs stay on the registry, the integrity hashes match it, no
 package or install script is new, and the publisher is the one that published the previous version. For a docker
-bump, the registry resolves the tag to the pinned index digest. For npm, every entry in `frontend/package.json`
+bump, the registry resolves the tag to the pinned index digest, and a ghcr.io image is at least 7 days old by its
+earliest verified attestation timestamp (`docker_digest.py`). For npm, every entry in `frontend/package.json`
 equals `packages["frontend"]` in `package-lock.json`: Dependabot's npm updater can write a caret there (PR #124's
 `eslint-config-next`, PR #100's Vitest), and `npm ci` accepts it. `.claude/scripts/dependabot/npm_specs.py` checks
 it on every PR (`make tooling`, CI `claude-tooling`; TASK-212): each spec in the four dependency sections of
@@ -260,9 +266,11 @@ that. It never merges, and leaves open with a comment for the owner, a PR with:
 - an integrity, hash or URL mismatch, or a file off the registry;
 - a new publisher, or provenance the previous version had and the new one lacks;
 - a new install script, or a new or removed package;
-- a uv or npm release younger than 7 days (the `cooldown` every ecosystem sets holds version updates back that
-  long, so this is a security update, which ignores it; for actions and docker images the hold is the `cooldown`
-  alone);
+- a uv or npm release, or a ghcr.io image, younger than 7 days (the `cooldown` every ecosystem sets holds version
+  updates back that long, so a uv or npm one is a security update, which ignores it; a ghcr.io image's age is its
+  earliest verified `gh attestation verify` timestamp, since Dependabot dates docker tags only on Docker Hub; for
+  actions and Docker Hub images the hold is the `cooldown` alone), or a docker image on any other registry, which
+  nothing dates;
 - a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
 - a red required check it can't fix, or a Must it can't fix;
 - any semver-major, anything touching `tantivy`, or a new Python release, patch or minor: a patch changes how the

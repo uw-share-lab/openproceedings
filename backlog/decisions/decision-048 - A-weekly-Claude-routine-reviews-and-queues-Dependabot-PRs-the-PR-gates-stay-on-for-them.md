@@ -50,7 +50,10 @@ The review gate of TASK-211 shaped three parts of this:
 - **A legitimate pipeline can still publish a bad release**, so Dependabot's `cooldown` holds every version
   update back 7 days (a compromised release is most often pulled within days), and the uv and npm checkers stop
   a younger one, which then can only be a security update: the owner decides. For actions and docker images
-  the hold is the `cooldown` alone (no checker reads their age).
+  the hold is the `cooldown` alone (no checker reads their age). *Amended 2026-10-11:* Dependabot dates a docker
+  tag only on Docker Hub and skips the `cooldown` for other registries (PR #132, uv 0.13.0 on ghcr.io, came about
+  20 hours after its release), so `docker_digest.py` now stops a ghcr.io image first attested under 7 days ago
+  and an image on any other registry; for actions and Docker Hub images the hold is still the `cooldown` alone.
 - **A new Python patch is the owner's.** Spec 08's "Python pin" says extracted text can depend on the release;
   TASK-208 proved 3.12.9 → 3.12.15 changed nothing by replaying the whole crawl cache, which needs `data/`, which
   the routine doesn't have. A new digest for the same tag carries no parser change and is merged like any other.

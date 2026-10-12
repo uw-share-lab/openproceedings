@@ -1104,7 +1104,7 @@ def _(c: Case) -> None:
     )
 
 
-def uv_image_case(c: Case, attested: bool) -> list[str]:
+def uv_image_case(c: Case, attested: bool, stamps: list[str] | None = None) -> list[str]:
     new = digest("uv-new")
     c.curl["https://ghcr.io/v2/astral-sh/uv/manifests/0.12.24"] = [
         {
@@ -1114,7 +1114,8 @@ def uv_image_case(c: Case, attested: bool) -> list[str]:
         }
     ]
     if attested:
-        c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{new} astral-sh"] = 0
+        ans = 0 if stamps is None else {"timestamps": stamps}
+        c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{new} astral-sh"] = ans
     return docker_case(
         c, f"ghcr.io/astral-sh/uv:0.12.23@{digest('uv-old')}", f"ghcr.io/astral-sh/uv:0.12.24@{new}",
         path="deploy/api.Dockerfile",
@@ -1136,6 +1137,64 @@ def _(c: Case) -> None:
         PROBLEM,
         r"^PROBLEM .*gh attestation verify --owner astral-sh",
     )
+
+
+@row("docker: a ghcr.io image attested under 7 days ago is left for the owner")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, ["2026-10-05T12:00:00Z"])
+    c.expect(
+        "docker_digest.py", args, PROBLEM, r"^PROBLEM .*uv:0\.12\.24.*first attested 2\.0 days ago \(under 7"
+    )
+
+
+@row("docker: a ghcr.io image attested exactly 7 days ago passes")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, ["2026-09-30T12:00:00Z"])
+    c.expect("docker_digest.py", args, OK, r"^ok .*first attested 7\.0 days ago, past the 7-day cooldown")
+
+
+@row("docker: a ghcr.io image's age is its earliest attestation, compared as times across offsets")
+def _(c: Case) -> None:
+    # as text, 2026-09-01T23:00-04:00 sorts first, but it is 2026-09-02T03:00Z, two hours after the earliest
+    stamps = ["2026-10-06T12:00:00Z", "2026-09-01T23:00:00-04:00", "2026-09-02T01:00:00Z"]
+    c.expect("docker_digest.py", uv_image_case(c, True, stamps), OK, r"^ok .*first attested 35\.5 days ago")
+
+
+@row("docker: a ghcr.io attestation with no verified timestamp is left for the owner")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, [])
+    c.expect(
+        "docker_digest.py", args, PROBLEM, r"^PROBLEM .*no verified timestamp, so nothing dates the image"
+    )
+
+
+@row("docker: attestation output that isn't an attestation list is an error, not a pass")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True)
+    c.gh[next(k for k in c.gh if k.startswith("attestation "))] = {"stdout": '{"verificationResult": {}}'}
+    c.expect("docker_digest.py", args, ERROR, r"^ERROR .*printed no attestation list")
+
+
+@row("docker: an attestation timestamp that isn't a time is an error, not a pass")
+def _(c: Case) -> None:
+    c.expect(
+        "docker_digest.py",
+        uv_image_case(c, True, ["yesterday"]),
+        ERROR,
+        r"^ERROR .*printed no attestation list",
+    )
+
+
+@row("docker: an image on a registry nothing dates is left for the owner")
+def _(c: Case) -> None:
+    new = digest("prom-new")
+    registry(c, "quay.io", "prometheus/prometheus", "v3.0.1", new)
+    args = docker_case(
+        c,
+        f"quay.io/prometheus/prometheus:v3.0.0@{digest('p')}",
+        f"quay.io/prometheus/prometheus:v3.0.1@{new}",
+    )
+    c.expect("docker_digest.py", args, PROBLEM, r"^PROBLEM .*nothing dates an image on quay\.io")
 
 
 @row("docker: an image that wasn't pinned before")
