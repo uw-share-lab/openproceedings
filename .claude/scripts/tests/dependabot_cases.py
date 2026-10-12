@@ -1060,6 +1060,7 @@ def _(c: Case) -> None:
         }
     ]
     c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{new} astral-sh"] = 0
+    c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{digest('uv-old')} astral-sh"] = 0
     text = (
         "FROM python:3.12.15-slim-bookworm@{}\nCOPY --from=ghcr.io/astral-sh/uv:{}@{} /uv /usr/local/bin/uv\n"
     )
@@ -1104,9 +1105,10 @@ def _(c: Case) -> None:
     )
 
 
-def uv_image_case(c: Case, attested: bool) -> list[str]:
+def uv_image_case(c: Case, attested: bool, stamps: list[str] | None = None, *, tag: str = "0.12.24",
+                  old_attested: bool = True) -> list[str]:  # fmt: skip
     new = digest("uv-new")
-    c.curl["https://ghcr.io/v2/astral-sh/uv/manifests/0.12.24"] = [
+    c.curl[f"https://ghcr.io/v2/astral-sh/uv/manifests/{tag}"] = [
         {
             "if": {"Accept": INDEX},
             "status": 200,
@@ -1114,9 +1116,12 @@ def uv_image_case(c: Case, attested: bool) -> list[str]:
         }
     ]
     if attested:
-        c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{new} astral-sh"] = 0
+        ans = 0 if stamps is None else {"timestamps": stamps}
+        c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{new} astral-sh"] = ans
+    if old_attested:
+        c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{digest('uv-old')} astral-sh"] = 0
     return docker_case(
-        c, f"ghcr.io/astral-sh/uv:0.12.23@{digest('uv-old')}", f"ghcr.io/astral-sh/uv:0.12.24@{new}",
+        c, f"ghcr.io/astral-sh/uv:0.12.23@{digest('uv-old')}", f"ghcr.io/astral-sh/uv:{tag}@{new}",
         path="deploy/api.Dockerfile",
     )  # fmt: skip
 
@@ -1136,6 +1141,147 @@ def _(c: Case) -> None:
         PROBLEM,
         r"^PROBLEM .*gh attestation verify --owner astral-sh",
     )
+
+
+@row("docker: a ghcr.io image attested under 7 days ago is left for the owner")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, ["2026-10-05T12:00:00Z"])
+    c.expect(
+        "docker_digest.py", args, PROBLEM, r"^PROBLEM .*uv:0\.12\.24.*first attested 2\.0 days ago \(under 7"
+    )
+
+
+@row("docker: a ghcr.io image attested just under 7 days ago is left for the owner")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, ["2026-09-30T14:24:00Z"])
+    c.expect("docker_digest.py", args, PROBLEM, r"^PROBLEM .*first attested 6\.9 days ago \(under 7")
+
+
+@row("docker: every attestation of the publisher is read, not only the first")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True)
+    c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{digest('uv-new')} astral-sh"] = {"attestations": [
+        {"timestamps": ["2026-10-06T12:00:00Z"]},
+        {"timestamps": ["2026-09-01T00:00:00Z"]},
+    ]}  # fmt: skip
+    c.expect("docker_digest.py", args, OK, r"^ok .*first attested 36\.5 days ago")
+
+
+@row("docker: a ghcr.io image attested exactly 7 days ago passes")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, ["2026-09-30T12:00:00Z"])
+    c.expect("docker_digest.py", args, OK, r"^ok .*first attested 7\.0 days ago, 7 days or more")
+
+
+@row("docker: a ghcr.io image's age is its earliest attestation, compared as times across offsets")
+def _(c: Case) -> None:
+    # as text, 2026-09-01T23:00-04:00 sorts first, but it is 2026-09-02T03:00Z, two hours after the earliest
+    stamps = ["2026-10-06T12:00:00Z", "2026-09-01T23:00:00-04:00", "2026-09-02T01:00:00Z"]
+    c.expect("docker_digest.py", uv_image_case(c, True, stamps), OK, r"^ok .*first attested 35\.5 days ago")
+
+
+@row("docker: a ghcr.io attestation with no verified timestamp is left for the owner")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, [])
+    c.expect(
+        "docker_digest.py", args, PROBLEM, r"^PROBLEM .*no verified timestamp, so nothing dates the image"
+    )
+
+
+@row("docker: attestation output that isn't an attestation list is an error, not a pass")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True)
+    c.gh[next(k for k in c.gh if k.startswith("attestation "))] = {"stdout": '{"verificationResult": {}}'}
+    c.expect("docker_digest.py", args, ERROR, r"^ERROR .*printed no attestation list")
+
+
+@row("docker: an attestation timestamp that isn't a time is an error, not a pass")
+def _(c: Case) -> None:
+    c.expect(
+        "docker_digest.py",
+        uv_image_case(c, True, ["yesterday"]),
+        ERROR,
+        r"^ERROR .*a timestamp that isn't ISO 8601: 'yesterday'",
+    )
+
+
+@row("docker: an old attestation by another workflow of the org doesn't date the image")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True)
+    c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{digest('uv-new')} astral-sh"] = {"attestations": [
+        {"signer": "https://github.com/astral-sh/uv/.github/workflows/pr-preview.yml@refs/pull/9/merge", "timestamps": ["2026-09-01T00:00:00Z"]},
+        {"timestamps": ["2026-10-05T12:00:00Z"]},
+    ]}  # fmt: skip
+    c.expect("docker_digest.py", args, PROBLEM, r"^PROBLEM .*first attested 2\.0 days ago")
+
+
+@row("docker: a ghcr.io image attested only by a new publisher is left for the owner")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True)
+    c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{digest('uv-new')} astral-sh"] = {"attestations": [
+        {"repo": "https://github.com/astral-sh/other", "timestamps": ["2026-09-01T00:00:00Z"]},
+    ]}  # fmt: skip
+    c.expect(
+        "docker_digest.py", args, PROBLEM, r"^PROBLEM .*attested only by .*astral-sh/other.*a new publisher"
+    )
+    _, out = c.run("docker_digest.py", *args)
+    assert "no verified timestamp" not in out and "docker pins: 1 problem" in out, out
+
+
+@row("docker: the publisher's workflow run from another ref is the same publisher")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True)
+    c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{digest('uv-new')} astral-sh"] = {"attestations": [
+        {"signer": "https://github.com/astral-sh/uv/.github/workflows/publish-docker-image.yml@refs/tags/0.12.24", "timestamps": ["2026-09-01T00:00:00Z"]},
+    ]}  # fmt: skip
+    c.expect("docker_digest.py", args, OK, r"^ok .*first attested 36\.5 days ago")
+
+
+@row("docker: a ghcr.io image whose previous pin has no attestation is left for the owner")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, old_attested=False)
+    c.expect(
+        "docker_digest.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM .*previous pin has no verified attestation.*\(gh: fake gh: attestation verification failed\)",
+    )
+
+
+@row("docker: a 0.x minor is hand-only")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, tag="0.13.0")
+    c.expect(
+        "docker_digest.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM .*uv:0\.13\.0.*a 0\.x minor from 0\.12\.23 is a breaking release",
+    )
+
+
+@row("docker: a minor of a 1.x or later image is not a 0.x minor")
+def _(c: Case) -> None:
+    new = digest("caddy212")
+    registry(c, "registry-1.docker.io", "library/caddy", "2.12.0-alpine", new)
+    args = docker_case(c, f"caddy:2.11.4-alpine@{digest('c')}", f"caddy:2.12.0-alpine@{new}")
+    c.expect("docker_digest.py", args, OK, r"^docker pins: 0 problems")
+
+
+@row("docker: a 0.x patch passes")
+def _(c: Case) -> None:
+    c.expect("docker_digest.py", uv_image_case(c, True, tag="0.12.24"), OK, r"^docker pins: 0 problems")
+
+
+@row("docker: an image on a registry nothing dates is left for the owner")
+def _(c: Case) -> None:
+    new = digest("prom-new")
+    registry(c, "quay.io", "prometheus/prometheus", "v3.0.1", new)
+    args = docker_case(
+        c,
+        f"quay.io/prometheus/prometheus:v3.0.0@{digest('p')}",
+        f"quay.io/prometheus/prometheus:v3.0.1@{new}",
+    )
+    c.expect("docker_digest.py", args, PROBLEM, r"^PROBLEM .*nothing dates an image on quay\.io")
 
 
 @row("docker: an image that wasn't pinned before")
@@ -1423,10 +1569,10 @@ def page1(path: str) -> str:
 
 def rest_pr(sha_: str, head: str = "dependabot/uv/g", *, state: str = "open", base: str = "dev",
             login: str = "dependabot[bot]", title: str = "deps: bump x", auto: bool = False,
-            merged: bool = False) -> dict[str, Any]:  # fmt: skip
+            merged: bool = False, body: str | None = "Bumps x.") -> dict[str, Any]:  # fmt: skip
     return {"number": 7, "state": state, "merged": merged, "merged_at": "2026-10-07T11:00:00Z" if merged else None,
             "user": {"login": login}, "base": {"ref": base}, "head": {"ref": head, "sha": sha_}, "title": title,
-            "auto_merge": {"merge_method": "merge"} if auto else None}  # fmt: skip
+            "body": body, "auto_merge": {"merge_method": "merge"} if auto else None}  # fmt: skip
 
 
 def gh_commit(sha_: str, *, verified: bool = True, login: str = "dependabot[bot]") -> dict[str, Any]:
@@ -1624,6 +1770,19 @@ def _(c: Case) -> None:
         c, "dependabot/uv/g", {"uv.lock": "b\n"}, title="deps: bump tantivy from 0.26.2 to 0.26.3"
     )
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM the title names a hand-only dependency")
+
+
+@row("prs check: Dependabot's notice that it skipped the cooldown")
+def _(c: Case) -> None:
+    body = "> [!WARNING]\n> Cooldown could not be applied because no publication date was available from the registry.\n"
+    args = check_case(c, "dependabot/docker/g", {"deploy/api.Dockerfile": "FROM x\n"}, body=body)
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM Dependabot says its cooldown could not be applied")
+
+
+@row("prs check: a PR with no body passes")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/docker/g", {"deploy/api.Dockerfile": "FROM x\n"}, body=None)
+    c.expect("prs.py", args, OK, r"^ok +docker: 1 file")
 
 
 def listed(n: int, login: str = "dependabot[bot]", head: str = "dependabot/uv/g") -> dict[str, Any]:

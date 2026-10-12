@@ -100,3 +100,41 @@ with no context and no access to the owner's machine can run it, and script its 
   step 3, README §Tests and checks, `.claude/skills/pr-workflow/SKILL.md`, `.claude/agents/ci-engineer.md`; rows in
   `.claude/scripts/tests/test-tooling-scripts.sh` and `dependabot_cases.py`; mutants in
   `.claude/scripts/mutants/dependabot.json`.
+
+## Addendum — 2026-10-11
+
+- **Dependabot's docker `cooldown` holds only on Docker Hub.** dependabot-core's docker update checker
+  (`registry_tag_release_date`) dates a tag from Docker Hub's API alone; for any other registry it logs "No
+  verified registry publication date source", skips the cooldown, and the PR body says "Cooldown could not be
+  applied". PR #132 (`ghcr.io/astral-sh/uv` 0.13.0, published 2026-10-09T19:49Z) arrived about 20 hours later
+  despite `cooldown: { default-days: 7 }`, and the procedure's "for docker the hold is the `cooldown` alone" was
+  wrong for it. Both #132 reviewers raised the age as a Must. `docker_digest.py` now dates a ghcr.io image by
+  the earliest verified (Rekor or TSA) timestamp in `gh attestation verify --format json` and stops one under 7 days
+  (evidence: run against #132's head it prints `PROBLEM … first attested 2.2 days ago`), and stops an image on
+  any registry nothing dates. The attestation time is a verified lower bound on the image's age; an image
+  config's `created` can be set to anything (reproducible builds set it to 1970), so it would fail open.
+- **A config option that silently degrades is a check to script.** "Cooldown could not be applied" is a
+  per-PR notice nobody reads; the hold had been assumed for every docker image since TASK-149. A Docker Hub
+  lookup that fails (timeout, 429, 403) skips the cooldown with the same notice, so `prs.py check` now stops any PR
+  whose body carries it (docs review). Dependabot gives no date for any ghcr.io update, so every
+  `ghcr.io/astral-sh/uv` PR (patches and digest bumps too) now goes to the owner, with `docker_digest.py`'s
+  attestation age as the evidence (docs review, round 2: a doc that called that age "the hold" overclaimed).
+- **An attestation dates an image only if it is the right publisher's.** `--owner astral-sh` accepts an
+  attestation from any repository and workflow of the org (a PR preview build included), so the earliest
+  timestamp of *any* attestation could make a new image look old (security review). The age now comes only from
+  attestations whose source repository and signing workflow (its `@ref` aside) match the previous pin's, and a new
+  publisher, or an unattested previous pin, is a PROBLEM.
+- **Compare timestamps as times.** `min()` over ISO strings with different UTC offsets picks the wrong one;
+  a row with `-04:00` and `Z` stamps whose text order differs from their time order kills that mutant.
+- **A 0.x minor of uv is a breaking release** (0.13.0 had a "Breaking changes" section), but `is_major` only
+  compares the first number, so the checkers passed it. `.github/dependabot.yml` now ignores `astral-sh/uv`
+  `version-update:semver-minor`, and `docker_digest.py` stops a 0.x minor of any image too, so the hold doesn't
+  rest on the ignore rule matching (code review). `is_major` itself is unchanged: uv and npm 0.x packages
+  (ruff and others) still pass as minors there, an owner's call.
+- **Docker images get no Dependabot alert or security update** (the Advisory Database has no docker ecosystem),
+  so a uv minor ignored by config surfaces nowhere unless the routine looks: it now compares the pinned uv minor
+  with the latest release and checks uv's advisories every run.
+- Propagated to: `.github/dependabot.yml`, spec 08 §CI "Dependabot", `.claude/commands/dependabot-review.md`
+  (hard stops, steps 1 and 2), `.claude/agents/ci-engineer.md`, decision-048 (amended), the `docker_digest.py` and
+  `prs.py` docstrings; rows in `dependabot_cases.py` (and the fake `gh` in `dependabot_fake.py`), mutants in
+  `.claude/scripts/mutants/dependabot.json`.

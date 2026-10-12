@@ -208,23 +208,35 @@ again (skill `task-hygiene`, §Ids). The rows are in `.claude/scripts/tests/test
 mutants in `.claude/scripts/mutants/backlog.json`.
 
 **Dependabot** (`.github/dependabot.yml`, weekly, each version update held back 7 days after its release by
-`cooldown`; security updates aren't) watches `github-actions` (prefix `ci`), `uv` and `npm` (prefix
-`deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch version updates are
-grouped into one PR per ecosystem (a docker digest bump is not a version change and comes as its own PR), and
-semver-major updates are ignored (`dependency-name: "*"`, `version-update:semver-major`), so a major upgrade is a
-deliberate, hand-made PR; adopted 2026-10-01, after the npm entry's first run opened six PRs, majors among them. The
-`uv` entry also ignores `tantivy` entirely (§Release, "Upgrading Tantivy"), and the `docker` entry still bumps the
-base-image digests, which are not majors (§Deploy), and ignores a new `python` minor
+`cooldown`, for docker only on Docker Hub (below); security updates aren't) watches `github-actions` (prefix `ci`),
+`uv` and `npm` (prefix `deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch
+version updates are grouped into one PR per ecosystem (a docker digest bump is not a version change and comes as its
+own PR), and semver-major updates are ignored (`dependency-name: "*"`, `version-update:semver-major`), so a major
+upgrade is a deliberate, hand-made PR; adopted 2026-10-01, after the npm entry's first run opened six PRs, majors
+among them. The `uv` entry also ignores `tantivy` entirely (§Release, "Upgrading Tantivy"), and the `docker` entry
+still bumps the base-image digests, which are not majors (§Deploy), and ignores a new `python` minor
 (`version-update:semver-minor`): the api image's tag names the patch release `.python-version` pins, so a patch bump
 arrives as a PR that must move `.python-version` too, and a minor is done by hand (§Monorepo layout, "Python pin").
-GitHub applies `ignore` to security updates too, so a vulnerability whose fix is a major, or any Tantivy fix, shows
-up as a Dependabot alert and is fixed by a hand-made PR.
+It also ignores an `astral-sh/uv` minor (`ghcr.io/astral-sh/uv`, the api image's uv stage): while uv is 0.x a minor
+is a breaking release (0.13.0 shipped "Breaking changes"; PR #132), so it is upgraded by hand like a major (the rule
+goes once uv reaches 1.0), and only its patches and digest bumps arrive here; `docker_digest.py` stops any 0.x minor
+of an image as well, and the weekly routine reports a newer uv minor or a uv advisory to the owner. A docker image's
+`cooldown` holds only on Docker Hub, and only when Docker Hub's API answers: Dependabot dates a tag from that API
+and otherwise skips the cooldown, saying "Cooldown could not be applied" in the PR body (it opened PR #132 about 20
+hours after uv 0.13.0's release). So `prs.py check` stops a PR with that notice. It gives no date for any ghcr.io
+tag or digest update, so every `ghcr.io/astral-sh/uv` PR, patch and digest bumps included, carries the notice and is
+left for the owner; `docker_digest.py`'s attestation age (below) is the evidence the owner decides on, and the hold
+should Dependabot ever date ghcr.io. GitHub applies `ignore` to security updates too, so a vulnerability whose fix
+is a major, or any Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR. Docker images get
+neither alerts nor security updates (the Advisory Database has no docker ecosystem).
 
 A Dependabot PR is reviewed and merged like any other (review gate, attestation, merge queue), with these checks
 added. Read the upstream release notes of every bumped package: a security release is not always in `npm audit`
 yet. Check the supply chain: the lock's resolved URLs stay on the registry, the integrity hashes match it, no
 package or install script is new, and the publisher is the one that published the previous version. For a docker
-bump, the registry resolves the tag to the pinned index digest. For npm, every entry in `frontend/package.json`
+bump, the registry resolves the tag to the pinned index digest, and a ghcr.io image is attested by the previous
+pin's publisher (source repository and signing workflow) and is at least 7 days old by the earliest verified
+timestamp of those attestations (`docker_digest.py`). For npm, every entry in `frontend/package.json`
 equals `packages["frontend"]` in `package-lock.json`: Dependabot's npm updater can write a caret there (PR #124's
 `eslint-config-next`, PR #100's Vitest), and `npm ci` accepts it. `.claude/scripts/dependabot/npm_specs.py` checks
 it on every PR (`make tooling`, CI `claude-tooling`; TASK-212): each spec in the four dependency sections of
@@ -241,33 +253,38 @@ fields. Docs that state a bumped version move in the same PR.
 
 **The weekly routine** (decision-048, TASK-211). A scheduled Claude Code routine (a cloud session on a fresh clone,
 no access to the owner's machine) runs `/dependabot-review` (`.claude/commands/dependabot-review.md`) once a week.
-Its checks are scripted in `.claude/scripts/dependabot/` and run from `dev`'s copy, never the PR branch's.
-`prs.py check` gates each PR before anything of it runs: open, by Dependabot, into `dev`, its head still the sha
-fetched, its head branch a plain `dependabot/<ecosystem>/…` name, every changed file one its ecosystem touches
-(computed by git, and GitHub's file and commit lists equal to git's), every commit Dependabot's with a signature
-GitHub verified. The checkers then run the checks above, and the shape of the change: `uv_lock.py`,
-`npm_lock.py`, `docker_digest.py` and `actions_pins.py` allow no change in a file beyond its dependency versions
-and pins (no script, build requirement, `RUN` line or `permissions:` rides along). `restore_libc.py` repairs dropped
-`libc` fields; `prs.py` also checks the environment (`preflight`), lists the PRs, queues them and watches the queue. The routine then runs the tests the ecosystem
-calls for (without the GitHub credential in their environment; `.githooks/pre-push` strips it from its `make lint`
-and `make tooling` as well), the reviewers, the dispositions, the review
-record and attestation (`record-review.py --attest --pr <n> --repo <owner>/<name>`), the `no-learning` label unless something was
-learned, and `prs.py queue <n> --head <sha>`. It fixes what the PR itself can fix: a manifest/lock pin, dropped `libc` fields, a doc
-that states the old version, a review finding. It may merge, through the queue only, a PR that passes all of
-that. It never merges, and leaves open with a comment for the owner, a PR with:
+Its checks are scripted in `.claude/scripts/dependabot/` and run from `dev`'s copy, never the PR branch's. `prs.py
+check` gates each PR before anything of it runs: open, by Dependabot, into `dev`, its head still the sha fetched,
+its head branch a plain `dependabot/<ecosystem>/…` name, every changed file one its ecosystem touches (computed by
+git, and GitHub's file and commit lists equal to git's), every commit Dependabot's with a signature GitHub verified,
+and no "Cooldown could not be applied" notice in its body. The checkers then run the checks above, and the shape of
+the change: `uv_lock.py`, `npm_lock.py`, `docker_digest.py` and `actions_pins.py` allow no change in a file beyond
+its dependency versions and pins (no script, build requirement, `RUN` line or `permissions:` rides along).
+`restore_libc.py` repairs dropped `libc` fields; `prs.py` also checks the environment (`preflight`), lists the PRs,
+queues them and watches the queue. The routine then runs the tests the ecosystem calls for (without the GitHub
+credential in their environment; `.githooks/pre-push` strips it from its `make lint` and `make tooling` as well),
+the reviewers, the dispositions, the review record and attestation (`record-review.py --attest --pr <n> --repo
+<owner>/<name>`), the `no-learning` label unless something was learned, and `prs.py queue <n> --head <sha>`. It
+fixes what the PR itself can fix: a manifest/lock pin, dropped `libc` fields, a doc that states the old version, a
+review finding. It may merge, through the queue only, a PR that passes all of that. It never merges, and leaves open
+with a comment for the owner, a PR with:
 
 - a commit that isn't Dependabot's, a file outside its ecosystem, or a change beyond versions and pins;
 - an integrity, hash or URL mismatch, or a file off the registry;
 - a new publisher, or provenance the previous version had and the new one lacks;
 - a new install script, or a new or removed package;
-- a uv or npm release younger than 7 days (the `cooldown` every ecosystem sets holds version updates back that
-  long, so this is a security update, which ignores it; for actions and docker images the hold is the `cooldown`
-  alone);
+- a uv or npm release, or a ghcr.io image, younger than 7 days (the `cooldown` every ecosystem sets holds version
+  updates back that long, so a uv or npm one is a security update, which ignores it; a ghcr.io image's age is the
+  earliest verified `gh attestation verify` timestamp by the previous pin's publisher, since Dependabot dates
+  docker tags only on Docker Hub), or one with no such attestation (no verified timestamp, a new publisher, an
+  unattested previous pin), a docker image on any other registry, which nothing dates, or a PR whose body says
+  Dependabot couldn't apply its cooldown; for actions and Docker Hub images the hold is otherwise the `cooldown`;
 - a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
 - a red required check it can't fix, or a Must it can't fix;
-- any semver-major, anything touching `tantivy`, or a new Python release, patch or minor: a patch changes how the
-  crawlers parse pages (§Monorepo layout, "Python pin"), and the crawl-cache replay that shows records unchanged
-  needs the owner's `data/`. A new digest for the same `python` tag is merged like any other.
+- any semver-major, a docker image's 0.x minor, anything touching `tantivy`, or a new Python release, patch or
+  minor: a patch changes how the crawlers parse pages (§Monorepo layout, "Python pin"), and the crawl-cache replay
+  that shows records unchanged needs the owner's `data/`. A new digest for the same `python` tag is merged like
+  any other.
 
 The checkers (and `prs.py check`) print `ok`, `FIX` (the routine repairs it) or `PROBLEM` (a hard stop) per
 finding, and exit 0, 3 (only FIX lines), 1 (a PROBLEM) or 2 (the check couldn't run, also a hard stop). Every

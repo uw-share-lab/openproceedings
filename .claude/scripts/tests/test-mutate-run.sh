@@ -59,7 +59,7 @@ root="$(cd "$(dirname "$0")/../../.." && pwd)"
 echo "t-w $root" >> "$MUT_LOG"
 cd "$root/src" && python3 -c 'import widget; widget.run()'
 EOF
-# t-h names helped.txt only in the helper beside it that it runs (as test-dependabot.sh runs dependabot_cases.py)
+# t-h names helped.txt only in the helper beside it that it runs (as test-dependabot.sh runs its Python case table)
 cat > "$R/.claude/scripts/tests/t-h.sh" <<'EOF'
 echo "t-h $(cd "$(dirname "$0")/../../.." && pwd)" >> "$MUT_LOG"
 python3 "$(dirname "$0")/h_cases.py"

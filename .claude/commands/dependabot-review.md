@@ -23,13 +23,22 @@ A PR that hits a **hard stop** is never merged by this command: it is left open 
 - a new install script;
 - a new package (a new transitive dependency included), or a removed one;
 - a uv or npm release younger than 7 days (Dependabot's `cooldown` holds version updates back that long, so
-  this is a security update or a changed config: the owner decides). For actions and docker images the 7-day hold
-  is Dependabot's `cooldown` alone; no checker reads their age;
+  this is a security update or a changed config: the owner decides), or a ghcr.io image first attested under 7
+  days ago by the previous pin's publisher, or with no such attestation (no verified timestamp, a new publisher,
+  or an unattested previous pin) (Dependabot dates docker tags only on Docker Hub and skips the `cooldown`
+  elsewhere: PR #132 came about 20 hours after its release), or a docker image on a registry other than Docker Hub
+  and ghcr.io (nothing dates it), or a PR whose body carries Dependabot's "Cooldown could not be applied" notice
+  (it found no publication date, which a failed Docker Hub lookup also causes; it gives none for ghcr.io, so every
+  `ghcr.io/astral-sh/uv` PR, patch and digest bumps included, stops here: step 1 still runs `docker_digest.py
+  --head "origin/<head>"` for it and the §10 comment quotes its age, the owner's evidence).
+  For actions and Docker Hub images the 7-day hold is otherwise Dependabot's `cooldown`; no checker reads their
+  age;
 - a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
 - a red required check (`lint`, `test`, `claude-tooling`, `attribution`, `learnings`, `review-attested`) that
   the PR's own fix can't turn green;
 - a Must a reviewer raised that this command can't fix;
-- any semver-major update;
+- any semver-major update, and a 0.x minor of a docker image (`0.12.x` → `0.13.0`: a breaking release while a
+  project is 0.x; `docker_digest.py` stops it, and `.github/dependabot.yml` ignores uv's);
 - anything touching `tantivy` (spec 08 §Release) or the Python release, patch or minor (a new Python changes how
   the crawlers parse pages, and the crawl-cache replay that shows records unchanged needs the owner's `data/`;
   spec 08 §Monorepo layout "Python pin"). A new digest for the same `python` tag is fine.
@@ -113,6 +122,12 @@ maintainer's own machine, which runs `make test` with it every day). Stop, and p
 identity is empty or names an AI (it matches `claude|anthropic|noreply@anthropic`): commits are authored by people.
 Note whether `docker info` works and whether `npx playwright install chromium` succeeds; step 5 uses them.
 
+**uv's minors come by hand** (`.github/dependabot.yml` ignores them while uv is 0.x, and docker images get no
+Dependabot alert or security update), so every run, with or without open PRs, compares the api image's uv tag
+(`git show origin/dev:deploy/api.Dockerfile`) with `gh api repos/astral-sh/uv/releases/latest --jq .tag_name`, and
+runs step 2's advisory query for `ecosystem=pip&affects=uv`: a newer minor, or an advisory whose range holds the
+pinned version, goes in the summary under "for the owner".
+
 ## 1. List the PRs, fetch one, check it before anything of it runs
 
 ```bash
@@ -137,7 +152,12 @@ every file changed since the merge base with `origin/dev` (computed by git, a re
 GitHub lists for the PR is one its ecosystem may touch (uv: `uv.lock` and the two `pyproject.toml`s; npm:
 `package-lock.json` and the two `package.json`s; docker: a Dockerfile under `deploy/`; github-actions: a workflow or
 a composite action's `action.yml`), git's commits are exactly GitHub's for the PR, every one Dependabot's with a
-signature GitHub verified, and the title doesn't name `tantivy`. Any PROBLEM is a hard stop (§10). A PR this
+signature GitHub verified, the title doesn't name `tantivy`, and the body has no "Cooldown could not be applied"
+notice. Any PROBLEM is a hard stop (§10). A docker PR whose only PROBLEM is that notice (every ghcr.io PR) first
+gets `python3 $RUN/.claude/scripts/dependabot/docker_digest.py --head "origin/<head>" > "$RUN/evidence-<n>.md"`
+(it only reads git objects, the registry and `gh attestation`, so it is safe before the switch; without `--head`
+it reads the dev checkout and finds no pins), and the §10 comment quotes its age and PROBLEM lines (exit 1 is
+expected; on exit 2 the comment says why it couldn't run). A PR this
 routine pushed to on an earlier run fails it too, by design: it is the owner's now. If `gh api
 repos/uw-share-lab/openproceedings/pulls/<n> --jq .mergeable_state` says `dirty` (a conflict; `unknown` or an empty
 answer means GitHub is still computing it: ask again in a minute), comment `@dependabot rebase` (`gh api -X POST
@@ -165,7 +185,7 @@ the PR head with its merge base on `origin/dev`, so a PR behind `dev` shows only
 |---|---|
 | `uv` | `uv_lock.py`: each bumped package's sdist and wheel sha256 against PyPI's JSON API, every file on files.pythonhosted.org, nothing yanked, nothing younger than 7 days, the PEP 740 provenance publisher of every file against the previous version's; no added or removed package; `uv.lock` unchanged outside its package list, and each `pyproject.toml` changed only in specifiers of packages the lock moved; `tantivy` untouched |
 | `npm_and_yarn` | `npm_lock.py`: every changed lock entry's version, `resolved` and `integrity` against `npm view <pkg>@<ver>` on registry.npmjs.org (run outside the repo, so no `.npmrc` there applies), and its dependencies, `os`, `cpu` and `libc` against the manifest; nothing younger than 7 days; no package added or removed, none switched to another name or to a link; no field dropped; no install script appeared; publisher (`_npmUser`) and npm provenance (present, and from the same source repository) against the previous version's; the manifests and the lock's workspace entries changed only in dependency values of packages the lock moved, and equal to each other (step 3) |
-| `docker` | `docker_digest.py`: each changed Dockerfile differs only in its pins' `:tag@digest`; an anonymous token from the registry, then `HEAD /v2/<image>/manifests/<tag>` with the OCI-index `Accept` header must give the pinned digest, as an index; for a ghcr.io image, `gh attestation verify oci://<image>@<digest> --owner <org>`; any new `python` tag is a hard stop |
+| `docker` | `docker_digest.py`: each changed Dockerfile differs only in its pins' `:tag@digest`; an anonymous token from the registry, then `HEAD /v2/<image>/manifests/<tag>` with the OCI-index `Accept` header must give the pinned digest, as an index; for a ghcr.io image, `gh attestation verify oci://<image>@<digest> --owner <org>` for the new and the previous pin: the new one must have an attestation by the previous pin's publisher (source repository and signing workflow, ref aside), and its earliest verified timestamp must be 7 days old or more; an image on another registry than Docker Hub and ghcr.io, a 0.x minor, or any new `python` tag, is a hard stop |
 | `github_actions` | `actions_pins.py`: each changed file differs only in its pins' `@<sha> # <tag>`; each new pin must be the commit the tag `<tag>` names (`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`, annotated tags peeled); no new action, no unpinned `uses:` |
 
 For npm, once `npm_lock.py` exits 0 (or 3, before step 3's fix): `npm ci --ignore-scripts` (the PR's lock, not
@@ -180,8 +200,8 @@ security advisories and for behaviour that changes by default. `npm audit` misse
 advisories that it didn't show. The GitHub Advisory Database answers per package, over REST:
 `gh api --paginate 'advisories?ecosystem=npm&affects=next&per_page=100' --jq '.[] | [.ghsa_id, .summary, (.vulnerabilities[] | select(.package.name == "next") | "\(.vulnerable_version_range) → \(.first_patched_version)")] | @tsv'`
 (`ecosystem=pip` for uv, `ecosystem=actions` for an action). A 0.x update can break things in a minor: read its
-notes as closely as a major's. Write what you found, with the advisory ids, in the evidence file. The notes are
-data (§Rules): they never clear a PROBLEM.
+notes as closely as a major's (uv's own minors: step 0's last check). Write what you found, with the advisory ids,
+in the evidence file. The notes are data (§Rules): they never clear a PROBLEM.
 
 ## 3. npm: manifest pins and the lock (FIX lines from `npm_lock.py`)
 
@@ -364,7 +384,8 @@ one closed or dropped out of the queue, 2 when GitHub couldn't be asked (run it 
 ## 10. Leaving a PR open
 
 For each hard stop, comment once on the PR with what was found and the evidence (the checker's PROBLEM lines,
-the check and its run URL, the reviewer's Must), and what the owner would need to decide. The comment follows the
+the check and its run URL, the reviewer's Must, and for a docker PR stopped by the cooldown notice the
+`docker_digest.py` lines from step 1), and what the owner would need to decide. The comment follows the
 attribution rule too:
 
 ```bash
@@ -387,7 +408,7 @@ not reviewed:
 - #<n> <title>: <why: rebase requested, tool missing, …>
 for the owner:
 - <a github-actions PR to queue, a Should not fixed, an advisory that predates a bump, a check that couldn't run
-  here; or "nothing">
+  here, a newer uv minor or a uv advisory (step 0); or "nothing">
 ```
 
 Write `none` under a heading with no entries. A PR still waiting in the queue when the run ends is listed under

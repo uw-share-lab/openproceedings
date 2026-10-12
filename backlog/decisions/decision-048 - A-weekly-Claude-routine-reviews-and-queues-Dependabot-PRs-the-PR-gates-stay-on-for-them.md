@@ -38,7 +38,10 @@ merge, through the merge queue only, a Dependabot PR that passes the supply-chai
 review, the tests, the reviewers and every required check. It never merges, and leaves open with a comment
 for the owner, a PR with a commit that isn't Dependabot's (signed and verified), a file outside its
 ecosystem or a change beyond dependency versions and pins, an integrity or URL mismatch, a new publisher or lost
-provenance, a new install script, a new package, a uv or npm release younger than 7 days, a digest that
+provenance, a new install script, a new package, a uv or npm release younger than 7 days (amended
+2026-10-11: or a ghcr.io image first attested under 7 days ago by the previous pin's publisher, or without such an
+attestation, an image on a registry other than Docker Hub and ghcr.io, a 0.x minor of an image, or a PR whose body
+says Dependabot couldn't apply its cooldown), a digest that
 doesn't resolve or a failed attestation, a red required check it can't fix, a Must it can't fix, any semver-major, anything
 touching `tantivy`, or a new Python release (patch or minor). The gates stay on for Dependabot PRs.
 
@@ -50,7 +53,13 @@ The review gate of TASK-211 shaped three parts of this:
 - **A legitimate pipeline can still publish a bad release**, so Dependabot's `cooldown` holds every version
   update back 7 days (a compromised release is most often pulled within days), and the uv and npm checkers stop
   a younger one, which then can only be a security update: the owner decides. For actions and docker images
-  the hold is the `cooldown` alone (no checker reads their age).
+  the hold is the `cooldown` alone (no checker reads their age). *Amended 2026-10-11:* Dependabot dates a docker
+  tag only on Docker Hub and skips the `cooldown` for other registries (PR #132, uv 0.13.0 on ghcr.io, came about
+  20 hours after its release), so `docker_digest.py` now stops a ghcr.io image first attested under 7 days ago
+  (by the previous pin's publisher) and an image on any other registry, and `prs.py check` stops a PR whose body
+  carries Dependabot's "Cooldown could not be applied" notice (a failed Docker Hub lookup skips it too;
+  Dependabot gives no date for any ghcr.io update, so every ghcr.io PR carries it and the attestation age is the
+  owner's evidence); for actions and Docker Hub images the hold is otherwise the `cooldown` alone.
 - **A new Python patch is the owner's.** Spec 08's "Python pin" says extracted text can depend on the release;
   TASK-208 proved 3.12.9 → 3.12.15 changed nothing by replaying the whole crawl cache, which needs `data/`, which
   the routine doesn't have. A new digest for the same tag carries no parser change and is merged like any other.
