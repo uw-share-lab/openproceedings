@@ -50,7 +50,7 @@ from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode, parse
 
-from tests.timing import assert_near_linear
+from tests.timing import assert_near_linear, cpu
 from tests.unit.ingest.test_dedup import H, paper
 
 NAME = "set.ris"
@@ -785,18 +785,17 @@ def test_the_cap_is_reached_at_exactly_a_thousand_records() -> None:
 
 
 def test_many_searches_cost_no_more_than_one() -> None:
-    """One search per record must not make the count quadratic (20,000 records once took 10.9 s)."""
-    import time
-
+    """One search per record must not make the count quadratic (20,000 records once took 10.9 s); CPU time with
+    the garbage collector paused (tests/timing.py)."""
     index = MatchIndex.build(records())
     same = read_ris("".join(entry(f"Paper {i}", search="s") for i in range(20_000)), NAME)
     each = read_ris("".join(entry(f"Paper {i}", search=f"s{i}") for i in range(20_000)), NAME)
 
     def cost(rs: list[RisRecord]) -> float:
-        started = time.thread_time()
-        side = scope_and_match(rs, index, Scope())
-        assert sum(side.searches.values()) == 20_000
-        return time.thread_time() - started
+        def run() -> None:
+            assert sum(scope_and_match(rs, index, Scope()).searches.values()) == 20_000
+
+        return cpu(run)
 
     pairs = [(cost(same), cost(each)) for _ in range(3)]
     assert min(b for _, b in pairs) < 3 * min(a for a, _ in pairs) + 0.5

@@ -35,8 +35,8 @@ from tests.corpus import Rec, fixture_records
 from tests.fixtures.corpus.synthetic_5k import records, vocab
 from tests.golden.test_trust_evals import STRINGS
 from tests.strategies import asts, engine_asts
+from tests.timing import growth
 from tests.unit.engine import highlight_before
-from tests.unit.test_latex_scan import fastest
 from tests.unit.test_normalize import TRICKY_ALPHABET
 from tests.unit.tokenize_before import tokenize as tokenize_before
 from tests.unit.tokenize_before_088 import _tokenize_each_char as each_char_before_088
@@ -124,9 +124,10 @@ def test_tokenize_gives_exactly_the_old_tokens_on_every_fixture_text() -> None:
 def test_the_stretches_of_a_text_are_found_in_linear_time(unit: str) -> None:
     # each stretch's end is searched for once, not from every stretch to the text's end (TASK-088 review):
     # quadrupling the text costs ~4x when linear, ~16x when quadratic; a late non-ASCII character makes the
-    # search for one reach the end
-    small, large = (fastest(tokenize, unit * (n // len(unit)) + "\u00e9") for n in (2_000, 8_000))
-    assert large / small < 8, (unit, small, large)
+    # search for one reach the end; tests/timing.py's paired, median measure, eight calls a sample
+    small, large = (unit * (n // len(unit)) + "\u00e9" for n in (2_000, 8_000))
+    ratio, pairs = growth(lambda: tokenize(small), lambda: tokenize(large), floor=1e-6, calls=8)
+    assert ratio < 8, (unit, ratio, pairs)
 
 
 def test_a_text_without_latex_never_builds_the_latex_mask(monkeypatch: pytest.MonkeyPatch) -> None:

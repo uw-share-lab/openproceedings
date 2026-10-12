@@ -5,6 +5,7 @@ back-off, what is cached and how) stays in `test_fetch.py` and `test_openreview_
 
 from __future__ import annotations
 
+import gc
 import json
 import logging
 import threading
@@ -281,6 +282,8 @@ def test_xml_root_scan_is_bounded_on_adversarial_prologs(body: bytes) -> None:
     worker = threading.Thread(target=measure, daemon=True)
     worker.start()
     worker.join(timeout=30)
+    if worker.is_alive():  # stuck inside a timed call, with the collector paused for the whole worker
+        gc.enable()
     assert not worker.is_alive(), "_xml_root did not return within 30 s"
     assert found == [None]
     [(ratio, pairs)] = ratios
