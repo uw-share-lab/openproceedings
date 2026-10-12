@@ -127,5 +127,6 @@ including batched ones (`growth(..., calls=8)`). Never assert a wall-clock bound
 runner, beside four xdist workers running 50,000-example properties, a 17 ms parse took 1.9 s and a 5 ms
 page 2.5 s (nightlies 37943547380, 38056534247). A wall-clock bound in a concurrency test is set by the hold
 it tells apart (under the 2 s wait it would otherwise wait), never tighter.
-`backend/tests/unit/test_latex_scan.py` (unclosed math openers, TASK-171 recovery) and
-`backend/tests/unit/engine/test_highlight_speed.py` (tokenizer stretches) apply it in batches.
+`backend/tests/unit/test_latex_scan.py` (unclosed math openers, TASK-171 recovery)
+`backend/tests/unit/engine/test_highlight_speed.py` (tokenizer stretches) and
+`backend/tests/unit/ingest/test_html.py` (`escape_bare_lt`) apply it in batches.

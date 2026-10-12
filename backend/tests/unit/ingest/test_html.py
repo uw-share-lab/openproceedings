@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import json
 import sys
-import time
 from collections.abc import Callable
 from pathlib import Path
-from statistics import median
 
 import pytest
 from openproceedings.ingest.sources import html
@@ -23,6 +21,7 @@ from openproceedings.ingest.sources.html import (
 )
 from openproceedings.ingest.sources.http import PageCache, SourceError
 
+from tests.timing import growth
 from tests.unit.test_python_pin import html_parser_fixed
 
 FIXTURES = Path(__file__).parents[2] / "fixtures"
@@ -309,14 +308,6 @@ def test_a_bare_lt_costs_linear_time() -> None:
     assert text_of(long_tag) == collapse(long_tag)
 
 
-def cpu_batch(f: Callable[[str], object], arg: str) -> float:
-    """Amortize the CPU clock over four calls without excluding allocation or GC cost."""
-    t = time.thread_time()
-    for _ in range(4):
-        f(arg)
-    return (time.thread_time() - t) / 4
-
-
 @pytest.mark.parametrize(
     "shape",
     [
@@ -343,18 +334,10 @@ def test_escape_bare_lt_is_linear(shape: Callable[[int], str]) -> None:
     Before the name and attribute runs were possessive, a tag name gave characters back and the attribute run
     rescanned the rest of the input for each one (TASK-209 review: 0.84 s at n = 2,000, 3.4 s at 4,000)."""
     small_arg, large_arg = shape(1_000), shape(4_000)
-    escape_bare_lt(small_arg)
-    escape_bare_lt(large_arg)
-    pairs = []
-    for round_number in range(9):
-        if round_number % 2:  # alternate the order against size-correlated CPU frequency and allocation drift
-            large = cpu_batch(escape_bare_lt, large_arg)
-            small = cpu_batch(escape_bare_lt, small_arg)
-        else:
-            small = cpu_batch(escape_bare_lt, small_arg)
-            large = cpu_batch(escape_bare_lt, large_arg)
-        pairs.append((small, large))
-    ratio = median(large / max(small, 1e-9) for small, large in pairs)
+    # tests/timing.py's paired, median measure, four calls a sample, the garbage collector paused
+    ratio, pairs = growth(
+        lambda: escape_bare_lt(small_arg), lambda: escape_bare_lt(large_arg), floor=1e-9, calls=4
+    )
     assert ratio < 8, (ratio, pairs)
 
 

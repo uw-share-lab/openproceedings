@@ -39,9 +39,10 @@ Get a green nightly on the exact `dev` head for the v0.3.0 release. No scheduled
   ~16-20) fails as well as the quadratic in work, and that no collection starts inside a timed call. Local
   negative controls: the former `_find` scans in place of `_Closers` fail the LaTeX check at 15.9, and a
   page-rescanning step added to the ICML parse fails the icml2007_paper check at 10.5-13.4.
-- **Two linear-time checks had their own timers.** `test_latex_scan.py` batched by hand and
-  `test_highlight_speed.py` compared unpaired minima, the method TASK-171's recovery showed flakes. Both now use
-  `growth(..., calls=8)`.
+- **Three linear-time checks had their own timers.** `test_latex_scan.py` and `ingest/test_html.py`
+  (`escape_bare_lt`) batched by hand, and `test_highlight_speed.py` compared unpaired minima, the method TASK-171's
+  recovery showed flakes. All three now use `growth(..., calls=N)`; `ingest/test_caps.py`'s capped-abstract
+  ceiling times with `cpu`.
 - Propagated to: `backend/tests/timing.py` (docstring), `.claude/skills/testing-standards/SKILL.md` §CPU growth checks.
 - Dead end: raising the bound for the largest input. It hides what the collector costs, and that cost scales with
   whatever else the worker holds, so no constant bound is safe.

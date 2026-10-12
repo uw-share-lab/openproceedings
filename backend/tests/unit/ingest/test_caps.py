@@ -8,7 +8,6 @@ import json
 import logging
 import random
 import sys
-import time
 import unicodedata
 from pathlib import Path
 
@@ -31,6 +30,7 @@ from openproceedings.ingest.dedup import attribution, title_key
 from openproceedings.ingest.snapshot import build, ingest_ris, load_records
 from openproceedings.query.normalize import tokenize
 
+from tests.timing import cpu
 from tests.unit.ingest.test_record import claim, record
 from tests.unit.ingest.test_snapshot import BUILT, REJECTED, source
 
@@ -390,9 +390,7 @@ def test_tokenizing_the_largest_capped_abstract_stays_linear() -> None:
     plain = "\u0e01" * len(worst)
 
     def secs(text: str) -> float:
-        t = time.thread_time()
-        tokenize(text)
-        return time.thread_time() - t
+        return cpu(lambda: tokenize(text))  # tests/timing.py: CPU time, the garbage collector paused
 
     secs(plain)
     capped, base = min(secs(worst) for _ in range(5)), min(secs(plain) for _ in range(5))
