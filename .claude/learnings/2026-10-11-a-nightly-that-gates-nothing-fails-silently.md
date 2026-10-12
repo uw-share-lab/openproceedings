@@ -41,8 +41,14 @@ Get a green nightly on the exact `dev` head for the v0.3.0 release. No scheduled
   page-rescanning step added to the ICML parse fails the icml2007_paper check at 10.5-13.4.
 - **Three linear-time checks had their own timers.** `test_latex_scan.py` and `ingest/test_html.py`
   (`escape_bare_lt`) batched by hand, and `test_highlight_speed.py` compared unpaired minima, the method TASK-171's
-  recovery showed flakes. All three now use `growth(..., calls=N)`; `ingest/test_caps.py`'s capped-abstract
-  ceiling times with `cpu`.
+  recovery showed flakes. All three now use `growth(..., calls=N)`. The differently shaped CPU bounds (the
+  capped-abstract ceiling in `ingest/test_caps.py`, `test_many_searches_cost_no_more_than_one`, the long-field
+  NEAR ceiling in `engine/test_highlight.py`) time with `cpu`, so no timer in `backend/tests` but `timing.py`'s
+  remains.
+- **A test of "no collection inside the call" must count only inside the call.** The first version recorded every
+  collection while its callback was installed; the test's own allocations after `cpu` returned could start a
+  youngest-generation collection (code-reviewer reproduced it at 4 of 12 starting counts). A flag set only during
+  the timed body fixed it.
 - Propagated to: `backend/tests/timing.py` (docstring), `.claude/skills/testing-standards/SKILL.md` §CPU growth checks.
 - Dead end: raising the bound for the largest input. It hides what the collector costs, and that cost scales with
   whatever else the worker holds, so no constant bound is safe.

@@ -47,14 +47,20 @@ def test_no_collection_runs_inside_a_timed_call_and_the_collector_is_restored() 
     """A full collection walks the worker's whole heap, a cost of the process and not of the input; the timed call
     allocates far past the youngest generation's threshold, and still no collection starts until it returns."""
     starts: list[int] = []
+    timing = False  # only a collection that starts inside the timed call counts: one after it is outside
 
     def started(phase: str, info: dict[str, int]) -> None:
-        if phase == "start":
+        if phase == "start" and timing:
             starts.append(info["generation"])
 
     def allocate() -> None:
-        kept = [[i] for i in range(20 * gc.get_threshold()[0])]
-        assert not gc.isenabled() and len(kept)
+        nonlocal timing
+        timing = True
+        try:
+            kept = [[i] for i in range(20 * gc.get_threshold()[0])]
+            assert not gc.isenabled() and len(kept)
+        finally:
+            timing = False
 
     gc.callbacks.append(started)
     try:
