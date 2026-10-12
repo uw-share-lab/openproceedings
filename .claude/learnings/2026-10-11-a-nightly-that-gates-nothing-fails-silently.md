@@ -46,8 +46,10 @@ Get a green nightly on the exact `dev` head for the v0.3.0 release. No scheduled
   recovery showed flakes. All three now use `growth(..., calls=N)`. The differently shaped CPU bounds (the
   capped-abstract ceiling in `ingest/test_caps.py`, `test_many_searches_cost_no_more_than_one`, the long-field
   NEAR ceiling in `engine/test_highlight.py`) time with `cpu`, so no CPU-time measurement in `backend/tests`
-  but `timing.py`'s remains (the wall-clock timers left are concurrency waits and HTTP latency bounds, not
-  linear-time checks).
+  but `timing.py`'s remains (the wall-clock timers left are concurrency waits and HTTP latency bounds,
+  plus one growth check across threads: `contract/test_verification_scale.py`'s `width_is_free` times requests
+  that `TestClient` serves on another thread, where this thread's CPU clock sees nothing, so it stays on the wall
+  clock with its 2x + 500 ms margin).
 - **A test of "no collection inside the call" must count only inside the call.** The first version recorded every
   collection while its callback was installed; the test's own allocations after `cpu` returned could start a
   youngest-generation collection (code-reviewer reproduced it at 4 of 12 starting counts). A flag set only during
