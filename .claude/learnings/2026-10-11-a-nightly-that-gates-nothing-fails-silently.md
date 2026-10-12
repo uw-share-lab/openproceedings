@@ -21,3 +21,27 @@ Get a green nightly on the exact `dev` head for the v0.3.0 release. No scheduled
 
 ## Decisions (and what would change them)
 - Growth ratio under 8x for 4x input. A legitimately N log N path that needs more headroom would change it, and that change would be stated per test.
+
+## Addendum — 2026-10-11 (TASK-239)
+- **The growth check charged the garbage collector to the large side.** `test_a_hostile_page_is_parsed_in_linear_time[icml2007_paper]`
+  failed the queue build for PR #138 (38176036366, ratio 8.09) and PR #140's `test` (38197206724, 8.24). The small
+  page kept its local 70 ms in every pair but the first, whose small call took 0.33-0.47 s; the large page took
+  0.5-0.76 s against 0.26 s locally. A discrete 0.3-0.4 s event is a full collection: it walks the xdist worker's
+  whole heap, and it fires once enough objects have survived since the last one, which the 407 KB page's
+  ~41,000-element tree does about once a call and the 107 KB page seldom. Logging `gc.get_stats()` around
+  `growth` in a local `make test`-style run (`-n 4`) reproduced it: ratio 5.45, large 366 ms, eight full
+  collections inside the measurement; with the collector paused, 3.84 and 246 ms. `tests/timing.py`'s `cpu` now
+  pauses the cyclic collector while it times a call; allocation, copying and freeing stay timed.
+- **The suspected cache effect didn't hold up.** Seven memory-bandwidth burners beside the measurement left the
+  ratio at 3.5-4.0 with the collector paused, and a cache miss rate doesn't make a single small call 6x slower in
+  one pair only.
+- **The pause keeps the check's power.** `test_timing.py` shows a quadratic in allocation (tuple copying, ratio
+  ~16-20) fails as well as the quadratic in work, and that no collection starts inside a timed call. Local
+  negative controls: the former `_find` scans in place of `_Closers` fail the LaTeX check at 15.9, and a
+  page-rescanning step added to the ICML parse fails the icml2007_paper check at 10.5-13.4.
+- **Two linear-time checks had their own timers.** `test_latex_scan.py` batched by hand and
+  `test_highlight_speed.py` compared unpaired minima, the method TASK-171's recovery showed flakes. Both now use
+  `growth(..., calls=8)`.
+- Propagated to: `backend/tests/timing.py` (docstring), `.claude/skills/testing-standards/SKILL.md` §CPU growth checks.
+- Dead end: raising the bound for the largest input. It hides what the collector costs, and that cost scales with
+  whatever else the worker holds, so no constant bound is safe.

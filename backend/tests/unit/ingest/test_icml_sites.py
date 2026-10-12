@@ -393,7 +393,7 @@ def test_a_page_listed_twice_or_a_capture_off_the_official_sites_path_is_refused
     )
 
 
-# the review gate's probes, by size: openings whose closing tag never comes, about 0.3 MB each at n = 20,000
+# the review gate's probes, by size: openings whose closing tag never comes, 0.2-0.5 MB each at n = 20,000
 HOSTILE: dict[str, Callable[[int], str]] = {
     "cyberchair": lambda n: "<table>" + "<th>x</th><td>" * n,
     "icml2007_paper": lambda n: (
@@ -442,8 +442,10 @@ def test_the_hostile_1998_page_is_read_as_a_1998_paper() -> None:
 @pytest.mark.parametrize("parser", sorted(HOSTILE))
 def test_a_hostile_page_is_parsed_in_linear_time(parser: str) -> None:
     """Unclosed tags made a backtracking pattern take 87 s at 5.6 KB, and lazy `(.*?)` openings tens of seconds
-    at 0.4 MB. Every parser reads such a page at once: 4x the page (0.3 MB at the larger size) costs about 4x the
-    CPU time, never quadratic's ~16x (tests/timing.py: a 2 s wall-clock bound flaked in nightly 38056534247)."""
+    at 0.4 MB. Every parser reads such a page at once: 4x the page (0.2-0.5 MB at the larger size) costs about 4x
+    the CPU time, never quadratic's ~16x (tests/timing.py: a 2 s wall-clock bound flaked in nightly 38056534247).
+    The garbage collector is paused while a call is timed: the 2007 paper page's tree set off full collections,
+    whose cost is the xdist worker's heap, mostly on the large side, and failed this at 8.09 and 8.24."""
     assert sorted(HOSTILE) == sorted(icml_sites.PARSERS)
     assert_near_linear(lambda page: _read_hostile(parser, page), HOSTILE[parser], 5_000, rounds=5)
 
