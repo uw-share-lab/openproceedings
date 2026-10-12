@@ -18,9 +18,11 @@ xdist workers the ICML 2007 paper page (107 KB against 407 KB, a tree of ~41,000
 failed at ratios 8.09 and 8.24 (runs 38176036366, 38197206724): the small side kept its local 70 ms except in the
 one pair whose small call took 0.33-0.47 s, a full collection's cost there, and the large side took 0.5-0.76 s
 against 0.26 s locally, about one such collection a call. A local `-n 4` run of the suite reproduced it (ratio
-5.45 with eight full collections inside the measurement, 3.84 with the collector paused). Pausing it removes only
-that heap-sized cost: allocating, copying and freeing (reference counting frees what a call drops) are still
-timed, so a quadratic in work or in allocation still costs ~16x (`tests/unit/test_timing.py` shows both fail).
+5.45 with eight full collections inside the measurement, 3.84 with the collector paused). Pausing it removes
+that heap-sized cost and one other: freeing the call's own cyclic garbage (the HTML tree's parent links make
+every parsed tree a cycle), which the next collection after the call does, linear in what the call allocated.
+Allocating, copying and freeing what reference counting frees are still timed, so a quadratic in work or in
+allocation still costs ~16x (`tests/unit/test_timing.py` shows both fail).
 """
 
 from __future__ import annotations
@@ -32,8 +34,8 @@ from statistics import median
 
 
 def cpu(f: Callable[[], object], calls: int = 1) -> float:
-    """This thread's CPU seconds for one call of `f`, averaged over `calls`: allocation and freeing included, the
-    cyclic garbage collector paused (module docstring) and restored as it was."""
+    """This thread's CPU seconds for one call of `f`, averaged over `calls`: allocation and non-cyclic freeing
+    included, the cyclic garbage collector paused (module docstring) and restored as it was."""
     enabled = gc.isenabled()
     gc.disable()
     try:

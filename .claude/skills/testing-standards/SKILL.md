@@ -114,19 +114,19 @@ Capture controlled runner output on the line before a `check` call and pass the 
 For adversarial algorithmic scaling checks, keep the input sizes and growth cutoff fixed. Measure thread CPU
 time in batches, pair the small and large measurements in each round, alternate their order, and compare the
 median paired growth ratio. Independent fastest calls at each size can compare unlike CPU/allocation phases
-even though thread CPU time excludes preemption. Keep allocation, copying and freeing in the measurement,
-but pause the cyclic garbage collector while a call is timed: a full collection walks the whole test
-worker's heap, not the input, and fires mostly on the side that keeps more objects alive (the ICML 2007
-hostile page failed at 8.09 and 8.24 in CI's xdist workers that way, runs 38176036366 and 38197206724).
-Before changing a sampling method, demonstrate that the former quadratic behavior still fails the same
-cutoff; a green optimized implementation alone does not prove the check works. `backend/tests/timing.py` is
-the one implementation (`cpu`, `growth`, `assert_near_linear`: 4x the input under 8x the CPU time, median of
-paired rounds, collector paused; `backend/tests/unit/test_timing.py` shows a quadratic in work and one in
-allocation fail it, and that no collection runs inside a timed call); use it (or its `cpu`, for a one-size
-CPU bound) for every linear-time test, including batched ones (`growth(..., calls=8)`). Never assert a
-wall-clock bound at one size: on a shared runner, beside four xdist workers running 50,000-example
-properties, a 17 ms parse took 1.9 s and a 5 ms page 2.5 s (nightlies 37943547380, 38056534247). A
-wall-clock bound in a concurrency test is set by the hold it tells apart (under the 2 s wait it would
-otherwise wait), never tighter. `backend/tests/unit/test_latex_scan.py` (unclosed math openers, TASK-171
-recovery) `backend/tests/unit/engine/test_highlight_speed.py` (tokenizer stretches) and
+even though thread CPU time excludes preemption. Keep allocation, copying and reference-counted freeing in
+the measurement, but pause the cyclic garbage collector while a call is timed: a full collection walks the
+whole test worker's heap, not the input, and fires mostly on the side that keeps more objects alive (the
+ICML 2007 hostile page failed at 8.09 and 8.24 in CI's xdist workers that way, runs 38176036366 and
+38197206724). Before changing a sampling method, demonstrate that the former quadratic behavior still fails
+the same cutoff; a green optimized implementation alone does not prove the check works.
+`backend/tests/timing.py` is the one implementation (`cpu`, `growth`, `assert_near_linear`: 4x the input
+under 8x the CPU time, median of paired rounds, collector paused; `backend/tests/unit/test_timing.py` shows
+a quadratic in work and one in allocation fail it, and that no collection runs inside a timed call); use it
+(or its `cpu`, for a one-size CPU bound) for every linear-time test, including batched ones (`growth(...,
+calls=8)`). Never assert a wall-clock bound at one size: on a shared runner, beside four xdist workers
+running 50,000-example properties, a 17 ms parse took 1.9 s and a 5 ms page 2.5 s (nightlies 37943547380,
+38056534247). A wall-clock bound in a concurrency test is set by the hold it tells apart (under the 2 s wait
+it would otherwise wait), never tighter. `backend/tests/unit/test_latex_scan.py` (unclosed math openers,
+TASK-171 recovery) `backend/tests/unit/engine/test_highlight_speed.py` (tokenizer stretches) and
 `backend/tests/unit/ingest/test_html.py` (`escape_bare_lt`) apply it in batches.

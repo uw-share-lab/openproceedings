@@ -31,7 +31,9 @@ Get a green nightly on the exact `dev` head for the v0.3.0 release. No scheduled
   ~41,000-element tree does about once a call and the 107 KB page seldom. Logging `gc.get_stats()` around
   `growth` in a local `make test`-style run (`-n 4`) reproduced it: ratio 5.45, large 366 ms, eight full
   collections inside the measurement; with the collector paused, 3.84 and 246 ms. `tests/timing.py`'s `cpu` now
-  pauses the cyclic collector while it times a call; allocation, copying and freeing stay timed.
+  pauses the cyclic collector while it times a call; allocation, copying and reference-counted freeing stay
+  timed. Freeing a call's cyclic garbage (every parsed HTML tree, through its parent links) moves after the call:
+  linear, and qa-auditor measured it at 12 ms against a 227 ms parse.
 - **The suspected cache effect didn't hold up.** Seven memory-bandwidth burners beside the measurement left the
   ratio at 3.5-4.0 with the collector paused, and a cache miss rate doesn't make a single small call 6x slower in
   one pair only.
