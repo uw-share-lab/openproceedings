@@ -1,7 +1,8 @@
 """The linear-time tests' measure (tests/timing.py) fails quadratic growth and passes linear growth, at the cutoff
 the tests use (testing-standards §CPU growth checks: a sampling method is shown to fail the former quadratic). It
 pauses the cyclic garbage collector while it times a call, so a quadratic must fail whether its cost is work or
-allocation, and no collection may run inside a timed call."""
+allocation, and no collection may run inside a timed call. `growth` takes another thread's measure (`measure`,
+as `width_is_free` reads the server's CPU time), and `collector_paused` restores the collector as it was."""
 
 from __future__ import annotations
 
@@ -100,15 +101,24 @@ def test_growth_takes_another_threads_measure() -> None:
     warming each side once first, and passes it `calls`."""
     seen: list[tuple[str, int]] = []
     costs = {"small": 0.01, "large": 0.05}
+    called: list[str] = []
+
+    def side(name: str) -> Callable[[], object]:
+        def call() -> str:
+            called.append(name)
+            return name
+
+        return call
 
     def measure(side: Callable[[], object], calls: int) -> float:
         name = str(side())
         seen.append((name, calls))
         return costs[name]
 
-    ratio, pairs = growth(lambda: "small", lambda: "large", rounds=3, calls=2, measure=measure)
+    ratio, pairs = growth(side("small"), side("large"), rounds=3, calls=2, measure=measure)
     assert ratio == pytest.approx(5.0) and pairs == [(0.01, 0.05)] * 3
     assert seen == [("small", 2), ("large", 2), ("large", 2), ("small", 2), ("small", 2), ("large", 2)]
+    assert called[:2] == ["small", "large"] and len(called) == 2 + 6  # one warm call each, then `measure`'s
 
 
 def test_collector_paused_restores_the_collector() -> None:

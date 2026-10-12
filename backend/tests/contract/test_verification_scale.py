@@ -31,7 +31,7 @@ from openproceedings.query.parser import parse
 from tests.contract.conftest import Store, build, make_app
 from tests.fixtures.corpus.synthetic_5k import records
 from tests.golden.test_trust_evals import STRINGS
-from tests.timing import collector_paused, growth
+from tests.timing import Measure, collector_paused, growth
 
 SEARCH = "/api/v1/search"
 DEFAULT_CEILING = ApiConfig(data_dir=Path("x")).max_verification_candidates
@@ -60,7 +60,7 @@ def cold(c: TestClient, q: str) -> None:
     assert r.status_code == 200, r.text[:300]
 
 
-def verify_cpu(logs: Logs) -> Callable[[Callable[[], object], int], float]:
+def verify_cpu(logs: Logs) -> Measure:
     """`timing.growth`'s measure for a call that serves one request: the CPU seconds the server's verifying
     thread spent in its verification slot, as the request's access line reports them (`verify_cpu_ms`, what
     the rate limit debits), averaged over `calls` calls, with the cyclic collector paused (the process's, so
@@ -79,7 +79,8 @@ def verify_cpu(logs: Logs) -> Callable[[Callable[[], object], int], float]:
             with collector_paused():
                 f()
             [line] = requests()[before:]  # the call's own access line, written before TestClient returns
-            spent += line["verify_cpu_ms"] / 1000  # absent (KeyError) if the request verified nothing
+            assert "verify_cpu_ms" in line, line  # absent if the request verified nothing (no slot held)
+            spent += line["verify_cpu_ms"] / 1000
         return spent / calls
 
     return measure
@@ -98,6 +99,8 @@ def width_is_free(c: TestClient, logs: Logs, stem: str, widths: tuple[int, ...])
     narrow, widest = wide(widths[0], stem), wide(widths[-1], stem)
     ratio, pairs = growth(lambda: cold(c, narrow), lambda: cold(c, widest), measure=verify_cpu(logs))
     assert ratio < 2, (widths, ratio, pairs)
+    # both sides under `growth`'s 2 ms floor would read as 1.0 whatever the growth: the narrow side must be measured
+    assert min(a for a, _ in pairs) > 0.01, pairs
 
 
 def refused_fast(c: TestClient, q: str, clauses: int) -> None:

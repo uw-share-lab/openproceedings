@@ -41,6 +41,9 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from statistics import median
 
+# one side's CPU seconds for a call, averaged over `calls` calls (`cpu`, or another thread's figure: `growth`)
+type Measure = Callable[[Callable[[], object], int], float]
+
 
 @contextmanager
 def collector_paused() -> Iterator[None]:
@@ -71,7 +74,7 @@ def growth(
     rounds: int = 9,
     floor: float = 0.002,
     calls: int = 1,
-    measure: Callable[[Callable[[], object], int], float] = cpu,
+    measure: Measure = cpu,
 ) -> tuple[float, list[tuple[float, float]]]:
     """The median of `large`'s CPU time over `small`'s, `rounds` pairs measured side by side in alternating
     order, each side at least `floor` (each the average of `calls` calls, for a call too fast to time alone);
