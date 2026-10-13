@@ -1355,5 +1355,83 @@
     "old": "        branch = urllib.parse.quote(b, safe=\"/\")\n",
     "new": "        branch = b\n",
     "equivalent": true
+  },
+  {
+    "label": "dependabot: prs: preflight writes no marker in the cloud",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        marker.write_text(\n",
+    "new": "        str(\n"
+  },
+  {
+    "label": "dependabot: prs: preflight leaves a stale marker locally",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        marker.unlink()\n",
+    "new": "        pass\n"
+  },
+  {
+    "label": "dependabot: prs: preflight writes the marker locally too",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if mode == \"cloud\":\n        marker.write_text(",
+    "new": "    if True:\n        marker.write_text("
+  },
+  {
+    "label": "dependabot: prs: ci counts a check another app wrote",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "if (r.get(\"app\") or {}).get(\"slug\") != CI_APP or name not in names:",
+    "new": "if name not in names:"
+  },
+  {
+    "label": "dependabot: prs: ci takes the oldest run of a check",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "if name not in latest or r[\"id\"] > latest[name][\"id\"]:",
+    "new": "if name not in latest or r[\"id\"] < latest[name][\"id\"]:"
+  },
+  {
+    "label": "dependabot: prs: ci reads a running check as its conclusion",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        elif r.get(\"status\") != \"completed\":\n            state[name] = \"pending\"\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: prs: ci accepts any conclusion",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if state[n] == \"success\":\n            rep.ok(",
+    "new": "        if True:\n            rep.ok("
+  },
+  {
+    "label": "dependabot: prs: ci never needs web-image",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "((\"web-image\",) if any(WEB_IMAGE_PATHS.fullmatch(p) for p in paths) else ())",
+    "new": "()"
+  },
+  {
+    "label": "dependabot: prs: ci always needs web-image",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "((\"web-image\",) if any(WEB_IMAGE_PATHS.fullmatch(p) for p in paths) else ())",
+    "new": "(\"web-image\",)"
+  },
+  {
+    "label": "dependabot: prs: ci skips the PR's state",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    pr_problems(rep, get_pr(number), sha)\n    if rep.problems:\n        rep.finish()\n    paths: set[str] = set()",
+    "new": "    paths: set[str] = set()"
+  },
+  {
+    "label": "dependabot: prs: ci never waits",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if red or not waiting or time.monotonic() >= deadline:\n",
+    "new": "        if True:\n"
+  },
+  {
+    "label": "dependabot: prs: ci waits on through a red check",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if red or not waiting or time.monotonic() >= deadline:\n",
+    "new": "        if not waiting or time.monotonic() >= deadline:\n"
+  },
+  {
+    "label": "dependabot: prs: ci passes a missing check",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "            state[name] = \"missing\"\n",
+    "new": "            state[name] = \"success\"\n"
   }
 ]

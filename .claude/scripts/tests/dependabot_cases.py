@@ -1900,6 +1900,174 @@ def _(c: Case) -> None:
     c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*gh api user")
 
 
+
+def marker(c: Case) -> Path:
+    return c.repo / ".git" / "op-no-dep-code"
+
+
+@row("prs preflight: cloud writes the no-dependency-code marker")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.expect("prs.py", ["preflight"], OK, r"^ok +no dependency code: .*op-no-dep-code written; make sync")
+    assert marker(c).is_file(), "no marker"
+
+
+@row("prs preflight: cloud writes the marker even when the credential check stops the run")
+def _(c: Case) -> None:
+    preflight_case(c, stored=True)
+    c.expect("prs.py", ["preflight"], PROBLEM, r"^PROBLEM gh has a stored login")
+    assert marker(c).is_file(), "no marker"
+
+
+@row("prs preflight: local removes a marker it finds, and writes none")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    marker(c).write_text("stale\n")
+    c.expect("prs.py", ["preflight"], OK, r"^ok +removed .*op-no-dep-code: a local clone runs")
+    assert not marker(c).exists(), "the marker is still there"
+
+
+@row("prs preflight: local with no marker says nothing of one")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    got, out = c.run("prs.py", "preflight")
+    assert got == OK and "op-no-dep-code" not in out and not marker(c).exists(), out
+
+
+# ci
+
+CI_NAMES = ("lint", "test", "claude-tooling", "playwright", "bench")
+
+
+def check_run(name: str, conclusion: str | None = "success", *, id_: int = 1, app: str = "github-actions",
+              status: str = "completed") -> dict[str, Any]:  # fmt: skip
+    return {"id": id_, "name": name, "status": status, "conclusion": conclusion, "app": {"slug": app}}
+
+
+def ci_case(c: Case, runs: list[dict[str, Any]] | dict[str, Any] | None = None, *,
+            files: tuple[str, ...] = ("uv.lock",), head: str = "dependabot/uv/g",
+            gh_head: str | None = None) -> list[str]:  # fmt: skip
+    sha_ = c.commit({"uv.lock": "b\n"}, who=BOT)
+    c.gh["cloud"] = True
+    c.gh[f"api {R}/pulls/7"] = rest_pr(gh_head or sha_, head)
+    c.gh[page1(f"{R}/pulls/7/files")] = [{"filename": f} for f in files]
+    if runs is None:
+        runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1)]
+    page = runs if isinstance(runs, dict) else {"total_count": len(runs), "check_runs": runs}
+    c.gh[page1(f"{R}/commits/{sha_}/check-runs")] = page
+    return ["ci", "7", "--head", sha_, "--interval", "0", "--timeout", "0"]
+
+
+@row("prs ci: every CI check green on the head is exit 0, REST only")
+def _(c: Case) -> None:
+    args = ci_case(c)
+    c.expect("prs.py", args, OK, r"^ok +bench: success at [0-9a-f]{12}\n(?s:.*)^CI #7: 0 problems")
+    assert not called(c, "graphql") and not called(c, "PUT"), calls(c)
+
+
+@row("prs ci: a red check is a stop, with its conclusion")
+def _(c: Case) -> None:
+    runs = [check_run(n, "failure" if n == "test" else "success", id_=i) for i, n in enumerate(CI_NAMES, 1)]
+    c.expect("prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM test: failure at [0-9a-f]{12}: CI's result stands")
+
+
+@row("prs ci: a skipped or neutral check is not green")
+def _(c: Case) -> None:
+    runs = [check_run(n, "skipped" if n == "bench" else "success", id_=i) for i, n in enumerate(CI_NAMES, 1)]
+    c.expect("prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM bench: skipped at")
+
+
+@row("prs ci: a check never listed is a stop at the timeout")
+def _(c: Case) -> None:
+    runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1) if n != "playwright"]
+    c.expect("prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM playwright: missing at [0-9a-f]{12} \(waited 0 min\)")
+
+
+@row("prs ci: a check still running at the timeout is a stop")
+def _(c: Case) -> None:
+    runs = [check_run(n, None if n == "lint" else "success", id_=i, status="in_progress" if n == "lint" else "completed")
+            for i, n in enumerate(CI_NAMES, 1)]  # fmt: skip
+    c.expect("prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM lint: pending at [0-9a-f]{12} \(waited 0 min\)")
+
+
+@row("prs ci: waits while a check runs, then passes once it is green")
+def _(c: Case) -> None:
+    green = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1)]
+    running = [*green[:-1], check_run("bench", None, id_=5, status="queued")]
+    args = ci_case(c, {"__seq": [{"total_count": 5, "check_runs": running}, {"total_count": 5, "check_runs": green}]})
+    args[-1] = "1"  # a minute's wait; the second read answers green
+    c.expect("prs.py", args, OK, r"^waiting for bench at [0-9a-f]{12}\n(?s:.*)^CI #7: 0 problems")
+
+
+@row("prs ci: a red check ends the wait at once")
+def _(c: Case) -> None:
+    runs = [check_run("test", "failure", id_=2), check_run("lint", None, id_=1, status="in_progress")]
+    args = ci_case(c, runs)
+    args[-1] = "60"  # would hang the row if a red check didn't stop the wait
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM lint: pending at [0-9a-f]{12} \(another check is red\)")
+
+
+@row("prs ci: the latest run of a check counts, not an older green one")
+def _(c: Case) -> None:
+    runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1)] + [check_run("test", "failure", id_=99)]
+    c.expect("prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM test: failure at")
+
+
+@row("prs ci: an older red run superseded by a green rerun passes")
+def _(c: Case) -> None:
+    runs = [check_run("test", "failure", id_=0), *(check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1))]
+    c.expect("prs.py", ci_case(c, runs), OK, r"^ok +test: success at")
+
+
+@row("prs ci: a check another app wrote under a CI name doesn't count")
+def _(c: Case) -> None:
+    runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1) if n != "test"]
+    runs.append(check_run("test", id_=50, app="claude"))  # the session's App can write checks
+    c.expect("prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM test: missing at")
+
+
+@row("prs ci: an npm PR needs web-image too")
+def _(c: Case) -> None:
+    args = ci_case(c, files=("package-lock.json",), head="dependabot/npm_and_yarn/g")
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM web-image: missing at")
+
+
+@row("prs ci: a docker PR passes with web-image green")
+def _(c: Case) -> None:
+    runs = [check_run(n, id_=i) for i, n in enumerate((*CI_NAMES, "web-image"), 1)]
+    args = ci_case(c, runs, files=("deploy/web.Dockerfile",), head="dependabot/docker/g")
+    c.expect("prs.py", args, OK, r"^ok +web-image: success at")
+
+
+@row("prs ci: a uv PR doesn't wait for web-image, which doesn't run for it")
+def _(c: Case) -> None:
+    got, out = c.run("prs.py", *ci_case(c))
+    assert got == OK and "web-image" not in out, out
+
+
+@row("prs ci: a head that moved is a stop before any check is read")
+def _(c: Case) -> None:
+    args = ci_case(c, gh_head="f" * 40)
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub's head is ffffffffffff")
+    assert not any("check-runs" in a for call in calls(c) for a in call), calls(c)
+
+
+@row("prs ci: a PR not opened by Dependabot is a stop")
+def _(c: Case) -> None:
+    args = ci_case(c)
+    c.gh[f"api {R}/pulls/7"]["user"] = {"login": "someone"}
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR was opened by someone")
+
+
+@row("prs ci: gh failing is exit 2")
+def _(c: Case) -> None:
+    args = ci_case(c)
+    del c.gh[page1(f"{R}/commits/{args[3]}/check-runs")]
+    c.expect("prs.py", args, ERROR, r"^ERROR ")
+
+
 # queue
 
 PUT = f"api PUT {R}/pulls/7/ccr/auto_merge"
