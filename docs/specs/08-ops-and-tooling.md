@@ -129,7 +129,9 @@ Modelled on the lab's naturalschema repo:
    prettier and eslint for the frontend, and shellcheck (report only) for shell. It reports anything it can't
    fix back to the agent and never blocks.
 2. `make fmt` fixes the whole repo. `make lint` is check-only and is exactly what CI runs.
-3. `.githooks/pre-push` runs `make lint` and `make tooling`, so a push never surprises CI.
+3. `.githooks/pre-push` runs `make lint` and `make tooling`, so a push never surprises CI. In a cloud
+   `/dependabot-review` run it skips `make lint` (the no-dependency-code marker, §CI "Dependabot"); CI's `lint` on
+   the pushed head stands in.
 
 ## Logging (skill: `logging-standards`)
 
@@ -148,7 +150,7 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 |---|---|
 | `lint` → `lint` | `make lint` (ruff format/check, mypy --strict on `backend/src` and on the `/dependabot-review` scripts and their case table, shellcheck, frontend prettier/eslint/tsc), then actionlint |
 | `test` → `test` | pytest under pytest-xdist at the `pr` Hypothesis profile (200 examples, 2 s deadline) (unit, golden, differential@200, contract; the 2,000-example `ci` profile runs nightly, TASK-127); vitest; `next build` (the standalone server must exist); OpenAPI snapshot and TS types freshness (`make openapi`, then `git diff --exit-code` on `backend/tests/contract/openapi.json` and `frontend/src/api/schema.ts`; unconditional, TASK-040) |
-| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`, no task or decision id used twice: §Merge queue), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every tracked file `scripts/setup-dev.sh` makes executable committed 100755, so a fresh clone's setup leaves the tree clean (`check_file_modes.py`, TASK-241), the npm manifests' dependency specs equal to the lock's workspace entries (`npm_specs.py`, §CI "Dependabot"), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`, the `/dependabot-review` scripts) |
+| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`, no task or decision id used twice: §Merge queue), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every tracked file `scripts/setup-dev.sh` makes executable committed 100755, so a fresh clone's setup leaves the tree clean (`check_file_modes.py`, TASK-241), the npm manifests' dependency specs equal to the lock's workspace entries (`npm_specs.py`, §CI "Dependabot"), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`, the `/dependabot-review` scripts, the no-dependency-code marker's guards in `test-no-dep-code.sh`) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha. In a merge-queue build, `merge_group_gate.py` runs the same three checks on every PR in the group (§Merge queue) |
 | `nightly` (scheduled daily, and `workflow_dispatch`; not a PR check) | Parallel jobs, each with its own time limit (TASK-057): the whole backend suite but the differential at the `ci` profile (2,000 examples) under pytest-xdist, synthetic-corpus parity (`test_parity.py`) included; every property at 50,000 examples as a 5-part `properties` matrix under pytest-xdist, split by measured time per test (the near-cap replay property alone, the other oracle-backed properties, `unit/engine`, `unit/ingest`, and the rest with the exhaustive tokenizer check, `OP_EXHAUSTIVE=1`); the year-edit property (`test_clauses.py`), which ran past 90 min unsplit, as 4 seeded `year-edits` jobs of 12,500 (`OP_YEAR_EDIT_SHARDS`); differential@50k as 12 independent jobs of 4,166 or 4,167 examples, exactly 50,000 between them (`OP_DIFFERENTIAL_SHARD` is each job's index; the remainder goes to the first shards) (8 until 2026-10-11, when the group-count property made a shard run past its 110 minutes), each with its own `--hypothesis-seed`, which its log prints with a rerun command; `benchmarks`: the spec 03 benchmarks with their budgets, then the ~80k report into the run summary and a `bench-80k` artifact (a budget miss there is a warning annotation); and the mutation run (`mutate.py`, every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent) as a 12-job `mutate` matrix (TASK-171; 8 until 2026-10-06): job i of n runs `mutate.py --shard i/n`, every n-th mutant from the i-th, so every mutant is checked every night (n is the matrix size, so adding a shard is one edit). Estimated from run 37017691575 (188 mutants in 140 min on a 4-CPU runner), the 694 mutants at TASK-171 need ~8.5 h of one runner, past GitHub's 6 h job cap, or ~65 min a shard of its 140 at 8 shards (2026-10-06: 778 mutants took 77–123 min a shard at 8, so 12); shard 1's first step prints the night's count, and shards are added before one nears 140 min. With 997 mutants (2026-10-09/10) four shards ran past 140 min, every mutant running all 13 case tables; since then a mutant runs the tables that name its file first and stops at the first failure, about a third of the time (§Mutation testing), so 12 shards have the room again. Shard 1's first step checks every mutant's pattern still exists (seconds), so a stale mutant anywhere fails the run each night; it also fails its own shard. A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min, with an `::error::` giving about how many of its mutants it checked (the step runs with `shell: bash`, i.e. pipefail, so the pipe through `tee` keeps the status). Long pytest steps run verbose with `OP_EARLY_FAILURES=1` (a failure's report, Hypothesis blob included, is printed when the test fails) and are interrupted before their job's limit, so an overrun fails with an `::error::` and shows which test was still running. The run has 35 jobs, past GitHub's limit of 20 at once for a free organization, so 15 (and more while a PR's CI runs) queue until running jobs finish (the short ones, `suite-ci`, `benchmarks` and the `differential` shards, took under 25 min in run 37017691575); a job's time limit starts when it runs. Full-corpus parity stays local (decision-004) |
 | `bench` → `bench` (advisory: not a required check yet) | pytest-benchmark on the 5k fixture index (`backend/tests/bench`, task-031): the PR's base and head on one runner; a minimum time over 20% slower than the base fails, and each benchmark asserts its spec 03 budget (p95). It becomes required once it has run green on a few PRs without false failures (runner noise); a maintainer adds it to `dev`'s required checks |
@@ -262,9 +264,10 @@ and no "Cooldown could not be applied" notice in its body. The checkers then run
 the change: `uv_lock.py`, `npm_lock.py`, `docker_digest.py` and `actions_pins.py` allow no change in a file beyond
 its dependency versions and pins (no script, build requirement, `RUN` line or `permissions:` rides along).
 `restore_libc.py` repairs dropped `libc` fields; `prs.py` also checks the environment (`preflight`), lists the PRs,
-queues them and watches the queue. The routine then runs the tests the ecosystem calls for (without the GitHub
-credential in their environment; `.githooks/pre-push` strips it from its `make lint` and `make tooling` as well),
-the reviewers, the dispositions, the review record and attestation (`record-review.py --attest --pr <n> --repo
+reads CI's results for a PR head (`ci`), queues them and watches the queue. Locally the routine then runs the tests
+the ecosystem calls for (without the GitHub credential in their environment; `.githooks/pre-push` strips it from its
+`make lint` and `make tooling` as well); in the cloud it runs none of the PR's dependency code and reads CI's results
+instead (*Cloud and local*). Then come the reviewers, the dispositions, the review record and attestation (`record-review.py --attest --pr <n> --repo
 <owner>/<name>`), the `no-learning` label unless something was learned, and `prs.py queue <n> --head <sha>`. It
 fixes what the PR itself can fix: a manifest/lock pin, dropped `libc` fields, a doc that states the old version, a
 review finding. It may merge, through the queue only, a PR that passes all of that. It never merges, and leaves open
@@ -282,7 +285,9 @@ with a comment for the owner, a PR with:
   Dependabot couldn't apply its cooldown; for actions and Docker Hub images the hold is otherwise the `cooldown`;
 - a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
 - a red required check it can't fix, or a Must it can't fix;
-- a red local test it can't fix, unless the PR's base is behind `dev` and the test was fixed there since. The
+- in the cloud, a CI check (`lint`, `test`, `claude-tooling`, `playwright`, `bench`, and `web-image` when it runs)
+  red, missing or still running after an hour on the head it would queue (`prs.py ci`); nothing is rerun there;
+- locally, a red local test it can't fix, unless the PR's base is behind `dev` and the test was fixed there since. The
   routine then checks, in its own run: that `dev` hasn't changed the PR's files since the base; that `make test`
   passes in full on `dev` with the PR's files (the tree the merge queue builds); that a named commit on `dev`,
   not in the PR's head, changes that test or the code it checks, and that the commit or its PR (opened by a
@@ -321,9 +326,26 @@ checks, contents, discussions, issues, pull requests, repository hooks and `work
 members and merge queues read, and the installation covered all of `uw-share-lab`'s repositories. The installation
 must cover only this repository: the routine's step 0 checks every Claude installation the user can reach (another
 account's included, `gh api user/installations/<id>/repositories`, or `installation/repositories`), and stops the
-run unless together they list only this repository, or when the fallback call fails too. Whether the routine should
-run dependency code in a session whose credential has `workflows` and repository-hooks write is the owner's open
-question (TASK-243). No push or CCR call has run from the cloud yet. `gh attestation verify` can't start a Sigstore
+run unless together they list only this repository, or when the fallback call fails too. Because that credential has
+`workflows` and repository-hooks write, which can't be removed, **a cloud run executes none of the PR's dependency
+code** (the owner's decision, 2026-10-13, decision-048): no `uv sync`, `uv run` or `npm ci` of the PR's locks, no
+`make lint`, `make test` or `make e2e`, no smoke test, no `npm audit signatures` (it needs the installed tree), and no
+reviewer running any of them. It keeps what runs none of it: `dev`'s checkers (standard-library Python, `git`, `curl`,
+`npm view`, `gh`), the registry, provenance and advisory checks, `npm audit --package-lock-only`, the release notes,
+the reviewers reading diffs, the docs checks, and `make tooling` and `make mutate-changed` (the repo's own scripts,
+with the environment step 0 installs from `dev` before any PR is fetched). For test, lint and e2e evidence it runs
+`prs.py ci <n> --head <sha>`: over REST, the latest GitHub Actions run of each of `lint`, `test`, `claude-tooling`,
+`playwright` and `bench` on that head, plus `web-image` when the PR touches a path it runs on, must be `success`
+(GitHub Actions runs them without the App's credential; a check by any other app doesn't count, since the App can
+write checks). It waits up to an hour while a check runs; red, missing or still running is a hard stop for the
+owner, never rerun in the cloud. The routine reads it before writing the PR body and again just before queueing.
+`prs.py preflight` makes the rule a guard: in the cloud it writes `op-no-dep-code` in the clone's git directory,
+and while that is there `make sync`, `fmt`, `lint`, `test`, `e2e` and `openapi` refuse (the Makefile's
+`dep-code-allowed`), `scripts/setup-dev.sh` skips its `uv sync`, and `.githooks/pre-push` skips its `make lint`;
+locally it removes a marker it finds (case table `test-no-dep-code.sh`, rows in `dependabot_cases.py`). Commands
+typed directly (`uv run`, `npm ci`, `npx`) have no such guard; the procedure and its reviewer prompt keep them out.
+Locally nothing changed: the routine runs `make test` and the rest, and step 5's stale-base waiver (which runs
+`make test` on the merged tree) is local only. No push or CCR call has run from the cloud yet. `gh attestation verify` can't start a Sigstore
 verifier there ("no valid Sigstore verifiers could be initialized", 2026-10-13), so it fails closed and every
 ghcr.io PR goes to the owner. The routine reads back every comment and PR body it writes, and removes anything
 added to it (a cloud comment gained a "Generated by Claude Code" footer on 2026-10-13). The procedure therefore

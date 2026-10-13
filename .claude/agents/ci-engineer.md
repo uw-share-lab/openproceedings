@@ -81,7 +81,11 @@ tempted to bypass it.
   change to a check changes the script, its rows in `.claude/scripts/tests/dependabot_cases.py` and its
   mutants in `.claude/scripts/mutants/dependabot.json` together. The routine is a Claude Code cloud session,
   which refuses GitHub GraphQL (so every `gh pr` command): the procedure and scripts call GitHub through REST
-  only, and queue through the session's CCR auto-merge route (TASK-213, decision-048's addendum). Its `uv` entry
+  only, and queue through the session's CCR auto-merge route (TASK-213, decision-048's addendum). A cloud run
+  executes none of the PR's dependency code (decision-048, 2026-10-13): it reads CI's results for the head with
+  `prs.py ci` instead of running `make test`, and `prs.py preflight`'s `op-no-dep-code` marker makes the
+  Makefile's dependency targets refuse (`dep-code-allowed`), `setup-dev.sh` skip `uv sync` and the pre-push hook
+  skip `make lint`; a new target that installs or runs dependencies takes `dep-code-allowed` as a prerequisite. Its `uv` entry
   ignores `tantivy`, whose upgrade must bump `SCHEMA_VERSION` by hand (spec 08 §Release), and every image a
   `deploy/` build pulls stays digest-pinned (`check_digest_pins.py`, spec 08 §Deploy).
 - Secrets: CI never needs OpenReview credentials — tests use recorded HTTP fixtures. No `data/` in

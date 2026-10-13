@@ -11,7 +11,7 @@ Four layers, each catching what the one before could not:
 |---|---|---|---|
 | `.claude/hooks/autofix.sh` | after every Write/Edit by Claude | the edited file only | **fix** (format + safe autofixes), then report whatever remains; its tools run without the GitHub token (decision-048) |
 | `make fmt` / `make lint` | whenever you like; `make lint` = CI | the whole repo | fmt fixes, lint checks |
-| `.githooks/pre-push` | every `git push` | `make lint` + `make tooling`, without the GitHub token (decision-048) | check: a push never surprises CI (`lint` and `claude-tooling`) |
+| `.githooks/pre-push` | every `git push` | `make lint` + `make tooling`, without the GitHub token (decision-048); `make lint` is skipped, with a message, while a cloud `/dependabot-review` run's `op-no-dep-code` marker is in the git directory (CI's `lint` stands in) | check: a push never surprises CI (`lint` and `claude-tooling`) |
 | CI `lint` job | every PR to dev/main | `make lint` | check (required status) |
 
 ## Tool per file type

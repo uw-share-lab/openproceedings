@@ -219,3 +219,50 @@ request a rebase instead).
 - **Still unconfirmed from the cloud (TASK-243):** step 0's installation calls, the CCR auto-merge `PUT` and
   `DELETE`, the job-log download, a push, `gh attestation verify` (see above), and whether the `attribution`
   setting holds there.
+
+## Addendum (2026-10-13, TASK-243: a cloud run executes none of a PR's dependency code)
+
+The owner limited the Claude GitHub App installation to `uw-share-lab/openproceedings` on 2026-10-13. Its
+`workflows`, `contents` and repository-hooks write can't be dropped (the App defines them), and dependency code a
+cloud session runs (`make test`, `make lint`, e2e, the smoke test, anything that executes the PR's dependencies)
+could use that credential through the session's proxy. The open question above is answered.
+
+**Decision (owner, 2026-10-13): in the cloud the routine runs none of the PR's dependency code.** It keeps
+everything that doesn't execute it: `dev`'s checkers from `.claude/scripts/dependabot/` (standard-library Python
+calling `git`, `curl`, `npm view` and `gh`; none imports a project dependency), the registry, provenance and
+advisory checks, `npm audit --package-lock-only`, the release notes, the reviewers reading diffs, the docs checks,
+and `make tooling` and `make mutate-changed`, which run the repo's own scripts (a PR can't change them: `prs.py
+check`) with the environment step 0 installs from `dev` before any PR is fetched. For test, lint and e2e evidence
+it relies on CI's results for the PR head, which GitHub Actions runs without the App's credential: `prs.py ci <n>
+--head <sha>` reads them over REST and requires the latest GitHub Actions run of `lint`, `test`, `claude-tooling`,
+`playwright` and `bench` (and `web-image` when the PR touches its paths) to be `success`, waiting up to an hour
+while one runs. A check run written by another app doesn't count, since the App has `checks` write. A red or
+missing check is a hard stop left for the owner, never rerun in the cloud. The routine reads CI before writing the
+PR body and again just before `prs.py queue`. Locally (a maintainer's machine) nothing changes: the routine runs
+`make test` and the rest as before.
+
+What follows from it:
+- **No PR dependency is installed in the cloud.** No `uv sync`/`uv run`/`make sync` of the PR's `uv.lock`, no
+  `npm ci`, `npm install` or `npm update` of its lock, and so no `npm audit signatures` (it checks an installed
+  tree); `npm_lock.py`'s integrity, publisher and provenance checks against the registry stand in, and the PR body
+  says signatures weren't checked. An advisory fix that would take `npm update` is left for the owner. The step-5
+  waiver for a red test on a stale base (the TASK-242 addendum) is local only, since it runs `make test` on the
+  merged tree; in the cloud a red CI `test` is a hard stop.
+- **A scripted guard, not only a rule.** In the cloud `prs.py preflight` writes `op-no-dep-code` in the clone's
+  git common directory. While it is there, the Makefile's `dep-code-allowed` makes `make sync`, `fmt`, `lint`,
+  `test`, `e2e` and `openapi` refuse, `scripts/setup-dev.sh` skips its `uv sync`, and `.githooks/pre-push` skips
+  its `make lint` (`uv run --locked` would sync the PR's `uv.lock` and run its ruff and mypy) and still runs
+  `make tooling`; CI's `lint` on the pushed head stands in. Locally `preflight` removes a marker it finds. Rows:
+  `.claude/scripts/tests/test-no-dep-code.sh` and `dependabot_cases.py`; mutants in `gates.json` and
+  `dependabot.json`. Commands typed directly (`uv run`, `npm ci`, `npx`, the smoke test) have no guard: the
+  procedure, and a verbatim instruction in every cloud reviewer prompt, keep them out.
+- **What it doesn't close.** The session still holds the App's credential behind the proxy, and `dev`'s own
+  environment still runs in it (`make tooling`'s three pytest tables, the autofix hook's ruff, prettier and
+  eslint); that is code already reviewed onto `dev`. A PR's dependencies first run in the cloud session only after
+  they are merged, as part of `dev`.
+- Options considered: running the tests in the cloud as before, bounded by the shape checks and the narrowed
+  installation (rejected: the App's `workflows` and repository-hooks write can't be removed, so a compromised
+  dependency could reach them); leaving every cloud PR to the owner (rejected: CI already runs the same suites
+  on the head, without that credential).
+- What would change this: GitHub letting the App drop `workflows` and repository-hooks write, or a cloud session
+  that can run code without the credential reachable (then the cloud may run the tests again).
