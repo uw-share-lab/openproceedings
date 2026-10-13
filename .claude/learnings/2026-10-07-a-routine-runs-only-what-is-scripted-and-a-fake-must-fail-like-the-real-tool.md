@@ -189,6 +189,8 @@ with no context and no access to the owner's machine can run it, and script its 
   - Round 2: a read-back that allows "only the marker" never passes, because `record-review.py --attest` adds
     a blank line before it; compare with the marker removed (`grep -v -x -F … | diff -B`). And a "must" the
     run can't check is no rule: step 0 now checks the App installation's reach
-    (`gh api installation/repositories`) and stops otherwise.
+    (`gh api user/installations/<id>/repositories`) and stops otherwise; the session's token acts as a user,
+    so an installation-token call alone would always fail there.
 - Propagated to (cloud runs): `.claude/settings.json`, `.claude/skills/no-ai-attribution/SKILL.md`, spec 08 §CI
-  "Dependabot" and §Hooks, the command's §Where it runs and step 10, decision-048 (second 2026-10-13 addendum).
+  "Dependabot" and §Hooks, the command's §Where it runs, step 0 (installation check), step 8 (body
+  read-back) and step 10, decision-048 (second 2026-10-13 addendum).

@@ -198,10 +198,11 @@ request a rebase instead).
   actions, checks, contents, discussions, issues, pull requests, repository hooks and `workflows` write, plus
   administration, members and merge queues read, and the installation covered all of `uw-share-lab`'s repositories.
   That is wider than this record's bound in two ways. The repository selection is the owner's to narrow; the
-  command's step 0 now checks it in the cloud (`gh api installation/repositories` must list only this repository)
-  and stops the run otherwise, or when the call fails. `workflows` and repository-hooks write can't be removed (the
-  App sets them; a webhook is a channel out of the repository). Whether the routine should run dependency code in a
-  session holding them is an open question for the owner (TASK-243).
+  command's step 0 now checks it in the cloud (`gh api user/installations/<id>/repositories`, or
+  `installation/repositories`, must list only this repository) and stops the run otherwise, or when the call fails.
+  `workflows` and repository-hooks write can't be removed (the App sets them; a webhook is a channel out of the
+  repository). Whether the routine should run dependency code in a session holding them is an open question for the
+  owner (TASK-243).
 - **`gh attestation verify` doesn't run in the cloud.** It failed with "error creating Sigstore verifier: no
   valid Sigstore verifiers could be initialized". `docker_digest.py` stopped the image (fail closed, as
   designed), so every ghcr.io PR goes to the owner until it runs there.
@@ -211,5 +212,9 @@ request a rebase instead).
   false), which a single-repo cloud session reads. Its docs name commits and PR descriptions only, so
   `/dependabot-review` now reads back every comment and PR body it writes and removes anything added. TASK-243
   confirms both on the next cloud run.
-- **Still unconfirmed from the cloud (TASK-243):** the CCR auto-merge `PUT` and `DELETE`, the job-log download,
-  a push, `gh attestation verify` (see above), and whether the `attribution` setting holds there.
+- **Until the owner narrows the installation, every cloud run stops at step 0** with "limit the Claude App
+  installation to openproceedings" first under "for the owner". That is by design: the run executes dependency
+  code, which can use the session's credential through the proxy.
+- **Still unconfirmed from the cloud (TASK-243):** step 0's installation calls, the CCR auto-merge `PUT` and
+  `DELETE`, the job-log download, a push, `gh attestation verify` (see above), and whether the `attribution`
+  setting holds there.

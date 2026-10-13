@@ -169,12 +169,16 @@ Note whether `docker info` works and whether `npx playwright install chromium` s
 **In the cloud, check the App installation's reach** (§Where it runs) before anything of a PR runs:
 
 ```bash
-gh api installation/repositories --jq '"\(.total_count) \([.repositories[].full_name] | join(" "))"'   # must print exactly: 1 uw-share-lab/openproceedings
+gh api user/installations --jq '.installations[] | select(.app_slug=="claude") | .id'   # <id>
+gh api --paginate user/installations/<id>/repositories --jq '.repositories[].full_name'   # must print exactly: uw-share-lab/openproceedings
 ```
 
-Anything else stops the run, with every PR as "not reviewed": more repositories (the installation reaches beyond
-this one, and dependency code could use that through the proxy), or an error (the reach can't be shown; whether
-this call answers through the session's proxy is unconfirmed, TASK-243). Put it first under "for the owner"
+The session's token acts as a user (`gh api user` answers), so these are the user-to-server calls. If the first
+errors, try the installation-token call instead, `gh api installation/repositories --jq '"\(.total_count)
+\([.repositories[].full_name] | join(" "))"'`, which must print exactly `1 uw-share-lab/openproceedings`. Neither
+has been run from a cloud session yet (TASK-243). Anything else stops the run, with every PR as "not reviewed":
+more repositories (the installation reaches beyond this one, and dependency code could use that through the
+proxy), or errors from both (the reach can't be shown). Put it first under "for the owner"
 ("limit the Claude App installation to openproceedings"). Locally, skip this check: the credential is the
 maintainer's own login.
 
