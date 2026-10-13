@@ -9,13 +9,15 @@ that matches no tracked file (bash would hand it to chmod as written, which fail
 matched as bash matches them: `*`, `?` and `[...]` within one path segment, and no leading dot unless the
 pattern names one; a glob whose bash meaning fnmatch doesn't share (`[^...]`, `[[:class:]]` and the other `[[`
 forms) is refused. bash's default glob options and the repo root as working directory are assumed, so `shopt`,
-`GLOBIGNORE` and any `cd`/`pushd`/`popd` but `cd "$(git rev-parse --show-toplevel)"` are refused. A missing setup
+`GLOBIGNORE`, `pushd`, `popd` and any `cd` but `cd "$(git rev-parse --show-toplevel)"` are refused wherever on a
+line they appear. A missing setup
 script is an error too, so moving it can't switch the check off. A chmod line with quotes, backslashes or a
 redirection is refused, since shlex would lose what bash keeps. Exits 1 listing every problem."""
 
 from __future__ import annotations
 
 import fnmatch
+import re
 import shlex
 import subprocess
 import sys
@@ -54,6 +56,7 @@ TOPLEVEL = (
     "$(git rev-parse --show-toplevel)"  # the one directory change allowed: globs resolve from the repo root
 )
 GLOB_STATE = ("shopt", "GLOBIGNORE")  # these change what bash's globs match
+STATE_WORD = re.compile(r"shopt|GLOBIGNORE|\b(?:cd|pushd|popd)\b")
 
 
 def chmod_globs(text: str) -> tuple[list[str], list[str]]:
@@ -69,8 +72,8 @@ def chmod_globs(text: str) -> tuple[list[str], list[str]]:
         try:
             words = list(lex)
         except ValueError as e:
-            if "chmod" in line:
-                problems.append(f"{SETUP}:{n}: can't read a line with chmod in it ({e})")
+            if "chmod" in line or STATE_WORD.search(line):
+                problems.append(f"{SETUP}:{n}: can't read a line with chmod, cd or glob options in it ({e})")
             continue
         # A word that begins with `#` starts a trailing comment, unless the `#` was quoted, which shlex no longer
         # shows; so a chmod after one is refused rather than skipped.
@@ -80,13 +83,15 @@ def chmod_globs(text: str) -> tuple[list[str], list[str]]:
             problems.append(f"{SETUP}:{n}: chmod after a # (a comment, or a quoted #?) can't be read")
         if any("chmod" in w and w != "chmod" for w in code):
             problems.append(f"{SETUP}:{n}: chmod in a form this check can't read")
-        for i, w in enumerate(code):
+        # every word, a trailing comment's too: a quoted `#` must not hide a directory or glob-option change
+        for i, w in enumerate(words):
             if any(x in w for x in GLOB_STATE):
                 problems.append(
                     f"{SETUP}:{n}: {w} changes what globs match; this check assumes bash's defaults"
                 )
-            if w in ("cd", "pushd", "popd") and code[i + 1 : i + 2] != [TOPLEVEL]:
+            if w in ("pushd", "popd") or (w == "cd" and words[i + 1 : i + 2] != [TOPLEVEL]):
                 problems.append(f'{SETUP}:{n}: {w} other than `cd "{TOPLEVEL}"` moves where globs resolve')
+        for i, w in enumerate(code):
             if w != "chmod":
                 continue
             args: list[str] = []

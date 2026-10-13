@@ -3870,12 +3870,6 @@
   "new": "if not args or args[0] != \"+x\":"
  },
  {
-  "label": "modes: unreadable chmod line skipped",
-  "file": ".claude/scripts/check_file_modes.py",
-  "old": "            if \"chmod\" in line:\n                problems.append(f\"{SETUP}:{n}: can't read a line with chmod in it ({e})\")\n",
-  "new": ""
- },
- {
   "label": "modes: only the first chmod line read",
   "file": ".claude/scripts/check_file_modes.py",
   "old": "                    globs.append(g)\n",
@@ -3990,18 +3984,6 @@
   "new": "GLOB_STATE = (\"shopt\",)"
  },
  {
-  "label": "modes: any cd accepted",
-  "file": ".claude/scripts/check_file_modes.py",
-  "old": "if w in (\"cd\", \"pushd\", \"popd\") and code[i + 1 : i + 2] != [TOPLEVEL]:",
-  "new": "if False:"
- },
- {
-  "label": "modes: cd to the top level refused",
-  "file": ".claude/scripts/check_file_modes.py",
-  "old": "and code[i + 1 : i + 2] != [TOPLEVEL]:",
-  "new": ":"
- },
- {
   "label": "modes: redirection accepted",
   "file": ".claude/scripts/check_file_modes.py",
   "old": "if any(c in a for a in args for c in \"<>\"):",
@@ -4018,5 +4000,47 @@
   "file": ".claude/scripts/check_file_modes.py",
   "old": "if any(c in line for c in \"'\\\"\\\\\"):",
   "new": "if any(c in line for c in \"'\\\"\"):"
+ },
+ {
+  "label": "modes: unreadable chmod line skipped",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "            if \"chmod\" in line or STATE_WORD.search(line):",
+  "new": "            if STATE_WORD.search(line):"
+ },
+ {
+  "label": "modes: unreadable cd line skipped",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "            if \"chmod\" in line or STATE_WORD.search(line):",
+  "new": "            if \"chmod\" in line:"
+ },
+ {
+  "label": "modes: any cd accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "            if w in (\"pushd\", \"popd\") or (w == \"cd\" and words[i + 1 : i + 2] != [TOPLEVEL]):",
+  "new": "            if w in (\"pushd\", \"popd\"):"
+ },
+ {
+  "label": "modes: cd to the top level refused",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "and words[i + 1 : i + 2] != [TOPLEVEL]",
+  "new": ""
+ },
+ {
+  "label": "modes: pushd accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if w in (\"pushd\", \"popd\") or",
+  "new": "if w in (\"popd\",) or"
+ },
+ {
+  "label": "modes: popd accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if w in (\"pushd\", \"popd\") or",
+  "new": "if w in (\"pushd\",) or"
+ },
+ {
+  "label": "modes: cd/shopt after a # skipped",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "        for i, w in enumerate(words):\n            if any(x in w for x in GLOB_STATE):",
+  "new": "        for i, w in enumerate(code):\n            if any(x in w for x in GLOB_STATE):"
  }
 ]

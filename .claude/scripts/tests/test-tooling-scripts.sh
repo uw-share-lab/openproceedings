@@ -508,6 +508,22 @@ modes 'chmod +x a/\*.sh' a/x.sh:+x
 expect_mode_err "an escaped glob is refused"                          'scripts/setup-dev\.sh:1: a chmod line with quotes or backslashes'
 modes 'chmod +x a/*.sh 2>/dev/null' a/x.sh:+x
 expect_mode_err "a redirection on a chmod is refused with its own message" 'scripts/setup-dev\.sh:1: a redirection'
+modes 'echo "# frontend"; cd frontend
+chmod +x a/*.sh' a/x.sh:+x
+expect_mode_err "a cd after a quoted # is refused"                    'scripts/setup-dev\.sh:1: cd other than'
+modes 'echo "#"; shopt -s dotglob
+chmod +x a/*.sh' a/x.sh:+x
+expect_mode_err "a shopt after a quoted # is refused"                 'scripts/setup-dev\.sh:1: shopt changes'
+modes 'msg="two
+lines"; cd b
+chmod +x a/*.sh' a/x.sh:+x
+expect_mode_err "a cd on a line shlex can't read is refused"          'scripts/setup-dev\.sh:2: can.t read a line with chmod, cd'
+modes 'pushd b
+chmod +x a/x.sh' a/x.sh:+x
+expect_mode_err "pushd is refused"                                    'scripts/setup-dev\.sh:1: pushd other than'
+modes 'popd
+chmod +x a/x.sh' a/x.sh:+x
+expect_mode_err "popd is refused"                                     'scripts/setup-dev\.sh:1: popd other than'
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
