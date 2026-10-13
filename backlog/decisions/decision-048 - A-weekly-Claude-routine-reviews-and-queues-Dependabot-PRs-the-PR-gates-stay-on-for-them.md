@@ -158,6 +158,64 @@ We keep every safety property above and change only how it is reached:
   (a redirect to a storage host the egress proxy may not allow) and `gh attestation verify` (sigstore hosts).
   The `PUT`, the log download and the attestation fail closed (the PR stays open). A failing `DELETE` does
   not: auto-merge may stay on (`queue` exits 2 and says so, first in the run's "for the owner"), and then only
-  `review-attested` stops a moved head. TASK-213 stays open until a cloud run confirms them.
+  `review-attested` stops a moved head. TASK-213 stays open until a cloud run confirms them. (Superseded
+  2026-10-13: TASK-213 is closed, and what is still unconfirmed moved to TASK-243; see the addendum below.)
 - What would change this: a documented CCR request with an expected head sha (then pass it), or GraphQL
   returning to cloud sessions (then use `--match-head-commit` there too).
+
+## Addendum (2026-10-13, TASK-242: a red test on a stale base)
+
+The hard stop "a red required check it can't fix" covers CI's checks; the procedure's step 5 also stopped on any
+red local test the bump didn't cause. PR #143 (hypothesis 6.168.3 → 6.168.4, `uv.lock` only) showed a case
+neither covered: `make test` on its head failed `test_verification_scale.py`'s `width_is_free`, a wall-time
+check, on a loaded machine. PR #144 had already moved that check to CPU time on `dev` (`7df168d3`), but #143's
+base predated #144. CI's `test` on the head was green, and `make test` on `dev` with #143's `uv.lock`, the
+tree the merge queue builds, passed in full. The reviewer queued the PR on that evidence, which the procedure
+didn't name.
+
+We keep the hard stop and name the one exception, checked in the routine's own run: the base is behind `dev`; `dev`
+hasn't changed the PR's files since the base (so `dev` with those files is the tree the queue builds; otherwise the
+routine asks Dependabot to rebase); `make test` passes in full on that tree, in a separate worktree, without the
+GitHub credential; a named commit on `dev` that isn't in the PR's head fixes that failure (it changes the test or
+the code it checks, and it or its PR, opened by a person, names the test); every other red test on the head is
+resolved; and CI's `test` on the head the routine queues is green. The PR body records all of it, and the summary
+lists the waiver for the owner. A red test with no identified fix (a flaky test, an unfixed failure) stays a hard
+stop even if the merged tree passes. The merge queue still runs `test` on the merged tree before anything merges.
+No script encodes the rule: it compares test runs and commits, which the routine judges, as it judges a red check.
+What would change this: a waived test that later proves to have been the bump's doing (then drop the exception and
+request a rebase instead).
+
+## Addendum (2026-10-13, TASK-213 closed: what the first cloud runs showed)
+
+- **Cloud writes go through the Claude GitHub App, not a fine-grained token.** The first scheduled run (2026-10-13,
+  session cse_01CgK2U5uwNVM1qnbnWBXb4u) reviewed #142 and #143 over REST, but every write answered 403 "Resource
+  not accessible by integration": the Claude GitHub App wasn't installed on `uw-share-lab`. The owner installed it
+  that day (about 15:55Z). A manual run (session cse_01WYQw7QfZwJp36tz47nWjhR) then posted #142's hard-stop comment
+  at 17:04:05Z, which GitHub records as `performed_via_github_app: claude`. So the credential depends on where the
+  routine runs. Locally it is the maintainer's own `gh` login (the TASK-213 addendum). In the cloud it is the App's
+  installation, whose repository selection and permissions take the place of the fine-grained token named above.
+  The App sets its own permissions. Read with `gh api orgs/uw-share-lab/installations` on 2026-10-13, they are
+  actions, checks, contents, discussions, issues, pull requests, repository hooks and `workflows` write, plus
+  administration, members and merge queues read, and the installation covered all of `uw-share-lab`'s repositories.
+  That is wider than this record's bound in two ways. The repository selection is the owner's to narrow; the
+  command's step 0 now checks, in the cloud, every Claude installation the user can reach (another account's
+  included: `gh api user/installations/<id>/repositories`, or `installation/repositories`), and stops the run
+  unless together they list only this repository, or when the fallback call fails too. `workflows` and
+  repository-hooks write can't be removed (the App sets them; a webhook is a channel out of the repository).
+  Whether the routine should run dependency code in a session holding them is an open question for the owner
+  (TASK-243).
+- **`gh attestation verify` doesn't run in the cloud.** It failed with "error creating Sigstore verifier: no
+  valid Sigstore verifiers could be initialized". `docker_digest.py` stopped the image (fail closed, as
+  designed), so every ghcr.io PR goes to the owner until it runs there.
+- **The posted comment ended with a "Generated by Claude Code" footer**, which the procedure forbids in PR
+  comments. Neither the routine's text nor a hook put it there; it was removed at 17:06:30Z. The
+  committed `.claude/settings.json` now sets Claude Code's `attribution` (`commit` and `pr` empty, `sessionUrl`
+  false), which a single-repo cloud session reads. Its docs name commits and PR descriptions only, so
+  `/dependabot-review` now reads back every comment and PR body it writes and removes anything added. TASK-243
+  confirms both on the next cloud run.
+- **Until the owner narrows the installation (and any other account's), every cloud run stops at step 0** with
+  "limit the Claude App installation to openproceedings" first under "for the owner". That is by design: the run
+  executes dependency code, which can use the session's credential through the proxy.
+- **Still unconfirmed from the cloud (TASK-243):** step 0's installation calls, the CCR auto-merge `PUT` and
+  `DELETE`, the job-log download, a push, `gh attestation verify` (see above), and whether the `attribution`
+  setting holds there.
