@@ -441,8 +441,30 @@ expect_mode_err "a second chmod line is checked" 'b/z: committed 100644'
 modes 'git config k v && chmod +x a/*.sh; echo nope/*' a/x.sh:+x
 expect ok  "the chmod ends at an operator; later words aren't globs"  check_file_modes.py
 modes '# chmod 755 a/x.sh
-chmod +x a/x.sh  # then chmod 700' a/x.sh:+x
-expect ok  "chmod in a comment is ignored"                            check_file_modes.py
+  # chmod u+x a/x.sh
+chmod +x a/x.sh  # then b/*.sh' a/x.sh:+x
+expect ok  "a comment line, and globs in a trailing comment, are ignored" check_file_modes.py
+modes 'chmod +x a/x.sh  # then chmod 700' a/x.sh:+x
+expect_mode_err "a chmod after a trailing # is refused, not skipped" 'scripts/setup-dev\.sh:1: chmod after a #'
+modes 'echo "#"; chmod +x a/*.sh' a/x.sh:+x
+expect_mode_err "a quoted # doesn't hide the chmod after it"         'scripts/setup-dev\.sh:1: chmod after a #'
+modes 'echo a#; chmod 755 a/x.sh' a/x.sh:-x
+expect_mode_err "a mid-word # starts no comment, as in bash"          'scripts/setup-dev\.sh:1: only'
+modes 'chmod +x b/*.sh#' b/y.sh:+x
+expect_mode_err "a # glued to a glob is part of it"                   'scripts/setup-dev\.sh: chmod \+x b/\*\.sh# matches no tracked file'
+modes 'chmod +x a/[[.x.]].sh' a/x.sh:+x
+expect_mode_err "any [[ form is refused (fnmatch doesn't know them)"  'scripts/setup-dev\.sh:1: chmod \+x .*not a literal'
+modes 'shopt -s dotglob
+chmod +x a/*.sh' a/x.sh:+x
+expect_mode_err "shopt is refused (it changes what globs match)"      'scripts/setup-dev\.sh:1: shopt changes'
+modes 'GLOBIGNORE=a/x.sh
+chmod +x a/*.sh' a/x.sh:+x
+expect_mode_err "GLOBIGNORE is refused"                               'scripts/setup-dev\.sh:1: GLOBIGNORE=a/x\.sh changes'
+modes 'cd b && chmod +x a/x.sh' a/x.sh:+x
+expect_mode_err "a cd elsewhere is refused (globs resolve from it)"   'scripts/setup-dev\.sh:1: cd other than'
+modes 'cd "$(git rev-parse --show-toplevel)"
+chmod +x a/x.sh' a/x.sh:+x
+expect ok  "cd to the repo root is allowed"                           check_file_modes.py
 modes 'chmod 755 a/x.sh' a/x.sh:-x
 expect_mode_err "an octal chmod is refused" 'scripts/setup-dev\.sh:1: only'
 modes 'chmod u+x a/x.sh' a/x.sh:+x

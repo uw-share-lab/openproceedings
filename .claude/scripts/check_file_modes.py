@@ -7,8 +7,10 @@ refuses the dirty tree. This reads every `chmod` in the script and checks each g
 It fails closed: a `chmod` written in any form but `chmod +x <literal glob>...` is refused, and so is a glob
 that matches no tracked file (bash would hand it to chmod as written, which fails under `set -e`). Globs are
 matched as bash matches them: `*`, `?` and `[...]` within one path segment, and no leading dot unless the
-pattern names one; a glob whose bash meaning fnmatch doesn't share (`[^...]`, `[[:class:]]`) is refused. A missing
-setup script is an error too, so moving it can't switch the check off. Exits 1 listing every problem."""
+pattern names one; a glob whose bash meaning fnmatch doesn't share (`[^...]`, `[[:class:]]` and the other `[[`
+forms) is refused. bash's default glob options and the repo root as working directory are assumed, so `shopt`,
+`GLOBIGNORE` and any `cd`/`pushd`/`popd` but `cd "$(git rev-parse --show-toplevel)"` are refused. A missing setup
+script is an error too, so moving it can't switch the check off. Exits 1 listing every problem."""
 
 from __future__ import annotations
 
@@ -47,26 +49,47 @@ def logical_lines(text: str) -> tuple[list[tuple[int, str]], list[str]]:
     return out, problems
 
 
+TOPLEVEL = (
+    "$(git rev-parse --show-toplevel)"  # the one directory change allowed: globs resolve from the repo root
+)
+GLOB_STATE = ("shopt", "GLOBIGNORE")  # these change what bash's globs match
+
+
 def chmod_globs(text: str) -> tuple[list[str], list[str]]:
     """Each glob a `chmod +x` in the script names, and the problems: a chmod it can't read."""
     globs: list[str] = []
     lines, problems = logical_lines(text)
     for n, line in lines:
+        if line.lstrip().startswith("#"):  # a comment line: bash runs none of it
+            continue
         lex = shlex.shlex(line, posix=True, punctuation_chars=True)
         lex.whitespace_split = True
+        lex.commenters = ""  # shlex starts a comment at any `#`, bash only at one that begins a word
         try:
             words = list(lex)
         except ValueError as e:
             if "chmod" in line:
                 problems.append(f"{SETUP}:{n}: can't read a line with chmod in it ({e})")
             continue
-        if "chmod" in line.split("#", 1)[0] and "chmod" not in words:
+        # A word that begins with `#` starts a trailing comment, unless the `#` was quoted, which shlex no longer
+        # shows; so a chmod after one is refused rather than skipped.
+        cut = next((i for i, w in enumerate(words) if w.startswith("#")), len(words))
+        code, rest = words[:cut], words[cut:]
+        if any("chmod" in w for w in rest):
+            problems.append(f"{SETUP}:{n}: chmod after a # (a comment, or a quoted #?) can't be read")
+        if any("chmod" in w and w != "chmod" for w in code):
             problems.append(f"{SETUP}:{n}: chmod in a form this check can't read")
-        for i, w in enumerate(words):
+        for i, w in enumerate(code):
+            if any(x in w for x in GLOB_STATE):
+                problems.append(
+                    f"{SETUP}:{n}: {w} changes what globs match; this check assumes bash's defaults"
+                )
+            if w in ("cd", "pushd", "popd") and code[i + 1 : i + 2] != [TOPLEVEL]:
+                problems.append(f'{SETUP}:{n}: {w} other than `cd "{TOPLEVEL}"` moves where globs resolve')
             if w != "chmod":
                 continue
             args: list[str] = []
-            for a in words[i + 1 :]:
+            for a in code[i + 1 :]:
                 if a in OPERATORS:
                     break
                 args.append(a)
@@ -80,7 +103,7 @@ def chmod_globs(text: str) -> tuple[list[str], list[str]]:
                     g.startswith(("-", "/"))
                     or any(c in g for c in "$`{")
                     or "[^" in g  # bash negates with ^, fnmatch reads it as a literal
-                    or "[[:" in g  # POSIX classes fnmatch doesn't know
+                    or "[[" in g  # POSIX [:class:], [.coll.] and [=equiv=], which fnmatch doesn't know
                 ):
                     problems.append(f"{SETUP}:{n}: chmod +x {g}: not a literal repo-relative glob")
                 else:

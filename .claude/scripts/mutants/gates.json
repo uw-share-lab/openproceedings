@@ -3870,18 +3870,6 @@
   "new": "if not args or args[0] != \"+x\":"
  },
  {
-  "label": "modes: unread chmod form accepted",
-  "file": ".claude/scripts/check_file_modes.py",
-  "old": "if \"chmod\" in line.split(\"#\", 1)[0] and \"chmod\" not in words:",
-  "new": "if False:"
- },
- {
-  "label": "modes: comment hides nothing (chmod in a comment refused)",
-  "file": ".claude/scripts/check_file_modes.py",
-  "old": "line.split(\"#\", 1)[0]",
-  "new": "line"
- },
- {
   "label": "modes: unreadable chmod line skipped",
   "file": ".claude/scripts/check_file_modes.py",
   "old": "            if \"chmod\" in line:\n                problems.append(f\"{SETUP}:{n}: can't read a line with chmod in it ({e})\")\n",
@@ -3918,12 +3906,6 @@
   "new": "                    or False"
  },
  {
-  "label": "modes: POSIX class accepted",
-  "file": ".claude/scripts/check_file_modes.py",
-  "old": "                    or \"[[:\" in g",
-  "new": "                    or False"
- },
- {
   "label": "modes: missing setup script passes",
   "file": ".claude/scripts/check_file_modes.py",
   "old": "        sys.exit(1)\n    globs, problems",
@@ -3952,5 +3934,71 @@
   "file": ".claude/scripts/check_file_modes.py",
   "old": ") % 2 == 1",
   "new": ") == 1"
+ },
+ {
+  "label": "modes: unread chmod form accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if any(\"chmod\" in w and w != \"chmod\" for w in code):",
+  "new": "if False:"
+ },
+ {
+  "label": "modes: POSIX/[[ forms accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "                    or \"[[\" in g",
+  "new": "                    or \"[[:\" in g"
+ },
+ {
+  "label": "modes: comment lines read as code",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "        if line.lstrip().startswith(\"#\"):  # a comment line: bash runs none of it\n            continue\n",
+  "new": ""
+ },
+ {
+  "label": "modes: shlex comments back on",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "        lex.commenters = \"\"",
+  "new": "        lex.commenters = \"#\""
+ },
+ {
+  "label": "modes: chmod after a # skipped",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if any(\"chmod\" in w for w in rest):",
+  "new": "if False:"
+ },
+ {
+  "label": "modes: trailing comment read as code",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "code, rest = words[:cut], words[cut:]",
+  "new": "code, rest = words, words[cut:]"
+ },
+ {
+  "label": "modes: comment starts at a mid-word #",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if w.startswith(\"#\")), len(words))",
+  "new": "if \"#\" in w), len(words))"
+ },
+ {
+  "label": "modes: shopt accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "GLOB_STATE = (\"shopt\", \"GLOBIGNORE\")",
+  "new": "GLOB_STATE = (\"GLOBIGNORE\",)"
+ },
+ {
+  "label": "modes: GLOBIGNORE accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "GLOB_STATE = (\"shopt\", \"GLOBIGNORE\")",
+  "new": "GLOB_STATE = (\"shopt\",)"
+ },
+ {
+  "label": "modes: any cd accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if w in (\"cd\", \"pushd\", \"popd\") and code[i + 1 : i + 2] != [TOPLEVEL]:",
+  "new": "if False:"
+ },
+ {
+  "label": "modes: cd to the top level refused",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "and code[i + 1 : i + 2] != [TOPLEVEL]:",
+  "new": ":"
  }
 ]
