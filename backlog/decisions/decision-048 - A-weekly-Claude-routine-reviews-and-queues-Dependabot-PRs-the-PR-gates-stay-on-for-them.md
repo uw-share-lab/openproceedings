@@ -158,7 +158,8 @@ We keep every safety property above and change only how it is reached:
   (a redirect to a storage host the egress proxy may not allow) and `gh attestation verify` (sigstore hosts).
   The `PUT`, the log download and the attestation fail closed (the PR stays open). A failing `DELETE` does
   not: auto-merge may stay on (`queue` exits 2 and says so, first in the run's "for the owner"), and then only
-  `review-attested` stops a moved head. TASK-213 stays open until a cloud run confirms them.
+  `review-attested` stops a moved head. TASK-213 stays open until a cloud run confirms them. (Superseded
+  2026-10-13: TASK-213 is closed, and what is still unconfirmed moved to TASK-243; see the addendum below.)
 - What would change this: a documented CCR request with an expected head sha (then pass it), or GraphQL
   returning to cloud sessions (then use `--match-head-commit` there too).
 
@@ -172,34 +173,41 @@ base predated #144. CI's `test` on the head was green, and `make test` on `dev` 
 tree the merge queue builds, passed in full. The reviewer queued the PR on that evidence, which the procedure
 didn't name.
 
-We keep the hard stop and name the one exception, checked in the routine's own run: the base is behind `dev`;
-`dev` hasn't changed the PR's files since the base (so `dev` with those files is the tree the queue builds;
-otherwise the routine asks Dependabot to rebase); `make test` passes in full on that tree, in a separate
-worktree, without the GitHub credential; a named commit on `dev` that isn't in the base fixes that failure (it
-changes the test or the code it checks, and its message or PR says so); no other test is red on the head; and
-CI's `test` on the head is green. The PR body records all of it, and the summary lists the waiver for the owner.
-A red test with no identified fix (a flaky test, an unfixed failure) stays a hard stop even if the merged tree
-passes. The merge queue still runs `test` on the merged tree before anything merges. No script encodes the rule:
-it compares test runs and commits, which the routine judges, as it judges a red check. What would change this: a
-waived test that later proves to have been the bump's doing (then drop the exception and request a rebase
-instead).
+We keep the hard stop and name the one exception, checked in the routine's own run: the base is behind `dev`; `dev`
+hasn't changed the PR's files since the base (so `dev` with those files is the tree the queue builds; otherwise the
+routine asks Dependabot to rebase); `make test` passes in full on that tree, in a separate worktree, without the
+GitHub credential; a named commit on `dev` that isn't in the PR's head fixes that failure (it changes the test or
+the code it checks, and it or its PR, opened by a person, names the test); every other red test on the head is
+resolved; and CI's `test` on the head the routine queues is green. The PR body records all of it, and the summary
+lists the waiver for the owner. A red test with no identified fix (a flaky test, an unfixed failure) stays a hard
+stop even if the merged tree passes. The merge queue still runs `test` on the merged tree before anything merges.
+No script encodes the rule: it compares test runs and commits, which the routine judges, as it judges a red check.
+What would change this: a waived test that later proves to have been the bump's doing (then drop the exception and
+request a rebase instead).
 
 ## Addendum (2026-10-13, TASK-213 closed: what the first cloud runs showed)
 
-- **Cloud writes go through the Claude GitHub App, not the fine-grained token.** The first scheduled run
-  (2026-10-13, session cse_01CgK2U5uwNVM1qnbnWBXb4u) reviewed #142 and #143 over REST, but every write answered
-  403 "Resource not accessible by integration": the Claude GitHub App wasn't installed on `uw-share-lab`. The
-  owner installed it that day (about 15:55Z). A manual run (session cse_01WYQw7QfZwJp36tz47nWjhR) then posted
-  #142's hard-stop comment at 17:04:05Z, which GitHub records as `performed_via_github_app: claude`. So in the
-  cloud the App's installation (pull requests and issues write) is what bounds the routine's writes. The
-  fine-grained token above is still the rule for any token the environment holds. A push and the CCR
-  auto-merge route haven't run from the cloud yet.
+- **Cloud writes go through the Claude GitHub App, not a fine-grained token.** The first scheduled run (2026-10-13,
+  session cse_01CgK2U5uwNVM1qnbnWBXb4u) reviewed #142 and #143 over REST, but every write answered 403 "Resource
+  not accessible by integration": the Claude GitHub App wasn't installed on `uw-share-lab`. The owner installed it
+  that day (about 15:55Z). A manual run (session cse_01WYQw7QfZwJp36tz47nWjhR) then posted #142's hard-stop comment
+  at 17:04:05Z, which GitHub records as `performed_via_github_app: claude`. So the credential depends on where the
+  routine runs. Locally it is the maintainer's own `gh` login (the TASK-213 addendum). In the cloud it is the App's
+  installation, whose repository selection and permissions take the place of the fine-grained token named above.
+  The App sets its own permissions. Read with `gh api orgs/uw-share-lab/installations` on 2026-10-13, they include
+  pull requests, issues, actions, contents and `workflows` write (plus `administration` read), and the installation
+  covered all of `uw-share-lab`'s repositories. That is wider than this record's bound in two ways. The repository
+  selection is the owner's to narrow, and the command now requires that the installation cover only this
+  repository. `workflows` write can't be removed. Whether the routine should run dependency code in a session
+  holding it is an open question for the owner (TASK-243).
 - **`gh attestation verify` doesn't run in the cloud.** It failed with "error creating Sigstore verifier: no
   valid Sigstore verifiers could be initialized". `docker_digest.py` stopped the image (fail closed, as
   designed), so every ghcr.io PR goes to the owner until it runs there.
 - **The posted comment ended with a "Generated by Claude Code" footer**, which the procedure forbids in PR
-  comments. Neither the routine's text nor a hook put it there, and the owner removed it (17:06:30Z). The
+  comments. Neither the routine's text nor a hook put it there; it was removed at 17:06:30Z. The
   committed `.claude/settings.json` now sets Claude Code's `attribution` (`commit` and `pr` empty, `sessionUrl`
   false), which a single-repo cloud session reads. Its docs name commits and PR descriptions only, so
-  `/dependabot-review` step 10 now reads each comment back and removes a footer. TASK-243 confirms both on
-  the next cloud run.
+  `/dependabot-review` now reads back every comment and PR body it writes and removes anything added. TASK-243
+  confirms both on the next cloud run.
+- **Still unconfirmed from the cloud (TASK-243):** the CCR auto-merge `PUT` and `DELETE`, the job-log download,
+  a push, `gh attestation verify` (see above), and whether the `attribution` setting holds there.

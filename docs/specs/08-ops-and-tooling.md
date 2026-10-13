@@ -281,11 +281,12 @@ with a comment for the owner, a PR with:
   Dependabot couldn't apply its cooldown; for actions and Docker Hub images the hold is otherwise the `cooldown`;
 - a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
 - a red required check it can't fix, or a Must it can't fix;
-- a red local test it can't fix, unless the PR's base is behind `dev` and the test was fixed there since: the
-  routine then checks in its own run that `dev` hasn't changed the PR's files since the base, that `make test`
-  passes in full on `dev` with the PR's files (the tree the merge queue builds), that a named commit on `dev`
-  (and its PR) fixes that failure and isn't in the base, that no other test is red, and that CI's `test` on the
-  head is green, and lists the waiver for the owner (`/dependabot-review` step 5, "A red test on a stale base");
+- a red local test it can't fix, unless the PR's base is behind `dev` and the test was fixed there since. The
+  routine then checks, in its own run: that `dev` hasn't changed the PR's files since the base; that `make test`
+  passes in full on `dev` with the PR's files (the tree the merge queue builds); that a named commit on `dev`,
+  not in the PR's head, changes that test or the code it checks, and that the commit or its PR (opened by a
+  person) names the test; that every other red test is resolved; and that CI's `test` on the head it queues is
+  green. It lists the waiver for the owner (`/dependabot-review` step 5, "A red test on a stale base");
 - any semver-major, a docker image's 0.x minor, anything touching `tantivy`, or a new Python release, patch or
   minor: a patch changes how the crawlers parse pages (§Monorepo layout, "Python pin"), and the crawl-cache replay
   that shows records unchanged needs the owner's `data/`. A new digest for the same `python` tag is merged like
@@ -297,41 +298,48 @@ outside call goes through `git`, `curl`, `npm` or `gh`, so the case table `.clau
 (in `make tooling`) runs them against fakes; the mutants are in `.claude/scripts/mutants/dependabot.json`. The run
 ends with a summary for its log: merged, left open (with the reason), not reviewed, and what the owner should look
 at. The gates stay on for Dependabot PRs; exempting `dependabot[bot]` from `learnings` and `review-attested` was
-considered and rejected (decision-048). The routine's GitHub token is fine-grained: this repository only,
-`contents`, `pull requests`, `issues` and `actions` read and write, nothing else (no `administration`, no
-`workflows`); it is the only credential the command uses locally. In the cloud the writes reach GitHub through the
-Claude GitHub App's installation instead (*Cloud and local*), whose permissions then bound them. Without `workflows` the routine
-reviews and attests a github-actions PR but leaves the queueing to the owner (`gh pr merge <n> --auto --match-head-commit <sha>`), named in
-its summary. The pre-push hook and the autofix hook run their tools without the token.
+considered and rejected (decision-048). Decision-048 set the routine's credential as a fine-grained token: this
+repository only, `contents`, `pull requests`, `issues` and `actions` read and write, nothing else (no
+`administration`, no `workflows`). As built, the credential depends on where the command runs: locally it is the
+maintainer's own `gh` login; in the cloud it is the Claude GitHub App's installation (*Cloud and local*), whose
+repository selection and permissions take the token's place as the bound. Because `workflows` is kept out, the
+routine reviews and attests a github-actions PR but leaves the queueing to the owner (`gh pr merge <n> --auto
+--match-head-commit <sha>`), named in its summary. The pre-push hook and the autofix hook run their tools without
+the token.
 
 *Cloud and local* (TASK-213). A Claude Code cloud session refuses every GitHub GraphQL call with HTTP 403 ("GitHub
 GraphQL is not available from Claude Code sessions; …"), so `gh pr list`, `view`, `checks` and `merge` all fail
 there, and its token is a network secret: `GH_TOKEN` and `GITHUB_TOKEN` hold placeholders (`gh auth status` calls
 them invalid) and an egress proxy adds the real token to requests for api.github.com, so no process in the session
 holds it. GitHub records the session's writes as the Claude GitHub App's (`performed_via_github_app: claude`), so
-the App must be installed on `uw-share-lab` with pull requests and issues write (and contents write, if a push
-goes the same way; no push or CCR call has run from the cloud yet). Without it every write answers 403 "Resource not accessible by integration": the first scheduled run
-(2026-10-13) reviewed #142 and #143 over REST but could post nothing, until the owner installed the App that day.
-`gh attestation verify` can't start a Sigstore verifier there ("no valid Sigstore verifiers could be initialized",
-2026-10-13), so it fails closed and every ghcr.io PR goes to the owner. The procedure therefore uses REST only (`gh api repos/<repo>/...`) and checks auth with a real call (`gh
-api user`). `prs.py preflight` tells the environment by asking GraphQL for the viewer: the session's 403 message
-is **cloud**, an answer is **local** (a maintainer's clone with a real `gh` login), anything else stops the run; in
-the cloud it also requires that `gh` has no stored login (a file dependency code could read). Turning auto-merge
-on is the one step that differs: `prs.py queue` uses the session's CCR route in the cloud (`PUT
-repos/<repo>/pulls/<n>/ccr/auto_merge`; `DELETE` turns it off) and `gh pr merge <n> --auto --match-head-commit
-<sha>` locally. The CCR route's request shape isn't documented, so any non-2xx leaves the PR open for the owner,
-and it has no `--match-head-commit`: `queue` reads the head before and after the PUT and turns auto-merge off
-again if it moved (or if GitHub shows nothing set to merge, or a failed call left it set). A push between that
-second read and GitHub acting on the PUT is a residual race; the merge queue's `review-attested` check closes it
-against anyone who can't also rewrite the PR body, since the queue build requires each PR's body to attest the
-exact head it merges, and the routine attested only the head it reviewed (decision-048). Dependency code left
-running in a cloud session could use the proxy to do both; the routine looks for leftover dependency processes
-before it queues, which catches accidents but not code that hides itself, so what bounds it is that only
-registry-verified versions run and the token's scope is narrow. The routine runs `record-review.py` from `dev`'s
-copy, like the checkers, because a PR branch based on an older `dev` carries an older recorder. `prs.py watch`
-polls REST: the PR's `merged` and `auto_merge`, the timeline's latest merge-queue event, the queue's
-`gh-readonly-queue/dev/pr-<n>-<sha>` build branch, and the check runs, and
-names a queue build run that hangs so the routine can cancel and rerun it through the Actions REST endpoints.
+the App must be installed for this repository. Without it every write answers 403 "Resource not accessible by
+integration": the first scheduled run (2026-10-13) reviewed #142 and #143 over REST but could post nothing, until
+the owner installed the App that day. The App sets its own permissions. As read on 2026-10-13 they include pull
+requests, issues, actions, contents and `workflows` write, and the installation covered all of `uw-share-lab`'s
+repositories. The installation must cover only this repository. Whether the routine should run dependency code
+in a session whose credential has `workflows` write is the owner's open question (TASK-243). No push or CCR call
+has run from the cloud yet. `gh attestation verify` can't start a Sigstore verifier there ("no valid Sigstore
+verifiers could be initialized", 2026-10-13), so it fails closed and every ghcr.io PR goes to the owner. The
+routine reads back every comment and PR body it writes, and removes anything added to it (a cloud comment gained
+a "Generated by Claude Code" footer on 2026-10-13). The procedure therefore uses REST only (`gh api
+repos/<repo>/...`) and checks auth with a real call (`gh api user`). `prs.py preflight` tells the environment by
+asking GraphQL for the viewer: the session's 403 message is **cloud**, an answer is **local** (a maintainer's clone
+with a real `gh` login), anything else stops the run; in the cloud it also requires that `gh` has no stored login
+(a file dependency code could read). Turning auto-merge on is the one step that differs: `prs.py queue` uses the
+session's CCR route in the cloud (`PUT repos/<repo>/pulls/<n>/ccr/auto_merge`; `DELETE` turns it off) and `gh pr
+merge <n> --auto --match-head-commit <sha>` locally. The CCR route's request shape isn't documented, so any non-2xx
+leaves the PR open for the owner, and it has no `--match-head-commit`: `queue` reads the head before and after the
+PUT and turns auto-merge off again if it moved (or if GitHub shows nothing set to merge, or a failed call left it
+set). A push between that second read and GitHub acting on the PUT is a residual race; the merge queue's
+`review-attested` check closes it against anyone who can't also rewrite the PR body, since the queue build requires
+each PR's body to attest the exact head it merges, and the routine attested only the head it reviewed
+(decision-048). Dependency code left running in a cloud session could use the proxy to do both; the routine looks
+for leftover dependency processes before it queues, which catches accidents but not code that hides itself, so what
+bounds it is that only registry-verified versions run and the credential's scope. The routine runs
+`record-review.py` from `dev`'s copy, like the checkers, because a PR branch based on an older `dev` carries an
+older recorder. `prs.py watch` polls REST: the PR's `merged` and `auto_merge`, the timeline's latest merge-queue
+event, the queue's `gh-readonly-queue/dev/pr-<n>-<sha>` build branch, and the check runs, and names a queue build
+run that hangs so the routine can cancel and rerun it through the Actions REST endpoints.
 
 ## Git and PR rules
 
@@ -857,9 +865,9 @@ exists and could shadow the project command.
 | `load-learnings.sh` | SessionStart | Puts `.claude/learnings/INDEX.md` into every session's context |
 
 Beside the hooks, `.claude/settings.json` sets Claude Code's own `attribution` to nothing (`commit` and `pr`
-empty, `sessionUrl` false), so Claude Code adds no trailer, footer or session link to a commit or a PR description,
-in a cloud session too (TASK-242). Its docs don't cover PR comments, so `/dependabot-review` reads each comment it
-posts back and removes a footer.
+empty, `sessionUrl` false), meant to keep Claude Code from adding a trailer, footer or session link to a commit or
+a PR description (TASK-242); that it holds in a cloud session is not yet confirmed (TASK-243). Its docs don't cover
+PR comments, so `/dependabot-review` reads back every comment and PR body it writes and removes anything added.
 
 All command-parsing gates share `.claude/hooks/lib/cmdparse.py`, which parses commands the way bash splits
 them:
