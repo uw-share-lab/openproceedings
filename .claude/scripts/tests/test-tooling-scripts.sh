@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016  # commands under test are single-quoted on purpose: $(…), $(( )) and backticks must reach the hooks unexpanded
-# Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, check_digest_pins.py, npm_specs.py,
+# Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, check_digest_pins.py, check_file_modes.py, npm_specs.py,
 # lint_tooling.py and roster_index.py. Each case copies the real .claude/ (and CLAUDE.md / CONTRIBUTING.md) into a throwaway
 # tree, confirms the script passes on it, then breaks exactly one thing and confirms the script fails —
 # so a regression in a check can't hide behind the repo's own content being clean (review round 2).
@@ -394,6 +394,65 @@ expect err "a path outside .claude/hooks is no hook" probe_hook.py ../scripts/li
 expect_out "sandbox runs it in a removed mktemp dir" '^exit 0 \(in .*op-probe-.*, removed\)$' sandbox --file "$TMP/probe-touch.txt"
 if [ ! -e "$TMP/op-probe-made" ]; then pass=$((pass+1)); echo "  ok   probe_hook.py          sandbox wrote nothing where it was run"
 else fail=$((fail+1)); echo "  FAIL probe_hook.py          sandbox wrote op-probe-made where it was run"; fi
+
+echo "== check_file_modes.py (what setup-dev.sh makes executable is committed 100755, TASK-241)"
+# modes <setup-dev.sh text> <path:+x|-x>... — a git repo at $TMP/r whose index holds each path at that mode; the file
+# on disk gets the opposite mode, so a check that read the disk instead of the index would flip every verdict
+modes() {
+  fresh; git -C "$TMP/r" init -q; mkdir -p "$TMP/r/scripts"; printf '%s\n' "$1" > "$TMP/r/scripts/setup-dev.sh"; shift
+  local pm p m
+  for pm in "$@"; do
+    p="${pm%:*}"; m="${pm##*:}"; mkdir -p "$TMP/r/${p%/*}"; printf 'x\n' > "$TMP/r/$p"
+    if [ "$m" = "+x" ]; then chmod 644 "$TMP/r/$p"; else chmod 755 "$TMP/r/$p"; fi
+    git -C "$TMP/r" add --chmod="$m" -- "$p"
+  done
+}
+# expect_mode_err <label> <ERE> — exits 1 AND prints a `✗ ` line matching <ERE>, so a crash or an unrelated problem
+# can't pass the row
+expect_mode_err() {
+  local label="$1" re="$2" out rc
+  out=$(python3 "$TMP/r/.claude/scripts/check_file_modes.py" 2>&1 >/dev/null); rc=$?
+  if [ "$rc" = 1 ] && printf '%s\n' "$out" | grep -Eq "^✗ $re"; then pass=$((pass+1)); printf '  ok   %-22s %-58s -> err\n' check_file_modes.py "$label"
+  else fail=$((fail+1)); printf '  FAIL %-22s %-58s -> rc %s: %s (want: %s)\n' check_file_modes.py "$label" "$rc" "$out" "$re"; fi
+}
+fresh; git -C "$TMP/r" init -q
+expect ok  "no setup script, nothing to check"                        check_file_modes.py
+modes 'chmod +x a/*.sh' a/x.sh:+x a/y.sh:+x
+expect ok  "every file a chmod glob names is 100755"                  check_file_modes.py
+modes 'chmod +x a/*.sh' a/x.sh:+x a/y.sh:-x
+expect_mode_err "one file in the glob committed 100644 (the bug)" 'a/y\.sh: committed 100644'
+modes 'chmod +x a/*.sh b/*.py' a/x.sh:+x
+expect_mode_err "a glob that matches no tracked file" 'scripts/setup-dev\.sh: chmod \+x b/\*\.py matches no tracked file'
+modes 'chmod +x a/*.sh' a/x.sh:+x a/sub/y.sh:-x
+expect ok  "* stays in one path segment"                              check_file_modes.py
+modes 'chmod +x a/*.sh' a/x.sh:+x a/.h.sh:-x
+expect ok  "* skips a leading dot, as bash does"                      check_file_modes.py
+modes 'chmod +x a/.*.sh' a/.h.sh:-x
+expect_mode_err "a pattern with a literal leading dot matches dot files" 'a/\.h\.sh: committed 100644'
+modes 'chmod +x a/x.s?' a/x.sh:-x
+expect_mode_err "? is a glob too" 'a/x\.sh: committed 100644'
+modes 'chmod +x a/x.sh
+chmod +x b/*' a/x.sh:+x b/z:-x
+expect_mode_err "a second chmod line is checked" 'b/z: committed 100644'
+modes 'git config k v && chmod +x a/*.sh; echo nope/*' a/x.sh:+x
+expect ok  "the chmod ends at an operator; later words aren't globs"  check_file_modes.py
+modes '# chmod 755 a/x.sh
+chmod +x a/x.sh  # then chmod 700' a/x.sh:+x
+expect ok  "chmod in a comment is ignored"                            check_file_modes.py
+modes 'chmod 755 a/x.sh' a/x.sh:-x
+expect_mode_err "an octal chmod is refused" 'scripts/setup-dev\.sh:1: only'
+modes 'chmod u+x a/x.sh' a/x.sh:+x
+expect_mode_err "a chmod other than +x is refused" 'scripts/setup-dev\.sh:1: only'
+modes 'chmod +x' a/x.sh:+x
+expect_mode_err "chmod +x with no paths is refused" 'scripts/setup-dev\.sh:1: only'
+modes '/bin/chmod +x a/x.sh' a/x.sh:-x
+expect_mode_err "a chmod by path is refused (not read)" 'scripts/setup-dev\.sh:1: chmod in a form'
+modes 'chmod +x "$D"/*.sh' a/x.sh:+x
+expect_mode_err "a variable in the glob is refused" 'scripts/setup-dev\.sh:1: chmod \+x .*not a literal'
+modes 'chmod +x a/{x,y}.sh' a/x.sh:+x
+expect_mode_err "a brace expansion is refused" 'scripts/setup-dev\.sh:1: chmod \+x .*not a literal'
+modes 'chmod +x "a/x.sh' a/x.sh:+x
+expect_mode_err "an unreadable line with chmod in it is refused" 'scripts/setup-dev\.sh:1: can.t read'
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
