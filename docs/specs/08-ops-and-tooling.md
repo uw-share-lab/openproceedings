@@ -318,9 +318,10 @@ integration": the first scheduled run (2026-10-13) reviewed #142 and #143 over R
 the owner installed the App that day. The App sets its own permissions. As read on 2026-10-13 they are actions,
 checks, contents, discussions, issues, pull requests, repository hooks and `workflows` write, plus administration,
 members and merge queues read, and the installation covered all of `uw-share-lab`'s repositories. The installation
-must cover only this repository: the routine's step 0 checks it (`gh api user/installations/<id>/repositories`, or
-`installation/repositories`) and stops the run otherwise, or when the call fails. Whether the routine should run
-dependency code in a session whose credential has `workflows` and repository-hooks write is the owner's open
+must cover only this repository: the routine's step 0 checks every Claude installation the user can reach (another
+account's included, `gh api user/installations/<id>/repositories`, or `installation/repositories`), and stops the
+run unless together they list only this repository, or when the fallback call fails too. Whether the routine should
+run dependency code in a session whose credential has `workflows` and repository-hooks write is the owner's open
 question (TASK-243). No push or CCR call has run from the cloud yet. `gh attestation verify` can't start a Sigstore
 verifier there ("no valid Sigstore verifiers could be initialized", 2026-10-13), so it fails closed and every
 ghcr.io PR goes to the owner. The routine reads back every comment and PR body it writes, and removes anything

@@ -185,9 +185,9 @@ gh api installation/repositories --jq '"\(.total_count) \([.repositories[].full_
 
 None of these has been run from a cloud session yet (TASK-243). Anything else stops the run, with every PR as "not
 reviewed": another repository anywhere in the list (the credential reaches beyond this one, and dependency code
-could use that through the proxy), or the fallback erroring too (the reach can't be shown). Put it first under "for the owner"
-("limit the Claude App installation to openproceedings"). Locally, skip this check: the credential is the
-maintainer's own login.
+could use that through the proxy), or the fallback erroring too (the reach can't be shown). Put it first under "for
+the owner" ("limit the Claude App installation to openproceedings"). Locally, skip this check: the credential is
+the maintainer's own login.
 
 **uv's minors come by hand** (`.github/dependabot.yml` ignores them while uv is 0.x, and docker images get no
 Dependabot alert or security update), so every run, with or without open PRs, compares the api image's uv tag
