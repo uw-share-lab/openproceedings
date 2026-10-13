@@ -117,7 +117,8 @@ The CLI and the API call the same functions, so the CLI alone is enough to run a
   `.claude/scripts/tests/` (the CI scripts, the network guard, `changelog.py`, the `/dependabot-review`
   scripts); `make tooling` and CI `claude-tooling` run them all.
 - `make tooling` also runs the roster lint, the `.claude/README.md`, learnings-index and backlog checks, the
-  digest-pin check on `deploy/` (§Deploy), and the npm manifest/lock check (`npm_specs.py`, §CI "Dependabot").
+  digest-pin check on `deploy/` (§Deploy), the file-mode check on what `scripts/setup-dev.sh` makes executable
+  (`check_file_modes.py`, TASK-241), and the npm manifest/lock check (`npm_specs.py`, §CI "Dependabot").
 - CLI commands are covered by the suites of the spec they call (07); the CLI adds only argument-parsing
   and exit-code tests.
 

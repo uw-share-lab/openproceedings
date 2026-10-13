@@ -16,6 +16,7 @@ brew install shellcheck       # or apt-get install shellcheck — used by make l
 is exactly what CI checks (frontend included: prettier, eslint, `next typegen` + `tsc --noEmit`; it fails if
 `node_modules/` is missing), `tooling` runs the roster, backlog and hook checks, and `openapi` regenerates
 the API contract (below).
+
 **Adding a script to a directory `setup-dev.sh` makes executable** (`.githooks/`, `.claude/hooks/*.sh`,
 `.claude/hooks/tests/*.sh`, `.claude/scripts/*.py`)? Commit it 100755 (`git add --chmod=+x <file>`): otherwise
 the script's `chmod +x` leaves a fresh clone's tree dirty and `record-review.py` refuses it. `make tooling`

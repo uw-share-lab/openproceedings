@@ -416,7 +416,7 @@ expect_mode_err() {
   else fail=$((fail+1)); printf '  FAIL %-22s %-58s -> rc %s: %s (want: %s)\n' check_file_modes.py "$label" "$rc" "$out" "$re"; fi
 }
 fresh; git -C "$TMP/r" init -q
-expect ok  "no setup script, nothing to check"                        check_file_modes.py
+expect_mode_err "a missing setup script is an error, not a pass" 'scripts/setup-dev\.sh not found'
 modes 'chmod +x a/*.sh' a/x.sh:+x a/y.sh:+x
 expect ok  "every file a chmod glob names is 100755"                  check_file_modes.py
 modes 'chmod +x a/*.sh' a/x.sh:+x a/y.sh:-x
@@ -457,6 +457,19 @@ modes 'chmod +x a/{x,y}.sh' a/x.sh:+x
 expect_mode_err "a brace expansion is refused" 'scripts/setup-dev\.sh:1: chmod \+x .*not a literal'
 modes 'chmod +x "a/x.sh' a/x.sh:+x
 expect_mode_err "an unreadable line with chmod in it is refused" 'scripts/setup-dev\.sh:1: can.t read'
+modes 'ch\
+mod 755 a/x.sh' a/x.sh:+x
+expect_mode_err "chmod split by a backslash-newline is still read" 'scripts/setup-dev\.sh:1: only'
+modes 'chmod +x \
+  a/*.sh' a/x.sh:+x a/y.sh:-x
+expect_mode_err "a glob on a continuation line is checked"          'a/y\.sh: committed 100644'
+modes '# a comment is never continued \
+chmod 755 a/x.sh' a/x.sh:+x
+expect_mode_err "the line after a comment ending in \\ is read"     'scripts/setup-dev\.sh:2: only'
+modes 'chmod +x a/[^x].sh' a/x.sh:+x a/y.sh:-x
+expect_mode_err "a [^...] glob is refused (fnmatch reads ^ literally)" 'scripts/setup-dev\.sh:1: chmod \+x .*not a literal'
+modes 'chmod +x a/[[:alpha:]].sh' a/x.sh:+x
+expect_mode_err "a POSIX class glob is refused"                     'scripts/setup-dev\.sh:1: chmod \+x .*not a literal'
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

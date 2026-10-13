@@ -3882,18 +3882,6 @@
   "new": "line"
  },
  {
-  "label": "modes: variable glob accepted",
-  "file": ".claude/scripts/check_file_modes.py",
-  "old": " or \"$\" in g",
-  "new": ""
- },
- {
-  "label": "modes: brace glob accepted",
-  "file": ".claude/scripts/check_file_modes.py",
-  "old": " or \"{\" in g",
-  "new": ""
- },
- {
   "label": "modes: unreadable chmod line skipped",
   "file": ".claude/scripts/check_file_modes.py",
   "old": "            if \"chmod\" in line:\n                problems.append(f\"{SETUP}:{n}: can't read a line with chmod in it ({e})\")\n",
@@ -3910,5 +3898,47 @@
   "file": ".claude/scripts/check_file_modes.py",
   "old": "sys.exit(1 if problems else 0)",
   "new": "sys.exit(0)"
+ },
+ {
+  "label": "modes: variable glob accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "any(c in g for c in \"$`{\")",
+  "new": "any(c in g for c in \"`{\")"
+ },
+ {
+  "label": "modes: brace glob accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "any(c in g for c in \"$`{\")",
+  "new": "any(c in g for c in \"$`\")"
+ },
+ {
+  "label": "modes: [^ negation accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "                    or \"[^\" in g",
+  "new": "                    or False"
+ },
+ {
+  "label": "modes: POSIX class accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "                    or \"[[:\" in g",
+  "new": "                    or False"
+ },
+ {
+  "label": "modes: continuation not joined",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "            buf += raw[:-1]\n            continue\n",
+  "new": ""
+ },
+ {
+  "label": "modes: a comment line is continued",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": " and \"#\" not in raw:",
+  "new": ":"
+ },
+ {
+  "label": "modes: missing setup script passes",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "        sys.exit(1)\n    globs, problems",
+  "new": "        sys.exit(0)\n    globs, problems"
  }
 ]

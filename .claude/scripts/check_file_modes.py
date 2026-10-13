@@ -7,7 +7,8 @@ refuses the dirty tree. This reads every `chmod` in the script and checks each g
 It fails closed: a `chmod` written in any form but `chmod +x <literal glob>...` is refused, and so is a glob
 that matches no tracked file (bash would hand it to chmod as written, which fails under `set -e`). Globs are
 matched as bash matches them: `*`, `?` and `[...]` within one path segment, and no leading dot unless the
-pattern names one. Exits 1 listing every problem."""
+pattern names one; a glob whose bash meaning fnmatch doesn't share (`[^...]`, `[[:class:]]`) is refused. A missing
+setup script is an error too, so moving it can't switch the check off. Exits 1 listing every problem."""
 
 from __future__ import annotations
 
@@ -22,11 +23,30 @@ SETUP = "scripts/setup-dev.sh"
 OPERATORS = {";", "&&", "||", "|", "&", "(", ")", ";;"}
 
 
+def logical_lines(text: str) -> list[tuple[int, str]]:
+    """Each line as bash reads it, a backslash-newline joined away (so `ch\\` + `mod` is still chmod), with the
+    number of the line it starts on."""
+    out: list[tuple[int, str]] = []
+    start, buf = 1, ""
+    for n, raw in enumerate(text.split("\n"), 1):
+        if not buf:
+            start = n
+        # a comment is never continued in bash; a line with any `#` is left whole, so the next is read on its own
+        if raw.endswith("\\") and not raw.endswith("\\\\") and "#" not in raw:
+            buf += raw[:-1]
+            continue
+        out.append((start, buf + raw))
+        buf = ""
+    if buf:
+        out.append((start, buf))
+    return out
+
+
 def chmod_globs(text: str) -> tuple[list[str], list[str]]:
     """Each glob a `chmod +x` in the script names, and the problems: a chmod it can't read."""
     globs: list[str] = []
     problems: list[str] = []
-    for n, line in enumerate(text.splitlines(), 1):
+    for n, line in logical_lines(text):
         lex = shlex.shlex(line, posix=True, punctuation_chars=True)
         lex.whitespace_split = True
         try:
@@ -51,7 +71,12 @@ def chmod_globs(text: str) -> tuple[list[str], list[str]]:
                 )
                 continue
             for g in args[1:]:
-                if g.startswith("-") or "$" in g or "`" in g or "{" in g or g.startswith("/"):
+                if (
+                    g.startswith(("-", "/"))
+                    or any(c in g for c in "$`{")
+                    or "[^" in g  # bash negates with ^, fnmatch reads it as a literal
+                    or "[[:" in g  # POSIX classes fnmatch doesn't know
+                ):
                     problems.append(f"{SETUP}:{n}: chmod +x {g}: not a literal repo-relative glob")
                 else:
                     globs.append(g)
@@ -84,7 +109,10 @@ def index_modes(root: Path) -> dict[str, str]:
 
 def main() -> None:
     setup = ROOT / SETUP
-    globs, problems = chmod_globs(setup.read_text(encoding="utf-8")) if setup.exists() else ([], [])
+    if not setup.is_file():  # moved or renamed, the check would otherwise guard nothing
+        print(f"✗ {SETUP} not found: nothing to check the file modes against", file=sys.stderr)
+        sys.exit(1)
+    globs, problems = chmod_globs(setup.read_text(encoding="utf-8"))
     modes = index_modes(ROOT)
     checked = 0
     for g in globs:
