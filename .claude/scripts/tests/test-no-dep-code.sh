@@ -96,7 +96,11 @@ out=$(cd "$TMP/wt" && PATH="$BIN:$PATH" bash .githooks/pre-push 2>&1); rc=$?
 result "pre-push in a linked worktree skips make lint" test "$rc" -eq 0 -a -z "$(grep 'make --no-print-directory lint' "$LOG")"
 git -C "$R" worktree remove --force "$TMP/wt" 2>/dev/null; rm -rf "$TMP/wt"
 
-fresh; mkdir -p "$TMP/badgit"; printf '#!/bin/sh\nexit 128\n' > "$TMP/badgit/git"; chmod +x "$TMP/badgit/git"
+# a git that fails only when asked for the common directory, so the hook gets as far as the marker check
+fresh; mkdir -p "$TMP/badgit"
+# shellcheck disable=SC2016  # the fake's $@ and $a are for the fake to expand
+printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = --git-common-dir ] && exit 128; done\nexec "%s" "$@"\n' "$(command -v git)" > "$TMP/badgit/git"
+chmod +x "$TMP/badgit/git"
 out=$(cd "$R" && PATH="$TMP/badgit:$BIN:$PATH" bash .githooks/pre-push 2>&1); rc=$?
 result "pre-push fails, running nothing, when git can't name the git directory" test "$rc" -ne 0 -a ! -s "$LOG"
 
