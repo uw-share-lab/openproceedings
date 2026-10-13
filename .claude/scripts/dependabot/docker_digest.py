@@ -17,6 +17,10 @@ could not be applied" notice and `prs.py check` leaves it for the owner; this ag
 decides on, and the hold should Dependabot ever date ghcr.io. Each changed file must differ only in its pins'
 `:tag@digest` (the image names and every other line stay the same).
 
+In a Claude Code cloud session `gh attestation verify` can't pass (the proxy blocks Sigstore's TUF hosts and refuses
+another organisation's attestation API), so every ghcr.io pin is a PROBLEM there, and its line says why; every
+ghcr.io PR is the owner's in the cloud (decision-048). Locally nothing changes.
+
 A PROBLEM, the PR stays open: a change outside the pins, a digest that doesn't resolve or differs, a non-index
 answer, a failed attestation, a ghcr.io image attested under `COOLDOWN_DAYS` ago (or with no verified
 timestamp), or not by the previous pin's publisher (or whose previous pin has no verified attestation), an
@@ -43,6 +47,7 @@ from _common import (
     ToolError,
     age_days,
     changed_files,
+    detect_mode,
     git_show,
     http,
     http_json,
@@ -170,6 +175,25 @@ def verify(pin: Pin, owner: str) -> tuple[list[tuple[Publisher, list[str]]] | No
     return attestations(r.stdout), ""
 
 
+# Why `gh attestation verify` can't pass in a Claude Code cloud session (read-only probe, 2026-10-13 23:25Z, session
+# cse_01Q24cxnP5Nu3yXGC2FKjWqW; decision-048's TASK-243 addendum): the proxy answers Forbidden for Sigstore's TUF
+# hosts, and refuses another organisation's attestation API, so no offline route exists either.
+CLOUD_SIGSTORE = (
+    "; in a Claude Code cloud session Sigstore can't run: the proxy blocks tuf-repo-cdn.sigstore.dev and "
+    'tuf-repo.github.com, and refuses another organisation\'s attestation API ("not enabled for this session"), so '
+    'every ghcr.io PR is the owner\'s in the cloud (decision-048, spec 08 §CI "Dependabot")'
+)
+
+
+def cloud_reason() -> str:
+    """CLOUD_SIGSTORE when this is a Claude Code cloud session, else nothing: a failed verify reads the same locally
+    as it always has (a GraphQL call that fails some other way leaves the message as it was)."""
+    try:
+        return CLOUD_SIGSTORE if detect_mode() == "cloud" else ""
+    except ToolError:
+        return ""
+
+
 def check_age(
     rep: Report,
     pin: Pin,
@@ -234,7 +258,7 @@ def check_pin(rep: Report, pin: Pin, before: set[Pin]) -> None:
         owner = repo.split("/", 1)[0]
         found, message = verify(pin, owner)
         if found is None:
-            rep.problem(f"{pin}: gh attestation verify --owner {owner} failed: {message}")
+            rep.problem(f"{pin}: gh attestation verify --owner {owner} failed: {message}{cloud_reason()}")
             return
         rep.ok(f"{pin}: GitHub attestation verified for owner {owner}")
         publishers: set[Publisher] = set()

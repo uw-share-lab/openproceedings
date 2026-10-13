@@ -29,6 +29,12 @@ from typing import Any, cast
 HERE = Path(__file__).resolve().parent
 SCRIPTS = HERE.parent / "dependabot"
 FAKE = HERE / "dependabot_fake.py"
+# the cloud proxy's two 403 messages, as the fake gh answers them (dependabot_fake.py; the 2026-10-13 probe)
+SESSION_BOUND_403 = ("This GitHub API path is not available: sessions are bound to their configured repositories. Use "
+                     "repository-scoped endpoints (repos/{owner}/{repo}/...)")  # fmt: skip
+NOT_ENABLED_403 = (
+    "GitHub access to this repository is not enabled for this session. Use add_repo to request access"
+)
 ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 TOKEN_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
 ROWS: list[tuple[str, Callable[[Case], None]]] = []
@@ -1136,12 +1142,39 @@ def _(c: Case) -> None:
 
 @row("docker: a ghcr.io image whose attestation fails")
 def _(c: Case) -> None:
-    c.expect(
-        "docker_digest.py",
-        uv_image_case(c, False),
-        PROBLEM,
-        r"^PROBLEM .*gh attestation verify --owner astral-sh",
-    )
+    args = uv_image_case(c, False)  # no graphql fixture: the mode can't be told, so the line stays as it was
+    c.expect("docker_digest.py", args, PROBLEM, r"^PROBLEM .*gh attestation verify --owner astral-sh")
+    got, out = c.run("docker_digest.py", *args)
+    assert "cloud" not in out, out
+
+
+@row("docker: a failed attestation locally says nothing of the cloud")
+def _(c: Case) -> None:
+    args = uv_image_case(c, False)
+    c.gh["graphql"] = {"data": {"viewer": {"login": "maintainer"}}}
+    got, out = c.run("docker_digest.py", *args)
+    assert (
+        got == PROBLEM and "gh attestation verify --owner astral-sh failed" in out and "cloud" not in out
+    ), out
+
+
+@row("docker: in the cloud a ghcr.io image is the owner's, and the line says Sigstore can't run there")
+def _(c: Case) -> None:
+    args = uv_image_case(
+        c, True
+    )  # fixtures say verified; behind the proxy gh attestation verify fails anyway
+    c.gh["cloud"] = True
+    c.expect("docker_digest.py", args, PROBLEM,
+             r"^PROBLEM .*uv:0\.12\.24.*failed: Error: error creating Sigstore verifier.*; in a Claude Code cloud "
+             r"session Sigstore can't run: the proxy blocks tuf-repo-cdn\.sigstore\.dev and tuf-repo\.github\.com, and "
+             r"refuses another organisation's attestation API .*every ghcr\.io PR is the owner's in the cloud")  # fmt: skip
+
+
+@row("docker: in the cloud a Docker Hub image still passes on its digest")
+def _(c: Case) -> None:
+    args = node_case(c)
+    c.gh["cloud"] = True
+    c.expect("docker_digest.py", args, OK, r"^ok .*registry-1\.docker\.io publishes no GitHub attestations")
 
 
 @row("docker: a ghcr.io image attested under 7 days ago is left for the owner")
@@ -1824,12 +1857,23 @@ def _(c: Case) -> None:
 # preflight
 
 
+INSTALLATIONS = "api orgs/uw-share-lab/installations?per_page=100"
+
+
+def installation(selection: str = "selected", slug: str = "claude", ident: int = 171042656) -> dict[str, Any]:
+    return {"id": ident, "app_slug": slug, "repository_selection": selection,
+            "permissions": {"contents": "write", "workflows": "write"}}  # fmt: skip
+
+
 def preflight_case(c: Case, *, cloud: bool = True, stored: bool = False) -> None:
-    c.gh["api user"] = {"login": "maintainer"}
+    # the repository call answers in both modes; in the cloud the fake proxy refuses every other repository and every
+    # path outside repos/ exactly as the 2026-10-13 probe saw (dependabot_fake.py), so the cloud needs no fixture more
+    c.gh[f"api {R}"] = {"full_name": "uw-share-lab/openproceedings"}
     if cloud:
         c.gh["cloud"] = True
     else:
         c.gh["graphql"] = {"data": {"viewer": {"login": "maintainer"}}}
+        c.gh[INSTALLATIONS] = {"installations": [installation(slug="vercel", ident=1), installation()]}
     if stored:
         c.gh["stored login"] = REAL_LOOKING
 
@@ -1884,21 +1928,186 @@ def _(c: Case) -> None:
 
 @row("prs preflight: GraphQL failing some other way stops the run")
 def _(c: Case) -> None:
-    c.gh["api user"] = {"login": "maintainer"}  # no graphql fixture: a 404 without the session's message
+    c.gh[f"api {R}"] = {
+        "full_name": "uw-share-lab/openproceedings"
+    }  # no graphql: a 404 without the session's message
     c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*not as a Claude Code session refuses it")
 
 
 @row("prs preflight: GraphQL answering an empty login stops the run")
 def _(c: Case) -> None:
-    c.gh["api user"] = {"login": "maintainer"}
+    c.gh[f"api {R}"] = {"full_name": "uw-share-lab/openproceedings"}
     c.gh["graphql"] = {"data": {"viewer": {"login": ""}}}
     c.expect("prs.py", ["preflight"], ERROR, r"^ERROR +GraphQL answered an empty login")
 
 
-@row("prs preflight: gh api user failing stops the run")
+@row("prs preflight: the repository call failing stops the run")
 def _(c: Case) -> None:
-    c.gh["cloud"] = True
-    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*gh api user")
+    c.gh["cloud"] = True  # no fixture for repos/uw-share-lab/openproceedings: a 404
+    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*gh api repos/uw-share-lab/openproceedings")
+
+
+@row("prs preflight: the cloud never calls gh api user, which its proxy refuses")
+def _(c: Case) -> None:
+    preflight_case(c)
+    got, out = c.run("prs.py", "preflight")
+    calls = (c.fix / "calls.log").read_text()
+    assert got == OK and '"api", "user"' not in calls, out + calls
+
+
+# The cloud session binding (TASK-243 AC6): both refusals must be the proxy's own 403s, word for word.
+
+
+@row("prs preflight: cloud passes when the proxy refuses both binding calls with its own 403s")
+def _(c: Case) -> None:
+    preflight_case(c)
+    got, out = c.run("prs.py", "preflight")
+    assert got == OK, out
+    assert re.search(
+        r"^ok +session binding: gh api user/installations \(outside repos/\.\.\.\) refused: 'This GitHub"
+        r" API path is not available: sessions are bound to their configured repositories'$",
+        out,
+        re.M,
+    ), out
+    assert re.search(r"^ok +session binding: gh api repos/astral-sh/uv \(another repository\) refused: 'GitHub access"
+                     r" to this repository is not enabled for this session'$", out, re.M), out  # fmt: skip
+
+
+@row("prs preflight: cloud stops when the installations call answers")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api user/installations"] = {"total_count": 1, "installations": [installation()]}
+    c.expect("prs.py", ["preflight"], PROBLEM,
+             r"^PROBLEM session binding: gh api user/installations .*was not refused .*it answered \(HTTP 2xx\)")  # fmt: skip
+
+
+@row("prs preflight: cloud stops when another repository answers")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api repos/astral-sh/uv"] = {"full_name": "astral-sh/uv"}
+    c.expect("prs.py", ["preflight"], PROBLEM,
+             r"^PROBLEM session binding: gh api repos/astral-sh/uv .*it answered \(HTTP 2xx\); the session's credential")  # fmt: skip
+
+
+@row("prs preflight: cloud stops when the installations call gets the other repository message")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api user/installations"] = {"__status": 403, "body": {"message": NOT_ENABLED_403}}
+    c.expect(
+        "prs.py", ["preflight"], PROBLEM, r"^PROBLEM session binding: gh api user/installations .*not enabled"
+    )
+
+
+@row("prs preflight: cloud stops when another repository gets the path message")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api repos/astral-sh/uv"] = {"__status": 403, "body": {"message": SESSION_BOUND_403}}
+    c.expect(
+        "prs.py",
+        ["preflight"],
+        PROBLEM,
+        r"^PROBLEM session binding: gh api repos/astral-sh/uv .*sessions are bound",
+    )
+
+
+@row("prs preflight: cloud stops on the right words with another status")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api user/installations"] = {"__status": 404, "body": {"message": SESSION_BOUND_403}}
+    c.expect(
+        "prs.py", ["preflight"], PROBLEM, r"^PROBLEM session binding: gh api user/installations .*HTTP 404"
+    )
+
+
+@row("prs preflight: cloud stops on a 403 without the proxy's words")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api repos/astral-sh/uv"] = {
+        "__status": 403,
+        "body": {"message": "Resource not accessible by integration"},
+    }
+    c.expect(
+        "prs.py",
+        ["preflight"],
+        PROBLEM,
+        r"^PROBLEM session binding: gh api repos/astral-sh/uv .*not accessible",
+    )
+
+
+@row("prs preflight: cloud stops when a binding call can't connect")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api user/installations"] = {"__conn": True}
+    c.expect(
+        "prs.py", ["preflight"], PROBLEM, r"^PROBLEM session binding: .*error connecting to api\.github\.com"
+    )
+
+
+@row("prs preflight: the binding check runs only in the cloud")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    got, out = c.run("prs.py", "preflight")
+    calls = (c.fix / "calls.log").read_text()
+    assert got == OK and "session binding" not in out and "user/installations" not in calls, out
+
+
+# Local: the Claude App installation's repository selection (an org owner's call).
+
+
+@row("prs preflight: local prints the Claude installation's selection and permissions")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.expect("prs.py", ["preflight"], OK, r"^ok +installation: Claude App 171042656 on uw-share-lab, repository_selection"
+             r" selected; contents write, workflows write$")  # fmt: skip
+
+
+@row("prs preflight: local stops an installation on all the org's repositories")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = {"installations": [installation("all")]}
+    c.expect(
+        "prs.py",
+        ["preflight"],
+        PROBLEM,
+        r"^PROBLEM installation: the Claude App installation 171042656 covers all",
+    )
+
+
+@row("prs preflight: local reads every installation, not only the first")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = {"installations": [installation(ident=5), installation("all", ident=6)]}
+    c.expect(
+        "prs.py", ["preflight"], PROBLEM, r"^PROBLEM installation: the Claude App installation 6 covers all"
+    )
+
+
+@row("prs preflight: local ignores another app's installation on all repositories")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = {"installations": [installation("all", slug="vercel", ident=1), installation()]}
+    c.expect("prs.py", ["preflight"], OK, r"^ok +installation: Claude App 171042656")
+
+
+@row("prs preflight: local with no Claude installation says so")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = {"installations": [installation(slug="vercel")]}
+    c.expect("prs.py", ["preflight"], OK, r"^ok +installation: no Claude App installation on uw-share-lab")
+
+
+@row("prs preflight: local stops when the installations call fails (not an org owner)")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = {"__status": 403, "body": {"message": "Must be an organization owner"}}
+    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*orgs/uw-share-lab/installations.*organization owner")
 
 
 def marker(c: Case) -> Path:
@@ -2730,11 +2939,16 @@ def _(c: Case) -> None:
     assert got == OK and "a token in GITHUB_TOKEN" in out and "network secret" not in out, out
 
 
-@row("prs preflight: gh api user answering an empty login stops the run")
+@row("prs preflight: the repository call answering another name stops the run")
 def _(c: Case) -> None:
     preflight_case(c)
-    c.gh["api user"] = {"login": ""}
-    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR +gh api user answered no login")
+    c.gh[f"api {R}"] = {"full_name": "someone/else"}
+    c.expect(
+        "prs.py",
+        ["preflight"],
+        ERROR,
+        r"^ERROR +gh api repos/uw-share-lab/openproceedings answered 'someone/else'",
+    )
 
 
 @row("prs check: a commit with no verification verdict is not verified")
@@ -2744,6 +2958,110 @@ def _(c: Case) -> None:
         {"sha": args[3], "author": {"login": "dependabot[bot]"}, "commit": {"verification": {}}}
     ]
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM commit .*doesn't verify its signature")
+
+
+# prs.py uv-release (step 0): the api image's uv against uv's latest release
+
+UV_LATEST = "api repos/astral-sh/uv/releases/latest"
+
+
+def uv_release_case(c: Case, dockerfile: str | None = None) -> None:
+    pin = f"ghcr.io/astral-sh/uv:0.12.23@{digest('uv-old')}"
+    base = c.commit(
+        {"deploy/api.Dockerfile": dockerfile if dockerfile is not None else f"FROM {pin} AS uv\n"}
+    )
+    c.git("update-ref", "refs/remotes/origin/dev", base)
+
+
+@row("prs uv-release: in the cloud the refused call is for the owner to check by hand, not a stop")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh["cloud"] = True  # the fake proxy refuses astral-sh/uv with its "not enabled for this session" 403
+    c.expect("prs.py", ["uv-release"], OK,
+             r"^OWNER +check uv's latest release by hand \(https://github\.com/astral-sh/uv/releases/latest; pinned "
+             r"0\.12\.23\): this cloud session isn't bound to astral-sh/uv")  # fmt: skip
+
+
+@row("prs uv-release: the same minor is ok, with no OWNER line")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh[UV_LATEST] = {"tag_name": "0.12.30"}
+    got, out = c.run("prs.py", "uv-release")
+    assert got == OK and re.search(
+        r"^ok +latest: uv 0\.12\.30, the pinned minor \(0\.12\.23\)$", out, re.M
+    ), out
+    assert "OWNER" not in out and re.search(
+        r"^ok +pinned: uv 0\.12\.23 \(deploy/api\.Dockerfile", out, re.M
+    ), out
+
+
+@row("prs uv-release: a newer minor is for the owner")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh[UV_LATEST] = {"tag_name": "0.13.0"}
+    c.expect("prs.py", ["uv-release"], OK, r"^OWNER +uv 0\.13\.0 is a newer minor than the pinned 0\.12\.23")
+
+
+@row("prs uv-release: a newer major is for the owner")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh[UV_LATEST] = {"tag_name": "1.0.0"}
+    c.expect("prs.py", ["uv-release"], OK, r"^OWNER +uv 1\.0\.0 is a newer minor")
+
+
+@row("prs uv-release: the proxy's other message is not the uv refusal")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh[UV_LATEST] = {"__status": 403, "body": {"message": SESSION_BOUND_403}}
+    got, out = c.run("prs.py", "uv-release")
+    assert got == ERROR and "OWNER" not in out and re.search(r"^ERROR .*releases/latest failed", out, re.M), (
+        out
+    )
+
+
+@row("prs uv-release: the call failing another way stops it")
+def _(c: Case) -> None:
+    uv_release_case(c)  # no fixture, not the cloud: a 404
+    c.expect("prs.py", ["uv-release"], ERROR, r"^ERROR .*releases/latest failed: .*HTTP 404")
+
+
+@row("prs uv-release: an answer without a tag_name is an error")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh[UV_LATEST] = {"name": "0.13.0"}
+    c.expect("prs.py", ["uv-release"], ERROR, r"^ERROR .*answered no tag_name")
+
+
+@row("prs uv-release: a tag with no version is an error")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh[UV_LATEST] = {"tag_name": "latest"}
+    c.expect("prs.py", ["uv-release"], ERROR, r"^ERROR .*has no version in its tag 'latest'")
+
+
+@row("prs uv-release: a Dockerfile with no uv pin is an error")
+def _(c: Case) -> None:
+    uv_release_case(c, "FROM python:3.12\n")
+    c.gh[UV_LATEST] = {"tag_name": "0.12.23"}
+    c.expect("prs.py", ["uv-release"], ERROR, r"^ERROR .*pins uv 0 ways, not one")
+
+
+@row("prs uv-release: two different uv pins are an error")
+def _(c: Case) -> None:
+    uv_release_case(
+        c,
+        f"FROM ghcr.io/astral-sh/uv:0.12.23@{digest('a')}\nFROM ghcr.io/astral-sh/uv:0.11.1@{digest('b')}\n",
+    )
+    c.gh[UV_LATEST] = {"tag_name": "0.12.23"}
+    c.expect("prs.py", ["uv-release"], ERROR, r"^ERROR .*pins uv 2 ways, not one")
+
+
+@row("prs uv-release: reads origin/dev's Dockerfile, not the checkout's")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.commit({"deploy/api.Dockerfile": f"FROM ghcr.io/astral-sh/uv:0.13.0@{digest('n')} AS uv\n"})
+    c.gh[UV_LATEST] = {"tag_name": "0.13.0"}
+    c.expect("prs.py", ["uv-release"], OK, r"^OWNER +uv 0\.13\.0 is a newer minor than the pinned 0\.12\.23")
 
 
 def one(label: str, fn: Callable[[Case], None]) -> str | None:

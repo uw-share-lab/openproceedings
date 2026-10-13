@@ -1027,13 +1027,13 @@
   },
   {
     "label": "dependabot: prs: cloud never detected",
-    "file": ".claude/scripts/dependabot/prs.py",
+    "file": ".claude/scripts/dependabot/_common.py",
     "old": "    if GRAPHQL_BLOCKED in r.stdout + r.stderr:\n",
     "new": "    if False:\n"
   },
   {
     "label": "dependabot: prs: any GraphQL failure read as cloud",
-    "file": ".claude/scripts/dependabot/prs.py",
+    "file": ".claude/scripts/dependabot/_common.py",
     "old": "    if GRAPHQL_BLOCKED in r.stdout + r.stderr:\n",
     "new": "    if True:\n"
   },
@@ -1195,7 +1195,7 @@
   },
   {
     "label": "dependabot: prs: an empty GraphQL login read as local",
-    "file": ".claude/scripts/dependabot/prs.py",
+    "file": ".claude/scripts/dependabot/_common.py",
     "old": "        if login:\n",
     "new": "        if True:\n"
   },
@@ -1326,9 +1326,9 @@
     "new": "        if verification.get(\"verified\") is False:\n"
   },
   {
-    "label": "dependabot: prs: an empty gh api user login accepted",
+    "label": "dependabot: prs: preflight accepts any repository call's answer",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "    if not login:\n        raise ToolError",
+    "old": "    if name != REPO:\n        raise ToolError",
     "new": "    if False:\n        raise ToolError"
   },
   {
@@ -1517,5 +1517,149 @@
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "git_show(sha, f)",
     "new": "git_show(\"HEAD\", f)"
+  },
+  {
+    "label": "dependabot: common: a binding refusal with any message accepted",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "    if r.returncode == 1 and \"HTTP 403\" in out and message in out:\n",
+    "new": "    if r.returncode == 1 and \"HTTP 403\" in out:\n"
+  },
+  {
+    "label": "dependabot: common: a binding refusal with any status accepted",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "    if r.returncode == 1 and \"HTTP 403\" in out and message in out:\n",
+    "new": "    if r.returncode == 1 and message in out:\n"
+  },
+  {
+    "label": "dependabot: common: an answered binding call not named as one",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "    if r.returncode == 0:\n        return \"it answered (HTTP 2xx)\"\n",
+    "new": "    if False:\n        return \"it answered (HTTP 2xx)\"\n"
+  },
+  {
+    "label": "dependabot: common: every binding call read as refused",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "    return refusal(run(cmd, ok_codes=(0, 1)), message)\n",
+    "new": "    return None\n"
+  },
+  {
+    "label": "dependabot: prs: session binding: any answer passes",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if got is None:\n            rep.ok(f\"session binding",
+    "new": "        if True:\n            rep.ok(f\"session binding"
+  },
+  {
+    "label": "dependabot: prs: session binding: the other repository not asked",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        (\n            [\"gh\", \"api\", f\"repos/{OTHER_REPO}\"],\n            NOT_ENABLED,\n            f\"gh api repos/{OTHER_REPO} (another repository)\",\n        ),\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: prs: session binding: the path outside repos/ not asked",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        ([\"gh\", \"api\", UNBOUND_PATH], SESSION_BOUND, f\"gh api {UNBOUND_PATH} (outside repos/...)\"),\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: prs: session binding: messages swapped",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        ([\"gh\", \"api\", UNBOUND_PATH], SESSION_BOUND,",
+    "new": "        ([\"gh\", \"api\", UNBOUND_PATH], NOT_ENABLED,"
+  },
+  {
+    "label": "dependabot: prs: cloud preflight skips the session binding",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        session_binding(rep)\n",
+    "new": "        pass\n"
+  },
+  {
+    "label": "dependabot: prs: session binding runs locally too",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        installations(rep)\n",
+    "new": "        installations(rep)\n        session_binding(rep)\n"
+  },
+  {
+    "label": "dependabot: prs: local preflight skips the installation check",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        installations(rep)\n",
+    "new": "        pass\n"
+  },
+  {
+    "label": "dependabot: prs: installation on all repositories accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if selection != \"selected\":\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: prs: any app's installation read as Claude's",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "if i[\"app_slug\"] == APP_SLUG]",
+    "new": "if True]"
+  },
+  {
+    "label": "dependabot: prs: only the first installation read",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    for inst in found:\n",
+    "new": "    for inst in found[:1]:\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: a patch read as a newer minor",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if latest[:2] > have[:2]:\n",
+    "new": "    if latest > have:\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: a newer minor never reported",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if latest[:2] > have[:2]:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: two uv pins accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if len(set(pins)) != 1:\n",
+    "new": "    if not pins:\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: reads the checkout, not origin/dev",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    text = git_show(\"origin/dev\", UV_DOCKERFILE)\n",
+    "new": "    text = git_show(\"HEAD\", UV_DOCKERFILE)\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: the path message taken for the repo refusal",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if (why := refusal(r, NOT_ENABLED)) is None:\n",
+    "new": "    if (why := refusal(r, SESSION_BOUND)) is None:\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: any failure read as the cloud refusal",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if (why := refusal(r, NOT_ENABLED)) is None:\n",
+    "new": "    if (why := refusal(r, NOT_ENABLED)) is None or r.returncode:\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: a tag with no version accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if not latest:\n        raise ToolError",
+    "new": "    if False:\n        raise ToolError"
+  },
+  {
+    "label": "dependabot: docker: the cloud's Sigstore reason never given",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "        return CLOUD_SIGSTORE if detect_mode() == \"cloud\" else \"\"\n",
+    "new": "        return \"\"\n"
+  },
+  {
+    "label": "dependabot: docker: the cloud's Sigstore reason given locally",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "        return CLOUD_SIGSTORE if detect_mode() == \"cloud\" else \"\"\n",
+    "new": "        return CLOUD_SIGSTORE\n"
+  },
+  {
+    "label": "dependabot: docker: an unknown mode read as the cloud",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    except ToolError:\n        return \"\"\n",
+    "new": "    except ToolError:\n        return CLOUD_SIGSTORE\n"
   }
 ]

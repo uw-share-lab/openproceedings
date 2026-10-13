@@ -2,6 +2,7 @@
 """Set up, list, check, queue and watch the open Dependabot PRs into dev (/dependabot-review; TASK-211, TASK-213).
 
     python3 .claude/scripts/dependabot/prs.py preflight
+    python3 .claude/scripts/dependabot/prs.py uv-release
     python3 .claude/scripts/dependabot/prs.py list
     python3 .claude/scripts/dependabot/prs.py check <n> --head <sha>
     python3 .claude/scripts/dependabot/prs.py ci <n> --head <sha> [--interval 60] [--timeout 60]
@@ -21,7 +22,16 @@ enabling auto-merge, which `queue` makes after detecting where it runs (`detect_
   --match-head-commit <sha>`.
 - anything else (GraphQL failing another way) is an error: the run stops rather than guess.
 
-`preflight` (step 0) checks `gh api user` answers, prints the mode, and checks the credential: in the cloud gh
+`preflight` (step 0) checks that `gh api repos/uw-share-lab/openproceedings` answers (a repository-scoped call: the
+cloud proxy refuses paths outside `repos/...`, so `gh api user` may fail there, and `gh auth status` calls the
+session's placeholder token invalid), prints the mode, and checks the credential's reach. In the cloud that is the
+session binding: `gh api user/installations` must be refused with the proxy's HTTP 403 "This GitHub API path is not
+available: sessions are bound to their configured repositories", and `gh api repos/astral-sh/uv` (a public
+repository the session isn't bound to) with its HTTP 403 "GitHub access to this repository is not enabled for this
+session"; any other answer, a 200 included, is a PROBLEM (the 2026-10-13 probe showed the installation API can't
+answer there; decision-048, TASK-243 AC6). Locally it reads `gh api orgs/uw-share-lab/installations` (an org
+owner's call; it fails, exit 2, for anyone else) and prints the Claude App installation's repository selection and
+permissions; a selection other than `selected` is a PROBLEM. Then the credential itself: in the cloud gh
 must have no stored login (one would be a file dependency code could read, which step 5 can't strip), and a real
 token in GH_TOKEN or GITHUB_TOKEN is reported (step 5 strips those). Locally a stored login is allowed: it is the
 maintainer's own machine, where `make test` runs with it every day. In the cloud it also writes the clone's
@@ -29,6 +39,12 @@ no-dependency-code marker, `op-no-dep-code` in git's common directory: a cloud r
 dependency code (decision-048, 2026-10-13), and while the marker is there `make sync`, `fmt`, `lint`, `test`, `e2e`
 and `openapi` refuse, `scripts/setup-dev.sh` skips its `uv sync`, and `.githooks/pre-push` skips its `make lint`.
 Locally it removes a marker it finds. A checker: ok / PROBLEM; exit 0, 1 or 2.
+
+`uv-release` (step 0) compares the api image's uv (`deploy/api.Dockerfile` on origin/dev) with uv's latest release
+(`gh api repos/astral-sh/uv/releases/latest`). It prints `ok` lines, and an `OWNER` line for the summary's "for the
+owner" when the release is a newer minor, or when the call is refused by the cloud session binding (HTTP 403 "GitHub
+access to this repository is not enabled for this session": check uv's latest release by hand). Exit 0; 2 when the
+pin can't be read or the call fails any other way.
 
 `ci` reads, over REST, CI's results for the PR's head `<sha>`, which in the cloud stand in for every local run of
 the PR's dependencies (step 5): the latest GitHub Actions check run of each of `lint`, `test`, `claude-tooling`,
@@ -99,16 +115,22 @@ from pathlib import Path
 from typing import Any
 
 from _common import (
+    NOT_ENABLED,
+    SESSION_BOUND,
     Report,
     ToolError,
     age_days,
+    detect_mode,
     git_show,
     main_guard,
     now,
     parse_time,
+    refusal,
+    refused,
     resolve_refs,
     run,
     run_json,
+    version_tuple,
 )
 
 REPO = "uw-share-lab/openproceedings"
@@ -133,8 +155,6 @@ DEPENDABOT = (
 )
 PER_PAGE = 100
 MAX_PAGES = 30
-# What a Claude Code cloud session answers for any GraphQL call (HTTP 403); its presence is how `cloud` is told.
-GRAPHQL_BLOCKED = "GitHub GraphQL is not available from Claude Code sessions"
 # A GitHub token's shape (classic, OAuth, app, refresh, fine-grained): a placeholder doesn't have it.
 TOKEN_SHAPE = re.compile(r"gh[opsur]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}")
 # what gh may hold as a stored login: a token of today's shape, or a classic 40-hex one (still valid if old)
@@ -161,6 +181,15 @@ CI_APP = "github-actions"
 WEB_IMAGE_PATHS = re.compile(
     r"(?:deploy|frontend)/.+|package\.json|package-lock\.json|\.dockerignore|\.github/workflows/web-image\.yml"
 )
+ORG = "uw-share-lab"
+APP_SLUG = "claude"
+# step 0's session-binding check (cloud): a path outside `repos/...` and a public repository the session isn't bound
+# to, each of which the proxy must refuse with its own 403 (decision-048, TASK-243 AC6 addendum)
+UNBOUND_PATH = "user/installations"
+OTHER_REPO = "astral-sh/uv"
+# the api image's uv stage, whose minors come by hand (step 0; `.github/dependabot.yml` ignores them while uv is 0.x)
+UV_DOCKERFILE = "deploy/api.Dockerfile"
+UV_PIN = re.compile(r"ghcr\.io/astral-sh/uv:(\d+(?:\.\d+)+)@sha256:[0-9a-f]{64}")
 
 
 def ecosystem(head: str) -> str:
@@ -195,36 +224,59 @@ def get_pr(number: int) -> dict[str, Any]:
     return pr
 
 
-def detect_mode() -> str:
-    """`cloud` when GraphQL is refused the way a Claude Code cloud session refuses it, `local` when it answers."""
-    r = run(["gh", "api", "graphql", "-f", "query={viewer{login}}"], ok_codes=(0, 1))
-    if r.returncode == 0:
-        try:
-            login = json.loads(r.stdout)["data"]["viewer"]["login"]
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            raise ToolError(f"GraphQL answered without a login: {r.stdout.strip()[:200]}") from e
-        if login:
-            return "local"
-        raise ToolError("GraphQL answered an empty login")
-    if GRAPHQL_BLOCKED in r.stdout + r.stderr:
-        return "cloud"
-    raise ToolError(
-        f"GraphQL failed, but not as a Claude Code session refuses it: {(r.stdout + r.stderr).strip()[:300]}"
-    )
-
-
 def marker_path() -> Path:
     """The no-dependency-code marker, in git's common directory (shared by every worktree of the clone)."""
     common = run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"]).stdout.strip()
     return Path(common) / NO_DEP_CODE
 
 
+def session_binding(rep: Report) -> None:
+    """Cloud: the proxy confines the session's credential to this repository. Both refusals must be the proxy's own
+    403s, word for word; any other answer (a 200 included) is a PROBLEM that stops the run."""
+    for cmd, message, what in (
+        (["gh", "api", UNBOUND_PATH], SESSION_BOUND, f"gh api {UNBOUND_PATH} (outside repos/...)"),
+        (
+            ["gh", "api", f"repos/{OTHER_REPO}"],
+            NOT_ENABLED,
+            f"gh api repos/{OTHER_REPO} (another repository)",
+        ),
+    ):
+        got = refused(cmd, message)
+        if got is None:
+            rep.ok(f"session binding: {what} refused: {message!r}")
+        else:
+            rep.problem(
+                f"session binding: {what} was not refused with {message!r} (HTTP 403): {got}; the session's "
+                f"credential may reach beyond {REPO}"
+            )
+
+
+def installations(rep: Report) -> None:
+    """Local: the Claude App's installation on the org must cover selected repositories only (the owner limited it to
+    openproceedings, 2026-10-13). `orgs/<org>/installations` needs an org owner's credential; the repository list of
+    a selected installation isn't readable with a gh login, so the selection is what is checked."""
+    got = run_json(["gh", "api", f"orgs/{ORG}/installations?per_page=100"])
+    found = [i for i in got["installations"] if i["app_slug"] == APP_SLUG]
+    if not found:
+        rep.ok(f"installation: no Claude App installation on {ORG} (a cloud run can write nothing here)")
+    for inst in found:
+        perms = ", ".join(f"{k} {v}" for k, v in sorted((inst.get("permissions") or {}).items()))
+        selection = inst["repository_selection"]
+        rep.ok(f"installation: Claude App {inst['id']} on {ORG}, repository_selection {selection}; {perms}")
+        if selection != "selected":
+            rep.problem(
+                f"installation: the Claude App installation {inst['id']} covers {selection} of {ORG}'s repositories; "
+                f"limit it to openproceedings (org Settings > GitHub Apps > Claude > Configure; decision-048)"
+            )
+
+
 def preflight() -> None:
     rep = Report("preflight")
-    login = run(["gh", "api", "user", "--jq", ".login"]).stdout.strip()
-    if not login:
-        raise ToolError("gh api user answered no login")
-    rep.ok(f"gh api user: {login}")
+    # a repository-scoped call: a cloud session's proxy refuses paths outside repos/... (`gh api user` may fail there)
+    name = run(["gh", "api", f"repos/{REPO}", "--jq", ".full_name"]).stdout.strip()
+    if name != REPO:
+        raise ToolError(f"gh api repos/{REPO} answered {name!r}, not {REPO}")
+    rep.ok(f"gh api repos/{REPO}: answers")
     mode = detect_mode()
     rep.ok(f"mode: {mode}")
     marker = marker_path()
@@ -236,9 +288,12 @@ def preflight() -> None:
             f"no dependency code: {marker} written; make sync, fmt, lint, test, e2e and openapi refuse here, "
             "setup-dev.sh skips uv sync and the pre-push hook skips make lint (CI's checks stand in: prs.py ci)"
         )
-    elif marker.exists():
-        marker.unlink()
-        rep.ok(f"removed {marker}: a local clone runs the PR's tests itself")
+        session_binding(rep)
+    else:
+        if marker.exists():
+            marker.unlink()
+            rep.ok(f"removed {marker}: a local clone runs the PR's tests itself")
+        installations(rep)
     held = [v for v in TOKEN_VARS if STORED_SHAPE.search(os.environ.get(v, ""))]
     clean = {k: v for k, v in os.environ.items() if k not in TOKEN_VARS}
     stored = run(["gh", "auth", "token"], ok_codes=(0, 1), env=clean)
@@ -259,6 +314,40 @@ def preflight() -> None:
     elif has_stored:
         rep.ok("credential: gh's stored login (a maintainer's own machine; step 5 hides gh's config)")
     rep.finish()
+
+
+def uv_release() -> None:
+    """Step 0: the api image's uv against uv's latest release. A newer minor is for the owner (`OWNER` line); in the
+    cloud the call is refused by the session binding, and checking by hand is for the owner. Exit 0, or 2 when the pin
+    can't be read or the call fails any other way."""
+    text = git_show("origin/dev", UV_DOCKERFILE)
+    pins = UV_PIN.findall(text or "")
+    if len(set(pins)) != 1:
+        raise ToolError(f"{UV_DOCKERFILE} on origin/dev pins uv {len(set(pins))} ways, not one")
+    pinned = pins[0]
+    print(f"ok      pinned: uv {pinned} ({UV_DOCKERFILE} on origin/dev)")
+    r = run(["gh", "api", f"repos/{OTHER_REPO}/releases/latest"], ok_codes=(0, 1))
+    if (why := refusal(r, NOT_ENABLED)) is None:
+        print(
+            f"OWNER   check uv's latest release by hand (https://github.com/{OTHER_REPO}/releases/latest; pinned "
+            f"{pinned}): this cloud session isn't bound to {OTHER_REPO} ({NOT_ENABLED!r}, HTTP 403)"
+        )
+        return
+    if r.returncode:
+        raise ToolError(f"gh api repos/{OTHER_REPO}/releases/latest failed: {why}")
+    try:
+        tag = str(json.loads(r.stdout)["tag_name"])
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        raise ToolError(f"gh api repos/{OTHER_REPO}/releases/latest answered no tag_name") from e
+    latest, have = version_tuple(tag), version_tuple(pinned)
+    if not latest:
+        raise ToolError(f"uv's latest release has no version in its tag {tag!r}")
+    if latest[:2] > have[:2]:
+        print(
+            f"OWNER   uv {tag} is a newer minor than the pinned {pinned}: upgrade the api image's uv by hand"
+        )
+    else:
+        print(f"ok      latest: uv {tag}, the pinned minor ({pinned})")
 
 
 def list_prs() -> None:
@@ -631,6 +720,7 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("preflight")
     sub.add_parser("list")
+    sub.add_parser("uv-release")
     for name in ("check", "queue", "ci"):
         c = sub.add_parser(name)
         c.add_argument("number", type=int)
@@ -648,6 +738,8 @@ def main() -> None:
         preflight()
     elif a.cmd == "list":
         list_prs()
+    elif a.cmd == "uv-release":
+        uv_release()
     elif a.cmd == "check":
         check_pr(a.number, a.head)
     elif a.cmd == "queue":
