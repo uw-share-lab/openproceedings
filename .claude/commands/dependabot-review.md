@@ -91,7 +91,7 @@ it back and compare it with the file you sent:
 ```bash
 gh api -X POST repos/uw-share-lab/openproceedings/issues/<n>/comments -F body=@"$RUN/comment-<n>.md" --jq .id   # <id>
 gh api repos/uw-share-lab/openproceedings/issues/comments/<id> --jq .body > "$RUN/posted-<n>.md"
-diff <(sed -e '$a\' "$RUN/comment-<n>.md") <(sed -e '$a\' "$RUN/posted-<n>.md")   # must print nothing
+diff <(awk 1 "$RUN/comment-<n>.md") <(awk 1 "$RUN/posted-<n>.md")   # must print nothing (awk 1 evens out the final newline)
 ```
 
 For `@dependabot rebase`, write the one line to `$RUN/comment-<n>.md` first and post it the same way. The PR body
