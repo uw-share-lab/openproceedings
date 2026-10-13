@@ -46,7 +46,9 @@ def chmod_globs(text: str) -> tuple[list[str], list[str]]:
                     break
                 args.append(a)
             if not args or args[0] != "+x" or len(args) < 2:
-                problems.append(f"{SETUP}:{n}: only `chmod +x <glob>...` is checked; found chmod {' '.join(args)}")
+                problems.append(
+                    f"{SETUP}:{n}: only `chmod +x <glob>...` is checked; found chmod {' '.join(args)}"
+                )
                 continue
             for g in args[1:]:
                 if g.startswith("-") or "$" in g or "`" in g or "{" in g or g.startswith("/"):
@@ -92,7 +94,9 @@ def main() -> None:
         for p in hit:
             checked += 1
             if modes[p] != "100755":
-                problems.append(f"{p}: committed {modes[p]}, but {SETUP} makes it executable (git add --chmod=+x)")
+                problems.append(
+                    f"{p}: committed {modes[p]}, but {SETUP} makes it executable (git add --chmod=+x)"
+                )
     for e in problems:
         print(f"✗ {e}", file=sys.stderr)
     print(f"file modes: {checked} files from {len(globs)} chmod globs · {len(problems)} errors")

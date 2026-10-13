@@ -4,6 +4,7 @@ title: 'setup-dev.sh leaves a fresh clone dirty: four tooling files committed 10
 status: In Progress
 assignee: []
 created_date: '2026-10-13 15:52'
+updated_date: '2026-10-13 16:16'
 labels:
   - tooling
   - bug
@@ -25,3 +26,12 @@ The weekly cloud routine (2026-10-13) found that on a fresh clone `scripts/setup
 - [ ] #3 Case-table rows cover the check, and its mutants are killed (`make mutate-changed`)
 - [ ] #4 Docs describe the check as built
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Find what in setup-dev.sh sets the bit: its one `chmod +x` over four globs.
+2. Decide on evidence: the four files have shebangs and all 22 siblings in the same globs are 100755, so commit them 100755 (keep the chmod as a safety net).
+3. Add .claude/scripts/check_file_modes.py to make tooling: read every chmod in setup-dev.sh (fail closed on forms it cannot read), match each glob against git's index as bash would, require 100755 and at least one match.
+4. Case-table rows in test-tooling-scripts.sh, mutants in gates.json, docs (CONTRIBUTING, ci-engineer, spec 08) and a learnings entry.
+<!-- SECTION:PLAN:END -->
