@@ -24,22 +24,28 @@ The weekly Dependabot cloud routine found a fresh clone dirty after `scripts/set
 
 ## Dead ends — don't repeat these
 - `core.fileMode=false` hides the symptom on one machine and leaves every other clone dirty; it isn't a fix.
-- Completing the task before the review round: Backlog 1.53 can't edit a task in `completed/` ("Task not found").
-  Restoring the pre-completion file with git (`git rm` the completed copy, `git restore --source=<sha>` the
-  `tasks/` copy) and re-running edit + complete worked; finalize after review instead.
+- Completing the task before the last review round. Write `--final-summary` and run `backlog task complete` only
+  after the final round (task-hygiene says so): Backlog 1.53 can't edit a task in `completed/` ("Task not
+  found"), and files under `backlog/` are not moved by hand. Here the pre-completion copy was restored with git
+  twice to re-finalize through the CLI; the first restore used a commit without the Implementation Plan and lost
+  it. If it has to be done, restore from the last pre-completion commit that still has the plan, and treat it as
+  needing the owner's approval rather than as a recipe.
 
 ## Decisions (and what would change them)
 - Commit the files 100755 and keep the chmod (a safety net for copies without modes, e.g. a source archive)
   → the check ties the two together → drop the chmod only if nothing outside git ever runs the tooling.
 - The check reads `chmod` from the setup script itself rather than repeating its globs, and refuses any chmod
-  it can't read (octal, `u+x`, by path, a variable or brace in a glob, `[^...]` and `[[:class:]]`, which fnmatch
-  reads differently from bash, a continued line with a `#` in it), joins backslash-newline continuations as bash
-  does, and fails when the setup script is missing, so the list can't drift and moving the script can't switch
-  it off (review round 1, security- and code-reviewer).
+  it can't read (octal, `u+x`, by path, a variable or brace in a glob, `[^...]` and any `[[` form, which fnmatch
+  reads differently from bash, a continued line with a `#` in it, a chmod after a `#`, quotes, backslashes or a
+  redirection on a chmod line, `shopt`, `GLOBIGNORE`, a `cd` off the repo root). It joins backslash-newline
+  continuations and starts a comment only at a word that begins with `#`, as bash does, and fails when the setup
+  script is missing, so the list can't drift and moving the script can't switch it off (review rounds 1 and 2).
+  shlex's defaults differ from bash in both of those (a mid-word `#` is a comment to shlex), so a shell-parsing
+  check needs `commenters = ""` and its own rules.
 
 ## Follow-ups
 - none.
 
 ## Propagated to
-- Skill / agent / CLAUDE.md updated? — `CONTRIBUTING.md` (Setup), `.claude/agents/ci-engineer.md`, spec 08 §CI table
+- Skill / agent / CLAUDE.md updated? — `CONTRIBUTING.md` (Setup), `README.md`, `.claude/agents/ci-engineer.md`, spec 08 §CI table and §Testing, `.claude/skills/pr-workflow/SKILL.md`, `make help`
 - Test or hook added? — `.claude/scripts/check_file_modes.py` in `make tooling`, rows in `test-tooling-scripts.sh`, mutants in `gates.json`
