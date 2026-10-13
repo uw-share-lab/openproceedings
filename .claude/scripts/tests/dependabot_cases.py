@@ -1143,8 +1143,8 @@ def _(c: Case) -> None:
 @row("docker: a ghcr.io image whose attestation fails")
 def _(c: Case) -> None:
     args = uv_image_case(c, False)  # no graphql fixture: the mode can't be told, so the line stays as it was
-    c.expect("docker_digest.py", args, PROBLEM, r"^PROBLEM .*gh attestation verify --owner astral-sh")
     got, out = c.run("docker_digest.py", *args)
+    assert got == PROBLEM and re.search(r"^PROBLEM .*gh attestation verify --owner astral-sh", out, re.M), out
     assert "cloud" not in out, out
 
 

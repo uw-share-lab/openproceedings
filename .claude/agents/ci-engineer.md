@@ -85,7 +85,10 @@ tempted to bypass it.
   executes none of the PR's dependency code (decision-048, 2026-10-13): it reads CI's results for the head with
   `prs.py ci` instead of running `make test`, and `prs.py preflight`'s `op-no-dep-code` marker makes the
   Makefile's dependency targets refuse (`dep-code-allowed`), `setup-dev.sh` skip `uv sync` and the pre-push hook
-  skip `make lint`; a new target that installs or runs dependencies takes `dep-code-allowed` as a prerequisite. Its `uv` entry
+  skip `make lint`; a new target that installs or runs dependencies takes `dep-code-allowed` as a prerequisite.
+  The session's proxy answers only `repos/uw-share-lab/openproceedings/...` (other paths and repositories get its
+  own 403s), so a cloud check must be one it can answer: `prs.py preflight` checks those refusals in the cloud and
+  the App installation locally, and Sigstore can't run there (decision-048's TASK-243 AC3/AC6 addendum). Its `uv` entry
   ignores `tantivy`, whose upgrade must bump `SCHEMA_VERSION` by hand (spec 08 §Release), and every image a
   `deploy/` build pulls stays digest-pinned (`check_digest_pins.py`, spec 08 §Deploy).
 - Secrets: CI never needs OpenReview credentials — tests use recorded HTTP fixtures. No `data/` in
