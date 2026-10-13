@@ -169,7 +169,7 @@ Note whether `docker info` works and whether `npx playwright install chromium` s
 **In the cloud, check the App installation's reach** (§Where it runs) before anything of a PR runs:
 
 ```bash
-gh api installation/repositories --jq '[.repositories[].full_name] | join(" ")'   # must print exactly uw-share-lab/openproceedings
+gh api installation/repositories --jq '"\(.total_count) \([.repositories[].full_name] | join(" "))"'   # must print exactly: 1 uw-share-lab/openproceedings
 ```
 
 Anything else stops the run, with every PR as "not reviewed": more repositories (the installation reaches beyond
