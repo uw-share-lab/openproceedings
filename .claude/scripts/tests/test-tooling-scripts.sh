@@ -425,6 +425,10 @@ modes 'chmod +x a/*.sh b/*.py' a/x.sh:+x
 expect_mode_err "a glob that matches no tracked file" 'scripts/setup-dev\.sh: chmod \+x b/\*\.py matches no tracked file'
 modes 'chmod +x a/*.sh' a/x.sh:+x a/sub/y.sh:-x
 expect ok  "* stays in one path segment"                              check_file_modes.py
+modes 'chmod +x b/*' b/z:+x b/sub/w:-x
+expect ok  "a trailing * doesn't reach into a subdirectory"           check_file_modes.py
+modes 'chmod +x a/x.sh' a/x.sh:+x a/x.sh.bak:-x a/x.shx:-x
+expect ok  "a glob matches the whole name, not a prefix"              check_file_modes.py
 modes 'chmod +x a/*.sh' a/x.sh:+x a/.h.sh:-x
 expect ok  "* skips a leading dot, as bash does"                      check_file_modes.py
 modes 'chmod +x a/.*.sh' a/.h.sh:-x
