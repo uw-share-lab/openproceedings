@@ -35,9 +35,10 @@ the PR's dependencies (step 5): the latest GitHub Actions check run of each of `
 `playwright` and `bench`, and `web-image` when the PR touches a path that workflow runs on. A check run by any
 other app doesn't count (the session's App can write checks). It requires the PR as `queue` does (open,
 Dependabot's, into `dev`, still at `<sha>`), then polls every `--interval` seconds while a check is still running
-or not yet listed, for up to `--timeout` minutes. Every check `success` is exit 0; any other conclusion, or a check
-still running or missing at the timeout, is a PROBLEM (exit 1: leave the PR open; no local rerun in the cloud); gh
-failing is exit 2.
+or not yet listed, for up to `--timeout` minutes (default 9, under the Bash tool's 10-minute limit). Every check
+`success` is exit 0; any other conclusion is a PROBLEM (exit 1: leave the PR open; no local rerun in the cloud),
+with the run's URL; gh failing is exit 2; a check still running or not yet listed at the timeout, with none red, is
+exit 4: run it again on the same head, up to an hour of waiting in all, then leave the PR open.
 
 `list` prints one block per open PR by dependabot[bot] into `dev`: number, ecosystem, head branch (quoted, with a
 warning, when it is not a plain `dependabot/<ecosystem>/…` name) and title
@@ -97,7 +98,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from _common import Report, ToolError, age_days, main_guard, now, parse_time, resolve_refs, run, run_json
+from _common import (
+    Report,
+    ToolError,
+    age_days,
+    git_show,
+    main_guard,
+    now,
+    parse_time,
+    resolve_refs,
+    run,
+    run_json,
+)
 
 REPO = "uw-share-lab/openproceedings"
 ALLOWED = {
@@ -135,6 +147,13 @@ HEAD_SHAPE = re.compile(r"dependabot/[a-z_]+/(?!.*\.\.)[A-Za-z0-9._/@+-]+")  # g
 # In git's common directory of a cloud clone: make's dependency targets, setup-dev.sh's uv sync and the pre-push
 # hook's make lint stand down while it exists (decision-048, 2026-10-13: a cloud run executes no PR dependency code).
 NO_DEP_CODE = "op-no-dep-code"
+# What a tree honours the marker with. A PR based on an older dev lacks them, and git runs the checked-out tree's
+# Makefile and pre-push hook, so in a cloud clone `check` stops such a head (the routine asks Dependabot to rebase).
+GUARDED = {
+    "Makefile": "dep-code-allowed",
+    ".githooks/pre-push": NO_DEP_CODE,
+    "scripts/setup-dev.sh": NO_DEP_CODE,
+}
 # CI's checks that stand in for step 5's local runs in the cloud (GitHub Actions runs them, without the session's
 # credential), and the paths `web-image.yml` runs on, which add `web-image`.
 CI_CHECKS = ("lint", "test", "claude-tooling", "playwright", "bench")
@@ -194,6 +213,12 @@ def detect_mode() -> str:
     )
 
 
+def marker_path() -> Path:
+    """The no-dependency-code marker, in git's common directory (shared by every worktree of the clone)."""
+    common = run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"]).stdout.strip()
+    return Path(common) / NO_DEP_CODE
+
+
 def preflight() -> None:
     rep = Report("preflight")
     login = run(["gh", "api", "user", "--jq", ".login"]).stdout.strip()
@@ -202,8 +227,7 @@ def preflight() -> None:
     rep.ok(f"gh api user: {login}")
     mode = detect_mode()
     rep.ok(f"mode: {mode}")
-    common = run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"]).stdout.strip()
-    marker = Path(common) / NO_DEP_CODE
+    marker = marker_path()
     if mode == "cloud":
         marker.write_text(
             "cloud mode (prs.py preflight): this run executes none of a PR's dependency code (decision-048)\n"
@@ -319,14 +343,21 @@ def check_pr(number: int, head: str) -> None:
             rep.problem(
                 f"commit {c[:12]}: GitHub doesn't verify its signature ({verification.get('reason')})"
             )
+    if marker_path().exists():  # a cloud clone: the head's own Makefile and hooks must honour the marker
+        old = [f for f, word in GUARDED.items() if word not in (git_show(sha, f) or "")]
+        if old:
+            rep.problem(
+                f"the head's {', '.join(old)} predate the no-dependency-code guard (a base older than it): comment "
+                "`@dependabot rebase` and list the PR as not reviewed"
+            )
     if not rep.problems:
         rep.ok(f"{eco}: {len(paths)} file(s) and {len(commits)} commit(s), all Dependabot's, at {sha[:12]}")
     rep.finish()
 
 
-def ci_state(sha: str, names: tuple[str, ...]) -> dict[str, str]:
-    """Each named check's state on `sha`: its latest GitHub Actions run's conclusion, `pending` while it runs, or
-    `missing` when no such run is listed."""
+def ci_state(sha: str, names: tuple[str, ...]) -> dict[str, tuple[str, str]]:
+    """Each named check's (state, run URL) on `sha`: its latest GitHub Actions run's conclusion, `pending` while
+    it runs, or `missing` when no such run is listed (no URL)."""
     latest: dict[str, dict[str, Any]] = {}
     for r in api_pages(f"repos/{REPO}/commits/{sha}/check-runs", key="check_runs"):
         name = r.get("name")
@@ -334,15 +365,15 @@ def ci_state(sha: str, names: tuple[str, ...]) -> dict[str, str]:
             continue
         if name not in latest or r["id"] > latest[name]["id"]:
             latest[name] = r
-    state: dict[str, str] = {}
+    state: dict[str, tuple[str, str]] = {}
     for name in names:
         r = latest.get(name)
         if r is None:
-            state[name] = "missing"
+            state[name] = ("missing", "")
         elif r.get("status") != "completed":
-            state[name] = "pending"
+            state[name] = ("pending", r.get("html_url") or "")
         else:
-            state[name] = r.get("conclusion") or "no conclusion"
+            state[name] = (r.get("conclusion") or "no conclusion", r.get("html_url") or "")
     return state
 
 
@@ -361,20 +392,29 @@ def ci_pr(number: int, head: str, interval: float, timeout_min: float) -> None:
     deadline = time.monotonic() + timeout_min * 60
     while True:
         state = ci_state(sha, names)
-        red = [n for n in names if state[n] not in ("success", "pending", "missing")]
-        waiting = [n for n in names if state[n] in ("pending", "missing")]
+        red = [n for n in names if state[n][0] not in ("success", "pending", "missing")]
+        waiting = [n for n in names if state[n][0] in ("pending", "missing")]
         if red or not waiting or time.monotonic() >= deadline:
             break
         print(f"waiting for {', '.join(waiting)} at {sha[:12]}", flush=True)
         time.sleep(interval)
     for n in names:
-        if state[n] == "success":
-            rep.ok(f"{n}: success at {sha[:12]}")
-        elif n in waiting:
-            why = "another check is red" if red else f"waited {timeout_min:g} min"
-            rep.problem(f"{n}: {state[n]} at {sha[:12]} ({why}); no local rerun in the cloud")
+        got, url = state[n]
+        at = f"at {sha[:12]}" + (f" ({url})" if url else "")
+        if got == "success":
+            rep.ok(f"{n}: success {at}")
+        elif n in red:
+            rep.problem(f"{n}: {got} {at}: CI's result stands; no local rerun in the cloud")
+        elif red:
+            rep.problem(f"{n}: {got} {at} (not waited for: another check is red)")
         else:
-            rep.problem(f"{n}: {state[n]} at {sha[:12]}: CI's result stands; no local rerun in the cloud")
+            print(f"waiting {n}: {got} {at}", flush=True)
+    if waiting and not red:
+        print(
+            f"CI #{number}: still waiting for {', '.join(waiting)} after {timeout_min:g} min: run this again on the "
+            "same head, up to an hour of waiting in all; then leave the PR open for the owner"
+        )
+        sys.exit(4)
     rep.finish()
 
 
@@ -597,7 +637,7 @@ def main() -> None:
         c.add_argument("--head", required=True, help="the PR head as fetched and reviewed (a sha or a ref)")
         if name == "ci":
             c.add_argument("--interval", type=float, default=60, help="seconds between reads")
-            c.add_argument("--timeout", type=float, default=60, help="minutes to wait for running checks")
+            c.add_argument("--timeout", type=float, default=9, help="minutes to wait for running checks")
     w = sub.add_parser("watch")
     w.add_argument("numbers", type=int, nargs="+")
     w.add_argument("--interval", type=float, default=45)

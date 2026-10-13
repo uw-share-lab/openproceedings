@@ -236,7 +236,7 @@ check`) with the environment step 0 installs from `dev` before any PR is fetched
 it relies on CI's results for the PR head, which GitHub Actions runs without the App's credential: `prs.py ci <n>
 --head <sha>` reads them over REST and requires the latest GitHub Actions run of `lint`, `test`, `claude-tooling`,
 `playwright` and `bench` (and `web-image` when the PR touches its paths) to be `success`, waiting up to an hour
-while one runs. A check run written by another app doesn't count, since the App has `checks` write. A red or
+while one runs (9 minutes per call, which exits 4 to be called again on the same head). A check run written by another app doesn't count, since the App has `checks` write. A red or
 missing check is a hard stop left for the owner, never rerun in the cloud. The routine reads CI before writing the
 PR body and again just before `prs.py queue`. Locally (a maintainer's machine) nothing changes: the routine runs
 `make test` and the rest as before.
@@ -254,7 +254,11 @@ What follows from it:
   its `make lint` (`uv run --locked` would sync the PR's `uv.lock` and run its ruff and mypy) and still runs
   `make tooling`; CI's `lint` on the pushed head stands in. Locally `preflight` removes a marker it finds. Rows:
   `.claude/scripts/tests/test-no-dep-code.sh` and `dependabot_cases.py`; mutants in `gates.json` and
-  `dependabot.json`. Commands typed directly (`uv run`, `npm ci`, `npx`, the smoke test) have no guard: the
+  `dependabot.json`. The guard lives in the checked-out tree, and a Dependabot PR based on an older `dev` carries
+  unguarded copies, so in the cloud `core.hooksPath` points at `dev`'s hooks extracted into the run directory and
+  `prs.py check` stops a head whose `Makefile`, pre-push hook or `setup-dev.sh` lacks the guard (the routine
+  comments `@dependabot rebase`). If `git rev-parse` fails, the Makefile's guarded targets and the pre-push hook
+  refuse. Commands typed directly (`uv run`, `npm ci`, `npx`, the smoke test) have no guard: the
   procedure, and a verbatim instruction in every cloud reviewer prompt, keep them out.
 - **What it doesn't close.** The session still holds the App's credential behind the proxy, and `dev`'s own
   environment still runs in it (`make tooling`'s three pytest tables, the autofix hook's ruff, prettier and

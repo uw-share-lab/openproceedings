@@ -4114,5 +4114,41 @@
   "file": "scripts/setup-dev.sh",
   "old": "if [ -e \"$common/op-no-dep-code\" ]; then",
   "new": "if [ -e \"$common/op-no-dep-code-never\" ]; then"
+ },
+ {
+  "label": "no-dep-code: make tooling guarded",
+  "file": "Makefile",
+  "old": "tooling:\n",
+  "new": "tooling: dep-code-allowed\n"
+ },
+ {
+  "label": "no-dep-code: make mutate guarded",
+  "file": "Makefile",
+  "old": "mutate:\n",
+  "new": "mutate: dep-code-allowed\n"
+ },
+ {
+  "label": "no-dep-code: the Makefile guard passes when git fails",
+  "file": "Makefile",
+  "old": "can't be checked: run make from the git clone\"; exit 1; }; \\",
+  "new": "can't be checked: run make from the git clone\"; exit 0; }; \\"
+ },
+ {
+  "label": "no-dep-code: pre-push looks in the worktree's git dir",
+  "file": ".githooks/pre-push",
+  "old": "common=$(git rev-parse --path-format=absolute --git-common-dir) || {",
+  "new": "common=$(git rev-parse --path-format=absolute --git-dir) || {"
+ },
+ {
+  "label": "no-dep-code: setup-dev.sh looks in the worktree's git dir",
+  "file": "scripts/setup-dev.sh",
+  "old": "common=$(git rev-parse --path-format=absolute --git-common-dir)",
+  "new": "common=$(git rev-parse --path-format=absolute --git-dir)"
+ },
+ {
+  "label": "no-dep-code: pre-push falls through to make lint when git fails",
+  "file": ".githooks/pre-push",
+  "old": "can't check for op-no-dep-code\" >&2; exit 1; }",
+  "new": "can't check for op-no-dep-code\" >&2; }"
  }
 ]

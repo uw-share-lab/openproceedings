@@ -250,7 +250,8 @@ isn't an object, a root `workspaces` entry other than `frontend` (add it to the 
 `--root` that isn't a directory, and a checkout with neither file (so a routine that forgets `--root .` fails on
 dev's copy's scratch directory instead of reading it as a match); case rows in `test-tooling-scripts.sh`.
 `npm_lock.py` reports the same mismatches, from the same function, as FIX lines (a section that isn't an object,
-or a workspace entry missing from the lock, is a PROBLEM). Run `npm audit --omit=dev` and report any advisory
+or a workspace entry missing from the lock, is a PROBLEM). Run `npm audit --omit=dev` (in a cloud run with
+`--package-lock-only`, *Cloud and local*) and report any advisory
 that predates the bump. A lockfile edit runs under the `.nvmrc` Node, because an older npm drops the `libc`
 fields. Docs that state a bumped version move in the same PR.
 
@@ -337,12 +338,18 @@ with the environment step 0 installs from `dev` before any PR is fetched). For t
 `prs.py ci <n> --head <sha>`: over REST, the latest GitHub Actions run of each of `lint`, `test`, `claude-tooling`,
 `playwright` and `bench` on that head, plus `web-image` when the PR touches a path it runs on, must be `success`
 (GitHub Actions runs them without the App's credential; a check by any other app doesn't count, since the App can
-write checks). It waits up to an hour while a check runs; red, missing or still running is a hard stop for the
+write checks). It waits up to 9 minutes per call (exit 4 while a check still
+runs: the routine calls it again on the same head, up to an hour in all); red, missing or still running is a hard stop for the
 owner, never rerun in the cloud. The routine reads it before writing the PR body and again just before queueing.
 `prs.py preflight` makes the rule a guard: in the cloud it writes `op-no-dep-code` in the clone's git directory,
 and while that is there `make sync`, `fmt`, `lint`, `test`, `e2e` and `openapi` refuse (the Makefile's
 `dep-code-allowed`), `scripts/setup-dev.sh` skips its `uv sync`, and `.githooks/pre-push` skips its `make lint`;
-locally it removes a marker it finds (case table `test-no-dep-code.sh`, rows in `dependabot_cases.py`). Commands
+locally it removes a marker it finds (case table `test-no-dep-code.sh`, rows in `dependabot_cases.py`). Because
+the guard lives in the checked-out tree, a PR based on an older `dev` would bring back unguarded copies: in a cloud
+clone `core.hooksPath` points at `dev`'s hooks extracted into the run directory, and `prs.py check` stops a head
+whose `Makefile`, pre-push hook or `setup-dev.sh` lacks the guard (the routine comments `@dependabot rebase`). When
+`git rev-parse` fails (so the marker can't be checked), the Makefile's dependency targets and the pre-push hook
+refuse rather than run. Commands
 typed directly (`uv run`, `npm ci`, `npx`) have no such guard; the procedure and its reviewer prompt keep them out.
 Locally nothing changed: the routine runs `make test` and the rest, and step 5's stale-base waiver (which runs
 `make test` on the merged tree) is local only. No push or CCR call has run from the cloud yet. `gh attestation verify` can't start a Sigstore
@@ -360,9 +367,10 @@ shape isn't documented, so any non-2xx leaves the PR open for the owner, and it 
 nothing set to merge, or a failed call left it set). A push between that second read and GitHub acting on the PUT
 is a residual race; the merge queue's `review-attested` check closes it against anyone who can't also rewrite the
 PR body, since the queue build requires each PR's body to attest the exact head it merges, and the routine attested
-only the head it reviewed (decision-048). Dependency code left running in a cloud session could use the proxy to do
-both; the routine looks for leftover dependency processes before it queues, which catches accidents but not code
-that hides itself, so what bounds it is that only registry-verified versions run and the credential's scope. The
+only the head it reviewed (decision-048). In the cloud no PR dependency code runs (above), only `dev`'s
+environment. Locally, dependency code left running could do both with the maintainer's login; the routine looks for
+leftover dependency processes before it queues, which catches accidents but not code that hides itself, so what
+bounds it is that only registry-verified versions run. The
 routine runs `record-review.py` from `dev`'s copy, like the checkers, because a PR branch based on an older `dev`
 carries an older recorder. `prs.py watch` polls REST: the PR's `merged` and `auto_merge`, the timeline's latest
 merge-queue event, the queue's `gh-readonly-queue/dev/pr-<n>-<sha>` build branch, and the check runs, and names a

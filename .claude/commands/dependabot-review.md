@@ -34,8 +34,10 @@ A PR that hits a **hard stop** is never merged by this command: it is left open 
   For actions and Docker Hub images the 7-day hold is otherwise Dependabot's `cooldown`; no checker reads their
   age;
 - a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
-- a red required check (`lint`, `test`, `claude-tooling`, `attribution`, `learnings`, `review-attested`) that
-  the PR's own fix can't turn green;
+- a red required check that the PR's own fix can't turn green: locally any of `lint`, `test`, `claude-tooling`,
+  `attribution`, `learnings`, `review-attested`; in the cloud only the PR gates (`attribution`, `learnings`,
+  `review-attested`) are fixed, and a red `lint`, `test`, `claude-tooling`, `playwright`, `bench` or `web-image`
+  is a hard stop (fixing it would mean running the PR's dependencies to check the fix);
 - locally, a red local test (step 5) that the bump caused and a small fix in this PR can't mend, or one the bump
   didn't cause, unless every condition of step 5's **A red test on a stale base** holds;
 - in the cloud, any PROBLEM from `prs.py ci` (step 5): a CI check (`lint`, `test`, `claude-tooling`, `playwright`,
@@ -49,8 +51,9 @@ A PR that hits a **hard stop** is never merged by this command: it is left open 
   spec 08 §Monorepo layout "Python pin"). A new digest for the same `python` tag is fine.
 
 The four checkers in `.claude/scripts/dependabot/` (`uv_lock.py`, `npm_lock.py`, `docker_digest.py`,
-`actions_pins.py`) and `prs.py check` print `PROBLEM` for each scripted stop above (all but a red check, a
-red local test, a reviewer's Must and a failed `npm audit signatures`, which this command judges itself), `FIX`
+`actions_pins.py`) and `prs.py check` print `PROBLEM` for each scripted stop above (all but a red check
+locally, a red local test, a reviewer's Must and a failed `npm audit signatures`, which this command judges itself;
+in the cloud `prs.py ci` scripts the red check), `FIX`
 for what it repairs in the PR itself, and `ok` otherwise. Their exit status: 0 clean, 1 a PROBLEM (hard stop), 2
 the check could not run (treat as a hard stop and say why), 3 only FIX lines (fix, commit, run the check again). No
 checker's exit is ever ignored. `prs.py preflight`, `prs.py ci` and `prs.py queue` are checkers too (ok / PROBLEM; 0, 1 or 2).
@@ -78,7 +81,7 @@ and the installation covered **all** the org's repositories. That repository sel
 permissions, replace the fine-grained token's scope as the bound on what the session (and dependency code running
 in it, through the proxy) can do. The installation must cover only `openproceedings` (the owner's setting, org
 Settings → GitHub Apps → Claude → Configure), and step 0 checks it; the owner limited it later on 2026-10-13
-(`repository_selection: selected`). Workflows, repository-hooks and checks write can't be removed (the App sets
+(`repository_selection: selected`). Workflows, contents, repository-hooks and checks write can't be removed (the App sets
 them), so a cloud run executes none of the PR's dependency code (below).
 A push and the CCR auto-merge route haven't run from the cloud yet (TASK-243). A write that answers 403 "Resource
 not accessible by integration" means the App isn't installed for this repository or lacks the permission: stop
@@ -167,7 +170,7 @@ gh api user --jq .login              # a real call: `gh auth status` reports a c
 node --version                       # v22 (.nvmrc); an older npm drops the lock's `libc` fields
 uv --version                         # 0.12.22 or later (it installs Python 3.12.15, the pin)
 python3 --version                    # 3.11 or later (the scripts use tomllib)
-shellcheck --version                 # make lint runs it, and the pre-push hook runs make lint
+shellcheck --version                 # locally: make lint and the pre-push hook run it (cloud: optional; autofix uses it if present)
 git config user.name; git config user.email
 scripts/setup-dev.sh                 # git hooks (pre-push: make lint + make tooling), uv sync of dev's lock
 npm ci --ignore-scripts              # dev's lock, at the repo root, never in frontend/
@@ -175,8 +178,9 @@ git rev-parse --is-shallow-repository   # if true: git fetch --unshallow origin
 git fetch origin dev
 git worktree prune                   # drops a stale-base worktree (step 5) an aborted run left
 mktemp -d                            # the run's scratch directory: evidence, bodies, dispositions; never in the repo
-git archive origin/dev .claude/scripts/dependabot .claude/scripts/record-review.py | tar -x -C <the scratch directory>   # dev's checkers and recorder
+git archive origin/dev .claude/scripts/dependabot .claude/scripts/record-review.py .githooks | tar -x -C <the scratch directory>   # dev's checkers, recorder and git hooks
 python3 <the scratch directory>/.claude/scripts/dependabot/prs.py preflight
+git config core.hooksPath <the scratch directory>/.githooks   # cloud only: git runs dev's hooks, never a PR tree's
 ```
 
 Shell variables don't survive from one Bash call to the next, so write the directory `mktemp -d` printed as a
@@ -195,7 +199,9 @@ identity is empty or names an AI (it matches `claude|anthropic|noreply@anthropic
 PR is fetched: that is code
 already on `dev`, and `make tooling` and the autofix hook need it. In the cloud, nothing is installed again after
 this: `prs.py preflight` writes the no-dependency-code marker (§Where it runs), so a later `make sync` or
-`setup-dev.sh` on a PR branch installs nothing. Locally, note whether `docker info` works and whether `npx
+`setup-dev.sh` on a PR branch installs nothing. That guard lives in the checked-out tree's `Makefile`, pre-push hook
+and `setup-dev.sh`, so a PR based on a `dev` older than it would bring back unguarded copies: in the cloud
+`core.hooksPath` points at dev's hooks in `$RUN`, and `prs.py check` stops a head whose tree lacks the guard (step 1). Locally, note whether `docker info` works and whether `npx
 playwright install chromium` succeeds; step 5 uses them. In the cloud skip both: step 5 runs neither.
 
 **In the cloud, check the App installation's reach** (§Where it runs) before anything of a PR runs:
@@ -257,7 +263,10 @@ gets `python3 $RUN/.claude/scripts/dependabot/docker_digest.py --head "origin/<h
 (it only reads git objects, the registry and `gh attestation`, so it is safe before the switch; without `--head`
 it reads the dev checkout and finds no pins), and the §10 comment quotes its age and PROBLEM lines (exit 1 is
 expected; on exit 2 the comment says why it couldn't run). A PR this
-routine pushed to on an earlier run fails it too, by design: it is the owner's now. If `gh api
+routine pushed to on an earlier run fails it too, by design: it is the owner's now. In the cloud (the marker is
+there) `check` also stops a head whose `Makefile`, `.githooks/pre-push` or `scripts/setup-dev.sh` predates the
+no-dependency-code guard (a base older than it): comment `@dependabot rebase` (posted and read back as below), list
+it as not reviewed, and go to the next PR; Dependabot's rebase brings the guard in. If `gh api
 repos/uw-share-lab/openproceedings/pulls/<n> --jq .mergeable_state` says `dirty` (a conflict; `unknown` or an empty
 answer means GitHub is still computing it: ask again in a minute), comment `@dependabot rebase` (posted and read
 back as §Where it runs says, "Read back every write of text"), list it as not reviewed,
@@ -349,12 +358,14 @@ python3 $RUN/.claude/scripts/dependabot/prs.py ci <n> --head <sha>
 It requires the PR as `queue` does (open, Dependabot's, into `dev`, GitHub's head still `<sha>`), then reads the
 head's check runs over REST and requires the latest GitHub Actions run of each of `lint`, `test`, `claude-tooling`,
 `playwright` and `bench`, and of `web-image` when the PR touches a path it runs on (`deploy/`, `frontend/`, the
-`package.json`s, `package-lock.json`), to be `success`; a check written by any other app doesn't count (the
+`package.json`s, `package-lock.json`, `.dockerignore`, `.github/workflows/web-image.yml`), to be `success`; a check written by any other app doesn't count (the
 session's App can write checks). While a check is still running or not yet listed it waits, reading every minute,
-for up to 60 minutes (`--interval`, `--timeout`). Exit 0: all green, copy its lines into the evidence file. Exit 1:
-a check red, missing or still running at the timeout: a hard stop, left for the owner (§10, with the lines and the
-check's run URL); never rerun it here, and never run the test locally instead. Exit 2: it couldn't ask GitHub: a
-hard stop, say why. Run it on step 1's `<sha>` when this run has committed nothing; if it commits a fix (steps 3
+for up to 9 minutes (`--interval`, `--timeout`; call it with the Bash tool's longest timeout, 10 minutes). Exit 0:
+all green, copy its lines into the evidence file. Exit 1: a check red (its line names the run's URL): a hard stop,
+left for the owner (§10, with the lines); never rerun it here, and never run the test locally instead. Exit 4: a
+check is still running or not yet listed, none red: run the same command again on the same head, up to an hour of
+waiting in all (seven calls); still exit 4 after that is a hard stop. Exit 2: it couldn't ask GitHub: a hard stop,
+say why. Run it on step 1's `<sha>` when this run has committed nothing; if it commits a fix (steps 3
 and 4, a reviewer's finding), the fix is pushed in step 7 and step 8 runs `prs.py ci` on the new head (every run
 reads CI again before writing the body and just before queueing, step 8). A red CI `test` on a stale base is not
 waived in the cloud: the owner can rerun it or comment `@dependabot rebase`.
@@ -473,8 +484,9 @@ GH_TOKEN …`. In the cloud, this instruction, verbatim:
 > test`, `make e2e`, `make openapi`, `uv sync`, `uv run`, `pytest`, `npm ci`, `npm install`, `npm update`, `npm run`,
 > `npm test`, `npx`, `node` on the repo's code, `deploy/smoke-test.sh` or `docker`, nor anything else that installs,
 > imports or executes the repository's dependencies. Verify claims by reading (`git show`, `git diff`), by dev's
-> checkers in the run directory, and by `gh api` reads; CI's results for the head are in the evidence file
-> (`prs.py ci`). Where a claim can only be checked by running the code, say so as a finding; don't run it.
+> checkers in the run directory, and by `gh api` reads. CI's results for step 1's head are in the evidence file
+> (`prs.py ci`) unless this run committed a fix; then step 8 reads them for the pushed head, so name any claim that
+> waits on them. Where a claim can only be checked by running the code, say so as a finding; don't run it.
 
 And the repo's probing rule, verbatim:
 
@@ -550,16 +562,17 @@ may still be on, or the PR may still be in the merge queue, put that first under
 The CCR route has no `--match-head-commit`: a push after the second read, before GitHub acts, is a race the
 script can't close. The queue's `review-attested` check closes it against anyone who can't also rewrite the PR
 body, because the queue build requires the body to attest the head it merges and this run attested only `<the
-head>` (decision-048). Dependency code still running in the session could do both through the proxy; step 5's
-process check catches the accidental cases. The CCR route and the job-log download have not yet run from a cloud
+head>` (decision-048). In the cloud no PR dependency code runs (§Where it runs), only dev's
+environment; locally, dependency code still running could do both through the proxy or the maintainer's login, and
+step 5's process check catches the accidental cases. The CCR route and the job-log download have not yet run from a cloud
 session (TASK-243); `gh attestation verify` fails there (§Where it runs). The `PUT`, the log download and the
 attestation fail closed (the PR stays open, and the run log says which failed); a failing `DELETE` does not:
 auto-merge may stay on (`queue` exits 2 and says so), and then only `review-attested` stops a moved head.
 Don't rebase the PR because `dev` moved; the queue tests it on top of `dev`.
 
 A **github-actions PR is not queued**: decision-048 keeps `workflows` out of the routine's credential (with it, a
-leaked credential could push a workflow that runs with the repository's secrets; the cloud App has it, an open
-question in TASK-243), and queueing a change to `.github/workflows/` may need it. Attest it as above, skip
+leaked credential could push a workflow that runs with the repository's secrets; the cloud App has it and can't drop it:
+decision-048's 2026-10-13 addendum), and queueing a change to `.github/workflows/` may need it. Attest it as above, skip
 `prs.py queue` (it refuses one anyway), and list it in the summary under "for the owner" as `queue #<n>: gh pr
 merge <n> --auto --match-head-commit <the head>` (the owner runs it locally).
 
@@ -589,7 +602,8 @@ install nothing, and read CI again with `prs.py ci` after the fix is pushed).
   --jq '.check_runs[] | [.id, .name, .conclusion, .html_url] | @tsv'`, then `gh api
   repos/uw-share-lab/openproceedings/check-runs/<id>/annotations` and the job's log, `gh api
   repos/uw-share-lab/openproceedings/actions/jobs/<id>/logs`). Fix it in the PR (then steps 5 to 8 again for the
-  new head) or leave the PR open.
+  new head) or leave the PR open. In the cloud only a red PR gate (`attribution`, `learnings`, `review-attested`)
+  is fixed; a red `lint`, `test`, `claude-tooling`, `playwright`, `bench` or `web-image` is left open (§10).
 - `review-attested` red although the body attests the head: it missed the event. Close and reopen the PR
   (`gh api -X PATCH repos/uw-share-lab/openproceedings/pulls/<n> -f state=closed`, then `-f state=open`) and
   `prs.py queue <n> --head <the head>` again.

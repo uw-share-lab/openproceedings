@@ -26,6 +26,11 @@ CI's results for the head instead of running the tests.
 - The App has `checks` write, so a check run named `test` can be written by the session itself: `prs.py ci`
   counts only GitHub Actions' runs (`app.slug == "github-actions"`), and takes the latest run per name by id,
   since a rerun leaves the older run listed (PR #146's head lists `review-attested` twice).
+- A guard that lives in the checked-out tree is absent from a PR based on an older `dev`: git runs the tree's
+  own `.githooks/pre-push` (`core.hooksPath` is relative) and its own Makefile, so on every Dependabot PR open
+  when this landed a cloud push would have run the old, unguarded `make lint` (security review, round 1). Hence
+  `core.hooksPath` pointing at `dev`'s hooks in the run directory, and `prs.py check` stopping a head whose tree
+  lacks the guard until Dependabot rebases it.
 - `npm audit signatures` needs the installed tree; `npm audit --package-lock-only` doesn't. In the cloud the
   former can't run and `npm_lock.py`'s registry checks stand in.
 

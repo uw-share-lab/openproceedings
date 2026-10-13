@@ -21,7 +21,8 @@ help:
 # `prs.py preflight` leaves `op-no-dep-code` in the clone's git directory, and every target that installs or runs
 # the dependencies refuses while it is there (CI's checks for the PR head stand in: `prs.py ci`).
 dep-code-allowed:
-	@d=$$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0; \
+	@d=$$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || { \
+	  echo "refused: git rev-parse failed, so op-no-dep-code can't be checked: run make from the git clone"; exit 1; }; \
 	if [ -e "$$d/op-no-dep-code" ]; then \
 	  echo "refused: $$d/op-no-dep-code is there: a cloud /dependabot-review run executes none of a PR's"; \
 	  echo "dependency code (decision-048). Read CI's results for the head instead: prs.py ci <n> --head <sha>"; exit 1; fi

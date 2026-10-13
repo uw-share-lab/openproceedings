@@ -34,6 +34,7 @@ TOKEN_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPR
 ROWS: list[tuple[str, Callable[[Case], None]]] = []
 
 OK, PROBLEM, ERROR, FIX = 0, 1, 2, 3
+WAIT = 4  # prs.py ci: a check still running at its timeout
 
 
 def row(label: str) -> Callable[[Callable[[Case], None]], Callable[[Case], None]]:
@@ -85,7 +86,7 @@ class Case:
         self.git("commit", "-q", "--allow-empty", "-m", "c", env=who)
         return self.git("rev-parse", "HEAD")
 
-    def run(self, script: str, *args: str) -> tuple[int, str]:
+    def run(self, script: str, *args: str, cwd: Path | None = None) -> tuple[int, str]:
         for name, data in (("curl.json", self.curl), ("npm.json", self.npm), ("gh.json", self.gh)):
             (self.fix / name).write_text(json.dumps(data))
         env = {k: v for k, v in ENV.items() if k not in TOKEN_VARS} | self.env
@@ -94,7 +95,7 @@ class Case:
         env.setdefault("OP_DEPENDABOT_SETTLE", "0")
         r = subprocess.run(
             [sys.executable, str(SCRIPTS / script), *args],
-            cwd=self.repo, capture_output=True, text=True, env=env, timeout=120,
+            cwd=cwd or self.repo, capture_output=True, text=True, env=env, timeout=120,
         )  # fmt: skip
         return r.returncode, r.stdout + r.stderr
 
@@ -1918,6 +1919,16 @@ def _(c: Case) -> None:
     assert marker(c).is_file(), "no marker"
 
 
+@row("prs preflight: from a linked worktree, the marker goes in the common git directory")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.commit({"a": "1\n"})
+    wt = c.repo.parent / "wt"
+    c.git("worktree", "add", "-q", "--detach", str(wt))
+    got, out = c.run("prs.py", "preflight", cwd=wt)
+    assert got == OK and marker(c).is_file(), out
+
+
 @row("prs preflight: local removes a marker it finds, and writes none")
 def _(c: Case) -> None:
     preflight_case(c, cloud=False, stored=True)
@@ -1933,6 +1944,44 @@ def _(c: Case) -> None:
     c.env = {}
     got, out = c.run("prs.py", "preflight")
     assert got == OK and "op-no-dep-code" not in out and not marker(c).exists(), out
+
+
+GUARDED_FILES = {"Makefile": "x: dep-code-allowed\n", ".githooks/pre-push": "op-no-dep-code\n",
+                 "scripts/setup-dev.sh": "op-no-dep-code\n"}  # fmt: skip
+
+
+@row("prs check: in a cloud clone, a head whose tree predates the guard is a stop (rebase)")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    marker(c).write_text("cloud\n")
+    c.expect(
+        "prs.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM the head's Makefile, \.githooks/pre-push, scripts/setup-dev\.sh predate",
+    )
+
+
+@row("prs check: in a cloud clone, a head missing only the pre-push guard is a stop")
+def _(c: Case) -> None:
+    c.commit({**GUARDED_FILES, ".githooks/pre-push": "make lint\n"})
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    marker(c).write_text("cloud\n")
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the head's \.githooks/pre-push predate")
+
+
+@row("prs check: in a cloud clone, a head whose tree has the guard passes")
+def _(c: Case) -> None:
+    c.commit(GUARDED_FILES)
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    marker(c).write_text("cloud\n")
+    c.expect("prs.py", args, OK, r"^ok +uv: ")
+
+
+@row("prs check: without the marker (local), an older tree is no stop")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    c.expect("prs.py", args, OK, r"^ok +uv: ")
 
 
 # ci
@@ -1984,15 +2033,20 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1) if n != "playwright"]
     c.expect(
-        "prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM playwright: missing at [0-9a-f]{12} \(waited 0 min\)"
+        "prs.py", ci_case(c, runs), WAIT, r"^CI #7: still waiting for playwright after 0 min: run this again"
     )
 
 
-@row("prs ci: a check still running at the timeout is a stop")
+@row("prs ci: a check still running at the timeout is exit 4: read again")
 def _(c: Case) -> None:
     runs = [check_run(n, None if n == "lint" else "success", id_=i, status="in_progress" if n == "lint" else "completed")
             for i, n in enumerate(CI_NAMES, 1)]  # fmt: skip
-    c.expect("prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM lint: pending at [0-9a-f]{12} \(waited 0 min\)")
+    got, out = c.run("prs.py", *ci_case(c, runs))
+    assert (
+        got == WAIT
+        and re.search(r"^waiting lint: pending at [0-9a-f]{12}$", out, re.M)
+        and "PROBLEM" not in out
+    ), out
 
 
 @row("prs ci: waits while a check runs, then passes once it is green")
@@ -2011,7 +2065,12 @@ def _(c: Case) -> None:
     runs = [check_run("test", "failure", id_=2), check_run("lint", None, id_=1, status="in_progress")]
     args = ci_case(c, runs)
     args[-1] = "60"  # would hang the row if a red check didn't stop the wait
-    c.expect("prs.py", args, PROBLEM, r"^PROBLEM lint: pending at [0-9a-f]{12} \(another check is red\)")
+    c.expect(
+        "prs.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM lint: pending at [0-9a-f]{12} \(not waited for: another check is red\)",
+    )
 
 
 @row("prs ci: the latest run of a check counts, not an older green one")
@@ -2030,13 +2089,64 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1) if n != "test"]
     runs.append(check_run("test", id_=50, app="claude"))  # the session's App can write checks
-    c.expect("prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM test: missing at")
+    c.expect("prs.py", ci_case(c, runs), WAIT, r"^waiting test: missing at")
 
 
 @row("prs ci: an npm PR needs web-image too")
 def _(c: Case) -> None:
     args = ci_case(c, files=("package-lock.json",), head="dependabot/npm_and_yarn/g")
-    c.expect("prs.py", args, PROBLEM, r"^PROBLEM web-image: missing at")
+    c.expect("prs.py", args, WAIT, r"^waiting web-image: missing at")
+
+
+for _path in (
+    "frontend/a.ts",
+    "package.json",
+    ".dockerignore",
+    ".github/workflows/web-image.yml",
+    "deploy/x",
+):
+
+    @row(f"prs ci: a PR touching {_path} needs web-image")
+    def _(c: Case, path: str = _path) -> None:
+        c.expect("prs.py", ci_case(c, files=(path,)), WAIT, r"^waiting web-image: missing at")
+
+
+for _path in ("backend/package.json", "docs/frontend/x.md", "docs/deploy/x", "xpackage.json"):
+
+    @row(f"prs ci: a PR touching only {_path} doesn't need web-image")
+    def _(c: Case, path: str = _path) -> None:
+        got, out = c.run("prs.py", *ci_case(c, files=(path,)))
+        assert got == OK and "web-image" not in out, out
+
+
+@row("prs ci: a file renamed away from a web-image path still needs web-image")
+def _(c: Case) -> None:
+    args = ci_case(c)
+    c.gh[page1(f"{R}/pulls/7/files")] = [{"filename": "docs/x.ts", "previous_filename": "frontend/x.ts"}]
+    c.expect("prs.py", args, WAIT, r"^waiting web-image: missing at")
+
+
+@row("prs ci: a red check's line names its run URL")
+def _(c: Case) -> None:
+    runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1) if n != "test"]
+    runs.append({**check_run("test", "failure", id_=9), "html_url": "https://github.com/x/runs/9"})
+    c.expect(
+        "prs.py",
+        ci_case(c, runs),
+        PROBLEM,
+        r"^PROBLEM test: failure at [0-9a-f]{12} \(https://github\.com/x/runs/9\)",
+    )
+
+
+@row("prs ci: --timeout is in minutes, not seconds")
+def _(c: Case) -> None:
+    green = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1)]
+    running = [*green[:-1], check_run("bench", None, id_=5, status="queued")]
+    args = ci_case(
+        c, {"__seq": [{"total_count": 5, "check_runs": running}, {"total_count": 5, "check_runs": green}]}
+    )
+    args[-3:] = ["0.1", "--timeout", "0.005"]  # 0.3 s: a second read only if the timeout is read as minutes
+    c.expect("prs.py", args, OK, r"^CI #7: 0 problems")
 
 
 @row("prs ci: a docker PR passes with web-image green")
