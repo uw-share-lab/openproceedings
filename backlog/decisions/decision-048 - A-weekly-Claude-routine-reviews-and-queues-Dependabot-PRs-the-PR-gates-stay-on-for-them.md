@@ -194,12 +194,14 @@ request a rebase instead).
   at 17:04:05Z, which GitHub records as `performed_via_github_app: claude`. So the credential depends on where the
   routine runs. Locally it is the maintainer's own `gh` login (the TASK-213 addendum). In the cloud it is the App's
   installation, whose repository selection and permissions take the place of the fine-grained token named above.
-  The App sets its own permissions. Read with `gh api orgs/uw-share-lab/installations` on 2026-10-13, they include
-  pull requests, issues, actions, contents and `workflows` write (plus `administration` read), and the installation
-  covered all of `uw-share-lab`'s repositories. That is wider than this record's bound in two ways. The repository
-  selection is the owner's to narrow, and the command now requires that the installation cover only this
-  repository. `workflows` write can't be removed. Whether the routine should run dependency code in a session
-  holding it is an open question for the owner (TASK-243).
+  The App sets its own permissions. Read with `gh api orgs/uw-share-lab/installations` on 2026-10-13, they are
+  actions, checks, contents, discussions, issues, pull requests, repository hooks and `workflows` write, plus
+  administration, members and merge queues read, and the installation covered all of `uw-share-lab`'s repositories.
+  That is wider than this record's bound in two ways. The repository selection is the owner's to narrow; the
+  command's step 0 now checks it in the cloud (`gh api installation/repositories` must list only this repository)
+  and stops the run otherwise, or when the call fails. `workflows` and repository-hooks write can't be removed (the
+  App sets them; a webhook is a channel out of the repository). Whether the routine should run dependency code in a
+  session holding them is an open question for the owner (TASK-243).
 - **`gh attestation verify` doesn't run in the cloud.** It failed with "error creating Sigstore verifier: no
   valid Sigstore verifiers could be initialized". `docker_digest.py` stopped the image (fail closed, as
   designed), so every ghcr.io PR goes to the owner until it runs there.

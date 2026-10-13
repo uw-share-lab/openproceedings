@@ -294,15 +294,16 @@ with a comment for the owner, a PR with:
 
 The checkers (and `prs.py check`) print `ok`, `FIX` (the routine repairs it) or `PROBLEM` (a hard stop) per
 finding, and exit 0, 3 (only FIX lines), 1 (a PROBLEM) or 2 (the check couldn't run, also a hard stop). Every
-outside call goes through `git`, `curl`, `npm` or `gh`, so the case table `.claude/scripts/tests/test-dependabot.sh`
-(in `make tooling`) runs them against fakes; the mutants are in `.claude/scripts/mutants/dependabot.json`. The run
-ends with a summary for its log: merged, left open (with the reason), not reviewed, and what the owner should look
-at. The gates stay on for Dependabot PRs; exempting `dependabot[bot]` from `learnings` and `review-attested` was
-considered and rejected (decision-048). Decision-048 set the routine's credential as a fine-grained token: this
-repository only, `contents`, `pull requests`, `issues` and `actions` read and write, nothing else (no
-`administration`, no `workflows`). As built, the credential depends on where the command runs: locally it is the
-maintainer's own `gh` login; in the cloud it is the Claude GitHub App's installation (*Cloud and local*), whose
-repository selection and permissions take the token's place as the bound. Because `workflows` is kept out, the
+outside call goes through `git`, `curl`, `npm` or `gh`, so the case table
+`.claude/scripts/tests/test-dependabot.sh` (in `make tooling`) runs them against fakes; the mutants are in
+`.claude/scripts/mutants/dependabot.json`. The run ends with a summary for its log: merged, left open (with the
+reason), not reviewed, and what the owner should look at. The gates stay on for Dependabot PRs; exempting
+`dependabot[bot]` from `learnings` and `review-attested` was considered and rejected (decision-048). Decision-048
+set the routine's credential as a fine-grained token: this repository only, `contents`, `pull requests`, `issues`
+and `actions` read and write, nothing else (no `administration`, no `workflows`). As built, the credential depends
+on where the command runs: locally it is the maintainer's own `gh` login; in the cloud it is the Claude GitHub
+App's installation (*Cloud and local*), whose repository selection and permissions take the token's place as the
+bound. Decision-048 keeps `workflows` out of the routine's credential (the cloud App has it: TASK-243), so the
 routine reviews and attests a github-actions PR but leaves the queueing to the owner (`gh pr merge <n> --auto
 --match-head-commit <sha>`), named in its summary. The pre-push hook and the autofix hook run their tools without
 the token.
@@ -314,10 +315,12 @@ them invalid) and an egress proxy adds the real token to requests for api.github
 holds it. GitHub records the session's writes as the Claude GitHub App's (`performed_via_github_app: claude`), so
 the App must be installed for this repository. Without it every write answers 403 "Resource not accessible by
 integration": the first scheduled run (2026-10-13) reviewed #142 and #143 over REST but could post nothing, until
-the owner installed the App that day. The App sets its own permissions. As read on 2026-10-13 they include pull
-requests, issues, actions, contents and `workflows` write, and the installation covered all of `uw-share-lab`'s
-repositories. The installation must cover only this repository. Whether the routine should run dependency code
-in a session whose credential has `workflows` write is the owner's open question (TASK-243). No push or CCR call
+the owner installed the App that day. The App sets its own permissions. As read on 2026-10-13 they are actions,
+checks, contents, discussions, issues, pull requests, repository hooks and `workflows` write, plus administration,
+members and merge queues read, and the installation covered all of `uw-share-lab`'s repositories. The installation
+must cover only this repository: the routine's step 0 checks it (`gh api installation/repositories`) and stops the
+run otherwise, or when the call fails. Whether the routine should run dependency code in a session whose credential
+has `workflows` and repository-hooks write is the owner's open question (TASK-243). No push or CCR call
 has run from the cloud yet. `gh attestation verify` can't start a Sigstore verifier there ("no valid Sigstore
 verifiers could be initialized", 2026-10-13), so it fails closed and every ghcr.io PR goes to the owner. The
 routine reads back every comment and PR body it writes, and removes anything added to it (a cloud comment gained

@@ -69,11 +69,14 @@ repos/uw-share-lab/openproceedings/...`, always the repository named, never `{ow
 **The credential, per environment.** Locally it is the maintainer's own `gh` login. In the cloud, REST writes
 reach GitHub as the **Claude GitHub App** (a comment shows `performed_via_github_app: claude`), through the App's
 installation on `uw-share-lab`. The App sets its own permissions. As read on 2026-10-13 (`gh api
-orgs/uw-share-lab/installations`, an org admin's call), they include pull requests, issues, actions, contents and
-**workflows** write, and the installation covered **all** the org's repositories. The installation must cover only
-`openproceedings` (the owner's setting, org Settings → GitHub Apps → Claude → Configure). That repository
-selection, and the App's permissions, replace the fine-grained token's scope as the bound on what the session (and
-dependency code running in it, through the proxy) can do; workflows write is the owner's open question (TASK-243).
+orgs/uw-share-lab/installations`, an org admin's call), they are actions, checks, contents, discussions, issues,
+pull requests, **repository hooks** and **workflows** write, plus administration, members and merge queues read,
+and the installation covered **all** the org's repositories. That repository selection, and the App's
+permissions, replace the fine-grained token's scope as the bound on what the session (and dependency code running
+in it, through the proxy) can do. The installation must cover only `openproceedings` (the owner's setting, org
+Settings → GitHub Apps → Claude → Configure), and step 0 checks it. Workflows and repository-hooks write can't be
+removed (the App sets them); whether the routine may run dependency code beside them is the owner's open question
+(TASK-243).
 A push and the CCR auto-merge route haven't run from the cloud yet (TASK-243). A write that answers 403 "Resource
 not accessible by integration" means the App isn't installed for this repository or lacks the permission: stop
 the run, list this PR and every later one as not reviewed, and put the 403 first under "for the owner" (the
@@ -88,13 +91,18 @@ it back and compare it with the file you sent:
 ```bash
 gh api -X POST repos/uw-share-lab/openproceedings/issues/<n>/comments -F body=@"$RUN/comment-<n>.md" --jq .id   # <id>
 gh api repos/uw-share-lab/openproceedings/issues/comments/<id> --jq .body > "$RUN/posted-<n>.md"
-diff "$RUN/comment-<n>.md" "$RUN/posted-<n>.md"   # must print nothing (a missing final newline aside)
+diff <(sed -e '$a\' "$RUN/comment-<n>.md") <(sed -e '$a\' "$RUN/posted-<n>.md")   # must print nothing
 ```
 
-For `@dependabot rebase`, write the one line to `$RUN/comment-<n>.md` first and post it the same way. After step
-8's body `PATCH` and its `--attest`, do the same with `gh api repos/uw-share-lab/openproceedings/pulls/<n> --jq
-.body` against `$RUN/body-<n>.md`: the only line `diff` may print is the `<!-- op-review: <sha> APPROVE -->`
-marker. Anything else added is removed by writing your file again (`gh api -X PATCH
+For `@dependabot rebase`, write the one line to `$RUN/comment-<n>.md` first and post it the same way. The PR body
+is read back in step 8, after `--attest`, with the marker `--attest` adds (and the blank line before it) left out:
+
+```bash
+gh api repos/uw-share-lab/openproceedings/pulls/<n> --jq .body > "$RUN/posted-body-<n>.md"
+grep -v -x -F '<!-- op-review: <the head> APPROVE -->' "$RUN/posted-body-<n>.md" | diff -B "$RUN/body-<n>.md" -   # must print nothing
+```
+
+Anything else added is removed by writing your file again (`gh api -X PATCH
 repos/uw-share-lab/openproceedings/issues/comments/<id> -F body=@"$RUN/comment-<n>.md"`; for the body, step 8's
 `PATCH` and `--attest` again), then read back again. If it is still there, say so first under "for the owner",
 and don't queue the PR.
@@ -157,6 +165,18 @@ maintainer's own machine, which runs `make test` with it every day). Stop, and p
 <why>", if `gh api user` fails, `prs.py preflight` doesn't exit 0, a tool above is missing or too old, or the git
 identity is empty or names an AI (it matches `claude|anthropic|noreply@anthropic`): commits are authored by people.
 Note whether `docker info` works and whether `npx playwright install chromium` succeeds; step 5 uses them.
+
+**In the cloud, check the App installation's reach** (§Where it runs) before anything of a PR runs:
+
+```bash
+gh api installation/repositories --jq '[.repositories[].full_name] | join(" ")'   # must print exactly uw-share-lab/openproceedings
+```
+
+Anything else stops the run, with every PR as "not reviewed": more repositories (the installation reaches beyond
+this one, and dependency code could use that through the proxy), or an error (the reach can't be shown; whether
+this call answers through the session's proxy is unconfirmed, TASK-243). Put it first under "for the owner"
+("limit the Claude App installation to openproceedings"). Locally, skip this check: the credential is the
+maintainer's own login.
 
 **uv's minors come by hand** (`.github/dependabot.yml` ignores them while uv is 0.x, and docker images get no
 Dependabot alert or security update), so every run, with or without open PRs, compares the api image's uv tag
@@ -293,8 +313,9 @@ committed later (condition 5, a reviewer's finding), check all six again on the 
 
 1. **The base is behind `dev`.** `git merge-base --is-ancestor origin/dev <head>` exits 1.
 2. **`dev` hasn't changed the PR's files since `<base>`.** `git diff --name-only <base> <head>` lists the PR's
-   files (an empty list fails this condition), and `git diff --quiet <base> origin/dev -- <each of them>` exits
-   0. Then `dev` with those files taken from `<head>` is the tree the queue builds. If it exits 1, comment
+   files, and `git diff --quiet <base> origin/dev -- <each of them>` exits 0. Then `dev` with those files taken
+   from `<head>` is the tree the queue builds. An empty file list is a hard stop. If `git diff --quiet` exits 1,
+   comment
    `@dependabot rebase` (as in step 1, read back) and list the PR as not reviewed, since a
    rebase gives a head that includes the fix.
 3. **That tree passes.** Build it in its own worktree:
@@ -315,15 +336,16 @@ committed later (condition 5, a reviewer's finding), check all six again on the 
    - it changes the failing test's file or the code that test checks (`git log --oneline <base>..origin/dev --
      <that file>` lists it);
    - its message, or its PR's title or body, names the failing test (its function or file name);
-   - its PR was opened by a person, not `dependabot[bot]` (`gh api
-     repos/uw-share-lab/openproceedings/commits/<fix>/pulls --jq '.[] | [.number, .user.login] | @tsv'`).
+   - its PR was opened by a person: `gh api repos/uw-share-lab/openproceedings/commits/<fix>/pulls --jq '.[] |
+     [.number, .user.login, .user.type] | @tsv'` prints `User` as the type (not `Bot`).
 
    A failure with no such commit (a flaky test, a failure nobody has fixed, a fix you can't match to the
    failure) stays a hard stop, even if the tree from condition 3 passes.
 5. **Every other red test is resolved.** Every red test on the head is one that condition 4's fix covers, or one
    the bump caused that this PR now fixes (then check all six again on the new head). Any other red test is a
    hard stop.
-6. **CI's `test` on the head this run queues is green.** Just before step 8's `prs.py queue`, `gh api
+6. **CI's `test` on the head this run queues is green.** Before writing step 8's body, and again just before its
+   `prs.py queue`, `gh api
    repos/uw-share-lab/openproceedings/commits/<the head>/check-runs --jq '.check_runs[] | select(.name=="test")
    | .conclusion'` prints `success`. While it prints nothing or `null`, the check is still running: ask again
    every few minutes, for up to 60 minutes, then treat it as a hard stop. Anything else is a hard stop. CI's
@@ -402,14 +424,15 @@ that isn't on `origin/dev`. The head is now `git rev-parse HEAD` (the `<sha>` of
 Write `$RUN/body-<n>.md`: **Summary** (what moved, from → to, and why it is safe), **Spec(s)** touched, **Supply
 chain** (each checker's verdict line, `npm audit` results, advisories found in the release notes), **Tests**
 (each command and its result; what didn't run here and which CI check stands in; for a red test waived under
-step 5's stale-base rule, the test, the `origin/dev` sha, the merged tree's commands and results, and the fix
-commit and its PR), **Review** (reviewers, counts
-by severity, every disposition), **Learnings** (`no-learning`, or the entry extended). No attribution line.
+step 5's stale-base rule, the waiver record step 5 lists), **Review** (reviewers, counts by severity, every
+disposition), **Learnings** (`no-learning`, or the entry extended). No attribution line.
 `gh pr edit` fails in this repo (Projects classic), so replace the body through the API:
 
 ```bash
 gh api -X PATCH repos/uw-share-lab/openproceedings/pulls/<n> -F body=@"$RUN/body-<n>.md"
 python3 $RUN/.claude/scripts/record-review.py APPROVE "$RUN/dispositions-<n>.md" --attest --pr <n> --repo uw-share-lab/openproceedings
+gh api repos/uw-share-lab/openproceedings/pulls/<n> --jq .body > "$RUN/posted-body-<n>.md"
+grep -v -x -F '<!-- op-review: <the head> APPROVE -->' "$RUN/posted-body-<n>.md" | diff -B "$RUN/body-<n>.md" -   # must print nothing; else §Where it runs
 python3 $RUN/.claude/scripts/dependabot/prs.py queue <n> --head <the head>
 ```
 
