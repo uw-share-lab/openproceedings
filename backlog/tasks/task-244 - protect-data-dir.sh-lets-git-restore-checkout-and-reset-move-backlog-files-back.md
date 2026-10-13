@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-13 19:42'
-updated_date: '2026-10-13 19:42'
+updated_date: '2026-10-13 22:40'
 labels:
   - tooling
   - bug
@@ -24,10 +24,10 @@ During PR #146 (TASK-241) a subagent completed task-241 before review finished, 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every git command shape that writes backlog/ files in the worktree or index by pathspec (rm, mv, restore, checkout <tree-ish> --, reset <tree-ish> --, stash push --, apply, checkout-index, update-index, read-tree --prefix) is refused by protect-data-dir.sh, including -C, cd, globs, magic pathspecs, whole-tree pathspecs, --pathspec-from-file, xargs and unresolvable paths
-- [ ] #2 The backlog CLI, decision-body edits, read-only git (log/show/diff, dry runs), unstaging (restore --staged, reset HEAD --), branch/commit-level operations (checkout/switch a branch, rebase, merge, cherry-pick, reset to a commit) and pathspecs that exclude backlog/ stay allowed, and the rule is documented
-- [ ] #3 Case-table rows cover every blocked and allowed shape; make tooling is green and every new mutant is killed (make mutate-changed)
-- [ ] #4 CLAUDE.md, the task-hygiene skill and spec 08 describe the hook as built, and task-hygiene says what to do when a completed task needs changes
+- [x] #1 Every git command shape that writes backlog/ files in the worktree or index by pathspec (rm, mv, restore, checkout <tree-ish> --, reset <tree-ish> --, stash push --, apply, checkout-index, update-index, read-tree --prefix) is refused by protect-data-dir.sh, including -C, cd, globs, magic pathspecs, whole-tree pathspecs, --pathspec-from-file, xargs and unresolvable paths
+- [x] #2 The backlog CLI, decision-body edits, read-only git (log/show/diff, dry runs), unstaging (restore --staged, reset HEAD --), branch/commit-level operations (checkout/switch a branch, rebase, merge, cherry-pick, reset to a commit) and pathspecs that exclude backlog/ stay allowed, and the rule is documented
+- [x] #3 Case-table rows cover every blocked and allowed shape; make tooling is green and every new mutant is killed (make mutate-changed)
+- [x] #4 CLAUDE.md, the task-hygiene skill and spec 08 describe the hook as built, and task-hygiene says what to do when a completed task needs changes
 <!-- AC:END -->
 
 ## Implementation Plan

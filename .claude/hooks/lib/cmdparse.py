@@ -340,6 +340,38 @@ GIT_LONG_OPTS: dict[str, frozenset[str]] = {
             "no-force-untracked-cache no-force-write-index no-fsmonitor"
         ),
         "update-ref": "no-deref stdin create-reflog deref no-stdin no-create-reflog",
+        # the commands that write backlog/ files by pathspec (protect-data-dir.sh, TASK-244)
+        "restore": (
+            "source staged worktree ignore-unmerged overlay quiet recurse-submodules progress merge conflict ours "
+            "theirs patch ignore-skip-worktree-bits pathspec-from-file pathspec-file-nul no-source no-staged "
+            "no-worktree no-ignore-unmerged no-overlay no-quiet no-recurse-submodules no-progress no-merge "
+            "no-conflict no-patch no-ignore-skip-worktree-bits no-pathspec-from-file no-pathspec-file-nul"
+        ),
+        "rm": (
+            "dry-run quiet cached force ignore-unmatch sparse pathspec-from-file pathspec-file-nul no-dry-run "
+            "no-quiet no-cached no-force no-ignore-unmatch no-sparse no-pathspec-from-file no-pathspec-file-nul"
+        ),
+        "mv": "verbose dry-run force sparse no-verbose no-dry-run no-force no-sparse",
+        "apply": (
+            "exclude include no-add stat allow-binary-replacement binary numstat summary check index "
+            "intent-to-add cached unsafe-paths apply 3way build-fake-ancestor whitespace ignore-space-change "
+            "ignore-whitespace reverse unidiff-zero reject allow-overlap verbose quiet inaccurate-eof recount "
+            "directory allow-empty add no-stat no-allow-binary-replacement no-binary no-numstat no-summary "
+            "no-check no-index no-intent-to-add no-cached no-unsafe-paths no-apply no-3way "
+            "no-build-fake-ancestor no-whitespace no-ignore-space-change no-ignore-whitespace no-reverse "
+            "no-unidiff-zero no-reject no-allow-overlap no-verbose no-quiet no-inaccurate-eof no-recount "
+            "no-directory no-allow-empty"
+        ),
+        "checkout-index": (
+            "all ignore-skip-worktree-bits force quiet no-create index stdin temp prefix stage create no-all "
+            "no-ignore-skip-worktree-bits no-force no-quiet no-index no-stdin no-temp no-prefix"
+        ),
+        "read-tree": (
+            "super-prefix index-output empty verbose trivial aggressive reset prefix exclude-per-directory "
+            "dry-run no-sparse-checkout debug-unpack recurse-submodules quiet sparse-checkout no-super-prefix "
+            "no-empty no-verbose no-trivial no-aggressive no-reset no-dry-run no-debug-unpack "
+            "no-recurse-submodules no-quiet"
+        ),
     }.items()
 }
 # The options newer gits list too (CI's runner, 2026-10-01): `test-git-long-opts.sh` notes any the table lacks.

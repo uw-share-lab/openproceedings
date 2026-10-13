@@ -1304,7 +1304,7 @@
  {
   "label": "pdd: xargs git subcommands allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        or (g is not None and g[0] in (\"add\", \"stage\", \"rm\", \"mv\", \"update-index\"))\n",
+  "old": "        or (g is not None and g[0] in (\"add\", \"stage\", *BACKLOG_GIT_SUBS))\n",
   "new": ""
  },
  {
@@ -4156,5 +4156,650 @@
   "file": "scripts/setup-dev.sh",
   "old": "then echo \"kept core.hooksPath",
   "new": "then git config core.hooksPath .githooks; echo \"kept core.hooksPath"
+ },
+ {
+  "label": "backlog git writes allowed (TASK-244: rm/mv/restore/checkout/... by pathspec)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if g and g[0] in BACKLOG_GIT_SUBS:\n",
+  "new": "            if False:\n"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): restore not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(\"rm\", \"mv\", \"restore\", \"checkout\",",
+  "new": "(\"rm\", \"mv\", \"checkout\","
+ },
+ {
+  "label": "pdd backlog git (TASK-244): checkout not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"restore\", \"checkout\", \"reset\",",
+  "new": "\"restore\", \"reset\","
+ },
+ {
+  "label": "pdd backlog git (TASK-244): reset not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"checkout\", \"reset\", \"stash\",",
+  "new": "\"checkout\", \"stash\","
+ },
+ {
+  "label": "pdd backlog git (TASK-244): stash not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"reset\", \"stash\", \"apply\",",
+  "new": "\"reset\", \"apply\","
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"stash\", \"apply\", \"checkout-index\",",
+  "new": "\"stash\", \"checkout-index\","
+ },
+ {
+  "label": "pdd backlog git (TASK-244): checkout-index not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"apply\", \"checkout-index\", \"update-index\",",
+  "new": "\"apply\", \"update-index\","
+ },
+ {
+  "label": "pdd backlog git (TASK-244): update-index not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"checkout-index\", \"update-index\",\n",
+  "new": "\"checkout-index\",\n"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): read-tree not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                    \"read-tree\")",
+  "new": "                    )"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): rm not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "BACKLOG_GIT_SUBS = (\"rm\", \"mv\",",
+  "new": "BACKLOG_GIT_SUBS = (\"mv\","
+ },
+ {
+  "label": "pdd backlog git (TASK-244): mv not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "BACKLOG_GIT_SUBS = (\"rm\", \"mv\",",
+  "new": "BACKLOG_GIT_SUBS = (\"rm\","
+ },
+ {
+  "label": "pdd backlog git (TASK-244): magic pathspec allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            return backlog_repo([base])\n        if m.group(1)",
+  "new": "            return False\n        if m.group(1)"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): magic pathspec refused without backlog/",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            return backlog_repo([base])\n        if m.group(1)",
+  "new": "            return True\n        if m.group(1)"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): short exclude :^ not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "r\":(?:[!^]|\\(exclude\\))(.*)\"",
+  "new": "r\":(?:[!]|\\(exclude\\))(.*)\""
+ },
+ {
+  "label": "pdd backlog git (TASK-244): long exclude not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "r\":(?:[!^]|\\(exclude\\))(.*)\"",
+  "new": "r\":(?:[!^])(.*)\""
+ },
+ {
+  "label": "pdd backlog git (TASK-244): exclude compared case-blind",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "rel(m.group(1), base) == \"backlog\"",
+  "new": "(rel(m.group(1), base) or \"\").lower() == \"backlog\""
+ },
+ {
+  "label": "pdd backlog git (TASK-244): empty exclude names the base",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if m.group(1) and rel(m.group(1), base) == \"backlog\":",
+  "new": "        if rel(m.group(1), base) == \"backlog\":"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): git globs read as plain paths",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if any(c in spec for c in \"*?[\"):\n        fixed",
+  "new": "    if False:\n        fixed"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): root glob not the root",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        spec = fixed.rpartition(\"/\")[0] or \".\"",
+  "new": "        spec = fixed.rpartition(\"/\")[0] or fixed"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): the root is not backlog/'s",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    return in_backlog(r) or (r == \".\" and backlog_repo([base]))",
+  "new": "    return in_backlog(r)"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): the root counts without backlog/",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    return in_backlog(r) or (r == \".\" and backlog_repo([base]))",
+  "new": "    return in_backlog(r) or r == \".\""
+ },
+ {
+  "label": "pdd backlog git (TASK-244): exclude of backlog/ ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if \"exclude-backlog\" in kinds:\n            continue\n",
+  "new": ""
+ },
+ {
+  "label": "pdd backlog git (TASK-244): only-excludes not read as .",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if (specs and not positive and backlog_spec(\".\", base)) or",
+  "new": "        if"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): only-excludes refused without backlog/",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if (specs and not positive and backlog_spec(\".\", base)) or",
+  "new": "        if (specs and not positive) or"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): work trees not judged",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if (specs and not positive and backlog_spec(\".\", base)) or any(k is True for k in positive):\n            return True\n    return False",
+  "new": "        if (specs and not positive and backlog_spec(\".\", base)) or any(k is True for k in positive):\n            return True\n        break\n    return False"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): separate long values not taken",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if name in valued_long and not eq and k + 1 < len(args):",
+  "new": "            if False:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): cluster value not the rest",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                    value = a[i + 1 :]\n",
+  "new": "                    value = \"\"\n"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): separate short values not taken",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                    if not value and k + 1 < len(args):\n                        value, k = args[k + 1], k + 1\n                    opts.append((c, value))",
+  "new": "                    opts.append((c, value))"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): cluster letters after a value read \u2014 equivalent: no short option that follows a value in a cluster turns an allow on (rm/mv's -n take no value; restore's -s is refused whatever follows)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                    opts.append((c, value))\n                    break\n",
+  "new": "                    opts.append((c, value))\n",
+  "equivalent": true
+ },
+ {
+  "label": "pdd backlog git (TASK-244): negations ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        elif name in off:\n            state = False\n",
+  "new": ""
+ },
+ {
+  "label": "pdd backlog git (TASK-244): rm dry run refused",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if last_flag(opts, (\"n\", \"dry-run\"), (\"no-dry-run\",)) or all_unmerged(directory, specs):",
+  "new": "        if all_unmerged(directory, specs):"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): rm of a merged path allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if last_flag(opts, (\"n\", \"dry-run\"), (\"no-dry-run\",)) or all_unmerged(directory, specs):",
+  "new": "        if True:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): mv dry run refused",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        opts, words, after = git_words(args)\n        if last_flag(opts, (\"n\", \"dry-run\"), (\"no-dry-run\",)):",
+  "new": "        opts, words, after = git_words(args)\n        if False:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): restore --source not valued",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(\"source\", \"pathspec-from-file\", \"conflict\"), \"s\")",
+  "new": "(\"pathspec-from-file\", \"conflict\"), \"s\")"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): restore -s not valued",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(\"source\", \"pathspec-from-file\", \"conflict\"), \"s\")",
+  "new": "(\"source\", \"pathspec-from-file\", \"conflict\"), \"\")"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): restore -S not staged",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "staged = last_flag(opts, (\"S\", \"staged\"), (\"no-staged\",))",
+  "new": "staged = last_flag(opts, (\"staged\",), (\"no-staged\",))"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): restore unstage ignores --worktree",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if staged and not worktree and not source:",
+  "new": "        if staged and not source:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): restore unstage ignores --source",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if staged and not worktree and not source:",
+  "new": "        if staged and not worktree:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): restore always unstage",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if staged and not worktree and not source:",
+  "new": "        if not worktree and not source:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): restore conflict exception ignores --source",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if not source and all_unmerged(directory, specs):",
+  "new": "        if all_unmerged(directory, specs):"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): restore conflict exception gone",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if not source and all_unmerged(directory, specs):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): restore --pathspec-from-file unseen",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        return specs, any(n == \"pathspec-from-file\" for n, _ in opts)\n    if sub == \"checkout\":",
+  "new": "        return specs, False\n    if sub == \"checkout\":"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): checkout -b not valued",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(\"orphan\", \"pathspec-from-file\", \"conflict\"), \"bB\")",
+  "new": "(\"orphan\", \"pathspec-from-file\", \"conflict\"), \"B\")"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): checkout --pathspec-from-file unseen",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if not treeish and all_unmerged(directory, specs):\n            return None  # settling a conflict (`--ours`, `--theirs`, `--merge`)\n        return specs, from_file\n    if sub == \"reset\":",
+  "new": "        if not treeish and all_unmerged(directory, specs):\n            return None  # settling a conflict (`--ours`, `--theirs`, `--merge`)\n        return specs, False\n    if sub == \"reset\":"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): checkout tree-ish not read without --",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        elif words and git(directory, \"rev-parse\"",
+  "new": "        elif False and git(directory, \"rev-parse\""
+ },
+ {
+  "label": "pdd backlog git (TASK-244): checkout tree-ish taken as a path after --",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if after is not None:\n            treeish, specs = words[:1], after\n        elif words and git(",
+  "new": "        if after is not None:\n            treeish, specs = [], after\n        elif words and git("
+ },
+ {
+  "label": "pdd backlog git (TASK-244): checkout conflict exception ignores the tree-ish",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if not treeish and all_unmerged(directory, specs):\n            return None  # settling a conflict (`--ours`, `--theirs`, `--merge`)\n        return specs, from_file\n    if sub == \"reset\":",
+  "new": "        if all_unmerged(directory, specs):\n            return None  # settling a conflict (`--ours`, `--theirs`, `--merge`)\n        return specs, from_file\n    if sub == \"reset\":"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): unmerged: nothing matched passes",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    return bool(listed) and listed <=",
+  "new": "    return listed <="
+ },
+ {
+  "label": "pdd backlog git (TASK-244): unmerged: one conflicted file is enough",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    return bool(listed) and listed <= {f.partition(\"\\t\")[2] for f in stages}",
+  "new": "    return bool(listed) and bool(listed & {f.partition(\"\\t\")[2] for f in stages})"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): unmerged: no pathspec means every file",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if not specs:\n        return False\n    off =",
+  "new": "    off ="
+ },
+ {
+  "label": "pdd backlog git (TASK-244): reset tree-ish not read without --",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        elif words and rev_tree(directory, words[0]):",
+  "new": "        elif False:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): reset to any tree-ish unstages",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if not treeish or (head and rev_tree(directory, treeish[0]) == head):",
+  "new": "        if True:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): reset with no HEAD unstages",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if not treeish or (head and rev_tree(directory, treeish[0]) == head):",
+  "new": "        if not treeish or rev_tree(directory, treeish[0]) == head:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): reset to HEAD's tree refused",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if not treeish or (head and rev_tree(directory, treeish[0]) == head):",
+  "new": "        if not treeish:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): reset --pathspec-from-file unseen",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            return None  # unstaging: the index takes HEAD's copy, the file on disk is the CLI's\n        return specs, from_file\n    if sub == \"stash\":",
+  "new": "            return None  # unstaging: the index takes HEAD's copy, the file on disk is the CLI's\n        return specs, False\n    if sub == \"stash\":"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): stash push not unwrapped",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if args and args[0] == \"push\":\n            args = args[1:]\n",
+  "new": "        if False:\n            pass\n"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): stash save/pop read as paths",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            return None  # pop, apply, list, show, save <message>, \u2026\n",
+  "new": "            pass\n"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): stash -m not valued",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(\"message\", \"pathspec-from-file\"), \"m\")",
+  "new": "(\"message\", \"pathspec-from-file\"), \"\")"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): stash --message not valued",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(\"message\", \"pathspec-from-file\"), \"m\")",
+  "new": "(\"pathspec-from-file\",), \"m\")"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply report modes write",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if names & {\"stat\", \"numstat\", \"summary\", \"check\"} and not last_flag",
+  "new": "        if False and not last_flag"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply --apply ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if names & {\"stat\", \"numstat\", \"summary\", \"check\"} and not last_flag(opts, (\"apply\",), (\"no-apply\",)):",
+  "new": "        if names & {\"stat\", \"numstat\", \"summary\", \"check\"}:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply stdin allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            return [], True  # the patch comes on stdin",
+  "new": "            return [], False"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply - not stdin \u2014 equivalent: `-` then reaches apply_paths, where git reads an empty stdin and fails and no file named - opens, so it is refused all the same",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if not patches or \"-\" in patches:",
+  "new": "        if not patches:",
+  "equivalent": true
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply unreadable allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if paths is None:\n            return [], True\n",
+  "new": "        if paths is None:\n            return [], False\n"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply --directory not valued",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(\"exclude\", \"include\", \"directory\", \"whitespace\", \"build-fake-ancestor\")",
+  "new": "(\"exclude\", \"include\", \"whitespace\", \"build-fake-ancestor\")"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply -p dropped",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if name in (\"p\", \"C\"):",
+  "new": "        if name in (\"C\",):"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply --directory dropped",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        elif name in (\"directory\", \"include\", \"exclude\"):",
+  "new": "        elif name in (\"include\", \"exclude\"):"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply --include dropped",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        elif name in (\"directory\", \"include\", \"exclude\"):",
+  "new": "        elif name in (\"directory\", \"exclude\"):"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply --exclude dropped",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        elif name in (\"directory\", \"include\", \"exclude\"):",
+  "new": "        elif name in (\"directory\", \"include\"):"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply numstat failure allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if r.returncode != 0:\n        return None\n    # `added",
+  "new": "    if r.returncode != 0:\n        return []\n    # `added"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply numstat paths dropped",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    paths = [p for p in paths if p]\n",
+  "new": "    paths = []\n"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): apply renamed-from paths dropped",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                paths += [line[len(\"rename from \") :].rstrip(\"\\r\\n\") for line in fh if line.startswith(\"rename from \")]",
+  "new": "                pass"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): checkout-index --temp skipped",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if \"temp\" in names:\n            return None  # temporary files, not the worktree\n",
+  "new": ""
+ },
+ {
+  "label": "pdd backlog git (TASK-244): checkout-index -a not every file",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "([\"backlog/\"] if names & {\"a\", \"all\"} else [])",
+  "new": "[]"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): checkout-index prefix dropped",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        return [prefix + p for p in paths], \"stdin\" in names",
+  "new": "        return paths, \"stdin\" in names"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): checkout-index --stdin unseen",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        return [prefix + p for p in paths], \"stdin\" in names",
+  "new": "        return [prefix + p for p in paths], False"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): update-index cacheinfo path not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        cache = [w for n, v in opts if n == \"cacheinfo\" for w in (v, v.split(\",\")[-1]) if v]",
+  "new": "        cache = []"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): update-index --cacheinfo not valued",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(\"chmod\", \"index-version\", \"cacheinfo\")",
+  "new": "(\"chmod\", \"index-version\")"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): update-index --stdin unseen",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        return words + cache + (after or []), bool({n for n, _ in opts} & {\"stdin\", \"index-info\"})",
+  "new": "        return words + cache + (after or []), False"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): read-tree prefix not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        return ([os.path.join(repo_root(directory), prefix[-1] or \".\")], False) if prefix else None",
+  "new": "        return None"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): read-tree prefix from the cwd",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        return ([os.path.join(repo_root(directory), prefix[-1] or \".\")], False) if prefix else None",
+  "new": "        return ([os.path.join(directory, prefix[-1] or \".\")], False) if prefix else None"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): read-tree empty prefix not the root",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        return ([os.path.join(repo_root(directory), prefix[-1] or \".\")], False) if prefix else None",
+  "new": "        return ([os.path.join(repo_root(directory), prefix[-1] or \"vendor\")], False) if prefix else None"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): unresolved and file paths allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                    if has_backlog and (from_file or hidden):",
+  "new": "                    if False:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): paths from a file allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                    if has_backlog and (from_file or hidden):",
+  "new": "                    if has_backlog and hidden:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): unresolved refused without backlog/",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                    if has_backlog and (from_file or hidden):",
+  "new": "                    if from_file or hidden:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): unresolved -C allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "w in unresolved for w in [*specs, *argv[1 : len(argv) - len(g[1]) - 1]]",
+  "new": "w in unresolved for w in specs"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): unresolved work tree allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                    hidden = None in trees or any(",
+  "new": "                    hidden = any("
+ },
+ {
+  "label": "pdd backlog git (TASK-244): work tree not a base",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                    bases = [g[2], *(os.path.join(d, t) for t in trees if t)]",
+  "new": "                    bases = [g[2]]"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): GIT_WORK_TREE not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if \"GIT_WORK_TREE\" in getattr(argv, \"assigns\", {}):",
+  "new": "    if False:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): --work-tree separate value not taken",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            trees.append(argv[k + 1] if takes and k + 1 < len(argv) else value)",
+  "new": "            trees.append(value)"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): find -delete allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if a == \"-delete\":\n            return True\n",
+  "new": ""
+ },
+ {
+  "label": "pdd backlog git (TASK-244): find -exec writers allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if a in (\"-exec\", \"-execdir\", \"-ok\", \"-okdir\") and (k + 1 == len(args) or",
+  "new": "        if False and (k + 1 == len(args) or"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): find -exec readers refused",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                                                            os.path.basename(args[k + 1]) not in FIND_READERS):",
+  "new": "                                                            True):"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): find -exec reader by path refused",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "os.path.basename(args[k + 1]) not in FIND_READERS",
+  "new": "args[k + 1] not in FIND_READERS"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): find -exec without a command allowed \u2014 equivalent: args[k + 1] then raises IndexError, and the hook refuses any internal error (exit 2)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(k + 1 == len(args) or\n",
+  "new": "(False or\n",
+  "equivalent": true
+ },
+ {
+  "label": "pdd backlog git (TASK-244): find check gone",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if head == \"find\" and find_writes(args):",
+  "new": "            if False:"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): find unresolved start allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                if backlog_repo([d, cwd]) and (any(s in unresolved for s in starts)\n",
+  "new": "                if False and (any(s in unresolved for s in starts)\n"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): find after an unknown cd allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                                               or (unknown and not all(os.path.isabs(s) for s in starts))):",
+  "new": "                                               ):"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): find from the root allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if in_backlog(r) or (r == \".\" and os.path.isdir(os.path.join(full, \"backlog\"))):",
+  "new": "        if in_backlog(r):"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): find from the root refused without backlog/",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if in_backlog(r) or (r == \".\" and os.path.isdir(os.path.join(full, \"backlog\"))):",
+  "new": "        if in_backlog(r) or r == \".\":"
+ },
+ {
+  "label": "pdd backlog git (TASK-244): find from above the repo allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if any(os.path.commonpath([full, root]) == full for root in roots):\n            return True\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: no long-option table for git restore (TASK-244)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "\"restore\": (",
+  "new": "\"x-restore\": ("
+ },
+ {
+  "label": "cmdparse: no long-option table for git rm (TASK-244)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "\"rm\": (",
+  "new": "\"x-rm\": ("
+ },
+ {
+  "label": "cmdparse: no long-option table for git mv (TASK-244)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "\"mv\": \"verbose",
+  "new": "\"x-mv\": \"verbose"
+ },
+ {
+  "label": "cmdparse: no long-option table for git apply (TASK-244)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "\"apply\": (",
+  "new": "\"x-apply\": ("
+ },
+ {
+  "label": "cmdparse: no long-option table for git checkout-index (TASK-244)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "\"checkout-index\": (",
+  "new": "\"x-checkout-index\": ("
+ },
+ {
+  "label": "cmdparse: no long-option table for git read-tree (TASK-244)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "\"read-tree\": (",
+  "new": "\"x-read-tree\": ("
  }
 ]

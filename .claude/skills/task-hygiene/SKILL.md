@@ -16,12 +16,27 @@ a task that is Done does not stay in `backlog/tasks/`.
 | As you go | Tick acceptance criteria as each is met (`--check-ac <n>`); add notes (`--append-notes`; `--notes` replaces them) when you learn something that changes the plan; record any follow-up **when you find it** (in the notes), and file it as a task at the end, after rebasing (§Ids) |
 | Scope changes | Edit the description/ACs so they match what you're actually doing; a stale AC is a lie |
 | Adding a dependency | `--dep` **replaces** the whole list: pass the old ids plus the new (`--dep task-063,task-065,task-133`), then check the `dependencies:` diff |
-| Done | All ACs checked → `backlog task edit <id> -s Done --final-summary "…"` → **`backlog task complete <id>`**, which moves it into `backlog/completed/` |
+| Done | **After the last review round** (the final `/review-gate` round has no findings left to fix): all ACs checked → `backlog task edit <id> -s Done --final-summary "…"` → **`backlog task complete <id>`**, which moves it into `backlog/completed/` |
 
 `backlog task complete` is the only way a task leaves `backlog/tasks/`. Never move files by hand: editor
-writes under `backlog/` are blocked by `enforce-backlog-cli.sh`, Bash `mv`/`git mv`/`rm` of files under
-`backlog/` are blocked by `protect-data-dir.sh`, and CI's `check_backlog.py` catches a Done task left
-behind in `tasks/`. Archive (`backlog task archive`) is only for tasks that were dropped
+writes under `backlog/` are blocked by `enforce-backlog-cli.sh`; Bash `mv`/`cp`/`rm`/redirects there, a
+`find -delete`/`-exec <writer>` that can reach it, and every git command that writes its files by pathspec
+(`git restore`, `git checkout <commit> -- <path>`, `git reset <commit> -- <path>`, `git rm`, `git mv`, `git stash
+push -- <path>`, `git apply`, `git checkout-index`, `git update-index`, `git read-tree --prefix`, a whole-tree
+pathspec such as `.`, `'*.md'` or `:/` included) are blocked by `protect-data-dir.sh` (TASK-244); and CI's
+`check_backlog.py` catches a Done task left behind in `tasks/`. Git still may unstage there (`git restore
+--staged`, `git reset -- <path>`), read (`log`, `show`, `diff`), dry-run, move whole branches and commits
+(checkout/switch a branch, rebase, merge, cherry-pick, reset to a commit), and settle a file a rebase or merge
+stopped on (`git checkout --theirs <path>`, `git rm <path>`); a whole-tree restore can leave backlog/ out with
+`':!backlog'`.
+
+**Finalize only after the last review round.** Backlog.md 1.53 can't edit a task once it is in `completed/`
+("Task not found"), and nothing may move it back: so a task completed while review is still running can't take
+the next round's notes or ticks. If it happened anyway, leave the completed file as it is and never put the
+pre-completion copy back with git (PR #146 did, three times, and lost the plan once; that is what TASK-244
+closed). Put what the later rounds changed in the PR body and the learnings entry; if they found more work, file
+it as a follow-up task with `backlog task create` (at the end of the branch, §Ids) whose description names the
+completed task. Reopening a completed task is the owner's decision, made by the owner. Archive (`backlog task archive`) is only for tasks that were dropped
 unfinished. Give the reason in the notes first.
 Backlog.md 1.53 reuses an archived task's id: the next `backlog task create` after an archive gets the
 same number (task-075 twice, 2026-09-26). After archiving, say which task an id means in both tasks' notes,

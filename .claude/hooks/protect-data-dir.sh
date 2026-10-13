@@ -25,7 +25,17 @@
 # - backlog/ is CLI-managed (task-hygiene skill): only the `backlog` CLI moves a task (e.g. `backlog task
 #   complete` into backlog/completed/). Bash mv / git mv / cp / rm / unlink / tee / dd of= / redirects that target
 #   files under backlog/, and sed -i / perl -i / ruby -i / awk -i inplace edits of them (decision bodies excepted, as in
-#   enforce-backlog-cli.sh), are refused here; enforce-backlog-cli.sh covers editor writes.
+#   enforce-backlog-cli.sh), are refused here; enforce-backlog-cli.sh covers editor writes. So is a find that deletes
+#   or runs anything but a reader (`-exec grep`) from backlog/, a worktree root or above, and every git command that
+#   writes backlog/ files in the worktree or the index by pathspec (TASK-244: PR #146 put a completed task back with
+#   `git restore`): restore (not `--staged` alone: unstaging), checkout [<commit>] --, reset <commit> -- (a tree
+#   that isn't HEAD's), rm, mv (not -n), stash push --, apply (paths from `git apply --numstat` and `rename from`),
+#   checkout-index, update-index, read-tree --prefix. A pathspec reaches backlog/ when it is in it, is the worktree
+#   root, is a git glob from either (`'*.md'`: git's `*` crosses `/`) or `:` magic, unless an exclude names backlog
+#   itself (`':!backlog'`, case-exact as git reads it); --pathspec-from-file, stdin and an unresolvable pathspec,
+#   -C or work tree are refused in a repo with backlog/. Allowed: branch and commit operations (checkout/switch a
+#   branch, rebase, merge, cherry-pick, reset without paths), reads, dry runs, and settling a path every match of
+#   which is in conflict (`checkout --theirs`, `restore --ours`, `rm`), since an editor write there is refused.
 # - `git clean -x/-X` (unless a dry run, `-e data`, or pathspecs outside data/) and `git stash push|save --all`
 #   (`-a` in any short cluster: `-qa`, `-ua`) are refused: they remove gitignored files, which is all of data/.
 # - Every path word is resolved first (cmdparse.expand_word): `~`, `~+`, `~-`, `$PWD`, `$(pwd)`, `$(git rev-parse
@@ -45,7 +55,7 @@
 #   the call's own, or their repository's MAIN worktree (a linked worktree has none of its own). Each target is
 #   judged against the worktree that contains it, case-blind, not the one the command runs in (`rm -rf
 #   ../<main>/data/snapshots`, or `../<MAIN>/data`, from a worktree).
-# - xargs appends words this guard can't see: rm/unlink/mv/cp/…, sed -i/perl -i and git add/rm/mv/update-index
+# - xargs appends words this guard can't see: rm/unlink/mv/cp/…, sed -i/perl -i and git add and the backlog git writers above
 #   run through xargs are refused in a repo with data/ or backlog/ (cmdparse's `Argv.via_xargs`).
 # Globs are expanded against the filesystem (`rm -rf data*`, `*`, `../*`), braces and `$'…'` decoded as bash
 # does (`rm -rf data{,}`, cmdparse); rsync's long options are read by unique prefix (`--rem`, `--del`), as
@@ -286,6 +296,280 @@ def refuse(msg):
     print(msg, file=sys.stderr)
     sys.exit(2)
 
+BACKLOG_GIT_MSG = (
+    "Blocked: backlog/ files are CLI-managed — git doesn't put them back, move or remove them by pathspec "
+    "(`git restore`, `git checkout <commit> -- <path>`, `git reset <commit> -- <path>`, `git rm`, `git mv`, "
+    "`git stash push -- <path>`, `git apply`, `git checkout-index`, `git update-index`, `git read-tree --prefix`), "
+    "and a pathspec of the whole tree (`.`, `'*.md'`, `:/…`) reaches backlog/ too: name the paths you mean, or add "
+    "`':!backlog'`. Branch and commit operations (checkout/switch a branch, rebase, merge, reset to a commit) and "
+    "unstaging (`git restore --staged <path>`) are fine. Backlog 1.53 can't edit a completed task, so run "
+    "`backlog task complete` only after the last review round (task-hygiene skill).")
+
+def backlog_spec(spec, base):
+    """What a git pathspec does to backlog/, judged from `base` (the directory git resolves it in): "exclude-backlog"
+    for an exclude naming backlog/ itself (`:!backlog`, `:^backlog/`, `:(exclude)backlog`), "exclude" for any other
+    exclude (it adds no file), True when it may name a file under backlog/, else False. It may when it is in backlog/
+    or is the worktree's root (or above it, from a subdirectory), and so may a git glob (`*` crosses `/`) whose
+    fixed directory is either, and any other `:` magic pathspec (`:/`, `:(top,icase)`), which this guard doesn't
+    read: the root and magic count only where the repository has a backlog/. Paths compare case-blind (APFS), but
+    an exclude only as git matches it, case and all (`:!Backlog` takes nothing out of backlog/)."""
+    if spec.startswith(":"):
+        m = re.fullmatch(r":(?:[!^]|\(exclude\))(.*)", spec)
+        if m is None:
+            return backlog_repo([base])
+        if m.group(1) and rel(m.group(1), base) == "backlog":  # `backlog/` too: rel resolves the path
+            return "exclude-backlog"
+        return "exclude"
+    if any(c in spec for c in "*?["):
+        fixed = re.split(r"[*?\[]", spec, maxsplit=1)[0]
+        spec = fixed.rpartition("/")[0] or "."
+    r = rel(spec, base)
+    return in_backlog(r) or (r == "." and backlog_repo([base]))
+
+def specs_reach_backlog(specs, bases):
+    """Do these pathspecs, read from any of `bases`, name a file under backlog/? Only excludes means `.` plus
+    them, as git reads it; an exclude of backlog/ itself takes it out whatever else is named."""
+    for base in bases:
+        kinds = [backlog_spec(s, base) for s in specs]
+        if "exclude-backlog" in kinds:
+            continue
+        positive = [k for k in kinds if k not in ("exclude", "exclude-backlog")]
+        if (specs and not positive and backlog_spec(".", base)) or any(k is True for k in positive):
+            return True
+    return False
+
+def git_words(args, valued_long=(), valued_short=""):
+    """A git subcommand's arguments read as parse-options reads them (long options already written out in full
+    by cmdparse): (the options in order as (name, value) pairs, a short option as its letter, the non-option words
+    before `--`, the words after `--` or None). An option in `valued_long` / a letter in `valued_short` takes the
+    next word (or the rest of its short cluster) as its value."""
+    opts, words, k = [], [], 0
+    while k < len(args):
+        a = args[k]
+        if a == "--":
+            return opts, words, args[k + 1 :]
+        if a.startswith("--"):
+            name, eq, value = a[2:].partition("=")
+            if name in valued_long and not eq and k + 1 < len(args):
+                value, k = args[k + 1], k + 1
+            opts.append((name, value))
+        elif a.startswith("-") and len(a) > 1:
+            for i, c in enumerate(a[1:], 1):
+                if c in valued_short:
+                    value = a[i + 1 :]
+                    if not value and k + 1 < len(args):
+                        value, k = args[k + 1], k + 1
+                    opts.append((c, value))
+                    break
+                opts.append((c, ""))
+        else:
+            words.append(a)
+        k += 1
+    return opts, words, None
+
+def last_flag(opts, on, off):
+    """The last of the options `on` (True) / `off` (False) given, else None: git's last-one-wins."""
+    state = None
+    for name, _ in opts:
+        if name in on:
+            state = True
+        elif name in off:
+            state = False
+    return state
+
+def rev_tree(directory, word):
+    """The tree id `word` names in the repository at `directory` (a commit's tree), or '' when it names none."""
+    return git(directory, "rev-parse", "--verify", "--quiet", "--end-of-options", word + "^{tree}")
+
+def all_unmerged(directory, specs):
+    """Is every index entry these pathspecs match (one at least) in conflict: a rebase, merge or cherry-pick stopped
+    on it? Then `git checkout`/`restore --ours|--theirs` and `git rm` settle the conflict, which is how a conflicted
+    backlog/ file is resolved (an editor write there is refused). Asked of git itself, with fsmonitor off."""
+    if not specs:
+        return False
+    off = ("-c", "core.fsmonitor=false")
+    listed = {p for p in git(directory, *off, "ls-files", "-z", "--", *specs).split("\0") if p}
+    stages = git(directory, *off, "ls-files", "-z", "--unmerged", "--", *specs).split("\0")
+    return bool(listed) and listed <= {f.partition("\t")[2] for f in stages}
+
+def apply_paths(directory, opts, patches):
+    """The paths a `git apply` of these patch files would write, as git itself reads them (`git apply --numstat
+    -z`, with the options that move paths: -p, --directory, --include, --exclude, …), or None when git can't read
+    them. It writes nothing and runs no hook or fsmonitor program."""
+    keep = []
+    for name, value in opts:
+        if name in ("p", "C"):
+            keep.append(f"-{name}{value}")
+        elif name in ("directory", "include", "exclude"):
+            keep.append(f"--{name}={value}")
+        elif name in ("unidiff-zero", "recount", "inaccurate-eof", "allow-empty", "unsafe-paths", "reverse", "R"):
+            keep.append("-R" if name == "R" else f"--{name}")
+    try:
+        r = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "apply", "--numstat",
+                            "-z", *keep, "--", *patches], cwd=directory, stdin=subprocess.DEVNULL, capture_output=True,
+                            text=True, timeout=30)
+    except Exception:
+        return None
+    if r.returncode != 0:
+        return None
+    # `added<TAB>deleted<TAB>path` per file; a field without its counts is a path on its own (a `\0old\0new` pair)
+    paths = [f.split("\t", 2)[2] if f.count("\t") >= 2 else f for f in r.stdout.split("\0")]
+    paths = [p for p in paths if p]
+    # --numstat names a rename by its new path only; the old one is deleted, so each `rename from` counts too (read
+    # as written: with -p or --directory it may name a path git wouldn't touch, which over-blocks at worst)
+    for patch in patches:
+        try:
+            with open(os.path.join(directory, patch), encoding="utf-8", errors="replace") as fh:
+                paths += [line[len("rename from ") :].rstrip("\r\n") for line in fh if line.startswith("rename from ")]
+        except OSError:
+            return None
+    return paths
+
+def backlog_git_specs(sub, args, directory):
+    """(pathspecs, from_file): the pathspecs by which this git subcommand would write files in the worktree or the
+    index, and whether it also reads paths from a file or stdin, which this guard can't see. None when this form
+    writes nothing by pathspec: a branch or commit operation, unstaging, a read-only command or a dry run."""
+    if sub == "rm":
+        opts, words, after = git_words(args, ("pathspec-from-file",))
+        specs = words + (after or [])
+        if last_flag(opts, ("n", "dry-run"), ("no-dry-run",)) or all_unmerged(directory, specs):
+            return None
+        return specs, any(n == "pathspec-from-file" for n, _ in opts)
+    if sub == "mv":
+        opts, words, after = git_words(args)
+        if last_flag(opts, ("n", "dry-run"), ("no-dry-run",)):
+            return None
+        return words + (after or []), False
+    if sub == "restore":
+        opts, words, after = git_words(args, ("source", "pathspec-from-file", "conflict"), "s")
+        staged = last_flag(opts, ("S", "staged"), ("no-staged",))
+        worktree = last_flag(opts, ("W", "worktree"), ("no-worktree",))
+        source = last_flag(opts, ("s", "source"), ("no-source",))
+        if staged and not worktree and not source:
+            return None  # unstaging: the index takes HEAD's copy, the file on disk is the CLI's
+        specs = words + (after or [])
+        if not source and all_unmerged(directory, specs):
+            return None  # settling a conflict (`--ours`, `--theirs`, `--merge`)
+        return specs, any(n == "pathspec-from-file" for n, _ in opts)
+    if sub == "checkout":
+        opts, words, after = git_words(args, ("orphan", "pathspec-from-file", "conflict"), "bB")
+        from_file = any(n == "pathspec-from-file" for n, _ in opts)
+        if after is not None:
+            treeish, specs = words[:1], after
+        elif words and git(directory, "rev-parse", "--verify", "--quiet", "--end-of-options", words[0] + "^{commit}"):
+            treeish, specs = words[:1], words[1:]  # `git checkout <commit> <path>…`; a lone commit is a switch
+        else:
+            treeish, specs = [], words
+        if not treeish and all_unmerged(directory, specs):
+            return None  # settling a conflict (`--ours`, `--theirs`, `--merge`)
+        return specs, from_file
+    if sub == "reset":
+        opts, words, after = git_words(args, ("pathspec-from-file",))
+        from_file = any(n == "pathspec-from-file" for n, _ in opts)
+        if after is not None:
+            treeish, specs = words[:1], after
+        elif words and rev_tree(directory, words[0]):
+            treeish, specs = words[:1], words[1:]
+        else:
+            treeish, specs = [], words  # no path at all: the whole branch or index moves, a commit operation
+        head = rev_tree(directory, "HEAD")
+        if not treeish or (head and rev_tree(directory, treeish[0]) == head):
+            return None  # unstaging: the index takes HEAD's copy, the file on disk is the CLI's
+        return specs, from_file
+    if sub == "stash":
+        if args and args[0] == "push":
+            args = args[1:]
+        elif args and not args[0].startswith("-"):
+            return None  # pop, apply, list, show, save <message>, …
+        opts, words, after = git_words(args, ("message", "pathspec-from-file"), "m")
+        specs = words + (after or [])
+        from_file = any(n == "pathspec-from-file" for n, _ in opts)
+        return specs, from_file  # none: a whole-tree stash
+    if sub == "apply":
+        opts, words, after = git_words(args, ("exclude", "include", "directory", "whitespace", "build-fake-ancestor"),
+                                       "pC")
+        names = {n for n, _ in opts}
+        if names & {"stat", "numstat", "summary", "check"} and not last_flag(opts, ("apply",), ("no-apply",)):
+            return None  # it only reports
+        patches = words + (after or [])
+        if not patches or "-" in patches:
+            return [], True  # the patch comes on stdin
+        paths = apply_paths(directory, opts, patches)
+        if paths is None:
+            return [], True
+        # git reads a patch's paths from the top of the worktree, and from a subdirectory skips the ones outside it
+        return [os.path.join(repo_root(directory), p) for p in paths], False
+    if sub == "checkout-index":
+        opts, words, after = git_words(args, ("prefix", "stage"))
+        names = {n for n, _ in opts}
+        if "temp" in names:
+            return None  # temporary files, not the worktree
+        prefix = ([v for n, v in opts if n == "prefix"] or [""])[-1]
+        paths = words + (after or []) + (["backlog/"] if names & {"a", "all"} else [])  # -a: every file, backlog/ too
+        # each file lands at <prefix><path>: `--prefix=out/` writes none in backlog/, `--prefix=backlog/tasks/` all
+        return [prefix + p for p in paths], "stdin" in names
+    if sub == "update-index":
+        opts, words, after = git_words(args, ("chmod", "index-version", "cacheinfo"))
+        cache = [w for n, v in opts if n == "cacheinfo" for w in (v, v.split(",")[-1]) if v]
+        return words + cache + (after or []), bool({n for n, _ in opts} & {"stdin", "index-info"})
+    if sub == "read-tree":
+        opts, _, _ = git_words(args, ("prefix", "index-output", "exclude-per-directory", "super-prefix"))
+        prefix = [v for n, v in opts if n == "prefix"]
+        # read into the index at <prefix>, from the top of the worktree (`--prefix=` is the root itself)
+        return ([os.path.join(repo_root(directory), prefix[-1] or ".")], False) if prefix else None
+    return None
+
+BACKLOG_GIT_SUBS = ("rm", "mv", "restore", "checkout", "reset", "stash", "apply", "checkout-index", "update-index",
+                    "read-tree")
+
+def backlog_repo(directories):
+    """Is there a backlog/ in the worktree holding any of these directories, or in its repository's main worktree?"""
+    return any(os.path.isdir(os.path.join(r, "backlog")) for b in directories
+               for r in (repo_root(b), main_worktree(b)) if r)
+
+# what `find -exec` may run on what it finds without writing it
+FIND_READERS = frozenset("grep egrep fgrep rg cat head tail wc ls file stat echo printf test [ basename dirname md5 "
+                         "md5sum shasum sha1sum sha256sum diff cmp realpath readlink true false".split())
+
+def find_writes(args):
+    """Does this find delete what it finds, or run anything but a known reader on it (`-exec rm {} +`, `-execdir git
+    restore -s dev {} ;`, `-ok sh -c …`)? Which files it picks can't be seen here."""
+    for k, a in enumerate(args):
+        if a == "-delete":
+            return True
+        if a in ("-exec", "-execdir", "-ok", "-okdir") and (k + 1 == len(args) or
+                                                            os.path.basename(args[k + 1]) not in FIND_READERS):
+            return True
+    return False
+
+def reaches_backlog_tree(path, base):
+    """Is `path` (or what its glob matches) in backlog/, the root of a worktree, or a directory above one with a
+    backlog/: a find started there can reach backlog/ files."""
+    roots = [os.path.realpath(r) for r in (repo_root(base), main_worktree(base))
+             if r and os.path.isdir(os.path.join(r, "backlog"))]
+    for p in expand(path, base):
+        full = os.path.realpath(p if os.path.isabs(p) else os.path.join(base, p))
+        r = rel(p, base)
+        if in_backlog(r) or (r == "." and os.path.isdir(os.path.join(full, "backlog"))):
+            return True
+        if any(os.path.commonpath([full, root]) == full for root in roots):
+            return True
+    return False
+
+def git_work_trees(argv):
+    """Where git resolves pathspecs besides the command's own directory: each `--work-tree` and GIT_WORK_TREE, as
+    written (resolved by the caller, so one it can't resolve is refused)."""
+    trees, k = [], 1
+    while k < len(argv) and argv[k].startswith("-"):
+        name, eq, value = argv[k].partition("=")
+        takes = name in GIT_VALUE_OPTS and not eq
+        if name == "--work-tree":
+            trees.append(argv[k + 1] if takes and k + 1 < len(argv) else value)
+        k += 2 if takes else 1
+    if "GIT_WORK_TREE" in getattr(argv, "assigns", {}):
+        trees.append(argv.assigns["GIT_WORK_TREE"])
+    return trees
+
 IMMUTABLE_MSG = "Blocked: data/snapshots/ and data/indexes/ are immutable (reproducibility, spec 03). Build a new one with `op snapshot build` / `op index build` instead."
 
 def main():
@@ -374,10 +658,24 @@ def main():
             if getattr(argv, "via_xargs", False) and (
                 head in DESTROY | DEST_LAST | {"mv", "tee"}
                 or (head in IN_PLACE_EDITORS and in_place)
-                or (g is not None and g[0] in ("add", "stage", "rm", "mv", "update-index"))
+                or (g is not None and g[0] in ("add", "stage", *BACKLOG_GIT_SUBS))
             ) and (os.path.isdir(os.path.join(root_, "data")) or os.path.isdir(os.path.join(root_, "backlog"))):
                 refuse("Blocked: xargs appends paths this guard can't see, and this repo has data/ or backlog/. "
                        "Run the command on the paths themselves (a shell loop or a glob) so they can be checked.")
+            if g and g[0] in BACKLOG_GIT_SUBS:
+                found = backlog_git_specs(g[0], g[1], g[2])
+                if found is not None:
+                    specs, from_file = found
+                    trees = [resolve(t, raw, d) for t in git_work_trees(argv)]  # `--work-tree=$X` too
+                    bases = [g[2], *(os.path.join(d, t) for t in trees if t)]
+                    has_backlog = backlog_repo([*bases, cwd])
+                    # a pathspec, -C or work tree only the shell knows (`git restore "$F"`, `cd "$X" && git rm .`)
+                    hidden = None in trees or any(w in unresolved for w in [*specs, *argv[1 : len(argv) - len(g[1]) - 1]])
+                    if has_backlog and (from_file or hidden):
+                        refuse(BACKLOG_GIT_MSG + " (Its paths come from a file, stdin or a word this guard can't "
+                               "resolve; name them on the command line.)")
+                    if specs_reach_backlog(specs, bases):
+                        refuse(BACKLOG_GIT_MSG)
             if g and g[0] in ("add", "stage"):  # `git stage` is `git add`
                 a = g[1]
                 forced = any(x in ("-f", "--force") or (x.startswith("-") and not x.startswith("--") and "f" in x) for x in a)
@@ -509,8 +807,6 @@ def main():
             if stash_writes and any(a == "--all" or (a.startswith("-") and not a.startswith("--") and "a" in a[1:].partition("m")[0])
                                     for a in gm[1][: gm[1].index("--") if "--" in gm[1] else None]):
                 refuse("Blocked: `git stash --all` stashes (and removes) gitignored files, including data/.")
-            if gm and gm[0] in ("mv", "rm") and any(in_backlog(rel(p, gm[2])) for p in gm[1] if not p.startswith("-")):
-                refuse(BACKLOG_MSG)
             if head in DESTROY | {"mv", "tee"} and any(any_rel(in_backlog, p, d) for p in paths):
                 refuse(BACKLOG_MSG)
             if head in DEST_LAST and paths and any_rel(in_backlog, paths[-1], d):  # copying OUT of backlog/ is fine
@@ -548,6 +844,14 @@ def main():
                 refuse_unresolved(find_starts(args), implicit_cwd=not any(os.path.isabs(p) for p in find_starts(args)))
             if find_deletes and any(covers_immutable(p, d) for p in find_starts(args)):
                 refuse(IMMUTABLE_MSG)
+            if head == "find" and find_writes(args):
+                starts = find_starts(args)
+                if backlog_repo([d, cwd]) and (any(s in unresolved for s in starts)
+                                               or (unknown and not all(os.path.isabs(s) for s in starts))):
+                    refuse(BACKLOG_MSG + " (find's start path can't be resolved here; write it out.)")
+                if any(reaches_backlog_tree(s, d) for s in starts):
+                    refuse(BACKLOG_MSG + " (`find … -delete` or `-exec <command>` from here can reach backlog/ files, "
+                           "and which ones can't be seen; start find in the directories you mean.)")
             if head in IN_PLACE_EDITORS and in_place and any(any_rel(inside_immutable, p, d) for p in paths):
                 refuse(IMMUTABLE_MSG)
             if head in IN_PLACE_EDITORS and in_place and any(any_rel(lambda r: in_backlog(r) and not in_decisions(r), p, d) for p in paths):
