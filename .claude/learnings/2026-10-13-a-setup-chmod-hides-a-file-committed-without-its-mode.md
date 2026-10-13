@@ -27,7 +27,7 @@ The weekly Dependabot cloud routine found a fresh clone dirty after `scripts/set
 - Completing the task before the last review round. Write `--final-summary` and run `backlog task complete` only
   after the final round (task-hygiene says so): Backlog 1.53 can't edit a task in `completed/` ("Task not
   found"), and files under `backlog/` are not moved by hand. Here the pre-completion copy was restored with git
-  twice to re-finalize through the CLI; the first restore used a commit without the Implementation Plan and lost
+  three times to re-finalize through the CLI; the first restore used a commit without the Implementation Plan and lost
   it. If it has to be done, restore from the last pre-completion commit that still has the plan, and treat it as
   needing the owner's approval rather than as a recipe.
 
@@ -37,9 +37,10 @@ The weekly Dependabot cloud routine found a fresh clone dirty after `scripts/set
 - The check reads `chmod` from the setup script itself rather than repeating its globs, and refuses any chmod
   it can't read (octal, `u+x`, by path, a variable or brace in a glob, `[^...]` and any `[[` form, which fnmatch
   reads differently from bash, a continued line with a `#` in it, a chmod after a `#`, quotes, backslashes or a
-  redirection on a chmod line, `shopt`, `GLOBIGNORE`, a `cd` off the repo root). It joins backslash-newline
+  redirection on a chmod line, and `shopt`, `GLOBIGNORE`, `pushd`, `popd` or a `cd` off the repo root anywhere
+  on a line). It joins backslash-newline
   continuations and starts a comment only at a word that begins with `#`, as bash does, and fails when the setup
-  script is missing, so the list can't drift and moving the script can't switch it off (review rounds 1 and 2).
+  script is missing, so the list can't drift and moving the script can't switch it off (review rounds 1-3).
   shlex's defaults differ from bash in both of those (a mid-word `#` is a comment to shlex), so a shell-parsing
   check needs `commenters = ""` and its own rules.
 

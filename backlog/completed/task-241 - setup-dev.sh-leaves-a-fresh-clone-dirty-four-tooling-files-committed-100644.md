@@ -4,7 +4,7 @@ title: 'setup-dev.sh leaves a fresh clone dirty: four tooling files committed 10
 status: Done
 assignee: []
 created_date: '2026-10-13 15:52'
-updated_date: '2026-10-13 18:04'
+updated_date: '2026-10-13 18:44'
 labels:
   - tooling
   - bug
@@ -41,12 +41,13 @@ The weekly cloud routine (2026-10-13) found that on a fresh clone `scripts/setup
 <!-- SECTION:NOTES:BEGIN -->
 Root cause: setup-dev.sh runs chmod +x over .githooks/*, .claude/hooks/*.sh, .claude/hooks/tests/*.sh and .claude/scripts/*.py; four files in those globs were committed 100644 (written by a file tool; always run as python3/bash <file>, so nothing failed locally).
 Review round 1 (security, code, docs): the check joins backslash-newline continuations (odd runs of trailing backslashes), refuses a continued line containing #, refuses [^...] globs, and fails when scripts/setup-dev.sh is missing; README, spec 08 §Testing, the pr-workflow skill, make help and the claude-tooling step name list the check.
-Review round 2 (security, qa, code): # starts a comment only at the start of a word, as in bash, and a chmod after one is refused; any [[ glob form, shopt, GLOBIGNORE and a cd/pushd/popd other than cd to the repo root are refused; a chmod line with quotes, backslashes or a redirection is refused.
-Validation: check_file_modes.py listed exactly the four files before the fix and 0 errors after (26 files, 4 globs); test-tooling-scripts.sh 195/195 (41 check_file_modes rows); make tooling and make lint green; mutate.py --match "modes:" 33/33 killed; make mutate-changed in round 0 covered the mode-changed files' existing mutants; a fresh clone + setup-dev.sh leaves git status --porcelain empty (qa-auditor also showed the merge-base leaves exactly the four files dirty).
+Review round 2 (security, qa, code): # starts a comment only at the start of a word, as in bash, and a chmod after one is refused; any [[ glob form, shopt, GLOBIGNORE and a directory change other than cd to the repo root are refused; a chmod line with quotes, backslashes or a redirection is refused.
+Review round 3 (security+qa): cd, pushd, popd, shopt and GLOBIGNORE are refused anywhere on a line (after a quoted # too) and on a line shlex cannot read.
+Validation: check_file_modes.py listed exactly the four files before the fix and 0 errors after (26 files, 4 globs); test-tooling-scripts.sh 200/200 (46 check_file_modes rows); make tooling and make lint green; mutate.py --match "modes:" 37/37 killed; make mutate-changed in round 0 covered the mode-changed files' existing mutants; a fresh clone + setup-dev.sh leaves git status --porcelain empty (qa-auditor also showed the merge-base leaves exactly the four files dirty).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Committed the four tooling files setup-dev.sh chmods (test-parser-boundaries.sh, check_digest_pins.py, lint_probes.py, probe_hook.py) as 100755, matching their shebangs and their 22 siblings, so a fresh clone stays clean after setup and record-review.py can attest. Added .claude/scripts/check_file_modes.py to make tooling: it reads every chmod in scripts/setup-dev.sh as bash would (continuations joined, comments only at a word start; any form it cannot read is refused), matches each glob against the git index, and fails on a matched file not committed 100755, a glob matching nothing, or a missing setup script. 41 case-table rows, 33 mutants (all killed); docs in CONTRIBUTING.md, README.md, spec 08, ci-engineer.md, the pr-workflow skill and make help.
+Committed the four tooling files setup-dev.sh chmods (test-parser-boundaries.sh, check_digest_pins.py, lint_probes.py, probe_hook.py) as 100755, matching their shebangs and their 22 siblings, so a fresh clone stays clean after setup and record-review.py can attest. Added .claude/scripts/check_file_modes.py to make tooling: it reads every chmod in scripts/setup-dev.sh as bash would (continuations joined, comments only at a word start; any form it cannot read, and any directory or glob-option change, is refused), matches each glob against the git index, and fails on a matched file not committed 100755, a glob matching nothing, or a missing setup script. 46 case-table rows, 37 mutants (all killed); docs in CONTRIBUTING.md, README.md, spec 08, ci-engineer.md, the pr-workflow skill and make help.
 <!-- SECTION:FINAL_SUMMARY:END -->
