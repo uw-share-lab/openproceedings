@@ -1355,5 +1355,167 @@
     "old": "        branch = urllib.parse.quote(b, safe=\"/\")\n",
     "new": "        branch = b\n",
     "equivalent": true
+  },
+  {
+    "label": "dependabot: prs: preflight writes no marker in the cloud",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        marker.write_text(\n",
+    "new": "        str(\n"
+  },
+  {
+    "label": "dependabot: prs: preflight leaves a stale marker locally",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        marker.unlink()\n",
+    "new": "        pass\n"
+  },
+  {
+    "label": "dependabot: prs: preflight writes the marker locally too",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if mode == \"cloud\":\n        marker.write_text(",
+    "new": "    if True:\n        marker.write_text("
+  },
+  {
+    "label": "dependabot: prs: ci counts a check another app wrote",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "if (r.get(\"app\") or {}).get(\"slug\") != CI_APP or name not in names:",
+    "new": "if name not in names:"
+  },
+  {
+    "label": "dependabot: prs: ci takes the oldest run of a check",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "if name not in latest or r[\"id\"] > latest[name][\"id\"]:",
+    "new": "if name not in latest or r[\"id\"] < latest[name][\"id\"]:"
+  },
+  {
+    "label": "dependabot: prs: ci reads a running check as its conclusion",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        elif r.get(\"status\") != \"completed\":\n            state[name] = (\"pending\", r.get(\"html_url\") or \"\")\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: prs: ci accepts any conclusion",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if got == \"success\":\n            rep.ok(",
+    "new": "        if True:\n            rep.ok("
+  },
+  {
+    "label": "dependabot: prs: ci never needs web-image",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "((\"web-image\",) if any(WEB_IMAGE_PATHS.fullmatch(p) for p in paths) else ())",
+    "new": "()"
+  },
+  {
+    "label": "dependabot: prs: ci always needs web-image",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "((\"web-image\",) if any(WEB_IMAGE_PATHS.fullmatch(p) for p in paths) else ())",
+    "new": "(\"web-image\",)"
+  },
+  {
+    "label": "dependabot: prs: ci skips the PR's state",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    pr_problems(rep, get_pr(number), sha)\n    if rep.problems:\n        rep.finish()\n    paths: set[str] = set()",
+    "new": "    paths: set[str] = set()"
+  },
+  {
+    "label": "dependabot: prs: ci never waits",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if red or not waiting or time.monotonic() >= deadline:\n",
+    "new": "        if True:\n"
+  },
+  {
+    "label": "dependabot: prs: ci waits on through a red check",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if red or not waiting or time.monotonic() >= deadline:\n",
+    "new": "        if not waiting or time.monotonic() >= deadline:\n"
+  },
+  {
+    "label": "dependabot: prs: ci passes a missing check",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "            state[name] = (\"missing\", \"\")\n",
+    "new": "            state[name] = (\"success\", \"\")\n"
+  },
+  {
+    "label": "dependabot: prs: ci ignores a renamed file's old path",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if f.get(\"previous_filename\"):\n            paths.add(f[\"previous_filename\"])\n    names = CI_CHECKS",
+    "new": "    names = CI_CHECKS"
+  },
+  {
+    "label": "dependabot: prs: ci web-image paths drop frontend/",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "r\"(?:deploy|frontend)/.+|",
+    "new": "r\"(?:deploy)/.+|"
+  },
+  {
+    "label": "dependabot: prs: ci web-image paths drop .dockerignore",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "|\\.dockerignore|",
+    "new": "|"
+  },
+  {
+    "label": "dependabot: prs: ci web-image paths drop package.json",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "|package\\.json|package-lock",
+    "new": "|package-lock"
+  },
+  {
+    "label": "dependabot: prs: ci web-image paths drop web-image.yml",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "|\\.github/workflows/web-image\\.yml\"",
+    "new": "\""
+  },
+  {
+    "label": "dependabot: prs: ci web-image paths matched by search",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "WEB_IMAGE_PATHS.fullmatch(p)",
+    "new": "WEB_IMAGE_PATHS.search(p)"
+  },
+  {
+    "label": "dependabot: prs: ci timeout read as seconds",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "deadline = time.monotonic() + timeout_min * 60\n    while True:\n        state = ci_state",
+    "new": "deadline = time.monotonic() + timeout_min\n    while True:\n        state = ci_state"
+  },
+  {
+    "label": "dependabot: prs: ci timeout exits 0",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        sys.exit(4)\n    rep.finish()\n",
+    "new": "        sys.exit(0)\n    rep.finish()\n"
+  },
+  {
+    "label": "dependabot: prs: ci red check not reported",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "            rep.problem(f\"{n}: {got} {at}: CI's result stands",
+    "new": "            print(f\"{n}: {got} {at}: CI's result stands"
+  },
+  {
+    "label": "dependabot: prs: check ignores a stale tree in a cloud clone",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if marker_path().exists():  # a cloud clone",
+    "new": "    if False:  # a cloud clone"
+  },
+  {
+    "label": "dependabot: prs: check stops a stale tree locally too",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if marker_path().exists():  # a cloud clone",
+    "new": "    if True:  # a cloud clone"
+  },
+  {
+    "label": "dependabot: prs: check doesn't need the pre-push guard",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    \".githooks/pre-push\": NO_DEP_CODE,\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: prs: preflight's marker in the worktree's git dir",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "\"--path-format=absolute\", \"--git-common-dir\"]",
+    "new": "\"--path-format=absolute\", \"--git-dir\"]"
+  },
+  {
+    "label": "dependabot: prs: check reads HEAD, not the PR head",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "git_show(sha, f)",
+    "new": "git_show(\"HEAD\", f)"
   }
 ]

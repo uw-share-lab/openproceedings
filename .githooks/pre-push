@@ -12,5 +12,13 @@ unset $(git rev-parse --local-env-vars)
 # GitHub credential, which only the push itself (git, in the parent process) needs (decision-048, TASK-211)
 ghcfg=$(mktemp -d) && trap 'rm -rf "$ghcfg"' EXIT
 nocred=(env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN "GH_CONFIG_DIR=$ghcfg")
-echo "pre-push: make lint" && "${nocred[@]}" make --no-print-directory lint
+# A cloud /dependabot-review run executes none of a PR's dependency code (decision-048, 2026-10-13): make lint would
+# install and run the PR's (uv run syncs the PR's uv.lock), so it stands down while prs.py preflight's marker is
+# there, and the run reads CI's lint for the pushed head instead (prs.py ci). make tooling runs the repo's own scripts.
+common=$(git rev-parse --path-format=absolute --git-common-dir) || { echo "pre-push: git rev-parse failed: can't check for op-no-dep-code" >&2; exit 1; }
+if [ -e "$common/op-no-dep-code" ]; then
+  echo "pre-push: make lint skipped: $common/op-no-dep-code is there (cloud run; CI's lint on the pushed head stands in)"
+else
+  echo "pre-push: make lint" && "${nocred[@]}" make --no-print-directory lint
+fi
 echo "pre-push: make tooling" && "${nocred[@]}" make --no-print-directory tooling

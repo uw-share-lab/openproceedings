@@ -1,5 +1,5 @@
 # openproceedings monorepo — common entry points. Standard: .claude/skills/autolint/SKILL.md
-.PHONY: help sync frontend-deps fmt lint tooling test e2e openapi changelog hooks mutate mutate-changed
+.PHONY: help dep-code-allowed sync frontend-deps fmt lint tooling test e2e openapi changelog hooks mutate mutate-changed
 
 SHELL_FILES := $(wildcard .claude/hooks/*.sh .claude/hooks/tests/*.sh .claude/scripts/tests/*.sh scripts/*.sh .githooks/* deploy/*.sh)
 PY_TARGETS  := .claude $(wildcard backend)
@@ -17,6 +17,16 @@ help:
 	@echo "mutate   - mutation-test every gate check in parallel (after changing a gate; nightly CI runs it as 12 --shard jobs)"
 	@echo "mutate-changed - only mutants in files changed vs origin/dev (what reviews run)"
 
+# A cloud run of /dependabot-review executes none of a PR's dependency code (decision-048, 2026-10-13): its
+# `prs.py preflight` leaves `op-no-dep-code` in the clone's git directory, and every target that installs or runs
+# the dependencies refuses while it is there (CI's checks for the PR head stand in: `prs.py ci`).
+dep-code-allowed:
+	@d=$$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || { \
+	  echo "refused: git rev-parse failed, so op-no-dep-code can't be checked: run make from the git clone"; exit 1; }; \
+	if [ -e "$$d/op-no-dep-code" ]; then \
+	  echo "refused: $$d/op-no-dep-code is there: a cloud /dependabot-review run executes none of a PR's"; \
+	  echo "dependency code (decision-048). Read CI's results for the head instead: prs.py ci <n> --head <sha>"; exit 1; fi
+
 # The npm workspace root is the repo root (package.json, package-lock.json); dependencies are hoisted to
 # ./node_modules. Once frontend/ exists, its checks never skip silently: a missing install is an error.
 frontend-deps:
@@ -25,16 +35,16 @@ frontend-deps:
 
 # --ignore-scripts: no dependency install script runs (only unrs-resolver and the optional fsevents have one,
 # and lint, tests and the build pass without them); CI installs the same way.
-sync:
+sync: dep-code-allowed
 	uv sync --locked
 	@if [ -f package-lock.json ]; then npm ci --ignore-scripts; fi
 
-fmt: frontend-deps
+fmt: dep-code-allowed frontend-deps
 	uv run --locked ruff format $(PY_TARGETS)
 	uv run --locked ruff check --fix $(PY_TARGETS)
 	@if [ -f frontend/package.json ]; then cd frontend && npx --no-install prettier --write . && npx --no-install eslint --fix .; fi
 
-lint: frontend-deps
+lint: dep-code-allowed frontend-deps
 	uv run --locked ruff format --check $(PY_TARGETS)
 	uv run --locked ruff check $(PY_TARGETS)
 	@if [ -d backend/src ]; then uv run --locked mypy --strict backend/src; fi
@@ -59,16 +69,16 @@ tooling:
 	  wait $$pids; rc=0; for f in "$$d"/*.rc; do n=$$(basename "$$f" .rc); \
 	  if [ "$$(cat "$$f")" != 0 ]; then cat "$$d/$$n.out"; rc=1; else echo "$$n: $$(tail -1 "$$d/$$n.out")"; fi; done; rm -rf "$$d"; exit $$rc
 
-test: frontend-deps
+test: dep-code-allowed frontend-deps
 	@if [ -d backend ]; then uv run --locked pytest -q -n auto; fi
 	@if [ -f frontend/package.json ]; then npm test --workspace frontend; fi
 
-e2e: frontend-deps
+e2e: dep-code-allowed frontend-deps
 	@if [ -f frontend/package.json ]; then npm run e2e --workspace frontend; fi
 
 # The API contract (api-contract skill): the committed OpenAPI snapshot, then the TypeScript types generated
 # from it. Run after any change to a route or a response model; CI's test job runs it and fails on a diff.
-openapi: frontend-deps
+openapi: dep-code-allowed frontend-deps
 	uv run --locked op openapi --out backend/tests/contract/openapi.json
 	npm run --silent gen:api --workspace frontend
 

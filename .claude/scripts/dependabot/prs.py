@@ -4,6 +4,7 @@
     python3 .claude/scripts/dependabot/prs.py preflight
     python3 .claude/scripts/dependabot/prs.py list
     python3 .claude/scripts/dependabot/prs.py check <n> --head <sha>
+    python3 .claude/scripts/dependabot/prs.py ci <n> --head <sha> [--interval 60] [--timeout 60]
     python3 .claude/scripts/dependabot/prs.py queue <n> --head <sha>
     python3 .claude/scripts/dependabot/prs.py watch <n> [<n> ...] [--interval 45] [--timeout 120] [--hung 40]
 
@@ -23,7 +24,21 @@ enabling auto-merge, which `queue` makes after detecting where it runs (`detect_
 `preflight` (step 0) checks `gh api user` answers, prints the mode, and checks the credential: in the cloud gh
 must have no stored login (one would be a file dependency code could read, which step 5 can't strip), and a real
 token in GH_TOKEN or GITHUB_TOKEN is reported (step 5 strips those). Locally a stored login is allowed: it is the
-maintainer's own machine, where `make test` runs with it every day. A checker: ok / PROBLEM; exit 0, 1 or 2.
+maintainer's own machine, where `make test` runs with it every day. In the cloud it also writes the clone's
+no-dependency-code marker, `op-no-dep-code` in git's common directory: a cloud run executes none of a PR's
+dependency code (decision-048, 2026-10-13), and while the marker is there `make sync`, `fmt`, `lint`, `test`, `e2e`
+and `openapi` refuse, `scripts/setup-dev.sh` skips its `uv sync`, and `.githooks/pre-push` skips its `make lint`.
+Locally it removes a marker it finds. A checker: ok / PROBLEM; exit 0, 1 or 2.
+
+`ci` reads, over REST, CI's results for the PR's head `<sha>`, which in the cloud stand in for every local run of
+the PR's dependencies (step 5): the latest GitHub Actions check run of each of `lint`, `test`, `claude-tooling`,
+`playwright` and `bench`, and `web-image` when the PR touches a path that workflow runs on. A check run by any
+other app doesn't count (the session's App can write checks). It requires the PR as `queue` does (open,
+Dependabot's, into `dev`, still at `<sha>`), then polls every `--interval` seconds while a check is still running
+or not yet listed, for up to `--timeout` minutes (default 9, under the Bash tool's 10-minute limit). Every check
+`success` is exit 0; any other conclusion is a PROBLEM (exit 1: leave the PR open; no local rerun in the cloud),
+with the run's URL; gh failing is exit 2; a check still running or not yet listed at the timeout, with none red, is
+exit 4: run it again on the same head, up to an hour of waiting in all, then leave the PR open.
 
 `list` prints one block per open PR by dependabot[bot] into `dev`: number, ecosystem, head branch (quoted, with a
 warning, when it is not a plain `dependabot/<ecosystem>/…` name) and title
@@ -80,9 +95,21 @@ import sys
 import time
 import urllib.parse
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from _common import Report, ToolError, age_days, main_guard, now, parse_time, resolve_refs, run, run_json
+from _common import (
+    Report,
+    ToolError,
+    age_days,
+    git_show,
+    main_guard,
+    now,
+    parse_time,
+    resolve_refs,
+    run,
+    run_json,
+)
 
 REPO = "uw-share-lab/openproceedings"
 ALLOWED = {
@@ -117,6 +144,23 @@ FAILED = {"failure", "timed_out", "cancelled", "action_required", "startup_failu
 QUEUE_EVENTS = ("added_to_merge_queue", "removed_from_merge_queue")
 # A Dependabot head branch: the PR's text reaches git commands the procedure writes, so its name must be plain.
 HEAD_SHAPE = re.compile(r"dependabot/[a-z_]+/(?!.*\.\.)[A-Za-z0-9._/@+-]+")  # git forbids ".." too
+# In git's common directory of a cloud clone: make's dependency targets, setup-dev.sh's uv sync and the pre-push
+# hook's make lint stand down while it exists (decision-048, 2026-10-13: a cloud run executes no PR dependency code).
+NO_DEP_CODE = "op-no-dep-code"
+# What a tree honours the marker with. A PR based on an older dev lacks them, and git runs the checked-out tree's
+# Makefile and pre-push hook, so in a cloud clone `check` stops such a head (the routine asks Dependabot to rebase).
+GUARDED = {
+    "Makefile": "dep-code-allowed",
+    ".githooks/pre-push": NO_DEP_CODE,
+    "scripts/setup-dev.sh": NO_DEP_CODE,
+}
+# CI's checks that stand in for step 5's local runs in the cloud (GitHub Actions runs them, without the session's
+# credential), and the paths `web-image.yml` runs on, which add `web-image`.
+CI_CHECKS = ("lint", "test", "claude-tooling", "playwright", "bench")
+CI_APP = "github-actions"
+WEB_IMAGE_PATHS = re.compile(
+    r"(?:deploy|frontend)/.+|package\.json|package-lock\.json|\.dockerignore|\.github/workflows/web-image\.yml"
+)
 
 
 def ecosystem(head: str) -> str:
@@ -169,6 +213,12 @@ def detect_mode() -> str:
     )
 
 
+def marker_path() -> Path:
+    """The no-dependency-code marker, in git's common directory (shared by every worktree of the clone)."""
+    common = run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"]).stdout.strip()
+    return Path(common) / NO_DEP_CODE
+
+
 def preflight() -> None:
     rep = Report("preflight")
     login = run(["gh", "api", "user", "--jq", ".login"]).stdout.strip()
@@ -177,6 +227,18 @@ def preflight() -> None:
     rep.ok(f"gh api user: {login}")
     mode = detect_mode()
     rep.ok(f"mode: {mode}")
+    marker = marker_path()
+    if mode == "cloud":
+        marker.write_text(
+            "cloud mode (prs.py preflight): this run executes none of a PR's dependency code (decision-048)\n"
+        )
+        rep.ok(
+            f"no dependency code: {marker} written; make sync, fmt, lint, test, e2e and openapi refuse here, "
+            "setup-dev.sh skips uv sync and the pre-push hook skips make lint (CI's checks stand in: prs.py ci)"
+        )
+    elif marker.exists():
+        marker.unlink()
+        rep.ok(f"removed {marker}: a local clone runs the PR's tests itself")
     held = [v for v in TOKEN_VARS if STORED_SHAPE.search(os.environ.get(v, ""))]
     clean = {k: v for k, v in os.environ.items() if k not in TOKEN_VARS}
     stored = run(["gh", "auth", "token"], ok_codes=(0, 1), env=clean)
@@ -281,8 +343,78 @@ def check_pr(number: int, head: str) -> None:
             rep.problem(
                 f"commit {c[:12]}: GitHub doesn't verify its signature ({verification.get('reason')})"
             )
+    if marker_path().exists():  # a cloud clone: the head's own Makefile and hooks must honour the marker
+        old = [f for f, word in GUARDED.items() if word not in (git_show(sha, f) or "")]
+        if old:
+            rep.problem(
+                f"the head's {', '.join(old)} predate the no-dependency-code guard (a base older than it): comment "
+                "`@dependabot rebase` and list the PR as not reviewed"
+            )
     if not rep.problems:
         rep.ok(f"{eco}: {len(paths)} file(s) and {len(commits)} commit(s), all Dependabot's, at {sha[:12]}")
+    rep.finish()
+
+
+def ci_state(sha: str, names: tuple[str, ...]) -> dict[str, tuple[str, str]]:
+    """Each named check's (state, run URL) on `sha`: its latest GitHub Actions run's conclusion, `pending` while
+    it runs, or `missing` when no such run is listed (no URL)."""
+    latest: dict[str, dict[str, Any]] = {}
+    for r in api_pages(f"repos/{REPO}/commits/{sha}/check-runs", key="check_runs"):
+        name = r.get("name")
+        if (r.get("app") or {}).get("slug") != CI_APP or name not in names:
+            continue
+        if name not in latest or r["id"] > latest[name]["id"]:
+            latest[name] = r
+    state: dict[str, tuple[str, str]] = {}
+    for name in names:
+        r = latest.get(name)
+        if r is None:
+            state[name] = ("missing", "")
+        elif r.get("status") != "completed":
+            state[name] = ("pending", r.get("html_url") or "")
+        else:
+            state[name] = (r.get("conclusion") or "no conclusion", r.get("html_url") or "")
+    return state
+
+
+def ci_pr(number: int, head: str, interval: float, timeout_min: float) -> None:
+    rep = Report(f"CI #{number}")
+    sha = run(["git", "rev-parse", "--verify", f"{head}^{{commit}}"]).stdout.strip()
+    pr_problems(rep, get_pr(number), sha)
+    if rep.problems:
+        rep.finish()
+    paths: set[str] = set()
+    for f in api_pages(f"repos/{REPO}/pulls/{number}/files"):
+        paths.add(f["filename"])
+        if f.get("previous_filename"):
+            paths.add(f["previous_filename"])
+    names = CI_CHECKS + (("web-image",) if any(WEB_IMAGE_PATHS.fullmatch(p) for p in paths) else ())
+    deadline = time.monotonic() + timeout_min * 60
+    while True:
+        state = ci_state(sha, names)
+        red = [n for n in names if state[n][0] not in ("success", "pending", "missing")]
+        waiting = [n for n in names if state[n][0] in ("pending", "missing")]
+        if red or not waiting or time.monotonic() >= deadline:
+            break
+        print(f"waiting for {', '.join(waiting)} at {sha[:12]}", flush=True)
+        time.sleep(interval)
+    for n in names:
+        got, url = state[n]
+        at = f"at {sha[:12]}" + (f" ({url})" if url else "")
+        if got == "success":
+            rep.ok(f"{n}: success {at}")
+        elif n in red:
+            rep.problem(f"{n}: {got} {at}: CI's result stands; no local rerun in the cloud")
+        elif red:
+            rep.problem(f"{n}: {got} {at} (not waited for: another check is red)")
+        else:
+            print(f"waiting {n}: {got} {at}", flush=True)
+    if waiting and not red:
+        print(
+            f"CI #{number}: still waiting for {', '.join(waiting)} after {timeout_min:g} min: run this again on the "
+            "same head, up to an hour of waiting in all; then leave the PR open for the owner"
+        )
+        sys.exit(4)
     rep.finish()
 
 
@@ -499,10 +631,13 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("preflight")
     sub.add_parser("list")
-    for name in ("check", "queue"):
+    for name in ("check", "queue", "ci"):
         c = sub.add_parser(name)
         c.add_argument("number", type=int)
         c.add_argument("--head", required=True, help="the PR head as fetched and reviewed (a sha or a ref)")
+        if name == "ci":
+            c.add_argument("--interval", type=float, default=60, help="seconds between reads")
+            c.add_argument("--timeout", type=float, default=9, help="minutes to wait for running checks")
     w = sub.add_parser("watch")
     w.add_argument("numbers", type=int, nargs="+")
     w.add_argument("--interval", type=float, default=45)
@@ -517,6 +652,8 @@ def main() -> None:
         check_pr(a.number, a.head)
     elif a.cmd == "queue":
         queue_pr(a.number, a.head)
+    elif a.cmd == "ci":
+        ci_pr(a.number, a.head, a.interval, a.timeout)
     else:
         watch(a.numbers, a.interval, a.timeout, a.hung)
 

@@ -4042,5 +4042,119 @@
   "file": ".claude/scripts/check_file_modes.py",
   "old": "        for i, w in enumerate(words):\n            if any(x in w for x in GLOB_STATE):",
   "new": "        for i, w in enumerate(code):\n            if any(x in w for x in GLOB_STATE):"
+ },
+ {
+  "label": "no-dep-code: the Makefile guard never refuses",
+  "file": "Makefile",
+  "old": "\tif [ -e \"$$d/op-no-dep-code\" ]; then \\\n",
+  "new": "\tif false; then \\\n"
+ },
+ {
+  "label": "no-dep-code: the Makefile guard refuses without failing",
+  "file": "Makefile",
+  "old": "prs.py ci <n> --head <sha>\"; exit 1; fi",
+  "new": "prs.py ci <n> --head <sha>\"; exit 0; fi"
+ },
+ {
+  "label": "no-dep-code: make sync unguarded",
+  "file": "Makefile",
+  "old": "sync: dep-code-allowed\n",
+  "new": "sync:\n"
+ },
+ {
+  "label": "no-dep-code: make fmt unguarded",
+  "file": "Makefile",
+  "old": "fmt: dep-code-allowed frontend-deps\n",
+  "new": "fmt: frontend-deps\n"
+ },
+ {
+  "label": "no-dep-code: make lint unguarded",
+  "file": "Makefile",
+  "old": "lint: dep-code-allowed frontend-deps\n",
+  "new": "lint: frontend-deps\n"
+ },
+ {
+  "label": "no-dep-code: make test unguarded",
+  "file": "Makefile",
+  "old": "test: dep-code-allowed frontend-deps\n",
+  "new": "test: frontend-deps\n"
+ },
+ {
+  "label": "no-dep-code: make e2e unguarded",
+  "file": "Makefile",
+  "old": "e2e: dep-code-allowed frontend-deps\n",
+  "new": "e2e: frontend-deps\n"
+ },
+ {
+  "label": "no-dep-code: make openapi unguarded",
+  "file": "Makefile",
+  "old": "openapi: dep-code-allowed frontend-deps\n",
+  "new": "openapi: frontend-deps\n"
+ },
+ {
+  "label": "no-dep-code: the Makefile guard looks in the worktree's git dir, not the common one",
+  "file": "Makefile",
+  "old": "@d=$$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)",
+  "new": "@d=$$(git rev-parse --path-format=absolute --git-dir 2>/dev/null)"
+ },
+ {
+  "label": "no-dep-code: pre-push runs make lint with the marker",
+  "file": ".githooks/pre-push",
+  "old": "[ -e \"$common/op-no-dep-code\" ]; then",
+  "new": "[ -e \"$common/op-no-dep-code-never\" ]; then"
+ },
+ {
+  "label": "no-dep-code: pre-push skips make lint without the marker",
+  "file": ".githooks/pre-push",
+  "old": "  echo \"pre-push: make lint\" && \"${nocred[@]}\" make --no-print-directory lint\n",
+  "new": "  echo \"pre-push: make lint\"\n"
+ },
+ {
+  "label": "no-dep-code: setup-dev.sh syncs with the marker",
+  "file": "scripts/setup-dev.sh",
+  "old": "if [ -e \"$common/op-no-dep-code\" ]; then echo \"skipped uv sync",
+  "new": "if [ -e \"$common/op-no-dep-code-never\" ]; then echo \"skipped uv sync"
+ },
+ {
+  "label": "no-dep-code: make tooling guarded",
+  "file": "Makefile",
+  "old": "tooling:\n",
+  "new": "tooling: dep-code-allowed\n"
+ },
+ {
+  "label": "no-dep-code: make mutate guarded",
+  "file": "Makefile",
+  "old": "mutate:\n",
+  "new": "mutate: dep-code-allowed\n"
+ },
+ {
+  "label": "no-dep-code: the Makefile guard passes when git fails",
+  "file": "Makefile",
+  "old": "can't be checked: run make from the git clone\"; exit 1; }; \\",
+  "new": "can't be checked: run make from the git clone\"; exit 0; }; \\"
+ },
+ {
+  "label": "no-dep-code: pre-push looks in the worktree's git dir",
+  "file": ".githooks/pre-push",
+  "old": "common=$(git rev-parse --path-format=absolute --git-common-dir) || {",
+  "new": "common=$(git rev-parse --path-format=absolute --git-dir) || {"
+ },
+ {
+  "label": "no-dep-code: setup-dev.sh looks in the worktree's git dir",
+  "file": "scripts/setup-dev.sh",
+  "old": "common=$(git rev-parse --path-format=absolute --git-common-dir)",
+  "new": "common=$(git rev-parse --path-format=absolute --git-dir)"
+ },
+ {
+  "label": "no-dep-code: pre-push falls through to make lint when git fails",
+  "file": ".githooks/pre-push",
+  "old": "can't check for op-no-dep-code\" >&2; exit 1; }",
+  "new": "can't check for op-no-dep-code\" >&2; }"
+ },
+ {
+  "label": "no-dep-code: setup-dev.sh resets core.hooksPath with the marker",
+  "file": "scripts/setup-dev.sh",
+  "old": "then echo \"kept core.hooksPath",
+  "new": "then git config core.hooksPath .githooks; echo \"kept core.hooksPath"
  }
 ]
