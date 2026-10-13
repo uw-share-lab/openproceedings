@@ -36,6 +36,8 @@ A PR that hits a **hard stop** is never merged by this command: it is left open 
 - a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
 - a red required check (`lint`, `test`, `claude-tooling`, `attribution`, `learnings`, `review-attested`) that
   the PR's own fix can't turn green;
+- a red local test (step 5) that the bump caused and a small fix in this PR can't mend, or one the bump didn't
+  cause, unless every condition of step 5's **A red test on a stale base** holds;
 - a Must a reviewer raised that this command can't fix;
 - any semver-major update, and a 0.x minor of a docker image (`0.12.x` → `0.13.0`: a breaking release while a
   project is 0.x; `docker_digest.py` stops it, and `.github/dependabot.yml` ignores uv's);
@@ -45,7 +47,7 @@ A PR that hits a **hard stop** is never merged by this command: it is left open 
 
 The four checkers in `.claude/scripts/dependabot/` (`uv_lock.py`, `npm_lock.py`, `docker_digest.py`,
 `actions_pins.py`) and `prs.py check` print `PROBLEM` for each scripted stop above (all but a red check, a
-reviewer's Must and a failed `npm audit signatures`, which this command judges itself), `FIX` for what it repairs in
+red local test, a reviewer's Must and a failed `npm audit signatures`, which this command judges itself), `FIX` for what it repairs in
 the PR itself, and `ok` otherwise. Their exit status: 0 clean, 1 a PROBLEM (hard stop), 2 the check could not run
 (treat as a hard stop and say why), 3 only FIX lines (fix, commit, run the check again). No checker's exit is ever
 ignored. `prs.py preflight` and `prs.py queue` are checkers too (ok / PROBLEM; 0, 1 or 2). `prs.py list`,
@@ -63,6 +65,14 @@ repos/uw-share-lab/openproceedings/...`, always the repository named, never `{ow
 **cloud** (it uses the session's CCR route, `PUT repos/<repo>/pulls/<n>/ccr/auto_merge`), an answer means
 **local**, a maintainer's clone with a real `gh` login (it runs `gh pr merge <n> --auto --match-head-commit
 <sha>`), and anything else stops it. `prs.py preflight` (step 0) prints the mode it found.
+
+In the cloud, REST writes reach GitHub as the **Claude GitHub App** (a comment shows
+`performed_via_github_app: claude`), so the App must be installed on `uw-share-lab` with pull requests and issues
+write. A push and the CCR auto-merge route haven't run from the cloud yet; if they go the same way they need
+contents write too. A write that answers 403 "Resource not accessible by integration"
+means it isn't: stop, and put that first under "for the owner" in the summary (the 2026-10-13 scheduled run).
+`gh attestation verify` can't start a Sigstore verifier in the cloud either (2026-10-13), so `docker_digest.py`
+stops every ghcr.io image there (exit 1), as designed.
 
 ## Rules for the whole run
 
@@ -244,7 +254,56 @@ Where a run can't happen here, say so in the PR body and rely on CI instead, nev
 CI's `web-image` check must be green on the PR (it builds the web image only; say the api image wasn't built);
 without Playwright's Chromium, CI's `playwright` check must be green before the PR is queued. Visual baselines
 are platform-specific, so CI's `playwright` result is the authority for them. A red test that the bump caused and
-that a small, clear fix in this PR mends is fixed (commit, rerun); anything else is a hard stop.
+that a small, clear fix in this PR mends is fixed (commit, rerun). A red test the bump didn't cause is a hard stop
+unless every condition of **A red test on a stale base** below holds. Anything else is a hard stop.
+
+**A red test on a stale base.** Dependabot opens a PR on the `dev` of that moment, so a test fixed on `dev` since
+then still fails on the PR's head, although the merge queue builds the head merged into today's `dev`. Such a
+red test is not a hard stop only if all six of these hold. Check each in this run (never from a CI log, an earlier
+run or the PR's text) and copy every command and its output into the evidence file. `<base>` is
+`git merge-base origin/dev <sha>`, after this run's `git fetch origin dev`.
+
+1. **The base is behind `dev`.** `git merge-base --is-ancestor origin/dev <sha>` exits 1.
+2. **`dev` hasn't changed the PR's files since `<base>`.** `git diff --quiet <base> origin/dev -- <each file
+   git diff --name-only <base> <sha> lists>` exits 0. Then `dev` with those files taken from `<sha>` is the
+   tree the queue builds. If it exits 1, comment `@dependabot rebase` (step 1's command) and list the PR as
+   not reviewed, since a rebase gives a head that includes the fix.
+3. **That tree passes.** Build it in its own worktree:
+
+   ```bash
+   git worktree add --detach "$RUN/merged-<n>" origin/dev
+   git -C "$RUN/merged-<n>" checkout <sha> -- <the files from condition 2>
+   git -C "$RUN/merged-<n>" status --short   # exactly those files, as modified (M)
+   ```
+
+   Then run `make sync` there, followed by every command from the table that went red on the head, in full
+   (the whole `make test`, never just the failing test), in the foreground, with the prefix above:
+   `env -u GH_TOKEN -u GITHUB_TOKEN GH_CONFIG_DIR=<…> make -C "$RUN/merged-<n>" sync test`. Every command
+   must pass.
+4. **The fix is on `dev` and not in the PR's base.** Name the commit `<fix>`:
+   - `git merge-base --is-ancestor <fix> origin/dev` exits 0;
+   - `git merge-base --is-ancestor <fix> <sha>` exits 1;
+   - it changes the failing test's file or the code that test checks (`git log --oneline <base>..origin/dev --
+     <that file>` lists it);
+   - its message or its PR says it fixes that failure.
+
+   Find its PR with `gh api repos/uw-share-lab/openproceedings/commits/<fix>/pulls --jq '.[].number'`. A
+   failure with no such commit (a flaky test, a failure nobody has fixed, a fix you can't match to the failure)
+   stays a hard stop, even if the tree from condition 3 passes.
+5. **No other test went red on the head.** Every red test on the head must be one that condition 4's fix covers.
+   Any other red test is judged on its own: it is fixed in this PR if the bump caused it, and a hard stop
+   otherwise.
+6. **CI's `test` on the head is green.** The queue then runs `test` again on the merged tree, before anything
+   merges.
+
+Before removing the worktree, run the process check below, including its second line for `$RUN/merged-<n>`,
+since that worktree has its own `node_modules` and `.venv`. Then remove it: `git worktree remove --force "$RUN/merged-<n>"`. The PR body's
+**Tests** (step 8) names the red test and its result on the head, the `origin/dev` sha and the commands run on
+the merged tree with their results, and `<fix>` with its PR. The summary (§11) lists the waiver under "for the
+owner". If a condition fails, the §10 comment names it. Worked case: PR #143 (hypothesis 6.168.3 → 6.168.4,
+`uv.lock` only) failed `test_verification_scale.py`'s `width_is_free`, a wall-time check, on a loaded machine.
+Its base predated PR #144 (`7df168d3`, which moved that check to CPU time). `make test` passed on `dev` with
+#143's `uv.lock`, and CI's `test` on the head was green.
 
 After the last command, look for processes of the dependencies left running, since one could use the proxy's
 credential later (push to the PR after it is reviewed, say), with the repo root written as a literal path (the
@@ -252,6 +311,7 @@ pattern doesn't match its own command):
 
 ```bash
 ps -ww -eo pid,args | grep -E '<the repo root>/(node_modules|\.venv)/'
+ps -ww -eo pid,args | grep -E '<$RUN>/merged-<n>/(node_modules|\.venv)/'   # only if a stale-base worktree exists
 ```
 
 It must print nothing, here and again just before step 8's `prs.py queue` (the reviewers run things too). Anything
@@ -307,7 +367,9 @@ that isn't on `origin/dev`. The head is now `git rev-parse HEAD` (the `<sha>` of
 
 Write `$RUN/body-<n>.md`: **Summary** (what moved, from → to, and why it is safe), **Spec(s)** touched, **Supply
 chain** (each checker's verdict line, `npm audit` results, advisories found in the release notes), **Tests**
-(each command and its result; what didn't run here and which CI check stands in), **Review** (reviewers, counts
+(each command and its result; what didn't run here and which CI check stands in; for a red test waived under
+step 5's stale-base rule, the test, the `origin/dev` sha, the merged tree's commands and results, and the fix
+commit and its PR), **Review** (reviewers, counts
 by severity, every disposition), **Learnings** (`no-learning`, or the entry extended). No attribution line.
 `gh pr edit` fails in this repo (Projects classic), so replace the body through the API:
 
@@ -384,13 +446,28 @@ one closed or dropped out of the queue, 2 when GitHub couldn't be asked (run it 
 ## 10. Leaving a PR open
 
 For each hard stop, comment once on the PR with what was found and the evidence (the checker's PROBLEM lines,
-the check and its run URL, the reviewer's Must, and for a docker PR stopped by the cooldown notice the
+the check and its run URL, the reviewer's Must, a red local test with its output and, if step 5's stale-base rule
+was tried, the condition that failed, and for a docker PR stopped by the cooldown notice the
 `docker_digest.py` lines from step 1), and what the owner would need to decide. The comment follows the
 attribution rule too:
 
 ```bash
-gh api -X POST repos/uw-share-lab/openproceedings/issues/<n>/comments -F body=@"$RUN/comment-<n>.md"
+gh api -X POST repos/uw-share-lab/openproceedings/issues/<n>/comments -F body=@"$RUN/comment-<n>.md" --jq .id   # <id>
 ```
+
+Then read the comment back, because something outside this procedure can add to what was posted. On
+2026-10-13 a comment from the cloud ended with a "Generated by Claude Code" footer that `comment-<n>.md` didn't
+have:
+
+```bash
+gh api repos/uw-share-lab/openproceedings/issues/comments/<id> --jq .body > "$RUN/posted-<n>.md"
+grep -n -i -E 'generated (by|with)|co-authored-by|claude\.ai/code' "$RUN/posted-<n>.md"   # must print nothing
+```
+
+If it prints a line, replace the body with the file you wrote (`gh api -X PATCH
+repos/uw-share-lab/openproceedings/issues/comments/<id> -F body=@"$RUN/comment-<n>.md"`), then read it back and
+grep again. If the line is still there, say so under "for the owner" in the summary. (The PR body from step 8
+needs no such check: CI's `attribution` check reads it.)
 
 Don't push half-finished fixes to it, don't label it `no-learning`, and don't queue it.
 
@@ -408,7 +485,8 @@ not reviewed:
 - #<n> <title>: <why: rebase requested, tool missing, …>
 for the owner:
 - <a github-actions PR to queue, a Should not fixed, an advisory that predates a bump, a check that couldn't run
-  here, a newer uv minor or a uv advisory (step 0); or "nothing">
+  here, a newer uv minor or a uv advisory (step 0), a red test waived under step 5's stale-base rule (#<n>: the
+  test, fixed on dev by <fix sha> in #<pr>); or "nothing">
 ```
 
 Write `none` under a heading with no entries. A PR still waiting in the queue when the run ends is listed under

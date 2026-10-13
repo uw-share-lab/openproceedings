@@ -281,6 +281,11 @@ with a comment for the owner, a PR with:
   Dependabot couldn't apply its cooldown; for actions and Docker Hub images the hold is otherwise the `cooldown`;
 - a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
 - a red required check it can't fix, or a Must it can't fix;
+- a red local test it can't fix, unless the PR's base is behind `dev` and the test was fixed there since: the
+  routine then checks in its own run that `dev` hasn't changed the PR's files since the base, that `make test`
+  passes in full on `dev` with the PR's files (the tree the merge queue builds), that a named commit on `dev`
+  (and its PR) fixes that failure and isn't in the base, that no other test is red, and that CI's `test` on the
+  head is green, and lists the waiver for the owner (`/dependabot-review` step 5, "A red test on a stale base");
 - any semver-major, a docker image's 0.x minor, anything touching `tantivy`, or a new Python release, patch or
   minor: a patch changes how the crawlers parse pages (§Monorepo layout, "Python pin"), and the crawl-cache replay
   that shows records unchanged needs the owner's `data/`. A new digest for the same `python` tag is merged like
@@ -294,7 +299,8 @@ ends with a summary for its log: merged, left open (with the reason), not review
 at. The gates stay on for Dependabot PRs; exempting `dependabot[bot]` from `learnings` and `review-attested` was
 considered and rejected (decision-048). The routine's GitHub token is fine-grained: this repository only,
 `contents`, `pull requests`, `issues` and `actions` read and write, nothing else (no `administration`, no
-`workflows`); it is the only credential the command uses. Without `workflows` the routine
+`workflows`); it is the only credential the command uses locally. In the cloud the writes reach GitHub through the
+Claude GitHub App's installation instead (*Cloud and local*), whose permissions then bound them. Without `workflows` the routine
 reviews and attests a github-actions PR but leaves the queueing to the owner (`gh pr merge <n> --auto --match-head-commit <sha>`), named in
 its summary. The pre-push hook and the autofix hook run their tools without the token.
 
@@ -302,7 +308,12 @@ its summary. The pre-push hook and the autofix hook run their tools without the 
 GraphQL is not available from Claude Code sessions; …"), so `gh pr list`, `view`, `checks` and `merge` all fail
 there, and its token is a network secret: `GH_TOKEN` and `GITHUB_TOKEN` hold placeholders (`gh auth status` calls
 them invalid) and an egress proxy adds the real token to requests for api.github.com, so no process in the session
-holds it. The procedure therefore uses REST only (`gh api repos/<repo>/...`) and checks auth with a real call (`gh
+holds it. GitHub records the session's writes as the Claude GitHub App's (`performed_via_github_app: claude`), so
+the App must be installed on `uw-share-lab` with pull requests and issues write (and contents write, if a push
+goes the same way; no push or CCR call has run from the cloud yet). Without it every write answers 403 "Resource not accessible by integration": the first scheduled run
+(2026-10-13) reviewed #142 and #143 over REST but could post nothing, until the owner installed the App that day.
+`gh attestation verify` can't start a Sigstore verifier there ("no valid Sigstore verifiers could be initialized",
+2026-10-13), so it fails closed and every ghcr.io PR goes to the owner. The procedure therefore uses REST only (`gh api repos/<repo>/...`) and checks auth with a real call (`gh
 api user`). `prs.py preflight` tells the environment by asking GraphQL for the viewer: the session's 403 message
 is **cloud**, an answer is **local** (a maintainer's clone with a real `gh` login), anything else stops the run; in
 the cloud it also requires that `gh` has no stored login (a file dependency code could read). Turning auto-merge
@@ -844,6 +855,11 @@ exists and could shadow the project command.
 | `autofix.sh` | PostToolUse Write/Edit/MultiEdit | Formats and fixes the edited file; reports what remains (never blocks). prettier and eslint are skipped while a config or `package.json` is uncommitted, and prettier is handed the tracked `frontend/.prettierrc.json` (`--config`), so it never loads an untracked nested one |
 | `remind-token-contract.sh` | PostToolUse Write/Edit/MultiEdit | Editing `normalize.py` or the tokenizer → reminder to bump `TOKENIZER_VERSION` and run the parity and differential tests |
 | `load-learnings.sh` | SessionStart | Puts `.claude/learnings/INDEX.md` into every session's context |
+
+Beside the hooks, `.claude/settings.json` sets Claude Code's own `attribution` to nothing (`commit` and `pr`
+empty, `sessionUrl` false), so Claude Code adds no trailer, footer or session link to a commit or a PR description,
+in a cloud session too (TASK-242). Its docs don't cover PR comments, so `/dependabot-review` reads each comment it
+posts back and removes a footer.
 
 All command-parsing gates share `.claude/hooks/lib/cmdparse.py`, which parses commands the way bash splits
 them:
