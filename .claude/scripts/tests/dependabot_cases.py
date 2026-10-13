@@ -1946,7 +1946,7 @@ def _(c: Case) -> None:
     assert got == OK and "op-no-dep-code" not in out and not marker(c).exists(), out
 
 
-GUARDED_FILES = {"Makefile": "x: dep-code-allowed\n", ".githooks/pre-push": "op-no-dep-code\n",
+GUARDED_FILES: dict[str, str | None] = {"Makefile": "x: dep-code-allowed\n", ".githooks/pre-push": "op-no-dep-code\n",
                  "scripts/setup-dev.sh": "op-no-dep-code\n"}  # fmt: skip
 
 
