@@ -48,9 +48,10 @@ tempted to bypass it.
    fixture manifest, `TOKENIZER_VERSION` and `SCHEMA_VERSION`.
 5. **claude-tooling:** `make tooling` — roster lint, `.claude/README.md` and learnings `INDEX.md`
    freshness (`--check`), `check_backlog.py` (no Done task left in `backlog/tasks/`, no task or decision
-   id used twice), digest pins in `deploy/` (`check_digest_pins.py`), the npm manifests against the lock's
-   workspace entries (`dependabot/npm_specs.py`, TASK-212), `lint_probes.py`, and every case table under
-   `.claude/hooks/tests/` and `.claude/scripts/tests/`.
+   id used twice), digest pins in `deploy/` (`check_digest_pins.py`), every tracked file
+   `scripts/setup-dev.sh` chmods +x committed 100755 (`check_file_modes.py`, TASK-241), the npm manifests
+   against the lock's workspace entries (`dependabot/npm_specs.py`, TASK-212), `lint_probes.py`, and every
+   case table under `.claude/hooks/tests/` and `.claude/scripts/tests/`.
 6. **pr-gates** (three jobs): `attribution` scans every commit message in `base..head` and the PR
    title/body; `learnings` needs an added or extended `YYYY-MM-DD-<slug>.md` entry directly in
    `.claude/learnings/` unless labelled `no-learning`; `review-attested` compares `<!-- op-review: <sha>

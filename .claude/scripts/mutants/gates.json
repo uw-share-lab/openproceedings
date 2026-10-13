@@ -3820,5 +3820,227 @@
   "file": ".claude/scripts/record-review.py",
   "old": "                if \"no pull requests found\" in said.lower():\n",
   "new": "                if True:\n"
+ },
+ {
+  "label": "modes: 100644 accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if modes[p] != \"100755\":",
+  "new": "if modes[p] not in (\"100755\", \"100644\"):"
+ },
+ {
+  "label": "modes: no-match glob accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "        if not hit:\n",
+  "new": "        if False:\n"
+ },
+ {
+  "label": "modes: * crosses /",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "    if len(p) != len(g):\n        return False\n",
+  "new": ""
+ },
+ {
+  "label": "modes: * matches a leading dot",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if name.startswith(\".\") and not pat.startswith(\".\"):",
+  "new": "if False:"
+ },
+ {
+  "label": "modes: segment match not anchored",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if not fnmatch.fnmatchcase(name, pat):",
+  "new": "if not fnmatch.fnmatchcase(name, pat + \"*\"):"
+ },
+ {
+  "label": "modes: chmod reads past an operator",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "                if a in OPERATORS:\n                    break\n",
+  "new": ""
+ },
+ {
+  "label": "modes: any chmod mode accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if not args or args[0] != \"+x\" or len(args) < 2:",
+  "new": "if not args or len(args) < 2:"
+ },
+ {
+  "label": "modes: chmod +x with no paths accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if not args or args[0] != \"+x\" or len(args) < 2:",
+  "new": "if not args or args[0] != \"+x\":"
+ },
+ {
+  "label": "modes: only the first chmod line read",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "                    globs.append(g)\n",
+  "new": "                    globs.append(g)\n        if globs:\n            break\n"
+ },
+ {
+  "label": "modes: problems don't fail the run",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "sys.exit(1 if problems else 0)",
+  "new": "sys.exit(0)"
+ },
+ {
+  "label": "modes: variable glob accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "any(c in g for c in \"$`{\")",
+  "new": "any(c in g for c in \"`{\")"
+ },
+ {
+  "label": "modes: brace glob accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "any(c in g for c in \"$`{\")",
+  "new": "any(c in g for c in \"$`\")"
+ },
+ {
+  "label": "modes: [^ negation accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "                    or \"[^\" in g",
+  "new": "                    or False"
+ },
+ {
+  "label": "modes: missing setup script passes",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "        sys.exit(1)\n    globs, problems",
+  "new": "        sys.exit(0)\n    globs, problems"
+ },
+ {
+  "label": "modes: continuation not joined",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "            buf += raw[:-1]\n            continue\n",
+  "new": ""
+ },
+ {
+  "label": "modes: a continued line with # passes",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "            problems.append(f\"{SETUP}:{n}: a continued line with # in it (comment or not?) can't be read\")\n",
+  "new": "            pass\n"
+ },
+ {
+  "label": "modes: an even run of backslashes continues",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": ") % 2 == 1",
+  "new": ") > 0"
+ },
+ {
+  "label": "modes: an odd run of 3 backslashes ends the line",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": ") % 2 == 1",
+  "new": ") == 1"
+ },
+ {
+  "label": "modes: unread chmod form accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if any(\"chmod\" in w and w != \"chmod\" for w in code):",
+  "new": "if False:"
+ },
+ {
+  "label": "modes: POSIX/[[ forms accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "                    or \"[[\" in g",
+  "new": "                    or \"[[:\" in g"
+ },
+ {
+  "label": "modes: comment lines read as code",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "        if line.lstrip().startswith(\"#\"):  # a comment line: bash runs none of it\n            continue\n",
+  "new": ""
+ },
+ {
+  "label": "modes: shlex comments back on",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "        lex.commenters = \"\"",
+  "new": "        lex.commenters = \"#\""
+ },
+ {
+  "label": "modes: chmod after a # skipped",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if any(\"chmod\" in w for w in rest):",
+  "new": "if False:"
+ },
+ {
+  "label": "modes: trailing comment read as code",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "code, rest = words[:cut], words[cut:]",
+  "new": "code, rest = words, words[cut:]"
+ },
+ {
+  "label": "modes: comment starts at a mid-word #",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if w.startswith(\"#\")), len(words))",
+  "new": "if \"#\" in w), len(words))"
+ },
+ {
+  "label": "modes: shopt accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "GLOB_STATE = (\"shopt\", \"GLOBIGNORE\")",
+  "new": "GLOB_STATE = (\"GLOBIGNORE\",)"
+ },
+ {
+  "label": "modes: GLOBIGNORE accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "GLOB_STATE = (\"shopt\", \"GLOBIGNORE\")",
+  "new": "GLOB_STATE = (\"shopt\",)"
+ },
+ {
+  "label": "modes: redirection accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if any(c in a for a in args for c in \"<>\"):",
+  "new": "if False:"
+ },
+ {
+  "label": "modes: quoted chmod line accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if any(c in line for c in \"'\\\"\\\\\"):",
+  "new": "if False:"
+ },
+ {
+  "label": "modes: backslash on a chmod line accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if any(c in line for c in \"'\\\"\\\\\"):",
+  "new": "if any(c in line for c in \"'\\\"\"):"
+ },
+ {
+  "label": "modes: unreadable chmod line skipped",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "            if \"chmod\" in line or STATE_WORD.search(line):",
+  "new": "            if STATE_WORD.search(line):"
+ },
+ {
+  "label": "modes: unreadable cd line skipped",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "            if \"chmod\" in line or STATE_WORD.search(line):",
+  "new": "            if \"chmod\" in line:"
+ },
+ {
+  "label": "modes: any cd accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "            if w in (\"pushd\", \"popd\") or (w == \"cd\" and words[i + 1 : i + 2] != [TOPLEVEL]):",
+  "new": "            if w in (\"pushd\", \"popd\"):"
+ },
+ {
+  "label": "modes: cd to the top level refused",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "and words[i + 1 : i + 2] != [TOPLEVEL]",
+  "new": ""
+ },
+ {
+  "label": "modes: pushd accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if w in (\"pushd\", \"popd\") or",
+  "new": "if w in (\"popd\",) or"
+ },
+ {
+  "label": "modes: popd accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if w in (\"pushd\", \"popd\") or",
+  "new": "if w in (\"pushd\",) or"
+ },
+ {
+  "label": "modes: cd/shopt after a # skipped",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "        for i, w in enumerate(words):\n            if any(x in w for x in GLOB_STATE):",
+  "new": "        for i, w in enumerate(code):\n            if any(x in w for x in GLOB_STATE):"
  }
 ]

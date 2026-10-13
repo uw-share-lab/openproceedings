@@ -17,6 +17,11 @@ is exactly what CI checks (frontend included: prettier, eslint, `next typegen` +
 `node_modules/` is missing), `tooling` runs the roster, backlog and hook checks, and `openapi` regenerates
 the API contract (below).
 
+**Adding a script to a directory `setup-dev.sh` makes executable** (`.githooks/`, `.claude/hooks/*.sh`,
+`.claude/hooks/tests/*.sh`, `.claude/scripts/*.py`)? Commit it 100755 (`git add --chmod=+x <file>`): otherwise
+the script's `chmod +x` leaves a fresh clone's tree dirty and `record-review.py` refuses it. `make tooling`
+fails on it (`check_file_modes.py`, TASK-241).
+
 **Changed a route, a parameter or a response model? Run `make openapi` and commit both files it writes:**
 `backend/tests/contract/openapi.json` (the OpenAPI snapshot, from `op openapi`) and
 `frontend/src/api/schema.ts` (TypeScript types generated from it by `openapi-typescript`). Never edit either
