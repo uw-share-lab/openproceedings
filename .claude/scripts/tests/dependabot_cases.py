@@ -1950,9 +1950,17 @@ GUARDED_FILES: dict[str, str | None] = {"Makefile": "x: dep-code-allowed\n", ".g
                  "scripts/setup-dev.sh": "op-no-dep-code\n"}  # fmt: skip
 
 
+def guarded_checkout(c: Case) -> None:
+    """Check out a side commit whose tree has the guard (as the clone's checkout of dev does in step 1), so a check
+    that read HEAD or the working tree instead of the PR head would pass."""
+    c.git("checkout", "-q", "-b", "side", "refs/remotes/origin/dev")
+    c.commit(GUARDED_FILES)
+
+
 @row("prs check: in a cloud clone, a head whose tree predates the guard is a stop (rebase)")
 def _(c: Case) -> None:
     args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    guarded_checkout(c)
     marker(c).write_text("cloud\n")
     c.expect(
         "prs.py",
@@ -1966,6 +1974,7 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     c.commit({**GUARDED_FILES, ".githooks/pre-push": "make lint\n"})
     args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    guarded_checkout(c)
     marker(c).write_text("cloud\n")
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM the head's \.githooks/pre-push predate")
 

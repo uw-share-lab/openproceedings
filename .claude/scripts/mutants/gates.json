@@ -4112,8 +4112,8 @@
  {
   "label": "no-dep-code: setup-dev.sh syncs with the marker",
   "file": "scripts/setup-dev.sh",
-  "old": "if [ -e \"$common/op-no-dep-code\" ]; then",
-  "new": "if [ -e \"$common/op-no-dep-code-never\" ]; then"
+  "old": "if [ -e \"$common/op-no-dep-code\" ]; then echo \"skipped uv sync",
+  "new": "if [ -e \"$common/op-no-dep-code-never\" ]; then echo \"skipped uv sync"
  },
  {
   "label": "no-dep-code: make tooling guarded",
@@ -4150,5 +4150,11 @@
   "file": ".githooks/pre-push",
   "old": "can't check for op-no-dep-code\" >&2; exit 1; }",
   "new": "can't check for op-no-dep-code\" >&2; }"
+ },
+ {
+  "label": "no-dep-code: setup-dev.sh resets core.hooksPath with the marker",
+  "file": "scripts/setup-dev.sh",
+  "old": "then echo \"kept core.hooksPath",
+  "new": "then git config core.hooksPath .githooks; echo \"kept core.hooksPath"
  }
 ]

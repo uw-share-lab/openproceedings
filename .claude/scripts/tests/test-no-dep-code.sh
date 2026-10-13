@@ -105,8 +105,12 @@ fresh; mark
 out=$(cd "$R" && PATH="$BIN:$PATH" bash scripts/setup-dev.sh 2>&1); rc=$?
 result "setup-dev.sh with the marker installs nothing" test "$rc" -eq 0 -a ! -s "$LOG"
 result "setup-dev.sh with the marker says it skipped uv sync" test -n "$(printf '%s' "$out" | grep 'skipped uv sync: .*op-no-dep-code is there')"
+fresh; mark; git -C "$R" config core.hooksPath /run/dev-hooks
+out=$(cd "$R" && PATH="$BIN:$PATH" bash scripts/setup-dev.sh 2>&1); rc=$?
+result "setup-dev.sh with the marker keeps core.hooksPath (dev's hooks)" test "$rc" -eq 0 -a "$(git -C "$R" config core.hooksPath)" = /run/dev-hooks
 fresh
 out=$(cd "$R" && PATH="$BIN:$PATH" bash scripts/setup-dev.sh 2>&1); rc=$?
+result "setup-dev.sh without the marker sets core.hooksPath to .githooks" test "$(git -C "$R" config core.hooksPath)" = .githooks
 result "setup-dev.sh without the marker runs uv sync --locked" test "$rc" -eq 0 -a -n "$(grep '^uv sync --locked' "$LOG")"
 
 linked

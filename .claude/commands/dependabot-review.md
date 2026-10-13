@@ -56,7 +56,8 @@ locally, a red local test, a reviewer's Must and a failed `npm audit signatures`
 in the cloud `prs.py ci` scripts the red check), `FIX`
 for what it repairs in the PR itself, and `ok` otherwise. Their exit status: 0 clean, 1 a PROBLEM (hard stop), 2
 the check could not run (treat as a hard stop and say why), 3 only FIX lines (fix, commit, run the check again). No
-checker's exit is ever ignored. `prs.py preflight`, `prs.py ci` and `prs.py queue` are checkers too (ok / PROBLEM; 0, 1 or 2).
+checker's exit is ever ignored. `prs.py preflight`, `prs.py ci` and `prs.py queue` are checkers too (ok / PROBLEM; 0, 1 or 2;
+`ci` also exits 4: a check still running, call it again, step 5).
 `prs.py list`, `prs.py watch`, `restore_libc.py` and `npm_specs.py` (exit 0 or 1 only) are helpers; their output is
 described where they are used (step 3 for `npm_specs.py`).
 
@@ -201,8 +202,9 @@ already on `dev`, and `make tooling` and the autofix hook need it. In the cloud,
 this: `prs.py preflight` writes the no-dependency-code marker (§Where it runs), so a later `make sync` or
 `setup-dev.sh` on a PR branch installs nothing. That guard lives in the checked-out tree's `Makefile`, pre-push hook
 and `setup-dev.sh`, so a PR based on a `dev` older than it would bring back unguarded copies: in the cloud
-`core.hooksPath` points at dev's hooks in `$RUN`, and `prs.py check` stops a head whose tree lacks the guard (step 1). Locally, note whether `docker info` works and whether `npx
-playwright install chromium` succeeds; step 5 uses them. In the cloud skip both: step 5 runs neither.
+`core.hooksPath` points at dev's hooks in `$RUN` (a re-run of `setup-dev.sh` or `make hooks` keeps it while the
+marker is there), and `prs.py check` stops a head whose tree lacks the guard (step 1). Locally, note whether `docker
+info` works and whether `npx playwright install chromium` succeeds; step 5 uses them. In the cloud skip both: step 5 runs neither.
 
 **In the cloud, check the App installation's reach** (§Where it runs) before anything of a PR runs:
 
@@ -258,7 +260,8 @@ GitHub lists for the PR is one its ecosystem may touch (uv: `uv.lock` and the tw
 `package-lock.json` and the two `package.json`s; docker: a Dockerfile under `deploy/`; github-actions: a workflow or
 a composite action's `action.yml`), git's commits are exactly GitHub's for the PR, every one Dependabot's with a
 signature GitHub verified, the title doesn't name `tantivy`, and the body has no "Cooldown could not be applied"
-notice. Any PROBLEM is a hard stop (§10). A docker PR whose only PROBLEM is that notice (every ghcr.io PR) first
+notice. Any PROBLEM is a hard stop (§10), except a tree that predates the no-dependency-code guard (below),
+which is a rebase request and "not reviewed". A docker PR whose only PROBLEM is that notice (every ghcr.io PR) first
 gets `python3 $RUN/.claude/scripts/dependabot/docker_digest.py --head "origin/<head>" > "$RUN/evidence-<n>.md"`
 (it only reads git objects, the registry and `gh attestation`, so it is safe before the switch; without `--head`
 it reads the dev checkout and finds no pins), and the §10 comment quotes its age and PROBLEM lines (exit 1 is
@@ -532,7 +535,9 @@ disposition), **Learnings** (`no-learning`, or the entry extended). No attributi
 `gh pr edit` fails in this repo (Projects classic), so replace the body through the API:
 
 In the cloud, run `python3 $RUN/.claude/scripts/dependabot/prs.py ci <n> --head <the head>` before writing the body
-(exit 0, or the PR is left open, §10) and again just before `prs.py queue` below. Locally, step 5's condition 6
+and again just before `prs.py queue` below: exit 0 to go on; exit 4 (CI on a just-pushed head is usually still
+running), call it again on the same head as step 5 says, up to an hour in all (seven calls); anything else, or still
+4 after that, leaves the PR open (§10). Locally, step 5's condition 6
 reads CI's `test` the same way when a stale-base waiver applies.
 
 ```bash
@@ -540,7 +545,7 @@ gh api -X PATCH repos/uw-share-lab/openproceedings/pulls/<n> -F body=@"$RUN/body
 python3 $RUN/.claude/scripts/record-review.py APPROVE "$RUN/dispositions-<n>.md" --attest --pr <n> --repo uw-share-lab/openproceedings
 gh api repos/uw-share-lab/openproceedings/pulls/<n> --jq .body > "$RUN/posted-body-<n>.md"
 grep -v -x -F '<!-- op-review: <the head> APPROVE -->' "$RUN/posted-body-<n>.md" | diff -B "$RUN/body-<n>.md" -   # must print nothing; else §Where it runs
-python3 $RUN/.claude/scripts/dependabot/prs.py ci <n> --head <the head>       # cloud only; exit 0, else leave it open
+python3 $RUN/.claude/scripts/dependabot/prs.py ci <n> --head <the head>       # cloud only; 0 go on, 4 call again (step 5), else leave it open
 python3 $RUN/.claude/scripts/dependabot/prs.py queue <n> --head <the head>
 ```
 

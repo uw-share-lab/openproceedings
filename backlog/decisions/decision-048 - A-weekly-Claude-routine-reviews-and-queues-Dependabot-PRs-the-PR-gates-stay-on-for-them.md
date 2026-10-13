@@ -255,7 +255,8 @@ What follows from it:
   `make tooling`; CI's `lint` on the pushed head stands in. Locally `preflight` removes a marker it finds. Rows:
   `.claude/scripts/tests/test-no-dep-code.sh` and `dependabot_cases.py`; mutants in `gates.json` and
   `dependabot.json`. The guard lives in the checked-out tree, and a Dependabot PR based on an older `dev` carries
-  unguarded copies, so in the cloud `core.hooksPath` points at `dev`'s hooks extracted into the run directory and
+  unguarded copies, so in the cloud `core.hooksPath` points at `dev`'s hooks extracted into the run directory
+  (`setup-dev.sh` leaves it alone while the marker is there) and
   `prs.py check` stops a head whose `Makefile`, pre-push hook or `setup-dev.sh` lacks the guard (the routine
   comments `@dependabot rebase`). If `git rev-parse` fails, the Makefile's guarded targets and the pre-push hook
   refuse. Commands typed directly (`uv run`, `npm ci`, `npx`, the smoke test) have no guard: the

@@ -1511,5 +1511,11 @@
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "\"--path-format=absolute\", \"--git-common-dir\"]",
     "new": "\"--path-format=absolute\", \"--git-dir\"]"
+  },
+  {
+    "label": "dependabot: prs: check reads HEAD, not the PR head",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "git_show(sha, f)",
+    "new": "git_show(\"HEAD\", f)"
   }
 ]

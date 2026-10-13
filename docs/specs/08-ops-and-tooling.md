@@ -346,7 +346,8 @@ and while that is there `make sync`, `fmt`, `lint`, `test`, `e2e` and `openapi` 
 `dep-code-allowed`), `scripts/setup-dev.sh` skips its `uv sync`, and `.githooks/pre-push` skips its `make lint`;
 locally it removes a marker it finds (case table `test-no-dep-code.sh`, rows in `dependabot_cases.py`). Because
 the guard lives in the checked-out tree, a PR based on an older `dev` would bring back unguarded copies: in a cloud
-clone `core.hooksPath` points at `dev`'s hooks extracted into the run directory, and `prs.py check` stops a head
+clone `core.hooksPath` points at `dev`'s hooks extracted into the run directory (`setup-dev.sh` leaves it while
+the marker is there), and `prs.py check` stops a head
 whose `Makefile`, pre-push hook or `setup-dev.sh` lacks the guard (the routine comments `@dependabot rebase`). When
 `git rev-parse` fails (so the marker can't be checked), the Makefile's dependency targets and the pre-push hook
 refuse rather than run. Commands
