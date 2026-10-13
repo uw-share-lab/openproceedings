@@ -4,7 +4,7 @@ title: 'setup-dev.sh leaves a fresh clone dirty: four tooling files committed 10
 status: Done
 assignee: []
 created_date: '2026-10-13 15:52'
-updated_date: '2026-10-13 16:28'
+updated_date: '2026-10-13 17:09'
 labels:
   - tooling
   - bug
@@ -27,24 +27,16 @@ The weekly cloud routine (2026-10-13) found that on a fresh clone `scripts/setup
 - [x] #4 Docs describe the check as built
 <!-- AC:END -->
 
-## Implementation Plan
-
-<!-- SECTION:PLAN:BEGIN -->
-1. Find what in setup-dev.sh sets the bit: its one `chmod +x` over four globs.
-2. Decide on evidence: the four files have shebangs and all 22 siblings in the same globs are 100755, so commit them 100755 (keep the chmod as a safety net).
-3. Add .claude/scripts/check_file_modes.py to make tooling: read every chmod in setup-dev.sh (fail closed on forms it cannot read), match each glob against git's index as bash would, require 100755 and at least one match.
-4. Case-table rows in test-tooling-scripts.sh, mutants in gates.json, docs (CONTRIBUTING, ci-engineer, spec 08) and a learnings entry.
-<!-- SECTION:PLAN:END -->
-
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Root cause: setup-dev.sh runs chmod +x over .githooks/*, .claude/hooks/*.sh, .claude/hooks/tests/*.sh and .claude/scripts/*.py; four files in those globs were committed 100644 (written by a file tool; always run as python3/bash <file>, so nothing failed locally).
-Validation: check_file_modes.py listed exactly those four before the fix and 0 errors after (26 files, 4 globs); test-tooling-scripts.sh 174/174; make tooling and make lint green; make mutate-changed: 52 mutants, the 15 new "modes:" mutants all killed after two rows were added for the two first-round survivors (* crossing / and an unanchored segment match).
+Review round 1 (security, code, docs reviewers): the check now joins backslash-newline continuations (odd runs of trailing backslashes), refuses a continued line containing #, refuses [^...] and [[:class:]] globs (fnmatch reads them differently from bash), and fails when scripts/setup-dev.sh is missing; README, spec 08 §Testing, the pr-workflow skill, make help and the claude-tooling step name list the check.
+Validation: check_file_modes.py listed exactly the four files before the fix and 0 errors after (26 files, 4 globs); test-tooling-scripts.sh 183/183 (29 check_file_modes rows); make tooling and make lint green; mutate.py --match "modes:" 22/22 killed; make mutate-changed in round 0 covered the mode-changed files' existing mutants (the two survivors then got rows); a fresh clone + setup-dev.sh leaves git status --porcelain empty.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Committed the four tooling files setup-dev.sh chmods (test-parser-boundaries.sh, check_digest_pins.py, lint_probes.py, probe_hook.py) as 100755, matching their shebangs and their 22 siblings, so a fresh clone stays clean after setup and record-review.py can attest. Added .claude/scripts/check_file_modes.py to make tooling: it reads every chmod in scripts/setup-dev.sh (refusing forms it cannot read), matches each glob against the git index as bash would, and fails on a matched file not committed 100755 or a glob matching nothing. 20 case-table rows, 15 mutants (all killed), docs in CONTRIBUTING.md, ci-engineer.md and spec 08.
+Committed the four tooling files setup-dev.sh chmods (test-parser-boundaries.sh, check_digest_pins.py, lint_probes.py, probe_hook.py) as 100755, matching their shebangs and their 22 siblings, so a fresh clone stays clean after setup and record-review.py can attest. Added .claude/scripts/check_file_modes.py to make tooling: it reads every chmod in scripts/setup-dev.sh as bash would (continuations joined; any form it cannot read is refused), matches each glob against the git index, and fails on a matched file not committed 100755, a glob matching nothing, or a missing setup script. 29 case-table rows, 22 mutants (all killed); docs in CONTRIBUTING.md, README.md, spec 08, ci-engineer.md, the pr-workflow skill and make help.
 <!-- SECTION:FINAL_SUMMARY:END -->

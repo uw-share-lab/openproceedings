@@ -24,12 +24,18 @@ The weekly Dependabot cloud routine found a fresh clone dirty after `scripts/set
 
 ## Dead ends — don't repeat these
 - `core.fileMode=false` hides the symptom on one machine and leaves every other clone dirty; it isn't a fix.
+- Completing the task before the review round: Backlog 1.53 can't edit a task in `completed/` ("Task not found").
+  Restoring the pre-completion file with git (`git rm` the completed copy, `git restore --source=<sha>` the
+  `tasks/` copy) and re-running edit + complete worked; finalize after review instead.
 
 ## Decisions (and what would change them)
 - Commit the files 100755 and keep the chmod (a safety net for copies without modes, e.g. a source archive)
   → the check ties the two together → drop the chmod only if nothing outside git ever runs the tooling.
 - The check reads `chmod` from the setup script itself rather than repeating its globs, and refuses any chmod
-  it can't read (octal, `u+x`, by path, a variable or brace in a glob), so the list can't drift.
+  it can't read (octal, `u+x`, by path, a variable or brace in a glob, `[^...]` and `[[:class:]]`, which fnmatch
+  reads differently from bash, a continued line with a `#` in it), joins backslash-newline continuations as bash
+  does, and fails when the setup script is missing, so the list can't drift and moving the script can't switch
+  it off (review round 1, security- and code-reviewer).
 
 ## Follow-ups
 - none.
