@@ -1900,7 +1900,6 @@ def _(c: Case) -> None:
     c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*gh api user")
 
 
-
 def marker(c: Case) -> Path:
     return c.repo / ".git" / "op-no-dep-code"
 
@@ -1970,7 +1969,9 @@ def _(c: Case) -> None:
 @row("prs ci: a red check is a stop, with its conclusion")
 def _(c: Case) -> None:
     runs = [check_run(n, "failure" if n == "test" else "success", id_=i) for i, n in enumerate(CI_NAMES, 1)]
-    c.expect("prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM test: failure at [0-9a-f]{12}: CI's result stands")
+    c.expect(
+        "prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM test: failure at [0-9a-f]{12}: CI's result stands"
+    )
 
 
 @row("prs ci: a skipped or neutral check is not green")
@@ -1982,7 +1983,9 @@ def _(c: Case) -> None:
 @row("prs ci: a check never listed is a stop at the timeout")
 def _(c: Case) -> None:
     runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1) if n != "playwright"]
-    c.expect("prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM playwright: missing at [0-9a-f]{12} \(waited 0 min\)")
+    c.expect(
+        "prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM playwright: missing at [0-9a-f]{12} \(waited 0 min\)"
+    )
 
 
 @row("prs ci: a check still running at the timeout is a stop")
@@ -1996,7 +1999,9 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     green = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1)]
     running = [*green[:-1], check_run("bench", None, id_=5, status="queued")]
-    args = ci_case(c, {"__seq": [{"total_count": 5, "check_runs": running}, {"total_count": 5, "check_runs": green}]})
+    args = ci_case(
+        c, {"__seq": [{"total_count": 5, "check_runs": running}, {"total_count": 5, "check_runs": green}]}
+    )
     args[-1] = "1"  # a minute's wait; the second read answers green
     c.expect("prs.py", args, OK, r"^waiting for bench at [0-9a-f]{12}\n(?s:.*)^CI #7: 0 problems")
 
