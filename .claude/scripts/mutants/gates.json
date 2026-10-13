@@ -3924,21 +3924,33 @@
   "new": "                    or False"
  },
  {
+  "label": "modes: missing setup script passes",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "        sys.exit(1)\n    globs, problems",
+  "new": "        sys.exit(0)\n    globs, problems"
+ },
+ {
   "label": "modes: continuation not joined",
   "file": ".claude/scripts/check_file_modes.py",
   "old": "            buf += raw[:-1]\n            continue\n",
   "new": ""
  },
  {
-  "label": "modes: a comment line is continued",
+  "label": "modes: a continued line with # passes",
   "file": ".claude/scripts/check_file_modes.py",
-  "old": " and \"#\" not in raw:",
-  "new": ":"
+  "old": "            problems.append(f\"{SETUP}:{n}: a continued line with # in it (comment or not?) can't be read\")\n",
+  "new": "            pass\n"
  },
  {
-  "label": "modes: missing setup script passes",
+  "label": "modes: an even run of backslashes continues",
   "file": ".claude/scripts/check_file_modes.py",
-  "old": "        sys.exit(1)\n    globs, problems",
-  "new": "        sys.exit(0)\n    globs, problems"
+  "old": ") % 2 == 1",
+  "new": ") > 0"
+ },
+ {
+  "label": "modes: an odd run of 3 backslashes ends the line",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": ") % 2 == 1",
+  "new": ") == 1"
  }
 ]

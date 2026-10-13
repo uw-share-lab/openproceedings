@@ -23,30 +23,35 @@ SETUP = "scripts/setup-dev.sh"
 OPERATORS = {";", "&&", "||", "|", "&", "(", ")", ";;"}
 
 
-def logical_lines(text: str) -> list[tuple[int, str]]:
+def logical_lines(text: str) -> tuple[list[tuple[int, str]], list[str]]:
     """Each line as bash reads it, a backslash-newline joined away (so `ch\\` + `mod` is still chmod), with the
-    number of the line it starts on."""
+    number of the line it starts on; and the problems: a continued line with a `#` in it, since a comment is
+    never continued and this check can't tell a comment from a quoted `#` (that line and the next are each
+    still read on their own)."""
     out: list[tuple[int, str]] = []
+    problems: list[str] = []
     start, buf = 1, ""
     for n, raw in enumerate(text.split("\n"), 1):
         if not buf:
             start = n
-        # a comment is never continued in bash; a line with any `#` is left whole, so the next is read on its own
-        if raw.endswith("\\") and not raw.endswith("\\\\") and "#" not in raw:
+        continued = (len(raw) - len(raw.rstrip("\\"))) % 2 == 1  # an odd run of trailing backslashes
+        if continued and "#" in raw:
+            problems.append(f"{SETUP}:{n}: a continued line with # in it (comment or not?) can't be read")
+        elif continued:
             buf += raw[:-1]
             continue
         out.append((start, buf + raw))
         buf = ""
     if buf:
         out.append((start, buf))
-    return out
+    return out, problems
 
 
 def chmod_globs(text: str) -> tuple[list[str], list[str]]:
     """Each glob a `chmod +x` in the script names, and the problems: a chmod it can't read."""
     globs: list[str] = []
-    problems: list[str] = []
-    for n, line in logical_lines(text):
+    lines, problems = logical_lines(text)
+    for n, line in lines:
         lex = shlex.shlex(line, posix=True, punctuation_chars=True)
         lex.whitespace_split = True
         try:

@@ -465,7 +465,17 @@ modes 'chmod +x \
 expect_mode_err "a glob on a continuation line is checked"          'a/y\.sh: committed 100644'
 modes '# a comment is never continued \
 chmod 755 a/x.sh' a/x.sh:+x
+expect_mode_err "a continued line with # in it is refused"          'scripts/setup-dev\.sh:1: a continued line with #'
 expect_mode_err "the line after a comment ending in \\ is read"     'scripts/setup-dev\.sh:2: only'
+modes 'chmod +x "a#"/*.sh \
+  b/*.sh' a#/x.sh:+x b/y.sh:+x
+expect_mode_err "a quoted # on a continued line is refused, not skipped" 'scripts/setup-dev\.sh:1: a continued line with #'
+modes 'echo x \\
+chmod 755 a/x.sh' a/x.sh:+x
+expect_mode_err "an even run of backslashes ends the line"          'scripts/setup-dev\.sh:2: only'
+modes 'echo x \\\
+chmod 755 a/x.sh' a/x.sh:+x
+expect_mode_err "an odd run of backslashes continues it"            'scripts/setup-dev\.sh:1: '
 modes 'chmod +x a/[^x].sh' a/x.sh:+x a/y.sh:-x
 expect_mode_err "a [^...] glob is refused (fnmatch reads ^ literally)" 'scripts/setup-dev\.sh:1: chmod \+x .*not a literal'
 modes 'chmod +x a/[[:alpha:]].sh' a/x.sh:+x
