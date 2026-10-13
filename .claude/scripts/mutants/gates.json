@@ -4000,5 +4000,23 @@
   "file": ".claude/scripts/check_file_modes.py",
   "old": "and code[i + 1 : i + 2] != [TOPLEVEL]:",
   "new": ":"
+ },
+ {
+  "label": "modes: redirection accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if any(c in a for a in args for c in \"<>\"):",
+  "new": "if False:"
+ },
+ {
+  "label": "modes: quoted chmod line accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if any(c in line for c in \"'\\\"\\\\\"):",
+  "new": "if False:"
+ },
+ {
+  "label": "modes: backslash on a chmod line accepted",
+  "file": ".claude/scripts/check_file_modes.py",
+  "old": "if any(c in line for c in \"'\\\"\\\\\"):",
+  "new": "if any(c in line for c in \"'\\\"\"):"
  }
 ]

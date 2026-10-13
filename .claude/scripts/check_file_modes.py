@@ -10,7 +10,8 @@ matched as bash matches them: `*`, `?` and `[...]` within one path segment, and 
 pattern names one; a glob whose bash meaning fnmatch doesn't share (`[^...]`, `[[:class:]]` and the other `[[`
 forms) is refused. bash's default glob options and the repo root as working directory are assumed, so `shopt`,
 `GLOBIGNORE` and any `cd`/`pushd`/`popd` but `cd "$(git rev-parse --show-toplevel)"` are refused. A missing setup
-script is an error too, so moving it can't switch the check off. Exits 1 listing every problem."""
+script is an error too, so moving it can't switch the check off. A chmod line with quotes, backslashes or a
+redirection is refused, since shlex would lose what bash keeps. Exits 1 listing every problem."""
 
 from __future__ import annotations
 
@@ -93,6 +94,13 @@ def chmod_globs(text: str) -> tuple[list[str], list[str]]:
                 if a in OPERATORS:
                     break
                 args.append(a)
+            if any(c in a for a in args for c in "<>"):
+                problems.append(f"{SETUP}:{n}: a redirection on a chmod can't be read")
+                continue
+            if any(c in line for c in "'\"\\"):
+                # shlex drops quotes and backslashes, after which a quoted `'a/*.sh'` (bash passes it as written)
+                # would be matched as a glob
+                problems.append(f"{SETUP}:{n}: a chmod line with quotes or backslashes can't be read")
             if not args or args[0] != "+x" or len(args) < 2:
                 problems.append(
                     f"{SETUP}:{n}: only `chmod +x <glob>...` is checked; found chmod {' '.join(args)}"

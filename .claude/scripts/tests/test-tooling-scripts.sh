@@ -497,11 +497,17 @@ chmod 755 a/x.sh' a/x.sh:+x
 expect_mode_err "an even run of backslashes ends the line"          'scripts/setup-dev\.sh:2: only'
 modes 'echo x \\\
 chmod 755 a/x.sh' a/x.sh:+x
-expect_mode_err "an odd run of backslashes continues it"            'scripts/setup-dev\.sh:1: '
+expect_mode_err "an odd run of backslashes continues it"            'scripts/setup-dev\.sh:1: chmod in a form'
 modes 'chmod +x a/[^x].sh' a/x.sh:+x a/y.sh:-x
 expect_mode_err "a [^...] glob is refused (fnmatch reads ^ literally)" 'scripts/setup-dev\.sh:1: chmod \+x .*not a literal'
 modes 'chmod +x a/[[:alpha:]].sh' a/x.sh:+x
 expect_mode_err "a POSIX class glob is refused"                     'scripts/setup-dev\.sh:1: chmod \+x .*not a literal'
+modes "chmod +x 'a/*.sh'" a/x.sh:+x
+expect_mode_err "a quoted glob is refused (bash passes it as written)" 'scripts/setup-dev\.sh:1: a chmod line with quotes'
+modes 'chmod +x a/\*.sh' a/x.sh:+x
+expect_mode_err "an escaped glob is refused"                          'scripts/setup-dev\.sh:1: a chmod line with quotes or backslashes'
+modes 'chmod +x a/*.sh 2>/dev/null' a/x.sh:+x
+expect_mode_err "a redirection on a chmod is refused with its own message" 'scripts/setup-dev\.sh:1: a redirection'
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
