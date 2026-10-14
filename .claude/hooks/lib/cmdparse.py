@@ -430,6 +430,11 @@ for _key, _newer in {
     "merge": "compact-summary no-compact-summary",
     "update-index": "show-index-version no-show-index-version",
     "update-ref": "batch-updates no-batch-updates",
+    # TASK-244's tables, as CI's git 2.55 lists them
+    "am": "retry",
+    "apply": "ours theirs",
+    "rebase": "trailer",
+    "restore": _PATCH_OPTS,
 }.items():
     GIT_LONG_OPTS[_key] = GIT_LONG_OPTS[_key] | frozenset(_newer.split())
 GIT_LONG_OPTS["stage"] = GIT_LONG_OPTS["add"]
