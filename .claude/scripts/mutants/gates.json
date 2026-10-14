@@ -5696,13 +5696,31 @@
  {
   "label": "pdd backlog guard (TASK-244 additive): git clean -e data -e '!data' allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "last_data is not None and any(v.startswith(\"!\") and (v[1:].strip(\"/\").startswith(\"data\")",
-  "new": "last_data is not None and any(False and (v[1:].strip(\"/\").startswith(\"data\")"
+  "old": "last_data is not None and any(v.startswith(\"!\") and (v[1:].strip(\"/\").lower().startswith(\"data\")",
+  "new": "last_data is not None and any(False and (v[1:].strip(\"/\").lower().startswith(\"data\")"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): a ! exclude before -e data refused",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "for v in c_ex[last_data + 1 :])):",
   "new": "for v in c_ex)):"
+ },
+ {
+  "label": "pdd backlog guard (TASK-244 additive): !DATA read case-exactly",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(v[1:].strip(\"/\").lower().startswith(\"data\")",
+  "new": "(v[1:].strip(\"/\").startswith(\"data\")"
+ },
+ {
+  "label": "pdd backlog guard (TASK-244 additive): a ! glob after -e data allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "or any(c in v for c in \"*?[\"))\n",
+  "new": "or False)\n"
+ },
+ {
+  "label": "pdd backlog guard (TASK-244 additive): misread find start: the call's own worktree not consulted",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if (data_in(d) or data_in(where)) and any(s in unresolved for s in extra):",
+  "new": "            if data_in(d) and any(s in unresolved for s in extra):"
  }
 ]

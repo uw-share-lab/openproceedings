@@ -36,8 +36,8 @@
 #   report-only `git apply --check` aside), merge-file (its first file), checkout-index (`<top>/<prefix><path>`, -a),
 #   update-index (not flag-only forms), read-tree --prefix or -u; the same pathspecs into data/, data/snapshots or
 #   data/indexes (git clean's are the older -x/-X rule's, plus a `!` exclude after `-e data` that puts data/ back,
-#   which it doesn't read). A pathspec reaches backlog/ when it is in it, is the worktree root, is a git glob from either
-#   (`'*.md'`: git's `*` crosses `/`) or `:` magic, unless an exclude names backlog itself (`':!backlog'`,
+#   which it doesn't read). A pathspec reaches backlog/ when it is in it, is the worktree root, is a git glob from
+#   either (`'*.md'`: git's `*` crosses `/`) or `:` magic, unless an exclude names backlog itself (`':!backlog'`,
 #   case-exact as git reads it; never under literal pathspecs); --pathspec-from-file, stdin, an unresolvable
 #   pathspec, -C, work tree or path-valued option (`--prefix=$P`, `--prefix "$P"`) and a built pathspec after a
 #   `cd` it couldn't follow are refused; `-C`, `--git-dir`, `--work-tree` (read after -C) and GIT_WORK_TREE are
@@ -942,9 +942,10 @@ def guard_walked(walked, where, depth):
         if g and g[0] == "clean" and data_in(g[2]):  # `-e data` then `-e '!data'`: the older -x/-X rule reads only the first
             c_opts, _, _ = git_words(g[1], ("exclude",), "e")
             c_ex = [v for n, v in c_opts if n in ("e", "exclude")]
-            last_data = max((k for k, v in enumerate(c_ex) if v.strip("/") == "data"), default=None)
+            last_data = max((k for k, v in enumerate(c_ex) if v.strip("/") == "data"), default=None)  # case-blind below:
+            # core.ignorecase (macOS) makes `!DATA` put data/ back
             if any(n in ("x", "X") for n, _ in c_opts) and not last_flag(c_opts, ("n", "dry-run"), ("no-dry-run",)) and (
-                    last_data is not None and any(v.startswith("!") and (v[1:].strip("/").startswith("data")
+                    last_data is not None and any(v.startswith("!") and (v[1:].strip("/").lower().startswith("data")
                                                                          or any(c in v for c in "*?["))
                                                   for v in c_ex[last_data + 1 :])):
                 refuse(IMMUTABLE_MSG + " (A `!` exclude after `-e data` puts data/ back in what git clean deletes.)")
