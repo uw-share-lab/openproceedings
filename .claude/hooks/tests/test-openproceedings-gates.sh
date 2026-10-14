@@ -1807,6 +1807,7 @@ check $P allow "git reset --hard in a repo without backlog/"   "$(payload_at "$T
 check $P block "git -c difftool.x.cmd='rm -rf backlog' difftool -t x" "$(payload_bl "git -c difftool.x.cmd='rm -rf backlog' difftool -t x")"
 check $P block "git -c mergetool.x.cmd='rm -rf backlog' mergetool -t x" "$(payload_bl "git -c mergetool.x.cmd='rm -rf backlog' mergetool -t x")"
 check $P block "git config alias.x '!rm -rf backlog' (a ! value)" "$(payload_bl "git config alias.x '!rm -rf backlog'")"
+check $P block "git config alias.x '!git restore -s dev backlog' (a ! value only the guard reads)" "$(payload_bl "git config alias.x '!git restore -s dev backlog'")"
 check $P block "git -c credential.helper='!rm -rf backlog' push" "$(payload_bl "git -c credential.helper='!rm -rf backlog' push")"
 check $P block "git grep -nO'rm -rf backlog' x (in a cluster)" "$(payload_bl "git grep -nO'rm -rf backlog' x")"
 check $P block "cp -vt backlog/tasks src/x.md (-t in a cluster)" "$(payload_bl 'cp -vt backlog/tasks src/x.md')"

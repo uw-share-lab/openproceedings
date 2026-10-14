@@ -5434,11 +5434,10 @@
   "new": "    for text, where_ in []:  # TASK-244"
  },
  {
-  "label": "pdd backlog guard (TASK-244 additive): ! kept on embedded values \u2014 equivalent: EMBEDDED stores the value with the ! dropped, and the older checks refuse it from there",
+  "label": "pdd backlog guard (TASK-244 additive): ! kept on embedded values",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "            backlog_guard(text.lstrip(\"!\"), repo_root(g[2]) if g else d, max(depth, 0) + 1)  # -1: the top level",
-  "new": "            backlog_guard(text, repo_root(g[2]) if g else d, max(depth, 0) + 1)  # -1: the top level",
-  "equivalent": true
+  "new": "            backlog_guard(text, repo_root(g[2]) if g else d, max(depth, 0) + 1)  # -1: the top level"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): xargs git writers allowed",

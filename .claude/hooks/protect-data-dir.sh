@@ -637,7 +637,7 @@ COMMAND_KEY = re.compile(r"core\.(pager|editor|sshcommand|askpass|fsmonitor)|pag
 
 def embedded_commands(argv, g):
     """The shell commands a git invocation runs from its own words: the `-c key=value` value of every command setting
-    (COMMAND_KEY: a pager, editor, diff.external, a filter or driver, an alias; a leading `!` is dropped), the COMMAND_ENV
+    (COMMAND_KEY: a pager, editor, diff.external, a filter or driver, an alias; the caller drops a leading `!`), the COMMAND_ENV
     assignments before it, `rebase --exec/-x`, `bisect run`, `submodule foreach`, `grep -O<cmd>`/
     `--open-files-in-pager=<cmd>`, `difftool -x/--extcmd`, each `filter-branch --*-filter` and `--setup`, and the
     value a `git config [set] <key> <value>` sets, for the keys in COMMAND_KEY (`-c user.name="O'Brien"` is no
