@@ -10,9 +10,12 @@
     python3 .claude/scripts/mutate.py --table-timeout 900  # a table past 900 s is a hang (default: 10x its baseline,
                                                            # >= 60 s; refused under 10x any table's baseline)
 
-Mutants live in .claude/scripts/mutants/*.json as {label, file, old, new[, equivalent]}: `old` is replaced
-by `new` once in `file`. A mutant marked "equivalent" is expected to survive (documented reason in the
-label). A mutant whose `old` text no longer exists fails the run — update it, so the list never rots.
+Mutants live in .claude/scripts/mutants/*.json as {label, file, old, new[, also][, equivalent]}: `old` is
+replaced by `new` once in `file`, and once in each file `also` lists (text kept identical in several files, such
+as the shared AI-attribution pattern, whose identity row would otherwise kill any one-file mutant: TASK-243).
+`--changed` selects by `file`. A mutant marked "equivalent" is expected to survive (documented reason in the
+label). A mutant whose `old` text is missing from any of its files fails the run — update it, so the list
+never rots.
 
 A mutant is killed when any case table fails; the first failure decides it. So each mutant runs, first, the
 tables that name its file (its name, or its stem as a word, in the table or a helper beside it that the table
@@ -294,12 +297,13 @@ def main() -> None:
                 return m, "STOPPED", []
             tree = work / f"m{i}"
             copy_tree(tree)
-            p = tree / m["file"]
-            text = p.read_text()
-            if m["old"] not in text:
-                shutil.rmtree(tree)
-                return m, "STALE", []
-            p.write_text(text.replace(m["old"], m["new"], 1))
+            for f in [m["file"], *m.get("also", [])]:
+                p = tree / f
+                text = p.read_text()
+                if m["old"] not in text:
+                    shutil.rmtree(tree)
+                    return m, "STALE", []
+                p.write_text(text.replace(m["old"], m["new"], 1))
             failed, hung = killing_tables(tree, m["file"], timeouts)
             shutil.rmtree(tree)
             status = "TIMEOUT" if hung and not failed else "KILLED" if failed else "SURVIVED"

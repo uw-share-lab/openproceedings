@@ -222,7 +222,8 @@ jobs:
           python3 -c '
           import glob, json, pathlib, sys
           ms = [m for f in sorted(glob.glob(".claude/scripts/mutants/*.json")) for m in json.loads(pathlib.Path(f).read_text())]
-          stale = [m["label"] for m in ms if m["old"] not in pathlib.Path(m["file"]).read_text()]
+          stale = [m["label"] for m in ms
+                   if any(m["old"] not in pathlib.Path(f).read_text() for f in [m["file"], *m.get("also", [])])]
           for label in stale:
               print("::error::stale mutant, its pattern is gone from its file: " + label)
           print(f"{len(ms)} mutants, {len(stale)} stale")

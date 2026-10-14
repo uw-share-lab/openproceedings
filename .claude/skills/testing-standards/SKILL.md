@@ -96,7 +96,9 @@ compilation). Anything the frontend or a script depends on → contract. User-vi
 `make mutate` / `make mutate-changed` / `mutate.py --match` (spec 08 §Mutation testing). Every new check in a
 hook or tooling script ships with a mutant in `.claude/scripts/mutants/*.json` (`gates.json`, or a file of its own such as `merge-group.json`), and with a case-table row
 that kills it. A row that passes only because something else fails first (a stale index, a parser crash
-that fails closed, an unreviewed HEAD) does not count. Isolate the one check the row is about.
+that fails closed, an unreviewed HEAD) does not count. Isolate the one check the row is about. Text kept
+identical in several files (the shared AI-attribution pattern) is mutated in all of them at once with `also`
+(`{label, file, old, new, also: [files]}`); a one-file mutant there is killed only by the identity row (TASK-243).
 An `equivalent` label needs evidence for the actual replacement, including a distinguishing negative case
 and a positive control. Dropping an explicit default and forcing its opposite are different mutations:
 `--no-renames` makes an unchanged learning rename look newly added, even though `--find-renames` gives 0/0.
