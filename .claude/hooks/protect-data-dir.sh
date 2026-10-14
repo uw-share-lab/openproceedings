@@ -723,10 +723,9 @@ def extract_dir(head, args):
     return None
 
 def writes_in_call(argv, directory):
-    """Does this command of a call count against `git apply`/`am` running in a call of its own? Not a `cd`, nor a
-    report-only `git apply --check/--stat/--numstat` (`git apply --check p && git apply p`)."""
-    if argv[0] in ("cd", "pushd", "popd"):
-        return False
+    """Does this command of a call count against `git apply`/`am` running in a call of its own? Not a report-only
+    `git apply --check/--stat/--numstat` (`git apply --check p && git apply p`); a `cd` is followed by the walk and
+    never reaches here as a command."""
     g_ = git_subcommand(argv, directory)
     return not (g_ and g_[0] == "apply" and backlog_git_specs("apply", g_[1], g_[2]) is None)
 

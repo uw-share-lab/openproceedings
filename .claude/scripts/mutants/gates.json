@@ -4796,10 +4796,11 @@
   "new": "if not isinstance(ti, dict):"
  },
  {
-  "label": "pdd backlog git (TASK-244 review): tool_input not an object allowed",
+  "label": "pdd backlog git (TASK-244 review): tool_input not an object allowed \u2014 equivalent: a string tool_input then raises AttributeError at .get, and the hook refuses any internal error (exit 2)",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "if not isinstance(ti, dict) or tool not in",
-  "new": "if tool not in"
+  "new": "if tool not in",
+  "equivalent": true
  },
  {
   "label": "pdd backlog git (TASK-244 review): edit without a path allowed",
@@ -5126,12 +5127,6 @@
   "new": "                if False:"
  },
  {
-  "label": "pdd backlog git (TASK-244 review): apply after cd refused",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "    if argv[0] in (\"cd\", \"pushd\", \"popd\"):\n        return False",
-  "new": "    if False:\n        return False"
- },
- {
   "label": "pdd backlog git (TASK-244 review): copy contents not read",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        if src.endswith(\"/\") or src.endswith(\"/.\") or contents:\n            if os.path.isdir(full_src):\n                out += [os.path.join(full_dest, n) for n in os.listdir(full_src)]",
@@ -5222,10 +5217,11 @@
   "new": "        return specs, False  # none: a whole-tree stash"
  },
  {
-  "label": "pdd backlog git (TASK-244 review): update-index --index-info unseen",
+  "label": "pdd backlog git (TASK-244 review): update-index --index-info unseen \u2014 equivalent: the older update-index rule refuses --index-info outright",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "bool({n for n, _ in opts} & {\"stdin\", \"index-info\"})",
-  "new": "bool({n for n, _ in opts} & {\"stdin\"})"
+  "new": "bool({n for n, _ in opts} & {\"stdin\"})",
+  "equivalent": true
  },
  {
   "label": "pdd backlog git (TASK-244 review): checkout --orphan not valued",
@@ -5438,10 +5434,11 @@
   "new": "    for text, where_ in []:  # TASK-244"
  },
  {
-  "label": "pdd backlog guard (TASK-244 additive): ! kept on embedded values",
+  "label": "pdd backlog guard (TASK-244 additive): ! kept on embedded values \u2014 equivalent: EMBEDDED stores the value with the ! dropped, and the older checks refuse it from there",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "            backlog_guard(text.lstrip(\"!\"), repo_root(g[2]) if g else d, max(depth, 0) + 1)  # -1: the top level",
-  "new": "            backlog_guard(text, repo_root(g[2]) if g else d, max(depth, 0) + 1)  # -1: the top level"
+  "new": "            backlog_guard(text, repo_root(g[2]) if g else d, max(depth, 0) + 1)  # -1: the top level",
+  "equivalent": true
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): xargs git writers allowed",

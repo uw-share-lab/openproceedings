@@ -1437,6 +1437,10 @@ check $P block "git -C \"\$UNSET\" restore -s dev x"           "$(payload_bl 'gi
 check $P block "git --work-tree=\"\$UNSET\" restore -s dev x"  "$(payload_bl 'git --work-tree="$OP_UNSET_244" restore -s dev x')"
 check $P block "GIT_WORK_TREE=<repo> git restore -s dev backlog (from elsewhere)" "$(payload_at "$TMP" "GIT_WORK_TREE='$BL' GIT_DIR='$BL/.git' git restore -s dev backlog")"
 check $P block "git --work-tree <repo> rm backlog/x (from elsewhere)" "$(payload_at "$TMP" "git --git-dir='$BL/.git' --work-tree '$BL' rm backlog/x")"
+check $P block "git --work-tree <repo> mv src/x.md backlog/tasks/ (from elsewhere)" "$(payload_at / "git --git-dir='$BL/.git' --work-tree='$BL' mv src/x.md backlog/tasks/")"
+check $P allow "git --work-tree <repo> mv -n … backlog/ (a dry run, from elsewhere)" "$(payload_at / "git --git-dir='$BL/.git' --work-tree='$BL' mv -n src/x.md backlog/tasks/")"
+check $P allow "git --work-tree <repo> rm -n backlog/x (a dry run, from elsewhere)" "$(payload_at / "git --git-dir='$BL/.git' --work-tree='$BL' rm -n backlog/x")"
+check $P allow "git --work-tree <repo> mv --dry … backlog/ (abbreviated dry run)" "$(payload_at / "git --git-dir='$BL/.git' --work-tree='$BL' mv --dry src/x.md backlog/tasks/")"
 check $P block "ls | xargs git restore"                        "$(payload_bl 'ls | xargs git restore')"
 check $P block "ls | xargs git checkout dev --"                "$(payload_bl 'ls | xargs git checkout dev --')"
 check $P block "echo x | xargs git apply"                      "$(payload_bl 'echo x | xargs git apply')"
@@ -1613,11 +1617,15 @@ check $P allow "git merge-file -L a -L b -L c src/x.md a b"     "$(payload_bl 'g
 # find writes a file with -fprint and its kin; BSD find takes start paths with -f
 check $P block "find src -fprint backlog/tasks/x.md"           "$(payload_bl 'find src -fprint backlog/tasks/x.md')"
 check $P block "find src -fprint0 / -fprintf / -fls into backlog/" "$(payload_bl "find src -fls backlog/x; find src -fprintf backlog/y '%p'; find src -fprint0 backlog/z")"
+check $P block "find src -fls backlog/x (alone)"              "$(payload_bl 'find src -fls backlog/x')"
 check $P block "find src -fprint \"\$UNSET\""                  "$(payload_bl 'find src -fprint "$OP_UNSET_244"')"
 check $P allow "find src -fprint /tmp/op-244-list"             "$(payload_bl 'find src -fprint /tmp/op-244-list')"
 check $P block "cd src && find -f ../backlog -delete (BSD -f)" "$(payload_bl 'cd src && find -f ../backlog -delete')"
 check $P block "cd src && find -f../backlog -delete (attached)" "$(payload_bl 'cd src && find -f../backlog -delete')"
 check $P block "find -x -f backlog -delete"                    "$(payload_bl 'find -x -f backlog -delete')"
+ln -s ../backlog "$BL/src/-bl"   # a start path that begins with -: what BSD -f is for
+check $P block "cd src && find -f -bl -delete (a start that begins with -)" "$(payload_bl 'cd src && find -f -bl -delete')"
+rm -f "$BL/src/-bl"
 check $P allow "find -f src -name x -delete"                   "$(payload_bl 'find -f src -name x -delete')"
 check $P block "find backlog -exec rg --pre rm x {} +"         "$(payload_bl 'find backlog -exec rg --pre rm x {} +')"
 # a reset word that is no commit yet and no path is a tree-ish; -p with no pathspec is the whole tree
@@ -1703,7 +1711,7 @@ rm -f "$BL/-"
 check $P allow "git apply --recount <src patch with wrong counts>" "$(payload_bl "git apply --recount '$TMP/recount.patch'")"
 check $P allow "git merge-file src/x.md <task> <task> (reads them)" "$(payload_bl "git merge-file src/x.md $T1 $T1")"
 mv "$BL/frontend/y.ts" "$TMP/y.ts.bak"   # tracked, not on disk: still a path to git
-check $P allow "git reset frontend/y.ts (in the index only)"   "$(payload_bl 'git reset frontend/y.ts')"
+check $P allow "git reset frontend/y.ts <task> (y.ts in the index only: a path, so unstaging)" "$(payload_bl "git reset frontend/y.ts $T1")"
 mv "$TMP/y.ts.bak" "$BL/frontend/y.ts"
 # review round 2: a parse failure anywhere refuses (a nested -c value once ended the check with exit 0)
 check $P block "from outside a repo: git -C <repo> -c user.name=\"it's\" rm -r backlog" "$(payload_at / "git -C '$BL' -c user.name=\"it's\" rm -r backlog")"
@@ -1730,6 +1738,11 @@ check $P block "tar -C . -xf a.tar"                            "$(payload_bl 'ta
 check $P block "tar -xf a.tar --directory=\$X"                 "$(payload_bl 'tar -xf a.tar --directory=$X')"
 check $P block "ditto <old repo> . (its contents land here)"   "$(payload_bl "ditto '$TMP/oldbl' .")"
 check $P block "git checkout-index -a -f --prefix \"\$UNSET\" (separate)" "$(payload_bl 'git checkout-index -a -f --prefix "$OP_UNSET_244"')"
+check $P block "cd src && cd \"\$UNSET\" && git checkout-index -a -f (a built pathspec after an unknown cd)" "$(payload_bl 'cd src && cd "$OP_UNSET_244" && git checkout-index -a -f')"
+check $P block "git restore -s dev \"\${HOME}backlog\" (backlog/ only with HOME read as '')" "$(payload_bl 'git restore -s dev "${HOME}backlog"')"
+check $P block "ditto src/x.md backlog/tasks/new.md (a new file in backlog/)" "$(payload_bl 'ditto src/x.md backlog/tasks/new.md')"
+check $P block "cd \"\$UNSET\" && tar -xf a.tar -C sub (an unresolved extract dir)" "$(payload_bl 'cd "$OP_UNSET_244" && tar -xf a.tar -C sub')"
+check $P block "cp src/x.md \"\$UNSET\" (an unresolved destination, repo with backlog/)" "$(payload_bl 'cp src/x.md "$OP_UNSET_244"')"
 check $P block "git apply --directory \"\$UNSET\" <src patch> (separate)" "$(payload_bl "git apply --directory \"\$OP_UNSET_244\" '$TMP/src.patch'")"
 check $P block "git apply -R <copy src → backlog> (deletes the copy)" "$(payload_bl "git apply -R '$TMP/copy.patch'")"
 check $P block "git apply <rename from a quoted UTF-8 backlog path>" "$(payload_bl "git apply '$TMP/utf8.patch'")"
@@ -1777,7 +1790,7 @@ check $P block "git restore --source=side <conflicted task>"   "$(payload_blc "g
 check $P block "git rm backlog/tasks/nosuch.md (matches nothing)" "$(payload_blc 'git rm backlog/tasks/nosuch.md')"
 check $P block "git checkout side <conflicted task> (no --)"   "$(payload_blc "git checkout side $T2")"
 # conflicts are read in this repository only
-check $P block "git --git-dir/--work-tree … rm <conflicted> (git pointed elsewhere: no exemption)" "$(payload_blc "git --git-dir='$BLC/.git' --work-tree='$BLC' rm $T2")"
+check $P block "git --git-dir/--work-tree … checkout --theirs <conflicted> (git pointed elsewhere: no exemption)" "$(payload_blc "git --git-dir='$BLC/.git' --work-tree='$BLC' checkout --theirs -- $T2")"
 # a repo whose only file is in conflict: paths from a file are still unseen
 BLX="$TMP/blx"
 git init -q -b dev "$BLX"; mkdir -p "$BLX/backlog/tasks"; printf 'a\n' > "$BLX/backlog/tasks/x.md"
