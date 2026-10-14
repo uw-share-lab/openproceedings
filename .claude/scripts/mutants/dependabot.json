@@ -1715,5 +1715,11 @@
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "    if not found:\n",
     "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: actions: a cloud-refused pin falls through to the sha compare",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "                \"the cloud (decision-048)\"\n            )\n            continue\n",
+    "new": "                \"the cloud (decision-048)\"\n            )\n"
   }
 ]

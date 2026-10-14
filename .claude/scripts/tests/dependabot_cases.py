@@ -1458,6 +1458,18 @@ def _(c: Case) -> None:
     ), out
 
 
+@row("actions: a tag ref answer that isn't an object is an error, not a crash")
+def _(c: Case) -> None:
+    c.gh["api repos/actions/checkout/git/ref/tags/v7.0.2"] = {"__status": 200, "body": "<html>"}
+    args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v7.0.2")
+    c.expect(
+        "actions_pins.py",
+        args,
+        ERROR,
+        r"^ERROR +gh api repos/actions/checkout/git/ref/tags/v7\.0\.2 returned no sha",
+    )
+
+
 @row("actions: a name that is only a branch, not a tag, is an error")
 def _(c: Case) -> None:
     c.gh["api repos/actions/checkout/commits/v7.0.2"] = {"sha": sha("b")}
@@ -2131,6 +2143,19 @@ def _(c: Case) -> None:
     c.gh[INSTALLATIONS] = installs(installation(slug="vercel"), installation(slug="claude-code", ident=2))
     c.expect("prs.py", ["preflight"], PROBLEM,
              r"^PROBLEM installation: no 'claude' App installation on uw-share-lab \(apps installed: claude-code, vercel\)")  # fmt: skip
+
+
+@row("prs preflight: local with no installation at all says none were seen")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = installs()
+    c.expect(
+        "prs.py",
+        ["preflight"],
+        PROBLEM,
+        r"^PROBLEM installation: no 'claude' App installation .*\(apps installed: none\)",
+    )
 
 
 @row("prs preflight: local stops when the installation list is cut short")
