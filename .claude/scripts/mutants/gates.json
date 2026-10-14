@@ -6545,5 +6545,17 @@
   "file": ".claude/hooks/block-ai-attribution.sh",
   "old": "        h = gh_subcommand(argv, between=True)\n",
   "new": "        h = gh_subcommand(argv)\n"
+ },
+ {
+  "label": "TASK-243: require-review's moved-ref check skips no flags between",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "((h := gh_subcommand(argv, between=True)) and h[:2] == (\"pr\", \"create\"))",
+  "new": "((h := gh_subcommand(argv)) and h[:2] == (\"pr\", \"create\"))"
+ },
+ {
+  "label": "TASK-243: a nested join records heredocs out of context",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    # a nested join (`_case_cut_short`'s) records nothing for `heredoc_quoting` (TASK-243)\n    _HEREDOC_SINK.append([])\n",
+  "new": "    # a nested join (`_case_cut_short`'s) records nothing for `heredoc_quoting` (TASK-243)\n    _HEREDOC_SINK.append(_HEREDOC_SINK[-1] if _HEREDOC_SINK else [])\n"
  }
 ]

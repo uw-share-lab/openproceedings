@@ -7,7 +7,7 @@ status: To Do
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-13 17:34'
-updated_date: '2026-10-14 18:14'
+updated_date: '2026-10-14 20:06'
 labels:
   - tooling
   - ci
@@ -58,4 +58,6 @@ AC5 final (review rounds 4-5): a file the call writes before sending it (a >/>> 
 AC5 round 6: heredoc quoting comes from cmdparse.heredoc_quoting (the quote-aware join_continuations scan), so a <<'X' inside a string no longer hides a later unquoted heredoc. Counts supersede the final note above: gates table 1073/0; 100 TASK-243 mutants in gates.json; parity of dev's hooks vs this branch over the full case table: 1004 hook rows, 0 rows dev blocks that this branch allows, 124 allow->block.
 
 AC5 round 7: counts supersede the notes above: gates table 1077/0; 102 TASK-243 mutants in gates.json; parity of dev's hooks vs this branch over the full case table: 1008 hook rows, 0 rows dev blocks that this branch allows (125 block-ai-attribution and 1 require-review rows go allow->block). cmdparse: heredoc_quoting added; gh_subcommand gained between=False and the issue new alias.
+
+AC5 after the rebase onto ba8a0598 (PR #149) and review round 8: branch squashed to one commit before the rebase (gates.json merged by label); join_continuations isolates heredoc_quoting's sink from nested joins; a row covers require-review's moved-ref check with gh pr -R. Counts supersede the notes above: gates table 1507/0 (includes #149's rows); 104 TASK-243 mutants; parity of dev's hooks vs this branch over the full case table: 1438 hook rows, 0 rows dev blocks that this branch allows (126 block-ai-attribution and 2 require-review rows go allow->block).
 <!-- SECTION:NOTES:END -->

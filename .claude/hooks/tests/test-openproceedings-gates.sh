@@ -371,6 +371,14 @@ check $A block "<<1 (a delimiter the scan can't read) with \$" "$(payload_bash "
 \$ATTRIB_FOOTER_UNSET
 1
 gh pr create --body-file '$TMP/new20.md'")"
+# a `case` in a substitution makes cmdparse join the text after it out of context; with the join cache evicted (200
+# substitutions) that must not record the string's <<'Q' as a quoted heredoc (review round 8)
+PAD=$(for i in $(seq 0 199); do printf '"$(echo case %s)" ' "$i"; done)
+check $A block "<<1 with \$, a <<'Q' string, 200 case substs" "$(payload_bash "X=\"\$(echo a case b)\"; Y=\" <<'Q' \"; cat > '$TMP/new21.md' <<1
+\$ATTRIB_FOOTER_UNSET
+1
+: $PAD
+gh pr create --body-file '$TMP/new21.md'")"
 check $A allow "cat > f <<'EOF' read by \$(cat f)"     "$(payload_bash "cat > '$TMP/new8.md' <<'EOF'
 Summary
 EOF
@@ -806,6 +814,7 @@ check $R allow "approved push after a #12 quoted line"  "$(payload_bash 'echo "f
 Closes #12" && git push origin mut')"
 check $R allow "approved push after \"x # y\" quoted"   "$(payload_bash 'echo "x # y" && git push origin mut')"
 check $R block "push after a commit in the same call"  "$(payload_bash 'git commit -m "x # y" && git push origin mut')"
+check $R block "git commit && gh pr -R o/r create (moved, flag between)" "$(payload_bash 'git commit -m x && gh pr -R o/r create --label no-learning --title t --body b')"
 # comment rule: '#' starts a comment only at the start of a word, and never inside quotes
 check $P block "a#b is a word, not a comment"          "$(payload_bash 'echo a#b; rm -rf data')"
 check $P block "quoted \"x # y\" is not a comment"     "$(payload_bash 'echo "x # y"; rm -rf data')"

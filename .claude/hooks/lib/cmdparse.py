@@ -530,10 +530,14 @@ def join_continuations(text: str) -> str:
     Never raises: text it can't scan to the end (an unclosed quote, substitution, arithmetic or heredoc, or nesting
     too deep) has every backslash-newline deleted, quoted or not, which is what the gates' fail-closed fallbacks
     read before TASK-164, and joins at least as much as bash would."""
+    # a nested join (`_case_cut_short`'s) records nothing for `heredoc_quoting` (TASK-243)
+    _HEREDOC_SINK.append([])
     try:
         return _join(text)
     except (ParseError, RecursionError):
         return text.replace("\\\n", "")
+    finally:
+        _HEREDOC_SINK.pop()
 
 
 # where `_join` also records each heredoc it finds, while `heredoc_quoting` runs it (TASK-243)
