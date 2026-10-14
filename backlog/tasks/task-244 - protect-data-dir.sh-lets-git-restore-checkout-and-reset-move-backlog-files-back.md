@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-13 19:42'
-updated_date: '2026-10-14 01:31'
+updated_date: '2026-10-14 04:13'
 labels:
   - tooling
   - bug
@@ -46,4 +46,6 @@ Review round 2 (security regression report via the coordinator; code/qa/docs/sec
 Additive redesign (owner ruling via the coordinator after a control-regression report): protect-data-dir.sh keeps origin/dev's text byte for byte (git diff origin/dev shows only added lines); the TASK-244 checks run first in guard_payload/backlog_guard and can only refuse; commands git runs from its own words also go through the older checks. Side-by-side of origin/dev's hooks and the branch's over the same case tables (new and old gates, enforce-pr-workflow, enforce-backlog-cli) and 192 audit probes: 0 rows where dev blocks and the branch allows. Also now refused: reset --hard/--merge/--keep where backlog/ is, a cwd that isn't a directory, a repo git rev-parse can't read. Known limitation stands: obfuscated commands may bypass; the backstop is git history plus review.
 
 ACs narrowed to the additive design (dry runs of git rm/mv and reset --hard are refused).
+
+Rebased onto origin/dev 855749a3 (PR #148), which archived id placeholders for 244-246 in backlog/archive/tasks/. This branch's task-244 is the task they reserved the id for; check_backlog doesn't compare archive/ (task-hygiene §Ids) and passes, backlog task view 244 shows this task, and Backlog 1.53 has no command that deletes an archived task (hand moves under backlog/ are refused), so the placeholder stays archived.
 <!-- SECTION:NOTES:END -->
