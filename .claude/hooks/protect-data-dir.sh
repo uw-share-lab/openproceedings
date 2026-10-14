@@ -781,6 +781,22 @@ def git_work_trees(argv):
 # the primary; both are checked as primaries)
 FIND_F_PRIMARIES = {"-fprint", "-fprint0", "-fprintf", "-fls", "-follow", "-fstype", "-false"}
 
+def bsd_f_starts(args):
+    """Only the BSD `-f <path>` start paths among find's leading options (the older find check reads the others)."""
+    out, k = [], 0
+    while k < len(args) and re.fullmatch(r"-[HLPEXdsx]*(f.*)?|-O\d*|-D", args[k]) and args[k] not in FIND_F_PRIMARIES:
+        flag = re.fullmatch(r"-[HLPEXdsx]*(?:f(.*))?", args[k])
+        if args[k] == "-D":
+            k += 2
+            continue
+        if flag and flag.group(1) is not None:
+            if flag.group(1):
+                out.append(flag.group(1))
+            elif k + 1 < len(args):
+                out.append(args[k + 1]); k += 1
+        k += 1
+    return out
+
 def find_starts_all(args):
     """find's start paths: the words before its first expression token, after -H/-L/-P and BSD's flags, plus each
     BSD `-f <path>` (TASK-244 security review: `find -f ../data/snapshots -delete`); none means `.`."""
@@ -934,7 +950,8 @@ def guard_walked(walked, where, depth):
                     # the patch is read now, before an earlier command in the call rewrites it
                     refuse(BACKLOG_GIT_MSG + " (Run `git apply`/`git am` in a call of its own, so the patch "
                            "this guard reads is the one git applies.)")
-                if specs_touch_immutable(specs, bases):  # data/ is gitignored, but a ref may still hold it
+                if g[0] != "clean" and specs_touch_immutable(specs, bases):  # data/ is gitignored, but a ref may
+                    # still hold it (git clean of data/ is the older -x/-X rule's)
                     refuse(IMMUTABLE_MSG)
         if g and g[0] == "reset" and backlog_repo([g[2], where]) and any(
                 a in ("--hard", "--merge", "--keep") for a in g[1][: g[1].index("--") if "--" in g[1] else None]):
@@ -995,7 +1012,7 @@ def guard_walked(walked, where, depth):
             if any(reaches_backlog_tree(s, d) for s in starts):
                 refuse(BACKLOG_MSG + " (`find … -delete` or `-exec <command>` from here can reach backlog/ files, "
                        "and which ones can't be seen; start find in the directories you mean.)")
-            if any(covers_immutable(s, d) for s in starts):  # BSD `-f <path>` starts, which the older check skips
+            if any(covers_immutable(s, d) for s in bsd_f_starts(args)):  # the older check skips these
                 refuse(IMMUTABLE_MSG)
 
 # ---- end TASK-244 ---------------------------------------------------------------------------------------------

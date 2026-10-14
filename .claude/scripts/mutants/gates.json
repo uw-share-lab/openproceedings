@@ -420,10 +420,11 @@
   "new": "        if False:"
  },
  {
-  "label": "protect-data-dir fails open on parse error",
+  "label": "protect-data-dir fails open on parse error (EQUIVALENT since TASK-244 backlog_guard parses every reading first and refuses any parse failure, anywhere, so this branch is no longer reached)",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        if data_in(cwd) or os.path.isdir(os.path.join(repo_root(cwd), \"backlog\")):",
-  "new": "        if False:"
+  "new": "        if False:",
+  "equivalent": true
  },
  {
   "label": "PR fallback checks commit before push",
@@ -1802,10 +1803,11 @@
   "new": "    False and PATH_SHAPED.fullmatch("
  },
  {
-  "label": "protect-data-dir: unreadable git command allowed",
+  "label": "protect-data-dir: unreadable git command allowed (EQUIVALENT since TASK-244 backlog_guard's walk raises the same FailClosed first and refuses it, so this branch is no longer reached)",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        except FailClosed as exc:\n            refuse(",
-  "new": "        except FailClosed as exc:\n            sys.exit(0)\n            refuse("
+  "new": "        except FailClosed as exc:\n            sys.exit(0)\n            refuse(",
+  "equivalent": true
  },
  {
   "label": "protect-data-dir: attached --cacheinfo= not split",
@@ -5009,8 +5011,8 @@
  {
   "label": "pdd backlog git (TASK-244 review): find leading flags not clustered",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "re.fullmatch(r\"-[HLPEXdsx]*(f.*)?|-O\\d*|-D\", args[k])",
-  "new": "re.fullmatch(r\"-[HLPEXdsx]?(f.*)?|-O\\d*|-D\", args[k])"
+  "old": "(re.fullmatch(r\"-[HLPEXdsx]*(f.*)?|-O\\d*|-D\", args[k]))",
+  "new": "(re.fullmatch(r\"-[HLPEXdsx]?(f.*)?|-O\\d*|-D\", args[k]))"
  },
  {
   "label": "pdd backlog git (TASK-244 review): find rg --pre a reader",
@@ -5183,8 +5185,8 @@
  {
   "label": "pdd backlog git (TASK-244 review): git pathspec into data/ allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "                if specs_touch_immutable(specs, bases):  # data/",
-  "new": "                if False:  # data/"
+  "old": "                if g[0] != \"clean\" and specs_touch_immutable(specs, bases):  # data/ is gitignored, but a ref may",
+  "new": "                if False:  # data/ is gitignored, but a ref may"
  },
  {
   "label": "pdd backlog git (TASK-244 review): data glob not read by its directory",
@@ -5316,8 +5318,8 @@
  {
   "label": "pdd backlog git (TASK-244 review 2): find -O not skipped",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "|-O\\d*|-D\", args[k])",
-  "new": "|-D\", args[k])"
+  "old": "|-O\\d*|-D\", args[k]))",
+  "new": "|-D\", args[k]))"
  },
  {
   "label": "pdd backlog git (TASK-244 review 2): ditto not contents",
@@ -5628,8 +5630,8 @@
  {
   "label": "pdd backlog guard (TASK-244 additive): find -f start into data allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            if any(covers_immutable(s, d) for s in starts):  # BSD",
-  "new": "            if False:  # BSD"
+  "old": "            if any(covers_immutable(s, d) for s in bsd_f_starts(args)):  # the older check skips these",
+  "new": "            if False:  # the older check skips these"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): find writers allowed",

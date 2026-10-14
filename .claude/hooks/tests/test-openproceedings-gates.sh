@@ -1623,6 +1623,7 @@ check $P allow "find src -fprint /tmp/op-244-list"             "$(payload_bl 'fi
 check $P block "cd src && find -f ../backlog -delete (BSD -f)" "$(payload_bl 'cd src && find -f ../backlog -delete')"
 check $P block "cd src && find -f../backlog -delete (attached)" "$(payload_bl 'cd src && find -f../backlog -delete')"
 check $P block "find -x -f backlog -delete"                    "$(payload_bl 'find -x -f backlog -delete')"
+check $P block "cd src && find -Lx -f ../backlog -delete (a two-letter cluster)" "$(payload_bl 'cd src && find -Lx -f ../backlog -delete')"
 ln -s ../backlog "$BL/src/-bl"   # a start path that begins with -: what BSD -f is for
 check $P block "cd src && find -f -bl -delete (a start that begins with -)" "$(payload_bl 'cd src && find -f -bl -delete')"
 rm -f "$BL/src/-bl"
@@ -1831,6 +1832,36 @@ check $P allow "ls outside any repo"                           "$(payload_at "$T
 # the guard leaves the older checks' state alone: what it records while reading HOME as '' doesn't stop their globbing
 check $P block "rm -rf \${HOME}data* data* (main repo: the older rule still globs data*)" "$(payload_bash 'rm -rf ${HOME}data* data*')"
 check $P allow "ls inside .git (rev-parse --git-dir reads it)" "$(payload_at "$BL/.git" 'ls')"
+
+echo "== TASK-244: the older data/ rules in a repo with data/ and no backlog/ (the backlog guard can't mask them there)"
+DO="$TMP/data only"
+git init -q -b dev "$DO"; mkdir -p "$DO/data/snapshots/s1" "$DO/data/indexes/i1" "$DO/src"; printf '/data/\n' > "$DO/.gitignore"; printf 'x\n' > "$DO/src/x.md"
+git -C "$DO" -c user.email=t@t -c user.name=t add -A && git -C "$DO" -c user.email=t@t -c user.name=t commit -qm init
+git -C "$DO" worktree add -q "$TMP/data only wt" -b dowt
+payload_do() { payload_at "$DO" "$1"; }
+check $P block "data-only: dd of=\"\$UNSET\""                   "$(payload_do 'dd if=/dev/zero of="$OP_UNSET_244" count=1')"
+check $P block "data-only: find . -execdir rm {} +"             "$(payload_do 'find . -name x -execdir rm {} +')"
+check $P block "data-only: find . -ok rm {} ;"                  "$(payload_do "find . -name x -ok rm {} ';'")"
+check $P block "data-only: find /tmp . -delete (the second start)" "$(payload_do 'find /tmp . -name x -delete')"
+check $P block "data-only: find -delete (no start: .)"          "$(payload_do 'find -name x -delete')"
+check $P block "data-only: find \"\$UNSET\" -delete"            "$(payload_do 'find "$OP_UNSET_244" -delete')"
+check $P block "data-only: cd src && cd \"\$UNSET\" && find -name x -delete" "$(payload_do 'cd src && cd "$OP_UNSET_244" && find -name x -delete')"
+check $P block "data-only: git clean -fdX -e data"              "$(payload_do 'git clean -fdX -e data')"
+check $P block "data-only: git clean -fdx data/snapshots"       "$(payload_do 'git clean -fdx data/snapshots')"
+check $P block "data-only: git clean -fdx data"                 "$(payload_do 'git clean -fdx data')"
+check $P block "data-only: git clean -fdx :/"                   "$(payload_do 'git clean -fdx :/')"
+check $P block "data-only: git clean -fdx \"\$UNSET\""          "$(payload_do 'git clean -fdx "$OP_UNSET_244"')"
+check $P block "data-only: cd \"\$UNSET\" && git clean -fdx"    "$(payload_do 'cd "$OP_UNSET_244" && git clean -fdx')"
+check $P block "data-only: ls | xargs git add"                  "$(payload_do 'ls | xargs git add')"
+check $P block "data-only: git update-index --index-info"       "$(payload_do 'git update-index --index-info')"
+check $P block "data-only: git update-index --add --stdin"      "$(payload_do 'git update-index --add --stdin')"
+check $P block "data-only: git update-index --add \"\$UNSET\""  "$(payload_do 'git update-index --add "$OP_UNSET_244"')"
+check $P block "data-only: rm -rf \"\$UNSET\""                  "$(payload_do 'rm -rf "$OP_UNSET_244"')"
+check $P block "data-only: cp x \"\$UNSET\""                    "$(payload_do 'cp src/x.md "$OP_UNSET_244"')"
+check $P block "data-only: echo x > \"\$UNSET\""                "$(payload_do 'echo x > "$OP_UNSET_244"')"
+check $P block "data-only: cd /tmp && rm -rf \"\$UNSET\" (the call's own worktree has data/)" "$(payload_do 'cd /tmp && rm -rf "$OP_UNSET_244"')"
+check $P block "data-only worktree: rm -rf \"\$UNSET\" (its main worktree has data/)" "$(payload_at "$TMP/data only wt" 'rm -rf "$OP_UNSET_244"')"
+check $P allow "data-only: rm -rf src (no data/ under it)"      "$(payload_do 'rm -rf src')"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")
