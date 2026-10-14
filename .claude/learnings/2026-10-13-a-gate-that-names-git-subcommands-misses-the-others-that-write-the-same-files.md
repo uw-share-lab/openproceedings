@@ -86,7 +86,7 @@ three times, and close it.
 
 ## Follow-ups
 - cmdparse's wrapper list lacks `xcrun`, `caffeinate`, `arch`, `doas`, `flock` and `unbuffer`, which every gate shares
-  (security review nit): filed as a task at the end of the branch.
+  (security review nit): task-248.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `CLAUDE.md` (hook table), `.claude/skills/task-hygiene/SKILL.md` (finalize only after the last review round; what to do when a completed task needs changes; what git may still do), `docs/specs/08-ops-and-tooling.md` (hook table, fail-closed paragraph), the hook's header comment; the finalize-after-review order in `.claude/skills/pr-workflow/SKILL.md`, `CONTRIBUTING.md`, `.claude/commands/review-gate.md` and `.claude/agents/project-manager.md`
