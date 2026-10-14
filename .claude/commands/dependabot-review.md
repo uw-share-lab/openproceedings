@@ -97,7 +97,10 @@ TUF hosts (`tuf-repo-cdn.sigstore.dev`, `tuf-repo.github.com`) and refuses the a
 organisation's repository (HTTP 403 "GitHub access to this repository is not enabled for this session"), so no
 offline route exists either (probe, 2026-10-13). `docker_digest.py` stops every ghcr.io image there (exit 1) and its
 PROBLEM line says so; locally it verifies as before. Every ghcr.io PR also carries Dependabot's "Cooldown could not
-be applied" notice, which `prs.py check` stops anyway (step 1).
+be applied" notice, which `prs.py check` stops anyway (step 1). The same binding stops `actions_pins.py` in the cloud:
+a new pin's tag lives in another repository (`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`), which the proxy
+refuses, so it prints a PROBLEM saying so and every github-actions PR with a new pin is the owner's there (locally
+unchanged).
 
 **What runs where (the owner's decision, 2026-10-13, decision-048).** Dependency code a cloud session runs could
 use the App's credential, workflows and repository-hooks write included, through the proxy. So **in the cloud this

@@ -1432,6 +1432,32 @@ def _(c: Case) -> None:
     c.expect("actions_pins.py", args, OK, r"^ok .*tag v7\.0\.2 is the pinned commit")
 
 
+@row("actions: in the cloud a new pin's tag can't be resolved, and the line says why")
+def _(c: Case) -> None:
+    c.gh["cloud"] = (
+        True  # the fake proxy refuses actions/checkout with its "not enabled for this session" 403
+    )
+    args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v7.0.2")
+    c.expect("actions_pins.py", args, PROBLEM,
+             r"^PROBLEM .*tag v7\.0\.2 can't be resolved here: this Claude Code cloud session's proxy refuses "
+             r"actions/checkout \('GitHub access to this repository is not enabled for this session', HTTP 403\)")  # fmt: skip
+
+
+@row("actions: another 403 is an error, not the cloud refusal")
+def _(c: Case) -> None:
+    c.gh["api repos/actions/checkout/git/ref/tags/v7.0.2"] = {
+        "__status": 403,
+        "body": {"message": "Forbidden"},
+    }
+    args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v7.0.2")
+    got, out = c.run("actions_pins.py", *args)
+    assert (
+        got == ERROR
+        and "cloud" not in out
+        and re.search(r"^ERROR .*git/ref/tags/v7\.0\.2 exited 1", out, re.M)
+    ), out
+
+
 @row("actions: a name that is only a branch, not a tag, is an error")
 def _(c: Case) -> None:
     c.gh["api repos/actions/checkout/commits/v7.0.2"] = {"sha": sha("b")}

@@ -13,17 +13,31 @@ differ only in its pins' `@<sha> # <tag>` (the action names and every other line
 
 A PROBLEM, the PR stays open: a change outside the pins, a tag that resolves to another commit, an action that
 wasn't used before, a semver-major tag change (or no earlier tag to compare with), or a `uses:` in a changed file
-that isn't pinned to a full sha.
+that isn't pinned to a full sha. In a Claude Code cloud session the proxy refuses every other repository (HTTP 403
+"GitHub access to this repository is not enabled for this session"), so a new pin's tag can't be resolved there: a
+PROBLEM that says so, and every github-actions PR with a new pin is the owner's in the cloud (decision-048, TASK-243).
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import urllib.parse
 from dataclasses import dataclass
 
-from _common import Report, ToolError, changed_files, git_show, is_major, main_guard, resolve_refs, run_json
+from _common import (
+    NOT_ENABLED,
+    Report,
+    ToolError,
+    changed_files,
+    git_show,
+    is_major,
+    main_guard,
+    refusal,
+    resolve_refs,
+    run,
+)
 
 # `uses:` anywhere a YAML key can start: block style (`- uses: …`) and flow style (`{uses: …, with: …}`)
 USES = re.compile(
@@ -32,6 +46,25 @@ USES = re.compile(
 # a pinned `uses:` value's `@<sha>` and its `# <tag>` comment, to blank them: what remains must not change
 PIN_SPAN = re.compile(r"(uses['\"]?:\s*['\"]?[^\s'\",}#@]+)@[0-9a-f]{40}(['\"]?)[ \t]*(?:#[ \t]*\S+)?")
 PINNED = re.compile(r"^([\w.-]+/[\w.-]+)(/[^@]*)?@([0-9a-f]{40})$")
+
+
+class CloudRefused(Exception):
+    """The cloud session's proxy refused another repository: the tag can't be resolved from this session."""
+
+
+def api_object(path: str) -> dict[str, object]:
+    """`gh api <path>`'s `object`; CloudRefused on the proxy's "not enabled for this session" 403."""
+    r = run(["gh", "api", path], ok_codes=(0, 1))
+    if r.returncode:
+        if refusal(r, NOT_ENABLED) is None:
+            raise CloudRefused(path)
+        raise ToolError(f"gh api {path} exited {r.returncode}: {r.stderr.strip()[:300]}")
+    try:
+        got = json.loads(r.stdout)
+    except json.JSONDecodeError as e:
+        raise ToolError(f"gh api {path} did not print JSON") from e
+    obj = (got or {}).get("object") if isinstance(got, dict) else None
+    return obj if isinstance(obj, dict) else {}
 
 
 @dataclass(frozen=True)
@@ -63,7 +96,7 @@ def tag_sha(repo: str, tag: str) -> str:
     """The commit the tag `tag` names (a tag ref only, never a branch of the same name; annotated tags peeled)."""
     path = f"repos/{repo}/git/ref/tags/{urllib.parse.quote(tag, safe='')}"
     for _ in range(5):  # a tag of a tag is legal; peel a few levels, no more
-        obj = (run_json(["gh", "api", path]) or {}).get("object") or {}
+        obj = api_object(path)
         kind, sha = obj.get("type"), obj.get("sha")
         if not isinstance(sha, str):
             raise ToolError(f"gh api {path} returned no sha")
@@ -105,7 +138,15 @@ def main() -> None:
             rep.problem(f"{use}: no earlier `# <tag>` to compare the major with")
         elif any(is_major(o, use.tag) for o in olds if o):
             rep.problem(f"{use}: semver-major from {', '.join(olds)}")
-        got = tag_sha(use.repo, use.tag)
+        try:
+            got = tag_sha(use.repo, use.tag)
+        except CloudRefused:
+            rep.problem(
+                f"{use}: tag {use.tag} can't be resolved here: this Claude Code cloud session's proxy refuses "
+                f"{use.repo} ({NOT_ENABLED!r}, HTTP 403), so a github-actions PR with a new pin is the owner's in "
+                "the cloud (decision-048)"
+            )
+            continue
         if got != use.sha:
             rep.problem(f"{use}: tag {use.tag} is commit {got[:12]}, not the pinned sha")
         else:

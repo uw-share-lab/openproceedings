@@ -322,6 +322,9 @@ Consequences:
   exactly as the probe's proxy did (the same two messages, and `gh attestation verify` failing); mutants in
   `.claude/scripts/mutants/dependabot.json`. Procedure: `.claude/commands/dependabot-review.md` §Where it runs and
   step 0; spec 08 §CI "Dependabot".
+- The same binding refuses `actions_pins.py`'s tag lookups (`repos/<owner>/<repo>/git/ref/tags/<tag>`, another
+  repository), so in the cloud a github-actions PR with a new pin is the owner's, and the checker's PROBLEM line says
+  why (review round 1); the routine never queued those PRs anyway (the owner does).
 - Adding `astral-sh/uv` to the routine's repositories would make the second refusal fail and stop every run; that
   is the intended reading (the binding moved), not a fault to work around.
 - Not decided here: the GitHub Advisory Database calls (`gh api advisories?…`, step 0's uv query and step 2's

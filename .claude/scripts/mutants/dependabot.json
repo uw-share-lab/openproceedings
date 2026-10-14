@@ -1673,5 +1673,47 @@
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "        rep.problem(\n            f\"installation: no {APP_SLUG!r}",
     "new": "        rep.ok(\n            f\"installation: no {APP_SLUG!r}"
+  },
+  {
+    "label": "dependabot: actions: any failed tag call read as the cloud refusal",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "        if refusal(r, NOT_ENABLED) is None:\n            raise CloudRefused(path)\n",
+    "new": "        raise CloudRefused(path)\n"
+  },
+  {
+    "label": "dependabot: actions: the cloud refusal read as a tool error",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "        if refusal(r, NOT_ENABLED) is None:\n            raise CloudRefused(path)\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: actions: a cloud-refused pin passes",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "        except CloudRefused:\n            rep.problem(\n",
+    "new": "        except CloudRefused:\n            rep.ok(\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: the same minor read as newer",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if latest[:2] > have[:2]:\n",
+    "new": "    if latest[:2] >= have[:2]:\n"
+  },
+  {
+    "label": "dependabot: prs: session binding asks the bound repository",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "            [\"gh\", \"api\", f\"repos/{OTHER_REPO}\"],\n",
+    "new": "            [\"gh\", \"api\", f\"repos/{REPO}\"],\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: a failed call not stopped",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if r.returncode:\n        raise ToolError(f\"gh api repos/{OTHER_REPO}/releases/latest failed",
+    "new": "    if False:\n        raise ToolError(f\"gh api repos/{OTHER_REPO}/releases/latest failed"
+  },
+  {
+    "label": "dependabot: prs: no Claude installation never checked",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if not found:\n",
+    "new": "    if False:\n"
   }
 ]
