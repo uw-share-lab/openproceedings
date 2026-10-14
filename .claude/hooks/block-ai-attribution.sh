@@ -392,8 +392,7 @@ def main():
             out.append(file_text(x, argv, d))
         return "\n".join(out)
     try:
-        if any(word != "-" for word, _, _ in sent):  # a write it can't resolve only matters when a file is sent
-            track()
+        track()  # with no file sent there is no sender, so it records nothing
         texts = [sent_text(word, argv, d) for word, argv, d in sent]
     except Unresolved as exc:
         unresolved(exc.args[0])

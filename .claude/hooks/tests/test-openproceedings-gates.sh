@@ -379,6 +379,8 @@ check $A block "<<1 with \$, a <<'Q' string, 200 case substs" "$(payload_bash "X
 1
 : $PAD
 gh pr create --body-file '$TMP/new21.md'")"
+cp "$TMP/clean.md" "$TMP/two.md"
+check $A allow "send f, jq > f, send another (between)" "$(payload_bash "gh pr comment 1 --body-file '$TMP/two.md'; jq -r . '$TMP/footer.md' > '$TMP/two.md'; gh pr comment 2 --body-file '$TMP/clean.md'")"
 check $A allow "cat > f <<'EOF' read by \$(cat f)"     "$(payload_bash "cat > '$TMP/new8.md' <<'EOF'
 Summary
 EOF
