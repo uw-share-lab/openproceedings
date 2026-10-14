@@ -271,3 +271,68 @@ What follows from it:
   on the head, without that credential).
 - What would change this: GitHub letting the App drop `workflows` and repository-hooks write, or a cloud session
   that can run code without the credential reachable (then the cloud may run the tests again).
+
+## Addendum (2026-10-13, TASK-243 AC3 and AC6: what the cloud can check, and what it can't)
+
+A read-only cloud probe ran on 2026-10-13 at 23:25Z (session cse_01Q24cxnP5Nu3yXGC2FKjWqW, Claude Code 2.1.296,
+gh 2.89.0) in the routine's environment. `gh auth status` exits 1 ("The token in GH_TOKEN is invalid"), yet `gh api
+repos/uw-share-lab/openproceedings` answers 200. `gh api user/installations` and `gh api installation/repositories`
+both answer HTTP 403 "This GitHub API path is not available: sessions are bound to their configured repositories. Use
+repository-scoped endpoints (repos/{owner}/{repo}/...)". Any other repository (the astral-sh/uv attestations API, for
+one) answers HTTP 403 "GitHub access to this repository is not enabled for this session. Use add_repo to request
+access…". `gh attestation verify`, `trusted-root` and `download` all fail: the proxy answers Forbidden for
+`tuf-repo-cdn.sigstore.dev` and `tuf-repo.github.com`, and another organisation's attestation API is refused as
+above, so no offline route exists. So the step 0 installation check this record's earlier addenda describe could
+never pass in the cloud, and `docker_digest.py` stops every ghcr.io image there. The exact calls step 0 now makes to
+another repository (`repos/astral-sh/uv` and `repos/astral-sh/uv/releases/latest`) were not themselves probed; the
+probe's refusal of another of that repository's endpoints says they will be, and a different answer fails closed (a
+200 to the binding call stops the run; an answer to the release call is used as locally).
+
+**Decisions (owner, 2026-10-13):**
+- **AC6, the credential's reach.** In the cloud, step 0 checks the **session binding** instead of the installation:
+  `prs.py preflight` requires `gh api user/installations` to be refused with the "sessions are bound to their
+  configured repositories" 403, and `gh api repos/astral-sh/uv` (a stable public repository the session isn't
+  bound to) with the "not enabled for this session" 403, each message matched word for word. Any other outcome, a
+  200 included, stops the run as before. The reason: the proxy confines the session's credential to this
+  repository whatever the installation covers, and since the addendum above the cloud runs none of a PR's
+  dependency code anyway. The auth gate is a repository-scoped call (`gh api repos/uw-share-lab/openproceedings`)
+  in both modes; `gh api user` is no longer called (the proxy may refuse it). The App installation's repository
+  selection (selected, openproceedings only, set by the owner on 2026-10-13) is checked **locally**: `prs.py
+  preflight` reads `gh api orgs/uw-share-lab/installations` with the owner's credential, prints the Claude
+  installation's `repository_selection` and permissions, and stops on any selection but `selected`, or when no
+  `claude` installation is listed (a list whose length isn't its `total_count` is exit 2). The selected repository
+  list itself can't be read with a `gh` login (it needs a GitHub App user token).
+- **AC3, Sigstore.** In the cloud it can't work, so every ghcr.io PR stays the owner's there, for the reason above;
+  `docker_digest.py`'s PROBLEM line now says so when it runs in a cloud session. Locally nothing changes.
+- **uv's release.** In the cloud, a refused `repos/astral-sh/uv/releases/latest` call is not a stop: the new `prs.py
+  uv-release` prints "check uv's latest release by hand" as an `OWNER` line for the summary. Locally it compares the
+  pinned minor with the latest release as the procedure did by hand.
+
+Options considered:
+- Keep the installation API check (rejected: the proxy refuses it, so every cloud run would stop at step 0).
+- Tell the environment apart by GraphQL alone and skip any reach check in the cloud (rejected: the mode says nothing
+  about what the credential reaches; the binding refusals do).
+- Add `astral-sh/uv` to the session so the release call answers (rejected: it widens the session for an
+  informational check, and it is the repository the binding check relies on being refused).
+- Use another `uw-share-lab` repository as the binding check's witness (rejected: `uw-share-lab/.github` doesn't
+  exist, and a sibling repository could one day be added to the session; `astral-sh/uv` is public, stable and the
+  repository whose refusal the probe saw).
+- Make Sigstore work in the cloud (rejected for now: the TUF hosts are blocked at the proxy and there is no offline
+  route; the cooldown notice leaves every ghcr.io PR to the owner anyway).
+
+Consequences:
+- Rows in `.claude/scripts/tests/dependabot_cases.py`, whose fake `gh` (`dependabot_fake.py`) now fails in cloud mode
+  exactly as the probe's proxy did (the same two messages, and `gh attestation verify` failing); mutants in
+  `.claude/scripts/mutants/dependabot.json`. Procedure: `.claude/commands/dependabot-review.md` §Where it runs and
+  step 0; spec 08 §CI "Dependabot".
+- The same binding refuses `actions_pins.py`'s tag lookups (`repos/<owner>/<repo>/git/ref/tags/<tag>`, another
+  repository), so in the cloud a github-actions PR with a new pin is the owner's, and the checker's PROBLEM line says
+  why (review round 1); the routine never queued those PRs anyway (the owner does).
+- Adding `astral-sh/uv` to the routine's repositories would make the second refusal fail and stop every run; that
+  is the intended reading (the binding moved), not a fault to work around.
+- Not decided here: the GitHub Advisory Database calls (`gh api advisories?…`, step 0's uv query and step 2's
+  per-package queries) are a path outside `repos/`, so the proxy may refuse them too; no cloud session has made
+  one yet (TASK-247). Until it is decided, the procedure fails closed: a refused step 2 query is a check that
+  couldn't run (a hard stop for that PR), and a refused step 0 uv query goes under "for the owner".
+- What would change this: the proxy answering the installation API (then check the installation's repository list
+  in the cloud again), or Sigstore's TUF hosts becoming reachable from a session.

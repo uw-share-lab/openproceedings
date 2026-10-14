@@ -223,7 +223,8 @@ arrives as a PR that must move `.python-version` too, and a minor is done by han
 It also ignores an `astral-sh/uv` minor (`ghcr.io/astral-sh/uv`, the api image's uv stage): while uv is 0.x a minor
 is a breaking release (0.13.0 shipped "Breaking changes"; PR #132), so it is upgraded by hand like a major (the rule
 goes once uv reaches 1.0), and only its patches and digest bumps arrive here; `docker_digest.py` stops any 0.x minor
-of an image as well, and the weekly routine reports a newer uv minor or a uv advisory to the owner. A docker image's
+of an image as well, and the weekly routine reports a newer uv minor (`prs.py uv-release`) or a uv advisory to the
+owner. A docker image's
 `cooldown` holds only on Docker Hub, and only when Docker Hub's API answers: Dependabot dates a tag from that API
 and otherwise skips the cooldown, saying "Cooldown could not be applied" in the PR body (it opened PR #132 about 20
 hours after uv 0.13.0's release). So `prs.py check` stops a PR with that notice. It gives no date for any ghcr.io
@@ -310,7 +311,7 @@ set the routine's credential as a fine-grained token: this repository only, `con
 and `actions` read and write, nothing else (no `administration`, no `workflows`). As built, the credential depends
 on where the command runs: locally it is the maintainer's own `gh` login; in the cloud it is the Claude GitHub
 App's installation (*Cloud and local*), whose repository selection and permissions take the token's place as the
-bound. Decision-048 keeps `workflows` out of the routine's credential (the cloud App has it: TASK-243), so the
+bound (the selection is checked locally; in the cloud step 0 checks the proxy's session binding). Decision-048 keeps `workflows` out of the routine's credential (the cloud App has it: TASK-243), so the
 routine reviews and attests a github-actions PR but leaves the queueing to the owner (`gh pr merge <n> --auto
 --match-head-commit <sha>`), named in its summary. The pre-push hook and the autofix hook run their tools without
 the token.
@@ -325,9 +326,21 @@ integration": the first scheduled run (2026-10-13) reviewed #142 and #143 over R
 the owner installed the App that day. The App sets its own permissions. As read on 2026-10-13 they are actions,
 checks, contents, discussions, issues, pull requests, repository hooks and `workflows` write, plus administration,
 members and merge queues read, and the installation covered all of `uw-share-lab`'s repositories. The installation
-must cover only this repository: the routine's step 0 checks every Claude installation the user can reach (another
-account's included, `gh api user/installations/<id>/repositories`, or `installation/repositories`), and stops the
-run unless together they list only this repository, or when the fallback call fails too. Because that credential has
+must cover only this repository (the owner set it so on 2026-10-13, `repository_selection: selected`). A cloud session
+can't read it: its proxy refuses the paths outside `repos/...` probed so far (`gh api user/installations` and
+`installation/repositories` answer HTTP 403 "This GitHub API path is not available: sessions are bound to their configured repositories"; probe,
+2026-10-13, TASK-243). So `prs.py preflight` checks the reach by mode (decision-048, TASK-243 AC6 addendum): **in the
+cloud** the session binding, requiring both of the proxy's own 403s word for word, `gh api user/installations` refused
+with that message and `gh api repos/astral-sh/uv` (a public repository the session isn't bound to) refused with
+"GitHub access to this repository is not enabled for this session", and stopping the run on any other answer, a 200
+included; **locally** the installation, reading `gh api orgs/uw-share-lab/installations` (an org owner's call),
+printing the Claude App installation's repository selection and permissions, and stopping the run unless the selection
+is `selected` (no `claude` installation at all, or a list whose length isn't its `total_count`, stops it too). The selected
+repository list itself can't be read with a `gh` login (it needs a GitHub App user token), so the selection is what is
+checked. The GitHub Advisory Database calls (`gh api advisories?…`, step 0's uv query and step 2's per-package
+queries) are outside `repos/` too, so the proxy may refuse them; no cloud session has made one yet (TASK-247), and the
+procedure puts a refused uv advisory query (step 0) under "for the owner" and treats a refused per-package query
+(step 2) as a check that couldn't run, a hard stop. Because that credential has
 `workflows` and repository-hooks write, which can't be removed, **a cloud run executes none of the PR's dependency
 code** (the owner's decision, 2026-10-13, decision-048): no `uv sync`, `uv run` or `npm ci` of the PR's locks, no
 `make lint`, `make test` or `make e2e`, no smoke test, no `npm audit signatures` (it needs the installed tree), and no
@@ -353,11 +366,19 @@ whose `Makefile`, pre-push hook or `setup-dev.sh` lacks the guard (the routine c
 refuse rather than run. Commands
 typed directly (`uv run`, `npm ci`, `npx`) have no such guard; the procedure and its reviewer prompt keep them out.
 Locally nothing changed: the routine runs `make test` and the rest, and step 5's stale-base waiver (which runs
-`make test` on the merged tree) is local only. No push or CCR call has run from the cloud yet. `gh attestation verify` can't start a Sigstore
-verifier there ("no valid Sigstore verifiers could be initialized", 2026-10-13), so it fails closed and every
-ghcr.io PR goes to the owner. The routine reads back every comment and PR body it writes, and removes anything
+`make test` on the merged tree) is local only. No push or CCR call has run from the cloud yet. **Sigstore can't run in
+the cloud**, so every ghcr.io PR is the owner's there: `gh attestation verify` can't start a verifier ("no valid
+Sigstore verifiers could be initialized", 2026-10-13) because the proxy answers Forbidden for Sigstore's TUF hosts
+(`tuf-repo-cdn.sigstore.dev`, `tuf-repo.github.com`), and the attestation API of another organisation's repository is
+refused ("not enabled for this session"), so no offline route exists either (probe, 2026-10-13). `docker_digest.py`
+fails closed and its PROBLEM line gives that reason; locally it verifies as before. The uv release check of step 0
+(`prs.py uv-release`) meets the same binding: a `repos/astral-sh/uv` call refused with the "not enabled for this session" 403
+(which only the cloud proxy sends) is not a stop but "check uv's latest release by hand" for the owner. `actions_pins.py` meets it too: a new pin's tag ref is in another
+repository, so in the cloud it can't be resolved and the checker's PROBLEM line says why; every github-actions PR
+(each brings a new pin) is the owner's there. The routine reads back every comment and PR body it writes, and removes anything
 added to it (a cloud comment gained a "Generated by Claude Code" footer on 2026-10-13). The procedure therefore
-uses REST only (`gh api repos/<repo>/...`) and checks auth with a real call (`gh api user`). `prs.py preflight`
+uses REST only (`gh api repos/<repo>/...`) and checks auth with a repository-scoped call (`gh api
+repos/uw-share-lab/openproceedings`; the proxy refuses paths outside `repos/`, so `gh api user` may fail there). `prs.py preflight`
 tells the environment by asking GraphQL for the viewer: the session's 403 message is **cloud**, an answer is
 **local** (a maintainer's clone with a real `gh` login), anything else stops the run; in the cloud it also requires
 that `gh` has no stored login (a file dependency code could read). Turning auto-merge on is the one step that

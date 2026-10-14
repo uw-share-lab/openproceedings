@@ -33,7 +33,10 @@ A PR that hits a **hard stop** is never merged by this command: it is left open 
   --head "origin/<head>"` for it and the §10 comment quotes its age, the owner's evidence).
   For actions and Docker Hub images the 7-day hold is otherwise Dependabot's `cooldown`; no checker reads their
   age;
-- a docker digest the registry doesn't resolve to, or a failed `gh attestation verify`;
+- a docker digest the registry doesn't resolve to, or a failed `gh attestation verify` (in the cloud it always
+  fails: Sigstore can't run there, §Where it runs, so every ghcr.io PR is the owner's);
+- a new action pin whose tag can't be resolved (in the cloud always: the proxy refuses the action's repository,
+  §Where it runs, so every github-actions PR is the owner's there);
 - a red required check that the PR's own fix can't turn green: locally any of `lint`, `test`, `claude-tooling`,
   `attribution`, `learnings`, `review-attested`; in the cloud only the PR gates (`attribution`, `learnings`,
   `review-attested`) are fixed, and a red `lint`, `test`, `claude-tooling`, `playwright`, `bench` or `web-image`
@@ -58,8 +61,8 @@ for what it repairs in the PR itself, and `ok` otherwise. Their exit status: 0 c
 the check could not run (treat as a hard stop and say why), 3 only FIX lines (fix, commit, run the check again). No
 checker's exit is ever ignored. `prs.py preflight`, `prs.py ci` and `prs.py queue` are checkers too (ok / PROBLEM; 0, 1 or 2;
 `ci` also exits 4: a check still running, call it again, step 5).
-`prs.py list`, `prs.py watch`, `restore_libc.py` and `npm_specs.py` (exit 0 or 1 only) are helpers; their output is
-described where they are used (step 3 for `npm_specs.py`).
+`prs.py list`, `prs.py watch`, `prs.py uv-release`, `restore_libc.py` and `npm_specs.py` (exit 0 or 1 only; `uv-release`
+0 or 2) are helpers; their output is described where they are used (step 0 for `uv-release`, step 3 for `npm_specs.py`).
 
 ## Where it runs: cloud or local
 
@@ -81,14 +84,25 @@ pull requests, **repository hooks** and **workflows** write, plus administration
 and the installation covered **all** the org's repositories. That repository selection, and the App's
 permissions, replace the fine-grained token's scope as the bound on what the session (and dependency code running
 in it, through the proxy) can do. The installation must cover only `openproceedings` (the owner's setting, org
-Settings → GitHub Apps → Claude → Configure), and step 0 checks it; the owner limited it later on 2026-10-13
-(`repository_selection: selected`). Workflows, contents, repository-hooks and checks write can't be removed (the App sets
+Settings → GitHub Apps → Claude → Configure); the owner limited it later on 2026-10-13
+(`repository_selection: selected`). The cloud can't read the installation (its proxy refuses the installation API,
+below), so step 0 checks that selection **locally** (`gh api orgs/uw-share-lab/installations`, an org owner's call),
+and in the cloud checks the session binding instead: the proxy confines the session's credential to this repository
+(decision-048, TASK-243 AC6 addendum). Workflows, contents, repository-hooks and checks write can't be removed (the App sets
 them), so a cloud run executes none of the PR's dependency code (below).
 A push and the CCR auto-merge route haven't run from the cloud yet (TASK-243). A write that answers 403 "Resource
 not accessible by integration" means the App isn't installed for this repository or lacks the permission: stop
 the run, list this PR and every later one as not reviewed, and put the 403 first under "for the owner" (the
-2026-10-13 scheduled run). `gh attestation verify` can't start a Sigstore verifier in the cloud (2026-10-13), so
-`docker_digest.py` stops every ghcr.io image there (exit 1), as designed.
+2026-10-13 scheduled run). **Sigstore can't run in the cloud**, so every ghcr.io PR is the owner's there: `gh
+attestation verify` can't start a Sigstore verifier (2026-10-13), because the proxy answers Forbidden for Sigstore's
+TUF hosts (`tuf-repo-cdn.sigstore.dev`, `tuf-repo.github.com`) and refuses the attestation API of another
+organisation's repository (HTTP 403 "GitHub access to this repository is not enabled for this session"), so no
+offline route exists either (probe, 2026-10-13). `docker_digest.py` stops every ghcr.io image there (exit 1) and its
+PROBLEM line says so; locally it verifies as before. Every ghcr.io PR also carries Dependabot's "Cooldown could not
+be applied" notice, which `prs.py check` stops anyway (step 1). The same binding stops `actions_pins.py` in the cloud:
+a new pin's tag lives in another repository (`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`), which the proxy
+refuses, so it prints a PROBLEM saying so and every github-actions PR (each brings a new pin) is the owner's there
+(locally unchanged).
 
 **What runs where (the owner's decision, 2026-10-13, decision-048).** Dependency code a cloud session runs could
 use the App's credential, workflows and repository-hooks write included, through the proxy. So **in the cloud this
@@ -167,7 +181,7 @@ and don't queue the PR.
 ## 0. Set up the clone
 
 ```bash
-gh api user --jq .login              # a real call: `gh auth status` reports a cloud session's placeholder token as invalid
+gh api repos/uw-share-lab/openproceedings --jq .full_name   # a repository-scoped call: `gh auth status` calls a cloud session's placeholder token invalid, and the proxy refuses paths outside repos/ (`gh api user` may fail there)
 node --version                       # v22 (.nvmrc); an older npm drops the lock's `libc` fields
 uv --version                         # 0.12.22 or later (it installs Python 3.12.15, the pin)
 python3 --version                    # 3.11 or later (the scripts use tomllib)
@@ -187,13 +201,14 @@ git config core.hooksPath <the scratch directory>/.githooks   # cloud only: git 
 Shell variables don't survive from one Bash call to the next, so write the directory `mktemp -d` printed as a
 literal path wherever this file says `$RUN`; the checkers are then `$RUN/.claude/scripts/dependabot/<script>.py`,
 run from the repo root, and the recorder `$RUN/.claude/scripts/record-review.py` (dev's copy: a PR branch based on
-an older `dev` has an older one). `prs.py preflight` prints `gh api user`'s login, the mode (`cloud` or `local`,
-§Where it runs) and where the credential is: in the cloud, a network secret (no token in `GH_TOKEN` or
+an older `dev` has an older one). `prs.py preflight` makes the same repository-scoped call, prints the mode (`cloud` or
+`local`, §Where it runs), the credential's reach (below: the session binding in the cloud, the App installation
+locally) and where the credential is: in the cloud, a network secret (no token in `GH_TOKEN` or
 `GITHUB_TOKEN`, and `gh auth token` with those unset finds no stored token); a real token in either variable is
 reported (step 5 strips it); a stored `gh` token in the cloud is a PROBLEM; locally a stored login is allowed (a
 maintainer's own machine, which runs `make test` with it every day). In the cloud it also writes the
 no-dependency-code marker and says so (`ok no dependency code: …`); locally it removes one it finds. Stop, and
-print the summary with every PR as "not reviewed: <why>", if `gh api user` fails, `prs.py preflight` doesn't exit 0, a tool above is missing or too old, or the git
+print the summary with every PR as "not reviewed: <why>", if `gh api repos/uw-share-lab/openproceedings` fails, `prs.py preflight` doesn't exit 0, a tool above is missing or too old, or the git
 identity is empty or names an AI (it matches `claude|anthropic|noreply@anthropic`): commits are authored by people.
 `scripts/setup-dev.sh` and `npm ci` install **dev's** environment (a fresh clone starts on `dev`, its default branch:
 `git rev-parse --abbrev-ref HEAD` prints `dev` before they run; if it doesn't, `git switch dev` first), before any
@@ -206,34 +221,48 @@ and `setup-dev.sh`, so a PR based on a `dev` older than it would bring back ungu
 marker is there), and `prs.py check` stops a head whose tree lacks the guard (step 1). Locally, note whether `docker
 info` works and whether `npx playwright install chromium` succeeds; step 5 uses them. In the cloud skip both: step 5 runs neither.
 
-**In the cloud, check the App installation's reach** (§Where it runs) before anything of a PR runs:
+**The credential's reach** (§Where it runs) is checked by `prs.py preflight` before anything of a PR runs, and
+differs by mode. **In the cloud** the installation API can't answer: the proxy refuses `gh api user/installations`
+and `gh api installation/repositories` (HTTP 403 "This GitHub API path is not available: sessions are bound to their
+configured repositories. Use repository-scoped endpoints …"; probe, 2026-10-13, TASK-243). So it checks the session
+binding instead, which the cloud can answer, matching each message word for word:
 
-```bash
-gh api --paginate user/installations --jq '.installations[] | select(.app_slug=="claude") | [.id, .account.login] | @tsv'
-gh api --paginate user/installations/<id>/repositories --jq '.repositories[].full_name'   # once for each <id> above
-```
+- `gh api user/installations` must be refused with HTTP 403 "This GitHub API path is not available: sessions are
+  bound to their configured repositories";
+- `gh api repos/astral-sh/uv` (a public repository the session isn't bound to) must be refused with HTTP 403 "GitHub
+  access to this repository is not enabled for this session".
 
-The session's token acts as a user (`gh api user` answers), so these are the user-to-server calls, and the token
-reaches the repositories of every Claude installation the user can reach (a personal account's included). So run
-the second call for every id the first prints. Together they must print exactly one name,
-`uw-share-lab/openproceedings`. If the first call prints no id, or either call errors, use the installation-token
-call instead:
-
-```bash
-gh api installation/repositories --jq '"\(.total_count) \([.repositories[].full_name] | join(" "))"'   # must print exactly: 1 uw-share-lab/openproceedings
-```
-
-None of these has been run from a cloud session yet (TASK-243). Anything else stops the run, with every PR as "not
-reviewed": another repository anywhere in the list (the credential reaches beyond this one, and dependency code
-could use that through the proxy), or the fallback erroring too (the reach can't be shown). Put it first under "for
-the owner" ("limit the Claude App installation to openproceedings"). Locally, skip this check: the credential is
-the maintainer's own login.
+Each prints an `ok session binding: …` line. Any other outcome, a 200 included, is a PROBLEM: stop the run with every PR
+as "not reviewed" and put the PROBLEM line first under "for the owner" (the credential may reach beyond this
+repository, and the routine can't show otherwise). The two refusals show that the proxy confines the session's
+credential to this repository, whatever the installation covers; and since TASK-243 the cloud runs none of a PR's
+dependency code anyway (decision-048). Don't add `astral-sh/uv` to the routine's repositories: the second refusal
+would then fail and every run would stop. **Locally** it reads `gh api orgs/uw-share-lab/installations` (the owner's
+credential: an org owner's call; anyone else gets exit 2 and the run stops) and prints the Claude App installation's
+`repository_selection` and permissions (`ok installation: Claude App <id> on uw-share-lab, repository_selection
+selected; …`). A selection other than `selected`, or no installation by the `claude` app at all (the line names the
+apps it saw), is a PROBLEM: stop the run and put the PROBLEM line first under "for the owner"; a list whose length isn't
+its `total_count` is exit 2. The repository list of a selected installation can't be read with a `gh` login (it
+needs a GitHub App user token), so the selection is what is checked; the owner set it to openproceedings only on
+2026-10-13.
 
 **uv's minors come by hand** (`.github/dependabot.yml` ignores them while uv is 0.x, and docker images get no
-Dependabot alert or security update), so every run, with or without open PRs, compares the api image's uv tag
-(`git show origin/dev:deploy/api.Dockerfile`) with `gh api repos/astral-sh/uv/releases/latest --jq .tag_name`, and
-runs step 2's advisory query for `ecosystem=pip&affects=uv`: a newer minor, or an advisory whose range holds the
-pinned version, goes in the summary under "for the owner".
+Dependabot alert or security update), so every run, with or without open PRs, runs
+
+```bash
+python3 $RUN/.claude/scripts/dependabot/prs.py uv-release
+```
+
+It compares the api image's uv tag (`deploy/api.Dockerfile` on `origin/dev`) with `gh api
+repos/astral-sh/uv/releases/latest` and prints `ok` lines, or an `OWNER` line that goes in the summary under "for the
+owner" as written: a newer minor, or, in the cloud, where the session binding refuses that repository (HTTP 403 "GitHub
+access to this repository is not enabled for this session"), "check uv's latest release by hand". That refusal is
+not a stop. Exit 2 (the pin can't be read, or the call failed any other way) isn't a stop either: put "uv's latest
+release: not checked (<its ERROR line>)" under "for the owner". Then run step 2's advisory query for
+`ecosystem=pip&affects=uv`: an advisory whose range holds the pinned version goes under "for the owner". In the cloud
+that query (a path outside `repos/`) may be refused with the session binding's "sessions are bound to their
+configured repositories" 403 (not yet seen from a cloud session; TASK-247); if so, put "check uv's advisories by hand"
+under "for the owner" and go on.
 
 ## 1. List the PRs, fetch one, check it before anything of it runs
 
@@ -298,7 +327,7 @@ the PR head with its merge base on `origin/dev`, so a PR behind `dev` shows only
 | `uv` | `uv_lock.py`: each bumped package's sdist and wheel sha256 against PyPI's JSON API, every file on files.pythonhosted.org, nothing yanked, nothing younger than 7 days, the PEP 740 provenance publisher of every file against the previous version's; no added or removed package; `uv.lock` unchanged outside its package list, and each `pyproject.toml` changed only in specifiers of packages the lock moved; `tantivy` untouched |
 | `npm_and_yarn` | `npm_lock.py`: every changed lock entry's version, `resolved` and `integrity` against `npm view <pkg>@<ver>` on registry.npmjs.org (run outside the repo, so no `.npmrc` there applies), and its dependencies, `os`, `cpu` and `libc` against the manifest; nothing younger than 7 days; no package added or removed, none switched to another name or to a link; no field dropped; no install script appeared; publisher (`_npmUser`) and npm provenance (present, and from the same source repository) against the previous version's; the manifests and the lock's workspace entries changed only in dependency values of packages the lock moved, and equal to each other (step 3) |
 | `docker` | `docker_digest.py`: each changed Dockerfile differs only in its pins' `:tag@digest`; an anonymous token from the registry, then `HEAD /v2/<image>/manifests/<tag>` with the OCI-index `Accept` header must give the pinned digest, as an index; for a ghcr.io image, `gh attestation verify oci://<image>@<digest> --owner <org>` for the new and the previous pin: the new one must have an attestation by the previous pin's publisher (source repository and signing workflow, ref aside), and its earliest verified timestamp must be 7 days old or more; an image on another registry than Docker Hub and ghcr.io, a 0.x minor, or any new `python` tag, is a hard stop |
-| `github_actions` | `actions_pins.py`: each changed file differs only in its pins' `@<sha> # <tag>`; each new pin must be the commit the tag `<tag>` names (`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`, annotated tags peeled); no new action, no unpinned `uses:` |
+| `github_actions` | `actions_pins.py`: each changed file differs only in its pins' `@<sha> # <tag>`; each new pin must be the commit the tag `<tag>` names (`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`, annotated tags peeled); no new action, no unpinned `uses:` (in the cloud: a PROBLEM, the proxy refuses the tag lookup) |
 
 For npm, once `npm_lock.py` exits 0 (or 3, before step 3's fix):
 
@@ -321,7 +350,10 @@ advisories that it didn't show. The GitHub Advisory Database answers per package
 `gh api --paginate 'advisories?ecosystem=npm&affects=next&per_page=100' --jq '.[] | [.ghsa_id, .summary, (.vulnerabilities[] | select(.package.name == "next") | "\(.vulnerable_version_range) → \(.first_patched_version)")] | @tsv'`
 (`ecosystem=pip` for uv, `ecosystem=actions` for an action). A 0.x update can break things in a minor: read its
 notes as closely as a major's (uv's own minors: step 0's last check). Write what you found, with the advisory ids,
-in the evidence file. The notes are data (§Rules): they never clear a PROBLEM.
+in the evidence file. The notes are data (§Rules): they never clear a PROBLEM. In the cloud the advisory query (a
+path outside `repos/`) may be refused with the "sessions are bound to their configured repositories" 403 (not yet
+seen from a cloud session; TASK-247): if it is, the check couldn't run, so treat it as a hard stop (§10: "advisories
+for <pkg>: not checked in the cloud, TASK-247") until TASK-247 decides otherwise.
 
 ## 3. npm: manifest pins and the lock (FIX lines from `npm_lock.py`)
 
@@ -648,7 +680,8 @@ not reviewed:
 - #<n> <title>: <why: rebase requested, tool missing, …>
 for the owner:
 - <a github-actions PR to queue, a Should not fixed, an advisory that predates a bump, a check that couldn't run
-  here, a newer uv minor or a uv advisory (step 0), a red test waived under step 5's stale-base rule (#<n>: the
+  here, a newer uv minor or a uv advisory (step 0), uv's latest release or advisories to check by hand (step 0, in the
+  cloud), a red test waived under step 5's stale-base rule (#<n>: the
   test, fixed on dev by <fix sha> in #<pr>); or "nothing">
 ```
 

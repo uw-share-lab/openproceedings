@@ -197,6 +197,52 @@ def age_days(timestamp: str) -> float:
     return (now() - parse_time(timestamp)).total_seconds() / 86400
 
 
+# What a Claude Code cloud session answers for any GraphQL call (HTTP 403); its presence is how `cloud` is told.
+GRAPHQL_BLOCKED = "GitHub GraphQL is not available from Claude Code sessions"
+# What the cloud session's proxy answers (HTTP 403) for a GitHub API path outside `repos/...`, and for a repository
+# the session isn't bound to (read-only probe, 2026-10-13 23:25Z, session cse_01Q24cxnP5Nu3yXGC2FKjWqW, Claude Code
+# 2.1.296, gh 2.89.0; decision-048's TASK-243 AC6 addendum).
+SESSION_BOUND = "This GitHub API path is not available: sessions are bound to their configured repositories"
+NOT_ENABLED = "GitHub access to this repository is not enabled for this session"
+
+
+def detect_mode() -> str:
+    """`cloud` when GraphQL is refused the way a Claude Code cloud session refuses it, `local` when it answers."""
+    r = run(["gh", "api", "graphql", "-f", "query={viewer{login}}"], ok_codes=(0, 1))
+    if r.returncode == 0:
+        try:
+            login = json.loads(r.stdout)["data"]["viewer"]["login"]
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            raise ToolError(f"GraphQL answered without a login: {r.stdout.strip()[:200]}") from e
+        if login:
+            return "local"
+        raise ToolError("GraphQL answered an empty login")
+    if GRAPHQL_BLOCKED in r.stdout + r.stderr:
+        return "cloud"
+    raise ToolError(
+        f"GraphQL failed, but not as a Claude Code session refuses it: {(r.stdout + r.stderr).strip()[:300]}"
+    )
+
+
+def refusal(r: subprocess.CompletedProcess[str], message: str) -> str | None:
+    """None when a finished `gh api` call was refused with HTTP 403 and `message` (the cloud proxy's answers above);
+    otherwise what it did instead. gh prints an API error's body on stdout and `gh: <message> (HTTP 403)` on stderr,
+    and exits 1."""
+    out = (r.stdout + r.stderr).strip()
+    if r.returncode == 1 and "HTTP 403" in out and message in out:
+        return None
+    if r.returncode == 0:
+        return "it answered (HTTP 2xx)"
+    # gh's own line (`gh: <message> (HTTP <status>)`) says it best; else whatever it printed
+    said = [line for line in (r.stderr.strip() or r.stdout.strip()).splitlines() if line.strip()]
+    return said[-1][:500] if said else f"gh exited {r.returncode} and printed nothing"
+
+
+def refused(cmd: list[str], message: str) -> str | None:
+    """`refusal` of running `cmd`."""
+    return refusal(run(cmd, ok_codes=(0, 1)), message)
+
+
 def main_guard(fn: Callable[[], object]) -> NoReturn:
     """Run a checker's main. A ToolError, or any unexpected error (an answer of the wrong shape), exits 2 with
     its message, so a failed check never reads as a pass or as a PROBLEM the PR caused."""

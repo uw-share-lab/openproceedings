@@ -7,7 +7,11 @@ Answers from the JSON fixtures in $DEPBOT_FIX (`curl.json`, `npm.json`, `gh.json
 `$DEPBOT_FIX/calls.log`, so no case reaches a live service. A request with no fixture fails the way the real
 tool would (HTTP 404, `npm error 404`, a non-zero `gh`). With `"cloud": true` in `gh.json` the fake `gh` is a
 Claude Code cloud session (TASK-213): every GraphQL call, so every `gh pr` command, fails with the session's
-HTTP 403 body, and the `/ccr/` routes answer (outside a session they are a 404, as on api.github.com).
+HTTP 403 body, and the `/ccr/` routes answer (outside a session they are a 404, as on api.github.com). Its proxy
+also confines the session to this repository, as the 2026-10-13 probe found (TASK-243 AC6): a path outside
+`repos/...` answers its HTTP 403 "sessions are bound to their configured repositories", another repository its HTTP
+403 "not enabled for this session" (unless the row gives that exact key a fixture), and `gh attestation verify`
+fails as Sigstore does there.
 """
 
 from __future__ import annotations
@@ -116,6 +120,37 @@ GRAPHQL_403 = (
 )
 
 
+# What the cloud session's proxy answers (HTTP 403; read-only probe, 2026-10-13 23:25Z, session
+# cse_01Q24cxnP5Nu3yXGC2FKjWqW, gh 2.89.0). The probe's record cut the second message after "Use add_repo to request
+# access"; the scripts match only the first sentence of each.
+SESSION_BOUND_403 = (
+    "This GitHub API path is not available: sessions are bound to their configured repositories. Use "
+    "repository-scoped endpoints (repos/{owner}/{repo}/...)"
+)
+NOT_ENABLED_403 = (
+    "GitHub access to this repository is not enabled for this session. Use add_repo to request access"
+)
+BOUND_REPO = "uw-share-lab/openproceedings"
+# `gh attestation verify` in the cloud: the proxy answers Forbidden for Sigstore's TUF hosts
+SIGSTORE_CLOUD = "Error: error creating Sigstore verifier: no valid Sigstore verifiers could be initialized"
+
+
+def proxy_refusal(path: str) -> str | None:
+    """The cloud proxy's 403 message for `path`, or None when it lets the call through."""
+    bare = path.split("?", 1)[0]
+    if not bare.startswith("repos/"):
+        return SESSION_BOUND_403
+    owner_repo = "/".join(bare.split("/")[1:3])
+    return None if owner_repo == BOUND_REPO else NOT_ENABLED_403
+
+
+def forbidden(message: str) -> int:
+    """As gh does on an HTTP 403 with a JSON body: the body on stdout, `gh: <message> (HTTP 403)` on stderr, exit 1."""
+    print(json.dumps({"message": message, "status": "403"}))
+    print(f"gh: {message} (HTTP 403)", file=sys.stderr)
+    return 1
+
+
 def not_found(what: str) -> int:
     """As gh does on an API error: the error body on stdout, a message on stderr, exit 1."""
     print(json.dumps({"message": "Not Found", "status": "404"}))
@@ -182,6 +217,8 @@ def gh_api(fx: dict[str, Any], args: list[str]) -> int:
         return not_found(path)
     key = f"api {path}" if method == "GET" else f"api {method} {path}"
     ans = answer(fx, key)
+    if ans is None and fx.get("cloud") and (message := proxy_refusal(path)) is not None:
+        return forbidden(message)
     if ans is None:
         return not_found(key)
     # gh cancelled (exit 2), with no answer at all; a real timeout is run()'s TimeoutExpired, the same path
@@ -201,10 +238,10 @@ def gh_api(fx: dict[str, Any], args: list[str]) -> int:
             return 1
         ans = ans.get("body", "")
     if jq is not None:
-        if jq != ".login":
+        if jq not in (".login", ".full_name"):
             print(f"fake gh: unsupported --jq {jq}", file=sys.stderr)
             return 2
-        print(ans["login"])
+        print(ans[jq[1:]])
         return 0
     print(json.dumps(ans) if ans != "" else "")
     return 0
@@ -223,6 +260,9 @@ def gh(args: list[str]) -> int:
     if args[:1] == ["api"]:
         return gh_api(fx, args[1:])
     if args[:2] == ["attestation", "verify"]:
+        if fx.get("cloud"):  # Sigstore can't start behind the session's proxy, whatever the fixtures say
+            print(SIGSTORE_CLOUD, file=sys.stderr)
+            return 1
         key = f"attestation {args[2]} {args[args.index('--owner') + 1]}"
         # 0: verified, by uv's publishing workflow, attested long ago; {"timestamps": [...]}: verified, by that
         # workflow, with those timestamps (an empty list: none); {"attestations": [{"repo", "signer", "timestamps"},
