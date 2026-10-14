@@ -32,10 +32,27 @@ three times, and close it.
   rebase or merge that stops on a task file has no other way to settle it (Edit is refused there), so a path every
   match of which is unmerged (`git ls-files --unmerged`) may take `checkout --theirs`, `restore --ours` or `rm`.
 
+- The review round found the same shape again one level out, so a gate is only as complete as its list of
+  writers: `git clean` (deletes the untracked file the CLI just wrote), `git am`, `git merge-file`, `read-tree -u`,
+  `-p` with no path (the whole tree), `find -fprint`, BSD `find -f <path>`, `patch`, `tar -x`, `cp -R src .`
+  landing at `./<name>`; and commands git runs from its own words (`-c core.pager=…`, `GIT_EDITOR`, `rebase
+  --exec`, `bisect run`, `submodule foreach`, `filter-branch` filters), now re-checked as commands. A payload the
+  hook couldn't read (invalid JSON, no command) was allowed; it is now refused.
+- A word git can't resolve yet is not a path: `git fetch origin dev:t && git reset t <task>` was read as two
+  pathspecs (`t` didn't exist when the hook ran). A word that is neither a commit nor a path is now a tree-ish.
+- `git apply --numstat` under `-R` names the old side of a rename, so both `rename from` and `rename to` count; and
+  a patch is read when the hook runs, so `git apply` in a call that writes the patch first is refused.
+- The scope is a guard against mistakes, not a boundary (owner ruling via the coordinator, 2026-10-13):
+  `git${IFS}rm`, a config or hook script written in an earlier call, and git behind a wrapper cmdparse doesn't
+  strip can still get through; git history plus review is the backstop.
+
 ## Dead ends — don't repeat these
 - Treating "the hook already refuses `git rm` under backlog/" as the whole rule: the reviewer's note was right
   about `git rm`, and the incident still got through with `git restore`.
 - A first exclusion compare that lower-cased the path read `':^Backlog'` as excluding backlog/ when git doesn't.
+- Waiting on `mutate.py` with `until ! pgrep -f "mutate.py --match …"`: the loop's own command line matches the
+  pattern, so it never ends. Wait on the PID instead.
+- Editing a hook while `mutate.py` runs: it copies the worktree for every mutant, so later mutants test the edit.
 - Counting the worktree root as reaching backlog/ in every repository refused `git restore .` and
   `find . -delete` in repositories with no backlog/ at all; the root and magic count only where there is one.
 
@@ -51,7 +68,8 @@ three times, and close it.
   backlog/ out is the workaround.
 
 ## Follow-ups
-- none.
+- cmdparse's wrapper list lacks `xcrun`, `caffeinate`, `arch`, `doas`, `flock` and `unbuffer`, which every gate shares
+  (security review nit): filed as a task at the end of the branch.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `CLAUDE.md` (hook table), `.claude/skills/task-hygiene/SKILL.md` (finalize only after the last review round; what to do when a completed task needs changes; what git may still do), `docs/specs/08-ops-and-tooling.md` (hook table), the hook's header comment

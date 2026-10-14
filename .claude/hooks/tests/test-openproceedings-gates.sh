@@ -533,8 +533,8 @@ check $P block "cd frontend && rm -rf ../*"           "$(payload_bash 'cd fronte
 check $P block "rm -r da\"\"ta (quotes split the word)" "$(payload_bash 'rm -r da""ta')"
 check $P allow "rm -rf frontend/src/data/* (not data/)" "$(payload_bash 'rm -rf frontend/src/data/*')"
 # git clean / stash precision
-check $P allow "git clean -fdx -e data"               "$(payload_bash 'git clean -fdx -e data')"
-check $P allow "git clean -fdx --exclude=data/"       "$(payload_bash 'git clean -fdx --exclude=data/')"
+check $P allow "git clean -fdx -e data"               "$(payload_bash 'git clean -fdx -e data -e backlog')"
+check $P allow "git clean -fdx --exclude=data/"       "$(payload_bash 'git clean -fdx --exclude=data/ --exclude=backlog')"
 check $P allow "git clean -fdx -- frontend/"          "$(payload_bash 'git clean -fdx -- frontend/')"
 check $P block "git clean -fdx -- . (covers data)"    "$(payload_bash 'git clean -fdx -- .')"
 check $P block "git stash -a"                         "$(payload_bash 'git stash -a')"
@@ -632,7 +632,7 @@ echo '")"  # the closing quote pairs with don't and would hide the push without 
 check $R allow "\$((1+(2*3))) nested parens, approved"  "$(payload_bash 'x=$((1+(2*3))) && git push origin mut')"
 check $R allow "nested parens keep << a shift, approved" "$(payload_bash 'x=$(( (a+(b)) << c )) && git push origin mut')"
 check $P block "git clean -fdxenode_modules (clustered -e)" "$(payload_bash 'git clean -fdxenode_modules')"
-check $P allow "git clean -fdxedata (clustered -e data)"    "$(payload_bash 'git clean -fdxedata')"
+check $P allow "git clean -fdxedata (clustered -e data)"    "$(payload_bash 'git clean -fdxedata -e backlog')"
 check $R block "<<E\"OF\" partly quoted delimiter"      "$(payload_bash 'cat <<E"OF"
 x
 EOF
@@ -1374,6 +1374,10 @@ printf 'diff --git a/src/n.md b/src/n.md\nnew file mode 100644\n--- /dev/null\n+
 printf 'diff --git a/backlog/completed/task-1 - a.md b/src/a.md\nsimilarity index 100%%\nrename from backlog/completed/task-1 - a.md\nrename to src/a.md\n' > "$TMP/out.patch"
 printf 'diff --git a/src/x.md b/src/z.md\nsimilarity index 100%%\nrename from src/x.md\nrename to src/z.md\n' > "$TMP/srcmv.patch"
 printf -- '--- /dev/null\n+++ backlog/tasks/n.md\n@@ -0,0 +1 @@\n+x\n' > "$TMP/p0.patch"   # no a/ b/: read with -p0
+printf 'diff --git a/src/a.md b/backlog/completed/a.md\nsimilarity index 100%%\nrename from src/a.md\nrename to backlog/completed/a.md\n' > "$TMP/in.patch"
+printf 'diff --git "a/backlog/caf\\303\\251.md" b/src/c.md\nsimilarity index 100%%\nrename from "backlog/caf\\303\\251.md"\nrename to src/c.md\n' > "$TMP/quoted.patch"
+printf 'diff --git a/src/r.md b/src/r.md\nnew file mode 100644\n--- /dev/null\n+++ b/src/r.md\n@@ -0,0 +1,5 @@\n+x\n' > "$TMP/recount.patch"   # wrong counts: needs --recount
+mkdir -p "$TMP/oldbl/backlog/tasks"; : > "$TMP/oldbl/backlog/tasks/x.md"
 payload_bl() { payload_at "$BL" "$1"; }
 T1='"backlog/tasks/task-1 - a.md"'; C1='"backlog/completed/task-1 - a.md"'
 # the PR #146 shapes: the pre-completion copy put back, the completed one removed
@@ -1494,7 +1498,7 @@ check $P allow "git apply --directory vendor <src patch> (separate)" "$(payload_
 check $P allow "git apply <src patch>"                         "$(payload_bl "git apply '$TMP/src.patch'")"
 check $P allow "git apply <rename inside src/>"                "$(payload_bl "git apply '$TMP/srcmv.patch'")"
 check $P allow "git apply --exclude='backlog/*' <backlog patch>" "$(payload_bl "git apply --exclude='backlog/*' '$TMP/bl.patch'")"
-check $P allow "cd src && git apply <backlog patch> (outside cwd: skipped)" "$(payload_bl "cd src && git apply --include='src/*' '$TMP/bl.patch'")"
+check $P allow "cd src && git apply <backlog patch> (outside cwd: skipped)" "$(payload_bl "cd src && git apply '$TMP/bl.patch'")"
 check $P allow "git apply --check / --stat / --numstat <patch>" "$(payload_bl "git apply --check '$TMP/bl.patch' && git apply --stat '$TMP/bl.patch' && git apply --numstat '$TMP/bl.patch'")"
 check $P allow "git checkout-index --temp <task>"              "$(payload_bl "git checkout-index --temp $T1")"
 check $P allow "git checkout-index -f src/x.md"                "$(payload_bl 'git checkout-index -f src/x.md')"
@@ -1537,6 +1541,166 @@ check $P allow "find backlog -name '*.md' -exec grep -l x {} +" "$(payload_bl "f
 check $P allow "find . -exec /usr/bin/grep x {} + (a reader by path)" "$(payload_bl "find . -name '*.md' -exec /usr/bin/grep x {} +")"
 check $P allow "find src -name '*.pyc' -delete"                "$(payload_bl "find src -name '*.pyc' -delete")"
 check $P allow "find backlog -type f (lists only)"             "$(payload_bl 'find backlog -type f')"
+# TASK-244 review gate: a payload this hook can't read is refused (fail closed); a well-formed one is checked
+check $P block "invalid JSON payload"                          'not json'
+check $P block "empty payload"                                 ''
+check $P block "a JSON array, not an object"                   '[1]'
+check $P block "no tool_name"                                  '{"tool_input":{"command":"ls"}}'
+check $P block "a tool this hook isn't wired to"               '{"tool_name":"Read","tool_input":{"file_path":"/tmp/x"}}'
+check $P block "Bash with no command"                          '{"tool_name":"Bash","cwd":"/tmp","tool_input":{}}'
+check $P block "Bash with a blank command"                     '{"tool_name":"Bash","cwd":"/tmp","tool_input":{"command":"  "}}'
+check $P block "Bash with a command that isn't a string"       '{"tool_name":"Bash","cwd":"/tmp","tool_input":{"command":5}}'
+check $P block "Bash with tool_input not an object"            '{"tool_name":"Bash","cwd":"/tmp","tool_input":"ls"}'
+check $P block "Edit with no file_path"                        '{"tool_name":"Edit","cwd":"/tmp","tool_input":{}}'
+check $P allow "Bash ls (well formed)"                         "$(payload_at /tmp 'ls')"
+check $P allow "Edit /tmp/x (well formed)"                     '{"tool_name":"Edit","cwd":"/tmp","tool_input":{"file_path":"/tmp/x"}}'
+# commands git runs from its own words are checked as commands (pagers, editors, drivers, --exec, run, foreach, …)
+check $P block "git -c core.pager='rm -rf backlog' log"        "$(payload_bl "git -c core.pager='rm -rf backlog' log")"
+check $P block "GIT_PAGER='git restore -s dev backlog' git log" "$(payload_bl "GIT_PAGER='git restore -s dev backlog' git log")"
+check $P block "PAGER='rm -rf backlog' git log"                "$(payload_bl "PAGER='rm -rf backlog' git log")"
+check $P block "git -c diff.external='rm backlog/x' diff"      "$(payload_bl "git -c diff.external='rm backlog/x' diff")"
+check $P block "GIT_EDITOR='rm -rf backlog' git commit"        "$(payload_bl "GIT_EDITOR='rm -rf backlog' git commit")"
+check $P block "git rebase --exec 'rm -rf backlog' dev"        "$(payload_bl "git rebase --exec 'rm -rf backlog' dev")"
+check $P block "git rebase --exec='rm -rf backlog' dev"        "$(payload_bl "git rebase --exec='rm -rf backlog' dev")"
+check $P block "git rebase -x 'git rm -r backlog' dev"         "$(payload_bl "git rebase -x 'git rm -r backlog' dev")"
+check $P block "git rebase -x'rm -rf backlog' dev (attached)"  "$(payload_bl "git rebase -x'rm -rf backlog' dev")"
+check $P block "git bisect run rm -rf backlog"                 "$(payload_bl 'git bisect run rm -rf backlog')"
+check $P block "git submodule foreach 'rm -rf backlog'"        "$(payload_bl "git submodule foreach 'rm -rf backlog'")"
+check $P block "git submodule foreach --recursive 'rm …'"      "$(payload_bl "git submodule foreach --recursive 'rm -rf backlog'")"
+check $P block "git grep -O'rm -rf backlog' x"                 "$(payload_bl "git grep -O'rm -rf backlog' x")"
+check $P block "git grep --open-files-in-pager='rm …' x"       "$(payload_bl "git grep --open-files-in-pager='rm -rf backlog' x")"
+check $P block "git difftool -x 'rm -rf backlog' dev"          "$(payload_bl "git difftool -x 'rm -rf backlog' dev")"
+check $P block "git difftool --extcmd='rm -rf backlog' dev"    "$(payload_bl "git difftool --extcmd='rm -rf backlog' dev")"
+check $P block "git filter-branch --tree-filter 'rm -rf backlog'" "$(payload_bl "git filter-branch --tree-filter 'rm -rf backlog' HEAD")"
+check $P block "git filter-branch --index-filter 'git rm …'"   "$(payload_bl "git filter-branch --index-filter 'git rm -r --cached backlog' HEAD")"
+check $P block "git config core.pager 'rm -rf backlog'"        "$(payload_bl "git config core.pager 'rm -rf backlog'")"
+check $P block "git bisect run … nested past four levels"      "$(payload_bl 'git bisect run git bisect run git bisect run git bisect run git bisect run git bisect run ls')"
+check $P allow "git -c core.pager=less log"                    "$(payload_bl 'git -c core.pager=less log')"
+check $P allow "git rebase --exec 'make lint' dev"             "$(payload_bl "git rebase --exec 'make lint' dev")"
+check $P allow "git -c user.email=t@t commit -m x"             "$(payload_bl 'git -c user.email=t@t commit -m x')"
+check $P allow "git config user.name 'A B'"                    "$(payload_bl "git config user.name 'A B'")"
+check $P allow "git bisect run make test"                      "$(payload_bl 'git bisect run make test')"
+check $P allow "git grep -O x (the default pager)"             "$(payload_bl 'git grep -O x')"
+# git clean deletes untracked files: a task the CLI just created or completed is one
+check $P block "git clean -f backlog/"                         "$(payload_bl 'git clean -f backlog/')"
+check $P block "git clean -fd (the whole tree)"                "$(payload_bl 'git clean -fd')"
+check $P block "cd backlog && git clean -f"                    "$(payload_bl 'cd backlog && git clean -f')"
+check $P block "git clean -fd -e backlog -e '!backlog/x'"      "$(payload_bl "git clean -fd -e backlog -e '!backlog/x'")"
+check $P block "git clean -n --no-dry-run -f backlog/"         "$(payload_bl 'git clean -n --no-dry-run -f backlog/')"
+check $P allow "git clean -n backlog/ (dry run)"               "$(payload_bl 'git clean -n backlog/')"
+check $P allow "git clean -fd -e backlog"                      "$(payload_bl 'git clean -fd -e backlog')"
+check $P allow "git clean -fd --exclude=backlog/"              "$(payload_bl 'git clean -fd --exclude=backlog/')"
+check $P allow "git clean -fd src"                             "$(payload_bl 'git clean -fd src')"
+check $P allow "git clean -fd -- . ':!backlog'"                "$(payload_bl "git clean -fd -- . ':!backlog'")"
+# git am applies patches like git apply
+check $P block "git am <patch into backlog/>"                  "$(payload_bl "git am '$TMP/bl.patch'")"
+check $P block "git am < patch (stdin)"                        "$(payload_bl "git am < '$TMP/src.patch'")"
+check $P block "git am --directory=backlog <src patch>"        "$(payload_bl "git am --directory=backlog '$TMP/src.patch'")"
+check $P block "git am --dir=backlog <src patch> (abbreviated)" "$(payload_bl "git am --dir=backlog '$TMP/src.patch'")"
+check $P allow "git am <src patch>"                            "$(payload_bl "git am '$TMP/src.patch'")"
+check $P allow "git am --continue / --abort / --skip"          "$(payload_bl 'git am --continue && git am --abort && git am --skip')"
+check $P allow "git am --show-current-patch=diff"              "$(payload_bl 'git am --show-current-patch=diff')"
+# git merge-file rewrites its first file
+check $P block "git merge-file <task> a b"                     "$(payload_bl "git merge-file $T1 src/x.md src/x.md")"
+check $P allow "git merge-file -p <task> a b (prints)"         "$(payload_bl "git merge-file -p $T1 src/x.md src/x.md")"
+check $P allow "git merge-file --stdout <task> a b"            "$(payload_bl "git merge-file --stdout $T1 src/x.md src/x.md")"
+check $P allow "git merge-file src/x.md a b"                   "$(payload_bl 'git merge-file src/x.md frontend/y.ts frontend/y.ts')"
+check $P allow "git merge-file -L a -L b -L c src/x.md a b"     "$(payload_bl 'git merge-file -L backlog -L b -L c src/x.md frontend/y.ts frontend/y.ts')"
+# find writes a file with -fprint and its kin; BSD find takes start paths with -f
+check $P block "find src -fprint backlog/tasks/x.md"           "$(payload_bl 'find src -fprint backlog/tasks/x.md')"
+check $P block "find src -fprint0 / -fprintf / -fls into backlog/" "$(payload_bl "find src -fls backlog/x; find src -fprintf backlog/y '%p'; find src -fprint0 backlog/z")"
+check $P block "find src -fprint \"\$UNSET\""                  "$(payload_bl 'find src -fprint "$OP_UNSET_244"')"
+check $P allow "find src -fprint /tmp/op-244-list"             "$(payload_bl 'find src -fprint /tmp/op-244-list')"
+check $P block "cd src && find -f ../backlog -delete (BSD -f)" "$(payload_bl 'cd src && find -f ../backlog -delete')"
+check $P block "cd src && find -f../backlog -delete (attached)" "$(payload_bl 'cd src && find -f../backlog -delete')"
+check $P block "find -x -f backlog -delete"                    "$(payload_bl 'find -x -f backlog -delete')"
+check $P allow "find -f src -name x -delete"                   "$(payload_bl 'find -f src -name x -delete')"
+check $P block "find backlog -exec rg --pre rm x {} +"         "$(payload_bl 'find backlog -exec rg --pre rm x {} +')"
+# a reset word that is no commit yet and no path is a tree-ish; -p with no pathspec is the whole tree
+check $P block "git reset nosuchref <task> (no --)"            "$(payload_bl "git reset nosuchref $T1")"
+check $P allow "git reset src/x.md (a path)"                   "$(payload_bl 'git reset src/x.md')"
+check $P block "git restore -p -s dev (whole tree)"            "$(payload_bl 'git restore -p -s dev')"
+check $P block "git restore -p (whole tree, from the index)"   "$(payload_bl 'git restore -p')"
+check $P block "git checkout -p dev (whole tree)"              "$(payload_bl 'git checkout -p dev')"
+check $P block "git reset -p dev (whole tree)"                 "$(payload_bl 'git reset -p dev')"
+check $P allow "git reset -p (HEAD: unstage)"                  "$(payload_bl 'git reset -p')"
+check $P allow "git restore -p --staged (unstage)"             "$(payload_bl 'git restore -p --staged')"
+# literal pathspecs make ':!backlog' a plain path, not an exclude
+check $P block "GIT_LITERAL_PATHSPECS=1 git reset dev -- . ':!backlog'" "$(payload_bl "GIT_LITERAL_PATHSPECS=1 git reset dev -- . ':!backlog'")"
+check $P block "git --literal-pathspecs restore -s dev -- . ':!backlog'" "$(payload_bl "git --literal-pathspecs restore -s dev -- . ':!backlog'")"
+check $P allow "GIT_LITERAL_PATHSPECS=0 git restore -s dev -- . ':!backlog'" "$(payload_bl "GIT_LITERAL_PATHSPECS=0 git restore -s dev -- . ':!backlog'")"
+# a relative --work-tree is read after -C; a path-valued option written with a $ word is unresolved
+check $P block "git -C <parent> --git-dir=… --work-tree=<relative> restore" "$(payload_at / "git -C '$TMP' --git-dir='$BL/.git' --work-tree='bl repo' restore -s dev backlog")"
+check $P block "git checkout-index -a -f --prefix=\$P"         "$(payload_bl 'git checkout-index -a -f --prefix=$P')"
+check $P block "git apply --directory=\$D <src patch>"         "$(payload_bl "git apply --directory=\$D '$TMP/src.patch'")"
+check $P allow "git checkout-index -f --prefix=out/ src/x.md"  "$(payload_bl 'git checkout-index -f --prefix=out/ src/x.md')"
+check $P block "cd src && git checkout-index --prefix=backlog/ x.md (from the top)" "$(payload_bl 'cd src && git checkout-index --prefix=backlog/ x.md')"
+# both sides of a rename count, C-unquoted
+check $P block "git apply -R <rename src → backlog> (deletes the backlog side)" "$(payload_bl "git apply -R '$TMP/in.patch'")"
+check $P block "git apply <rename from a quoted backlog path>" "$(payload_bl "git apply '$TMP/quoted.patch'")"
+# read-tree -u writes the tree over the worktree; update-index flags write no file
+check $P block "git read-tree -u --reset dev"                  "$(payload_bl 'git read-tree -u --reset dev')"
+check $P block "git read-tree -m -u dev"                       "$(payload_bl 'git read-tree -m -u dev')"
+check $P allow "git update-index --assume-unchanged <task>"    "$(payload_bl "git update-index --assume-unchanged $T1")"
+check $P allow "git update-index --skip-worktree <task>"       "$(payload_bl "git update-index --skip-worktree $T1")"
+check $P block "git update-index --skip-worktree --force-remove <task>" "$(payload_bl "git update-index --skip-worktree --force-remove $C1")"
+check $P block "git update-index --index-info"                 "$(payload_bl 'git update-index --index-info')"
+# a patch is read before the command runs: git apply/am go in a call of their own
+check $P block "true && git apply <src patch>"                 "$(payload_bl "true && git apply '$TMP/src.patch'")"
+check $P allow "cd src && git apply <src patch>"               "$(payload_bl "cd src && git apply '$TMP/src.patch'")"
+# copies into a directory land at dest/<name> or, for src/, dest/<each entry>
+check $P block "cp -R <old>/backlog . (lands at ./backlog)"    "$(payload_bl "cp -R '$TMP/oldbl/backlog' .")"
+check $P block "rsync -a <old>/ ./ (its contents: backlog/ too)" "$(payload_bl "rsync -a '$TMP/oldbl/' ./")"
+check $P block "ditto <old>/backlog backlog"                   "$(payload_bl "ditto '$TMP/oldbl/backlog' backlog")"
+check $P allow "cp -R <old>/backlog /tmp (outside the repo)"   "$(payload_bl "cp -R '$TMP/oldbl/backlog' /tmp")"
+check $P allow "cp -R src <tmp dir>"                           "$(payload_bl "cp -R src '$TMP/oldbl'")"
+# other writers: patch(1), archives extracted here, sponge, touch
+check $P block "patch -p1 -R < <patch>"                        "$(payload_bl "patch -p1 -R < '$TMP/src.patch'")"
+check $P allow "patch --dry-run -p1 < <patch>"                 "$(payload_bl "patch --dry-run -p1 < '$TMP/src.patch'")"
+check $P block "tar -xf a.tar (here)"                          "$(payload_bl 'tar -xf a.tar')"
+check $P block "tar xzf a.tgz (bundled)"                       "$(payload_bl 'tar xzf a.tgz')"
+check $P block "git archive dev backlog | tar -x"              "$(payload_bl 'git archive dev backlog | tar -x')"
+check $P block "unzip a.zip (here)"                            "$(payload_bl 'unzip a.zip')"
+check $P block "tar -xf a.tar -C \"\$UNSET\""                  "$(payload_bl 'tar -xf a.tar -C "$OP_UNSET_244"')"
+check $P allow "tar -xf a.tar -C <dir of its own>"             "$(payload_bl "tar -xf a.tar -C '$TMP/oldbl'")"
+check $P allow "tar -xf a.tar --directory=src"                 "$(payload_bl 'tar -xf a.tar --directory=src')"
+check $P allow "tar -czf /tmp/o.tgz src (creates)"             "$(payload_bl 'tar -czf /tmp/o.tgz src')"
+check $P allow "unzip -l a.zip (lists)"                        "$(payload_bl 'unzip -l a.zip')"
+check $P allow "unzip a.zip -d src"                            "$(payload_bl 'unzip a.zip -d src')"
+check $P block "sponge backlog/tasks/x.md"                     "$(payload_bl 'sponge backlog/tasks/x.md')"
+check $P block "touch backlog/tasks/new.md"                    "$(payload_bl 'touch backlog/tasks/new.md')"
+check $P allow "touch src/new.md"                              "$(payload_bl 'touch src/new.md')"
+# a path only the shell knows is refused where backlog/ is, data/ or not
+check $P block "rm -f \"\$UNSET\" (repo with backlog/, no data/)" "$(payload_bl 'rm -f "$OP_UNSET_244"')"
+check $P block "echo x > \"\$UNSET\" (repo with backlog/)"     "$(payload_bl 'echo x > "$OP_UNSET_244"')"
+check $P block "mv \"\$UNSET\" src/ (repo with backlog/)"      "$(payload_bl 'mv "$OP_UNSET_244" src/')"
+# every protected sibling, and no prefix confusion
+check $P block "git rm -r backlog/archive"                     "$(payload_bl 'git rm -r backlog/archive')"
+check $P block "git restore -s dev backlog/decisions"          "$(payload_bl 'git restore -s dev backlog/decisions')"
+check $P block "git checkout dev -- backlog/milestones"        "$(payload_bl 'git checkout dev -- backlog/milestones')"
+check $P allow "git restore -s dev backlogX/y (another dir)"   "$(payload_bl 'git restore -s dev backlogX/y')"
+check $P allow "git rm -r backlog-old (another dir)"           "$(payload_bl 'git rm -r backlog-old')"
+check $P allow "rm -rf backlogX"                               "$(payload_bl 'rm -rf backlogX')"
+check $P block "git rm -r data/snapshots (main repo)"          "$(payload_bash 'git rm -r data/snapshots')"
+check $P block "git checkout dev -- data/indexes/abc"          "$(payload_bash 'git checkout dev -- data/indexes/abc')"
+check $P block "git restore -s dev 'data/snap*'"               "$(payload_bash "git restore -s dev 'data/snap*'")"
+check $P block "find src -fprint data/snapshots/s1/x"          "$(payload_bash 'find frontend -fprint data/snapshots/s1/x')"
+check $P block "cd frontend && find -f ../data/snapshots -delete" "$(payload_bash 'cd frontend && find -f ../data/snapshots -delete')"
+check $P allow "git restore -s dev -- frontend/src/data (not data/)" "$(payload_bash 'git restore -s dev -- frontend/src/data')"
+check $P allow "rm -rf data-old (another dir)"                 "$(payload_bash 'rm -rf data-old')"
+# review rows: values that read as backlog/ paths, stash from a file, a file named -, --recount
+check $P allow "git restore -s backlog/old -- src/x.md (-s takes a value)" "$(payload_bl 'git restore -s backlog/old -- src/x.md')"
+check $P allow "git checkout --orphan backlog"                 "$(payload_bl 'git checkout --orphan backlog')"
+check $P allow "git checkout -B backlog dev"                   "$(payload_bl 'git checkout -B backlog dev')"
+check $P block "git stash push --pathspec-from-file=list"      "$(payload_bl 'git stash push --pathspec-from-file=list')"
+: > "$BL/-"
+check $P block "git apply --allow-empty - (a file named - exists)" "$(payload_bl 'git apply --allow-empty -')"
+rm -f "$BL/-"
+check $P allow "git apply --recount <src patch with wrong counts>" "$(payload_bl "git apply --recount '$TMP/recount.patch'")"
+check $P allow "git merge-file src/x.md <task> <task> (reads them)" "$(payload_bl "git merge-file src/x.md $T1 $T1")"
+mv "$BL/frontend/y.ts" "$TMP/y.ts.bak"   # tracked, not on disk: still a path to git
+check $P allow "git reset frontend/y.ts (in the index only)"   "$(payload_bl 'git reset frontend/y.ts')"
+mv "$TMP/y.ts.bak" "$BL/frontend/y.ts"
 mkdir -p "$TMP/plain244"; git init -q "$TMP/plain244"
 check $P allow "git restore \"\$UNSET\" in a repo without backlog/" "$(payload_at "$TMP/plain244" 'git restore "$OP_UNSET_244"')"
 check $P allow "git restore --pathspec-from-file=l, no backlog/" "$(payload_at "$TMP/plain244" 'git restore --pathspec-from-file=l')"
@@ -1564,6 +1728,8 @@ check $P block "git checkout side -- <conflicted task> (a commit's copy)" "$(pay
 check $P block "git restore --source=side <conflicted task>"   "$(payload_blc "git restore --source=side $T2")"
 check $P block "git rm backlog/tasks/nosuch.md (matches nothing)" "$(payload_blc 'git rm backlog/tasks/nosuch.md')"
 check $P block "git checkout side <conflicted task> (no --)"   "$(payload_blc "git checkout side $T2")"
+# conflicts are read in this repository only
+check $P block "git --git-dir/--work-tree … rm <conflicted> (git pointed elsewhere: no exemption)" "$(payload_blc "git --git-dir='$BLC/.git' --work-tree='$BLC' rm $T2")"
 # a repo whose only file is in conflict: paths from a file are still unseen
 BLX="$TMP/blx"
 git init -q -b dev "$BLX"; mkdir -p "$BLX/backlog/tasks"; printf 'a\n' > "$BLX/backlog/tasks/x.md"

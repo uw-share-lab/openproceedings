@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-13 19:42'
-updated_date: '2026-10-13 22:40'
+updated_date: '2026-10-13 23:28'
 labels:
   - tooling
   - bug
@@ -35,3 +35,9 @@ During PR #146 (TASK-241) a subagent completed task-241 before review finished, 
 <!-- SECTION:PLAN:BEGIN -->
 1. Reproduce each shape through probe_hook.py (data only). 2. In protect-data-dir.sh, one rule for git commands that write backlog/ files by pathspec: a pathspec reaches backlog/ when it is in it, is the worktree root (or above), is a git glob or magic pathspec from such a place, or can't be read; an exclude of backlog/ lifts it. Allowed: unstaging, dry runs, read-only and commit-level commands. 3. Case-table rows, GIT_LONG_OPTS for restore/rm/mv/apply, mutants. 4. Docs: CLAUDE.md, task-hygiene, spec 08, hook comment.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Review round 1 (code, docs, security, qa) and the coordinator's audit: added git clean, am, merge-file, read-tree -u, -p with no path, find -fprint/-f, patch, tar/unzip, cp -R/rsync/ditto landing paths, touch/sponge; commands git runs from its own words (-c values, GIT_PAGER/EDITOR…, rebase --exec, bisect run, submodule foreach, grep -O, difftool -x, filter-branch filters, git config values) are checked as commands; malformed payloads fail closed; unresolvable paths refused where backlog/ is; git pathspecs into data/snapshots|indexes refused; literal pathspecs; relative --work-tree after -C. Closing-workflow docs now finalize after the last review round. Known limitation (owner ruling via the coordinator): obfuscated commands may bypass; the backstop is git history plus review (git${IFS}rm, config/hook scripts written earlier, unstripped wrappers). Follow-up: cmdparse wrapper list (xcrun, caffeinate, arch, doas, flock, unbuffer) to file at the end.
+<!-- SECTION:NOTES:END -->

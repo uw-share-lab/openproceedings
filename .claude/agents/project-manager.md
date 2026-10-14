@@ -29,8 +29,8 @@ is marked Done that is not merged. You never hand-write files under `backlog/` �
    `TOKENIZER_VERSION` bumped or parity proven, `index_version` in responses). Size: ½–1 day; split
    anything larger.
 4. **Standard DoD** on implementation tasks: tests green; ACs ticked; docs as-built in the same commit;
-   `/record-learnings` entry; `/review-gate` approved for HEAD; PR into `dev`; `backlog task complete
-   <id>`.
+   `/record-learnings` entry; `/review-gate` rounds done, then `backlog task complete <id>` in its own commit,
+   reviewed and approved as HEAD; PR into `dev`.
 5. **Design detail** → `backlog doc create "<title>" -t specification`. **Irreversible choices** (open
    questions in 00, e.g. rejected-ICLR indexing, earliest year, hosting) → `backlog decision create
    "<title>"`, then Edit the created file's Context / Decision / Consequences body.
@@ -39,7 +39,7 @@ is marked Done that is not merged. You never hand-write files under `backlog/` �
    and file it as a task before the final `/review-gate`, never "noted for later" (new ids are created
    last, after rebasing onto `dev`: `task-hygiene` §Ids).
    `backlog task edit <id> -s "In Progress"|"Done" --notes "…"`. When a task is Done (final summary
-   written), run **`backlog task complete <id>`** so it moves to `backlog/completed/`; CI's
+   written, after the last review round), run **`backlog task complete <id>`** so it moves to `backlog/completed/`; CI's
    `check_backlog.py` fails on a Done task left in `backlog/tasks/` and on an id used twice. Blockers go
    in `--comment`.
 

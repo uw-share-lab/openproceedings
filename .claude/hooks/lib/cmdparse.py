@@ -362,6 +362,16 @@ GIT_LONG_OPTS: dict[str, frozenset[str]] = {
             "no-unidiff-zero no-reject no-allow-overlap no-verbose no-quiet no-inaccurate-eof no-recount "
             "no-directory no-allow-empty"
         ),
+        "am": (
+            "interactive no-verify binary 3way quiet signoff utf8 keep keep-non-patch message-id keep-cr scissors "
+            "quoted-cr whitespace ignore-space-change ignore-whitespace directory exclude include patch-format reject "
+            "resolvemsg continue resolved skip abort quit show-current-patch allow-empty "
+            "committer-date-is-author-date ignore-date rerere-autoupdate gpg-sign empty rebasing verify "
+            "no-interactive no-binary no-3way no-quiet no-signoff no-utf8 no-keep no-keep-non-patch no-message-id "
+            "no-keep-cr no-scissors no-whitespace no-ignore-space-change no-ignore-whitespace no-directory "
+            "no-exclude no-include no-patch-format no-reject no-resolvemsg no-committer-date-is-author-date "
+            "no-ignore-date no-rerere-autoupdate no-gpg-sign no-rebasing"
+        ),
         "checkout-index": (
             "all ignore-skip-worktree-bits force quiet no-create index stdin temp prefix stage create no-all "
             "no-ignore-skip-worktree-bits no-force no-quiet no-index no-stdin no-temp no-prefix"
