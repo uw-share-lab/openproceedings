@@ -183,13 +183,25 @@
   "label": "robot footer dropped",
   "file": ".claude/hooks/block-ai-attribution.sh",
   "old": "|\ud83e\udd16 generated",
-  "new": ""
+  "new": "",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
  },
  {
   "label": "= trailer form dropped",
   "file": ".claude/hooks/block-ai-attribution.sh",
   "old": "co-authored-by[:=]",
-  "new": "co-authored-by:"
+  "new": "co-authored-by:",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
  },
  {
   "label": "gh pr edit not checked",
@@ -212,14 +224,14 @@
  {
   "label": "stdin redirect not read",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "              if \"<\" in op and not op.startswith(\"<<\") and target]",
-  "new": "              if False]"
+  "old": "            if reads_in(op, target) and not op.startswith(\"<<\"):",
+  "new": "            if False:"
  },
  {
   "label": "cat pipe not read",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        if argv[0] in READERS:\n            named += [(a, argv, d) for a in reader_files(argv)]",
-  "new": "        if False:\n            named += [(a, argv, d) for a in reader_files(argv)]"
+  "old": "        if argv[0] in READERS:\n            sent += [(a, argv, d) for a in reader_files(argv)]",
+  "new": "        if False:\n            sent += [(a, argv, d) for a in reader_files(argv)]"
  },
  {
   "label": "dd branch removed",
@@ -801,7 +813,7 @@
  {
   "label": "release notes file not read",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "            named += [(f, argv, d) for f in opt_values(h[2], \"--notes-file\", \"-F\")]\n",
+  "old": "            sent += [(f, argv, d) for f in opt_values(h[2], \"--notes-file\", \"-F\")]\n",
   "new": ""
  },
  {
@@ -3580,20 +3592,20 @@
  {
   "label": "block-ai: a program outside any substitution read as a file reader (TASK-170)",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        elif argv.in_subst and reads_unmodeled_file(argv, d):",
+  "old": "        elif (argv.in_subst or stdin_writer and argv[0] != \"gh\") and reads_unmodeled_file(argv, d):",
   "new": "        elif reads_unmodeled_file(argv, d):"
  },
  {
   "label": "block-ai: no program in a substitution checked (TASK-170)",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        elif argv.in_subst and reads_unmodeled_file(argv, d):",
-  "new": "        elif False:"
+  "old": "        elif (argv.in_subst or stdin_writer and argv[0] != \"gh\") and reads_unmodeled_file(argv, d):",
+  "new": "        elif (stdin_writer and argv[0] != \"gh\") and reads_unmodeled_file(argv, d):"
  },
  {
   "label": "block-ai: a herestring read as a file (TASK-170)",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "              if \"<\" in op and not op.startswith(\"<<\") and target]",
-  "new": "              if \"<\" in op and target]"
+  "old": "            if reads_in(op, target) and not op.startswith(\"<<\"):",
+  "new": "            if reads_in(op, target):"
  },
  {
   "label": "block-ai: an unresolved file word passes (TASK-170)",
@@ -5722,5 +5734,822 @@
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "            if (data_in(d) or data_in(where)) and any(s in unresolved for s in extra):",
   "new": "            if data_in(d) and any(s in unresolved for s in extra):"
+ },
+ {
+  "label": "TASK-243: gh issue comment not checked",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "GH_ISSUE_WRITE = {\"create\", \"edit\", \"comment\", ",
+  "new": "GH_ISSUE_WRITE = {\"create\", \"edit\", "
+ },
+ {
+  "label": "TASK-243: gh issue create not checked",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "GH_ISSUE_WRITE = {\"create\", ",
+  "new": "GH_ISSUE_WRITE = {"
+ },
+ {
+  "label": "TASK-243: gh issue close not checked",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "\"comment\", \"close\", \"reopen\"}\nGH_RELEASE",
+  "new": "\"comment\", \"reopen\"}\nGH_RELEASE"
+ },
+ {
+  "label": "TASK-243: gh issue reopen not checked",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "\"close\", \"reopen\"}\nGH_RELEASE",
+  "new": "\"close\"}\nGH_RELEASE"
+ },
+ {
+  "label": "TASK-243: gh pr close not checked",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "\"merge\", \"close\", \"reopen\"}",
+  "new": "\"merge\", \"reopen\"}"
+ },
+ {
+  "label": "TASK-243: gh pr reopen not checked",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "\"merge\", \"close\", \"reopen\"}",
+  "new": "\"merge\", \"close\"}"
+ },
+ {
+  "label": "TASK-243: gh issue group not matched",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "or h[0] == \"issue\" and h[1] in GH_ISSUE_WRITE",
+  "new": "or False"
+ },
+ {
+  "label": "TASK-243: gh api not checked",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "if h and h[0] == \"api\" and api_writes",
+  "new": "if False and api_writes"
+ },
+ {
+  "label": "TASK-243: gh api files not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "sent += [(f, argv, d) for f in api_files(api_args([h[1], *h[2]]))]",
+  "new": "pass"
+ },
+ {
+  "label": "TASK-243: -F @file values ignored",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "if eq and value.startswith(\"@\"):",
+  "new": "if False:"
+ },
+ {
+  "label": "TASK-243: --field long form ignored",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "GH_API_FILE_FIELDS = (\"-F\", \"--field\")",
+  "new": "GH_API_FILE_FIELDS = (\"-F\",)"
+ },
+ {
+  "label": "TASK-243: --input not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "return files + opt_values(args, \"--input\")",
+  "new": "return files"
+ },
+ {
+  "label": "TASK-243: text fields don't make a write",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "*GH_API_FILE_FIELDS, *GH_API_TEXT_FIELDS))",
+  "new": "*GH_API_FILE_FIELDS))"
+ },
+ {
+  "label": "TASK-243: a non-GET method doesn't make a write",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    return bool(methods) or ",
+  "new": "    return "
+ },
+ {
+  "label": "TASK-243: every gh api call is a write",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    return bool(methods) or bool(opt_values(args, *GH_API_FILE_FIELDS, *GH_API_TEXT_FIELDS))",
+  "new": "    return True"
+ },
+ {
+  "label": "TASK-243: --method ignored",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "opt_values(args, \"-X\", \"--method\")",
+  "new": "opt_values(args, \"-X\")"
+ },
+ {
+  "label": "TASK-243: unopenable message file skipped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        except OSError:\n            raise Unreadable(word) from None",
+  "new": "        except OSError:\n            continue"
+ },
+ {
+  "label": "TASK-243: oversized message file truncated, not refused",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "if len(text) > MAX_BYTES:",
+  "new": "if len(text) > MAX_BYTES + 1:"
+ },
+ {
+  "label": "TASK-243: a 1 MB message file refused",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "if len(text) > MAX_BYTES:",
+  "new": "if len(text) >= MAX_BYTES:"
+ },
+ {
+  "label": "TASK-243: /dev/null refused",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "if os.path.realpath(p) == os.devnull:\n            continue",
+  "new": "if os.path.realpath(p) == os.devnull:\n            raise Unreadable(word)"
+ },
+ {
+  "label": "TASK-243: commit-msg misses generated-by",
+  "file": ".githooks/commit-msg",
+  "old": "generated[ -](with|by)",
+  "new": "generated[ -](with)"
+ },
+ {
+  "label": "TASK-243: pr-gates pattern drifts",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "generated[ -](with|by)",
+  "new": "generated[ -](with)"
+ },
+ {
+  "label": "TASK-243: changelog pattern drifts",
+  "file": ".claude/scripts/changelog.py",
+  "old": "generated[ -](with|by)",
+  "new": "generated[ -](with)"
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): generated-by form dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "generated[ -](with|by)",
+  "new": "generated[ -](with)",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): generated-with form dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "generated[ -](with|by)",
+  "new": "generated[ -](by)",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): Generated-by trailer form dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "generated[ -](with|by)",
+  "new": "generated (with|by)",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): optional colon dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "(with|by):? +",
+  "new": "(with|by) +",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): one space only",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "(with|by):? +",
+  "new": "(with|by):? ",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): backquote before the name dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "[`*_[]*",
+  "new": "[*_[]*",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): emphasis star before the name dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "[`*_[]*",
+  "new": "[`_[]*",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): underscore before the name dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "[`*_[]*",
+  "new": "[`*[]*",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): bracket before the name dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "[`*_[]*",
+  "new": "[`*_]*",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): article before the name dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "((an?|the) +)?",
+  "new": "",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): article a narrowed to an",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "((an?|the) +)?",
+  "new": "((an|the) +)?",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): article the dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "((an?|the) +)?",
+  "new": "((an?) +)?",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): vendor before the name dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "((github|microsoft|google) +)?",
+  "new": "",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): vendor github dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "((github|microsoft|google) +)?",
+  "new": "((microsoft|google) +)?",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): vendor microsoft dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "((github|microsoft|google) +)?",
+  "new": "((github|google) +)?",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): vendor google dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "((github|microsoft|google) +)?",
+  "new": "((github|microsoft) +)?",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): claude bounded by a word end",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "(claude|(anthropic|",
+  "new": "((claude|anthropic|",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): claude dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "(claude|(anthropic|",
+  "new": "((anthropic|",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): anthropic dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "(claude|(anthropic|openai|",
+  "new": "(claude|(openai|",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): openai dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|openai|(chat)?gpt",
+  "new": "|(chat)?gpt",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): chatgpt dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "(chat)?gpt",
+  "new": "gpt",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): gpt version dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "gpt(-?[0-9][0-9a-z.]*)?",
+  "new": "gpt",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): copilot dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|copilot|",
+  "new": "|",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): gemini dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|gemini|",
+  "new": "|",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): bard dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|bard|",
+  "new": "|",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): codex dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|codex|",
+  "new": "|",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): llm dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|llm|",
+  "new": "|",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): ai dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|llm|ai)",
+  "new": "|llm)",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): name terminator dropped (tooling text matches)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "([^a-zA-Z0-9]|$))|",
+  "new": ")|",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): end of text not a word end",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "([^a-zA-Z0-9]|$))|",
+  "new": "([^a-zA-Z0-9]))|",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243: gh issue new alias not create",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if group in (\"pr\", \"issue\") and verb == \"new\":\n        verb = \"create\"\n    return group, verb, rest[1:]",
+  "new": "    if group == \"pr\" and verb == \"new\":\n        verb = \"create\"\n    return group, verb, rest[1:]"
+ },
+ {
+  "label": "TASK-243: bundled -i not split",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        while a.startswith(\"-i\") and len(a) > 2 and not a.startswith(\"--\"):",
+  "new": "        while False:"
+ },
+ {
+  "label": "TASK-243: bundled -i split once only",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        while a.startswith(\"-i\") and len(a) > 2",
+  "new": "        if a.startswith(\"-i\") and len(a) > 2"
+ },
+ {
+  "label": "TASK-243: GET with fields counts as a write",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if methods and all(m == \"GET\" for m in methods):\n        return False\n",
+  "new": ""
+ },
+ {
+  "label": "TASK-243: one GET among methods makes a read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "if methods and all(m == \"GET\" for m in methods):",
+  "new": "if methods and any(m == \"GET\" for m in methods):"
+ },
+ {
+  "label": "TASK-243: --input with GET not a write",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if opt_values(args, \"--input\"):\n        return True\n    if methods",
+  "new": "    if methods"
+ },
+ {
+  "label": "TASK-243: missing file in the HOME-empty reading refused",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            if argv.env_empty:\n                continue\n",
+  "new": ""
+ },
+ {
+  "label": "TASK-243: missing file skipped in the normal reading",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            if argv.env_empty:\n                continue\n            raise Unreadable(word)",
+  "new": "            continue"
+ },
+ {
+  "label": "TASK-243: stdin writer not detected",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    stdin_writer = any(word == \"-\" and argv[0] == \"gh\" and",
+  "new": "    stdin_writer = False and any(word == \"-\" and argv[0] == \"gh\" and"
+ },
+ {
+  "label": "TASK-243: git stdin writer counts too",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "stdin_writer = any(word == \"-\" and argv[0] == \"gh\" and",
+  "new": "stdin_writer = any(word == \"-\" and"
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): gpt version letters dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "gpt(-?[0-9][0-9a-z.]*)?",
+  "new": "gpt(-?[0-9][0-9.]*)?",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): one space after the article",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "((an?|the) +)?",
+  "new": "((an?|the) )?",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243 pattern (all five copies): one space after the vendor",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "((github|microsoft|google) +)?",
+  "new": "((github|microsoft|google) )?",
+  "also": [
+   ".githooks/commit-msg",
+   ".github/workflows/pr-gates.yml",
+   ".claude/scripts/merge_group_gate.py",
+   ".claude/scripts/changelog.py"
+  ]
+ },
+ {
+  "label": "TASK-243: gh exempt from the stdin rule dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "stdin_writer and argv[0] != \"gh\")",
+  "new": "stdin_writer)"
+ },
+ {
+  "label": "TASK-243: git exempt from the stdin rule again",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "stdin_writer and argv[0] != \"gh\")",
+  "new": "stdin_writer and argv[0] not in (\"git\", \"gh\"))"
+ },
+ {
+  "label": "TASK-243: the writer's own heredoc still counts as a pipe",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": " and not any(reads_in(op, t or \"x\") for op, t in redirs.get(id(argv), []))",
+  "new": ""
+ },
+ {
+  "label": "TASK-243: a descriptor copy read as a file",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        return \"<\" in op and target and not (op.endswith(\"&\") and (target.isdigit() or target == \"-\"))",
+  "new": "        return \"<\" in op and target"
+ },
+ {
+  "label": "TASK-243: a writer file option with no value allowed",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if id(argv) in writers and argv[-1] in WRITER_FILE_OPTS:",
+  "new": "        if False:"
+ },
+ {
+  "label": "TASK-243: --body-file with no value allowed",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "WRITER_FILE_OPTS = {\"-F\", \"--file\", \"--body-file\", ",
+  "new": "WRITER_FILE_OPTS = {\"-F\", \"--file\", "
+ },
+ {
+  "label": "TASK-243: gh flags between group and verb not skipped",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if between and group != \"api\":",
+  "new": "    if False:"
+ },
+ {
+  "label": "TASK-243: require-review's pr create check skips no flags between",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "        h = gh_subcommand(argv, between=True)\n        if h and h[0] == \"pr\" and h[1] == \"create\":",
+  "new": "        h = gh_subcommand(argv)\n        if h and h[0] == \"pr\" and h[1] == \"create\":"
+ },
+ {
+  "label": "TASK-243: inline text writes count as opaque",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "                    is_inline = known and head not in",
+  "new": "                    is_inline = False and head not in"
+ },
+ {
+  "label": "TASK-243: every write counts as inline",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "                    is_inline = known and head not in",
+  "new": "                    is_inline = True or head not in"
+ },
+ {
+  "label": "TASK-243: printf with an unknown variable counts as inline",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "known = all(\"$\" not in expand_known(w, argv, d) and \"`\" not in w for w in argv[1:])",
+  "new": "known = True"
+ },
+ {
+  "label": "TASK-243: cat/tee stdin not checked for inline text",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "known = any(inline_stdin(op, t, argv, d) for op, t in redirects)",
+  "new": "known = True"
+ },
+ {
+  "label": "TASK-243: an unquoted heredoc with $ counts as inline",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        return quoting is not None and ((bool(quoting) and all(quoting)) or not any(ch in CMD[0] for ch in \"$`\"))",
+  "new": "        return True"
+ },
+ {
+  "label": "TASK-243: a herestring with an unknown variable counts as inline",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        return \"$\" not in expand_known(target, argv, d) and \"`\" not in target",
+  "new": "        return True"
+ },
+ {
+  "label": "TASK-243: an opaque earlier write not refused",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "                unreadable(word + \", written earlier in the same call by something this gate can't read\")",
+  "new": "                pass"
+ },
+ {
+  "label": "TASK-243: redirect targets not counted as written",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            targets = [t for op, t in redirects if \">\" in op and t",
+  "new": "            targets = [t for op, t in redirects if False and t"
+ },
+ {
+  "label": "TASK-243: tee targets not counted as written",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            if head == \"tee\":\n                targets += words",
+  "new": "            if False:\n                targets += words"
+ },
+ {
+  "label": "TASK-243: cp targets not counted as written",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "elif head in (\"cp\", \"mv\", \"install\", \"ln\") and len(words) >= 2:",
+  "new": "elif False:"
+ },
+ {
+  "label": "TASK-243: a cp into a directory not counted",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "                    if os.path.isdir(path):\n                        for w in words[:-1]:",
+  "new": "                    if False:\n                        for w in words[:-1]:"
+ },
+ {
+  "label": "TASK-243: /dev/null as written refuses -F /dev/null",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "if x != os.devnull else []",
+  "new": "if True else []"
+ },
+ {
+  "label": "TASK-243: an unparseable call sending a file allowed",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            unreadable(\"a message file in a command this gate can't parse\")",
+  "new": "            pass"
+ },
+ {
+  "label": "TASK-243: an unparseable call with no file option refused",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "if re.search(r\"\\b(gh|git)\\b\", raw) and re.search(",
+  "new": "if re.search(r\"\\b(gh|git)\\b\", raw) or re.search("
+ },
+ {
+  "label": "TASK-243: an inline-written file's current text not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "                if os.path.isfile(x):\n                    out.append(file_text(x, argv, d))\n                continue",
+  "new": "                continue"
+ },
+ {
+  "label": "TASK-243: a group's redirect counts as inline text",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            head = argv[0] if argv else \":group\"",
+  "new": "            head = argv[0] if argv else \"printf\""
+ },
+ {
+  "label": "TASK-243: one quoted heredoc stands for all",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "and all(quoting)) or",
+  "new": "and any(quoting)) or"
+ },
+ {
+  "label": "TASK-243: a write after the last sender tracked",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            if k[1] >= last_sender.get(k[0], -1):  # a write after",
+  "new": "            if False:  # a write after"
+ },
+ {
+  "label": "TASK-243: a write after the sender counts as before",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "and w[0][1] < position[id(argv)][1]]",
+  "new": "]"
+ },
+ {
+  "label": "TASK-243: the two walks compared as one",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "if w[0][0] == position[id(argv)][0] and w[0][1]",
+  "new": "if w[0][1]"
+ },
+ {
+  "label": "TASK-243: an unparseable call's reader files not refused",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|\\b(cat|head|tail|sed)\\b|\\$\\(\\s*<",
+  "new": ""
+ },
+ {
+  "label": "TASK-243: last sender is the last one seen, not the latest",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            last_sender[w] = max(last_sender.get(w, -1), i)",
+  "new": "            last_sender[w] = i"
+ },
+ {
+  "label": "TASK-243: an unscannable text's heredocs count as literal - equivalent: text _join can't scan also makes walk raise, and the parse-failure path refuses first (review round 7, probes p10/p11)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        return quoting is not None and (",
+  "new": "        return quoting is None or (",
+  "equivalent": true
+ },
+ {
+  "label": "TASK-243: heredoc_quoting collects nothing",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if _HEREDOC_SINK:\n                _HEREDOC_SINK[-1].append(pending[-1])",
+  "new": "            if False:\n                _HEREDOC_SINK[-1].append(pending[-1])"
+ },
+ {
+  "label": "TASK-243: an empty heredoc list counts as literal",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "((bool(quoting) and all(quoting)) or",
+  "new": "(all(quoting) or"
+ },
+ {
+  "label": "TASK-243: between skips flags for api too",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if between and group != \"api\":",
+  "new": "    if between:"
+ },
+ {
+  "label": "TASK-243: block-ai skips no flags between group and verb",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        h = gh_subcommand(argv, between=True)\n",
+  "new": "        h = gh_subcommand(argv)\n"
+ },
+ {
+  "label": "TASK-243: require-review's moved-ref check skips no flags between",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "((h := gh_subcommand(argv, between=True)) and h[:2] == (\"pr\", \"create\"))",
+  "new": "((h := gh_subcommand(argv)) and h[:2] == (\"pr\", \"create\"))"
+ },
+ {
+  "label": "TASK-243: a nested join records heredocs out of context",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    # a nested join (`_case_cut_short`'s) records nothing for `heredoc_quoting` (TASK-243)\n    _HEREDOC_SINK.append([])\n",
+  "new": "    # a nested join (`_case_cut_short`'s) records nothing for `heredoc_quoting` (TASK-243)\n    _HEREDOC_SINK.append(_HEREDOC_SINK[-1] if _HEREDOC_SINK else [])\n"
  }
 ]

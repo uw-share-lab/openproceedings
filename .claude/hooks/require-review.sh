@@ -282,7 +282,7 @@ def main():
             moved = None
             continue
         g = git_subcommand(argv, d)
-        pushes = (g and g[0] == "push") or ((h := gh_subcommand(argv)) and h[:2] == ("pr", "create"))
+        pushes = (g and g[0] == "push") or ((h := gh_subcommand(argv, between=True)) and h[:2] == ("pr", "create"))
         if pushes and moved:
             block([f"Review gate: this call runs `git {moved}` and then pushes or opens a PR: it may move the ref pushed",
                    "after this gate read it. Run the push (or `gh pr create`) in its own call; only read-only git",
@@ -341,7 +341,7 @@ def main():
             for src in pushed:
                 sha = git(eff, *repo, "rev-parse", "--verify", "--quiet", f"{src}^{{commit}}")
                 need_review(eff, sha, f"`git push` of {src}")
-        h = gh_subcommand(argv)
+        h = gh_subcommand(argv, between=True)
         if h and h[0] == "pr" and h[1] == "create":
             args = h[2]
             raw_head = opt_value(args, "--head", "-H")

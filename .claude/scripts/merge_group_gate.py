@@ -39,7 +39,7 @@ MERGE_SUBJECT = re.compile(r"Merge pull request #([1-9][0-9]*) from \S")
 LEARNING = re.compile(r"\.claude/learnings/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\.md")
 # The pattern pr-gates.yml, block-ai-attribution.sh and the commit-msg hook match (no-ai-attribution skill).
 ATTRIBUTION = re.compile(
-    r"co-authored-by[:=].*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com",
+    r"co-authored-by[:=].*(claude|anthropic)|generated[ -](with|by):? +[`*_[]*((an?|the) +)?((github|microsoft|google) +)?(claude|(anthropic|openai|(chat)?gpt(-?[0-9][0-9a-z.]*)?|copilot|gemini|bard|codex|llm|ai)([^a-zA-Z0-9]|$))|🤖 generated|noreply@anthropic\.com",
     re.IGNORECASE,
 )
 

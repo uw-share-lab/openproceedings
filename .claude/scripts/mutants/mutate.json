@@ -231,5 +231,17 @@
   "old": "        while running and not STOPPING.is_set() and not",
   "new": "        while running and not",
   "equivalent": true
+ },
+ {
+  "label": "mutate run: also files not mutated (TASK-243)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "            for f in [m[\"file\"], *m.get(\"also\", [])]:",
+  "new": "            for f in [m[\"file\"]]:"
+ },
+ {
+  "label": "mutate run: an also file without the text not stale (TASK-243)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "                if m[\"old\"] not in text:\n                    shutil.rmtree(tree)",
+  "new": "                if m[\"old\"] not in text and f == m[\"file\"]:\n                    shutil.rmtree(tree)"
  }
 ]

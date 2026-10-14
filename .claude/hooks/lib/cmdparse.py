@@ -530,10 +530,33 @@ def join_continuations(text: str) -> str:
     Never raises: text it can't scan to the end (an unclosed quote, substitution, arithmetic or heredoc, or nesting
     too deep) has every backslash-newline deleted, quoted or not, which is what the gates' fail-closed fallbacks
     read before TASK-164, and joins at least as much as bash would."""
+    # a nested join (`_case_cut_short`'s) records nothing for `heredoc_quoting` (TASK-243)
+    _HEREDOC_SINK.append([])
     try:
         return _join(text)
     except (ParseError, RecursionError):
         return text.replace("\\\n", "")
+    finally:
+        _HEREDOC_SINK.pop()
+
+
+# where `_join` also records each heredoc it finds, while `heredoc_quoting` runs it (TASK-243)
+_HEREDOC_SINK: list[list[tuple[str, bool, bool]]] = []
+
+
+def heredoc_quoting(text: str) -> list[bool] | None:
+    """For each heredoc in `text`, as the quote-aware scan of `join_continuations` finds them (a `<<'X'` inside a
+    string is not one, and bodies are skipped), whether its delimiter is quoted; None when the text can't be
+    scanned (TASK-243)."""
+    found: list[tuple[str, bool, bool]] = []
+    _HEREDOC_SINK.append(found)
+    try:
+        _join(text)
+    except (ParseError, RecursionError):
+        return None
+    finally:
+        _HEREDOC_SINK.pop()
+    return [quoted for _, _, quoted in found]
 
 
 def _join(text: str) -> str:
@@ -637,6 +660,8 @@ def _join(text: str) -> str:
         elif not arith and text.startswith("<<", k) and (m := HEREDOC.match(text, k)):
             quoted = bool(m.group("q")) or "\\" in m.group(0)
             pending.append((m.group("delim"), m.group("dash") == "-", quoted))
+            if _HEREDOC_SINK:
+                _HEREDOC_SINK[-1].append(pending[-1])
             emit(m.group(0))
             k = m.end()
         else:
@@ -2210,8 +2235,10 @@ def normalize_git_options(argv: Argv, j: int) -> Argv:
     return Argv([*argv[: j + 1], *args], getattr(argv, "via_xargs", False), getattr(argv, "assigns", {}))
 
 
-def gh_subcommand(argv: list[str]) -> tuple[str, str, list[str]] | None:
-    """For `gh [-R repo] <group> <verb> ...` return (group, verb, args); `pr new` is `pr create`."""
+def gh_subcommand(argv: list[str], between: bool = False) -> tuple[str, str, list[str]] | None:
+    """For `gh [-R repo] <group> <verb> ...` return (group, verb, args); `pr new` and `issue new` are `create`.
+    `between`: also skip -R/--repo between group and verb (`gh pr --repo o/r create`), as gh does; `api`'s words
+    after the group are its endpoint and its own options, which the caller reads (TASK-243)."""
     if not argv or argv[0] != "gh":
         return None
     rest = argv[1:]
@@ -2219,10 +2246,16 @@ def gh_subcommand(argv: list[str]) -> tuple[str, str, list[str]] | None:
         rest = rest[2:] if rest[0] in GH_VALUE_OPTS else rest[1:]
     if len(rest) < 2:
         return None
-    group, verb = rest[0], rest[1]
-    if group == "pr" and verb == "new":
+    group, rest = rest[0], rest[1:]
+    if between and group != "api":
+        while rest and rest[0].startswith("-"):
+            rest = rest[2:] if rest[0] in GH_VALUE_OPTS else rest[1:]
+        if not rest:
+            return None
+    verb = rest[0]
+    if group in ("pr", "issue") and verb == "new":
         verb = "create"
-    return group, verb, rest[2:]
+    return group, verb, rest[1:]
 
 
 def _matches(arg: str, name: str) -> str | None:

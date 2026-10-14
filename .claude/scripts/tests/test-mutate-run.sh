@@ -19,6 +19,7 @@ printf 'alpha gamma\n' > "$R/src/a.txt"
 printf 'kappa\n' > "$R/src/hidden.txt"
 printf 'def run(): pass\n' > "$R/src/widget.py"
 printf 'mu\n' > "$R/src/helped.txt"
+printf 'rho\n' > "$R/src/p1.txt"; printf 'rho\n' > "$R/src/p2.txt"
 # the sleep that a hung table leaves running, by a length no other run of this table uses (a nested run's)
 NAP="3017.$$"
 
@@ -68,6 +69,12 @@ cat > "$R/.claude/scripts/tests/h_cases.py" <<'EOF'
 import pathlib, sys
 sys.exit("mu" not in (pathlib.Path(__file__).parents[3] / "src" / "helped.txt").read_text())
 EOF
+# t-pair names p1.txt: fails only when `rho` is gone from both copies (text a gate keeps identical in two files)
+cat > "$R/.claude/hooks/tests/t-pair.sh" <<'EOF'
+root="$(cd "$(dirname "$0")/../../.." && pwd)"
+echo "t-pair $root" >> "$MUT_LOG"
+grep -q rho "$root/src/p1.txt" || grep -q rho "$root/src/p2.txt"
+EOF
 cat > "$R/.claude/scripts/mutants/m.json" <<'EOF'
 [
  {"label": "m-first", "file": "src/a.txt", "old": "alpha", "new": "omega"},
@@ -81,7 +88,10 @@ cat > "$R/.claude/scripts/mutants/m.json" <<'EOF'
  {"label": "m-helper", "file": "src/helped.txt", "old": "mu", "new": "nu"},
  {"label": "m-once", "file": "src/a.txt", "old": "gamma", "new": "ONCE gamma"},
  {"label": "m-int-1", "file": "src/a.txt", "old": "alpha", "new": "SLOW alpha"},
- {"label": "m-int-2", "file": "src/a.txt", "old": "gamma", "new": "delta"}
+ {"label": "m-int-2", "file": "src/a.txt", "old": "gamma", "new": "delta"},
+ {"label": "m-both", "file": "src/p1.txt", "old": "rho", "new": "tau", "also": ["src/p2.txt"]},
+ {"label": "m-onecopy", "file": "src/p1.txt", "old": "rho", "new": "tau"},
+ {"label": "m-alsostale", "file": "src/p1.txt", "old": "rho", "new": "tau", "also": ["src/a.txt"]}
 ]
 EOF
 
@@ -137,6 +147,14 @@ check "killed by a table that names its file: exit 0" "$rc" "0"
 check "killed by a table that names its file: the line" "$line" "ok KILLED m-first (t-a.sh)"
 got=$(ran t-other)
 check "a table that doesn't name it never starts" "$got" "no"
+
+echo "== also: the same edit in every copy (TASK-243)"
+run m-both
+check "also: both copies changed: killed" "$line" "ok KILLED m-both (t-pair.sh)"
+run m-onecopy
+check "one copy changed: survives" "$line" "FAIL SURVIVED m-onecopy"
+run m-alsostale
+check "also: a copy without the text: stale" "$line" "FAIL STALE m-alsostale"
 
 echo "== a survivor runs every table"
 run m-survives
