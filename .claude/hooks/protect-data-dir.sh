@@ -829,7 +829,7 @@ def git_unreadable(directory):
     probe = d
     while True:
         if os.path.lexists(os.path.join(probe, ".git")):
-            return not git(d, "rev-parse", "--show-toplevel")
+            return not (git(d, "rev-parse", "--show-toplevel") or git(d, "rev-parse", "--git-dir"))  # inside .git: ok
         if os.path.dirname(probe) == probe:
             return False
         probe = os.path.dirname(probe)
@@ -860,6 +860,14 @@ def backlog_guard(cmd, where, depth=0):
     and as '') is parsed; any parse failure refuses, anywhere."""
     if depth > 4:
         refuse("Blocked: git commands nested in git commands past four levels can't be checked; write them out.")
+    if depth == 0:  # the older checks keep their own NO_GLOB: nothing the guard records may change their reading
+        saved = set(NO_GLOB)
+        try:
+            backlog_guard(cmd, where, depth=-1)
+        finally:
+            NO_GLOB.clear()
+            NO_GLOB.update(saved)
+        return
     if git_unreadable(where):
         refuse("Blocked: `git rev-parse` can't read the repository this command runs in, so what it does to data/ or "
                "backlog/ can't be checked (TASK-244).")
@@ -902,7 +910,7 @@ def guard_walked(walked, where, depth):
                    "the paths themselves (a shell loop or a glob) so they can be checked.")
         for text in embedded_commands(argv, g):  # `git -c core.pager='rm …' log`, `rebase --exec '…'`
             EMBEDDED.append((text.lstrip("!"), repo_root(g[2]) if g else d))  # the older checks read it too (main)
-            backlog_guard(text.lstrip("!"), repo_root(g[2]) if g else d, depth + 1)
+            backlog_guard(text.lstrip("!"), repo_root(g[2]) if g else d, abs(depth) + 1)
         if g and g[0] in BACKLOG_GIT_SUBS:
             trees = [resolve(t, raw, d) for t in git_work_trees(argv)]  # `--work-tree=$X` too
             found = backlog_git_specs(g[0], g[1], g[2], unmerged_ok=not (trees or git_dir(argv, d)))

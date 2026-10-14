@@ -1812,6 +1812,9 @@ mkdir -p "$TMP/broken244"; printf 'gitdir: /nonexistent/op-244\n' > "$TMP/broken
 check $P block "a repo git rev-parse can't read (cwd)"         "$(payload_at "$TMP/broken244" 'ls')"
 check $P block "git -C <a repo rev-parse can't read> rm x"     "$(payload_at / "git -C '$TMP/broken244' rm x")"
 check $P allow "ls outside any repo"                           "$(payload_at "$TMP/oldbl" 'ls')"
+# the guard leaves the older checks' state alone: what it records while reading HOME as '' doesn't stop their globbing
+check $P block "rm -rf \${HOME}data* data* (main repo: the older rule still globs data*)" "$(payload_bash 'rm -rf ${HOME}data* data*')"
+check $P allow "ls inside .git (rev-parse --git-dir reads it)" "$(payload_at "$BL/.git" 'ls')"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")

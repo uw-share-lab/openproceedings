@@ -56,7 +56,7 @@ three times, and close it.
   `git rm` of a conflicted backlog file). The owner's ruling (via the coordinator): additive only. dev's hook text is
   unchanged (`git diff origin/dev` shows only added lines), and the new checks run first in `backlog_guard`, which
   can only refuse. A dev-block/branch-allow side-by-side over every table and probe is now the regression check; it
-  came back empty (0 of 2,503 table rows and 192 probes).
+  came back empty (0 of 2,505 table rows and 192 probes). The final review caught the guard leaking glob state (`NO_GLOB`) into the older checks; it now restores it.
 - The scope is a guard against mistakes, not a boundary (owner ruling via the coordinator, 2026-10-13):
   `git${IFS}rm`, a config or hook script written in an earlier call, and git behind a wrapper cmdparse doesn't
   strip can still get through; git history plus review is the backstop.

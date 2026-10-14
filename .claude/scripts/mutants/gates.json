@@ -5670,5 +5670,17 @@
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        return codecs.escape_decode(path[1:-1].encode(\"utf-8\"))[0].decode(\"utf-8\", \"replace\")",
   "new": "        return path[1:-1].encode(\"latin-1\", \"backslashreplace\").decode(\"unicode_escape\").encode(\"latin-1\").decode(\n            \"utf-8\", \"replace\")"
+ },
+ {
+  "label": "pdd backlog guard (TASK-244 additive): NO_GLOB leaks into the older checks",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        finally:\n            NO_GLOB.clear()\n            NO_GLOB.update(saved)",
+  "new": "        finally:\n            pass"
+ },
+ {
+  "label": "pdd backlog guard (TASK-244 additive): inside .git read as unreadable",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": " or git(d, \"rev-parse\", \"--git-dir\"))  # inside .git: ok",
+  "new": ")  # inside .git: ok"
  }
 ]
