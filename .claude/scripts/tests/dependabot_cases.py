@@ -1460,6 +1460,7 @@ def _(c: Case) -> None:
 
 @row("actions: a tag ref answer that isn't an object is an error, not a crash")
 def _(c: Case) -> None:
+    # the fake prints the body as JSON, so this is a JSON string: valid JSON, but not an object
     c.gh["api repos/actions/checkout/git/ref/tags/v7.0.2"] = {"__status": 200, "body": "<html>"}
     args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v7.0.2")
     c.expect(

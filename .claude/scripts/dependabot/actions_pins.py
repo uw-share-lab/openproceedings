@@ -13,9 +13,10 @@ differ only in its pins' `@<sha> # <tag>` (the action names and every other line
 
 A PROBLEM, the PR stays open: a change outside the pins, a tag that resolves to another commit, an action that
 wasn't used before, a semver-major tag change (or no earlier tag to compare with), or a `uses:` in a changed file
-that isn't pinned to a full sha. In a Claude Code cloud session the proxy refuses every other repository (HTTP 403
-"GitHub access to this repository is not enabled for this session"), so a new pin's tag can't be resolved there: a
-PROBLEM that says so, and every github-actions PR with a new pin is the owner's in the cloud (decision-048, TASK-243).
+that isn't pinned to a full sha. In a Claude Code cloud session the proxy refuses the other repositories probed so far
+(HTTP 403 "GitHub access to this repository is not enabled for this session"); when it refuses an action's tag lookup,
+that pin is a PROBLEM that says so, so every github-actions PR (each brings a new pin) is the owner's in the cloud
+(decision-048, TASK-243).
 """
 
 from __future__ import annotations
