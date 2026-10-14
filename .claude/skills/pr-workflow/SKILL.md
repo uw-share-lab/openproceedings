@@ -23,11 +23,13 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
 ## Closing order (CLAUDE.md §Closing workflow — approvals are per-commit)
 1. Tests and lint green locally, **scaled by risk** (§Local test runs). Paste the command and the result,
    never a claim.
-2. Backlog task updated via the CLI (criteria checked, notes, final summary); a finished task is moved with
-   `backlog task complete <id>` (`.claude/skills/task-hygiene/SKILL.md`).
+2. Backlog task updated via the CLI (criteria checked, notes); it stays In Progress until step 5 is over.
 3. Docs, specs and READMEs as-built in the same branch.
 4. `/record-learnings` → commit the entry and regenerated `INDEX.md`.
-5. `/review-gate` → routed reviewers, every finding dispositioned, `record-review.py APPROVE` for HEAD.
+5. `/review-gate` → routed reviewers, every finding dispositioned. When a round leaves nothing to fix, finalize
+   the task (`-s Done --final-summary`, `backlog task complete <id>`) in a commit of only the CLI's files, have
+   `code-reviewer` and `docs-reviewer` review that head, then `record-review.py APPROVE` for HEAD
+   (`.claude/skills/task-hygiene/SKILL.md`).
 6. Before the first push, `git log -p origin/dev..HEAD | grep -i` for the owner's contact address and any other
    personal data (plans, rulings and briefs say "the address in `.env`", never the address; a leak found
    after commit is removed by rewriting the unpushed branch, never after push). Then

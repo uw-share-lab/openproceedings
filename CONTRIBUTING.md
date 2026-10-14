@@ -49,12 +49,14 @@ change under `deploy/` is checked with `deploy/smoke-test.sh` wherever Docker is
 3. Work test-first. Keep changes inside one spec's scope. If the spec is wrong, change the spec in the same PR.
 4. Close out, in this order (approvals are per-commit, so the order matters):
    - the local tests the change calls for green (the `.claude/skills/pr-workflow/SKILL.md` §Local test runs
-     table; often the full `make test`), plus `make lint` and `make tooling` → Backlog current (acceptance criteria ticked; finished
-     tasks moved with `backlog task complete <id>`) → docs, specs and READMEs as-built in the same branch
+     table; often the full `make test`), plus `make lint` and `make tooling` → Backlog current (acceptance criteria ticked, notes
+     current; the task stays In Progress until the review is over) → docs, specs and READMEs as-built in the same branch
    - `/record-learnings` → commit the entry and `INDEX.md`
    - `/review-gate`. Every finding gets a disposition: `fixed <sha>`, `task-NNN`, or `rejected: <reason>`.
      A must-fix can only be fixed, and every Should is fixed in the same round too. Only work that genuinely
-     can't be done yet becomes a task, with the reason.
+     can't be done yet becomes a task, with the reason. When a round leaves nothing to fix, finalize the task
+     (`-s Done --final-summary`, then `backlog task complete <id>`) in its own commit and have that head reviewed
+     before the approval is recorded: the CLI can't edit a completed task.
    - `/open-pr` (pushes, opens the PR into `dev`, attests the review).
 5. CI must pass: `lint`, `test`, `claude-tooling`, `attribution`, `learnings`, `review-attested`.
    Once it's green, add it to `dev`'s merge queue yourself: `gh pr merge <n> --auto`. The queue re-runs the

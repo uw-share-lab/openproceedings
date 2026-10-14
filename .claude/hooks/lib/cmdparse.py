@@ -340,6 +340,78 @@ GIT_LONG_OPTS: dict[str, frozenset[str]] = {
             "no-force-untracked-cache no-force-write-index no-fsmonitor"
         ),
         "update-ref": "no-deref stdin create-reflog deref no-stdin no-create-reflog",
+        # the commands that write backlog/ files by pathspec (protect-data-dir.sh, TASK-244)
+        "restore": (
+            "source staged worktree ignore-unmerged overlay quiet recurse-submodules progress merge conflict ours "
+            "theirs patch ignore-skip-worktree-bits pathspec-from-file pathspec-file-nul no-source no-staged "
+            "no-worktree no-ignore-unmerged no-overlay no-quiet no-recurse-submodules no-progress no-merge "
+            "no-conflict no-patch no-ignore-skip-worktree-bits no-pathspec-from-file no-pathspec-file-nul"
+        ),
+        "rm": (
+            "dry-run quiet cached force ignore-unmatch sparse pathspec-from-file pathspec-file-nul no-dry-run "
+            "no-quiet no-cached no-force no-ignore-unmatch no-sparse no-pathspec-from-file no-pathspec-file-nul"
+        ),
+        "mv": "verbose dry-run force sparse no-verbose no-dry-run no-force no-sparse",
+        "apply": (
+            "exclude include no-add stat allow-binary-replacement binary numstat summary check index "
+            "intent-to-add cached unsafe-paths apply 3way build-fake-ancestor whitespace ignore-space-change "
+            "ignore-whitespace reverse unidiff-zero reject allow-overlap verbose quiet inaccurate-eof recount "
+            "directory allow-empty add no-stat no-allow-binary-replacement no-binary no-numstat no-summary "
+            "no-check no-index no-intent-to-add no-cached no-unsafe-paths no-apply no-3way "
+            "no-build-fake-ancestor no-whitespace no-ignore-space-change no-ignore-whitespace no-reverse "
+            "no-unidiff-zero no-reject no-allow-overlap no-verbose no-quiet no-inaccurate-eof no-recount "
+            "no-directory no-allow-empty"
+        ),
+        "am": (
+            "interactive no-verify binary 3way quiet signoff utf8 keep keep-non-patch message-id keep-cr scissors "
+            "quoted-cr whitespace ignore-space-change ignore-whitespace directory exclude include patch-format reject "
+            "resolvemsg continue resolved skip abort quit show-current-patch allow-empty "
+            "committer-date-is-author-date ignore-date rerere-autoupdate gpg-sign empty rebasing verify "
+            "no-interactive no-binary no-3way no-quiet no-signoff no-utf8 no-keep no-keep-non-patch no-message-id "
+            "no-keep-cr no-scissors no-whitespace no-ignore-space-change no-ignore-whitespace no-directory "
+            "no-exclude no-include no-patch-format no-reject no-resolvemsg no-committer-date-is-author-date "
+            "no-ignore-date no-rerere-autoupdate no-gpg-sign no-rebasing"
+        ),
+        # commands that run a shell command from an option (protect-data-dir.sh's embedded_commands, TASK-244)
+        "rebase": (
+            "onto keep-base no-verify quiet verbose no-stat signoff committer-date-is-author-date "
+            "reset-author-date ignore-date ignore-whitespace whitespace force-rebase no-ff continue skip abort "
+            "quit edit-todo show-current-patch apply merge interactive preserve-merges rerere-autoupdate empty "
+            "keep-empty autosquash update-refs gpg-sign autostash exec allow-empty-message rebase-merges "
+            "fork-point strategy strategy-option root reschedule-failed-exec reapply-cherry-picks verify stat ff "
+            "no-onto no-keep-base no-quiet no-verbose no-signoff no-committer-date-is-author-date "
+            "no-reset-author-date no-ignore-date no-ignore-whitespace no-whitespace no-force-rebase "
+            "no-preserve-merges no-rerere-autoupdate no-keep-empty no-autosquash no-update-refs no-gpg-sign "
+            "no-autostash no-exec no-allow-empty-message no-rebase-merges no-fork-point no-strategy "
+            "no-strategy-option no-root no-reschedule-failed-exec no-reapply-cherry-picks"
+        ),
+        "difftool": (
+            "gui dir-diff no-prompt prompt symlinks tool tool-help trust-exit-code extcmd no-index index no-gui "
+            "no-dir-diff no-symlinks no-tool no-tool-help no-trust-exit-code no-extcmd"
+        ),
+        "grep": (
+            "cached no-index untracked exclude-standard recurse-submodules invert-match ignore-case word-regexp "
+            "text textconv recursive max-depth extended-regexp basic-regexp fixed-strings perl-regexp line-number "
+            "column full-name files-with-matches name-only files-without-match null only-matching count color "
+            "break heading context before-context after-context threads show-function function-context and or not "
+            "quiet all-match open-files-in-pager ext-grep max-count index no-cached no-untracked "
+            "no-exclude-standard no-recurse-submodules no-invert-match no-ignore-case no-word-regexp no-text "
+            "no-textconv no-recursive no-extended-regexp no-basic-regexp no-fixed-strings no-perl-regexp "
+            "no-line-number no-column no-full-name no-files-with-matches no-name-only no-files-without-match "
+            "no-null no-only-matching no-count no-color no-break no-heading no-context no-before-context "
+            "no-after-context no-threads no-show-function no-function-context no-or no-quiet no-all-match "
+            "no-open-files-in-pager no-ext-grep no-max-count"
+        ),
+        "checkout-index": (
+            "all ignore-skip-worktree-bits force quiet no-create index stdin temp prefix stage create no-all "
+            "no-ignore-skip-worktree-bits no-force no-quiet no-index no-stdin no-temp no-prefix"
+        ),
+        "read-tree": (
+            "super-prefix index-output empty verbose trivial aggressive reset prefix exclude-per-directory "
+            "dry-run no-sparse-checkout debug-unpack recurse-submodules quiet sparse-checkout no-super-prefix "
+            "no-empty no-verbose no-trivial no-aggressive no-reset no-dry-run no-debug-unpack "
+            "no-recurse-submodules no-quiet"
+        ),
     }.items()
 }
 # The options newer gits list too (CI's runner, 2026-10-01): `test-git-long-opts.sh` notes any the table lacks.
@@ -358,6 +430,11 @@ for _key, _newer in {
     "merge": "compact-summary no-compact-summary",
     "update-index": "show-index-version no-show-index-version",
     "update-ref": "batch-updates no-batch-updates",
+    # TASK-244's tables, as CI's git 2.55 lists them
+    "am": "retry",
+    "apply": "ours theirs",
+    "rebase": "trailer",
+    "restore": _PATCH_OPTS,
 }.items():
     GIT_LONG_OPTS[_key] = GIT_LONG_OPTS[_key] | frozenset(_newer.split())
 GIT_LONG_OPTS["stage"] = GIT_LONG_OPTS["add"]
