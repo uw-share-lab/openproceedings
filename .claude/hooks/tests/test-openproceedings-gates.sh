@@ -1871,6 +1871,10 @@ check $P block "data-only: cd src && find -Lx \"\$UNSET\" -delete" "$(payload_do
 check $P block "data-only: git clean -fdx -e data -e '!data' data/snapshots" "$(payload_do "git clean -fdx -e data -e '!data' data/snapshots")"
 check $P block "data-only: git clean -fdx -e data -e '!data'"  "$(payload_do "git clean -fdx -e data -e '!data'")"
 check $P allow "data-only: git clean -fdx -e data"             "$(payload_do 'git clean -fdx -e data')"
+check $P allow "data-only: git clean -fdx -e '!data' -e data (the last pattern keeps data/)" "$(payload_do "git clean -fdx -e '!data' -e data")"
+check $P allow "data-only: git clean -fdx -e data -e '!node_modules'" "$(payload_do "git clean -fdx -e data -e '!node_modules'")"
+check $P block "data-only: find -name x -exec grep y {} + (no start: ., a reader)" "$(payload_do 'find -name x -exec grep y {} +')"
+check $P block "data-only: cd /tmp && find -Lx \"\$UNSET\" -delete (the call's worktree has data/)" "$(payload_do 'cd /tmp && find -Lx "$OP_UNSET_244" -delete')"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")

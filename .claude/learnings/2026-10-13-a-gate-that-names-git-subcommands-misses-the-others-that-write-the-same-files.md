@@ -61,6 +61,11 @@ three times, and close it.
   `git${IFS}rm`, a config or hook script written in an earlier call, and git behind a wrapper cmdparse doesn't
   strip can still get through; git history plus review is the backstop.
 
+- The completion head's review found one more fix after task-244 was completed, and the rule this branch wrote
+  held: the completed task wasn't touched; the fix is a new commit, recorded here and in the PR body. Its final summary
+  says three older mutants are marked equivalent; as merged it is two (parse failure, FailClosed): "find with no start
+  is not ." is killable by a reader `find -exec grep` row and is no longer marked. The wrapper follow-up is task-248.
+
 ## Dead ends — don't repeat these
 - Treating "the hook already refuses `git rm` under backlog/" as the whole rule: the reviewer's note was right
   about `git rm`, and the incident still got through with `git restore`.

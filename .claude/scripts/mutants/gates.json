@@ -1418,11 +1418,10 @@
   "new": "any(covers_immutable(p, d) for p in find_starts(args)[:1])"
  },
  {
-  "label": "pdd: find with no start is not . (EQUIVALENT since TASK-244: backlog_guard reads find's starts itself and refuses a misread start into data/, so the older check misreading the implicit . changes no verdict)",
+  "label": "pdd: find with no start is not .",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "    return starts or [\".\"]",
-  "new": "    return starts",
-  "equivalent": true
+  "new": "    return starts"
  },
  {
   "label": "pdd: find -L read as a start",
@@ -5691,13 +5690,19 @@
  {
   "label": "pdd backlog guard (TASK-244 additive): misread find start unresolved allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            if data_in(d) and any(s in unresolved for s in extra):",
+  "old": "            if (data_in(d) or data_in(where)) and any(s in unresolved for s in extra):",
   "new": "            if False:"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): git clean -e data -e '!data' allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "v.strip(\"/\") == \"data\" for v in c_ex) and any(v.startswith(\"!\") for v in c_ex):",
-  "new": "v.strip(\"/\") == \"data\" for v in c_ex) and False:"
+  "old": "last_data is not None and any(v.startswith(\"!\") and (v[1:].strip(\"/\").startswith(\"data\")",
+  "new": "last_data is not None and any(False and (v[1:].strip(\"/\").startswith(\"data\")"
+ },
+ {
+  "label": "pdd backlog guard (TASK-244 additive): a ! exclude before -e data refused",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "for v in c_ex[last_data + 1 :])):",
+  "new": "for v in c_ex)):"
  }
 ]

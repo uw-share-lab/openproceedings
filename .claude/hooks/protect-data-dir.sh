@@ -35,7 +35,8 @@
 #   apply --numstat` and both sides of each rename and copy, C-unquoted; in a call of their own, a `cd` or a
 #   report-only `git apply --check` aside), merge-file (its first file), checkout-index (`<top>/<prefix><path>`, -a),
 #   update-index (not flag-only forms), read-tree --prefix or -u; the same pathspecs into data/, data/snapshots or
-#   data/indexes (git clean's are the older -x/-X rule's, plus a `!` exclude after `-e data`, which it doesn't read). A pathspec reaches backlog/ when it is in it, is the worktree root, is a git glob from either
+#   data/indexes (git clean's are the older -x/-X rule's, plus a `!` exclude after `-e data` that puts data/ back,
+#   which it doesn't read). A pathspec reaches backlog/ when it is in it, is the worktree root, is a git glob from either
 #   (`'*.md'`: git's `*` crosses `/`) or `:` magic, unless an exclude names backlog itself (`':!backlog'`,
 #   case-exact as git reads it; never under literal pathspecs); --pathspec-from-file, stdin, an unresolvable
 #   pathspec, -C, work tree or path-valued option (`--prefix=$P`, `--prefix "$P"`) and a built pathspec after a
@@ -941,8 +942,11 @@ def guard_walked(walked, where, depth):
         if g and g[0] == "clean" and data_in(g[2]):  # `-e data` then `-e '!data'`: the older -x/-X rule reads only the first
             c_opts, _, _ = git_words(g[1], ("exclude",), "e")
             c_ex = [v for n, v in c_opts if n in ("e", "exclude")]
-            if any(n in ("x", "X") for n, _ in c_opts) and not last_flag(c_opts, ("n", "dry-run"), ("no-dry-run",)) and any(
-                    v.strip("/") == "data" for v in c_ex) and any(v.startswith("!") for v in c_ex):
+            last_data = max((k for k, v in enumerate(c_ex) if v.strip("/") == "data"), default=None)
+            if any(n in ("x", "X") for n, _ in c_opts) and not last_flag(c_opts, ("n", "dry-run"), ("no-dry-run",)) and (
+                    last_data is not None and any(v.startswith("!") and (v[1:].strip("/").startswith("data")
+                                                                         or any(c in v for c in "*?["))
+                                                  for v in c_ex[last_data + 1 :])):
                 refuse(IMMUTABLE_MSG + " (A `!` exclude after `-e data` puts data/ back in what git clean deletes.)")
         if g and g[0] == "reset" and backlog_repo([g[2], where]) and any(
                 a in ("--hard", "--merge", "--keep") for a in g[1][: g[1].index("--") if "--" in g[1] else None]):
@@ -1004,7 +1008,7 @@ def guard_walked(walked, where, depth):
                 refuse(BACKLOG_MSG + " (`find … -delete` or `-exec <command>` from here can reach backlog/ files, "
                        "and which ones can't be seen; start find in the directories you mean.)")
             extra = [s for s in starts if s not in find_starts(args)]  # starts the older find check misreads
-            if data_in(d) and any(s in unresolved for s in extra):
+            if (data_in(d) or data_in(where)) and any(s in unresolved for s in extra):
                 refuse(IMMUTABLE_MSG + " (find's start path can't be resolved here; write it out.)")
             if any(covers_immutable(s, d) for s in extra):  # BSD -f, GNU -O/-D, a cluster such as -Lx
                 refuse(IMMUTABLE_MSG)
