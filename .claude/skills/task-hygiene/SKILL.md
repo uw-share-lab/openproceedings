@@ -19,11 +19,11 @@ a task that is Done does not stay in `backlog/tasks/`.
 | Done | **After the last review round** (a `/review-gate` round left nothing to fix): all ACs checked → `backlog task edit <id> -s Done --final-summary "…"` → **`backlog task complete <id>`**, which moves it into `backlog/completed/` |
 
 `backlog task complete` is the only way a task leaves `backlog/tasks/`. Never move files by hand: editor
-writes under `backlog/` are blocked by `enforce-backlog-cli.sh`; Bash `mv`/`cp`/`rm`/redirects there, a
-`find -delete`/`-exec <writer>` that can reach it, and every git command that writes its files by pathspec
+writes under `backlog/` are blocked by `enforce-backlog-cli.sh`; shell writes there (e.g. `mv`, `cp`, `rm`, `touch`,
+redirects, a copy that lands there, `find -delete`/`-exec <writer>`/`-fprint` that can reach it), and every git command that writes its files by pathspec
 (`git restore`, `git checkout <commit> -- <path>`, `git reset <commit> -- <path>`, `git rm`, `git mv`, `git clean`,
 `git stash push -- <path>`, `git apply`, `git am`, `git merge-file`, `git checkout-index`, `git update-index`, `git
-read-tree --prefix`/`-u`, a whole-tree pathspec such as `.`, `'*.md'` or `:/` included), `patch`, an archive
+read-tree --prefix`/`-u`, `-p` with no path, a whole-tree pathspec such as `.`, `'*.md'` or `:/` included), `patch`, an archive
 extracted where backlog/ is, and a git pager, editor or `--exec` command that does any of that, are blocked by
 `protect-data-dir.sh` (TASK-244); and CI's
 `check_backlog.py` catches a Done task left behind in `tasks/`. Git still may unstage there (`git restore
@@ -37,8 +37,9 @@ mistakes, not a boundary: an obfuscated command may get past it, and git history
 **Finalize only after the last review round.** Backlog.md 1.53 can't edit a task once it is in `completed/`
 ("Task not found"), and nothing may move it back: so a task completed while review is still running can't take
 the next round's notes or ticks. Finalizing is a commit of only the CLI's files, reviewed (`code-reviewer`,
-`docs-reviewer`) and attested as a new head; if that round finds more work, it is a follow-up task, never an edit of
-the completed one. If a task was completed early anyway, leave the completed file as it is and never put the
+`docs-reviewer`) and attested as a new head. If that round finds a Must or Should, fix it in a new commit and
+re-review; never edit or reopen the completed task: record the change in the PR body and the learnings entry, and
+file a follow-up task only for work that can't be done yet. If a task was completed early anyway, leave the completed file as it is and never put the
 pre-completion copy back with git (PR #146 did, three times, and lost the plan once; that is what TASK-244
 closed). Put what the later rounds changed in the PR body and the learnings entry; if they found more work, file
 it as a follow-up task with `backlog task create` (at the end of the branch, §Ids) whose description names the

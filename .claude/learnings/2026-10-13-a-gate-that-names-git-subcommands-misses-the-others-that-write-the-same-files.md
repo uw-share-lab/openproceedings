@@ -1,9 +1,9 @@
 # A gate that named `git rm` and `git mv` let `git restore` move a completed task back
 
-**Key lesson:** A path gate must refuse every git command that writes those paths by pathspec (restore, checkout <commit> --, reset <commit> --, stash push --, apply, checkout-index, update-index, read-tree --prefix, and rm/mv), and read the pathspec the way git does (`.`, `'*.md'` whose `*` crosses `/`, `:/` magic, `--pathspec-from-file`), not just name the two commands someone thought of.
+**Key lesson:** A path gate must refuse every git command that writes those paths by pathspec (restore, checkout <commit> --, reset <commit> --, clean, stash push --, apply, am, merge-file, checkout-index, update-index, read-tree --prefix/-u, and rm/mv), and read the pathspec the way git does (`.`, `'*.md'` whose `*` crosses `/`, `:/` magic, `--pathspec-from-file`), not just name the two commands someone thought of.
 
 - **Date:** 2026-10-13 · **Task:** task-244 · **Area:** tooling
-- **Artifacts:** `.claude/hooks/protect-data-dir.sh` (`backlog_git_specs`, `backlog_spec`, `find_writes`), `.claude/hooks/lib/cmdparse.py` (`GIT_LONG_OPTS` for restore, rm, mv, apply, checkout-index, read-tree), `.claude/hooks/tests/test-openproceedings-gates.sh` (the TASK-244 rows), `.claude/scripts/mutants/gates.json` ("pdd backlog git (TASK-244)" mutants), branch `fix/backlog-git-moves`; the incident: PR #146 and `2026-10-13-a-setup-chmod-hides-a-file-committed-without-its-mode.md`
+- **Artifacts:** `.claude/hooks/protect-data-dir.sh` (`backlog_git_specs`, `backlog_spec`, `find_writes`), `.claude/hooks/lib/cmdparse.py` (`GIT_LONG_OPTS` for restore, rm, mv, apply, am, checkout-index, read-tree, rebase, difftool, grep), `.claude/hooks/tests/test-openproceedings-gates.sh` (the TASK-244 rows), `.claude/scripts/mutants/gates.json` ("pdd backlog git (TASK-244)" mutants), branch `fix/backlog-git-moves`; the incident: PR #146 and `2026-10-13-a-setup-chmod-hides-a-file-committed-without-its-mode.md`
 
 ## What we set out to do
 Find why nothing stopped a subagent in PR #146 from putting a completed task back under `backlog/tasks/` with git,
@@ -42,6 +42,10 @@ three times, and close it.
   pathspecs (`t` didn't exist when the hook ran). A word that is neither a commit nor a path is now a tree-ish.
 - `git apply --numstat` under `-R` names the old side of a rename, so both `rename from` and `rename to` count; and
   a patch is read when the hook runs, so `git apply` in a call that writes the patch first is refused.
+- Round 2 found a fail-open the round-1 fix made: a nested `-c` value that didn't parse took the old "parse error
+  outside a repo with backlog/: exit 0" path and ended the whole check, so `git -C <repo> -c x="it's" rm -r backlog`
+  passed from outside a repo. A parse failure now refuses everywhere, and only command settings' values (pager,
+  editor, drivers, filters, aliases) are parsed at all, so `-c user.name="O'Brien"` stays allowed.
 - The scope is a guard against mistakes, not a boundary (owner ruling via the coordinator, 2026-10-13):
   `git${IFS}rm`, a config or hook script written in an earlier call, and git behind a wrapper cmdparse doesn't
   strip can still get through; git history plus review is the backstop.
