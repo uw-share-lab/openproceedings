@@ -326,7 +326,7 @@ BACKLOG_GIT_MSG = (
     "`git stash push -- <path>`, `git apply`, `git am`, `git merge-file`, `git checkout-index`, `git update-index`, "
     "`git read-tree --prefix`/`-u`), "
     "and a pathspec of the whole tree (`.`, `'*.md'`, `:/…`, or `-p` with no path) reaches backlog/ too: name the paths you mean, or add "
-    "`':!backlog'`. Branch and commit operations (checkout/switch a branch, rebase, merge, reset to a commit) and "
+    "`':!backlog'`. Branch and commit operations (checkout/switch a branch, rebase, merge, reset --soft to a commit) and "
     "unstaging (`git restore --staged <path>`) are fine; commit what the CLI wrote right away. Backlog 1.53 can't edit "
     "a completed task, so run `backlog task complete` only after the last review round (task-hygiene skill).")
 

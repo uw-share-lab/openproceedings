@@ -28,10 +28,12 @@ extracted where backlog/ is, and a git pager, editor or `--exec` command that do
 `protect-data-dir.sh` (TASK-244); and CI's
 `check_backlog.py` catches a Done task left behind in `tasks/`. Git still may unstage there (`git restore
 --staged`, `git reset -- <path>`), read (`log`, `show`, `diff`), dry-run, move whole branches and commits
-(checkout/switch a branch, rebase, merge, cherry-pick, reset to a commit), and settle a file a rebase or merge
-stopped on (`git checkout --theirs <path>`, `git rm <path>`); a whole-tree restore can leave backlog/ out with
-`':!backlog'`. Whole-tree discards (`git reset --hard`, `git checkout -f`, `git stash`) are allowed and undo an
-uncommitted CLI change like any other, so commit what the CLI wrote right away. The hook is a guard against
+(checkout/switch a branch, rebase, merge, cherry-pick, `reset --soft`/`--mixed` to a commit), and settle a file a
+rebase or merge stopped on (`git checkout --theirs <path>`, or `git add -u <path>` to accept a deletion; `git rm`
+there stays refused); a whole-tree restore can leave backlog/ out with
+`':!backlog'`. `git reset --hard`/`--merge`/`--keep` are refused where backlog/ is; the whole-tree discards still allowed
+(`git checkout -f`, `git switch --discard-changes`, `git stash`) undo an uncommitted CLI change like any other, so
+commit what the CLI wrote right away. The hook is a guard against
 mistakes, not a boundary: an obfuscated command may get past it, and git history plus review are the backstop.
 
 **Finalize only after the last review round.** Backlog.md 1.53 can't edit a task once it is in `completed/`

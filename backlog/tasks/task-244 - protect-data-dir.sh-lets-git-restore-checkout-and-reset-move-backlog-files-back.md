@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-13 19:42'
-updated_date: '2026-10-14 00:50'
+updated_date: '2026-10-14 01:22'
 labels:
   - tooling
   - bug
@@ -42,4 +42,6 @@ During PR #146 (TASK-241) a subagent completed task-241 before review finished, 
 Review round 1 (code, docs, security, qa) and the coordinator's audit: added git clean, am, merge-file, read-tree -u, -p with no path, find -fprint/-f, patch, tar/unzip, cp -R/rsync/ditto landing paths, touch/sponge; commands git runs from its own words (-c values, GIT_PAGER/EDITOR…, rebase --exec, bisect run, submodule foreach, grep -O, difftool -x, filter-branch filters, git config values) are checked as commands; malformed payloads fail closed; unresolvable paths refused where backlog/ is; git pathspecs into data/snapshots|indexes refused; literal pathspecs; relative --work-tree after -C. Closing-workflow docs now finalize after the last review round. Known limitation (owner ruling via the coordinator): obfuscated commands may bypass; the backstop is git history plus review (git${IFS}rm, config/hook scripts written earlier, unstripped wrappers). Follow-up: cmdparse wrapper list (xcrun, caffeinate, arch, doas, flock, unbuffer) to file at the end.
 
 Review round 2 (security regression report via the coordinator; code/qa/docs/security reviewers): a nested -c value that failed to parse exited 0 and ended the check (fail-open regression from round 1). Now any parse failure refuses everywhere and only command settings' -c values are parsed. Also tar x in any cluster, ditto contents, -t dir, find -D/-O/-follow, separate path-valued values, rebase/difftool/grep abbreviations, git config --file/set, filter-branch --setup, copy headers, byte-level unquoting, apply --check && apply allowed, clean -X. The origin/dev case table, run against the new hook, has no row that blocked before and passes now (only the three git clean -e data rows changed, allow to block, by design).
+
+Additive redesign (owner ruling via the coordinator after a control-regression report): protect-data-dir.sh keeps origin/dev's text byte for byte (git diff origin/dev shows only added lines); the TASK-244 checks run first in guard_payload/backlog_guard and can only refuse; commands git runs from its own words also go through the older checks. Side-by-side of origin/dev's hooks and the branch's over the same case tables (new and old gates, enforce-pr-workflow, enforce-backlog-cli) and 192 audit probes: 0 rows where dev blocks and the branch allows. Also now refused: reset --hard/--merge/--keep where backlog/ is, a cwd that isn't a directory, a repo git rev-parse can't read. Known limitation stands: obfuscated commands may bypass; the backstop is git history plus review.
 <!-- SECTION:NOTES:END -->

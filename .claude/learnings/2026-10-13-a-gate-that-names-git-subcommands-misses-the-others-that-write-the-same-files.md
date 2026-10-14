@@ -50,6 +50,12 @@ three times, and close it.
   `find -D`/`-O` skipped (and `-follow` not read as BSD `-f`), rebase/difftool/grep options read as git abbreviates
   them, `git config --file`/`set`, `filter-branch --setup`, copy headers in patches, `git apply --check && git
   apply` allowed, and `-e backlog` no longer keeping backlog/ under `clean -X`.
+- Rewriting an existing gate to add coverage weakened it: the side-by-side run of origin/dev's hook and the branch's
+  over the same case tables found four rows dev blocked and the rewrite allowed (`git rm -n`, `git mv -n`/`--dry`,
+  `git rm` of a conflicted backlog file). The owner's ruling (via the coordinator): additive only. dev's hook text is
+  unchanged (`git diff origin/dev` shows only added lines), and the new checks run first in `backlog_guard`, which
+  can only refuse. A dev-block/branch-allow side-by-side over every table and probe is now the regression check; it
+  came back empty (0 of 2,503 table rows and 192 probes).
 - The scope is a guard against mistakes, not a boundary (owner ruling via the coordinator, 2026-10-13):
   `git${IFS}rm`, a config or hook script written in an earlier call, and git behind a wrapper cmdparse doesn't
   strip can still get through; git history plus review is the backstop.

@@ -4705,12 +4705,6 @@
   "new": "        if a == \"--pre\" or a.startswith(\"--pre=\"):"
  },
  {
-  "label": "pdd backlog git (TASK-244): find -exec writers allowed",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        if a in (\"-exec\", \"-execdir\", \"-ok\", \"-okdir\") and (k + 1 == len(args) or",
-  "new": "        if False and (k + 1 == len(args) or"
- },
- {
   "label": "pdd backlog git (TASK-244): find -exec readers refused",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "                                                            os.path.basename(args[k + 1]) not in FIND_READERS):",
@@ -4734,12 +4728,6 @@
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        if head == \"find\" and find_writes(args):",
   "new": "        if False:"
- },
- {
-  "label": "pdd backlog git (TASK-244): find unresolved start allowed",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "                if backlog_repo([d, cwd]) and (any(s in unresolved for s in starts)\n",
-  "new": "                if False and (any(s in unresolved for s in starts)\n"
  },
  {
   "label": "pdd backlog git (TASK-244): find after an unknown cd allowed",
@@ -4892,12 +4880,6 @@
   "new": "        pass"
  },
  {
-  "label": "pdd backlog git (TASK-244 review): grep -O not read",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        texts += [a[2:] for a in args if a.startswith(\"-O\") and len(a) > 2]",
-  "new": "        pass"
- },
- {
   "label": "pdd backlog git (TASK-244 review): filter-branch not read",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        texts += values((*(f\"--{f}-filter\" for f in (\"env\", \"tree\", \"index\", \"parent\", \"msg\", \"commit\", \"tag-name\")),\n                         \"--setup\"))",
@@ -5006,24 +4988,6 @@
   "new": "opts, words, after = git_words(args, (\"marker-size\",), \"\")"
  },
  {
-  "label": "pdd backlog git (TASK-244 review): find -fprint not read",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "                if a_ in (\"-fprint\", \"-fprint0\", \"-fprintf\", \"-fls\"):",
-  "new": "                if False:"
- },
- {
-  "label": "pdd backlog git (TASK-244 review): find -fls not read",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "                if a_ in (\"-fprint\", \"-fprint0\", \"-fprintf\", \"-fls\"):",
-  "new": "                if a_ in (\"-fprint\", \"-fprint0\", \"-fprintf\"):"
- },
- {
-  "label": "pdd backlog git (TASK-244 review): find -fprint unresolved allowed",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "                    if out in unresolved and (has_data or backlog_repo([d, cwd])):",
-  "new": "                    if False:"
- },
- {
   "label": "pdd backlog git (TASK-244 review): find -fprint into data/ allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "                if any_rel(inside_immutable, out, d):\n                    refuse(IMMUTABLE_MSG)\n                if any_rel(in_backlog, out, d):",
@@ -5102,12 +5066,6 @@
   "new": "                literal = False or \\"
  },
  {
-  "label": "pdd backlog git (TASK-244 review): GIT_LITERAL_PATHSPECS not read",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "argv.assigns.get(\"GIT_LITERAL_PATHSPECS\", os.environ.get(\"GIT_LITERAL_PATHSPECS\", \"0\")) \\\n                        not in (\"\", \"0\")",
-  "new": "False"
- },
- {
   "label": "pdd backlog git (TASK-244 review): work tree read from the cwd",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "                bases = [g[2], *(os.path.join(g[2], t) for t in trees if t)]",
@@ -5174,40 +5132,16 @@
   "new": "    if False:\n        return False"
  },
  {
-  "label": "pdd backlog git (TASK-244 review): copy targets not read",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            if head in DEST_LAST and len(paths) > 1 and any(in_backlog(rel(t, d)) for t in copy_targets(paths, d, head == \"ditto\")):",
-  "new": "            if False:"
- },
- {
   "label": "pdd backlog git (TASK-244 review): copy contents not read",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        if src.endswith(\"/\") or src.endswith(\"/.\") or contents:\n            if os.path.isdir(full_src):\n                out += [os.path.join(full_dest, n) for n in os.listdir(full_src)]",
   "new": "        if src.endswith(\"/\") or src.endswith(\"/.\") or contents:\n            pass"
  },
  {
-  "label": "pdd backlog git (TASK-244 review): ditto not a copy",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "DEST_LAST = {\"cp\", \"rsync\", \"install\", \"ln\", \"ditto\"}",
-  "new": "DEST_LAST = {\"cp\", \"rsync\", \"install\", \"ln\"}"
- },
- {
   "label": "pdd backlog git (TASK-244 review): sponge/touch allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        if head in (\"sponge\", \"touch\") and any(any_rel(in_backlog, p, d) for p in paths):",
   "new": "        if False:"
- },
- {
-  "label": "pdd backlog git (TASK-244 review): patch(1) allowed",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            if head == \"patch\" and backlog_repo([d, cwd]) and not any(",
-  "new": "            if False and not any("
- },
- {
-  "label": "pdd backlog git (TASK-244 review): patch --dry-run refused",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "                    a in (\"--dry-run\", \"-C\", \"--check\") for a in args):",
-  "new": "                    False for a in args):"
  },
  {
   "label": "pdd backlog git (TASK-244 review): archives allowed",
@@ -5252,24 +5186,6 @@
   "new": "    flag = \"-C\""
  },
  {
-  "label": "pdd backlog git (TASK-244 review): archive into an unresolved dir allowed",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "                if where in unresolved or re.search(r\"[$`~]\", where) or reaches_backlog_tree(where, d):",
-  "new": "                if re.search(r\"[$`~]\", where) or reaches_backlog_tree(where, d):"
- },
- {
-  "label": "pdd backlog git (TASK-244 review): unresolved paths only where data/ is",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "                if (has_data or backlog_repo([d, cwd])) and (any(w in unresolved for w in words_)",
-  "new": "                if has_data and (any(w in unresolved for w in words_)"
- },
- {
-  "label": "pdd backlog git (TASK-244 review): unresolved redirect only where data/ is",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "                if resolved_target is None and (data_in(d) or data_in(cwd) or backlog_repo([d, cwd])):",
-  "new": "                if resolved_target is None and (data_in(d) or data_in(cwd)):"
- },
- {
   "label": "pdd backlog git (TASK-244 review): git pathspec into data/ allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "                if specs_touch_immutable(specs, bases):  # data/",
@@ -5286,12 +5202,6 @@
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        if (specs and not positive and backlog_spec(\".\", base)) or",
   "new": "        if (not positive and backlog_spec(\".\", base)) or"
- },
- {
-  "label": "pdd backlog git (TASK-244 review): xargs back to rm/mv/update-index",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        or (g is not None and g[0] in (\"add\", \"stage\", *BACKLOG_GIT_SUBS))",
-  "new": "        or (g is not None and g[0] in (\"add\", \"stage\", \"rm\", \"mv\", \"update-index\"))"
  },
  {
   "label": "pdd backlog git (TASK-244 review): apply --recount dropped",
@@ -5346,12 +5256,6 @@
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "if a in (\"-ok\", \"-okdir\", \"-exec\", \"-execdir\") and",
   "new": "if a in (\"-okdir\", \"-exec\", \"-execdir\") and"
- },
- {
-  "label": "pdd backlog git (TASK-244 review 2): parse failure allowed outside a backlog repo",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            refuse(\"Blocked: this command could not be parsed (unbalanced quotes?), so what it does to data/ or \"",
-  "new": "            sys.exit(0) if not (data_in(cwd) or os.path.isdir(os.path.join(repo_root(cwd), \"backlog\"))) else None\n            refuse(\"Blocked: this command could not be parsed (unbalanced quotes?), so what it does to data/ or \""
  },
  {
   "label": "pdd backlog git (TASK-244 review 2): every -c value a command",
@@ -5420,34 +5324,10 @@
   "new": "|-D\", args[k])"
  },
  {
-  "label": "pdd backlog git (TASK-244 review 2): tar --directory=$X allowed",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "if where in unresolved or re.search(r\"[$`~]\", where) or reaches",
-  "new": "if where in unresolved or reaches"
- },
- {
   "label": "pdd backlog git (TASK-244 review 2): ditto not contents",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "copy_targets(paths, d, head == \"ditto\")",
   "new": "copy_targets(paths, d)"
- },
- {
-  "label": "pdd backlog git (TASK-244 review 2): -t dir not read",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            if head in (\"cp\", \"mv\", \"ln\", \"install\") and target_dirs:",
-  "new": "            if False:"
- },
- {
-  "label": "pdd backlog git (TASK-244 review 2): -t dir unresolved allowed",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "                if any(t in unresolved or re.search(r\"[$`~]\", t) for t in target_dirs) and backlog_repo([d, cwd]):",
-  "new": "                if False:"
- },
- {
-  "label": "pdd backlog git (TASK-244 review 2): --target-directory= not read",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "                a_.partition(\"=\")[2] for a_ in args if a_.startswith(\"--target-directory=\")]",
-  "new": "                ]"
  },
  {
   "label": "pdd backlog git (TASK-244 review 2): separate path-valued value unresolved allowed",
