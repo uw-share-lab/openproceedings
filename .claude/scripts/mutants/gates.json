@@ -1418,10 +1418,11 @@
   "new": "any(covers_immutable(p, d) for p in find_starts(args)[:1])"
  },
  {
-  "label": "pdd: find with no start is not .",
+  "label": "pdd: find with no start is not . (EQUIVALENT since TASK-244: backlog_guard reads find's starts itself and refuses a misread start into data/, so the older check misreading the implicit . changes no verdict)",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "    return starts or [\".\"]",
-  "new": "    return starts"
+  "new": "    return starts",
+  "equivalent": true
  },
  {
   "label": "pdd: find -L read as a start",
@@ -5630,8 +5631,8 @@
  {
   "label": "pdd backlog guard (TASK-244 additive): find -f start into data allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            if any(covers_immutable(s, d) for s in bsd_f_starts(args)):  # the older check skips these",
-  "new": "            if False:  # the older check skips these"
+  "old": "            if any(covers_immutable(s, d) for s in extra):  # BSD -f, GNU -O/-D, a cluster such as -Lx",
+  "new": "            if False:  # BSD -f, GNU -O/-D, a cluster such as -Lx"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): find writers allowed",
@@ -5686,5 +5687,17 @@
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "max(depth, 0) + 1)  # -1: the top level",
   "new": "abs(depth) + 1)  # -1: the top level"
+ },
+ {
+  "label": "pdd backlog guard (TASK-244 additive): misread find start unresolved allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if data_in(d) and any(s in unresolved for s in extra):",
+  "new": "            if False:"
+ },
+ {
+  "label": "pdd backlog guard (TASK-244 additive): git clean -e data -e '!data' allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "v.strip(\"/\") == \"data\" for v in c_ex) and any(v.startswith(\"!\") for v in c_ex):",
+  "new": "v.strip(\"/\") == \"data\" for v in c_ex) and False:"
  }
 ]

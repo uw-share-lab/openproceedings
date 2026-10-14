@@ -1862,6 +1862,15 @@ check $P block "data-only: echo x > \"\$UNSET\""                "$(payload_do 'e
 check $P block "data-only: cd /tmp && rm -rf \"\$UNSET\" (the call's own worktree has data/)" "$(payload_do 'cd /tmp && rm -rf "$OP_UNSET_244"')"
 check $P block "data-only worktree: rm -rf \"\$UNSET\" (its main worktree has data/)" "$(payload_at "$TMP/data only wt" 'rm -rf "$OP_UNSET_244"')"
 check $P allow "data-only: rm -rf src (no data/ under it)"      "$(payload_do 'rm -rf src')"
+# starts the older find check misreads (it reads only exact leading flags), and a `!` exclude after -e data
+check $P block "data-only: cd src && find -O3 ../data/snapshots -delete" "$(payload_do 'cd src && find -O3 ../data/snapshots -delete')"
+check $P block "data-only: cd src && find -Lx ../data/snapshots -delete" "$(payload_do 'cd src && find -Lx ../data/snapshots -delete')"
+check $P block "data-only: cd src && find -D tree ../data/snapshots -delete" "$(payload_do 'cd src && find -D tree ../data/snapshots -delete')"
+check $P block "data-only: cd src && find -f ../data/snapshots -delete" "$(payload_do 'cd src && find -f ../data/snapshots -delete')"
+check $P block "data-only: cd src && find -Lx \"\$UNSET\" -delete" "$(payload_do 'cd src && find -Lx "$OP_UNSET_244" -delete')"
+check $P block "data-only: git clean -fdx -e data -e '!data' data/snapshots" "$(payload_do "git clean -fdx -e data -e '!data' data/snapshots")"
+check $P block "data-only: git clean -fdx -e data -e '!data'"  "$(payload_do "git clean -fdx -e data -e '!data'")"
+check $P allow "data-only: git clean -fdx -e data"             "$(payload_do 'git clean -fdx -e data')"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")

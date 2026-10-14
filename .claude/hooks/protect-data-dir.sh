@@ -35,7 +35,7 @@
 #   apply --numstat` and both sides of each rename and copy, C-unquoted; in a call of their own, a `cd` or a
 #   report-only `git apply --check` aside), merge-file (its first file), checkout-index (`<top>/<prefix><path>`, -a),
 #   update-index (not flag-only forms), read-tree --prefix or -u; the same pathspecs into data/, data/snapshots or
-#   data/indexes. A pathspec reaches backlog/ when it is in it, is the worktree root, is a git glob from either
+#   data/indexes (git clean's are the older -x/-X rule's, plus a `!` exclude after `-e data`, which it doesn't read). A pathspec reaches backlog/ when it is in it, is the worktree root, is a git glob from either
 #   (`'*.md'`: git's `*` crosses `/`) or `:` magic, unless an exclude names backlog itself (`':!backlog'`,
 #   case-exact as git reads it; never under literal pathspecs); --pathspec-from-file, stdin, an unresolvable
 #   pathspec, -C, work tree or path-valued option (`--prefix=$P`, `--prefix "$P"`) and a built pathspec after a
@@ -48,7 +48,8 @@
 #   source), cp/mv/ln/install `-t <dir>` into it, patch(1) (not --dry-run), tar -x/unzip into backlog/, a worktree
 #   root or above, find -fprint/-fls into it, and a find that deletes or runs anything but a reader (`-exec grep`;
 #   `rg --pre` is no reader) from backlog/, a worktree root or above (BSD `-f <path>` starts; GNU's leading -D/-O
-#   skipped), and the same finds and copies into data/snapshots or data/indexes; and a path, redirect target, -t
+#   skipped), and the finds the older check misreads (those starts, -O/-D, a cluster such as -Lx) and copies into
+#   data/snapshots or data/indexes; and a path, redirect target, -t
 #   directory or find output only the shell knows, in a repo with backlog/. Settling a conflicted file stays possible:
 #   `checkout --theirs`/`restore --ours` (every matched path unmerged, and git not pointed at another repository),
 #   or `git add -u <path>` to accept a deletion. Fail closed: a payload this guard can't read (not a JSON object, a
@@ -781,22 +782,6 @@ def git_work_trees(argv):
 # the primary; both are checked as primaries)
 FIND_F_PRIMARIES = {"-fprint", "-fprint0", "-fprintf", "-fls", "-follow", "-fstype", "-false"}
 
-def bsd_f_starts(args):
-    """Only the BSD `-f <path>` start paths among find's leading options (the older find check reads the others)."""
-    out, k = [], 0
-    while k < len(args) and re.fullmatch(r"-[HLPEXdsx]*(f.*)?|-O\d*|-D", args[k]) and args[k] not in FIND_F_PRIMARIES:
-        flag = re.fullmatch(r"-[HLPEXdsx]*(?:f(.*))?", args[k])
-        if args[k] == "-D":
-            k += 2
-            continue
-        if flag and flag.group(1) is not None:
-            if flag.group(1):
-                out.append(flag.group(1))
-            elif k + 1 < len(args):
-                out.append(args[k + 1]); k += 1
-        k += 1
-    return out
-
 def find_starts_all(args):
     """find's start paths: the words before its first expression token, after -H/-L/-P and BSD's flags, plus each
     BSD `-f <path>` (TASK-244 security review: `find -f ../data/snapshots -delete`); none means `.`."""
@@ -953,6 +938,12 @@ def guard_walked(walked, where, depth):
                 if g[0] != "clean" and specs_touch_immutable(specs, bases):  # data/ is gitignored, but a ref may
                     # still hold it (git clean of data/ is the older -x/-X rule's)
                     refuse(IMMUTABLE_MSG)
+        if g and g[0] == "clean" and data_in(g[2]):  # `-e data` then `-e '!data'`: the older -x/-X rule reads only the first
+            c_opts, _, _ = git_words(g[1], ("exclude",), "e")
+            c_ex = [v for n, v in c_opts if n in ("e", "exclude")]
+            if any(n in ("x", "X") for n, _ in c_opts) and not last_flag(c_opts, ("n", "dry-run"), ("no-dry-run",)) and any(
+                    v.strip("/") == "data" for v in c_ex) and any(v.startswith("!") for v in c_ex):
+                refuse(IMMUTABLE_MSG + " (A `!` exclude after `-e data` puts data/ back in what git clean deletes.)")
         if g and g[0] == "reset" and backlog_repo([g[2], where]) and any(
                 a in ("--hard", "--merge", "--keep") for a in g[1][: g[1].index("--") if "--" in g[1] else None]):
             refuse(BACKLOG_GIT_MSG + " (`git reset --hard`/`--merge`/`--keep` rewrites the whole worktree, backlog/ "
@@ -1012,7 +1003,10 @@ def guard_walked(walked, where, depth):
             if any(reaches_backlog_tree(s, d) for s in starts):
                 refuse(BACKLOG_MSG + " (`find … -delete` or `-exec <command>` from here can reach backlog/ files, "
                        "and which ones can't be seen; start find in the directories you mean.)")
-            if any(covers_immutable(s, d) for s in bsd_f_starts(args)):  # the older check skips these
+            extra = [s for s in starts if s not in find_starts(args)]  # starts the older find check misreads
+            if data_in(d) and any(s in unresolved for s in extra):
+                refuse(IMMUTABLE_MSG + " (find's start path can't be resolved here; write it out.)")
+            if any(covers_immutable(s, d) for s in extra):  # BSD -f, GNU -O/-D, a cluster such as -Lx
                 refuse(IMMUTABLE_MSG)
 
 # ---- end TASK-244 ---------------------------------------------------------------------------------------------
