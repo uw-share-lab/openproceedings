@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-13 19:42'
-updated_date: '2026-10-14 01:22'
+updated_date: '2026-10-14 01:31'
 labels:
   - tooling
   - bug
@@ -24,9 +24,9 @@ During PR #146 (TASK-241) a subagent completed task-241 before review finished, 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 Every git command shape that writes backlog/ files in the worktree or index by pathspec (rm, mv, restore, checkout <tree-ish> --, reset <tree-ish> --, stash push --, apply, checkout-index, update-index, read-tree --prefix) is refused by protect-data-dir.sh, including -C, cd, globs, magic pathspecs, whole-tree pathspecs, --pathspec-from-file, xargs and unresolvable paths
-- [x] #2 The backlog CLI, decision-body edits, read-only git (log/show/diff, dry runs), unstaging (restore --staged, reset HEAD --), branch/commit-level operations (checkout/switch a branch, rebase, merge, cherry-pick, reset to a commit) and pathspecs that exclude backlog/ stay allowed, and the rule is documented
-- [x] #3 Case-table rows cover every blocked and allowed shape; make tooling is green and every new mutant is killed (make mutate-changed)
+- [x] #1 Every git command shape that writes backlog/ files in the worktree or index by pathspec (rm, mv, restore, checkout <tree-ish> --, reset <tree-ish> -- and reset --hard/--merge/--keep, clean, stash push --, apply, am, merge-file, checkout-index, update-index, read-tree --prefix/-u) is refused by protect-data-dir.sh, including -C, cd, globs, magic pathspecs, whole-tree pathspecs, --pathspec-from-file, xargs and unresolvable paths, as added blocks that never turn an older refusal into an allow
+- [x] #2 The backlog CLI, decision-body edits, read-only git (log/show/diff, git clean -n, git apply --check; git rm -n/mv -n stay refused by the older rule), unstaging (restore --staged, reset HEAD --), branch/commit-level operations (checkout/switch a branch, rebase, merge, cherry-pick, reset --soft/--mixed to a commit), settling a conflict (checkout --theirs, git add -u) and pathspecs that exclude backlog/ stay allowed, and the rule is documented
+- [ ] #3 Case-table rows cover every blocked and allowed shape; make tooling is green and every new mutant is killed (mutate.py --match TASK-244); a side-by-side of origin/dev's hook and the branch's finds no row dev blocks that the branch allows
 - [x] #4 CLAUDE.md, the task-hygiene skill and spec 08 describe the hook as built, and task-hygiene says what to do when a completed task needs changes
 <!-- AC:END -->
 
@@ -44,4 +44,6 @@ Review round 1 (code, docs, security, qa) and the coordinator's audit: added git
 Review round 2 (security regression report via the coordinator; code/qa/docs/security reviewers): a nested -c value that failed to parse exited 0 and ended the check (fail-open regression from round 1). Now any parse failure refuses everywhere and only command settings' -c values are parsed. Also tar x in any cluster, ditto contents, -t dir, find -D/-O/-follow, separate path-valued values, rebase/difftool/grep abbreviations, git config --file/set, filter-branch --setup, copy headers, byte-level unquoting, apply --check && apply allowed, clean -X. The origin/dev case table, run against the new hook, has no row that blocked before and passes now (only the three git clean -e data rows changed, allow to block, by design).
 
 Additive redesign (owner ruling via the coordinator after a control-regression report): protect-data-dir.sh keeps origin/dev's text byte for byte (git diff origin/dev shows only added lines); the TASK-244 checks run first in guard_payload/backlog_guard and can only refuse; commands git runs from its own words also go through the older checks. Side-by-side of origin/dev's hooks and the branch's over the same case tables (new and old gates, enforce-pr-workflow, enforce-backlog-cli) and 192 audit probes: 0 rows where dev blocks and the branch allows. Also now refused: reset --hard/--merge/--keep where backlog/ is, a cwd that isn't a directory, a repo git rev-parse can't read. Known limitation stands: obfuscated commands may bypass; the backstop is git history plus review.
+
+ACs narrowed to the additive design (dry runs of git rm/mv and reset --hard are refused).
 <!-- SECTION:NOTES:END -->

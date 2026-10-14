@@ -30,7 +30,8 @@ three times, and close it.
 - What must stay allowed decided the shape: unstaging (`restore --staged`, `reset -- <path>`, or a reset to a tree
   equal to HEAD's) leaves the CLI's file on disk; branch and commit operations replay commits the CLI made; and a
   rebase or merge that stops on a task file has no other way to settle it (Edit is refused there), so a path every
-  match of which is unmerged (`git ls-files --unmerged`) may take `checkout --theirs`, `restore --ours` or `rm`.
+  match of which is unmerged (`git ls-files --unmerged`) may take `checkout --theirs` or `restore --ours`; a deletion is settled with `git add -u <path>` (`git rm` there
+  stays refused by the older rule).
 
 - The review round found the same shape again one level out, so a gate is only as complete as its list of
   writers: `git clean` (deletes the untracked file the CLI just wrote), `git am`, `git merge-file`, `read-tree -u`,
@@ -74,9 +75,11 @@ three times, and close it.
 - Refuse whole-tree pathspecs (`git restore .`, `git checkout -- .`, `git rm -r --cached .`) in a repo with backlog/,
   with `':!backlog'` as the way out → they reach CLI files as surely as a named one → a CLI that could restore a
   task's earlier state would make the git route unnecessary rather than allowed.
-- Leave commit-level operations alone (rebase, merge, cherry-pick, revert, `reset --hard <commit>`, `checkout
-  <branch>`) → they replay CLI-written commits and the branch/merge-queue flow depends on them; reverting a
+- Leave commit-level operations alone (rebase, merge, cherry-pick, revert, `reset --soft`/`--mixed <commit>`,
+  `checkout <branch>`) → they replay CLI-written commits and the branch/merge-queue flow depends on them; reverting a
   completion commit is the same act in spirit and stays a convention → change if it is ever done.
+- Refuse `reset --hard`/`--merge`/`--keep` where backlog/ is → they rewrite the whole worktree, backlog/ included
+  (the coordinator's list) → commit what the CLI wrote, and move branches with commit operations.
 - `find` from backlog/, a worktree root or above may list and `-exec` readers but not delete or run a writer
   (`-exec rm`, `-exec git restore`, `-exec sh`) → which files it picks can't be seen → a start path that leaves
   backlog/ out is the workaround.
@@ -86,5 +89,5 @@ three times, and close it.
   (security review nit): filed as a task at the end of the branch.
 
 ## Propagated to
-- Skill / agent / CLAUDE.md updated? — `CLAUDE.md` (hook table), `.claude/skills/task-hygiene/SKILL.md` (finalize only after the last review round; what to do when a completed task needs changes; what git may still do), `docs/specs/08-ops-and-tooling.md` (hook table), the hook's header comment
+- Skill / agent / CLAUDE.md updated? — `CLAUDE.md` (hook table), `.claude/skills/task-hygiene/SKILL.md` (finalize only after the last review round; what to do when a completed task needs changes; what git may still do), `docs/specs/08-ops-and-tooling.md` (hook table, fail-closed paragraph), the hook's header comment; the finalize-after-review order in `.claude/skills/pr-workflow/SKILL.md`, `CONTRIBUTING.md`, `.claude/commands/review-gate.md` and `.claude/agents/project-manager.md`
 - Test or hook added? — `protect-data-dir.sh` rows in `test-openproceedings-gates.sh`, mutants in `gates.json`

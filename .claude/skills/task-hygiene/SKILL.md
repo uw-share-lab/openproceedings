@@ -27,7 +27,8 @@ read-tree --prefix`/`-u`, `-p` with no path, a whole-tree pathspec such as `.`, 
 extracted where backlog/ is, and a git pager, editor or `--exec` command that does any of that, are blocked by
 `protect-data-dir.sh` (TASK-244); and CI's
 `check_backlog.py` catches a Done task left behind in `tasks/`. Git still may unstage there (`git restore
---staged`, `git reset -- <path>`), read (`log`, `show`, `diff`), dry-run, move whole branches and commits
+--staged`, `git reset -- <path>`), read (`log`, `show`, `diff`), dry-run (`git clean -n`, `git apply --check`; `git rm -n`/`git mv -n` there
+stay refused), move whole branches and commits
 (checkout/switch a branch, rebase, merge, cherry-pick, `reset --soft`/`--mixed` to a commit), and settle a file a
 rebase or merge stopped on (`git checkout --theirs <path>`, or `git add -u <path>` to accept a deletion; `git rm`
 there stays refused); a whole-tree restore can leave backlog/ out with
