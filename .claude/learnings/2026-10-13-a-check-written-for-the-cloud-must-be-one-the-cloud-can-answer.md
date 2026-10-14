@@ -1,9 +1,9 @@
 # A check written for the cloud must be one the cloud can answer
 
-**Key lesson:** Before a routine's gate relies on an API call from a Claude Code cloud session, probe that exact call there: the session's proxy refuses every path outside `repos/<this repo>/...` with its own 403, so check what the proxy enforces (its refusals, word for word) rather than an API it will never answer.
+**Key lesson:** Before a routine's gate relies on an API call from a Claude Code cloud session, probe that exact call there: the session's proxy refuses the paths outside `repos/<this repo>/...` probed so far with its own 403, so check what the proxy enforces (its refusals, word for word) rather than an API it will never answer.
 
 - **Date:** 2026-10-13 · **Task:** task-243 · **Area:** tooling
-- **Artifacts:** `.claude/scripts/dependabot/prs.py` (`preflight`, `uv-release`), `.claude/scripts/dependabot/_common.py`
+- **Artifacts:** `.claude/scripts/dependabot/prs.py` (`preflight`, `uv-release`), `.claude/scripts/dependabot/actions_pins.py`, `.claude/agents/ci-engineer.md`, `.claude/scripts/dependabot/_common.py`
   (`refusal`, `detect_mode`), `.claude/scripts/dependabot/docker_digest.py`, `.claude/scripts/tests/dependabot_fake.py`,
   `.claude/scripts/tests/dependabot_cases.py`, `.claude/scripts/mutants/dependabot.json`,
   `.claude/commands/dependabot-review.md` step 0, spec 08 §CI "Dependabot", decision-048 (TASK-243 AC3/AC6 addendum)
@@ -25,7 +25,7 @@ cse_01Q24cxnP5Nu3yXGC2FKjWqW) showed its installation check, its uv release call
   attestations API refused, not `repos/astral-sh/uv` itself; the lesson applies here too, and the check fails closed
   if that call ever answers (review round 1).
 - A gate whose "nothing to check" case prints `ok` passes on a renamed app: the local check now stops when no `claude`
-  installation is listed and names the apps it saw, and refuses a list shorter than its `total_count` (security
+  installation is listed and names the apps it saw, and refuses a list whose length isn't its `total_count` (security
   review, round 1).
 - `gh auth status` fails and `gh api user` may fail in a session whose token is a placeholder behind the proxy; a
   repository-scoped call (`gh api repos/<this repo>`) is the auth check that holds in both modes.
@@ -44,8 +44,8 @@ cse_01Q24cxnP5Nu3yXGC2FKjWqW) showed its installation check, its uv release call
   `astral-sh/uv` is public, stable and the repository the probe saw refused.
 
 ## Decisions (and what would change them)
-- Session binding in the cloud, installation selection locally (decision-048 addendum) → the proxy answers only
-  repository-scoped calls → revisit if the proxy starts answering the installation API.
+- Session binding in the cloud, installation selection locally (decision-048 addendum) → the proxy refused every
+  call outside this repository that the probe made (the advisory calls are untested: task-247) → revisit if the proxy starts answering the installation API.
 
 ## Follow-ups
 - [ ] task-247 — the Advisory Database calls (`gh api advisories?…`, steps 0 and 2) are outside `repos/`, so the
@@ -54,5 +54,7 @@ cse_01Q24cxnP5Nu3yXGC2FKjWqW) showed its installation check, its uv release call
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/commands/dependabot-review.md` (§Where it runs, step 0, the summary),
   spec 08 §CI "Dependabot", decision-048
+- Agent? — `.claude/agents/ci-engineer.md` (the cloud check must be one the proxy answers); `actions_pins.py` names the
+  proxy's refusal of another repository's tags (review round 1)
 - Test or hook added? — rows in `.claude/scripts/tests/dependabot_cases.py` (the fake `gh` in `dependabot_fake.py`
   fails like the proxy), mutants in `.claude/scripts/mutants/dependabot.json`

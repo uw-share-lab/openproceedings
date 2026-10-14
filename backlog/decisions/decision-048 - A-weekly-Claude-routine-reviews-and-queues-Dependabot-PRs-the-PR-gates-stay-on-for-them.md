@@ -300,8 +300,8 @@ probe's refusal of another of that repository's endpoints says they will be, and
   selection (selected, openproceedings only, set by the owner on 2026-10-13) is checked **locally**: `prs.py
   preflight` reads `gh api orgs/uw-share-lab/installations` with the owner's credential, prints the Claude
   installation's `repository_selection` and permissions, and stops on any selection but `selected`, or when no
-  `claude` installation is listed. The selected repository list itself can't be read with a `gh` login (it needs a
-  GitHub App user token).
+  `claude` installation is listed (a list whose length isn't its `total_count` is exit 2). The selected repository
+  list itself can't be read with a `gh` login (it needs a GitHub App user token).
 - **AC3, Sigstore.** In the cloud it can't work, so every ghcr.io PR stays the owner's there, for the reason above;
   `docker_digest.py`'s PROBLEM line now says so when it runs in a cloud session. Locally nothing changes.
 - **uv's release.** In the cloud, a refused `repos/astral-sh/uv/releases/latest` call is not a stop: the new `prs.py
@@ -314,6 +314,9 @@ Options considered:
   about what the credential reaches; the binding refusals do).
 - Add `astral-sh/uv` to the session so the release call answers (rejected: it widens the session for an
   informational check, and it is the repository the binding check relies on being refused).
+- Use another `uw-share-lab` repository as the binding check's witness (rejected: `uw-share-lab/.github` doesn't
+  exist, and a sibling repository could one day be added to the session; `astral-sh/uv` is public, stable and the
+  repository whose refusal the probe saw).
 - Make Sigstore work in the cloud (rejected for now: the TUF hosts are blocked at the proxy and there is no offline
   route; the cooldown notice leaves every ghcr.io PR to the owner anyway).
 
@@ -329,6 +332,7 @@ Consequences:
   is the intended reading (the binding moved), not a fault to work around.
 - Not decided here: the GitHub Advisory Database calls (`gh api advisories?…`, step 0's uv query and step 2's
   per-package queries) are a path outside `repos/`, so the proxy may refuse them too; no cloud session has made
-  one yet (TASK-247).
+  one yet (TASK-247). Until it is decided, the procedure fails closed: a refused step 2 query is a check that
+  couldn't run (a hard stop for that PR), and a refused step 0 uv query goes under "for the owner".
 - What would change this: the proxy answering the installation API (then check the installation's repository list
   in the cloud again), or Sigstore's TUF hosts becoming reachable from a session.

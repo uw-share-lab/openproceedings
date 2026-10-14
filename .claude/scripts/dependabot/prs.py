@@ -30,7 +30,7 @@ available: sessions are bound to their configured repositories", and `gh api rep
 repository the session isn't bound to) with its HTTP 403 "GitHub access to this repository is not enabled for this
 session"; any other answer, a 200 included, is a PROBLEM (the 2026-10-13 probe showed the installation API can't
 answer there; decision-048, TASK-243 AC6). Locally it reads `gh api orgs/uw-share-lab/installations` (an org
-owner's call; it fails, exit 2, for anyone else, or when it lists fewer installations than its `total_count`) and
+owner's call; it fails, exit 2, for anyone else, or when the number it lists isn't its `total_count`) and
 prints the Claude App installation's repository selection and permissions; a selection other than `selected`, or no
 installation by the `claude` app at all, is a PROBLEM. Then the credential itself: in the cloud gh
 must have no stored login (one would be a file dependency code could read, which step 5 can't strip), and a real
