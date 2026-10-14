@@ -356,7 +356,7 @@ def uv_release() -> None:
             f"OWNER   uv {tag} is a newer minor than the pinned {pinned}: upgrade the api image's uv by hand"
         )
     else:
-        print(f"ok      latest: uv {tag}, the pinned minor ({pinned})")
+        print(f"ok      latest: uv {tag}, no newer minor than the pinned {pinned}")
 
 
 def list_prs() -> None:

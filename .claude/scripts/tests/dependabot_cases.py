@@ -3027,7 +3027,7 @@ def _(c: Case) -> None:
     c.gh[UV_LATEST] = {"tag_name": "0.12.30"}
     got, out = c.run("prs.py", "uv-release")
     assert got == OK and re.search(
-        r"^ok +latest: uv 0\.12\.30, the pinned minor \(0\.12\.23\)$", out, re.M
+        r"^ok +latest: uv 0\.12\.30, no newer minor than the pinned 0\.12\.23$", out, re.M
     ), out
     assert "OWNER" not in out and re.search(
         r"^ok +pinned: uv 0\.12\.23 \(deploy/api\.Dockerfile", out, re.M
