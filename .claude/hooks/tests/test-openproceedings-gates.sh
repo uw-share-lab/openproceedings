@@ -1473,7 +1473,7 @@ check $P allow "git reset -- <task> (unstage)"                 "$(payload_bl "gi
 check $P allow "git reset HEAD -- <task> (unstage)"            "$(payload_bl "git reset HEAD -- $T1")"
 check $P allow "git reset same -- <task> (HEAD's tree)"        "$(payload_bl "git reset same -- $T1")"
 check $P allow "git reset <task> (a path, unstage)"            "$(payload_bl "git reset $C1")"
-check $P allow "git reset --hard dev (the whole branch)"       "$(payload_bl 'git reset --hard dev')"
+check $P block "git reset --hard dev (rewrites backlog/ too)"       "$(payload_bl 'git reset --hard dev')"
 check $P allow "git reset --soft HEAD~1"                       "$(payload_bl 'git reset --soft HEAD~1')"
 check $P allow "git checkout dev (a branch)"                   "$(payload_bl 'git checkout dev')"
 check $P allow "git checkout HEAD~1 (a commit)"                "$(payload_bl 'git checkout HEAD~1')"
@@ -1488,9 +1488,9 @@ check $P allow "git restore -s dev -- . ':!backlog'"           "$(payload_bl "gi
 check $P allow "git restore -s dev -- . ':(exclude)backlog/'"  "$(payload_bl "git restore -s dev -- . ':(exclude)backlog/'")"
 check $P allow "git checkout dev -- '*.md' ':^backlog'"        "$(payload_bl "git checkout dev -- '*.md' ':^backlog'")"
 check $P block "git checkout dev -- '*.md' ':^Backlog' (git's exclude is case-exact)" "$(payload_bl "git checkout dev -- '*.md' ':^Backlog'")"
-check $P allow "git rm -n <completed> (dry run)"               "$(payload_bl "git rm -n $C1")"
+check $P block "git rm -n <completed> (dry run; the older rule refuses it)"               "$(payload_bl "git rm -n $C1")"
 check $P allow "git rm --dry-run -r . (dry run)"               "$(payload_bl 'git rm --dry-run -r .')"
-check $P allow "git mv -n <completed> backlog/tasks/ (dry run)" "$(payload_bl "git mv -n $C1 backlog/tasks/")"
+check $P block "git mv -n <completed> backlog/tasks/ (dry run; the older rule)" "$(payload_bl "git mv -n $C1 backlog/tasks/")"
 check $P allow "git rm src/x.md"                               "$(payload_bl 'git rm src/x.md')"
 check $P allow "git mv src/x.md src/z.md"                      "$(payload_bl 'git mv src/x.md src/z.md')"
 check $P allow "git log / show / diff / status -- backlog/"    "$(payload_bl 'git log -- backlog/ && git show dev:backlog/tasks/x.md && git diff dev -- backlog/ && git status -- backlog')"
@@ -1520,7 +1520,7 @@ check $P allow "cd src && git checkout-index -a -f (src/ only)" "$(payload_bl 'c
 check $P block "cd src && git read-tree --prefix=backlog/ dev (from the top)" "$(payload_bl 'cd src && git read-tree --prefix=backlog/ dev')"
 # abbreviated long options are read as git reads them (cmdparse.GIT_LONG_OPTS)
 check $P block "git rm --pathspec-f=list"                      "$(payload_bl 'git rm --pathspec-f=list')"
-check $P allow "git mv --dry <completed> backlog/tasks/"       "$(payload_bl "git mv --dry $C1 backlog/tasks/")"
+check $P block "git mv --dry <completed> backlog/tasks/ (the older rule)"       "$(payload_bl "git mv --dry $C1 backlog/tasks/")"
 check $P block "git apply --direc=backlog <src patch>"         "$(payload_bl "git apply --direc=backlog '$TMP/src.patch'")"
 check $P block "git checkout-index --pref=backlog/tasks/ src/x.md" "$(payload_bl 'git checkout-index --pref=backlog/tasks/ src/x.md')"
 check $P block "git read-tree --pref=backlog/ dev"             "$(payload_bl 'git read-tree --pref=backlog/ dev')"
@@ -1720,7 +1720,7 @@ check $P block "git grep --open='rm -rf backlog' x (abbreviated)" "$(payload_bl 
 check $P block "git filter-branch --setup 'rm -rf backlog' HEAD" "$(payload_bl "git filter-branch --setup 'rm -rf backlog' HEAD")"
 check $P block "find -follow -name '*.md' -delete (a primary, not -f ollow)" "$(payload_bl "find -follow -name '*.md' -delete")"
 check $P block "cd src && find -O3 ../backlog -delete (GNU -O)" "$(payload_bl 'cd src && find -O3 ../backlog -delete')"
-check $P block "cd src && find -D tree ../backlog -delete (GNU -D)" "$(payload_bl 'cd src && find -D tree ../backlog -delete')"
+check $P block "cd src && find -D tree -O3 ../backlog -delete (GNU -D)" "$(payload_bl 'cd src && find -D tree -O3 ../backlog -delete')"
 check $P allow "find backlog -exec rg --pretty x {} + (not --pre)" "$(payload_bl 'find backlog -exec rg --pretty x {} +')"
 check $P block "tar -v -xf a.tar (x after another flag)"       "$(payload_bl 'tar -v -xf a.tar')"
 check $P block "tar --verbose -xf a.tar"                       "$(payload_bl 'tar --verbose -xf a.tar')"
@@ -1767,7 +1767,7 @@ payload_blc() { payload_at "$BLC" "$1"; }
 check $P allow "git checkout --theirs <conflicted task>"       "$(payload_blc "git checkout --theirs -- $T2")"
 check $P allow "git restore --ours <conflicted task>"          "$(payload_blc "git restore --ours $T2")"
 check $P allow "git checkout -m <conflicted task>"             "$(payload_blc "git checkout -m $T2")"
-check $P allow "git rm <conflicted task>"                      "$(payload_blc "git rm $T2")"
+check $P block "git rm <conflicted task> (the older rule refuses git rm there)"                      "$(payload_blc "git rm $T2")"
 check $P block "git checkout --theirs backlog/ (a merged file too)" "$(payload_blc 'git checkout --theirs -- backlog/')"
 check $P block "git checkout --theirs <merged task>"           "$(payload_blc "git checkout --theirs -- 'backlog/tasks/task-3 - d.md'")"
 check $P block "git checkout side -- <conflicted task> (a commit's copy)" "$(payload_blc "git checkout side -- $T2")"
@@ -1784,6 +1784,34 @@ git -C "$BLX" switch -qc side && printf 'b\n' > "$BLX/backlog/tasks/x.md" && git
 git -C "$BLX" switch -q dev && printf 'c\n' > "$BLX/backlog/tasks/x.md" && git -C "$BLX" -c user.email=t@t -c user.name=t commit -qam dev
 git -C "$BLX" -c user.email=t@t -c user.name=t merge -q side >/dev/null 2>&1
 check $P block "git restore --ours --pathspec-from-file=list (all in conflict)" "$(payload_at "$BLX" 'git restore --ours --pathspec-from-file=list')"
+# review round 3 and the additive guard: whole-worktree resets, more command keys, -t forms, and state that can drift
+check $P block "git reset --merge dev"                         "$(payload_bl 'git reset --merge dev')"
+check $P block "git reset --keep dev"                          "$(payload_bl 'git reset --keep dev')"
+check $P allow "git reset --soft HEAD~1 (index and worktree kept)" "$(payload_bl 'git reset --soft HEAD~1')"
+check $P allow "git reset --hard in a repo without backlog/"   "$(payload_at "$TMP/plain244" 'git reset --hard')"
+check $P block "git -c difftool.x.cmd='rm -rf backlog' difftool -t x" "$(payload_bl "git -c difftool.x.cmd='rm -rf backlog' difftool -t x")"
+check $P block "git -c mergetool.x.cmd='rm -rf backlog' mergetool -t x" "$(payload_bl "git -c mergetool.x.cmd='rm -rf backlog' mergetool -t x")"
+check $P block "git config alias.x '!rm -rf backlog' (a ! value)" "$(payload_bl "git config alias.x '!rm -rf backlog'")"
+check $P block "git -c credential.helper='!rm -rf backlog' push" "$(payload_bl "git -c credential.helper='!rm -rf backlog' push")"
+check $P block "git grep -nO'rm -rf backlog' x (in a cluster)" "$(payload_bl "git grep -nO'rm -rf backlog' x")"
+check $P block "cp -vt backlog/tasks src/x.md (-t in a cluster)" "$(payload_bl 'cp -vt backlog/tasks src/x.md')"
+check $P block "cp -tbacklog/tasks src/x.md (attached)"        "$(payload_bl 'cp -tbacklog/tasks src/x.md')"
+check $P block "cp --target-directory backlog/tasks src/x.md (separate)" "$(payload_bl 'cp --target-directory backlog/tasks src/x.md')"
+check $P block "mv --target=backlog/tasks src/x.md (a prefix)" "$(payload_bl 'mv --target=backlog/tasks src/x.md')"
+check $P block "cp -t data/snapshots/s1 x (main repo)"         "$(payload_bash 'cp -t data/snapshots/s1 README.md')"
+check $P block "ditto x data/indexes/abc (main repo)"          "$(payload_bash 'ditto README.md data/indexes/abc')"
+check $P allow "git add -u <conflicted task> (accepts a deletion)" "$(payload_blc "git add -u $T2")"
+check $P block "Bash with no cwd"                              '{"tool_name":"Bash","tool_input":{"command":"ls"}}'
+check $P block "Bash with a cwd that is no directory"          '{"tool_name":"Bash","cwd":"/nonexistent/op-244","tool_input":{"command":"ls"}}'
+ln -s "$BL" "$TMP/bl-link"   # the repo reached through a symlink
+check $P block "git rm backlog/x from a symlinked cwd"         "$(payload_at "$TMP/bl-link" 'git rm backlog/tasks/x.md')"
+check $P block "git restore -s dev backlog via a symlinked -C" "$(payload_at / "git -C '$TMP/bl-link' restore -s dev backlog")"
+check $P block "find <symlinked repo> -name x -delete"         "$(payload_at / "find '$TMP/bl-link/backlog' -name x -delete")"
+rm -f "$TMP/bl-link"
+mkdir -p "$TMP/broken244"; printf 'gitdir: /nonexistent/op-244\n' > "$TMP/broken244/.git"   # git rev-parse fails here
+check $P block "a repo git rev-parse can't read (cwd)"         "$(payload_at "$TMP/broken244" 'ls')"
+check $P block "git -C <a repo rev-parse can't read> rm x"     "$(payload_at / "git -C '$TMP/broken244' rm x")"
+check $P allow "ls outside any repo"                           "$(payload_at "$TMP/oldbl" 'ls')"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")

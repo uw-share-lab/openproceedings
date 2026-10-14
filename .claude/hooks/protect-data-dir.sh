@@ -25,34 +25,38 @@
 # - backlog/ is CLI-managed (task-hygiene skill): only the `backlog` CLI moves a task (e.g. `backlog task
 #   complete` into backlog/completed/). Bash mv / git mv / cp / rm / unlink / tee / dd of= / redirects that target
 #   files under backlog/, and sed -i / perl -i / ruby -i / awk -i inplace edits of them (decision bodies excepted, as in
-#   enforce-backlog-cli.sh), are refused here; enforce-backlog-cli.sh covers editor writes. So are touch/sponge there,
-#   a cp -R/rsync/ditto whose copy lands there (dest/<name>, or each entry of a `src/`), patch(1) (not --dry-run),
-#   tar -x/unzip into backlog/, a worktree root or above, find -fprint/-fls into it, and a find that deletes or runs
-#   anything but a reader (`-exec grep`; `rg --pre` is no reader) from backlog/, a worktree root or above (BSD
-#   `find -f <path>` starts too). And every git command that writes backlog/ files in the worktree or the index by
-#   pathspec (TASK-244: PR #146 put a completed task back with `git restore`): restore (not `--staged` alone:
-#   unstaging), checkout [<commit>] --, reset <commit> -- (a tree that isn't HEAD's; a word that is no commit and no
-#   path is a tree-ish), `-p` with no path (the whole tree), rm, mv (not -n), clean (not -n; `-e backlog` keeps it
-#   unless a `!` pattern follows), stash push --, apply and am (paths from `git apply --numstat`, both sides of each
-#   rename, C-unquoted; in a call of their own), merge-file (its first file), checkout-index, update-index (not
-#   flag-only forms), read-tree --prefix or -u; the same pathspecs into data/, data/snapshots or data/indexes. A pathspec
-#   reaches backlog/ when it is in it, is the worktree root, is a git glob from either (`'*.md'`: git's `*` crosses
-#   `/`) or `:` magic, unless an exclude names backlog itself (`':!backlog'`, case-exact as git reads it; never under
-#   literal pathspecs); --pathspec-from-file, stdin, an unresolvable pathspec, -C, work tree or path-valued option
-#   (`--prefix=$P`), and a built pathspec after a `cd` it couldn't follow are refused in a repo with backlog/. A
-#   command git runs from its own words (a command setting's `-c` value: core.pager, pager.*, editors, drivers,
-#   filters, aliases; GIT_PAGER/PAGER/GIT_EDITOR/…; rebase --exec/-x, bisect run, submodule foreach, grep -O<cmd>,
-#   difftool -x, filter-branch filters and --setup; a `git config [set] <key> <value>` value for those keys) is
-#   checked as a command, up to four levels. cp/mv/ln/install `-t <dir>` is a destination; ditto copies contents. Allowed: branch and commit operations (checkout/switch a branch, rebase,
-#   merge, cherry-pick, reset without paths, `git stash` without a path), reads, dry runs, and settling a path every
-#   match of which is in conflict (`checkout --theirs`, `restore --ours`, `rm`; not when git is pointed at another
-#   repository), since an editor write there is refused.
-# - A payload this hook can't read (not a JSON object, a tool it isn't wired to, no command or file path) is refused,
-#   and so is a command it can't parse, anywhere (TASK-244 review round 2: a nested value that failed to parse once
-#   ended the check with exit 0).
-# - Known limitation: this is a best-effort guard against agent mistakes, not a security boundary. Obfuscated commands
-#   may bypass it (`git${IFS}rm`, a config or hook script written in an earlier call, git behind a wrapper cmdparse
-#   doesn't strip); the backstop is git history plus review (TASK-244).
+#   enforce-backlog-cli.sh), are refused here; enforce-backlog-cli.sh covers editor writes.
+# - TASK-244 (added blocks only: `backlog_guard` runs before every check below and can only refuse, never allow;
+#   PR #146 put a completed task back with `git restore`). Refused where backlog/ is in reach: every git command that
+#   writes backlog/ files in the worktree or the index by pathspec: restore (not `--staged` alone: unstaging),
+#   checkout [<commit>] --, reset <commit> -- (a tree that isn't HEAD's; a word that is no commit and no path is a
+#   tree-ish) and reset --hard/--merge/--keep, `-p` with no path (the whole tree), rm, mv, clean (not -n; `-e
+#   backlog` keeps it unless a `!` pattern follows, and not under -X), stash push --, apply and am (paths from `git
+#   apply --numstat` and both sides of each rename and copy, C-unquoted; in a call of their own, a `cd` or a
+#   report-only `git apply --check` aside), merge-file (its first file), checkout-index (`<top>/<prefix><path>`, -a),
+#   update-index (not flag-only forms), read-tree --prefix or -u; the same pathspecs into data/, data/snapshots or
+#   data/indexes. A pathspec reaches backlog/ when it is in it, is the worktree root, is a git glob from either
+#   (`'*.md'`: git's `*` crosses `/`) or `:` magic, unless an exclude names backlog itself (`':!backlog'`,
+#   case-exact as git reads it; never under literal pathspecs); --pathspec-from-file, stdin, an unresolvable
+#   pathspec, -C, work tree or path-valued option (`--prefix=$P`, `--prefix "$P"`) and a built pathspec after a
+#   `cd` it couldn't follow are refused; `-C`, `--git-dir`, `--work-tree` (read after -C) and GIT_WORK_TREE are
+#   followed. A command git runs from its own words (a command setting's `-c` value: core.pager, pager.*, editors,
+#   drivers, filters, aliases; GIT_PAGER/PAGER/GIT_EDITOR/…; rebase --exec/-x, bisect run, submodule foreach,
+#   grep -O<cmd>, difftool -x, filter-branch filters and --setup; a `git config [--file f] [set] <key> <value>`
+#   value for those keys) is checked as a command, up to four levels. Shell writes refused too: touch/sponge in
+#   backlog/, a cp/rsync/ditto whose copy lands there (dest/<name>, or each entry of a `src/` and of every ditto
+#   source), cp/mv/ln/install `-t <dir>` into it, patch(1) (not --dry-run), tar -x/unzip into backlog/, a worktree
+#   root or above, find -fprint/-fls into it, and a find that deletes or runs anything but a reader (`-exec grep`;
+#   `rg --pre` is no reader) from backlog/, a worktree root or above (BSD `-f <path>` starts; GNU's leading -D/-O
+#   skipped), and the same finds and copies into data/snapshots or data/indexes; and a path, redirect target, -t
+#   directory or find output only the shell knows, in a repo with backlog/. Settling a conflicted file stays possible:
+#   `checkout --theirs`/`restore --ours` (every matched path unmerged, and git not pointed at another repository),
+#   or `git add -u <path>` to accept a deletion. Fail closed: a payload this guard can't read (not a JSON object, a
+#   tool it isn't wired to, no command, cwd or file path), a cwd that isn't a directory, a command any reading of
+#   which can't be parsed, and a git repository `git rev-parse` can't read are refused, anywhere.
+# - Known limitation (TASK-244): this is a best-effort guard against agent mistakes, not a security boundary.
+#   Obfuscated commands may bypass it (`git${IFS}rm`, a config or hook script written in an earlier call, git behind
+#   a wrapper cmdparse doesn't strip); the backstop is git history plus review.
 # - `git clean -x/-X` (unless a dry run, `-e data`, or pathspecs outside data/) and `git stash push|save --all`
 #   (`-a` in any short cluster: `-qa`, `-ua`) are refused: they remove gitignored files, which is all of data/.
 # - Every path word is resolved first (cmdparse.expand_word): `~`, `~+`, `~-`, `$PWD`, `$(pwd)`, `$(git rev-parse
@@ -72,22 +76,25 @@
 #   the call's own, or their repository's MAIN worktree (a linked worktree has none of its own). Each target is
 #   judged against the worktree that contains it, case-blind, not the one the command runs in (`rm -rf
 #   ../<main>/data/snapshots`, or `../<MAIN>/data`, from a worktree).
-# - xargs appends words this guard can't see: rm/unlink/mv/cp/…, sed -i/perl -i and git add and the backlog git writers above
+# - xargs appends words this guard can't see: rm/unlink/mv/cp/…, sed -i/perl -i and git add/rm/mv/update-index
 #   run through xargs are refused in a repo with data/ or backlog/ (cmdparse's `Argv.via_xargs`).
 # Globs are expanded against the filesystem (`rm -rf data*`, `*`, `../*`), braces and `$'…'` decoded as bash
 # does (`rm -rf data{,}`, cmdparse); rsync's long options are read by unique prefix (`--rem`, `--del`), as
-# macOS's openrsync reads them. Any command this guard can't parse is refused (fail closed), and so is any command
-# this guard can't check at all (an internal error exits 2, never 1: Claude Code lets a crash through). Paths are resolved against the repo root, so
+# macOS's openrsync reads them. Any command this guard can't parse is refused (fail closed) where the main
+# worktree has data/ or the repo has backlog/, and so is any command this guard can't check at all (an internal
+# error exits 2, never 1: Claude Code lets a crash through). Paths are resolved against the repo root, so
 # frontend/src/data/… is unaffected. Exit 2 blocks.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 # The program goes to Python as an argument and the payload on stdin, never in an environment variable: past
 # ARG_MAX (about 1 MB) exec fails with 126, which Claude Code lets through. Any exit but 0 blocks (TASK-156).
 IFS= read -r -d '' PROG <<'PY' || true
-import codecs, functools, glob, os, re, shlex, subprocess, sys
+import functools, glob, os, re, subprocess, sys
+import codecs, shlex  # TASK-244
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
 from cmdparse import (GIT_VALUE_OPTS, Argv, FailClosed, ParseError, expand_word, git, git_config, git_config_opaque,
-                      git_dir, git_subcommand, read_payload, repo_root, walk)
+                      git_subcommand, read_payload, repo_root, walk)
 from cmdparse import payload as hook_payload
+from cmdparse import git_dir  # TASK-244
 
 payload = hook_payload()
 tool = payload.get("tool_name", "")
@@ -264,24 +271,11 @@ def dry_run_add(argv, sub_args, directory):
         return None
     return [line[5:-1] for line in r.stdout.splitlines() if line.startswith("add '") and line.endswith("'")]
 
-# primaries a leading `-f…` word may be rather than BSD's `-f <path>` (macOS find reads `-fprint` as -f print, GNU as
-# the primary; both are checked as primaries)
-FIND_F_PRIMARIES = {"-fprint", "-fprint0", "-fprintf", "-fls", "-follow", "-fstype", "-false"}
-
 def find_starts(args):
-    """find's start paths: the words before its first expression token, after -H/-L/-P and BSD's flags, plus each
-    BSD `-f <path>` (TASK-244 security review: `find -f ../data/snapshots -delete`); none means `.`."""
+    """find's start paths: the words before its first expression token, after -H/-L/-P and BSD's flags;
+    none means `.`."""
     k, starts = 0, []
-    while k < len(args) and (re.fullmatch(r"-[HLPEXdsx]*(f.*)?|-O\d*|-D", args[k])) and args[k] not in FIND_F_PRIMARIES:
-        if args[k] == "-D":  # GNU find's debug option takes a value
-            k += 2
-            continue
-        flag = re.fullmatch(r"-[HLPEXdsx]*(?:f(.*))?", args[k])  # None for -O<n>
-        if flag and flag.group(1) is not None:  # BSD `-f <path>` (attached: `-f../backlog`)
-            if flag.group(1):
-                starts.append(flag.group(1))
-            elif k + 1 < len(args):
-                starts.append(args[k + 1]); k += 1
+    while k < len(args) and args[k] in ("-H", "-L", "-P", "-E", "-X", "-d", "-s", "-x"):
         k += 1
     while k < len(args) and not args[k].startswith("-") and args[k] not in ("(", "!", ")"):
         starts.append(args[k]); k += 1
@@ -325,6 +319,7 @@ def refuse(msg):
     print(msg, file=sys.stderr)
     sys.exit(2)
 
+# ---- TASK-244: added blocks only -------------------------------------------------------------------------------
 BACKLOG_GIT_MSG = (
     "Blocked: backlog/ files are CLI-managed — git doesn't put them back, move or remove them by pathspec "
     "(`git restore`, `git checkout <commit> -- <path>`, `git reset <commit> -- <path>`, `git rm`, `git mv`, `git clean`, "
@@ -636,11 +631,13 @@ COMMAND_ENV = ("GIT_PAGER", "PAGER", "GIT_EDITOR", "EDITOR", "VISUAL", "GIT_SEQU
 COMMAND_KEY = re.compile(r"core\.(pager|editor|sshcommand|askpass|fsmonitor)|pager\..+|sequence\.editor|diff\.external"
                          r"|diff\..+\.(command|textconv)|merge\..+\.driver|filter\..+\.(clean|smudge|process)"
                          r"|credential(\..+)?\.helper|gpg(\..+)?\.program|interactive\.difffilter|sendemail\..*cmd"
-                         r"|uploadpack\.packobjectshook|alias\..+")
+                         r"|uploadpack\.packobjectshook|alias\..+|(diff|merge)tool\..+\.cmd|core\.gitproxy"
+                         r"|core\.alternaterefscommand|remote\..+\.(uploadpack|receivepack)|trailer\..+\.cmd"
+                         r"|gpg\.ssh\.defaultkeycommand|man\..+\.cmd|browser\..+\.cmd|submodule\..+\.update")
 
 def embedded_commands(argv, g):
-    """The shell commands a git invocation runs from its own words: every `-c key=value` value (a pager, editor,
-    diff.external, a filter or driver; harmless for the rest, which aren't commands that write), the COMMAND_ENV
+    """The shell commands a git invocation runs from its own words: the `-c key=value` value of every command setting
+    (COMMAND_KEY: a pager, editor, diff.external, a filter or driver, an alias; a leading `!` is dropped), the COMMAND_ENV
     assignments before it, `rebase --exec/-x`, `bisect run`, `submodule foreach`, `grep -O<cmd>`/
     `--open-files-in-pager=<cmd>`, `difftool -x/--extcmd`, each `filter-branch --*-filter` and `--setup`, and the
     value a `git config [set] <key> <value>` sets, for the keys in COMMAND_KEY (`-c user.name="O'Brien"` is no
@@ -666,7 +663,8 @@ def embedded_commands(argv, g):
         texts += values(("--extcmd",), "-x")
     elif sub == "grep":
         texts += [a.partition("=")[2] for a in args if a.startswith("--open-files-in-pager=")]
-        texts += [a[2:] for a in args if a.startswith("-O") and len(a) > 2]
+        texts += [a[a.index("O", 1) + 1 :] for a in args if a.startswith("-") and not a.startswith("--") and "O" in a[1:]
+                  and a[a.index("O", 1) + 1 :]]  # `-O<cmd>`, `-nO<cmd>`
     elif sub == "filter-branch":
         texts += values((*(f"--{f}-filter" for f in ("env", "tree", "index", "parent", "msg", "commit", "tag-name")),
                          "--setup"))
@@ -747,7 +745,7 @@ def find_writes(args):
     for k, a in enumerate(args):
         if a == "-delete" or a == "--pre" or a.startswith("--pre="):  # `-exec rg --pre <prog>` runs <prog> on each file
             return True
-        if a in ("-exec", "-execdir", "-ok", "-okdir") and (k + 1 == len(args) or
+        if a in ("-ok", "-okdir", "-exec", "-execdir") and (k + 1 == len(args) or
                                                             os.path.basename(args[k + 1]) not in FIND_READERS):
             return True
     return False
@@ -780,58 +778,262 @@ def git_work_trees(argv):
         trees.append(argv.assigns["GIT_WORK_TREE"])
     return trees
 
-IMMUTABLE_MSG = "Blocked: data/snapshots/ and data/indexes/ are immutable (reproducibility, spec 03). Build a new one with `op snapshot build` / `op index build` instead."
+# primaries a leading `-f…` word may be rather than BSD's `-f <path>` (macOS find reads `-fprint` as -f print, GNU as
+# the primary; both are checked as primaries)
+FIND_F_PRIMARIES = {"-fprint", "-fprint0", "-fprintf", "-fls", "-follow", "-fstype", "-false"}
+
+def find_starts_all(args):
+    """find's start paths: the words before its first expression token, after -H/-L/-P and BSD's flags, plus each
+    BSD `-f <path>` (TASK-244 security review: `find -f ../data/snapshots -delete`); none means `.`."""
+    k, starts = 0, []
+    while k < len(args) and (re.fullmatch(r"-[HLPEXdsx]*(f.*)?|-O\d*|-D", args[k])) and args[k] not in FIND_F_PRIMARIES:
+        if args[k] == "-D":  # GNU find's debug option takes a value
+            k += 2
+            continue
+        flag = re.fullmatch(r"-[HLPEXdsx]*(?:f(.*))?", args[k])  # None for -O<n>
+        if flag and flag.group(1) is not None:  # BSD `-f <path>` (attached: `-f../backlog`)
+            if flag.group(1):
+                starts.append(flag.group(1))
+            elif k + 1 < len(args):
+                starts.append(args[k + 1]); k += 1
+        k += 1
+    while k < len(args) and not args[k].startswith("-") and args[k] not in ("(", "!", ")"):
+        starts.append(args[k]); k += 1
+    return starts or ["."]
 
 MALFORMED_MSG = ("Blocked: protect-data-dir.sh got a tool call it can't read (not a JSON object, an unknown tool, or "
-                 "no command or file path), so it can't tell what it would write; refusing (fail closed, TASK-244).")
+                 "no command, cwd or file path), so it can't tell what it would write; refusing (fail closed, TASK-244).")
+
+def guard_payload():
+    """Refuse a payload that isn't what Claude Code sends: invalid JSON (read as {}), a tool this hook isn't wired to,
+    an Edit with no path, a Bash call with no command or with a cwd that isn't a directory. It only refuses."""
+    if not isinstance(ti, dict) or tool not in ("Write", "Edit", "MultiEdit", "NotebookEdit", "Bash"):
+        refuse(MALFORMED_MSG)
+    if tool != "Bash":
+        path = ti.get("notebook_path") or ti.get("file_path") or ""
+        if not isinstance(path, str) or not path:
+            refuse(MALFORMED_MSG)
+        return
+    if not isinstance(ti.get("command"), str) or not ti["command"].strip():
+        refuse(MALFORMED_MSG)
+    where = payload.get("cwd")
+    if not isinstance(where, str) or not os.path.isdir(where):
+        refuse(MALFORMED_MSG + " (The cwd is resolved from the tool call, never assumed.)")
+
+def git_unreadable(directory):
+    """Is `directory` inside a git checkout (a `.git` above it) that `git rev-parse` can't read? Then nothing this
+    guard asks git can be trusted, and the call is refused rather than read as outside a repository."""
+    d = os.path.realpath(directory)
+    while not os.path.isdir(d) and os.path.dirname(d) != d:
+        d = os.path.dirname(d)
+    probe = d
+    while True:
+        if os.path.lexists(os.path.join(probe, ".git")):
+            return not git(d, "rev-parse", "--show-toplevel")
+        if os.path.dirname(probe) == probe:
+            return False
+        probe = os.path.dirname(probe)
+
+# commands git runs from a command's own words, collected by the guard; main() also runs the older checks on each
+EMBEDDED = []
+
+GUARD_DESTROY = {"unlink", "rm", "rmdir", "shred", "truncate"}
+GUARD_DEST_LAST = {"rsync", "cp", "install", "ln", "ditto"}
+GUARD_EDITORS = ("sed", "perl", "ruby", "awk", "gawk")
+
+def target_dirs(args):
+    """GNU's destination-first directory: `-t <dir>`, `-t<dir>`, `-vt <dir>`, `--target-directory[=]<dir>` (or a
+    unique prefix of it, `--target`)."""
+    out = []
+    for k, a in enumerate(args):
+        name, eq, value = a.partition("=")
+        if a.startswith("--") and len(name) >= len("--tar") and "--target-directory".startswith(name):
+            out.append(value if eq else (args[k + 1] if k + 1 < len(args) else ""))
+        elif a.startswith("-") and not a.startswith("--") and "t" in a[1:]:
+            rest = a[a.index("t", 1) + 1 :]
+            out.append(rest or (args[k + 1] if k + 1 < len(args) else ""))
+    return out
+
+def backlog_guard(cmd, where, depth=0):
+    """TASK-244's added blocks, run before every older check and exit path in main(): it refuses (exit 2) or returns,
+    and never allows anything the checks after it would refuse. Every reading of the command (HOME/TMPDIR/USER as set
+    and as '') is parsed; any parse failure refuses, anywhere."""
+    if depth > 4:
+        refuse("Blocked: git commands nested in git commands past four levels can't be checked; write them out.")
+    if git_unreadable(where):
+        refuse("Blocked: `git rev-parse` can't read the repository this command runs in, so what it does to data/ or "
+               "backlog/ can't be checked (TASK-244).")
+    for env_empty in (False, True) if ("$" in cmd or "~" in cmd) else (False,):
+        try:
+            walked = list(walk(cmd, where, env_empty))
+        except Exception as exc:
+            refuse(f"Blocked: this command could not be parsed ({type(exc).__name__}), so what it does to data/ or "
+                   "backlog/ can't be checked — refusing rather than letting it through unexamined. Fix the quoting, "
+                   "or write the command more plainly, and retry.")
+        guard_walked(walked, where, depth)
+
+def guard_walked(walked, where, depth):
+    commands = [(argv, d) for argv, d, _ in walked if argv]
+    for argv, d, redirects in walked:
+        for op, target in redirects:
+            if ">" not in op or (op.endswith("&") and target.isdigit()):
+                continue
+            if resolve(target, argv, d) is None and backlog_repo([d, where]):
+                refuse(BACKLOG_MSG + " (A redirect target names a path this guard can't resolve, in a repo with "
+                       "backlog/; write the path out.)")
+    for raw, d in commands:
+        resolved = [raw[0], *(w if w.startswith("-") else resolve(w, raw, d) for w in raw[1:])]
+        unresolved = {w for w, r in zip(raw, resolved) if r is None}
+        unknown = raw.dir_unknown
+        if raw.env_empty:
+            NO_GLOB.update(r for w, r in zip(raw, resolved)
+                           if r and (m := ENV_LEAD.match(w)) and (m.group(1) or m.group(2)) not in raw.shell_vars)
+        argv = Argv([w if r is None else r for w, r in zip(raw, resolved) if w == "" or r != ""], raw.via_xargs,
+                    raw.assigns)
+        head, args = argv[0], argv[1:]
+        paths = [a for a in args if not a.startswith("-")]
+        g = git_subcommand(argv, d)
+        in_backlog_repo = backlog_repo([d, where])
+        if g and git_unreadable(g[2]):
+            refuse("Blocked: `git rev-parse` can't read the repository this git command names (TASK-244).")
+        if getattr(argv, "via_xargs", False) and g is not None and g[0] in BACKLOG_GIT_SUBS and backlog_repo(
+                [repo_root(d)]):
+            refuse("Blocked: xargs appends paths this guard can't see, and this repo has backlog/. Run the command on "
+                   "the paths themselves (a shell loop or a glob) so they can be checked.")
+        for text in embedded_commands(argv, g):  # `git -c core.pager='rm …' log`, `rebase --exec '…'`
+            EMBEDDED.append((text.lstrip("!"), repo_root(g[2]) if g else d))  # the older checks read it too (main)
+            backlog_guard(text.lstrip("!"), repo_root(g[2]) if g else d, depth + 1)
+        if g and g[0] in BACKLOG_GIT_SUBS:
+            trees = [resolve(t, raw, d) for t in git_work_trees(argv)]  # `--work-tree=$X` too
+            found = backlog_git_specs(g[0], g[1], g[2], unmerged_ok=not (trees or git_dir(argv, d)))
+            if found is not None:
+                specs, from_file = found
+                bases = [g[2], *(os.path.join(g[2], t) for t in trees if t)]  # after -C, as git reads it
+                has_backlog = backlog_repo([*bases, where])
+                # a pathspec, -C or work tree only the shell knows (`git restore "$F"`, `cd "$X" && git rm .`)
+                hidden = unknown or None in trees or any(
+                    w in unresolved for w in [*specs, *argv[1 : len(argv) - len(g[1]) - 1]]) or any(
+                    a.partition("=")[0] in PATH_VALUED and re.search(r"[$`~]", a.partition("=")[2]) for a in g[1]) or any(
+                    a in PATH_VALUED and k + 1 < len(g[1]) and g[1][k + 1] in unresolved for k, a in enumerate(g[1]))
+                if has_backlog and (from_file or hidden):
+                    refuse(BACKLOG_GIT_MSG + " (Its paths come from a file, stdin or a word this guard can't "
+                           "resolve; name them on the command line.)")
+                literal = "--literal-pathspecs" in argv[1 : len(argv) - len(g[1]) - 1] or \
+                    argv.assigns.get("GIT_LITERAL_PATHSPECS", os.environ.get("GIT_LITERAL_PATHSPECS", "0")) \
+                    not in ("", "0")
+                if specs_reach_backlog(specs, bases, literal):
+                    refuse(BACKLOG_GIT_MSG)
+                if g[0] in ("apply", "am") and sum(writes_in_call(c_argv, c_d) for c_argv, c_d in commands) > 1:
+                    # the patch is read now, before an earlier command in the call rewrites it
+                    refuse(BACKLOG_GIT_MSG + " (Run `git apply`/`git am` in a call of its own, so the patch "
+                           "this guard reads is the one git applies.)")
+                if specs_touch_immutable(specs, bases):  # data/ is gitignored, but a ref may still hold it
+                    refuse(IMMUTABLE_MSG)
+        if g and g[0] == "reset" and backlog_repo([g[2], where]) and any(
+                a in ("--hard", "--merge", "--keep") for a in g[1][: g[1].index("--") if "--" in g[1] else None]):
+            refuse(BACKLOG_GIT_MSG + " (`git reset --hard`/`--merge`/`--keep` rewrites the whole worktree, backlog/ "
+                   "included; commit what the CLI wrote, and move the branch with a commit operation instead.)")
+        if head in GUARD_DEST_LAST and len(paths) > 1 and any(
+                in_backlog(rel(t, d)) for t in copy_targets(paths, d, head == "ditto")):
+            refuse(BACKLOG_MSG)  # `cp -R /old/backlog .`, `rsync -a /old/ ./`, `ditto /old .`
+        if head == "ditto" and paths and any_rel(in_backlog, paths[-1], d):
+            refuse(BACKLOG_MSG)
+        if head == "ditto" and paths and any_rel(is_or_contains_immutable, paths[-1], d):
+            refuse(IMMUTABLE_MSG)
+        dirs = target_dirs(args) if head in ("cp", "mv", "ln", "install") else []
+        if dirs:  # GNU `-t <dir>`: the destination comes first
+            if any(t in unresolved or re.search(r"[$`~]", t) for t in dirs) and in_backlog_repo:
+                refuse(BACKLOG_MSG + " (a -t directory this guard can't resolve; write it out.)")
+            if any(any_rel(in_backlog, t, d) for t in dirs):
+                refuse(BACKLOG_MSG)
+            if any(any_rel(is_or_contains_immutable, t, d) for t in dirs):
+                refuse(IMMUTABLE_MSG)
+        if head in ("sponge", "touch") and any(any_rel(in_backlog, p, d) for p in paths):
+            refuse(BACKLOG_MSG)
+        if head == "patch" and in_backlog_repo and not any(a in ("--dry-run", "-C", "--check") for a in args):
+            refuse(BACKLOG_MSG + " (patch(1) writes the files its patch names, which this guard can't read; use "
+                   "`git apply` on a patch file, in a call of its own.)")
+        if head in ("tar", "bsdtar", "gtar", "unzip") and extracts(head, args):
+            where_to = extract_dir(head, args) or "."
+            if where_to in unresolved or re.search(r"[$`~]", where_to) or reaches_backlog_tree(where_to, d):
+                refuse(BACKLOG_MSG + " (An archive extracted here can overwrite backlog/ files; extract it into "
+                       "a directory of its own.)")
+        # a word expand_word couldn't resolve is a path only the shell knows: refused where backlog/ is (the older
+        # check below does the same where data/ is)
+        if in_backlog_repo:
+            hidden_paths = []
+            if head in GUARD_DESTROY | {"mv", "tee", "sponge", "touch"}:
+                hidden_paths = paths
+            elif head in GUARD_DEST_LAST:
+                hidden_paths = paths[-1:]
+            elif head == "dd":
+                hidden_paths = [a for a in raw[1:] if a.startswith("of=")]
+            if any(w in unresolved for w in hidden_paths):
+                refuse(BACKLOG_MSG + " (A `$` word, `~` or `cd`/`pushd` target names a path this guard can't "
+                       "resolve, in a repo with backlog/; write the path out.)")
+        for k_, a_ in enumerate(args):  # `-fprint <file>` and its kin write that file, as a redirect does
+            if head == "find" and a_ in ("-fprint", "-fprint0", "-fprintf", "-fls"):
+                out = args[k_ + 1] if k_ + 1 < len(args) else ""
+                if out in unresolved and (in_backlog_repo or data_in(d)):
+                    refuse(BACKLOG_MSG + " (find writes to a file this guard can't resolve; write it out.)")
+                if any_rel(inside_immutable, out, d):
+                    refuse(IMMUTABLE_MSG)
+                if any_rel(in_backlog, out, d):
+                    refuse(BACKLOG_MSG)
+        if head == "find" and find_writes(args):
+            starts = find_starts_all(args)
+            if in_backlog_repo and (any(s in unresolved for s in starts)
+                                    or (unknown and not all(os.path.isabs(s) for s in starts))):
+                refuse(BACKLOG_MSG + " (find's start path can't be resolved here; write it out.)")
+            if any(reaches_backlog_tree(s, d) for s in starts):
+                refuse(BACKLOG_MSG + " (`find … -delete` or `-exec <command>` from here can reach backlog/ files, "
+                       "and which ones can't be seen; start find in the directories you mean.)")
+            if any(covers_immutable(s, d) for s in starts):  # BSD `-f <path>` starts, which the older check skips
+                refuse(IMMUTABLE_MSG)
+
+# ---- end TASK-244 ---------------------------------------------------------------------------------------------
+
+IMMUTABLE_MSG = "Blocked: data/snapshots/ and data/indexes/ are immutable (reproducibility, spec 03). Build a new one with `op snapshot build` / `op index build` instead."
 
 def main():
     global cwd  # the payload's, replaced by read_payload's below
-    # a payload that isn't what Claude Code sends (invalid JSON, a tool this hook isn't wired to, no command or path)
-    # is refused: there is nothing to check it against (TASK-244 security review: it was let through)
-    if not isinstance(ti, dict) or tool not in ("Write", "Edit", "MultiEdit", "NotebookEdit", "Bash"):
-        refuse(MALFORMED_MSG)
+    guard_payload()  # TASK-244: refuses a payload it can't read; never allows
     if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
         path = ti.get("file_path") or ti.get("notebook_path") or ""
-        if not isinstance(path, str) or not path:
-            refuse(MALFORMED_MSG)
-        if inside_immutable(rel(path, os.path.dirname(path) if os.path.isabs(path) else cwd)):
+        if path and inside_immutable(rel(path, os.path.dirname(path) if os.path.isabs(path) else cwd)):
             refuse(IMMUTABLE_MSG)
         sys.exit(0)
 
-    if not isinstance(ti.get("command"), str) or not ti["command"].strip():
-        refuse(MALFORMED_MSG)
     cmd, cwd = read_payload()
-    def walked_or_refuse(env_empty, text=None, where=None):
+    backlog_guard(cmd, cwd)  # TASK-244: added blocks only, before every check and exit path below
+    def walked_or_refuse(env_empty):
         try:
-            return list(walk(cmd if text is None else text, cwd if where is None else where, env_empty))
+            return list(walk(cmd, cwd, env_empty))
         except FailClosed as exc:
             refuse(f"Blocked: this git command can't be read reliably ({exc}), so what it does to data/ or backlog/ "
                    "can't be checked. Write abbreviated options out in full and run the git subcommand by its own name.")
         except ParseError:
-            # Fail CLOSED, everywhere (TASK-244 review round 2: an exit 0 here, reached from a nested `-c` value, ended
-            # the whole check early and let `git -C <repo> -c x="it's" rm -r backlog` through from outside a repo)
-            refuse("Blocked: this command could not be parsed (unbalanced quotes?), so what it does to data/ or "
-                   "backlog/ can't be checked — refusing rather than letting it through unexamined. Fix the quoting, "
-                   "or write the command more plainly, and retry.")
+            # Fail CLOSED (review gate round 3): any parse failure, whatever the text names (`rm -rf . "`), where the
+            # main worktree has data/ or the repo has backlog/.
+            if data_in(cwd) or os.path.isdir(os.path.join(repo_root(cwd), "backlog")):
+                refuse("Blocked: this command could not be parsed (unbalanced quotes?), and this repo has data/ or "
+                       "backlog/ — refusing rather than letting it through unexamined. Fix the quoting, or write the "
+                       "command more plainly, and retry.")
+            sys.exit(0)
 
-    def check(walked, depth=0):
-        """Refuse (exit 2) if a command in `walked` writes, moves or deletes what this guard protects. A command a
-        git invocation runs from its own words (`embedded_commands`) is checked the same way, from the worktree's
-        top, where git runs it; past four levels of that, refused."""
-        if depth > 4:
-            refuse("Blocked: git commands nested in git commands past four levels can't be checked; write them out.")
+    def check(walked):
+        """Refuse (exit 2) if a command in `walked` writes, moves or deletes what this guard protects."""
         commands = [(argv, d) for argv, d, _ in walked if argv]
         for argv, d, redirects in walked:
             for op, target in redirects:
                 if ">" not in op or (op.endswith("&") and target.isdigit()):
                     continue
                 resolved_target = resolve(target, argv, d)  # `> "$PWD/data/snapshots/x"`
-                if resolved_target is None and (data_in(d) or data_in(cwd) or backlog_repo([d, cwd])):
+                if resolved_target is None and (data_in(d) or data_in(cwd)):
                     # a target only the shell knows (`> "$(echo data)/snapshots/x"`): refused where data/ is, as a path
                     # word is (TASK-067 final review gate)
                     refuse(IMMUTABLE_MSG + " (A redirect target names a path this guard can't resolve, in a repo with "
-                           "data/ or backlog/; write the path out.)")
+                           "data/; write the path out.)")
                 target = resolved_target or target
                 if ">" in op and inside_immutable(rel(target, d)):
                     refuse(IMMUTABLE_MSG)
@@ -839,7 +1041,7 @@ def main():
                     refuse(BACKLOG_MSG)
 
         DESTROY = {"rm", "shred", "truncate", "rmdir", "unlink"}          # every path arg is a target
-        DEST_LAST = {"cp", "rsync", "install", "ln", "ditto"}  # last path arg is the target
+        DEST_LAST = {"cp", "rsync", "install", "ln"}          # last path arg is the target
         IN_PLACE_EDITORS = ("sed", "perl", "ruby", "awk", "gawk")
         UNRESOLVED_MSG = (IMMUTABLE_MSG + " (A `$` word, `~` or `cd`/`pushd` target names a path this guard can't resolve, "
                           "in a repo with data/; write the path out.)")
@@ -874,46 +1076,17 @@ def main():
             # (when a `cd` went somewhere unknown, `d` is only where the walk last knew) has one (review gate round 3)
             has_data = data_in(d) or data_in(cwd)
             def refuse_unresolved(words_, implicit_cwd=False):
-                """Refuse (where data/ or backlog/ is) when a path that decides a check can't be resolved, or the command works
+                """Refuse (where data/ is) when a path that decides a check can't be resolved, or the command works
                 on the current directory itself and a `cd` before it couldn't be followed."""
-                if (has_data or backlog_repo([d, cwd])) and (any(w in unresolved for w in words_)
-                                                             or (implicit_cwd and unknown)):
+                if has_data and (any(w in unresolved for w in words_) or (implicit_cwd and unknown)):
                     refuse(UNRESOLVED_MSG)
             if getattr(argv, "via_xargs", False) and (
                 head in DESTROY | DEST_LAST | {"mv", "tee"}
                 or (head in IN_PLACE_EDITORS and in_place)
-                or (g is not None and g[0] in ("add", "stage", *BACKLOG_GIT_SUBS))
+                or (g is not None and g[0] in ("add", "stage", "rm", "mv", "update-index"))
             ) and (os.path.isdir(os.path.join(root_, "data")) or os.path.isdir(os.path.join(root_, "backlog"))):
                 refuse("Blocked: xargs appends paths this guard can't see, and this repo has data/ or backlog/. "
                        "Run the command on the paths themselves (a shell loop or a glob) so they can be checked.")
-            for text in embedded_commands(argv, g):  # `git -c core.pager='rm …' log`, `rebase --exec '…'`
-                check(walked_or_refuse(raw.env_empty, text, repo_root(g[2]) if g else d), depth + 1)
-            if g and g[0] in BACKLOG_GIT_SUBS:
-                trees = [resolve(t, raw, d) for t in git_work_trees(argv)]  # `--work-tree=$X` too
-                found = backlog_git_specs(g[0], g[1], g[2], unmerged_ok=not (trees or git_dir(argv, d)))
-                if found is not None:
-                    specs, from_file = found
-                    bases = [g[2], *(os.path.join(g[2], t) for t in trees if t)]  # after -C, as git reads it
-                    has_backlog = backlog_repo([*bases, cwd])
-                    # a pathspec, -C or work tree only the shell knows (`git restore "$F"`, `cd "$X" && git rm .`)
-                    hidden = unknown or None in trees or any(
-                        w in unresolved for w in [*specs, *argv[1 : len(argv) - len(g[1]) - 1]]) or any(
-                        a.partition("=")[0] in PATH_VALUED and re.search(r"[$`~]", a.partition("=")[2]) for a in g[1]) or any(
-                        a in PATH_VALUED and k + 1 < len(g[1]) and g[1][k + 1] in unresolved for k, a in enumerate(g[1]))
-                    if has_backlog and (from_file or hidden):
-                        refuse(BACKLOG_GIT_MSG + " (Its paths come from a file, stdin or a word this guard can't "
-                               "resolve; name them on the command line.)")
-                    literal = "--literal-pathspecs" in argv[1 : len(argv) - len(g[1]) - 1] or \
-                        argv.assigns.get("GIT_LITERAL_PATHSPECS", os.environ.get("GIT_LITERAL_PATHSPECS", "0")) \
-                        not in ("", "0")
-                    if specs_reach_backlog(specs, bases, literal):
-                        refuse(BACKLOG_GIT_MSG)
-                    if g[0] in ("apply", "am") and sum(writes_in_call(c_argv, c_d) for c_argv, c_d in commands) > 1:
-                        # the patch is read now, before an earlier command in the call rewrites it
-                        refuse(BACKLOG_GIT_MSG + " (Run `git apply`/`git am` in a call of its own, so the patch "
-                               "this guard reads is the one git applies.)")
-                    if specs_touch_immutable(specs, bases):  # data/ is gitignored, but a ref may still hold it
-                        refuse(IMMUTABLE_MSG)
             if g and g[0] in ("add", "stage"):  # `git stage` is `git add`
                 a = g[1]
                 forced = any(x in ("-f", "--force") or (x.startswith("-") and not x.startswith("--") and "f" in x) for x in a)
@@ -1045,30 +1218,12 @@ def main():
             if stash_writes and any(a == "--all" or (a.startswith("-") and not a.startswith("--") and "a" in a[1:].partition("m")[0])
                                     for a in gm[1][: gm[1].index("--") if "--" in gm[1] else None]):
                 refuse("Blocked: `git stash --all` stashes (and removes) gitignored files, including data/.")
+            if gm and gm[0] in ("mv", "rm") and any(in_backlog(rel(p, gm[2])) for p in gm[1] if not p.startswith("-")):
+                refuse(BACKLOG_MSG)
             if head in DESTROY | {"mv", "tee"} and any(any_rel(in_backlog, p, d) for p in paths):
                 refuse(BACKLOG_MSG)
             if head in DEST_LAST and paths and any_rel(in_backlog, paths[-1], d):  # copying OUT of backlog/ is fine
                 refuse(BACKLOG_MSG)
-            if head in DEST_LAST and len(paths) > 1 and any(in_backlog(rel(t, d)) for t in copy_targets(paths, d, head == "ditto")):
-                refuse(BACKLOG_MSG)  # `cp -R /old/backlog .`, `rsync -a /old/ ./`
-            target_dirs = [args[k_ + 1] for k_, a_ in enumerate(args[:-1]) if a_ == "-t"] + [
-                a_.partition("=")[2] for a_ in args if a_.startswith("--target-directory=")]
-            if head in ("cp", "mv", "ln", "install") and target_dirs:  # GNU `-t <dir>`: the destination comes first
-                if any(t in unresolved or re.search(r"[$`~]", t) for t in target_dirs) and backlog_repo([d, cwd]):
-                    refuse(BACKLOG_MSG + " (a -t directory this guard can't resolve; write it out.)")
-                if any(any_rel(in_backlog, t, d) or any_rel(inside_immutable, t, d) for t in target_dirs):
-                    refuse(BACKLOG_MSG)
-            if head in ("sponge", "touch") and any(any_rel(in_backlog, p, d) for p in paths):
-                refuse(BACKLOG_MSG)
-            if head == "patch" and backlog_repo([d, cwd]) and not any(
-                    a in ("--dry-run", "-C", "--check") for a in args):
-                refuse(BACKLOG_MSG + " (patch(1) writes the files its patch names, which this guard can't read; use "
-                       "`git apply` on a patch file, in a call of its own.)")
-            if head in ("tar", "bsdtar", "gtar", "unzip") and extracts(head, args):
-                where = extract_dir(head, args) or "."
-                if where in unresolved or re.search(r"[$`~]", where) or reaches_backlog_tree(where, d):
-                    refuse(BACKLOG_MSG + " (An archive extracted here can overwrite backlog/ files; extract it into "
-                           "a directory of its own.)")
             # a word expand_word couldn't resolve is a path only the shell knows (`rm -rf "$UNSET/x"`): refuse where
             # data/ is, for every path that decides a check below
             if head in DESTROY | {"mv", "tee"}:
@@ -1102,23 +1257,6 @@ def main():
                 refuse_unresolved(find_starts(args), implicit_cwd=not any(os.path.isabs(p) for p in find_starts(args)))
             if find_deletes and any(covers_immutable(p, d) for p in find_starts(args)):
                 refuse(IMMUTABLE_MSG)
-            for k_, a_ in enumerate(args):  # `-fprint <file>` and its kin write that file, as a redirect does
-                if a_ in ("-fprint", "-fprint0", "-fprintf", "-fls"):
-                    out = args[k_ + 1] if k_ + 1 < len(args) else ""
-                    if out in unresolved and (has_data or backlog_repo([d, cwd])):
-                        refuse(BACKLOG_MSG + " (find writes to a file this guard can't resolve; write it out.)")
-                    if any_rel(inside_immutable, out, d):
-                        refuse(IMMUTABLE_MSG)
-                    if any_rel(in_backlog, out, d):
-                        refuse(BACKLOG_MSG)
-            if head == "find" and find_writes(args):
-                starts = find_starts(args)
-                if backlog_repo([d, cwd]) and (any(s in unresolved for s in starts)
-                                               or (unknown and not all(os.path.isabs(s) for s in starts))):
-                    refuse(BACKLOG_MSG + " (find's start path can't be resolved here; write it out.)")
-                if any(reaches_backlog_tree(s, d) for s in starts):
-                    refuse(BACKLOG_MSG + " (`find … -delete` or `-exec <command>` from here can reach backlog/ files, "
-                           "and which ones can't be seen; start find in the directories you mean.)")
             if head in IN_PLACE_EDITORS and in_place and any(any_rel(inside_immutable, p, d) for p in paths):
                 refuse(IMMUTABLE_MSG)
             if head in IN_PLACE_EDITORS and in_place and any(any_rel(lambda r: in_backlog(r) and not in_decisions(r), p, d) for p in paths):
@@ -1128,6 +1266,10 @@ def main():
     check(walked_or_refuse(False))
     if "$" in cmd or "~" in cmd:  # `cd ~` with HOME '' stays put (TASK-156)
         check(walked_or_refuse(True))
+    for text, where_ in EMBEDDED:  # TASK-244: the older checks on what git runs from its own words (parsed above)
+        check(list(walk(text, where_, False)))
+        if "$" in text or "~" in text:
+            check(list(walk(text, where_, True)))
     sys.exit(0)
 
 try:

@@ -374,16 +374,16 @@ GIT_LONG_OPTS: dict[str, frozenset[str]] = {
         ),
         # commands that run a shell command from an option (protect-data-dir.sh's embedded_commands, TASK-244)
         "rebase": (
-            "onto keep-base no-verify quiet verbose no-stat signoff committer-date-is-author-date reset-author- "
-            "date ignore-date ignore-whitespace whitespace force-rebase no-ff continue skip abort quit edit-todo "
-            "show-current-patch apply merge interactive preserve-merges rerere-autoupdate empty keep-empty "
-            "autosquash update-refs gpg-sign autostash exec allow-empty-message rebase-merges fork-point strategy "
-            "strategy-option root reschedule-failed-exec reapply-cherry-picks verify stat ff no-onto no-keep-base "
-            "no-quiet no-verbose no-signoff no-committer-date-is-author-date no-reset-author-date no-ignore-date "
-            "no-ignore-whitespace no-whitespace no-force-rebase no-preserve-merges no-rerere-autoupdate no-keep- "
-            "empty no-autosquash no-update-refs no-gpg-sign no-autostash no-exec no-allow-empty-message no- "
-            "rebase-merges no-fork-point no-strategy no-strategy-option no-root no-reschedule-failed-exec no- "
-            "reapply-cherry-picks"
+            "onto keep-base no-verify quiet verbose no-stat signoff committer-date-is-author-date "
+            "reset-author-date ignore-date ignore-whitespace whitespace force-rebase no-ff continue skip abort "
+            "quit edit-todo show-current-patch apply merge interactive preserve-merges rerere-autoupdate empty "
+            "keep-empty autosquash update-refs gpg-sign autostash exec allow-empty-message rebase-merges "
+            "fork-point strategy strategy-option root reschedule-failed-exec reapply-cherry-picks verify stat ff "
+            "no-onto no-keep-base no-quiet no-verbose no-signoff no-committer-date-is-author-date "
+            "no-reset-author-date no-ignore-date no-ignore-whitespace no-whitespace no-force-rebase "
+            "no-preserve-merges no-rerere-autoupdate no-keep-empty no-autosquash no-update-refs no-gpg-sign "
+            "no-autostash no-exec no-allow-empty-message no-rebase-merges no-fork-point no-strategy "
+            "no-strategy-option no-root no-reschedule-failed-exec no-reapply-cherry-picks"
         ),
         "difftool": (
             "gui dir-diff no-prompt prompt symlinks tool tool-help trust-exit-code extcmd no-index index no-gui "
@@ -394,13 +394,13 @@ GIT_LONG_OPTS: dict[str, frozenset[str]] = {
             "text textconv recursive max-depth extended-regexp basic-regexp fixed-strings perl-regexp line-number "
             "column full-name files-with-matches name-only files-without-match null only-matching count color "
             "break heading context before-context after-context threads show-function function-context and or not "
-            "quiet all-match open-files-in-pager ext-grep max-count index no-cached no-untracked no-exclude- "
-            "standard no-recurse-submodules no-invert-match no-ignore-case no-word-regexp no-text no-textconv no- "
-            "recursive no-extended-regexp no-basic-regexp no-fixed-strings no-perl-regexp no-line-number no- "
-            "column no-full-name no-files-with-matches no-name-only no-files-without-match no-null no-only- "
-            "matching no-count no-color no-break no-heading no-context no-before-context no-after-context no- "
-            "threads no-show-function no-function-context no-or no-quiet no-all-match no-open-files-in-pager no- "
-            "ext-grep no-max-count"
+            "quiet all-match open-files-in-pager ext-grep max-count index no-cached no-untracked "
+            "no-exclude-standard no-recurse-submodules no-invert-match no-ignore-case no-word-regexp no-text "
+            "no-textconv no-recursive no-extended-regexp no-basic-regexp no-fixed-strings no-perl-regexp "
+            "no-line-number no-column no-full-name no-files-with-matches no-name-only no-files-without-match "
+            "no-null no-only-matching no-count no-color no-break no-heading no-context no-before-context "
+            "no-after-context no-threads no-show-function no-function-context no-or no-quiet no-all-match "
+            "no-open-files-in-pager no-ext-grep no-max-count"
         ),
         "checkout-index": (
             "all ignore-skip-worktree-bits force quiet no-create index stdin temp prefix stage create no-all "

@@ -45,7 +45,11 @@ three times, and close it.
 - Round 2 found a fail-open the round-1 fix made: a nested `-c` value that didn't parse took the old "parse error
   outside a repo with backlog/: exit 0" path and ended the whole check, so `git -C <repo> -c x="it's" rm -r backlog`
   passed from outside a repo. A parse failure now refuses everywhere, and only command settings' values (pager,
-  editor, drivers, filters, aliases) are parsed at all, so `-c user.name="O'Brien"` stays allowed.
+  editor, drivers, filters, aliases) are parsed at all, so `-c user.name="O'Brien"` stays allowed. The same round
+  added: tar `x` in any short cluster, `ditto` copying a source's contents, `cp`/`mv`/`ln`/`install -t <dir>`, GNU
+  `find -D`/`-O` skipped (and `-follow` not read as BSD `-f`), rebase/difftool/grep options read as git abbreviates
+  them, `git config --file`/`set`, `filter-branch --setup`, copy headers in patches, `git apply --check && git
+  apply` allowed, and `-e backlog` no longer keeping backlog/ under `clean -X`.
 - The scope is a guard against mistakes, not a boundary (owner ruling via the coordinator, 2026-10-13):
   `git${IFS}rm`, a config or hook script written in an earlier call, and git behind a wrapper cmdparse doesn't
   strip can still get through; git history plus review is the backstop.
