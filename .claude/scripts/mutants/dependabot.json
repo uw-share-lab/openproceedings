@@ -1661,5 +1661,17 @@
     "file": ".claude/scripts/dependabot/docker_digest.py",
     "old": "    except ToolError:\n        return \"\"\n",
     "new": "    except ToolError:\n        return CLOUD_SIGSTORE\n"
+  },
+  {
+    "label": "dependabot: prs: a cut-short installation list accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if got[\"total_count\"] != len(got[\"installations\"]):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: no Claude installation passes",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        rep.problem(\n            f\"installation: no {APP_SLUG!r}",
+    "new": "        rep.ok(\n            f\"installation: no {APP_SLUG!r}"
   }
 ]

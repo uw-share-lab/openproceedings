@@ -21,7 +21,12 @@ cse_01Q24cxnP5Nu3yXGC2FKjWqW) showed its installation check, its uv release call
 - The proxy itself is the bound worth checking: another repository answers HTTP 403 "GitHub access to this
   repository is not enabled for this session". Requiring both refusals, each message matched exactly, is a check the
   cloud can answer, and a 200 (the binding gone) stops the run. The installation's repository selection moves to the
-  local run, which has an org owner's credential (`orgs/uw-share-lab/installations`).
+  local run, which has an org owner's credential (`orgs/uw-share-lab/installations`). The probe saw astral-sh/uv's
+  attestations API refused, not `repos/astral-sh/uv` itself; the lesson applies here too, and the check fails closed
+  if that call ever answers (review round 1).
+- A gate whose "nothing to check" case prints `ok` passes on a renamed app: the local check now stops when no `claude`
+  installation is listed and names the apps it saw, and refuses a list shorter than its `total_count` (security
+  review, round 1).
 - `gh auth status` fails and `gh api user` may fail in a session whose token is a placeholder behind the proxy; a
   repository-scoped call (`gh api repos/<this repo>`) is the auth check that holds in both modes.
 - Sigstore is closed off in two places at once (the TUF hosts are Forbidden at the proxy, and another org's

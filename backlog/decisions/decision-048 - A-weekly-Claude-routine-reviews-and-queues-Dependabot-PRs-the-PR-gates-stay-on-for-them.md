@@ -283,8 +283,10 @@ one) answers HTTP 403 "GitHub access to this repository is not enabled for this 
 access…". `gh attestation verify`, `trusted-root` and `download` all fail: the proxy answers Forbidden for
 `tuf-repo-cdn.sigstore.dev` and `tuf-repo.github.com`, and another organisation's attestation API is refused as
 above, so no offline route exists. So the step 0 installation check this record's earlier addenda describe could
-never pass in the cloud, step 0's uv release call would be refused, and `docker_digest.py` stops every ghcr.io image
-there.
+never pass in the cloud, and `docker_digest.py` stops every ghcr.io image there. The exact calls step 0 now makes to
+another repository (`repos/astral-sh/uv` and `repos/astral-sh/uv/releases/latest`) were not themselves probed; the
+probe's refusal of another of that repository's endpoints says they will be, and a different answer fails closed (a
+200 to the binding call stops the run; an answer to the release call is used as locally).
 
 **Decisions (owner, 2026-10-13):**
 - **AC6, the credential's reach.** In the cloud, step 0 checks the **session binding** instead of the installation:
@@ -297,13 +299,23 @@ there.
   in both modes; `gh api user` is no longer called (the proxy may refuse it). The App installation's repository
   selection (selected, openproceedings only, set by the owner on 2026-10-13) is checked **locally**: `prs.py
   preflight` reads `gh api orgs/uw-share-lab/installations` with the owner's credential, prints the Claude
-  installation's `repository_selection` and permissions, and stops on any selection but `selected`. The selected
-  repository list itself can't be read with a `gh` login (it needs a GitHub App user token).
+  installation's `repository_selection` and permissions, and stops on any selection but `selected`, or when no
+  `claude` installation is listed. The selected repository list itself can't be read with a `gh` login (it needs a
+  GitHub App user token).
 - **AC3, Sigstore.** In the cloud it can't work, so every ghcr.io PR stays the owner's there, for the reason above;
   `docker_digest.py`'s PROBLEM line now says so when it runs in a cloud session. Locally nothing changes.
 - **uv's release.** In the cloud, a refused `repos/astral-sh/uv/releases/latest` call is not a stop: the new `prs.py
   uv-release` prints "check uv's latest release by hand" as an `OWNER` line for the summary. Locally it compares the
   pinned minor with the latest release as the procedure did by hand.
+
+Options considered:
+- Keep the installation API check (rejected: the proxy refuses it, so every cloud run would stop at step 0).
+- Tell the environment apart by GraphQL alone and skip any reach check in the cloud (rejected: the mode says nothing
+  about what the credential reaches; the binding refusals do).
+- Add `astral-sh/uv` to the session so the release call answers (rejected: it widens the session for an
+  informational check, and it is the repository the binding check relies on being refused).
+- Make Sigstore work in the cloud (rejected for now: the TUF hosts are blocked at the proxy and there is no offline
+  route; the cooldown notice leaves every ghcr.io PR to the owner anyway).
 
 Consequences:
 - Rows in `.claude/scripts/tests/dependabot_cases.py`, whose fake `gh` (`dependabot_fake.py`) now fails in cloud mode

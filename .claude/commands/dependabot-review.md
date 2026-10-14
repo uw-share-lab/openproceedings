@@ -235,8 +235,9 @@ dependency code anyway (decision-048). Don't add `astral-sh/uv` to the routine's
 would then fail and every run would stop. **Locally** it reads `gh api orgs/uw-share-lab/installations` (the owner's
 credential: an org owner's call; anyone else gets exit 2 and the run stops) and prints the Claude App installation's
 `repository_selection` and permissions (`ok installation: Claude App <id> on uw-share-lab, repository_selection
-selected; …`); a selection other than `selected` is a PROBLEM ("limit the Claude App installation to openproceedings",
-first under "for the owner"). The repository list of a selected installation can't be read with a `gh` login (it
+selected; …`). A selection other than `selected`, or no installation by the `claude` app at all (the line names the
+apps it saw), is a PROBLEM: stop the run and put the PROBLEM line first under "for the owner"; a list shorter than its
+`total_count` is exit 2. The repository list of a selected installation can't be read with a `gh` login (it
 needs a GitHub App user token), so the selection is what is checked; the owner set it to openproceedings only on
 2026-10-13.
 

@@ -30,8 +30,9 @@ available: sessions are bound to their configured repositories", and `gh api rep
 repository the session isn't bound to) with its HTTP 403 "GitHub access to this repository is not enabled for this
 session"; any other answer, a 200 included, is a PROBLEM (the 2026-10-13 probe showed the installation API can't
 answer there; decision-048, TASK-243 AC6). Locally it reads `gh api orgs/uw-share-lab/installations` (an org
-owner's call; it fails, exit 2, for anyone else) and prints the Claude App installation's repository selection and
-permissions; a selection other than `selected` is a PROBLEM. Then the credential itself: in the cloud gh
+owner's call; it fails, exit 2, for anyone else, or when it lists fewer installations than its `total_count`) and
+prints the Claude App installation's repository selection and permissions; a selection other than `selected`, or no
+installation by the `claude` app at all, is a PROBLEM. Then the credential itself: in the cloud gh
 must have no stored login (one would be a file dependency code could read, which step 5 can't strip), and a real
 token in GH_TOKEN or GITHUB_TOKEN is reported (step 5 strips those). Locally a stored login is allowed: it is the
 maintainer's own machine, where `make test` runs with it every day. In the cloud it also writes the clone's
@@ -256,9 +257,17 @@ def installations(rep: Report) -> None:
     openproceedings, 2026-10-13). `orgs/<org>/installations` needs an org owner's credential; the repository list of
     a selected installation isn't readable with a gh login, so the selection is what is checked."""
     got = run_json(["gh", "api", f"orgs/{ORG}/installations?per_page=100"])
+    if got["total_count"] != len(got["installations"]):
+        raise ToolError(
+            f"gh api orgs/{ORG}/installations listed {len(got['installations'])} of {got['total_count']} installations"
+        )
     found = [i for i in got["installations"] if i["app_slug"] == APP_SLUG]
     if not found:
-        rep.ok(f"installation: no Claude App installation on {ORG} (a cloud run can write nothing here)")
+        seen = ", ".join(sorted(str(i["app_slug"]) for i in got["installations"])) or "none"
+        rep.problem(
+            f"installation: no {APP_SLUG!r} App installation on {ORG} (apps installed: {seen}); its selection can't "
+            "be checked: if the Claude App was renamed or removed, say so to the owner (decision-048)"
+        )
     for inst in found:
         perms = ", ".join(f"{k} {v}" for k, v in sorted((inst.get("permissions") or {}).items()))
         selection = inst["repository_selection"]

@@ -1865,6 +1865,10 @@ def installation(selection: str = "selected", slug: str = "claude", ident: int =
             "permissions": {"contents": "write", "workflows": "write"}}  # fmt: skip
 
 
+def installs(*items: dict[str, Any], total: int | None = None) -> dict[str, Any]:
+    return {"total_count": len(items) if total is None else total, "installations": list(items)}
+
+
 def preflight_case(c: Case, *, cloud: bool = True, stored: bool = False) -> None:
     # the repository call answers in both modes; in the cloud the fake proxy refuses every other repository and every
     # path outside repos/ exactly as the 2026-10-13 probe saw (dependabot_fake.py), so the cloud needs no fixture more
@@ -1873,7 +1877,7 @@ def preflight_case(c: Case, *, cloud: bool = True, stored: bool = False) -> None
         c.gh["cloud"] = True
     else:
         c.gh["graphql"] = {"data": {"viewer": {"login": "maintainer"}}}
-        c.gh[INSTALLATIONS] = {"installations": [installation(slug="vercel", ident=1), installation()]}
+        c.gh[INSTALLATIONS] = installs(installation(slug="vercel", ident=1), installation())
     if stored:
         c.gh["stored login"] = REAL_LOOKING
 
@@ -2067,7 +2071,7 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     preflight_case(c, cloud=False, stored=True)
     c.env = {}
-    c.gh[INSTALLATIONS] = {"installations": [installation("all")]}
+    c.gh[INSTALLATIONS] = installs(installation("all"))
     c.expect(
         "prs.py",
         ["preflight"],
@@ -2080,7 +2084,7 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     preflight_case(c, cloud=False, stored=True)
     c.env = {}
-    c.gh[INSTALLATIONS] = {"installations": [installation(ident=5), installation("all", ident=6)]}
+    c.gh[INSTALLATIONS] = installs(installation(ident=5), installation("all", ident=6))
     c.expect(
         "prs.py", ["preflight"], PROBLEM, r"^PROBLEM installation: the Claude App installation 6 covers all"
     )
@@ -2090,16 +2094,25 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     preflight_case(c, cloud=False, stored=True)
     c.env = {}
-    c.gh[INSTALLATIONS] = {"installations": [installation("all", slug="vercel", ident=1), installation()]}
+    c.gh[INSTALLATIONS] = installs(installation("all", slug="vercel", ident=1), installation())
     c.expect("prs.py", ["preflight"], OK, r"^ok +installation: Claude App 171042656")
 
 
-@row("prs preflight: local with no Claude installation says so")
+@row("prs preflight: local with no Claude installation stops, naming the apps it saw")
 def _(c: Case) -> None:
     preflight_case(c, cloud=False, stored=True)
     c.env = {}
-    c.gh[INSTALLATIONS] = {"installations": [installation(slug="vercel")]}
-    c.expect("prs.py", ["preflight"], OK, r"^ok +installation: no Claude App installation on uw-share-lab")
+    c.gh[INSTALLATIONS] = installs(installation(slug="vercel"), installation(slug="claude-code", ident=2))
+    c.expect("prs.py", ["preflight"], PROBLEM,
+             r"^PROBLEM installation: no 'claude' App installation on uw-share-lab \(apps installed: claude-code, vercel\)")  # fmt: skip
+
+
+@row("prs preflight: local stops when the installation list is cut short")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = installs(installation(slug="vercel"), installation(), total=3)
+    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*listed 2 of 3 installations")
 
 
 @row("prs preflight: local stops when the installations call fails (not an org owner)")

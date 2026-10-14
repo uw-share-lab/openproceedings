@@ -7,7 +7,7 @@ status: To Do
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-13 17:34'
-updated_date: '2026-10-13 23:48'
+updated_date: '2026-10-14 00:19'
 labels:
   - tooling
   - ci
@@ -48,4 +48,6 @@ Owner decision 2026-10-13 (AC4's question): in CLOUD mode the routine runs none 
 Review rounds 1-3 (feat/cloud-routine-no-dep-code) added: in the cloud core.hooksPath points at dev's .githooks extracted into the run directory (setup-dev.sh keeps it while the marker is there); prs.py check stops a head whose Makefile, pre-push or setup-dev.sh predates the guard (the routine comments @dependabot rebase); prs.py ci waits 9 minutes per call and exits 4 while checks run (called again, up to an hour), PROBLEM lines carry the run URL; the Makefile and pre-push refuse if git rev-parse fails. AC4 ticked: the installation reads repository_selection: selected and the owner's answer is in decision-048's 2026-10-13 TASK-243 addendum. Still open: AC1 (footer), AC2 (CCR PUT/DELETE, job-log download, a cloud push: now with dev's pre-push, which skips make lint), AC3 (Sigstore), AC5 (attribution pattern / gh api -F body=@file), AC6 (step 0's installation calls from a cloud session). Verified: test-no-dep-code.sh 24/0, test-dependabot.sh 275/0, make lint, make tooling, make mutate-changed.
 
 AC3 and AC6 (fix/dependabot-cloud-step0): a read-only cloud probe on 2026-10-13 at 23:25Z (session cse_01Q24cxnP5Nu3yXGC2FKjWqW, Claude Code 2.1.296, gh 2.89.0) showed gh api user/installations and installation/repositories answer HTTP 403 'sessions are bound to their configured repositories', any other repository HTTP 403 'not enabled for this session', and gh attestation verify fails (the proxy blocks tuf-repo-cdn.sigstore.dev and tuf-repo.github.com; another org's attestation API is refused). Owner's rulings implemented: in the cloud prs.py preflight checks the session binding (both refusals, word for word; anything else, a 200 included, stops the run) and auth with gh api repos/uw-share-lab/openproceedings; locally it reads gh api orgs/uw-share-lab/installations and stops a Claude installation whose repository_selection isn't selected. docker_digest.py's PROBLEM line says why Sigstore can't pass in the cloud, and every ghcr.io PR stays the owner's there (procedure, spec 08). New prs.py uv-release: in the cloud a refused uv release call is an OWNER line (check by hand), not a stop. The fake gh fails like the proxy; rows and mutants added. decision-048 addendum (TASK-243 AC3/AC6).
+
+Superseded by the AC3/AC6 note: the earlier notes that every cloud run stops at step 0 until the installation is narrowed, and that step 0 checks every Claude installation the user can reach, describe the old installation check. In the cloud step 0 now checks the session binding; locally it reads the org's installations (repository_selection selected, and a claude installation present).
 <!-- SECTION:NOTES:END -->
