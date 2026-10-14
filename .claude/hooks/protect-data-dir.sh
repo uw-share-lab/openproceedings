@@ -910,7 +910,7 @@ def guard_walked(walked, where, depth):
                    "the paths themselves (a shell loop or a glob) so they can be checked.")
         for text in embedded_commands(argv, g):  # `git -c core.pager='rm …' log`, `rebase --exec '…'`
             EMBEDDED.append((text.lstrip("!"), repo_root(g[2]) if g else d))  # the older checks read it too (main)
-            backlog_guard(text.lstrip("!"), repo_root(g[2]) if g else d, abs(depth) + 1)
+            backlog_guard(text.lstrip("!"), repo_root(g[2]) if g else d, max(depth, 0) + 1)  # -1: the top level
         if g and g[0] in BACKLOG_GIT_SUBS:
             trees = [resolve(t, raw, d) for t in git_work_trees(argv)]  # `--work-tree=$X` too
             found = backlog_git_specs(g[0], g[1], g[2], unmerged_ok=not (trees or git_dir(argv, d)))

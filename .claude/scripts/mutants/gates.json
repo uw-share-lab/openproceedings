@@ -5410,7 +5410,7 @@
  {
   "label": "pdd backlog guard (TASK-244 additive): unreadable read as readable",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            return not git(d, \"rev-parse\", \"--show-toplevel\")",
+  "old": "            return not (git(d, \"rev-parse\", \"--show-toplevel\") or git(d, \"rev-parse\", \"--git-dir\"))  # inside .git: ok",
   "new": "            return False"
  },
  {
@@ -5440,8 +5440,8 @@
  {
   "label": "pdd backlog guard (TASK-244 additive): ! kept on embedded values",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            backlog_guard(text.lstrip(\"!\"), repo_root(g[2]) if g else d, depth + 1)",
-  "new": "            backlog_guard(text, repo_root(g[2]) if g else d, depth + 1)"
+  "old": "            backlog_guard(text.lstrip(\"!\"), repo_root(g[2]) if g else d, max(depth, 0) + 1)  # -1: the top level",
+  "new": "            backlog_guard(text, repo_root(g[2]) if g else d, max(depth, 0) + 1)  # -1: the top level"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): xargs git writers allowed",
@@ -5682,5 +5682,11 @@
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": " or git(d, \"rev-parse\", \"--git-dir\"))  # inside .git: ok",
   "new": ")  # inside .git: ok"
+ },
+ {
+  "label": "pdd backlog guard (TASK-244 additive): nesting limit one lower",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "max(depth, 0) + 1)  # -1: the top level",
+  "new": "abs(depth) + 1)  # -1: the top level"
  }
 ]

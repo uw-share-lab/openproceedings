@@ -1577,6 +1577,8 @@ check $P block "git filter-branch --tree-filter 'rm -rf backlog'" "$(payload_bl 
 check $P block "git filter-branch --index-filter 'git rm …'"   "$(payload_bl "git filter-branch --index-filter 'git rm -r --cached backlog' HEAD")"
 check $P block "git config core.pager 'rm -rf backlog'"        "$(payload_bl "git config core.pager 'rm -rf backlog'")"
 check $P block "git bisect run … nested past four levels"      "$(payload_bl 'git bisect run git bisect run git bisect run git bisect run git bisect run git bisect run ls')"
+check $P allow "git bisect run … nested four levels (the limit)" "$(payload_bl 'git bisect run git bisect run git bisect run git bisect run ls')"
+check $P block "git bisect run … nested five levels"           "$(payload_bl 'git bisect run git bisect run git bisect run git bisect run git bisect run ls')"
 check $P allow "git -c core.pager=less log"                    "$(payload_bl 'git -c core.pager=less log')"
 check $P allow "git rebase --exec 'make lint' dev"             "$(payload_bl "git rebase --exec 'make lint' dev")"
 check $P allow "git -c user.email=t@t commit -m x"             "$(payload_bl 'git -c user.email=t@t commit -m x')"
