@@ -603,7 +603,8 @@ UNGATED_NOTES: dict[tuple[str, int, str], UngatedNote] = {
         "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts",
         date(2026, 10, 10),
     ),
-    # ungated by the owner, 2026-10-16 (TASK-217); the served note leaves that out (copy deck CV-9)
+    # ungated by the owner, 2026-10-16 (TASK-217); the served note leaves that out (copy deck CV-9; the lead's ruling,
+    # 2026-10-16)
     ("AIES", 2026, "main"): UngatedNote(
         "the program co-chairs state that 1,001 papers were reviewed and 249 accepted (44 presented as orals or "
         "discussions, 205 as posters), and welcome the 25 student-panel participants separately; the program's "
