@@ -1,31 +1,30 @@
 ---
-id: TASK-060
-title: Near-miss endpoint with missing-vocabulary terms
+id: TASK-062
+title: Near-miss panel in the UI
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-29 23:58'
+updated_date: '2026-10-16 15:34'
 labels:
   - semantic
-  - api
+  - frontend
   - deferred
 milestone: m-5
 dependencies:
-  - TASK-058
-  - TASK-035
-ordinal: 59000
+  - TASK-042
+ordinal: 61000
 ---
 
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Spec 06 §Features 2.
+Chips edit q; panel labelled; semantic_version stored in records.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Separate resource; never merged into /search
-- [ ] #2 Per-concept-group failure reasons; tf-idf missing terms
+- [ ] #1 e2e flow for adding a suggested term
+- [ ] #2 usability-auditor review
 <!-- AC:END -->
 
 ## Implementation Notes

@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 18:53'
-updated_date: '2026-10-10 22:05'
+updated_date: '2026-10-16 15:37'
 labels:
   - ops
   - deploy
@@ -28,7 +28,7 @@ Spec 08's deploy runbook refreshes the index by hand: crawl, op snapshot build (
 - [ ] #1 The schedule (crawl, build, verify) runs on the hosting chosen in TASK-064 (cron or a scheduler), with logs and an alert when a step fails
 - [ ] #2 Whether promotion is automatic is decided and recorded; if automatic, its thresholds are tested on a shrunk-diff fixture and a failing one holds the index
 - [ ] #3 Promotion and retention follow spec 08's runbook, and every promotion is recorded where the next release's Data section can cite it
-- [ ] #4 The schedule runs every source in scope (OpenReview, ICLR archive, NeurIPS, PMLR, dblp, OJS, and in later milestones Crossref, the FAccT site and OpenAlex), each driven by its table; a venue's first appearance is not a per-venue-year drop; a new venue-year at an existing source needs a table row, not code
+- [ ] #4 The schedule runs every source as built (op ingest openreview, iclr, neurips, pmlr, ojs, crossref, then openalex last), each driven by its table; dblp is a pinned XML release and aaai-library a pinned table of Internet Archive captures, so each changes by a reviewed table bump, not by the schedule; a venue's first appearance is not a per-venue-year drop; a new venue-year at an existing source needs a table row, not code
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -41,4 +41,6 @@ Scope note (2026-10-09, decision-049, docs/plans/2026-10-09-new-venues-design.md
 Milestone B adds `op ingest crossref` (with the FAccT site pages) and `op ingest dblp --venue AAAI` / `op ingest pmlr --venue FAccT`; a full run orders …, ojs, crossref. CROSSREF_MAILTO is optional (controller's ruling): set it in the scheduled environment to use Crossref's polite pool; without it Crossref is queried through the public pool. A malformed value stops the crawl.
 
 Milestone C adds op ingest openalex (last in a full run; OPENALEX_API_KEY optional) and the post-dedup fill in op snapshot build; promotion needs an index at schema 4.
+
+2026-10-16 refresh: AC#4 rewritten for the as-built sources (decision-049 milestones A to C and decision-051 are merged; the old wording named Crossref, the FAccT site and OpenAlex as later milestones). The FAccT site is fetched inside op ingest crossref. The scheduled OpenAlex fill depends on TASK-135's answer on OpenAlex's terms (the Terms of Service revised 2026-10-02 conflict with the CC0 statement decision-049 relied on). The semantic layer is shelved (decision-017 addendum), so promotion has no embedding build. Host requirements for the schedule are listed in TASK-064's 2026-10-16 note.
 <!-- SECTION:NOTES:END -->

@@ -97,3 +97,12 @@ abstracts stay shown).
   as an alternative abstract source for the unlicensed years.
 - **Docs.** Spec 00 §Open questions Q1 is closed with a link here; spec 08 §Deploy and the README state what
   a public instance serves and its prerequisites.
+
+## Addendum (2026-10-16): the consultation is a launch gate
+
+The project owner decided on 2026-10-16 that TASK-135 blocks the public launch (TASK-069), because TASK-135
+now also covers OpenAlex's Terms of Service, which conflict with the CC0 statement decision-049 relied on.
+The 2026-09-29 decision to show this decision's abstracts whatever the answer is unchanged for the sources in
+its Context; an answer that changes anything becomes a new decision. The launch waits until TASK-135's answer
+(or a record that none came, per its AC#2) and its OpenAlex AC are recorded. The "recommended, not a gate"
+wording above is the 2026-09-29 record.

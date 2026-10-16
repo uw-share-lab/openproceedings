@@ -85,7 +85,7 @@ Every compiled query is also rendered as a readable string for debugging (`op se
 - Negated and filter clauses never contribute to the score.
 - Other sorts: `year_desc`, `year_asc`, `title`. The tie-breaker is always `id`, so the order is fully
   deterministic.
-- `sort=semantic` is supplied by 06 when it is enabled. 06 is deferred to phase 2 (decision-017), so v1
+- `sort=semantic` is supplied by 06 when it is enabled. 06 is shelved (decision-017), so v1
   has only the four sorts above and refuses `sort=semantic` with 422 `API_BAD_PARAM` (the CLI rejects it as
   a usage error).
 - As built (task-025, `engine/tantivy_engine.py`): the weights are per-field boosts; k1 and b are

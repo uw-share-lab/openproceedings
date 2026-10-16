@@ -19,7 +19,7 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | GET | `/coverage` | counts per venue × year × track × status, abstract-missing counts, snapshot date; `snapshot.crawl_dates_kind` and `identification_citable`, a record's derivation (TASK-091) |
 | GET | `/meta` | current and servable `index_version`s, field names (`filter_fields` is the served index's own: `abstract_kind` only on schema 4), venue, track and status vocabularies, and `limits` (`max_query_length`, the parser's; `max_verified_clauses` and `max_verification_candidates`, the served config's, task-089; `max_counted_groups`, `max_counted_terms` and `max_counted_ids`, the bounds of `/search`'s group counts, TASK-176; `compare`: `POST /compare`'s caps, or null when comparisons are off, which is how a client knows not to offer them) |
 | GET | `/healthz` | liveness, index loaded |
-| GET | `/near-misses` | M5 only (deferred to phase 2, decision-017; not in v1), a separate resource (`.claude/skills/specter2-embeddings/SKILL.md`) |
+| GET | `/near-misses` | M5 only (shelved, decision-017; not in v1), a separate resource (`.claude/skills/specter2-embeddings/SKILL.md`) |
 
 ## `SearchResponse`
 `query {input, canonical, canonical_hash, identification_query, warnings[], translations[],
