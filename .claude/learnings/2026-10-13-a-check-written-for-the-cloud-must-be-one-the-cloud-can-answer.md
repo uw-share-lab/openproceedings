@@ -82,6 +82,10 @@ attest, queue, push) is a local run's.
   space" when another session's compose stack of this repo holds the internal network's default subnet; setting
   `OP_INTERNAL_SUBNET`, `OP_INTERNAL_IP_RANGE` and `OP_PROXY_ADDRESS` to a free /24 lets both run (the procedure's
   step 5 table says so now).
+- Notify-only is behaviour, not a security bound: the session keeps the App's pull-request and checks write, and
+  `dev`'s six required checks have `app_id: null` (`gh api repos/<repo>/branches/dev/protection/required_status_checks`),
+  so a check run any app writes under a required name would count. Only the installation's scope bounds a steered
+  session; pinning the checks to GitHub Actions is the owner's call.
 - Propagated to: `.claude/commands/dependabot-review.md` (§Where it runs, steps 0-11, the cloud summary), spec 08
   §CI "Dependabot" and §Code quality, decision-048's 2026-10-16 addendum, `.claude/agents/ci-engineer.md`,
   `.claude/skills/pr-workflow/SKILL.md`, CLAUDE.md; rows in `dependabot_cases.py`, `test-no-dep-code.sh` and
