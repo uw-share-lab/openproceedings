@@ -276,6 +276,11 @@ class LibraryCheck:
     refused: Mapping[str, int]  # why the fill attaches nothing to the rest (`title_unmatched`, …)
     differs: tuple[str, ...]  # the ids classed `differs`, in id order
 
+    @property
+    def compared(self) -> int:
+        """The records with both texts: every `rows` count."""
+        return sum(sum(row.values()) for row in self.rows.values())
+
 
 def _from_library(r: PaperRecord) -> bool:
     return r.abstract is not None and any(
@@ -286,8 +291,8 @@ def _from_library(r: PaperRecord) -> bool:
 def library_check(
     records: Iterable[PaperRecord], fetcher: Fetcher, *, table: Table | None = None
 ) -> LibraryCheck | None:
-    """OpenAlex's text against AAAI's own for the AAAI records of a listed year (1980-2008) whose abstract is
-    `aaai_library`'s. The fill is replayed over the table's listings (read whole from the fetcher's cache, as
+    """OpenAlex's text against AAAI's own for the DOI-less AAAI records of a listed year (1980-2008) whose abstract
+    is `aaai_library`'s (a DOI would take the DOI route, which the listings don't answer). The fill is replayed over the table's listings (read whole from the fetcher's cache, as
     `title_check` reads them) twice: as the records stand, and with those abstracts and their claims set aside, so
     that each is a candidate. Each text the second run attaches to one of them is compared with AAAI's
     (`compare`); the refusals the second run adds are theirs (one record's outcome never depends on another's
@@ -298,7 +303,11 @@ def library_check(
     lookups = tuple(openalex.listing_lookup(row, fetcher, refresh=False) for row in table.listings.values())
     extract = openalex.Extract("0" * 64, lookups)
     pool = sorted((r for r in records if r.venue in OPENALEX_VENUES), key=lambda r: r.id)
-    targets = {r.id: r for r in pool if (r.venue, r.year) in table.listings and _from_library(r)}
+    targets = {
+        r.id: r
+        for r in pool
+        if (r.venue, r.year) in table.listings and not openalex.bare_doi(r.urls.doi) and _from_library(r)
+    }
     stripped = [r.model_copy(update={"abstract": None,
                                      "provenance": tuple(c for c in r.provenance if c.field != "abstract")})
                 if r.id in targets else r for r in pool]  # fmt: skip
@@ -468,7 +477,7 @@ def _library_section(check: LibraryCheck) -> list[str]:
     totals: Counter[str] = Counter()
     for row in check.rows.values():
         totals.update(row)
-    n = sum(totals.values())
+    n = check.compared
     refused = ", ".join(f"`{k}` {v:,}" for k, v in check.refused.items()) or "none"
     lines = [
         "## AAAI 1980–2008: OpenAlex against AAAI's archived pages (`aaai_library`)",
@@ -477,11 +486,12 @@ def _library_section(check: LibraryCheck) -> list[str]:
         "(`aaai_library`, official) never takes OpenAlex's, but the title route often finds a work for it. The "
         "fill was replayed over the cached listings with those abstracts set aside (no new listing fetch), and each "
         "text it would attach was compared with AAAI's by the rules above. This is the one measure of OpenAlex's "
-        "fidelity for these years: on the records OpenAlex does fill, no official text exists.",
+        "text for these years: on the records OpenAlex does fill, no official text exists. It measures how often "
+        "two texts agree, not how often OpenAlex is wrong (see Caveats).",
         "",
-        f"- AAAI 1980–2008 records with an `aaai_library` abstract: {check.library:,}; with an OpenAlex text to "
-        f"compare: {n:,}; one work but no abstract in OpenAlex (`no_abstract`): {check.no_abstract:,}; no single "
-        f"work attached, by why: {refused}.",
+        f"- AAAI 1980–2008 records with an `aaai_library` abstract: {check.library:,} (every one, not a sample; no "
+        f"seed); with an OpenAlex text to compare: {n:,}; one work but no abstract in OpenAlex (`no_abstract`): "
+        f"{check.no_abstract:,}; nothing attached, by reason: {refused}.",
         "",
         *_table(check.rows, KINDS),
     ]
@@ -493,12 +503,15 @@ def _library_section(check: LibraryCheck) -> list[str]:
             else ""
         )
         lines += ["", f"`differs` examples{more}: {shown}."]
-    exact, near, differs = totals["exact"], totals["near_exact"], totals["differs"]
+    exact, near = totals["exact"], totals["near_exact"]
+    truncated, similar, differs = totals["truncated"], totals["similar"], totals["differs"]
     lines += [
         "",
         f"Of the {n:,} records with both an `aaai_library` abstract and an OpenAlex text, OpenAlex's is exact for "
-        f"{exact:,} ({_pct(exact, n)}), near-exact for {near:,} ({_pct(near, n)}) and differs for {differs:,} "
-        f"({_pct(differs, n)}).",
+        f"{exact:,} ({_pct(exact, n)}), near-exact for {near:,} ({_pct(near, n)}), truncated for {truncated:,} "
+        f"({_pct(truncated, n)}), similar for {similar:,} ({_pct(similar, n)}) and differs for {differs:,} "
+        f"({_pct(differs, n)}): together {exact + near:,} ({_pct(exact + near, n)}) would match every search "
+        "exactly as AAAI's text does.",
     ]
     return lines
 
@@ -574,7 +587,8 @@ def _near_spelling(a: TitleAttach) -> bool:
 def render(result: AuditResult, meta: Meta) -> str:
     """The report: a header (snapshot, commit, seed and sample sizes, date), the reproduction command, the method,
     the per-venue-year table with each class's rate and a totals row, the refusals, a few `differs` ids, a closing
-    paragraph stating the exact and near-exact rates, and the title route's check when there is one."""
+    paragraph stating the exact and near-exact rates, the title route's check and the `aaai_library` comparison when
+    there are ones, and the caveats."""
     totals: Counter[str] = Counter()
     for row in result.rows.values():
         totals.update(row)
@@ -601,6 +615,15 @@ def render(result: AuditResult, meta: Meta) -> str:
         "## Method",
         "",
         _METHOD,
+        *(
+            [
+                "",
+                "The DOI route covers AIES, FAccT and AAAI 2010+. AAAI 1980–2008 has no DOI: its OpenAlex texts are "
+                "checked by the title-route section and measured by the `aaai_library` section below.",
+            ]
+            if result.library is not None
+            else []
+        ),
         "",
         "## The DOI route: OpenAlex's abstract against the official one",
         "",
@@ -654,6 +677,12 @@ def _caveats(result: AuditResult) -> list[str]:
             "- OpenAlex's fidelity for AAAI 1980–2008 is measured only on records `aaai_library` also gives an "
             "abstract for (the section above). The records OpenAlex fills are the ones AAAI's archived pages don't "
             "cover, so their texts may agree less or more often than these."
+        )
+        lines.append(
+            "- In that comparison AAAI's text is itself read from archived HTML, and OpenAlex's is often text-mined, "
+            "so a `similar` or `differs` can be an OCR, hyphenation or extraction difference on either side. The "
+            "texts are title-route attaches with no author check, so a `differs` can also be another paper (the "
+            "title route's wrong-attach estimate is below)."
         )
     check = result.title
     if check is None:

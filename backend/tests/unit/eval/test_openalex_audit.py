@@ -307,7 +307,8 @@ def _library_corpus() -> list:
             _library("DiffC90", "Wholly Different", "An archived abstract about planning."),
             _library("NoneD90", "No OpenAlex Text", "An archived abstract OpenAlex lacks."),
             _library("LostE90", "Not In The Listing", "An archived abstract with no work."),
-            _library("FillF90", "Filled By OpenAlex", None)]  # fmt: skip
+            _library("FillF90", "Filled By OpenAlex", None),
+            _library("GoneG90", "Nobody Lists This Either", None)]  # refused in both runs: subtracted  # fmt: skip
 
 
 def _seed_library(t: FakeTransport) -> None:
@@ -328,6 +329,17 @@ def test_the_library_check_compares_openalex_with_aaai_librarys_abstracts(tmp_pa
     assert check.rows == {("AAAI", 1990): {"exact": 1, "near_exact": 1, "differs": 1}}
     assert check.no_abstract == 1 and check.refused == {"title_unmatched": 1}
     assert check.differs == ("op:aaai:1990:dblp-DiffC90",)
+    assert check.compared == 3
+    assert check.library == check.compared + check.no_abstract + sum(check.refused.values())
+
+
+def test_the_library_check_leaves_out_a_record_with_a_doi(tmp_path: Path) -> None:
+    t = FakeTransport({})
+    _seed_library(t)
+    with_doi = audit_fixture.build("op:aaai:1990:dblp-DoiH90", "AAAI", 1990, title="Same Text", doi="10.1/x",
+                                   abstract="An archived abstract.", source="dblp", official="aaai_library")  # fmt: skip
+    check = oa.library_check([*_library_corpus(), with_doi], _fetcher(tmp_path, t), table=LIBRARY_TABLE)
+    assert check is not None and check.library == 5
 
 
 def test_the_library_check_is_none_without_listing_rows(tmp_path: Path) -> None:
@@ -346,8 +358,14 @@ def test_the_library_section_reports_the_exact_near_exact_and_differs_rates(tmp_
     assert "## AAAI 1980–2008: OpenAlex against AAAI's archived pages (`aaai_library`)" in text
     assert "| AAAI | 1990 | 3 | 1 (33.3%) | 1 (33.3%) | 0 (0.0%) | 0 (0.0%) | 1 (33.3%) |" in text
     assert ("Of the 3 records with both an `aaai_library` abstract and an OpenAlex text, OpenAlex's is exact for 1 "
-            "(33.3%), near-exact for 1 (33.3%) and differs for 1 (33.3%).") in text  # fmt: skip
-    assert "`title_unmatched` 1" in text and "`op:aaai:1990:dblp-DiffC90`" in text
+            "(33.3%), near-exact for 1 (33.3%), truncated for 0 (0.0%), similar for 0 (0.0%) and differs for 1 "
+            "(33.3%): together 2 (66.7%) would match every search exactly as AAAI's text does.") in text  # fmt: skip
+    assert "nothing attached, by reason: `title_unmatched` 1." in text
+    assert (
+        "a `differs` can also be another paper" in text
+        and "The DOI route covers AIES" in text
+        and "`op:aaai:1990:dblp-DiffC90`" in text
+    )
     assert "OpenAlex's fidelity for AAAI before 2010 is unmeasured" not in text
     assert all(r.abstract is None or r.abstract not in text for r in corpus)
     assert "Search trees" not in text
@@ -400,4 +418,4 @@ def test_op_eval_openalex_reports_the_library_check_from_the_cache(tmp_path: Pat
                      "--title-sample", "0", "--offline", "--out", str(out), "--date", "2026-10-16"])  # fmt: skip
     assert code == 0
     text = (out / "2026-10-16-openalex-audit.md").read_text()
-    assert "near-exact for 1 (33.3%) and differs for 1 (33.3%)." in text
+    assert "together 2 (66.7%) would match every search" in text
