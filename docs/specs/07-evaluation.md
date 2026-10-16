@@ -223,11 +223,12 @@ front-matter description, the AI Magazine conference report, the AIES program), 
 crawl reads. AAAI 2013's count includes its AI and Robotics special track, which is why the 2011 and 2013
 "Robotics Program" sections are `main`; AAAI 2013's gate row therefore pins that mapping ruling (the one gated row that
 depends on a section decision), so a failing 2013 cell is a reason to check the mapping before the crawl. Four more,
-read 2026-10-10, are counts of AAAI's own published accepted-paper list (no AAAI document states an accepted count
-for these years): AAAI 2012 (292), 2017 (637), 2020 (1,614) and 2021 (1,696) main. A list count backs a row only
-when the list is independent of the OJS proceedings and its definition is our `main` cell. A list counts as independent of the proceedings when it either states that it is pre-camera-ready, or visibly differs from the proceedings in content (a different count or membership); either shows it was not derived from them. Each row's
+read 2026-10-10 (2021's re-read 2026-10-16), are counts of AAAI's own published accepted-paper list (no AAAI document states an accepted count
+for these years): AAAI 2012 (292), 2017 (637), 2020 (1,614) and 2021 (1,697) main. A list count backs a row only
+when the list is independent of the OJS proceedings and its definition is our `main` cell. A list counts as independent of the proceedings when it states that it is pre-camera-ready, visibly differs from the proceedings in content (a different count or membership), or survives in a dated copy archived before the proceedings (the owner, 2026-10-16, TASK-234); each shows it was not derived from them. Each row's
 description says "counted", names the list and names its ground (gate C round 2): 2020's lists say they were made
-before camera-ready; 2012, 2017 and 2021 differ from the proceedings in count. AAAI 2010 (262), 2014 (398) and 2016
+before camera-ready; 2021's is counted from a copy archived before the conference (owner, 2026-10-16); 2012 and 2017
+differ from the proceedings in count. AAAI 2010 (262), 2014 (398) and 2016
 match the proceedings exactly and are not shown to predate them, so each is an ungated cell with a note. The other cells are recorded, not gated, and each carries a cited **ungated-cell note** (`gate_note` on
 `/coverage`, a section of the report; `official_counts.UNGATED_NOTES`, TASK-222): AAAI 2011's list leaves out the
 Robotics Program our `main` holds (240 against 248); AAAI 2010's, 2014's and 2016's lists match the proceedings
@@ -269,7 +270,9 @@ nothing in reads as it did. The coverage numbers come from the manifest's `abstr
 As built, the milestone's report (`docs/results/2026-10-11-coverage.md`, index `b4f335e07e70` on snapshot
 `2026-10-11-93c2937e2f29`, 173,253 records) passes `op eval coverage --check`: 81 of 82 gated cells within ±1%, the
 82nd being ICLR 2013's owner-accepted exception, and 1,117 abstracts labelled `abstract_kind:openalex` (AAAI 21,
-AIES 557, FAccT 539); another 4,536 AAAI 1980–2008 abstracts are official, from `aaai_library` (decision-051). The
+AIES 557, FAccT 539); another 4,536 AAAI 1980–2008 abstracts are official, from `aaai_library` (decision-051). Its
+re-run of 2026-10-16 (`docs/results/2026-10-16-coverage.md`, same index) differs only in AAAI 2021's row, re-counted at
+1,697 from the pre-conference copy of AAAI's list (Δ −3, still within the gate; TASK-234). The
 gate has two fewer cells than the earlier as-built report (`docs/results/2026-10-10-coverage.md`, index
 `9977ed00669f`, 83 of 84, 2,158 OpenAlex abstracts), which stays as history.
 The source of statuses indexed is spec 01's source table as `ingest/statuses.py` holds it (spec 01
@@ -378,8 +381,9 @@ release gate. Both become required only if a decision superseding decision-017 r
 
 OpenAlex fills an abstract only where every official source gave none (spec 01 §Sources), so on the records it fills
 there is no official text to check it against. The audit measures it where both exist, and writes
-`docs/results/<date>-openalex-audit.md` (the milestone's report is [2026-10-11-openalex-audit.md](../results/2026-10-11-openalex-audit.md), on the final snapshot
-`2026-10-11-93c2937e2f29`, where the title route attaches 19 and 18 agree; the earlier
+`docs/results/<date>-openalex-audit.md` (the current report is [2026-10-16-openalex-audit.md](../results/2026-10-16-openalex-audit.md), on the final snapshot
+`2026-10-11-93c2937e2f29`; it adds the `aaai_library` comparison to the milestone's
+[2026-10-11 report](../results/2026-10-11-openalex-audit.md) on the same snapshot, where the title route attaches 19 and 18 agree; the earlier
 [2026-10-10 report](../results/2026-10-10-openalex-audit.md), on snapshot `2026-10-10-22a339940466` before `aaai_library`
 took over most AAAI 1980–2008 abstracts, checked 1,061 title attaches; the DOI-route rates below are the same in both).
 It feeds nothing: it writes no extract, touches no snapshot and gates nothing, and the rates are not thresholds.
@@ -405,6 +409,16 @@ It feeds nothing: it writes no extract, touches no snapshot and gates nothing, a
   homonym numbers and Jr./II suffixes dropped, `Last, First` handled); `agree`, `wrong` (OpenAlex lists authors and
   none is ours) or `unverifiable` (an empty list on either side). The report lists each `wrong` one and the rules
   that would exclude it, with what each rule costs, and counts how many have a near-spelling first-author surname.
+- **AAAI's archived pages (`library_check`, TASK-235).** A DOI-less AAAI 1980–2008 record whose abstract is
+  `aaai_library`'s (official) never takes OpenAlex's, but the title route finds a work for 1,300 of the 4,536 (28.7%).
+  Every such record is checked, not a sample. The fill is replayed over the
+  cached listings twice, as the records stand and with those abstracts set aside, and each text the second run would
+  attach is compared with AAAI's by the classes above. A work with no abstract is counted `no_abstract`; the other
+  refusals the second run adds (`title_unmatched`, `title_ambiguous`, rebuild refusals) are counted by reason. This is
+  the one measure of OpenAlex's text for those years. It measures agreement, not error: AAAI's text is itself read
+  from archived HTML and OpenAlex's is often text-mined, so `similar` and `differs` include OCR, hyphenation and
+  extraction differences on either side; and these are title-route attaches with no author check, so a `differs`
+  can be another paper.
 - **Reproducibility.** The fetcher is the one OpenAlex fetcher and cache (api.openalex.org only, one request a second,
   keyless, no contact address). The reproduction command in the report starts `op eval openalex --offline …` and
   carries `--date` and the controller's `--ruling`, so a re-run from the cache makes no request and renders the same
@@ -427,6 +441,17 @@ first author to match also excludes 8 that agree on another author). **Ruling (c
 title-key and year rule**; the residual wrong-attach risk is about 2 of 1,061 (an estimate: the audit's Caveats).
 
 **The final result** ([2026-10-11 report](../results/2026-10-11-openalex-audit.md), after `aaai_library` took most AAAI 1980–2008 abstracts): the title route attaches 19 and 18 agree; the 1 other is an OCR variant (`nournai`/`nourani`). The ruling stands.
+
+**OpenAlex against AAAI's archived pages** ([2026-10-16 report](../results/2026-10-16-openalex-audit.md), same
+snapshot; the DOI route and title route figures are unchanged). Of the 4,536 AAAI 1980–2008 records with an
+`aaai_library` abstract, the title route finds one work with a text for 1,131. OpenAlex's text is exact for 361
+(31.9%), near-exact for 223 (19.7%), truncated for 16 (1.4%), similar for 408 (36.1%) and differs for 123 (10.9%):
+51.6% would match every search exactly as AAAI's text does, against 99.3% (993 of 1,000) for the AAAI 2010+ sample on
+the DOI route, a group that differs in route, era and reference source, so the gap is not a measure of the route
+alone. Another 109 have a work with no abstract; 3,216 have no listed work with their title key, 20 are ambiguous and
+60 refused by the rebuild. `differs` is 15.9–50.0% a year in 1994–2002 and at most 21.4% (2006) in the other years. It
+is a measure, not a threshold: the records OpenAlex does fill are the ones the archived pages don't cover, and they
+carry `abstract_kind: openalex`.
 
 ## Error handling
 

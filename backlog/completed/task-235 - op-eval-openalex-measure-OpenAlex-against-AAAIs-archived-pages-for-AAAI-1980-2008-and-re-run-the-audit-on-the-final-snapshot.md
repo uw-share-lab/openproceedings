@@ -3,10 +3,10 @@ id: TASK-235
 title: >-
   op eval openalex: measure OpenAlex against AAAI's archived pages for AAAI
   1980-2008, and re-run the audit on the final snapshot
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-11 05:08'
-updated_date: '2026-10-11 10:00'
+updated_date: '2026-10-16 17:04'
 labels:
   - eval
   - new-venues
@@ -23,7 +23,7 @@ The OpenAlex audit (docs/results/2026-10-10-openalex-audit.md) compares OpenAlex
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 op eval openalex reports, for AAAI 1980-2008 records with both an aaai_library abstract and an OpenAlex work, the exact, near-exact and differs rates, with tests
+- [x] #1 op eval openalex reports, for AAAI 1980-2008 records with both an aaai_library abstract and an OpenAlex work, the exact, near-exact and differs rates, with tests
 - [x] #2 The audit is re-run on the final snapshot and docs/results, spec 07 §G and the coverage page's linked audit cite it
 <!-- AC:END -->
 
@@ -31,4 +31,12 @@ The OpenAlex audit (docs/results/2026-10-10-openalex-audit.md) compares OpenAlex
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-11: the audit was re-run on the final snapshot 2026-10-11-93c2937e2f29 (docs/results/2026-10-11-openalex-audit.md): DOI route unchanged (2,122 compared, 83.1% exact or near-exact); title route 19 attaches, 18 agree, 1 an OCR variant of the same surname. Left: measure OpenAlex against aaai_library's official AAAI 1980-2008 abstracts.
+
+2026-10-16: op eval openalex adds library_check (eval/openalex_audit.py): the fill replayed with aaai_library abstracts set aside, each OpenAlex text compared with AAAI's. docs/results/2026-10-16-openalex-audit.md on 2026-10-11-93c2937e2f29: 4,536 aaai_library records; 1,131 with an OpenAlex text: exact 361 (31.9%), near-exact 223 (19.7%), truncated 16, similar 408 (36.1%), differs 123 (10.9%); 109 a work with no abstract; title_unmatched 3,216, title_ambiguous 20, rebuild refusals 60. Spec 07 §G, docs/README, README and the coverage page's audit link updated.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+op eval openalex adds library_check: the fill replayed with aaai_library abstracts set aside, each OpenAlex text compared with AAAI's (tests in test_openalex_audit.py). docs/results/2026-10-16-openalex-audit.md: of 4,536 records, 1,131 compared, 51.6% exact or near-exact (31.9% / 19.7%), 10.9% differs. Limits stated. Spec 07 §G, the READMEs and the coverage page link updated.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -116,14 +116,17 @@ def test_aaai_main_is_gated_or_noted_from_2010_on() -> None:
 
 def test_each_gated_list_row_names_its_independence_ground() -> None:
     """Gate C round 2's rule: a list is independent of the proceedings when it says it is pre-camera-ready or
-    visibly differs from them in content; each gated list row names which, and each list that matches exactly and
-    isn't shown to predate them is a note."""
-    grounds = {2012: "differs", 2017: "differs", 2020: "says", 2021: "differs"}
+    visibly differs from them in content, or (AAAI 2021, the owner's choice of 2026-10-16) is a copy archived before
+    them; each gated list row names which, and each list that matches exactly and isn't shown to predate them is a
+    note."""
+    grounds = {2012: "differs", 2017: "differs", 2020: "says", 2021: "archived"}
     for year, ground in grounds.items():
         counts = OFFICIAL_ACCEPTED[("AAAI", year, "main")].counts
         assert "independent of the proceedings" in counts, year
         if ground == "says":
             assert "says it was made before camera-ready" in counts
+        elif ground == "archived":
+            assert "because it was made before them" in counts and "captured on 2020-12-30" in counts
         else:
             assert "differs from them in count" in counts and "on snapshot 2026-10-10-9efa49481112" in counts
     for year in (2010, 2014, 2016):
