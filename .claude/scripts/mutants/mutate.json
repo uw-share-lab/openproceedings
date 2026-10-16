@@ -235,13 +235,43 @@
  {
   "label": "mutate run: also files not mutated (TASK-243)",
   "file": ".claude/scripts/mutate.py",
-  "old": "            for f in [m[\"file\"], *m.get(\"also\", [])]:",
-  "new": "            for f in [m[\"file\"]]:"
+  "old": "            for f in files:",
+  "new": "            for f in files[:1]:"
  },
  {
   "label": "mutate run: an also file without the text not stale (TASK-243)",
   "file": ".claude/scripts/mutate.py",
   "old": "                if m[\"old\"] not in text:\n                    shutil.rmtree(tree)",
   "new": "                if m[\"old\"] not in text and f == m[\"file\"]:\n                    shutil.rmtree(tree)"
+ },
+ {
+  "label": "mutate run: a table's declared scope ignored (a table flaky under load kills any mutant; TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    return scope is None or not scope.isdisjoint(files)",
+  "new": "    return True"
+ },
+ {
+  "label": "mutate run: scope read past the header (a fixture's declaration counts; TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        if not line.startswith(\"#\"):\n            break\n",
+  "new": ""
+ },
+ {
+  "label": "mutate run: scope checked against the mutant's file only, not its also files (TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "not scope.isdisjoint(files)",
+  "new": "not scope.isdisjoint(files[:1])"
+ },
+ {
+  "label": "mutate run: the first phase not limited to the tables in scope (TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    first = [t for t in first_tables(files[0]) if t in tables]\n",
+  "new": "    first = first_tables(files[0])\n"
+ },
+ {
+  "label": "mutate run: an explicit --table-timeout raised to the floor (review round 2; TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        return dict.fromkeys(TABLES, explicit)",
+  "new": "        return dict.fromkeys(TABLES, max(TIMEOUT_FLOOR, explicit))"
  }
 ]

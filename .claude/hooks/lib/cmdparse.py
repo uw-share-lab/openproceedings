@@ -16,8 +16,11 @@ matter to a gate:
   * `for v in <words>; do …; done` is read once per word with `v` set to it (`_unroll_for`; not when the body
     can leave the loop early); `$(mktemp)` is unknown when the command sets or unsets TMPDIR;
   * leading reserved words (`if`/`then`/`do`/`{`/`!` …), `VAR=val`, and wrappers (`env`, `sudo`, `nice`,
-    `timeout`, `xargs`, `stdbuf`, `watch`, `exec`, `time`, `nohup`, `command`, `builtin`) are stripped, each
-    wrapper with its own table of value-taking options; `env -S '…'` is split, `env -C`/`sudo -D` move dir;
+    `timeout`, `xargs`, `stdbuf`, `watch`, `exec`, `time`, `nohup`, `command`, `builtin`, `xcrun`, `caffeinate`,
+    `arch`, `doas`, `flock`, `unbuffer`) are stripped, each wrapper with its own table of value-taking options;
+    `env -S '…'` is split, `env -C`/`sudo -D` move dir, `arch -e NAME=value`/`-d NAME` set and unset as env does;
+    flock's lock file is a `>>` redirect of its own, in the directory flock runs in (flock creates it; `flock N`
+    alone is a descriptor), and its `-c`/`--command '…'` is a `sh -c`;
     the argv comes back as an `Argv` that records the `VAR=val` words and whether xargs runs it;
   * command names compare by basename (`/usr/bin/git` is `git`);
   * redirections leave argv as (operator, target) pairs (`walk` yields them);
@@ -26,7 +29,7 @@ matter to a gate:
     unknown) and `bash -c "…"` (with the assignments before it exported to it) / `eval "…"` are recursed into;
     `bash script.sh` is yielded as itself;
   * `expand_word` resolves `~`, `~+`, `~-`, `$PWD`, `$HOME` and other variables a command's path names: set
-    (or `unset`, or `env -u`: empty) earlier in the command, else only HOME/TMPDIR/USER from this hook's
+    (or `unset`, `env -u` or `arch -d`: empty) earlier in the command, else only HOME/TMPDIR/USER from this hook's
     environment, which a gate also reads as '' (`walk(env_empty=True)`);
   * a git alias (`-c alias.<name>=…` or the repo's config; `!shell` ones too) becomes what git runs for it;
   * a `git-<sub>` program (`$(git --exec-path)/git-push`) is `git <sub>`;
@@ -118,6 +121,13 @@ WRAPPER_VALUE_OPTS: dict[str, set[str]] = {
         "--max-procs",
     },
     "watch": {"-n", "-d", "--interval"},
+    # TASK-248: macOS's xcrun, caffeinate and arch, OpenBSD's doas, util-linux flock, expect's unbuffer
+    "xcrun": {"-sdk", "--sdk", "-toolchain", "--toolchain"},
+    "caffeinate": {"-t", "-w"},
+    "arch": {"-arch", "-d", "-e"},
+    "doas": {"-a", "-u", "-C"},
+    "flock": {"-w", "-E", "--wait", "--timeout", "--conflict-exit-code"},
+    "unbuffer": set(),
 }
 WRAPPERS = set(WRAPPER_VALUE_OPTS)
 # Shell reserved words that can start a simple command without being the command (review 2026-09-25:
@@ -483,12 +493,16 @@ class Argv(list):
     in_subst: bool = False
     # `cd_stayed`: the directory is where it is because a `cd ~/…` failed in the HOME '' reading (`_change_dir`)
     cd_stayed: bool = False
+    # `creates`: (directory, file) for each file a stripped wrapper itself creates (flock's lock file), in the
+    # directory the wrapper ran in; the walk yields each as a `>>` redirect
+    creates: list[tuple[str, str]]
 
     def __init__(self, words: list[str], via_xargs: bool = False, assigns: dict[str, str] | None = None):
         super().__init__(words)
         self.via_xargs = via_xargs
         self.assigns = assigns or {}
         self.shell_vars = {}
+        self.creates = []
 
 
 # What xargs may not run: a command whose appended words (paths, refspecs) decide what a gate allows.
@@ -1373,6 +1387,12 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                     return _strip_prefixes([*tokenize(value), *argv[i + (1 if eq else 2) :]], state, out)
                 if name == "env" and opt in ("-u", "--unset") and value is not None:
                     out.assigns[value] = ""  # unset for what it runs: known empty (review gate round 3)
+                # `arch -e NAME=value` sets NAME and `arch -d NAME` unsets it, for what it runs (as env's do)
+                if name == "arch" and opt == "-e" and value is not None:
+                    key, _, val = value.partition("=")
+                    out.assigns[key] = val
+                if name == "arch" and opt == "-d" and value is not None:
+                    out.assigns[value] = ""
                 if (
                     state is not None
                     and value is not None
@@ -1385,6 +1405,13 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                 i += 1 if (eq or not takes_value) else 2
             if name == "timeout" and i < len(argv):  # the duration
                 i += 1
+            if name == "flock" and i < len(argv):  # the lock file, which flock creates
+                if not (argv[i].isdigit() and i + 1 == len(argv)):  # `flock 9` alone locks a file descriptor
+                    out.creates.append((state["dir"] if state is not None else "", argv[i]))
+                i += 1
+                # `flock <file> -c '<cmd>'`: a shell runs the string
+                if i + 1 < len(argv) and argv[i] in ("-c", "--command"):
+                    argv = [*argv[:i], "sh", "-c", *argv[i + 1 :]]
         else:
             break
     rest = argv[i:]
@@ -1997,6 +2024,9 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             raw = [_restore(t, subs) for t in raw]
         args, redirects = split_redirects(raw)
         argv = strip_prefixes(args, state)
+        # a file a wrapper creates is written, as `>>` writes one, whatever runs next (`eval`, `cd`)
+        for d, f in argv.creates:
+            yield _context(Argv([]), state), d or state["dir"], [(">>", f)]
         if writes_git_config(argv, redirects, state):
             state["config_written"] = True
         if note_exports(argv, state) or not argv:

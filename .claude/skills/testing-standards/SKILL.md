@@ -99,6 +99,8 @@ that kills it. A row that passes only because something else fails first (a stal
 that fails closed, an unreviewed HEAD) does not count. Isolate the one check the row is about. Text kept
 identical in several files (the shared AI-attribution pattern) is mutated in all of them at once with `also`
 (`{label, file, old, new, also: [files]}`); a one-file mutant there is killed only by the identity row (TASK-243).
+A table that exercises only some files says so in its header comment (`# mutate-scope: <file> …`, repo-relative paths exactly as a mutant's `file`), and `mutate.py`
+then runs it only for those files' mutants, so a failure from load is never credited with another file's (TASK-238).
 An `equivalent` label needs evidence for the actual replacement, including a distinguishing negative case
 and a positive control. Dropping an explicit default and forcing its opposite are different mutations:
 `--no-renames` makes an unchanged learning rename look newly added, even though `--find-renames` gives 0/0.

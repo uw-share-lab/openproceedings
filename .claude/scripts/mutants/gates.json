@@ -18,6 +18,138 @@
   "new": ""
  },
  {
+  "label": "xcrun not a wrapper (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"xcrun\": {\"-sdk\", \"--sdk\", \"-toolchain\", \"--toolchain\"},\n",
+  "new": ""
+ },
+ {
+  "label": "caffeinate not a wrapper (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"caffeinate\": {\"-t\", \"-w\"},\n",
+  "new": ""
+ },
+ {
+  "label": "arch not a wrapper (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"arch\": {\"-arch\", \"-d\", \"-e\"},\n",
+  "new": ""
+ },
+ {
+  "label": "doas not a wrapper (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"doas\": {\"-a\", \"-u\", \"-C\"},\n",
+  "new": ""
+ },
+ {
+  "label": "flock not a wrapper (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"flock\": {\"-w\", \"-E\", \"--wait\", \"--timeout\", \"--conflict-exit-code\"},\n",
+  "new": ""
+ },
+ {
+  "label": "unbuffer not a wrapper (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"unbuffer\": set(),\n",
+  "new": ""
+ },
+ {
+  "label": "xcrun's value-taking options not skipped (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"xcrun\": {\"-sdk\", \"--sdk\", \"-toolchain\", \"--toolchain\"},\n",
+  "new": "    \"xcrun\": set(),\n"
+ },
+ {
+  "label": "caffeinate's value-taking options not skipped (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"caffeinate\": {\"-t\", \"-w\"},\n",
+  "new": "    \"caffeinate\": set(),\n"
+ },
+ {
+  "label": "arch's value-taking options not skipped (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"arch\": {\"-arch\", \"-d\", \"-e\"},\n",
+  "new": "    \"arch\": set(),\n"
+ },
+ {
+  "label": "doas's value-taking options not skipped (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"doas\": {\"-a\", \"-u\", \"-C\"},\n",
+  "new": "    \"doas\": set(),\n"
+ },
+ {
+  "label": "flock's value-taking options not skipped (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"flock\": {\"-w\", \"-E\", \"--wait\", \"--timeout\", \"--conflict-exit-code\"},\n",
+  "new": "    \"flock\": set(),\n"
+ },
+ {
+  "label": "flock's lock file read as the command (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    out.creates.append((state[\"dir\"] if state is not None else \"\", argv[i]))\n                i += 1\n",
+  "new": "                    out.creates.append((state[\"dir\"] if state is not None else \"\", argv[i]))\n                i += 0\n"
+ },
+ {
+  "label": "flock -c's string not run as sh -c (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    argv = [*argv[:i], \"sh\", \"-c\", *argv[i + 1 :]]\n",
+  "new": "                    pass\n"
+ },
+ {
+  "label": "flock --command not read as -c (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "argv[i] in (\"-c\", \"--command\"):",
+  "new": "argv[i] in (\"-c\",):"
+ },
+ {
+  "label": "flock's lock file not a write (it hid an op-reviews/ path; TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    out.creates.append((state[\"dir\"] if state is not None else \"\", argv[i]))\n",
+  "new": "                    pass\n"
+ },
+ {
+  "label": "a wrapper's created file only a redirect of the command it runs (eval and cd drop it; TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        for d, f in argv.creates:\n            yield _context(Argv([]), state), d or state[\"dir\"], [(\">>\", f)]\n",
+  "new": "        redirects += [(\">>\", f) for d, f in argv.creates]\n"
+ },
+ {
+  "label": "a wrapper's created file read in the directory after its prefix, not where it ran (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "yield _context(Argv([]), state), d or state[\"dir\"], [(\">>\", f)]",
+  "new": "yield _context(Argv([]), state), state[\"dir\"], [(\">>\", f)]"
+ },
+ {
+  "label": "flock 9 alone read as a file (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "if not (argv[i].isdigit() and i + 1 == len(argv)):",
+  "new": "if True:"
+ },
+ {
+  "label": "arch -e's NAME=value not set for what it runs (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    key, _, val = value.partition(\"=\")\n                    out.assigns[key] = val\n",
+  "new": "                    pass\n"
+ },
+ {
+  "label": "arch -d's NAME not unset for what it runs (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    out.assigns[value] = \"\"\n",
+  "new": "                    pass\n"
+ },
+ {
+  "label": "doas -a takes no value (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"doas\": {\"-a\", \"-u\", \"-C\"},\n",
+  "new": "    \"doas\": {\"-u\", \"-C\"},\n"
+ },
+ {
+  "label": "arch -e takes no value (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"arch\": {\"-arch\", \"-d\", \"-e\"},\n",
+  "new": "    \"arch\": {\"-arch\", \"-d\"},\n"
+ },
+ {
   "label": "wrapper option values not skipped",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "                i += 1 if (eq or not takes_value) else 2",
@@ -2394,7 +2526,7 @@
  {
   "label": "cmdparse: env -u not read as empty",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                    out.assigns[value] = \"\"",
+  "old": "                    out.assigns[value] = \"\"  # unset for what it runs: known empty (review gate round 3)",
   "new": "                    pass"
  },
  {
