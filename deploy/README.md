@@ -466,3 +466,7 @@ Linux host. No CI job runs it.
 - Do the first start and its checks on the host: client addresses (First start, step 4), and the rate limit
   and CORS (TASK-067 AC #2).
 - Schedule the record-store backup (§Backups).
+- Alert on the rate of uvicorn's `Exceeded concurrency limit.` lines. With or without comparisons, an
+  unsized body that reaches 64 KiB on an API route other than `/api/v1/compare` and stalls may hold one of
+  the API's 256 connections until `read_body` (10 s, or 60 s with `compare.yml`), so a few hundred such
+  requests could refuse every search for that long (inferred, not measured; open: TASK-255).
