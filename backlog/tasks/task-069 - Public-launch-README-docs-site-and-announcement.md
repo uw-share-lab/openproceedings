@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-02 19:33'
+updated_date: '2026-10-16 16:14'
 labels:
   - docs
 milestone: m-6
@@ -34,7 +34,7 @@ README and CONTRIBUTING as-built for external users; citation info.
 - [x] #2 CITATION.cff added
 - [ ] #3 Repo visibility is public and README links the instance (spec 00 §Milestones M6)
 - [ ] #4 Public instance reachable over TLS with the current index_version on /healthz
-- [ ] #5 The outcome of the copyright-office consultation (TASK-135, recommended, not blocking), if any, is recorded before launch
+- [ ] #5 TASK-135's outcome (the copyright office's answer, or a record that none came, and the OpenAlex-terms decision) is recorded before launch: a launch gate since 2026-10-16 (decision-018 addendum)
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -52,4 +52,6 @@ README fixes from the run: the quickstart had no clone step (added: git clone �
 AC#2: CITATION.cff added and valid against the CFF 1.2.0 schema (uvx cffconvert --validate: 'Citation metadata are valid according to schema version 1.2.0'). The author list is pending from team-lead: Jeevan Parmar plus a placeholder entry. Left unchecked until the real list is in.
 
 2026-10-02, AC#2: CITATION.cff lists the authors the owner gave (via team-lead): Jeevan Parmar and Sharon Ferguson, both with affiliation 'University of Waterloo, SHARE Lab', no ORCIDs. It validates against CFF 1.2.0 (cffconvert --validate). The message asks users to cite the saved record's link, its index_version and the release (op --version). Spec 08 §Release step 4 now sets CITATION.cff version and date-released on each release branch.
+
+2026-10-16: the owner decided that TASK-135 blocks the launch (decision-018 addendum), because it now also covers OpenAlex's Terms of Service. AC#5 (recommended, not blocking) is replaced by the gate AC. TASK-135 is not added with --dep: the CLI refuses the whole edit because this task's existing dependencies include completed tasks; the AC is the gate.
 <!-- SECTION:NOTES:END -->
