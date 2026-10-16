@@ -36,3 +36,13 @@ Index AAAI 2010–2026, AIES 2024–2025 and IASEAI 2026 from ojs.aaai.org over 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/record-schema/SKILL.md` (self-naming and attribution tests for a new source), `.claude/skills/pr-workflow/SKILL.md` (full `make test` for `vocab.py`), `.claude/skills/testing-standards/SKILL.md` (e2e ports from a worktree; timing-bounded tests for untrusted input)
 - Test or hook added? — yes, in the branch: self-naming and attribution tests (`673112f6`, `aa668b59`), adversarial-timing prolog tests (`fdcea53d`); no new hook.
+
+## Addendum — 2026-10-16 (TASK-217, AIES 2026)
+
+**Key lesson (addendum):** A new OJS volume needs a `--refresh` census, which re-reads the journal's whole chain, so the next snapshot diff shows every earlier record of that journal as `provenance_only` (new `fetched_at`, and a new resumption-token `url` past the first page). Before calling it additions-only, check that `changed`, `display_only` and the content hashes are empty. Check the chairs' accepted count against the proceedings before you write a gate row: some accepted papers may never be published.
+
+- **What happened.** AIES Vol. 9 appeared on ojs.aaai.org. The census (`scripts/ojs_section_census.py AIES --refresh`) found 265 live records: Main Track I–IV 67/60/57/59 and Student Abstracts 22, plus 1 deleted header. Five `[[section]]` rows were enough, with no code (TASK-202's note held). `op ingest ojs --journal AIES` then made 0 requests and reported `count_ok` for v7–v9.
+- **The diff.** `2026-10-16-03eab0ef56c4` against `2026-10-11-93c2937e2f29`: added 265, removed, rekeyed, changed and display-only all 0, and **provenance_only 449**. Those 449 are every AIES 2024–2025 record, with only `fetched_at` (all 449) and `url` (50) differing. The cause is the refresh. AAAI, IASEAI and every other source are untouched. The lead ruled this meets "additions only" (2026-10-16).
+- **The count.** The AIES-26 program's co-chairs' welcome says 249 accepted (44 oral + 205 poster), and OJS publishes 243 main. That is −2.4%: six accepted papers have no listing. In 2024 and 2025 the same kind of figure matched exactly. An `accepted` exception can't cover an under-count whose papers aren't in the snapshot. **The cell was ungated by the owner, 2026-10-16 (TASK-217)**, with a cited `UNGATED_NOTES` entry, as for IASEAI 2026 (92 accepted, 57 published).
+- **Dead end.** `op snapshot diff` takes snapshot directories, not names: a bare name gives `snapshot_invalid` (FileNotFoundError).
+- **Propagated to:** `.claude/skills/snapshots/SKILL.md` (a refreshed source shows its earlier records as `provenance_only`). No test: this is data behaviour, and the diff already reports it.

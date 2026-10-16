@@ -873,6 +873,7 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
 |---|---|---|---|---|---|
 | AIES 2024 | 150 | archival full papers accepted (468 reviewed); student abstracts separate | https://ojs.aaai.org/index.php/AIES/article/view/31763 (chairs' front matter); the table in https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 150 | gateable (row) |
 | AIES 2025 | 238 | archival full papers accepted (748 reviewed); student abstracts separate | https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 238 | gateable (row) |
+| AIES 2026 | 249 | papers accepted (1,001 reviewed; 44 oral, 205 poster), 6 of them not in the OJS proceedings | https://www.aies-conference.com/2026/wp-content/uploads/2026/10/AIES-26-Program_v7.pdf (read 2026-10-16) | 243 | definition mismatch: recorded, not gated (the owner, 2026-10-16, TASK-217) |
 | AAAI 2013 | 203 | technical program incl. the four special tracks (AI and the Web, Cognitive Systems, Computational Sustainability, AI and Robotics); late-breaking and spotlights excluded | https://ojs.aaai.org/index.php/AAAI/article/view/8512 (AAAI-13 preface) | 202 | gateable (row) once "Robotics Program" is `main` (it was a mismatch at 191) |
 | AAAI 2015 | 539 | papers "selected … and presented" from the main technical and topical tracks (AI Magazine report) | https://ojs.aaai.org/index.php/aimagazine/article/view/2606/2500 | 538 | gateable (row; the weakest wording) |
 | AAAI 2018 | 938 | original research publications in the proceedings (3,800 submissions) | https://ojs.aaai.org/index.php/AAAI/issue/view/301 | 937 | gateable (row) |
@@ -936,7 +937,7 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   The deltas are those of snapshot `2026-10-10-9efa49481112` and are unchanged on the final snapshot
   `2026-10-11-93c2937e2f29` (`docs/results/2026-10-11-coverage.md`), where the gate passes at 81 of 82 cells; with
   2021 re-counted at 1,697 its delta is −3 (`docs/results/2026-10-16-coverage.md`), and the gate still passes.
-- **Ungated-cell notes (TASK-222).** AAAI 2010, 2011, 2014, 2016 and 2022–2026 main and IASEAI 2026 main each carry a
+- **Ungated-cell notes (TASK-222).** AAAI 2010, 2011, 2014, 2016 and 2022–2026 main, AIES 2026 main (TASK-217) and IASEAI 2026 main each carry a
   cited note
   saying why they are not gated (`official_counts.UNGATED_NOTES`, `coverage-sources.md` §Ungated cells with a note),
   served on `/coverage` and listed in the coverage report.

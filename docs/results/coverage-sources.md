@@ -36,13 +36,13 @@ copies were captured after publication, on 2010-08-30 and 2015-09-06), so each i
 and −3 (0.18%; −2 against the later AAAI-21 copy before the owner's choice of 2026-10-16), the same as on
 `2026-10-10-9efa49481112`: the abstract fills change no count.
 
-The other AAAI `main` cells and IASEAI 2026 are reported, not gated, each with a note in §Ungated cells with a
+The other AAAI `main` cells, AIES 2026 and IASEAI 2026 are reported, not gated, each with a note in §Ungated cells with a
 note: AAAI 2010's and 2014's lists match the proceedings and survive only as copies captured after publication;
 AAAI 2011's list leaves out the Robotics Program the cell holds (240 against 248); AAAI 2016's list matches the
 proceedings section by section and doesn't say it predates them, so it may be derived from them and would check
 nothing; AAAI 2022–2026
 have only the chairs' notification emails quoted elsewhere and aggregator figures, which are never a row and seem
-to count the main technical track alone; and IASEAI 2026 states 92 accepted papers of which only the 57 archival
+to count the main technical track alone; AIES 2026's program co-chairs state 249 accepted, of which the proceedings publish 243 (the other 6 have no listing; ungated by the owner, 2026-10-16, TASK-217); and IASEAI 2026 states 92 accepted papers of which only the 57 archival
 ones are published. The research note (`docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md` §Official
 counts) classifies every venue-year.
 
@@ -205,6 +205,7 @@ failing one takes its cause in `coverage-causes.toml`.
 | AAAI | 2024 | main | no official accepted count was found: the only figure, 2,342, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
 | AAAI | 2025 | main | no official accepted count was found: the only figure, 3,032, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
 | AAAI | 2026 | main | no official accepted count was found: the only figure, 4,167, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
+| AIES | 2026 | main | the program co-chairs state that 1,001 papers were reviewed and 249 accepted (44 oral, 205 poster); the OJS proceedings publish 243 main-track papers (Main Track I 67, II 60, III 57, IV 59) plus 22 student abstracts, and the 6 accepted papers not in the proceedings have no listing, so no official count of what the index can hold exists; ungated by the owner, 2026-10-16 (TASK-217) | https://www.aies-conference.com/2026/wp-content/uploads/2026/10/AIES-26-Program_v7.pdf (the program co-chairs' welcome; SHA-1 519552b4439d3ddec45ccb9085e2d9660072ed6a) | 2026-10-16 |
 | IASEAI | 2026 | main | 57 archival papers are published in the proceedings; the conference accepted 92, and the 35 non-archival ones have no findable listing, so no official count of what the index can hold exists | https://ojs.aaai.org/index.php/IASEAI/issue/view/741 (docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §IASEAI) | 2026-10-09 |
 
 ## Disagreements between sources
@@ -328,7 +329,7 @@ the official main-track counts above, so these cells are now ordinary ±1% gate 
 2026: NeurIPS 2026 has no row because its main conference is not public yet. The index holds its workshop
 submissions and 95 Creative_AI_Track notes (track `other`, status `unknown`), neither gated.
 
-AAAI 2010, 2011, 2014, 2016 and 2022–2026 main and IASEAI 2026 main have no row (above; each has a note in §Ungated cells with a note); AAAI's and AIES's
+AAAI 2010, 2011, 2014, 2016 and 2022–2026 main, AIES 2026 main and IASEAI 2026 main have no row (above; each has a note in §Ungated cells with a note); AAAI's and AIES's
 other tracks (`student_abstract`, `consortium`, `demo`, `iaai`, `eaai`, `other`) are not gated.
 
 Other tracks are reported on the coverage page but not gated (spec 07 §C), so they have no rows here. These

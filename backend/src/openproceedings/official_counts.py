@@ -603,6 +603,14 @@ UNGATED_NOTES: dict[tuple[str, int, str], UngatedNote] = {
         "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts",
         date(2026, 10, 10),
     ),
+    ("AIES", 2026, "main"): UngatedNote(
+        "the program co-chairs state that 1,001 papers were reviewed and 249 accepted (44 oral, 205 poster); the "
+        "OJS proceedings publish 243 main-track papers (Main Track I 67, II 60, III 57, IV 59) plus 22 student "
+        "abstracts, and the 6 accepted papers not in the proceedings have no listing, so no official count of "
+        "what the index can hold exists; ungated by the owner, 2026-10-16 (TASK-217)",
+        "https://www.aies-conference.com/2026/wp-content/uploads/2026/10/AIES-26-Program_v7.pdf (the program co-chairs' welcome; SHA-1 519552b4439d3ddec45ccb9085e2d9660072ed6a)",
+        date(2026, 10, 16),
+    ),
     ("IASEAI", 2026, "main"): UngatedNote(
         "57 archival papers are published in the proceedings; the conference accepted 92, and the 35 non-archival "
         "ones have no findable listing, so no official count of what the index can hold exists",
