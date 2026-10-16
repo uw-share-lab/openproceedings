@@ -99,7 +99,8 @@ fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `
 - **Autolint** (`.claude/skills/autolint/SKILL.md`): `autofix.sh` formats and fixes each file as it's edited
   (ruff, prettier, eslint, shellcheck).
 - `make lint` is exactly what CI's `lint` job runs. The pre-push hook runs `make lint` and `make tooling` (a cloud
-  `/dependabot-review` clone skips `make lint` and refuses the other dependency targets: decision-048).
+  `/dependabot-review` clone refuses every push, since that run is notify-only, and refuses the dependency targets:
+  decision-048).
   `make fmt` fixes the whole repo.
 - **Logging** (`.claude/skills/logging-standards/SKILL.md`): structured JSON, one line per unit of work, and
   no query text, abstracts, credentials or personal data. `observability-reviewer` checks every
