@@ -306,24 +306,22 @@ with a comment for the owner, a PR with:
   that shows records unchanged needs the owner's `data/`. A new digest for the same `python` tag is merged like
   any other.
 
-The checkers (and `prs.py check`) print `ok`, `FIX` (the routine repairs it) or `PROBLEM` (a hard stop) per
-finding, and exit 0, 3 (only FIX lines), 1 (a PROBLEM) or 2 (the check couldn't run, also a hard stop). Every
-outside call goes through `git`, `curl`, `npm` or `gh`, so the case table
-`.claude/scripts/tests/test-dependabot.sh` (in `make tooling`) runs them against fakes; the mutants are in
-`.claude/scripts/mutants/dependabot.json`. The run ends with a summary for its log: locally merged, left open (with
-the reason), not reviewed, and what the owner should look at; in the cloud ready for a local run (with the fixes it
-must make), hard stops (with their evidence), not reviewed, and what the owner should look at (procedure §11). The
-gates stay on for Dependabot PRs; exempting `dependabot[bot]` from `learnings` and `review-attested` was considered
-and rejected (decision-048). Decision-048
-set the routine's credential as a fine-grained token: this repository only, `contents`, `pull requests`, `issues`
-and `actions` read and write, nothing else (no `administration`, no `workflows`). As built, the credential depends
-on where the command runs: locally it is the maintainer's own `gh` login; in the cloud it is the Claude GitHub
-App's installation (*Cloud and local*), whose repository selection and permissions take the token's place as the
-bound (the selection is checked locally; in the cloud step 0 checks the proxy's session binding). A workflow change
-runs with the repository's secrets once it merges, so a local run reviews and attests a github-actions PR but leaves
-the queueing to the owner, by hand after reading it (`gh pr merge <n> --auto --match-head-commit <sha>`), named in its
-summary; `prs.py queue` refuses one. The pre-push hook and the autofix hook run their tools without
-the token.
+The checkers (and `prs.py check`) print `ok`, `FIX` (the routine repairs it) or `PROBLEM` (a hard stop) per finding,
+and exit 0, 3 (only FIX lines), 1 (a PROBLEM) or 2 (the check couldn't run, also a hard stop). Every outside call
+goes through `git`, `curl`, `npm` or `gh`, so the case table `.claude/scripts/tests/test-dependabot.sh` (in `make
+tooling`) runs them against fakes; the mutants are in `.claude/scripts/mutants/dependabot.json`. The run ends with a
+summary for its log: locally merged, left open (with the reason), not reviewed, and what the owner should look at;
+in the cloud ready for a local run (with the fixes it must make), hard stops (with their evidence), not reviewed,
+and what the owner should look at (procedure §11). The gates stay on for Dependabot PRs; exempting `dependabot[bot]`
+from `learnings` and `review-attested` was considered and rejected (decision-048). Decision-048 set the routine's
+credential as a fine-grained token: this repository only, `contents`, `pull requests`, `issues` and `actions` read
+and write, nothing else (no `administration`, no `workflows`). As built, the credential depends on where the command
+runs: locally it is the maintainer's own `gh` login; in the cloud it is the Claude GitHub App's installation (*Cloud
+and local*), whose repository selection and permissions take the token's place as the bound (the selection is
+checked locally; in the cloud step 0 checks the proxy's session binding). A workflow change runs with the
+repository's secrets once it merges, so a local run reviews and attests a github-actions PR but leaves the queueing
+to the owner, by hand after reading it (`gh pr merge <n> --auto --match-head-commit <sha>`), named in its summary;
+`prs.py queue` refuses one. The pre-push hook and the autofix hook run their tools without the token.
 
 *Cloud and local* (TASK-213). A Claude Code cloud session refuses every GitHub GraphQL call with HTTP 403 ("GitHub
 GraphQL is not available from Claude Code sessions; …"), so `gh pr list`, `view`, `checks` and `merge` all fail
@@ -335,88 +333,87 @@ integration": the first scheduled run (2026-10-13) reviewed #142 and #143 over R
 the owner installed the App that day. The App sets its own permissions. As read on 2026-10-13 they are actions,
 checks, contents, discussions, issues, pull requests, repository hooks and `workflows` write, plus administration,
 members and merge queues read, and the installation covered all of `uw-share-lab`'s repositories. The installation
-must cover only this repository (the owner set it so on 2026-10-13, `repository_selection: selected`). A cloud session
-can't read it: its proxy refuses the paths outside `repos/...` probed so far (`gh api user/installations` and
-`installation/repositories` answer HTTP 403 "This GitHub API path is not available: sessions are bound to their configured repositories"; probe,
-2026-10-13, TASK-243). So `prs.py preflight` checks the reach by mode (decision-048, TASK-243 AC6 addendum): **in the
-cloud** the session binding, requiring both of the proxy's own 403s word for word, `gh api user/installations` refused
-with that message and `gh api repos/astral-sh/uv` (a public repository the session isn't bound to) refused with
-"GitHub access to this repository is not enabled for this session", and stopping the run on any other answer, a 200
-included; **locally** the installation, reading `gh api orgs/uw-share-lab/installations` (an org owner's call),
-printing the Claude App installation's repository selection and permissions, and stopping the run unless the selection
-is `selected` (no `claude` installation at all, or a list whose length isn't its `total_count`, stops it too). The selected
-repository list itself can't be read with a `gh` login (it needs a GitHub App user token), so the selection is what is
-checked. The GitHub Advisory Database calls (`gh api advisories?…`, step 0's uv query and step 2's per-package
-queries) are outside `repos/` too, and the proxy refuses them: the 2026-10-16 run's `gh api
-'advisories?ecosystem=pip&affects=uv&per_page=100'` answered HTTP 403 "This GitHub API path is not available: sessions
-are bound to their configured repositories" (TASK-247). So a cloud run reports the advisories as not checked (step 0's
-uv query under "for the owner"; a per-package query as "checked only locally" on that PR's line, which doesn't keep
-it from "ready for a local run"), and the local run that merges a PR makes the queries itself. Because that
-credential has `workflows` and repository-hooks write, which can't be removed, **a cloud run executes none of the PR's dependency
-code** (the owner's decision, 2026-10-13, decision-048): no `uv sync`, `uv run` or `npm ci` of the PR's locks, no
-`make lint`, `make test` or `make e2e`, no smoke test, no `npm audit signatures` (it needs the installed tree), and no
-reviewer running any of them. It keeps what runs none of it: `dev`'s checkers (standard-library Python, `git`, `curl`,
-`npm view`, `gh`), the registry, provenance and advisory checks, `npm audit --package-lock-only`, the release notes,
-the reviewers reading diffs, the docs checks, and `make tooling` and `make mutate-changed` (the repo's own scripts,
-with the environment step 0 installs from `dev` before any PR is fetched). For test, lint and e2e evidence it runs
-`prs.py ci <n> --head <sha>`: over REST, the latest GitHub Actions run of each of `lint`, `test`, `claude-tooling`,
-`playwright` and `bench` on that head, plus `web-image` when the PR touches a path it runs on, must be `success`
-(GitHub Actions runs them without the App's credential; a check by any other app doesn't count, since the App can
-write checks). It waits up to 9 minutes per call (exit 4 while a check still
-runs: the routine calls it again on the same head, up to an hour in all); red, missing or still running is a hard stop for the
-owner, never rerun in the cloud. A cloud run reads it once per PR and reports it; a local run reads CI's `test` before
-the body and again before `prs.py queue` when step 5's stale-base waiver applies.
-`prs.py preflight` makes the rule a guard: in the cloud it writes `op-no-dep-code` in the clone's git directory,
-and while that is there `make sync`, `fmt`, `lint`, `test`, `e2e` and `openapi` refuse (the Makefile's
-`dep-code-allowed`), `scripts/setup-dev.sh` skips its `uv sync`, and `.githooks/pre-push` refuses every push;
-locally it removes a marker it finds (case table `test-no-dep-code.sh`, rows in `dependabot_cases.py`). Because
-the guard lives in the checked-out tree, a PR based on an older `dev` would bring back unguarded copies: in a cloud
-clone `core.hooksPath` points at `dev`'s hooks extracted into the run directory (`setup-dev.sh` leaves it while
-the marker is there), and `prs.py check` stops a head
-whose `Makefile`, pre-push hook or `setup-dev.sh` lacks the guard (the cloud summary lists it as "rebase needed
-(`@dependabot rebase`)" for the local run). When
-`git rev-parse` fails (so the marker can't be checked), the Makefile's dependency targets and the pre-push hook
-refuse rather than run. Commands
-typed directly (`uv run`, `npm ci`, `npx`) have no such guard; the procedure and its reviewer prompt keep them out.
-Locally nothing changed: the routine runs `make test` and the rest, and step 5's stale-base waiver (which runs
-`make test` on the merged tree) is local only. **Sigstore can't run in
-the cloud**, so every ghcr.io PR is the owner's there: `gh attestation verify` can't start a verifier ("no valid
-Sigstore verifiers could be initialized", 2026-10-13) because the proxy answers Forbidden for Sigstore's TUF hosts
-(`tuf-repo-cdn.sigstore.dev`, `tuf-repo.github.com`), and the attestation API of another organisation's repository is
-refused ("not enabled for this session"), so no offline route exists either (probe, 2026-10-13). `docker_digest.py`
-fails closed and its PROBLEM line gives that reason; locally it verifies as before. The uv release check of step 0
-(`prs.py uv-release`) meets the same binding: a `repos/astral-sh/uv` call refused with the "not enabled for this session" 403
-(which only the cloud proxy sends) is not a stop but "check uv's latest release by hand" for the owner. `actions_pins.py` meets it too: a new pin's tag ref is in another
-repository, so in the cloud it can't be resolved and the checker's PROBLEM line says why; every github-actions PR
-(each brings a new pin) is the owner's there. **A cloud run is notify-only** (the owner's decision, 2026-10-16,
-decision-048): it makes no GitHub write, so no comment, label, PR-body edit, attestation, queueing or push leaves a
-cloud session. The evidence: on 2026-10-16 (session cse_014uvWwXsnPaQKx5UQf2fD6u) a comment the cloud posted with
-`gh api … -F body=@file` came back with a generated-by footer naming Claude Code appended on the server side (as on
-2026-10-13), a cloud `PATCH` kept it, and only a `PATCH` from the owner's machine removed it; the cloud's queueing
-route (CCR) and a cloud push were never exercised (TASK-243). The scripts enforce what they can: `prs.py queue`
-refuses in a cloud session before any call, `record-review.py --attest` refuses in a clone holding the
-no-dependency-code marker, and the pre-push hook refuses every push while it is there; the `gh api` writes (comments,
-labels, the body `PATCH`, step 9's close/reopen and run cancel/rerun) are kept out by the procedure.
-`record-review.py --attest --pr` also refuses wherever GraphQL is refused as a cloud session refuses it, marker or
-not. These guards stop an honest run's mistakes, not a steered one: the session still holds the App's credential, with
-pull-request and checks write, so it could write an attestation marker or a check run under a required check's name
-(`dev`'s required checks aren't tied to an app, `app_id: null`); only the installation's scope (this repository)
-bounds a steered run. A local run reads back every comment and PR body it writes and removes anything added
-(cheap, though a write from the owner's machine hasn't gained a footer). The procedure uses REST only (`gh api repos/<repo>/...`) and checks auth with a repository-scoped call (`gh api
-repos/uw-share-lab/openproceedings`; the proxy refuses paths outside `repos/`, so `gh api user` may fail there). `prs.py preflight`
-tells the environment by asking GraphQL for the viewer: the session's 403 message is **cloud**, an answer is
-**local** (a maintainer's clone with a real `gh` login), anything else stops the run; in the cloud it also requires
-that `gh` has no stored login (a file dependency code could read). Locally `prs.py queue` runs `gh pr merge <n>
---auto --match-head-commit <sha>`, reads the PR again and turns auto-merge off again (`--disable-auto`) if the head
-moved, GitHub shows nothing set to merge, or a failed call left it set; the merge queue's `review-attested` check
-also requires each PR's body to attest the exact head it merges, and the routine attested only the head it reviewed
-(decision-048). Dependency code left running locally could defeat both with the maintainer's login; the routine looks
-for leftover dependency processes before it queues, which catches accidents but not code that hides itself, so what
-bounds it is that only registry-verified versions run. The routine runs `record-review.py` from `dev`'s copy, like
-the checkers, because a PR branch based on an older `dev` carries an older recorder. `prs.py watch` polls REST: the
-PR's `merged` and `auto_merge`, the timeline's latest merge-queue event, the queue's
-`gh-readonly-queue/dev/pr-<n>-<sha>` build branch, and the check runs, and names a queue build run that hangs so the
-local run can cancel and rerun it through the Actions REST endpoints.
+must cover only this repository (the owner set it so on 2026-10-13, `repository_selection: selected`). A cloud
+session can't read it: its proxy refuses the paths outside `repos/...` probed so far (`gh api user/installations`
+and `installation/repositories` answer HTTP 403 "This GitHub API path is not available: sessions are bound to their
+configured repositories"; probe, 2026-10-13, TASK-243). So `prs.py preflight` checks the reach by mode
+(decision-048, TASK-243 AC6 addendum): **in the cloud** the session binding, requiring both of the proxy's own 403s
+word for word, `gh api user/installations` refused with that message and `gh api repos/astral-sh/uv` (a public
+repository the session isn't bound to) refused with "GitHub access to this repository is not enabled for this
+session", and stopping the run on any other answer, a 200 included; **locally** the installation, reading `gh api
+orgs/uw-share-lab/installations` (an org owner's call), printing the Claude App installation's repository selection
+and permissions, and stopping the run unless the selection is `selected` (no `claude` installation at all, or a list
+whose length isn't its `total_count`, stops it too). The selected repository list itself can't be read with a `gh`
+login (it needs a GitHub App user token), so the selection is what is checked. The GitHub Advisory Database calls
+(`gh api advisories?…`, step 0's uv query and step 2's per-package queries) are outside `repos/` too, and the proxy
+refuses them: the 2026-10-16 run's `gh api 'advisories?ecosystem=pip&affects=uv&per_page=100'` answered HTTP 403
+"This GitHub API path is not available: sessions are bound to their configured repositories" (TASK-247). So a cloud
+run reports the advisories as not checked (step 0's uv query under "for the owner"; a per-package query as "checked
+only locally" on that PR's line, which doesn't keep it from "ready for a local run"), and the local run that merges
+a PR makes the queries itself. Because that credential has `workflows` and repository-hooks write, which can't be
+removed, **a cloud run executes none of the PR's dependency code** (the owner's decision, 2026-10-13, decision-048):
+no `uv sync`, `uv run` or `npm ci` of the PR's locks, no `make lint`, `make test` or `make e2e`, no smoke test, no
+`npm audit signatures` (it needs the installed tree), and no reviewer running any of them. It keeps what runs none
+of it: `dev`'s checkers (standard-library Python, `git`, `curl`, `npm view`, `gh`), the registry, provenance and
+advisory checks, `npm audit --package-lock-only`, the release notes, the reviewers reading diffs, the docs checks,
+and `make tooling` and `make mutate-changed` (the repo's own scripts, with the environment step 0 installs from
+`dev` before any PR is fetched). For test, lint and e2e evidence it runs `prs.py ci <n> --head <sha>`: over REST,
+the latest GitHub Actions run of each of `lint`, `test`, `claude-tooling`, `playwright` and `bench` on that head,
+plus `web-image` when the PR touches a path it runs on, must be `success` (GitHub Actions runs them without the
+App's credential; a check by any other app doesn't count, since the App can write checks). It waits up to 9 minutes
+per call (exit 4 while a check still runs: the routine calls it again on the same head, up to an hour in all); red,
+missing or still running is a hard stop for the owner, never rerun in the cloud. A cloud run reads it once per PR
+and reports it; a local run reads CI's `test` before the body and again before `prs.py queue` when step 5's
+stale-base waiver applies. `prs.py preflight` makes the rule a guard: in the cloud it writes `op-no-dep-code` in the
+clone's git directory, and while that is there `make sync`, `fmt`, `lint`, `test`, `e2e` and `openapi` refuse (the
+Makefile's `dep-code-allowed`), `scripts/setup-dev.sh` skips its `uv sync`, and `.githooks/pre-push` refuses every
+push; locally it removes a marker it finds (case table `test-no-dep-code.sh`, rows in `dependabot_cases.py`).
+Because the guard lives in the checked-out tree, a PR based on an older `dev` would bring back unguarded copies: in
+a cloud clone `core.hooksPath` points at `dev`'s hooks extracted into the run directory (`setup-dev.sh` leaves it
+while the marker is there), and `prs.py check` stops a head whose `Makefile`, pre-push hook or `setup-dev.sh` lacks
+the guard (the cloud summary lists it as "rebase needed (`@dependabot rebase`)" for the local run). When `git
+rev-parse` fails (so the marker can't be checked), the Makefile's dependency targets and the pre-push hook refuse
+rather than run. Commands typed directly (`uv run`, `npm ci`, `npx`) have no such guard; the procedure and its
+reviewer prompt keep them out. Locally nothing changed: the routine runs `make test` and the rest, and step 5's
+stale-base waiver (which runs `make test` on the merged tree) is local only. **Sigstore can't run in the cloud**, so
+every ghcr.io PR is the owner's there: `gh attestation verify` can't start a verifier ("no valid Sigstore verifiers
+could be initialized", 2026-10-13) because the proxy answers Forbidden for Sigstore's TUF hosts
+(`tuf-repo-cdn.sigstore.dev`, `tuf-repo.github.com`), and the attestation API of another organisation's repository
+is refused ("not enabled for this session"), so no offline route exists either (probe, 2026-10-13).
+`docker_digest.py` fails closed and its PROBLEM line gives that reason; locally it verifies as before. The uv
+release check of step 0 (`prs.py uv-release`) meets the same binding: a `repos/astral-sh/uv` call refused with the
+"not enabled for this session" 403 (which only the cloud proxy sends) is not a stop but "check uv's latest release
+by hand" for the owner. `actions_pins.py` meets it too: a new pin's tag ref is in another repository, so in the
+cloud it can't be resolved and the checker's PROBLEM line says why; every github-actions PR (each brings a new pin)
+is the owner's there. **A cloud run is notify-only** (the owner's decision, 2026-10-16, decision-048): it makes no
+GitHub write, so no comment, label, PR-body edit, attestation, queueing or push leaves a cloud session. The
+evidence: on 2026-10-16 (session cse_014uvWwXsnPaQKx5UQf2fD6u) a comment the cloud posted with `gh api … -F
+body=@file` came back with a generated-by footer naming Claude Code appended on the server side (as on 2026-10-13),
+a cloud `PATCH` kept it, and only a `PATCH` from the owner's machine removed it; the cloud's queueing route (CCR)
+and a cloud push were never exercised (TASK-243). The scripts enforce what they can: `prs.py queue` refuses in a
+cloud session before any call, `record-review.py --attest` refuses in a clone holding the no-dependency-code marker,
+and the pre-push hook refuses every push while it is there; the `gh api` writes (comments, labels, the body `PATCH`,
+step 9's close/reopen and run cancel/rerun) are kept out by the procedure. `record-review.py --attest --pr` also
+refuses wherever GraphQL is refused as a cloud session refuses it, marker or not. These guards stop an honest run's
+mistakes, not a steered one: the session still holds the App's credential, with pull-request and checks write, so it
+could write an attestation marker or a check run under a required check's name (`dev`'s required checks aren't tied
+to an app, `app_id: null`); only the installation's scope (this repository) bounds a steered run. A local run reads
+back every comment and PR body it writes and removes anything added (cheap, though a write from the owner's machine
+hasn't gained a footer). The procedure uses REST only (`gh api repos/<repo>/...`) and checks auth with a
+repository-scoped call (`gh api repos/uw-share-lab/openproceedings`; the proxy refuses paths outside `repos/`, so
+`gh api user` may fail there). `prs.py preflight` tells the environment by asking GraphQL for the viewer: the
+session's 403 message is **cloud**, an answer is **local** (a maintainer's clone with a real `gh` login), anything
+else stops the run; in the cloud it also requires that `gh` has no stored login (a file dependency code could read).
+Locally `prs.py queue` runs `gh pr merge <n> --auto --match-head-commit <sha>`, reads the PR again and turns
+auto-merge off again (`--disable-auto`) if the head moved, GitHub shows nothing set to merge, or a failed call left
+it set; the merge queue's `review-attested` check also requires each PR's body to attest the exact head it merges,
+and the routine attested only the head it reviewed (decision-048). Dependency code left running locally could defeat
+both with the maintainer's login; the routine looks for leftover dependency processes before it queues, which
+catches accidents but not code that hides itself, so what bounds it is that only registry-verified versions run. The
+routine runs `record-review.py` from `dev`'s copy, like the checkers, because a PR branch based on an older `dev`
+carries an older recorder. `prs.py watch` polls REST: the PR's `merged` and `auto_merge`, the timeline's latest
+merge-queue event, the queue's `gh-readonly-queue/dev/pr-<n>-<sha>` build branch, and the check runs, and names a
+queue build run that hangs so the local run can cancel and rerun it through the Actions REST endpoints.
 
 ## Git and PR rules
 
