@@ -194,3 +194,23 @@ with no context and no access to the owner's machine can run it, and script its 
 - Propagated to (cloud runs): `.claude/settings.json`, `.claude/skills/no-ai-attribution/SKILL.md`, spec 08 §CI
   "Dependabot" and §Hooks, the command's §Where it runs, step 0 (installation check), step 8 (body
   read-back) and step 10, decision-048 (second 2026-10-13 addendum).
+
+## Addendum — 2026-10-16 (the uv 0.13 hand upgrade, after PR #132)
+
+**Key lesson:** the image's uv pin is the only uv the 7-day hold governs; CI's `setup-uv` (no `version:`) already
+runs the newest uv, so a uv minor reaches CI on release day and the image only when it is pinned by hand.
+
+- The owner waived the 0.x-minor stop for uv 0.13 on 2026-10-11 but kept the 7-day rule, so the hand upgrade pinned
+  0.13.0 (published 2026-10-09T19:49:55Z) at 19:51Z on 2026-10-16; 0.13.1 (2026-10-14) was too young. Dev's
+  `docker_digest.py --head HEAD` gave the evidence locally: the registry resolves the tag to the pinned index
+  digest, the attestation verifies for astral-sh, first attested 7.0 days ago. Its two PROBLEMs are expected on a hand
+  PR: the 0.x minor (the owner's waiver) and a comment line outside the pins.
+- CI was already on uv 0.13.1 before this PR (a `test` job's log: "Downloading uv … 0.13.1"), and the owner's
+  machine on 0.13.0 (Homebrew): `uv sync --locked` passed under both, so `uv.lock` needed no change, and the
+  "0.12.22 or later" minimums stay true.
+- 0.13.0's breaking changes that could reach this repo were checked, not assumed: the default Python moved to 3.15
+  (`.python-version` pins 3.12.15, and the image sets `UV_PYTHON_DOWNLOADS=never`), `tar-codec` became the default tar
+  backend (the image build and `make test` both installed the lock), and `uv_build` bounds (the backend builds with
+  hatchling).
+- Propagated to: spec 08 §CI "Dependabot" (the hand upgrade), `deploy/api.Dockerfile`'s header comment. Whether CI
+  should pin `setup-uv`'s `version:` to the image's uv is the owner's call (reported, not changed).
