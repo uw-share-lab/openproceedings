@@ -3,10 +3,10 @@ id: TASK-247
 title: >-
   dependabot-review: the Advisory Database calls from a cloud session (steps 0
   and 2)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-14 01:13'
-updated_date: '2026-10-16 16:32'
+updated_date: '2026-10-16 18:00'
 labels:
   - tooling
   - ci
@@ -37,3 +37,9 @@ The GitHub Advisory Database calls /dependabot-review makes (gh api advisories?e
 
 Review round 1: AC1's text names an npm/next probe; the recorded call is step 0's pip/uv query on the same advisories endpoint, which answers the question AC1 asks. AC3 is conditional ('if it answers') and is ticked as settled: the call is refused, and the 'not yet seen from a cloud session' caveats are gone. Correction to the note above: a refused per-package query does not keep a PR from 'ready for a local run' (that would make every cloud PR unready, since every cloud query is refused); it is listed as 'checked only locally' on the PR's line, and the local run makes the query (procedure step 2, spec 08, decision-048).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The cloud's Advisory Database call is refused (HTTP 403 'This GitHub API path is not available: sessions are bound to their configured repositories', 2026-10-16 run). Under the owner's notify-only decision a refused query is reported, not a stop: step 0's uv query goes under 'for the owner', a per-package query is listed as 'checked only locally' on the PR's line without keeping it from 'ready for a local run', and the local run that merges makes the queries. Procedure steps 0 and 2, spec 08 and decision-048 record it.
+<!-- SECTION:FINAL_SUMMARY:END -->

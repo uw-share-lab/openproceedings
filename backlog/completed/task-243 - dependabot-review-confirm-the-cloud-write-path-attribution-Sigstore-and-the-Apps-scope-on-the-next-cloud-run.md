@@ -3,11 +3,11 @@ id: TASK-243
 title: >-
   dependabot-review: confirm the cloud write path, attribution, Sigstore and the
   App's scope on the next cloud run
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-13 17:34'
-updated_date: '2026-10-16 16:32'
+updated_date: '2026-10-16 18:00'
 labels:
   - tooling
   - ci
@@ -65,3 +65,9 @@ AC1 and AC2 (chore/dependabot-cloud-notify-only, 2026-10-16): the scheduled run 
 
 AC2 is ticked on its outcome, not its letter (review round 1): the CCR PUT/DELETE, the job-log download and a cloud push were never exercised, and under the owner's 2026-10-16 notify-only decision they never will be from the cloud; the AC text is kept as written because the backlog CLI can only replace an AC by removing and re-adding it, which renumbers AC3-AC6 that notes and decision-048 cite. Round 1 also added: record-review.py --attest --pr refuses wherever GraphQL is refused as a cloud session refuses it (marker or not), a row that a marked clone still writes a record without --attest, and the 'what the guards don't do' bullet in decision-048 (they stop an honest run's mistakes, not a steered one).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+AC1-AC6 met. AC1: the 2026-10-16 scheduled run showed the generated-by footer is added on the server side to the cloud session's writes (a cloud PATCH keeps it; a PATCH from the owner's machine removed it, comment 6218376786). AC2: the CCR PUT/DELETE, job-log download and a cloud push were never exercised; the owner made the cloud routine notify-only on 2026-10-16, so they are moot: prs.py queue refuses in a cloud session and its CCR route is removed, record-review.py --attest refuses with the op-no-dep-code marker (and --attest --pr wherever GraphQL is refused as in a cloud session), and .githooks/pre-push refuses every push with the marker. Procedure (.claude/commands/dependabot-review.md), spec 08 §CI 'Dependabot', decision-048's 2026-10-16 addendum, ci-engineer, pr-workflow skill and CLAUDE.md updated; rows in dependabot_cases.py, test-no-dep-code.sh and test-openproceedings-gates.sh, mutants in dependabot.json and gates.json. Three review rounds (code, docs+methodology, security, qa).
+<!-- SECTION:FINAL_SUMMARY:END -->
