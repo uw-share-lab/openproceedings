@@ -72,7 +72,7 @@ EXIT_MISMATCH = 3
 # `op ingest <source>` sources still to come -> the task that implements them
 PLANNED_SOURCES: dict[str, str] = {}  # none left: ris, openreview, neurips and pmlr are all implemented
 # tasks shelved with the semantic layer (spec 06, decision-017): their stubs say so
-DEFERRED_TASKS: frozenset[str] = frozenset({"task-058", "task-061"})
+SHELVED_TASKS: frozenset[str] = frozenset({"task-058", "task-061"})
 MIN_DELAY = 0.5  # seconds between requests to a proceedings host: never faster (politeness)
 
 
@@ -89,12 +89,12 @@ def default_data_dir() -> Path:
 
 def _stub_status(task: str) -> str:
     """How a stub names its task: planned, or shelved with the semantic layer (decision-017)."""
-    return "shelved (decision-017)" if task in DEFERRED_TASKS else f"planned in {task}"
+    return "shelved (decision-017)" if task in SHELVED_TASKS else f"planned in {task}"
 
 
 def _stub_pointer(task: str) -> str:
     """Where a stub sends the reader: the task, or spec 06 for a shelved one (its task is archived)."""
-    if task in DEFERRED_TASKS:
+    if task in SHELVED_TASKS:
         return f"see docs/specs/06-semantic-layer.md (archived {task})"
     return f"see `backlog task view {task}`"
 

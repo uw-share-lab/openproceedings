@@ -322,7 +322,7 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
   the other four getting 413); a length that isn't 1 to 18 plain digits gets 400 (over HTTP/2 Go passes it on to
   Caddy, whose arithmetic on it would fail into a 500); browsers
   declare a file's length (Chromium over HTTP/2 did). The server
-  also stops speaking HTTP/3 (`protocols h1 h2`): no stall over QUIC has been run against this block. Caddy
+  also stops speaking HTTP/3 (`protocols h1 h2`): no stall over QUIC has been run against this block (TASK-257). Caddy
   builds its HTTP/3 server with only the idle timeout, and `read_body` reaches a QUIC stream only through the
   per-request read deadline Caddy sets since 2.11.6 (`modules/caddyhttp/server.go`); until a stall is shown
   to be cut there, an upload stalled over QUIC might hold its buffer for as long as the client keeps the
@@ -333,7 +333,12 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
   memory limit `OP_CADDY_MEM_LIMIT` (default `1g`, with no swap on top) and `GOMEMLIMIT`
   `OP_CADDY_GOMEMLIMIT` (default `800MiB`: Go collects harder as the heap nears it, well before the kernel's
   limit). **`read_body` is a timeout of the whole server**, every path, not of the comparison path: Caddy has
-  no per-path setting for it, so a slow client of any route is now cut after 60 s rather than 10.
+  no per-path setting for it, so a slow client of any route is now cut after 60 s rather than 10. The other
+  API routes don't require a `Content-Length` yet (with the overlay or without it): an unsized body there that
+  reaches the 64 KiB `request_buffers` and stalls is streamed on to the API, and may hold one of its 256
+  `limit_concurrency` connections until `read_body` runs out, so about 256 such requests (some 16 MiB in all)
+  could hold every API connection, searches included (inferred from the comparison path, not measured on
+  those routes; alert on the rate of uvicorn's `Exceeded concurrency limit.` lines; open: TASK-255).
 
 What was measured on this stack with `compare.yml`'s defaults (TASK-183, 2026-10-16: Docker Desktop, engine
 24.0.7, on an 8-CPU Mac shared with other builds; caddy 2.11.7, with 2.11.4's figures close to these; the raw
@@ -360,8 +365,8 @@ connection it held is dropped, searches included, for the few seconds it takes. 
 uploads held at once reached its edge (peaks of 890 to 998 MiB) and 32 did not fit: somewhere between the two
 (400 to 540 MB of traffic, each upload faster than 2.24 Mbit/s to beat `read_body 60s`) is enough, from one
 address or many, and Caddy as built here limits
-neither connections nor uploads per client. That bound is the host's or a front proxy's to add, not this
-stack's.
+neither connections nor uploads per client. That bound is not built here: where it goes (a front proxy, the
+host's firewall, or a custom Caddy build) is an owner decision, TASK-256.
 
 A stalled upload was cut by the proxy when `read_body` ran out (60 s after its request started, sending
 included) and never reached the API: with uploads stalled in the proxy, a whole 16 MiB comparison ran at once
@@ -461,3 +466,7 @@ Linux host. No CI job runs it.
 - Do the first start and its checks on the host: client addresses (First start, step 4), and the rate limit
   and CORS (TASK-067 AC #2).
 - Schedule the record-store backup (§Backups).
+- Alert on the rate of uvicorn's `Exceeded concurrency limit.` lines. With or without comparisons, an
+  unsized body that reaches 64 KiB on an API route other than `/api/v1/compare` and stalls may hold one of
+  the API's 256 connections until `read_body` (10 s, or 60 s with `compare.yml`), so about 256 such
+  requests could refuse every search for that long (inferred, not measured; open: TASK-255).

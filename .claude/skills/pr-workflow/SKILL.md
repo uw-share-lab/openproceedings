@@ -69,7 +69,12 @@ the affected tests. A long command runs in the **foreground**, behind a wait for
 a session that backgrounds its run and waits to be told can stop with its work uncommitted. Scratch files are
 named after the task (`t181-test.log`), never `test.log`. Nothing a session starts listens on 8000 or 3000
 (`OP_E2E_API_PORT` / `OP_E2E_WEB_PORT` for e2e). A session in a worktree reports its follow-ups; it creates no
-Backlog ids.
+Backlog ids. A mutation run is as heavy as a full suite: one `mutate.py` run on the machine at a time, at
+`--jobs 2` (its default is the CPU count, up to 8), with nothing else heavy running (two at `--jobs 4` took the
+load to 180–260 on 8 CPUs; 2026-10-16). A decision a background agent needs before it merges goes in its brief;
+one sent later as a message counts only once the agent says it has it, and the agent doesn't queue the PR
+(`gh pr merge --auto`) before then, because a message to an agent that is mid-turn is read when the turn ends,
+often after the merge (2026-10-16).
 
 The learnings commit comes **before** the review because the review record is keyed to the exact HEAD
 sha. Any commit after an approval — a typo fix, a rebase, an amend — produces a new sha with no record, and

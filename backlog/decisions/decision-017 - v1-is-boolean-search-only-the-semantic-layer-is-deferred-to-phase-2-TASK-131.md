@@ -85,6 +85,7 @@ layer and keep its design as a reference. Recorded:
 - Spec 06, the `embedding-engineer` and `near-miss-evaluator` agents and the `specter2-embeddings` skill stay
   as a design reference. Specs, skills, the README and the CLI and engine messages say "shelved" where they
   said "deferred to phase 2" (the engine hint above now reads "semantic sort is shelved (decision-017)").
+  The 2026-10-16 follow-ups renamed `DEFERRED_TASKS` (above) to `SHELVED_TASKS`, and the test set to `SHELVED`.
 - Nothing in API v1 changes: `semantic_version` stays on search records, always null, and `sort=semantic`
   stays refused (spec 04).
 - Resuming still takes a new decision that supersedes this one, plus new tasks: the archived ones may be
