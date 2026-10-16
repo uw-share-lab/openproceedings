@@ -37,8 +37,9 @@ citation a reader can check (a URL or a repo path); `coverage-sources.md` also h
 2012, 2017, 2020 and 2021 main (a count of AAAI's own published list: the row's description says "counted" and
 names the list, and the list must match our `main` definition and be independent of the proceedings, which means
 evidently not derived from them: a pre-camera-ready list that says so, one that visibly differs from them in count or
-membership, or a dated copy archived before them, which the owner prefers when one exists (2026-10-16, TASK-234)). The
-other side of that rule: an archived copy captured after publication is not evidence of independence (gate C round 1): AAAI 2010's and 2014's lists, like 2016's, are ungated cells with a note. A
+membership, or a dated copy archived before them, which the owner prefers when one exists (2026-10-16, TASK-234)). An
+archived copy captured after publication is not evidence of independence (gate C round 1), so AAAI 2010's and
+2014's lists, like 2016's, are ungated cells with a note. A
 row counts the whole document it cites, its own later sections too (AAAI-21's "Main Technical Track" PDF ends with the
 AI for Social Impact list, pp. 121–124), and says which part each number comes from; to date a list, list every capture
 of its URL and of its pre-migration path in the Wayback CDX index (the digest is the file's base32 SHA-1), name the
