@@ -22,9 +22,9 @@ bounded and measured.
   slot), not by Caddy. Same for 64 KiB on the other routes.
 - **A stall that never reaches the limit is cut by `read_body` and never reaches the upstream**: with the
   declared 16 MiB minus one byte sent, the API logged nothing, a whole 16 MiB comparison ran while 8 such
-  uploads were held, and each was cut 58.4 s after its last byte (`read_body 60s`, which counts from the
-  request's start). Caddy then answers the client an empty `200` (its access log says `status: 0`).
-- **Memory: about 50 MiB per buffered 16 MiB upload.** cgroup `memory.current` held 446, 793 and 912 MiB for
+  uploads were held, and each was cut at `read_body` (60.02 s after its request's start with `60s`: the
+  timeout counts from there, sending included). Caddy then answers the client an empty `200` (its access log says `status: 0`).
+- **Memory: about 50 MiB per buffered 16 MiB upload.** cgroup `memory.current` held 412, 793 and 912 MiB for
   8, 16 and 24 uploads; `bytes.Buffer.ReadFrom` doubles to 32 MiB to hold 16 and the outgrown buffers wait
   for GC. With `mem_limit 1g` and `GOMEMLIMIT 800MiB`, 24 fit and 32 got the kernel's OOM kill (Docker's `oom`
   event, exit 137) and a restart: bounded, but a few dozen uploads take the proxy down. `OOMKilled` stayed
@@ -46,6 +46,9 @@ bounded and measured.
 - 411 for an unsized `POST` to the comparison path instead of a buffer one byte over the cap → it closes the
   stream-through for every unsized body, over HTTP/2 as well as chunked → reverse if a client that must
   stream (no known length) needs comparisons.
+- No HTTP/3 with comparisons on (`protocols h1 h2` from a `protocols-on` snippet) → by the review's reading
+  Caddy builds its HTTP/3 server without `read_body`, so a QUIC upload that stalls would never be cut (not
+  measured: this Mac's curl has no HTTP/3) → reverse once an HTTP/3 stall is shown to be cut.
 - The overlay `deploy/compare.yml` instead of README edits → one switch that the smoke test runs exactly as
   an operator would → a deploy that templated its Caddyfile could fold it in.
 

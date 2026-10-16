@@ -67,7 +67,9 @@ as_root() {
     -v "$PWD/deploy/index-permissions.sh:/index-permissions.sh:ro" "$api_image" -c "$script" sh "$@"
 }
 
+stalls_pid=
 cleanup() {
+  if [ -n "$stalls_pid" ]; then kill "$stalls_pid" 2>/dev/null || true; fi # the stalled uploads' probe
   "${dc[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
   # shellcheck disable=SC2016 # "$1" expands inside the container's sh, on purpose
   if $linux; then as_root 'rm -rf "$1"' "$work/data/records" >/dev/null 2>&1 || true; fi # op-api's, 0700
@@ -256,14 +258,38 @@ echo "/api/v1/papers/$neighbour (unlisted): abstract_withheld, has an abstract =
 step "6. comparisons"
 offered=$("${curl_tls[@]}" "$base/api/v1/meta" | json '(d["limits"]["compare"] or {}).get("max_body_bytes")') \
   || fail "GET /meta"
+echo "/meta limits.compare.max_body_bytes: $offered"
 # a status from curl without --fail: the refusals below are the point
 status_of() { curl -sS --cacert "$cert" -o /dev/null -w '%{http_code}' "$@" || true; }
 head -c 65537 /dev/zero | tr '\0' x >"$work/over64k.json"
+# the proxy's own body caps and protocols, as Caddy adapted the Caddyfile in the running container: a body
+# that declares its length over 64 KiB is refused by the API from the header whatever the proxy does, so the
+# 413 below can't show the proxy's cap
+"${dc[@]}" exec -T caddy caddy adapt --config /etc/caddy/Caddyfile 2>/dev/null | python3 -c '
+import json, sys
+on = sys.argv[1] == "true"
+srv = next(s for s in json.load(sys.stdin)["apps"]["http"]["servers"].values() if ":443" in s.get("listen", []))
+site = srv["routes"][0]["handle"][0]["routes"]
+caps = [(r.get("match"), h["max_size"]) for r in site for h in r.get("handle", []) if h["handler"] == "request_body"]
+compare = [r["handle"][0]["routes"] for r in site if r.get("match") == [{"path": ["/api/v1/compare"]}]]
+inner = [(h["handler"], h.get("max_size") or h.get("request_buffers") or h.get("status_code"), r.get("match"))
+         for routes in compare for r in routes for h in r["handle"]]
+want_inner = [("request_body", 16777216, None),
+              ("static_response", 411, [{"method": ["POST"], "not": [{"header": {"Content-Length": ["*"]}}]}]),
+              ("reverse_proxy", 16777216, None)]
+print("proxy: protocols", srv.get("protocols"), "| body caps", caps, "| /api/v1/compare", inner)
+ok = (srv.get("protocols") == ["h1", "h2"] and caps == [([{"not": [{"path": ["/api/v1/compare"]}]}], 65536)]
+      and sorted(map(str, inner)) == sorted(map(str, want_inner))) if on else (
+      srv.get("protocols") == ["h1", "h2", "h3"] and caps == [(None, 65536)] and not compare)
+sys.exit(0 if ok else 1)' "$compare" || fail "the proxy's adapted body caps or protocols are not what compare=$compare needs"
+# HTTP/3 is advertised (Alt-Svc) only with comparisons off: Caddy doesn't give its HTTP/3 server read_body
+h3=$("${curl_tls[@]}" -D - -o /dev/null "$base/api/v1/healthz" | grep -ci '^alt-svc: h3' || true)
+echo "Alt-Svc h3 headers: $h3"
 if ! $compare; then
-  echo "/meta limits.compare.max_body_bytes: $offered"
   [ "$offered" = None ] || fail "comparisons are offered without deploy/compare.yml"
+  [ "$h3" = 1 ] || fail "the proxy doesn't advertise HTTP/3 with comparisons off"
 else
-  echo "/meta limits.compare.max_body_bytes: $offered"
+  [ "$h3" = 0 ] || fail "the proxy still advertises HTTP/3 with comparisons on"
   [ "$offered" = 16777216 ] || fail "comparisons on, but /meta offers $offered"
   # compare.yml repeats compose.yml's api command (compose replaces a list): it must be that plus --compare
   python3 -c '
@@ -274,11 +300,16 @@ sys.exit(0 if on == [*base, "--compare"] else 1)' \
     <(docker compose -f deploy/compose.yml config --format json) \
     <(docker compose -f deploy/compose.yml -f deploy/compare.yml config --format json) \
     || fail "deploy/compare.yml's api command is not compose.yml's plus --compare"
+  # cgroup v2 (memory.max); memory.peak needs Linux 5.19 or later, else the peak is sampled while uploads are held
   mem() { "${dc[@]}" exec -T caddy cat "/sys/fs/cgroup/$1"; }
   read_body=$("${dc[@]}" exec -T caddy printenv OP_READ_BODY) || fail "reading caddy's OP_READ_BODY"
-  limit=$(mem memory.max) || fail "reading caddy's memory limit"
+  case "$read_body" in
+    *[!0-9]*s | s | *[!s]) fail "this test reads OP_READ_BODY in whole seconds (60s), not '$read_body'" ;;
+  esac
+  limit=$(mem memory.max) || fail "reading caddy's memory limit (cgroup v2)"
   echo "caddy: read_body $read_body, memory limit $limit bytes, GOMEMLIMIT $("${dc[@]}" exec -T caddy printenv GOMEMLIMIT)"
   [ "$limit" != max ] || fail "the caddy service has no memory limit"
+  caddy_id=$("${dc[@]}" ps -q caddy)
   compared() { "${dc[@]}" logs --no-color api | grep -c '"route": "/api/v1/compare"' || true; }
   records=$(python3 backend/tests/deploy/compare_probe.py ris "$OP_DATA_HOST/snapshots/small/records.jsonl" 16777216 \
     "$work/full.ris") || fail "writing the 16 MiB RIS file"
@@ -293,32 +324,38 @@ sys.exit(0 if on == [*base, "--compare"] else 1)' \
     sleep 1
   done
   grep -q sent "$work/stalls.out" || fail "the stalled uploads never finished sending"
-  echo "$stalls uploads stalled a byte short; proxy memory now $(($(mem memory.current) / 1048576)) MiB"
+  held=$(mem memory.current) || fail "reading caddy's memory"
+  echo "$stalls uploads stalled a byte short; proxy memory now $((held / 1048576)) MiB"
   # the API's one comparison slot is free while the proxy holds them: a whole 16 MiB file is compared
   answer=$("${curl_tls[@]}" -H 'content-type: application/x-research-info-systems' --data-binary "@$work/full.ris" \
     "$base/api/v1/compare?q=learning" | json 'd["records_total"], d["papers_total"]') \
     || fail "a 16 MiB comparison while uploads stall"
   echo "a 16 MiB comparison while they stall: records, papers = $answer"
   [ "$answer" = "$records $records" ] || fail "the 16 MiB comparison of $records records read $answer"
+  now=$(mem memory.current) || fail "reading caddy's memory"
+  [ "$now" -gt "$held" ] && held=$now
   wait "$stalls_pid" || fail "the stalled uploads"
-  echo "stalled uploads: $(tail -1 "$work/stalls.out")"
+  stalls_pid=
+  echo "stalled uploads, seconds from each request's start: $(tail -1 "$work/stalls.out")"
   python3 -c '
 import json, sys
 cut = json.loads(open(sys.argv[2]).read().splitlines()[-1])
 limit = float(sys.argv[1])
-sys.exit(0 if limit - 5 <= cut["cut_min_s"] and cut["cut_max_s"] <= limit + 2 else 1)' \
+sys.exit(0 if abs(cut["cut_min_s"] - limit) <= 2 and abs(cut["cut_max_s"] - limit) <= 2 else 1)' \
     "${read_body%s}" "$work/stalls.out" || fail "a stalled upload was not cut at read_body ($read_body)"
-  peak=$(mem memory.peak) || fail "reading caddy's memory peak"
+  peak=$(mem memory.peak 2>/dev/null) || peak=$held # sampled: no memory.peak before Linux 5.19
   oom=$(mem memory.events | sed -n 's/^oom_kill //p') || fail "reading caddy's OOM kills"
-  echo "proxy memory peak $((peak / 1048576)) MiB of $((limit / 1048576)) MiB; oom_kill $oom"
-  [ "$oom" = 0 ] && [ "$peak" -lt "$limit" ] || fail "the proxy went over its memory limit"
+  restarts=$(docker inspect --format '{{.RestartCount}}' "$caddy_id") || fail "reading caddy's restarts"
+  echo "proxy memory peak $((peak / 1048576)) MiB of $((limit / 1048576)) MiB; oom_kill $oom; restarts $restarts"
+  [ "$oom" = 0 ] && [ "$restarts" = 0 ] && [ "$("${dc[@]}" ps -q caddy)" = "$caddy_id" ] \
+    || fail "the proxy was killed (over its memory limit?)"
   after=$(compared)
   echo "API compare requests: $((after - before)) (the 16 MiB comparison; no stalled upload reached the API)"
   [ "$((after - before))" = 1 ] || fail "a stalled upload reached the API"
   head -c 16777217 /dev/zero | tr '\0' x >"$work/over.ris"
   status=$(status_of -H 'content-type: application/x-research-info-systems' --data-binary "@$work/over.ris" \
     "$base/api/v1/compare?q=$query")
-  echo "16 MiB + 1 byte to /api/v1/compare -> $status"
+  echo "16 MiB + 1 byte to /api/v1/compare -> $status (the API's, from the declared length)"
   [ "$status" = 413 ] || fail "a file one byte over 16 MiB answered $status"
   # past request_buffers the proxy streams the rest to the API, so a file must say how long it is
   status=$(status_of --http1.1 -H 'Transfer-Encoding: chunked' -H 'content-type: application/x-research-info-systems' \
@@ -330,7 +367,8 @@ sys.exit(0 if limit - 5 <= cut["cut_min_s"] and cut["cut_max_s"] <= limit + 2 el
   echo "an HTTP/2 file with no content-length to /api/v1/compare -> $status"
   [ "$status" = 411 ] || fail "an unsized HTTP/2 file answered $status"
 fi
-# every path but /api/v1/compare keeps the API's own 64 KiB body cap, comparisons on or off
+# every other path still refuses a body over 64 KiB (the API's 413, from the declared length; the proxy's own
+# cap is the adapted config above)
 status=$(status_of -H 'content-type: application/json' --data-binary "@$work/over64k.json" "$base/api/v1/records")
 echo "64 KiB + 1 byte to /api/v1/records -> $status"
 [ "$status" = 413 ] || fail "a body one byte over 64 KiB to /api/v1/records answered $status"

@@ -10,10 +10,21 @@
 #             `includeSubDomains` until the hosting domain is decided (TASK-064): the header would then bind
 #             every subdomain of a domain this project may not control. Once it is, set
 #             OP_HSTS="max-age=63072000; includeSubDomains" if every subdomain serves HTTPS.
-# OP_COMPARE  `off` (the default) or `on`: which body caps the site imports, below. Only deploy/compare.yml sets
-#             it, beside `op serve --compare` (decision-035; deploy/README.md §Comparisons). Any other value is a
-#             snippet that doesn't exist, and Caddy refuses to start.
+# OP_COMPARE  `off` (the default) or `on`: which protocols the server speaks and which body caps the site
+#             imports, below. Only deploy/compare.yml sets it, beside `op serve --compare` (decision-035;
+#             deploy/README.md §Comparisons). Any other value names a snippet (or file) that doesn't exist, and
+#             Caddy refuses to start.
 # OP_READ_BODY  the server's read_body timeout (default 10s); deploy/compare.yml raises it for 16 MiB uploads.
+
+# With comparisons on, no HTTP/3: Caddy's HTTP/3 server is not given read_body, so an upload stalled over QUIC
+# would hold its buffer for as long as the client keeps the connection alive. HTTP/1.1 and HTTP/2 are cut
+(protocols-off) {
+	protocols h1 h2 h3
+}
+(protocols-on) {
+	protocols h1 h2
+}
+
 {
 	skip_install_trust # the local CA's root stays in the caddy-data volume; nothing to install inside a container
 	log default {
@@ -35,6 +46,7 @@
 			# (`read_body_idle`, also 1m, never fires: `read_body` above caps it)
 		}
 		max_header_size 64KiB # the API's own request-head limit (a 2,000-code-point q fits)
+		import protocols-{$OP_COMPARE:off}
 	}
 }
 
@@ -85,7 +97,9 @@
 	# Caddy sets X-Forwarded-For to the client's address (it trusts no proxy in front of it), and the API
 	# believes it only from this proxy's address (`--trusted-proxy` in compose.yml)
 	reverse_proxy /api/* api:8000 {
-		request_buffers 64KiB # read the whole (capped) body before opening the upstream request
+		# read the whole (capped) body before opening the upstream request. A body that declares its length
+		# within the cap is read whole; an unsized (chunked) one that reaches 64KiB has the rest streamed
+		request_buffers 64KiB
 	}
 	reverse_proxy web:3000
 	log {

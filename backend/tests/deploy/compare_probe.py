@@ -13,23 +13,26 @@ the API's caps (64 lines a record, 32,768 characters a line). Prints its record 
 `stall` opens `<uploads>` connections at once, each a `POST <path>` (query string included) declaring
 `<declared bytes>` and sending `<sent>` bytes of body, then stops sending. It prints `sent` once every upload
 has sent its bytes (the moment the proxy holds them all), then waits for each connection to end and prints one
-JSON line: how many seconds after its last byte the first and last were cut (-1 for one cut while it was still
-sending), and the status lines they got, if any.
+JSON line: how many seconds after its request's first byte the first and last were cut (read_body counts from
+there; -1 for one that failed to connect or was cut while still sending), and the status lines they got.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import socket
 import ssl
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 RECORDS = 400
 MAX_LINE = 30_000  # under the API's 32,768-character line cap, tag included
 MAX_LINES = 60  # under its 64 lines a record
+WAIT = 600  # seconds: the longest any upload waits for the others, or for the proxy to end it
 
 
 def ris(records: Path, size: int, out: Path) -> int:
@@ -54,22 +57,28 @@ def ris(records: Path, size: int, out: Path) -> int:
 
 
 def _padding(n: int) -> bytes:
-    """`n` bytes of `N1` lines, none over `MAX_LINE`, at most `MAX_LINES` of them."""
-    if n == 0:
-        return b""
+    """`n` bytes of `N1` lines (8 bytes at least, `MAX_LINE` at most, `MAX_LINES` of them at most)."""
+    if 0 < n < 8:
+        raise SystemExit(f"{n} bytes of padding is too short for a line: use another size")
     lines: list[bytes] = []
     while n > 0:
-        if n < 8:  # too short for a line of its own: lengthen the last one
-            lines[-1] += b"x" * n
-            break
         take = min(n, MAX_LINE)
-        if 0 < n - take < 8:
+        if 0 < n - take < 8:  # leave the last line room for its tag
             take = n - 8
         lines.append(b"N1  - " + b"x" * (take - 7) + b"\n")
         n -= take
-    if len(lines) > MAX_LINES or any(len(line) > MAX_LINE + 8 for line in lines):
+    if len(lines) > MAX_LINES:
         raise SystemExit("padding over the API's line caps: use a smaller file or more records")
     return b"".join(lines)
+
+
+@dataclass
+class Cut:
+    """How one stalled upload ended: seconds from its request's first byte (-1 if it never got to stall), and
+    the status line it got, if any."""
+
+    after_start_s: float
+    status: str | None
 
 
 def stall(port: int, cacert: str, target: str, declared: int, sent: int, uploads: int) -> None:
@@ -79,49 +88,61 @@ def stall(port: int, cacert: str, target: str, declared: int, sent: int, uploads
         f"Content-Type: application/x-research-info-systems\r\nContent-Length: {declared}\r\n\r\n"
     ).encode()
     line = b"N1  - " + b"x" * 1017 + b"\n"
-    results: list[dict[str, object]] = [{} for _ in range(uploads)]
-    ready = threading.Barrier(uploads + 1)
+    cuts = [Cut(-1.0, "never ran") for _ in range(uploads)]
+    ready = threading.Barrier(uploads + 1, timeout=WAIT)
 
     def one(i: int) -> None:
-        s = context.wrap_socket(socket.create_connection(("localhost", port)), server_hostname="localhost")
         try:
-            s.sendall(head)
-            left = sent
-            while left > 0:
-                s.sendall(line[: min(left, len(line))])
-                left -= min(left, len(line))
-        except OSError:  # the proxy cut it before it had sent its bytes (read_body passed while sending)
-            results[i] = {"cut_after_s": -1.0, "status": "cut while sending"}
-            s.close()
+            s = context.wrap_socket(
+                socket.create_connection(("localhost", port)), server_hostname="localhost"
+            )
+        except OSError:
+            cuts[i] = Cut(-1.0, "connect failed")
+            _wait(ready)
             return
-        finally:
-            ready.wait()
-        stopped = time.monotonic()
-        s.settimeout(600)
-        got = b""
-        try:
-            while data := s.recv(4096):
-                got += data
-        except (OSError, ssl.SSLError):
-            pass
-        results[i] = {
-            "cut_after_s": round(time.monotonic() - stopped, 2),
-            "status": got.split(b"\r\n", 1)[0].decode("latin-1") if got else None,
-        }
-        s.close()
+        with s:
+            began = time.monotonic()  # read_body counts from the request's start
+            try:
+                s.sendall(head)
+                left = sent
+                while left > 0:
+                    s.sendall(line[: min(left, len(line))])
+                    left -= min(left, len(line))
+            except OSError:  # the proxy cut it before it had sent its bytes (read_body passed while sending)
+                cuts[i] = Cut(-1.0, "cut while sending")
+                return
+            finally:
+                _wait(ready)
+            s.settimeout(WAIT)
+            got = b""
+            try:
+                while data := s.recv(4096):
+                    got += data
+            except OSError:
+                pass
+            status = got.split(b"\r\n", 1)[0].decode("latin-1") if got else None
+            cuts[i] = Cut(round(time.monotonic() - began, 2), status)
 
-    threads = [threading.Thread(target=one, args=(i,)) for i in range(uploads)]
+    threads = [threading.Thread(target=one, args=(i,), daemon=True) for i in range(uploads)]
     for t in threads:
         t.start()
-    ready.wait()
+    _wait(ready)
     print("sent", flush=True)
     for t in threads:
-        t.join()
-    cuts = [float(str(r["cut_after_s"])) for r in results]
-    statuses = sorted({str(r["status"]) for r in results})
+        t.join(WAIT)
+    after = [c.after_start_s for c in cuts]
+    statuses = sorted({str(c.status) for c in cuts})
     print(
-        json.dumps({"uploads": uploads, "cut_min_s": min(cuts), "cut_max_s": max(cuts), "statuses": statuses})
+        json.dumps(
+            {"uploads": uploads, "cut_min_s": min(after), "cut_max_s": max(after), "statuses": statuses}
+        )
     )
+
+
+def _wait(barrier: threading.Barrier) -> None:
+    """Wait at `barrier`, or go on once it has waited `WAIT` (it is then broken for every thread)."""
+    with contextlib.suppress(threading.BrokenBarrierError):
+        barrier.wait()
 
 
 def main() -> None:
