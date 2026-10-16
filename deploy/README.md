@@ -468,5 +468,5 @@ Linux host. No CI job runs it.
 - Schedule the record-store backup (§Backups).
 - Alert on the rate of uvicorn's `Exceeded concurrency limit.` lines. With or without comparisons, an
   unsized body that reaches 64 KiB on an API route other than `/api/v1/compare` and stalls may hold one of
-  the API's 256 connections until `read_body` (10 s, or 60 s with `compare.yml`), so a few hundred such
+  the API's 256 connections until `read_body` (10 s, or 60 s with `compare.yml`), so about 256 such
   requests could refuse every search for that long (inferred, not measured; open: TASK-255).

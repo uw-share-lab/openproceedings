@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-16 23:07'
-updated_date: '2026-10-16 23:30'
+updated_date: '2026-10-16 23:32'
 labels:
   - ops
 dependencies: []
@@ -22,5 +22,5 @@ TASK-183 (PR #156) turns HTTP/3 off in the compare-on block because a stalled up
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 An HTTP/3 upload that stalls under the 16 MiB cap is shown to be cut, or shown not to be: cut means the client sees its stream end within OP_READ_BODY ± 2 s (smoke-test.sh's existing check) and Caddy logs its 499, and a second batch of N stalls sent after the first is cut doesn't push the caddy cgroup's memory.peak past the first batch's peak (memory.current is no evidence: Go keeps freed buffers, and it stayed at 765 MiB after a confirmed HTTP/1.1 cut in docs/results/2026-10-16-compare-proxy.md); HTTP/3 is re-enabled in compare-on only if it is cut, and spec 08 and deploy/README.md say which
+- [ ] #1 An HTTP/3 upload that stalls under the 16 MiB cap is shown to be cut, or shown not to be: cut means the client gets 499 (or Caddy's access log records it) within OP_READ_BODY ± 2 s, the bound smoke-test.sh applies to its HTTP/1.1 probe (a 499 alone can mean the client gave up; the timing shows the proxy cut it), and with N = 8 a second batch of stalls sent after the first is cut raises the caddy cgroup's memory.peak by less than N × 25 MiB (memory.current is no evidence: Go keeps freed buffers, and it stayed at 765 MiB after a confirmed HTTP/1.1 cut in docs/results/2026-10-16-compare-proxy.md); HTTP/3 is re-enabled in compare-on only if it is cut, and spec 08 and deploy/README.md say which
 <!-- AC:END -->
