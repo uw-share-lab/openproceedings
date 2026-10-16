@@ -4,7 +4,7 @@ title: 'AIES 2026 proceedings: add OJS section rows once published'
 status: In Progress
 assignee: []
 created_date: '2026-10-10 03:47'
-updated_date: '2026-10-16 19:51'
+updated_date: '2026-10-16 20:08'
 labels:
   - ingest
   - new-venues
@@ -34,4 +34,6 @@ Snapshot 2026-10-16-03eab0ef56c4 vs 2026-10-11-93c2937e2f29: added 265 (all op:a
 Official count: the AIES-26 program PDF's co-chairs' welcome states 1,001 reviewed and 249 accepted (44 oral + 205 poster); OJS publishes 243 main, so 6 accepted papers have no listing (-2.4%, outside the gate). The owner chose (2026-10-16) to leave AIES 2026 main ungated with a cited UNGATED_NOTES entry, following IASEAI 2026; no decision record.
 
 Review round 1 (2026-10-16): the note's first wording ('the 6 accepted papers not in the proceedings have no listing') was wrong. The program's sessions list 244 papers, matched title by title: the 243 OJS main-track records plus #1030 'Knowable Errors: Architectural Foreseeability and the Case for AI Recklessness in Safety-Critical Deployment', which is not on OJS. Its Student Panel lists 25 entries: the 22 OJS student abstracts plus #37, #85 and #105. So only 5 of the chairs' 249 are named nowhere found. The note, coverage-sources.md, spec 07 and the research note now say this. The ruling (ungated) is unchanged. '44 oral' is now '44 orals or discussions', as the source has it.
+
+Review round 2 (2026-10-16): correction to round 1: the 3 Student Panel entries not on OJS are #39 ('Toward Responsible and Sustainable AI Training Data Pipelines'), #85 and #105. #37 is on OJS as 'Pragmatic Explainable Machine Learning'. Per session type, the program lists 28 + 16 = 44 papers in paper and discussion sessions (the chairs' 44) and 200 in poster sessions (against 205), so the 5 unnamed papers are all posters. Note wording now: 'not named in the program or the proceedings'.
 <!-- SECTION:NOTES:END -->

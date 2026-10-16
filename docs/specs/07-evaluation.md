@@ -235,8 +235,8 @@ Robotics Program our `main` holds (240 against 248); AAAI 2010's, 2014's and 201
 and don't say they predate them, so they may be derived from them and a gate on them would check nothing; AAAI 2022–2026 have only chairs' emails
 quoted elsewhere and third-party paper trackers' figures, which are never a row and seem to count the main technical track alone;
 AIES 2026's program co-chairs state 249 accepted (44 orals or discussions, 205 posters), but the program's sessions list 244
-papers, the 243 main-track papers the OJS proceedings publish and one that is not in them, and the other 5 are named nowhere
-found (ungated by the owner, 2026-10-16, TASK-217);
+papers (44 and 200), the 243 main-track papers the OJS proceedings publish and one they do not, and the other 5 posters are
+not named in the program or the proceedings (ungated by the owner, 2026-10-16, TASK-217);
 IASEAI 2026's front matter states 92 accepted research papers, but 35 of them are non-archival and unpublished on
 OJS, so 57 indexed against 92 would fail the ±1% gate for a reason the index cannot repair. The research note
 classifies every venue-year (`docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md` §Official counts). Each OJS volume's listed

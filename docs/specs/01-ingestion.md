@@ -40,7 +40,7 @@ build.
 | `competition` | `NeurIPS.cc/<Y>/Competition_Track` (2024+; TASK-094), `NeurIPS.cc/<Y>/Track/Competition`, PMLR competition volumes (v123, v133, v176, v220) |
 | `tiny_papers` | ICLR Tiny Papers (2023–2024) |
 | `blogpost` | ICLR Blogpost track |
-| `student_abstract` | OJS sections of AAAI and AIES student abstracts and posters (21 rows; `STU`, `A25-SA`, `A25-SA-2`, `A26-SA`; decision-049); a `dblp_aaai.toml` `[[section]]` range of an official AAAI 1994–2008 contents page's Student Abstracts (399 records), or a `[[track]]` row (1); an `acm_proceedings.toml` `[[section]]` range of AIES 2018–2023's student abstract block (108 records, inferred from page position) |
+| `student_abstract` | OJS sections of AAAI and AIES student abstracts and posters (21 rows: AIES `STU`, `A25-SA`, `A25-SA-2`, `A26-SA`, and AAAI's per-volume sets; decision-049); a `dblp_aaai.toml` `[[section]]` range of an official AAAI 1994–2008 contents page's Student Abstracts (399 records), or a `[[track]]` row (1); an `acm_proceedings.toml` `[[section]]` range of AIES 2018–2023's student abstract block (108 records, inferred from page position) |
 | `consortium` | OJS sections of AAAI's doctoral and undergraduate consortia (20 rows); a `dblp_aaai.toml` `[[section]]` range of an official AAAI 1996–2008 contents page's Doctoral Consortium (158 records) |
 | `demo` | OJS sections of AAAI's demonstration tracks (13 rows); a `dblp_aaai.toml` `[[section]]` range of an official AAAI 1993–2008 contents page's video abstracts, video program or Intelligent Systems Demonstrations (127 records; 2005's contents page lists the section without page numbers, so its range comes from the entries' own paper pages) |
 | `iaai` | OJS sections of the Innovative Applications of Artificial Intelligence conference, printed in the AAAI volumes (53 rows); a `dblp_aaai.toml` `[[section]]` range of the IAAI papers in the AAAI 1996–2008 volumes, by the official AAAI or IAAI contents pages (232 records). **AAAI only**: the record refuses it on any other venue (`record.VENUE_ONLY_TRACKS`) |
@@ -564,7 +564,7 @@ op ingest aaai-library [--dry-run | --offline] [--refresh]             # AAAI 19
 op ingest openalex [--dry-run | --offline] [--refresh] [--delay 1]     # last in a full crawl
 op ingest ris <mended.ris>...           # cache scholarmend outputs (resolved.json beside each)
 op snapshot build [--from <cache>]      # merge sources → new immutable snapshot
-op snapshot diff <a> <b>                # added / removed / changed records
+op snapshot diff <a> <b>                # two snapshot directories: added / removed / changed records
 ```
 
 As built (task-022, task-050, task-051, task-052/053, task-096, TASK-205/206, decision-049): `ingest ris`, `ingest openreview`,

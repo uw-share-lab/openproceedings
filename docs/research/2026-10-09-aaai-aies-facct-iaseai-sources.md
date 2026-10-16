@@ -137,14 +137,15 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
   and accepted 249", and "oral presentations or discussions of 44 papers and three poster sessions of 205 papers"
   (44 + 205 = 249). Separately: "25 students participating in the discussion panels and presenting their posters".
 - **The program's own lists**, matched to the OJS titles (exact normalized title prefixes, every entry checked):
-  - the paper, discussion and poster sessions list 244 distinct papers: all 243 OJS main-track records and one
+  - the paper, discussion and poster sessions list 244 distinct papers (28 + 16 = 44 in the paper and discussion
+    sessions, the welcome's 44; 200 in the poster sessions, against its 205): all 243 OJS main-track records and one
     that is not on OJS, #1030 "Knowable Errors: Architectural Foreseeability and the Case for AI Recklessness in
     Safety-Critical Deployment";
   - the Student Panel Discussions list 25 entries (the welcome's 25 students): all 22 OJS student abstracts and 3
-    that are not on OJS (#37, #85, #105).
+    that are not on OJS (#39 "Toward Responsible and Sustainable AI Training Data Pipelines", #85, #105).
 - **Reading.** The 249 is read as the main track only: the welcome counts the 25 students apart, and the sessions'
-  244 hold no student abstract. It is still 5 more than the program lists, and those 5 are named nowhere found, so
-  it is not a count of what the index can hold. AIES 2026 main is therefore ungated with a cited note (the owner,
+  244 hold no student abstract. It is still 5 more than the program lists, all 5 in the poster count, and those 5 are not
+  named in the program or the proceedings, so it is not a count of what the index can hold. AIES 2026 main is therefore ungated with a cited note (the owner,
   2026-10-16, TASK-217), as IASEAI 2026 is. `student_abstract` is not gated, so the 25 against 22 needs nothing.
 - No code changed: the year comes from the journal's offset (9 + 2017) and the tracks from the five new
   `[[section]]` rows, as the design expected (a new venue-year at an existing source needs a table row).
