@@ -80,7 +80,8 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
 - From 2024 AIES is on OJS:
   - Vol. 7 (2024, 2 issues): 171 = 150 full archival papers + 20 student abstracts + 1 front matter.
   - Vol. 8 (2025, 4 issues): 279 = 238 main-track papers + 41 student abstracts.
-  - AIES 2026 (Malmö, 12–14 Oct 2026) is not yet published.
+  - AIES 2026 (Malmö, 12–14 Oct 2026) was not yet published on 2026-10-09; Vol. 9 (4 issues) appeared by
+    2026-10-16: see §AIES 2026 below.
 - **The AIES OAI list is 5 pages of 100, not one response.** An earlier note said "450 records in one response, no
   resumption token"; the live chain on 2026-10-09 had 5 pages.
 - Sets: `FUL`, `STU`, `FMT`, `A25-1/2/3`, `A25-SA`, `A25-SA-2`, plus `2025-11` and `ART`, which hold no records.
@@ -118,8 +119,37 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
     .3278727, .3278746; 2019 3306618.3314227, .3314274; 2020 3375627.3375805, .3375809, .3375816, .3375818,
     .3375819, .3375821, .3375824, .3375853, .3375861, .3375867, .3375869; 2021 3461702.3462520, .3462534,
     .3462537, .3462577, .3462613; 2022 3514094.3534125, .3534151, .3534194.
-  Student abstracts from 2024 on are OJS's `student` track (`STU`, `A25-SA`). The table gained a `[[section]]`
+  Student abstracts from 2024 on are OJS's `student` track (`STU`, `A25-SA`, `A25-SA-2`, `A26-SA`). The table gained a `[[section]]`
   table (venue, year, page range, track, label, check date, source) for the same track here (TASK-224).
+
+### AIES 2026 (Vol. 9; census of 2026-10-16, TASK-217)
+
+- `scripts/ojs_section_census.py AIES --refresh` on 2026-10-16: complete, 18 pages, `completeListSize` 716 = 715
+  live + 1 deleted header; no unavailable article, no fallback set, nothing recovered by `GetRecord`, no
+  duplicates. Vol. 7 (171) and Vol. 8 (279) are unchanged.
+- Vol. 9: 265 live = `A26-1` Main Track I 67, `A26-2` Main Track II 60, `A26-3` Main Track III 57, `A26-4` Main
+  Track IV 59 (243 `main`) + `A26-SA` Student Abstracts 22 (`student_abstract`); the one deleted header is in
+  `A26-SA`. No front matter is listed. The issue pages (`issue/view/743`–`746`, the last "Main Track IV &
+  Student Abstracts"; read 2026-10-16) show the same section titles, and issue 746 the same 59 and 22.
+- **The official count (2026-10-16).** The AIES-26 program PDF
+  (https://www.aies-conference.com/2026/wp-content/uploads/2026/10/AIES-26-Program_v7.pdf, SHA-1
+  519552b4439d3ddec45ccb9085e2d9660072ed6a), in the program co-chairs' welcome: "we sent 1,001 papers out for review
+  and accepted 249", and "oral presentations or discussions of 44 papers and three poster sessions of 205 papers"
+  (44 + 205 = 249). Separately: "25 students participating in the discussion panels and presenting their posters".
+- **The program's own lists**, matched to the OJS titles (exact normalized title prefixes, every entry checked):
+  - the paper, discussion and poster sessions list 244 distinct papers (28 + 16 = 44 in the paper and discussion
+    sessions, the welcome's 44; 200 in the poster sessions, against its 205): all 243 OJS main-track records and one
+    that is not on OJS, #1030 "Knowable Errors: Architectural Foreseeability and the Case for AI Recklessness in
+    Safety-Critical Deployment";
+  - the Student Panel Discussions list 25 entries (the welcome's 25 students): all 22 OJS student abstracts and 3
+    that are not on OJS (#39 "Toward Responsible and Sustainable AI Training Data Pipelines", #85, #105).
+- **Reading.** The 249 is read as the main track only: the welcome counts the 25 students apart, and the sessions' 244
+  hold no student abstract. It is still 5 more than the program lists, all 5 in the poster count, and those 5 are not
+  named in the program or the proceedings, so it is not a count of what the index can hold. AIES 2026 main is
+  therefore ungated with a cited note (the owner, 2026-10-16, TASK-217), as IASEAI 2026 is. `student_abstract` is not
+  gated, so the 25 against 22 needs nothing.
+- No code changed: the year comes from the journal's offset (9 + 2017) and the tracks from the five new `[[section]]`
+  rows, as the design expected (a new venue-year at an existing source needs a table row).
 
 ### IASEAI
 
@@ -860,6 +890,7 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
 |---|---|---|---|---|---|
 | AIES 2024 | 150 | archival full papers accepted (468 reviewed); student abstracts separate | https://ojs.aaai.org/index.php/AIES/article/view/31763 (chairs' front matter); the table in https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 150 | gateable (row) |
 | AIES 2025 | 238 | archival full papers accepted (748 reviewed); student abstracts separate | https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 238 | gateable (row) |
+| AIES 2026 | 249 | papers accepted (1,001 reviewed; 44 orals or discussions, 205 posters); the program's sessions list 244, 243 of them in the OJS proceedings (§AIES 2026) | https://www.aies-conference.com/2026/wp-content/uploads/2026/10/AIES-26-Program_v7.pdf (SHA-1 519552b4439d3ddec45ccb9085e2d9660072ed6a, read 2026-10-16) | 243 | definition mismatch: recorded, not gated (the owner, 2026-10-16, TASK-217) |
 | AAAI 2013 | 203 | technical program incl. the four special tracks (AI and the Web, Cognitive Systems, Computational Sustainability, AI and Robotics); late-breaking and spotlights excluded | https://ojs.aaai.org/index.php/AAAI/article/view/8512 (AAAI-13 preface) | 202 | gateable (row) once "Robotics Program" is `main` (it was a mismatch at 191) |
 | AAAI 2015 | 539 | papers "selected … and presented" from the main technical and topical tracks (AI Magazine report) | https://ojs.aaai.org/index.php/aimagazine/article/view/2606/2500 | 538 | gateable (row; the weakest wording) |
 | AAAI 2018 | 938 | original research publications in the proceedings (3,800 submissions) | https://ojs.aaai.org/index.php/AAAI/issue/view/301 | 937 | gateable (row) |
@@ -877,7 +908,8 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
 
 - **AIES.** The chairs' statements are not the OJS issue listing (whose totals this note once called circular);
   the 2025 program is on the conference's own site. Whether "accepted" is before or after withdrawals is not
-  stated; the exact match with the listing suggests none.
+  stated; for 2024 and 2025 the exact match with the listing suggests none. AIES 2026's 249 is more than the 244 papers
+  its own program lists, and 243 of those are published, so that cell is ungated (§AIES 2026; TASK-217).
 - **AAAI 2018, 2019.** "Original research publications" is read as the technical program, special tracks
   included; the front matter does not itemise.
 - **AAAI list counts (2026-10-10; one independence rule since gate C round 1, 2026-10-11).** For 2010, 2012, 2014,
@@ -923,7 +955,7 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   The deltas are those of snapshot `2026-10-10-9efa49481112` and are unchanged on the final snapshot
   `2026-10-11-93c2937e2f29` (`docs/results/2026-10-11-coverage.md`), where the gate passes at 81 of 82 cells; with
   2021 re-counted at 1,697 its delta is −3 (`docs/results/2026-10-16-coverage.md`), and the gate still passes.
-- **Ungated-cell notes (TASK-222).** AAAI 2010, 2011, 2014, 2016 and 2022–2026 main and IASEAI 2026 main each carry a
+- **Ungated-cell notes (TASK-222).** AAAI 2010, 2011, 2014, 2016 and 2022–2026 main, AIES 2026 main (TASK-217) and IASEAI 2026 main each carry a
   cited note
   saying why they are not gated (`official_counts.UNGATED_NOTES`, `coverage-sources.md` §Ungated cells with a note),
   served on `/coverage` and listed in the coverage report.

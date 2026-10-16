@@ -212,7 +212,7 @@ so cross-venue counts over those years compare three venues, not more. ICML 1988
 which has no abstracts: only the years whose official ICML pages give abstracts have them (TASK-206), and every
 other record of those years is title-only, counted in the cell's missing abstracts. ICLR 2014–2016 are
 not gaps: their public archive listings supply accepted main-track records (TASK-096).
-**AAAI 2010+, AIES 2024+ and IASEAI (decision-049, milestone A).** The index holds AAAI 2010–2026, AIES 2024–2025 and IASEAI
+**AAAI 2010+, AIES 2024+ and IASEAI (decision-049, milestone A).** The index holds AAAI 2010–2026, AIES 2024–2026 and IASEAI
 2026 from ojs.aaai.org, every record `accepted` (published in the proceedings: the source lists no rejected paper),
 each venue-year a coverage cell with its real tracks (`main`, `student_abstract`, `consortium`, `demo`, `iaai`,
 `eaai`, `other`). AAAI's `main` is the section mapping of `ingest/ojs_sections.toml` (technical, special and Journal
@@ -234,6 +234,10 @@ match the proceedings exactly and are not shown to predate them, so each is an u
 Robotics Program our `main` holds (240 against 248); AAAI 2010's, 2014's and 2016's lists match the proceedings
 and don't say they predate them, so they may be derived from them and a gate on them would check nothing; AAAI 2022–2026 have only chairs' emails
 quoted elsewhere and third-party paper trackers' figures, which are never a row and seem to count the main technical track alone;
+AIES 2026's program co-chairs state 249 accepted (44 orals or discussions, 205 posters), but the program's sessions list 244
+papers (44 orals or discussions and 200 posters), the 243 main-track papers the proceedings on ojs.aaai.org publish and one
+they do not, and the other 5, all posters, are not named in the program or the proceedings (ungated by the owner,
+2026-10-16, TASK-217);
 IASEAI 2026's front matter states 92 accepted research papers, but 35 of them are non-archival and unpublished on
 OJS, so 57 indexed against 92 would fail the ±1% gate for a reason the index cannot repair. The research note
 classifies every venue-year (`docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md` §Official counts). Each OJS volume's listed
@@ -271,8 +275,10 @@ As built, the milestone's report (`docs/results/2026-10-11-coverage.md`, index `
 `2026-10-11-93c2937e2f29`, 173,253 records) passes `op eval coverage --check`: 81 of 82 gated cells within ±1%, the
 82nd being ICLR 2013's owner-accepted exception, and 1,117 abstracts labelled `abstract_kind:openalex` (AAAI 21,
 AIES 557, FAccT 539); another 4,536 AAAI 1980–2008 abstracts are official, from `aaai_library` (decision-051). Its
-re-run of 2026-10-16 (`docs/results/2026-10-16-coverage.md`, same index) differs only in AAAI 2021's row, re-counted at
-1,697 from the pre-conference copy of AAAI's list (Δ −3, still within the gate; TASK-234). The
+re-run of 2026-10-16 differed only in AAAI 2021's row, re-counted at 1,697 from the pre-conference copy of AAAI's
+list (Δ −3, still within the gate; TASK-234). That report (`docs/results/2026-10-16-coverage.md`) was then
+regenerated on index `78d2e70310f3` (snapshot `2026-10-16-03eab0ef56c4`, 173,518 records: the 265 AIES 2026 records
+added, TASK-217), with the same 81 of 82 gated cells and AIES 2026 main ungated with its note. The
 gate has two fewer cells than the earlier as-built report (`docs/results/2026-10-10-coverage.md`, index
 `9977ed00669f`, 83 of 84, 2,158 OpenAlex abstracts), which stays as history.
 The source of statuses indexed is spec 01's source table as `ingest/statuses.py` holds it (spec 01

@@ -163,6 +163,10 @@ marked crawl) is refused.
   changes, and `abstract_withheld` (`added`: ids the second withholds and the first didn't; `lifted`: the
   reverse; from the manifests' `withheld`). Every
   snapshot promotion needs one: a removed id in a stable venue-year is a regression until explained.
+  A source re-crawled with `--refresh` shows every earlier record it supplies as `provenance_only`: a new
+  `fetched_at`, and a new `url` where the claim names a resumption-token page. With `changed` and
+  `display_only` empty, that is not a content change (TASK-217: 449 AIES 2024–2025 records).
+  `op snapshot diff` takes snapshot directories, not bare names.
 
 ## Checklist
 - [ ] build twice from the same cache and get byte-identical `records.jsonl`

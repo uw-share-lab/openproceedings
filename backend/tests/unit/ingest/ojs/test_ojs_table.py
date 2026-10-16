@@ -119,17 +119,17 @@ def test_the_shipped_table_loads() -> None:
 
 def test_the_shipped_mapping_is_pinned_per_track_and_journal() -> None:
     """Spec 01's row counts, per journal: a row whose track flips (a student abstract into `main`) fails here.
-    `main` 402 = AAAI 397 (the two Robotics Program rows, 2011 and 2013, are its AI and Robotics special track; the
-    2010 Short Papers row is main by the owner's decision of 2026-10-10, TASK-218), AIES 4, IASEAI 1; `other` 37."""
+    `main` 406 = AAAI 397 (the two Robotics Program rows, 2011 and 2013, are its AI and Robotics special track; the
+    2010 Short Papers row is main by the owner's decision of 2026-10-10, TASK-218), AIES 8 (2026's four main tracks: TASK-217), IASEAI 1; `other` 37."""
     rows: Counter[tuple[str, str]] = Counter()
     for s in ojs_table.TABLE.sections.values():
         rows[(s.journal, s.track or s.kind)] += 1
     assert dict(rows) == {
         ("AAAI", "main"): 397,
-        ("AIES", "main"): 4,
+        ("AIES", "main"): 8,
         ("IASEAI", "main"): 1,
         ("AAAI", "student_abstract"): 17,
-        ("AIES", "student_abstract"): 3,
+        ("AIES", "student_abstract"): 4,
         ("AAAI", "consortium"): 20,
         ("AAAI", "demo"): 13,
         ("AAAI", "iaai"): 53,
@@ -139,7 +139,7 @@ def test_the_shipped_mapping_is_pinned_per_track_and_journal() -> None:
         ("AIES", "front_matter"): 1,
         ("IASEAI", "front_matter"): 1,
     }
-    assert sum(rows.values()) == 601
+    assert sum(rows.values()) == 606
     # the papers per track, so two rows whose tracks are swapped cannot pass on row counts alone
     papers: Counter[str | None] = Counter()
     for s in ojs_table.TABLE.sections.values():
@@ -152,6 +152,11 @@ def test_the_shipped_mapping_is_pinned_per_track_and_journal() -> None:
         "other": 15,
         "eaai": 9,
     }  # AAAI 2010
+    aies: Counter[str | None] = Counter()
+    for s in ojs_table.TABLE.sections.values():
+        if (s.journal, s.volume) == ("AIES", 9):
+            aies[s.track] += s.papers
+    assert dict(aies) == {"main": 243, "student_abstract": 22}  # AIES 2026 (TASK-217)
 
 
 # 2010's `Short Papers` is main (refereed AAAI-10 technical papers; owner decision 2026-10-10, TASK-218), so not here

@@ -34,7 +34,7 @@ fixes.
    same way, and that its merged side was an imported record (sources `ris` alone) or its survivor was. Read `conflicts.csv` for
    `ambiguous_not_merged` clusters and check that none of them were merged anyway.
 5. **Conservation.** The input record count minus the `merges.csv` rows must equal the `records.jsonl`
-   line count. Run `op snapshot diff <current> <new>`, and treat every removed id in a venue-year whose
+   line count. Run `op snapshot diff <current snapshot dir> <new snapshot dir>`, and treat every removed id in a venue-year whose
    sources didn't change as a finding until explained.
 
 ## What is a Must

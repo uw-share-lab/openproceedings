@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 18:53'
-updated_date: '2026-10-16 15:37'
+updated_date: '2026-10-16 19:13'
 labels:
   - ops
   - deploy
@@ -43,4 +43,6 @@ Milestone B adds `op ingest crossref` (with the FAccT site pages) and `op ingest
 Milestone C adds op ingest openalex (last in a full run; OPENALEX_API_KEY optional) and the post-dedup fill in op snapshot build; promotion needs an index at schema 4.
 
 2026-10-16 refresh: AC#4 rewritten for the as-built sources (decision-049 milestones A to C and decision-051 are merged; the old wording named Crossref, the FAccT site and OpenAlex as later milestones). The FAccT site is fetched inside op ingest crossref. The scheduled OpenAlex fill depends on TASK-135's answer on OpenAlex's terms (the Terms of Service revised 2026-10-02 conflict with the CC0 statement decision-049 relied on). The semantic layer is shelved (decision-017 addendum), so promotion has no embedding build. Host requirements for the schedule are listed in TASK-064's 2026-10-16 note.
+
+2026-10-16 (TASK-217): confirmed: AIES 2026 (Vol. 9) on OJS needed only five ojs_sections.toml rows, no code.
 <!-- SECTION:NOTES:END -->
