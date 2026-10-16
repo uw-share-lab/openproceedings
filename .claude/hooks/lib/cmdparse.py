@@ -16,8 +16,9 @@ matter to a gate:
   * `for v in <words>; do …; done` is read once per word with `v` set to it (`_unroll_for`; not when the body
     can leave the loop early); `$(mktemp)` is unknown when the command sets or unsets TMPDIR;
   * leading reserved words (`if`/`then`/`do`/`{`/`!` …), `VAR=val`, and wrappers (`env`, `sudo`, `nice`,
-    `timeout`, `xargs`, `stdbuf`, `watch`, `exec`, `time`, `nohup`, `command`, `builtin`) are stripped, each
-    wrapper with its own table of value-taking options; `env -S '…'` is split, `env -C`/`sudo -D` move dir;
+    `timeout`, `xargs`, `stdbuf`, `watch`, `exec`, `time`, `nohup`, `command`, `builtin`, `xcrun`, `caffeinate`,
+    `arch`, `doas`, `flock`, `unbuffer`) are stripped, each wrapper with its own table of value-taking options;
+    `env -S '…'` is split, `env -C`/`sudo -D` move dir; flock's lock file is skipped and its `-c '…'` is a `sh -c`;
     the argv comes back as an `Argv` that records the `VAR=val` words and whether xargs runs it;
   * command names compare by basename (`/usr/bin/git` is `git`);
   * redirections leave argv as (operator, target) pairs (`walk` yields them);
@@ -118,6 +119,13 @@ WRAPPER_VALUE_OPTS: dict[str, set[str]] = {
         "--max-procs",
     },
     "watch": {"-n", "-d", "--interval"},
+    # TASK-248: macOS's xcrun, caffeinate and arch, OpenBSD's doas, util-linux flock, expect's unbuffer
+    "xcrun": {"-sdk", "--sdk", "-toolchain", "--toolchain"},
+    "caffeinate": {"-t", "-w"},
+    "arch": {"-arch", "-d"},
+    "doas": {"-u", "-C"},
+    "flock": {"-w", "-E", "--wait", "--timeout", "--conflict-exit-code"},
+    "unbuffer": set(),
 }
 WRAPPERS = set(WRAPPER_VALUE_OPTS)
 # Shell reserved words that can start a simple command without being the command (review 2026-09-25:
@@ -1385,6 +1393,11 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                 i += 1 if (eq or not takes_value) else 2
             if name == "timeout" and i < len(argv):  # the duration
                 i += 1
+            if name == "flock" and i < len(argv):  # the lock file
+                i += 1
+                # `flock <file> -c '<cmd>'`: a shell runs the string
+                if i + 1 < len(argv) and argv[i] in ("-c", "--command"):
+                    argv = [*argv[:i], "sh", "-c", *argv[i + 1 :]]
         else:
             break
     rest = argv[i:]

@@ -22,6 +22,10 @@ tables that name its file (its name, or its stem as a word, in the table or a he
 names), then the rest only if those all pass, and a phase stops as soon as one table fails. The verdict is the
 same as running every table (a survivor runs them all); only the time differs: about a third of it on the
 nightly logs, where every mutant ran all 13 tables and four 12-way shards ran past 140 min (TASK-171 rerun).
+A table whose header comment (its leading `#` lines) has `# mutate-scope: <file> ...` lines exercises only those
+files: it runs only for a mutant that changes one of them, so a table that fails for another reason (one slowed
+by load) can never be credited with killing another file's mutant (TASK-238: test-mutate-run.sh, which runs only
+mutate.py, was credited with 15 of 17 docker_digest.py mutants on a loaded machine).
 A table that runs past its timeout under a mutant has hung (an infinite loop): it is stopped, so one hang never
 stalls a shard, and run again alone; if it hangs again the mutant is TIMEOUT, which counts as killed, as in other
 mutation tools, and if not, that run's verdict stands (a table slowed by the other jobs is not a hang). The
@@ -154,6 +158,27 @@ def table_text(t: str) -> str:
     return _TABLE_TEXT[t]
 
 
+SCOPE = re.compile(r"#\s*mutate-scope:\s*(.*)")
+
+
+def table_scope(t: str) -> set[str] | None:
+    """The files table `t` declares it exercises (`# mutate-scope:` lines in its header comment, the `#` lines
+    before its first other line; a fixture a table writes later is not its header), or None: it may exercise any."""
+    files: set[str] = set()
+    for line in (ROOT / t).read_text(errors="replace").splitlines():
+        if not line.startswith("#"):
+            break
+        if m := SCOPE.match(line):
+            files.update(m.group(1).split())
+    return files or None
+
+
+def can_kill(t: str, files: list[str]) -> bool:
+    """Whether table `t` exercises any of the mutated `files` (`table_scope`)."""
+    scope = table_scope(t)
+    return scope is None or not scope.isdisjoint(files)
+
+
 def first_tables(file: str) -> list[str]:
     """The tables that name `file`: its name, or its stem as a word (`cmdparse`, imported by name). Only an
     order: a mutant these all pass still runs every other table."""
@@ -176,11 +201,13 @@ def run_phase(tree: Path, tables: list[str], timeouts: dict[str, float]) -> tupl
     return run_phase(tree, left, timeouts) if left else ([], [])
 
 
-def killing_tables(tree: Path, file: str, timeouts: dict[str, float]) -> tuple[list[str], list[str]]:
-    """The tables that fail and the tables that hang with `tree`'s mutant in `file`: those that name the file
-    first, then the rest only if none of those failed (module docstring). Both empty: it survived."""
-    first = first_tables(file)
-    rest = [t for t in TABLES if t not in first]
+def killing_tables(tree: Path, files: list[str], timeouts: dict[str, float]) -> tuple[list[str], list[str]]:
+    """The tables that fail and the tables that hang with `tree`'s mutant in `files` (its `file` first, then
+    `also`): of the tables that can kill it (`can_kill`), those that name its file first, then the rest only if
+    none of those failed (module docstring). Both empty: it survived."""
+    tables = [t for t in TABLES if can_kill(t, files)]
+    first = [t for t in first_tables(files[0]) if t in tables]
+    rest = [t for t in tables if t not in first]
     failed: list[str] = []
     hung: list[str] = []
     for phase in (first, rest):
@@ -297,14 +324,15 @@ def main() -> None:
                 return m, "STOPPED", []
             tree = work / f"m{i}"
             copy_tree(tree)
-            for f in [m["file"], *m.get("also", [])]:
+            files = [m["file"], *m.get("also", [])]
+            for f in files:
                 p = tree / f
                 text = p.read_text()
                 if m["old"] not in text:
                     shutil.rmtree(tree)
                     return m, "STALE", []
                 p.write_text(text.replace(m["old"], m["new"], 1))
-            failed, hung = killing_tables(tree, m["file"], timeouts)
+            failed, hung = killing_tables(tree, files, timeouts)
             shutil.rmtree(tree)
             status = "TIMEOUT" if hung and not failed else "KILLED" if failed else "SURVIVED"
             return m, status, failed + [f"{h} hung" for h in hung]

@@ -238,6 +238,25 @@ echo "xargs appends words no gate can see (TASK-067):"
 check feature/x block 'echo dev | xargs git push origin'           # xargs supplies the refspec
 check feature/x block "echo origin dev | xargs sh -c 'git push \"\$@\"' sh"   # ... also through sh -c "\$@"
 check feature/x allow 'echo x | xargs git log -1'                  # positive control
+# TASK-249: xargs's flag is carried into the sh -c it runs, so the commit there is refused; without it, a commit on
+# a feature branch passes (the words xargs adds reach git as "$@", which this gate doesn't see)
+check feature/x block "echo -- --amend | xargs sh -c 'git commit -m wip \"\$@\"' sh"
+check feature/x allow "echo x | xargs sh -c 'git log -1 \"\$@\"' sh"        # positive control: no guarded command
+
+echo "more wrappers cmdparse strips, each with its value-taking options (TASK-248):"
+check main  block 'xcrun git commit -m x'
+check main  block 'xcrun -sdk macosx git commit -m x'                 # -sdk takes a value
+check main  block 'xcrun --toolchain=swift git commit -m x'
+check main  block 'caffeinate -i -t 60 git commit -m x'               # -t takes a value
+check main  block 'arch -arch arm64 git commit -m x'                  # -arch takes a value
+check main  block 'arch -x86_64 -e A=1 git commit -m x'               # -e NAME=value is an assignment
+check main  block 'doas -u root git commit -m x'                      # -u takes a value
+check main  block 'flock -w 5 /tmp/op.lock git commit -m x'           # -w takes a value; then the lock file
+check main  block "flock -n /tmp/op.lock -c 'git commit -m x'"        # -c runs its string in a shell
+check feature/x block "flock /tmp/op.lock --command 'git status; git push origin HEAD:dev'"
+check main  block 'unbuffer -p git commit -m x'
+check main  allow "flock /tmp/op.lock -c 'git status'"                # positive control: a read in the shell
+check main  allow 'xcrun -sdk macosx git log -1'                      # positive control
 
 echo "git -c config overrides and aliases are expanded before classifying (TASK-067):"
 check feature/x block 'git -c remote.origin.push=HEAD:refs/heads/dev push origin'   # -c picks the destination

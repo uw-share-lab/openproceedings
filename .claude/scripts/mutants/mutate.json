@@ -243,5 +243,29 @@
   "file": ".claude/scripts/mutate.py",
   "old": "                if m[\"old\"] not in text:\n                    shutil.rmtree(tree)",
   "new": "                if m[\"old\"] not in text and f == m[\"file\"]:\n                    shutil.rmtree(tree)"
+ },
+ {
+  "label": "mutate run: a table's declared scope ignored (a table flaky under load kills any mutant; TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    return scope is None or not scope.isdisjoint(files)",
+  "new": "    return True"
+ },
+ {
+  "label": "mutate run: scope read past the header (a fixture's declaration counts; TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        if not line.startswith(\"#\"):\n            break\n",
+  "new": ""
+ },
+ {
+  "label": "mutate run: scope checked against the mutant's file only, not its also files (TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "not scope.isdisjoint(files)",
+  "new": "not scope.isdisjoint(files[:1])"
+ },
+ {
+  "label": "mutate run: the first phase not limited to the tables in scope (TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    first = [t for t in first_tables(files[0]) if t in tables]\n",
+  "new": "    first = first_tables(files[0])\n"
  }
 ]
