@@ -1,7 +1,7 @@
 # OpenAlex fidelity audit (2026-10-16)
 
 - Snapshot: `2026-10-11-93c2937e2f29`
-- Code: commit `c21efb54b0f5`
+- Code: commit `b34016f5e551`
 - Sample: seed 49; every record with an official abstract and a DOI of FAccT 2022, 2025, 2026; AIES 2024, 2025; and 1,000 of 25,124 such AAAI 2010+ records, sorted by id after a seeded draw. Title-route check: 19 attaches.
 - Date: 2026-10-16
 
@@ -30,6 +30,8 @@ text is then compared with the official one:
 - `duplicate`: several works answer for the DOI with differing texts (several with one text are compared once).
 
 Each rate is of the records compared in that row. No abstract text is quoted here; records are named by id.
+
+The DOI route covers AIES, FAccT and AAAI 2010+. AAAI 1980–2008 has no DOI: its OpenAlex texts are checked by the title-route section and measured by the `aaai_library` section below.
 
 ## The DOI route: OpenAlex's abstract against the official one
 
@@ -100,9 +102,9 @@ Rules that would exclude them:
 
 ## AAAI 1980–2008: OpenAlex against AAAI's archived pages (`aaai_library`)
 
-An AAAI 1980–2008 record whose abstract comes from AAAI's own archived aaai.org paper page (`aaai_library`, official) never takes OpenAlex's, but the title route often finds a work for it. The fill was replayed over the cached listings with those abstracts set aside (no new listing fetch), and each text it would attach was compared with AAAI's by the rules above. This is the one measure of OpenAlex's fidelity for these years: on the records OpenAlex does fill, no official text exists.
+An AAAI 1980–2008 record whose abstract comes from AAAI's own archived aaai.org paper page (`aaai_library`, official) never takes OpenAlex's, but the title route often finds a work for it. The fill was replayed over the cached listings with those abstracts set aside (no new listing fetch), and each text it would attach was compared with AAAI's by the rules above. This is the one measure of OpenAlex's text for these years: on the records OpenAlex does fill, no official text exists. It measures how often two texts agree, not how often OpenAlex is wrong (see Caveats).
 
-- AAAI 1980–2008 records with an `aaai_library` abstract: 4,536; with an OpenAlex text to compare: 1,131; one work but no abstract in OpenAlex (`no_abstract`): 109; no single work attached, by why: `inverted_gap` 58, `inverted_unreadable` 2, `title_ambiguous` 20, `title_unmatched` 3,216.
+- AAAI 1980–2008 records with an `aaai_library` abstract: 4,536 (every one, not a sample; no seed); with an OpenAlex text to compare: 1,131; one work but no abstract in OpenAlex (`no_abstract`): 109; nothing attached, by reason: `inverted_gap` 58, `inverted_unreadable` 2, `title_ambiguous` 20, `title_unmatched` 3,216.
 
 | Venue | Year | Compared | `exact` | `near_exact` | `truncated` | `similar` | `differs` |
 |---|---|---|---|---|---|---|---|
@@ -133,9 +135,10 @@ An AAAI 1980–2008 record whose abstract comes from AAAI's own archived aaai.or
 
 `differs` examples (the first 10 of 123): `op:aaai:1980:dblp-Genesereth80`, `op:aaai:1980:dblp-Grinberg80`, `op:aaai:1982:dblp-StolfoS82`, `op:aaai:1983:dblp-BenjaminH83`, `op:aaai:1986:dblp-GuidaGGS86`, `op:aaai:1991:dblp-Vilain91`, `op:aaai:1992:dblp-Sy92`, `op:aaai:1994:dblp-AntonioCN94`, `op:aaai:1994:dblp-Chang94`, `op:aaai:1994:dblp-Franz94`.
 
-Of the 1,131 records with both an `aaai_library` abstract and an OpenAlex text, OpenAlex's is exact for 361 (31.9%), near-exact for 223 (19.7%) and differs for 123 (10.9%).
+Of the 1,131 records with both an `aaai_library` abstract and an OpenAlex text, OpenAlex's is exact for 361 (31.9%), near-exact for 223 (19.7%), truncated for 16 (1.4%), similar for 408 (36.1%) and differs for 123 (10.9%): together 584 (51.6%) would match every search exactly as AAAI's text does.
 
 ## Caveats
 
 - OpenAlex's fidelity for AAAI 1980–2008 is measured only on records `aaai_library` also gives an abstract for (the section above). The records OpenAlex fills are the ones AAAI's archived pages don't cover, so their texts may agree less or more often than these.
+- In that comparison AAAI's text is itself read from archived HTML, and OpenAlex's is often text-mined, so a `similar` or `differs` can be an OCR, hyphenation or extraction difference on either side. The texts are title-route attaches with no author check, so a `differs` can also be another paper (the title route's wrong-attach estimate is below).
 - The title route's residual wrong-attach risk is an estimate, not a measured bound: 1 of the 1 attaches that look wrong have a first-author surname close to ours, judged by a character ratio, not checked by a person. If they are the same authors, 0 of the 19 sampled attaches (0.0%) would be wrong.

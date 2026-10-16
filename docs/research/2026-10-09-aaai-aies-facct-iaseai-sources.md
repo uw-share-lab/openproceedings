@@ -463,7 +463,8 @@ ran 2026-10-10 21:09–21:16 UTC (387 s, of which about 290 s is the offline rep
 API itself states none: its root answer is `{"version", "documentation_url", "msg"}`, and a work answer carries only
 each paper's own `license` field, which is not a data licence. The statements that matter are on three pages:
 - OpenAlex's Pricing page, https://help.openalex.org/access/pricing/ (read 2026-10-16 through its Markdown sibling,
-  https://help.openalex.org/access/pricing.md): the data is released under "a CC0 public-domain license", with no
+  https://help.openalex.org/access/pricing.md, which the help site's index names as each page's raw source; the
+  rendered page was not compared): the data is released under "a CC0 public-domain license", with no
   personal-use carve-out and no permission needed.
 - The work-object documentation, now https://help.openalex.org/data/works/attributes/ (the old
   https://help.openalex.org/api-entities/works/work-object redirects there; read 2026-10-16): OpenAlex does not ship
@@ -471,19 +472,24 @@ each paper's own `license` field, which is not a data licence. The statements th
 - OpenAlex's terms page, https://openalex.org/terms (read 2026-10-16), names its PDFs as "the canonical versions".
   The terms of service, https://openalex.org/OpenAlex_termsofservice.pdf ("Last Revised: October 2, 2026"; sha256
   `58dacd4243971000748a2a1a232299328ef75c3723bd1df351ad7dbac5c89197`, read 2026-10-16), apply to the API and the
-  snapshot by name. They grant a "freely revocable, limited license" to use the free features, and say that
-  republishing the Data without Impactstory's "prior written consent is strictly prohibited". **This contradicts the
-  Pricing page's CC0 statement.** No separate data-licence page was found: help.openalex.org's page index
+  snapshot by name. They grant a "freely revocable, limited license" to use the free features, and forbid
+  republishing the Data without Impactstory's "prior written consent". **This contradicts the Pricing page's CC0
+  statement.** No separate data-licence page was found: help.openalex.org's page index
   (https://help.openalex.org/llms.txt, read 2026-10-16) lists none, and its "Licenses" page
   (https://help.openalex.org/data/licenses/) covers the licences of the works OpenAlex indexes, not OpenAlex's own.
   Whether the terms change the fallback is the owner's question (TASK-236's report); nothing here changes the fill.
 
-So the Pricing page calls the data CC0, though the terms of service read since say otherwise; either way the abstract text is deliberately not shipped: the `abstract_inverted_index` is the form
-OpenAlex releases, and `openalex.rebuild` turns it back into text. The consequence for this project is that serving a
-rebuilt OpenAlex abstract carries **the same copyright posture as serving a publisher's abstract**, not a CC0 one.
-It rests on decision-018 (README §Abstracts on a public instance), the takedown list (a listed paper's abstract is
-withheld whatever its source, so an OpenAlex abstract too) and the pending copyright-office consultation (TASK-135).
-The `abstract_kind` label and filter let a review see and exclude these abstracts.
+So the Pricing page calls the data CC0, though the terms of service (read 2026-10-16) restrict republication. Either
+way the abstract text is deliberately not shipped: the `abstract_inverted_index` is the form OpenAlex releases, and
+`openalex.rebuild` turns it back into text. The consequence for this project is that serving a rebuilt OpenAlex
+abstract carries **the same copyright posture as serving a publisher's abstract**, not a CC0 one. It rests on
+decision-018 (README §Abstracts on a public instance), the takedown list (a listed paper's abstract is withheld
+whatever its source, so an OpenAlex abstract too) and the pending copyright-office consultation (TASK-135). The
+`abstract_kind` label and filter let a review see and exclude these abstracts. The terms add a second, contractual
+question that this posture doesn't answer: fair dealing (decision-018) is a copyright defence, not a licence to
+breach a contract term. The terms were revised on 2026-10-02, before the 2026-10-10 crawl, so the extract was
+taken under them, and serving rebuilt abstracts on a public instance is the kind of republication they cover. That
+is for the owner (item 1 of §Fixtures and what the census leaves for the owner).
 
 ### The DOI route (AIES 2018–2023, FAccT, two AAAI 2020 records)
 
@@ -618,8 +624,9 @@ DOI, 1,150 by title) and leaves 3,560 at `none` (§TASK-231 below). These are th
     index of the real 1984 page reads as a dense one in the fixture.
   - `test_openalex_recorded.py` pins them to the parser, the rebuild and the shipped table.
 - **For the owner:**
-  1. The OpenAlex licence is settled (§OpenAlex, Licence): CC0 data, abstracts rebuilt from the index under
-     the publisher-abstract posture.
+  1. Open (2026-10-16): the Pricing page says CC0, but OpenAlex's terms of service (revised 2026-10-02) restrict
+     republishing its data without written consent (§OpenAlex, Licence). Whether OpenAlex stays the fallback is the
+     owner's decision. Abstracts rebuilt from the index are served on the publisher-abstract posture either way.
   2. Decided (TASK-231, 2026-10-10): a key holding CR/LF is read as its words joined by one space, at its one
      position (§TASK-231 below). The extract keeps the raw index, so no refetch was needed.
   3. Note that the `works` counts are a live total. If OpenAlex adds or merges a work under S4306420577 for a
@@ -888,16 +895,24 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   - 2021 (re-checked 2026-10-16, TASK-234): the 40 AI for Social Impact papers are in the cited PDF itself. Its
     first page says the special track's list "appears at the end of this document", and its last section,
     "Special Track on AI for Social Impact" (pp. 121–124), has 40 numbered entries; the 1,656 main technical are
-    the entries before it. No separate AI for Social Impact list exists among the Internet Archive's captures of
-    `aaai.org/Conferences/AAAI-21/` (887 URLs, none another accepted list). The PDF doesn't say it predates the
-    proceedings, and the cited copy (SHA-1 base32 `SOFX7UV3F7DWXILKLOLHRV5OKIO76JPZ`, embedded creation date
-    2021-01-29) was first captured on 2021-11-10. But an earlier copy, at
-    `aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/…` and captured on 2020-12-30 and 2021-01-26
-    (`DZJNTKYZTPBVFWBS5AXMQIUBXI457YSX`, embedded creation date 2020-12-23), was made before the conference
-    (2021-02-02 to 02-09) and so before the proceedings. It lists the same 40 AI for Social Impact papers and 1,657
-    main technical: paper 7140 is on it and not on the cited copy. The row keeps the cited copy's 1,696, still
-    independent because it differs from the proceedings in count, and names the earlier copy. Counted against the
-    earlier copy, the row would be 1,697 (Δ −3, 0.18%), which also passes the gate.
+    the entries before it (counted 2026-10-16 by the AI assistant session working for the owner, from the
+    2023-09-29 capture `https://web.archive.org/web/20230929155523id_/https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf`).
+    No separate AI for Social Impact list was found under either path the Internet Archive holds:
+    `https://web.archive.org/cdx/search/cdx?url=aaai.org/Conferences/AAAI-21/*&collapse=urlkey` lists 887 URLs, none
+    another accepted list, and `https://web.archive.org/cdx/search/cdx?url=aaai.org/wp-content/uploads/2023/01/AAAI-21*&collapse=urlkey`
+    lists four files, this PDF, the program committee, the schedule overview and the poster schedule (both queried
+    2026-10-16; AAAI-20's separate AISI list sits under the 2023/01 path, AAAI-21's doesn't). The PDF doesn't say it
+    predates the proceedings, and the cited copy (SHA-1 base32 `SOFX7UV3F7DWXILKLOLHRV5OKIO76JPZ`, embedded creation
+    date 2021-01-29) was first captured on 2021-11-10, at the old path
+    `aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf`.
+    An earlier copy at that path, captured on 2020-12-30 and 2021-01-26 (`DZJNTKYZTPBVFWBS5AXMQIUBXI457YSX`,
+    embedded creation date 2020-12-23), was made before the conference (2021-02-02 to 02-09) and so before the
+    proceedings. It lists the same 40 AI for Social Impact papers and 1,657 main technical: paper 7140 ("Fused
+    Sequential and Hierarchical Representation Model for Aspect Term Extraction") is on it and not on the cited copy,
+    and is not in the index (snapshot `2026-10-11-93c2937e2f29`), so the later copy was edited toward the
+    proceedings. The row keeps the cited copy's 1,696, which still differs from the proceedings in count, and names
+    the earlier copy and which copy each number comes from. Counted against the earlier copy, the row would be 1,697
+    (Δ −3, 0.18%), which also passes the gate; which copy to count is the owner's choice (reported 2026-10-16).
 
   The deltas are those of snapshot `2026-10-10-9efa49481112` and are unchanged on the final snapshot
   `2026-10-11-93c2937e2f29` (`docs/results/2026-10-11-coverage.md`), where the gate passes at 81 of 82 cells.

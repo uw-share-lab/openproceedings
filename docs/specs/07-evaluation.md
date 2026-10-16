@@ -406,12 +406,16 @@ It feeds nothing: it writes no extract, touches no snapshot and gates nothing, a
   homonym numbers and Jr./II suffixes dropped, `Last, First` handled); `agree`, `wrong` (OpenAlex lists authors and
   none is ours) or `unverifiable` (an empty list on either side). The report lists each `wrong` one and the rules
   that would exclude it, with what each rule costs, and counts how many have a near-spelling first-author surname.
-- **AAAI's archived pages (`library_check`, TASK-235).** An AAAI 1980–2008 record whose abstract is `aaai_library`'s
-  (official) never takes OpenAlex's, but the title route often finds a work for it. The fill is replayed over the
+- **AAAI's archived pages (`library_check`, TASK-235).** A DOI-less AAAI 1980–2008 record whose abstract is
+  `aaai_library`'s (official) never takes OpenAlex's, but the title route finds a work for about a quarter of them.
+  Every such record is checked, not a sample. The fill is replayed over the
   cached listings twice, as the records stand and with those abstracts set aside, and each text the second run would
   attach is compared with AAAI's by the classes above. A work with no abstract is counted `no_abstract`; the other
   refusals the second run adds (`title_unmatched`, `title_ambiguous`, rebuild refusals) are counted by reason. This is
-  the one measure of OpenAlex's text for those years.
+  the one measure of OpenAlex's text for those years. It measures agreement, not error: AAAI's text is itself read
+  from archived HTML and OpenAlex's is often text-mined, so `similar` and `differs` include OCR, hyphenation and
+  extraction differences on either side; and these are title-route attaches with no author check, so a `differs`
+  can be another paper.
 - **Reproducibility.** The fetcher is the one OpenAlex fetcher and cache (api.openalex.org only, one request a second,
   keyless, no contact address). The reproduction command in the report starts `op eval openalex --offline …` and
   carries `--date` and the controller's `--ruling`, so a re-run from the cache makes no request and renders the same
@@ -439,9 +443,10 @@ title-key and year rule**; the residual wrong-attach risk is about 2 of 1,061 (a
 the DOI route and title route figures are unchanged). Of the 4,536 AAAI 1980–2008 records with an `aaai_library`
 abstract, the title route finds one work with a text for 1,131. OpenAlex's text is exact for 361 (31.9%), near-exact
 for 223 (19.7%), truncated for 16 (1.4%), similar for 408 (36.1%) and differs for 123 (10.9%): 51.6% would match every
-search exactly as AAAI's text does, against 99.3% for AAAI 2010+ on the DOI route. Another 109 have a work with no
-abstract; 3,216 have no listed work with their title key, 20 are ambiguous and 60 refused by the rebuild. `differs` runs
-highest in 1994–2002 (15.9–50.0% a year). It is a measure, not a threshold: the records OpenAlex does fill are the ones the
+search exactly as AAAI's text does, against 99.3% (993 of 1,000) for the AAAI 2010+ sample on the DOI route, a
+group that differs in route, era and reference source, so the gap is not a measure of the route alone. Another 109 have a work with no
+abstract; 3,216 have no listed work with their title key, 20 are ambiguous and 60 refused by the rebuild. `differs` is
+15.9–50.0% a year in 1994–2002 and at most 21.4% (2006) in the other years. It is a measure, not a threshold: the records OpenAlex does fill are the ones the
 archived pages don't cover, and they carry `abstract_kind: openalex`.
 
 ## Error handling
