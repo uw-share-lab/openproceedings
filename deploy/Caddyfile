@@ -76,13 +76,19 @@
 		# to the API, so a chunked (or HTTP/2, unsized) file that went over 16 MiB, or stopped at it, and then
 		# stalled reached the API and held its slot until the API's own upload timeout. A declared length over
 		# the cap is refused here (413) before any of it is read: forwarded, the API refused it from the header
-		# and reset the connection while the proxy was still sending, which the client saw as a 502 as often as
-		# a 413. A declared length within the cap is buffered here whole
+		# and reset the connection while the proxy was still sending, which the client once saw as a 502. A
+		# length that isn't plain digits is refused (400; over HTTP/2 Go passes it on, and int() would fail into
+		# a 500). A declared length within the cap is buffered here whole
 		@unsized {
 			method POST
 			not header Content-Length *
 		}
 		respond @unsized "Send the file with a Content-Length." 411
+		@badlength {
+			method POST
+			expression !string({http.request.header.Content-Length}).matches('^0*[0-9]{1,18}$')
+		}
+		respond @badlength "Send the file with a valid Content-Length." 400
 		@oversized {
 			method POST
 			expression int('0' + string({http.request.header.Content-Length})) > 16777216

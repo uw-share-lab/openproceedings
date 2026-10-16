@@ -23,7 +23,10 @@ bounded and measured.
   the connection while Caddy is still writing the body, so one run in five gave the client a 502
   (`write: connection reset by peer`). The comparison path now answers 413 itself, before reading the body,
   from an `expression` matcher on the declared length (`int('0' + string({http.request.header.Content-Length}))
-  > 16777216`; the `'0' +` keeps a missing header from erroring into a 500).
+  > 16777216`; the `'0' +` keeps a missing header from erroring into a 500). Over HTTP/2 Go hands Caddy a
+  malformed `Content-Length` (`abc`, `+5`, `5,5`) that HTTP/1.1 would have refused with 400, and `int()` then
+  fails into a 500 with two error lines, so a `matches('^0*[0-9]{1,18}$')` route answers 400 first (found by
+  the review on a throwaway caddy with h2c).
 - **A stall that never reaches the limit is cut by `read_body` and never reaches the upstream**: with the
   declared 16 MiB minus one byte sent, the API logged nothing, a whole 16 MiB comparison ran while 8 such
   uploads were held, and each was cut at `read_body` (60.0 to 60.03 s after its request's start with `60s`: the

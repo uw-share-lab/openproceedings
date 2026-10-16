@@ -100,9 +100,9 @@ one IPv6 /48, held the slot 100% of the time.
   `--no-compare`; without them, comparisons on by the loopback default refuse every proxied request.
   **As built (TASK-183, 2026-10-16):** the README block is gone. Comparisons are turned on with the overlay
   `deploy/compose.yml` + `deploy/compare.yml` (`op serve --compare`; the `Caddyfile`'s `compare-on` snippet:
-  the 64KiB cap kept off `/api/v1/compare`, 16MiB there with a 411 for an unsized `POST` and a 413 for one
-  declaring more, no HTTP/3; `read_body`
-  60s; a 1g memory limit on `caddy`), and the precondition is that `deploy/smoke-test.sh --compare` passes on
+  the 64KiB cap kept off `/api/v1/compare`, 16MiB there with a 411 for an unsized `POST`, a 400 for a
+  malformed length and a 413 for one declaring more, no HTTP/3; `read_body` 60s; a 1g memory limit on
+  `caddy`), and the precondition is that `deploy/smoke-test.sh --compare` passes on
   the host. It passed on Docker Desktop on 2026-10-16 (the Linux-only ownership checks skipped there). A
   further stated limit it measured: every upload in flight costs the proxy about 50 MiB, and the stack bounds
   how many by the memory limit alone, past which the proxy is OOM-killed and restarted, dropping every

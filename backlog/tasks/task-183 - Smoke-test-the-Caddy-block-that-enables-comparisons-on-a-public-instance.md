@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-05 08:39'
-updated_date: '2026-10-16 20:52'
+updated_date: '2026-10-16 21:08'
 labels:
   - ops
   - security
@@ -39,4 +39,6 @@ Gate round 1 (2026-10-16): no Must. Fixed: HTTP/3 off with comparisons on (proto
 Gate round 2 (2026-10-16): no Must; one Should (cite follow-up ids in spec 08) rejected, since worktree sessions create no ids: spec 08 marks both gaps open and filed from TASK-183. Nits fixed: the smoke test also checks the /api/* request_buffers and fetches headers before counting Alt-Svc, the probe has socket timeouts and fails rather than print sent on a broken barrier, the HTTP/3 claim cites Caddy v2.11.4 modules/caddyhttp/server.go (only IdleTimeout reaches http3.Server), 24 uploads described as the edge of 1 GiB. Rerun: smoke-test.sh PASS 128 s, --compare PASS 161 s (8 stalls held 460 MiB, peak 496 MiB; cut 60.0 s from each request's start).
 
 Gate round 3 (2026-10-16): no Must; Shoulds fixed (README '24 fitted' made consistent with 'the edge of 1 GiB', spec 08 no longer says the follow-ups are filed, results peak 914). Nits fixed (probe read timeouts reported as not cut, the wait loop notices a dead probe, HTTP/2 cut marked unmeasured). Found on the rerun: a declared length one byte over 16 MiB reached the client as a 502 once in five runs (the API's header refusal reset the connection while Caddy still sent the file), so compare-on now answers 413 itself from the declared length (expression matcher; a missing header can't error). smoke-test.sh PASS 100 s, --compare PASS 186 s (8 stalls held 472 MiB, peak 508 MiB; 413 from the proxy).
+
+Gate round 4 (2026-10-16): no Must. Fixed: over HTTP/2 a malformed Content-Length made the 413 matcher fail into a 500, so compare-on answers 400 first to a length that isn't plain digits; the smoke test now asserts the 413 is the proxy's (its text) and that an HTTP/2 'Content-Length: abc' gets 400; the 502 is described as one smoke run in five. smoke-test.sh PASS 87 s, --compare PASS 149 s (8 stalls held 418 MiB, peak 422 MiB).
 <!-- SECTION:NOTES:END -->

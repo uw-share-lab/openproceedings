@@ -318,7 +318,9 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
   file that went over 16 MiB and then stalled reached the API and held its one slot until the API's own
   30 s upload timeout (seen on this stack before the fix). A declared length over 16 MiB gets 413 from the
   proxy before it reads any of the file (forwarded, the API refused it from the header and reset the
-  connection while the proxy was still sending, which the client saw as 502 as often as 413); browsers
+  connection while the proxy was still sending, which reached the client as a 502 in one smoke run of five,
+  the other four getting 413); a length that isn't plain digits gets 400 (over HTTP/2 Go passes it on to
+  Caddy, whose arithmetic on it would fail into a 500); browsers
   declare a file's length (Chromium over HTTP/2 did). The server
   also stops speaking HTTP/3 (`protocols h1 h2`): Caddy builds its HTTP/3 server with only the idle timeout
   (read in v2.11.4's `modules/caddyhttp/server.go`; not measured), so `read_body` never applies there and an
@@ -328,9 +330,8 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
 - **`caddy`** also gets `OP_READ_BODY` (default `60s`: a 16 MiB file then needs more than 2.24 Mbit/s), a
   memory limit `OP_CADDY_MEM_LIMIT` (default `1g`, with no swap on top) and `GOMEMLIMIT`
   `OP_CADDY_GOMEMLIMIT` (default `800MiB`: Go collects harder as the heap nears it, well before the kernel's
-  limit). **`read_body` is a
-  timeout of the whole server**, every path, not of the comparison path: Caddy has no per-path setting for
-  it, so a slow client of any route is now cut after 60 s rather than 10.
+  limit). **`read_body` is a timeout of the whole server**, every path, not of the comparison path: Caddy has
+  no per-path setting for it, so a slow client of any route is now cut after 60 s rather than 10.
 
 What was measured on this stack with `compare.yml`'s defaults (TASK-183, 2026-10-16: Docker Desktop, engine
 24.0.7, on an 8-CPU Mac shared with other builds; caddy 2.11.4; the raw output is in
@@ -342,14 +343,14 @@ each time:
 
 | Uploads held at once | Proxy memory held (peak) | Per upload (held less about 14 MiB idle) |
 |---|---|---|
-| 8 | 412 to 472 MiB over the last three smoke runs (peaks 448 to 508 MiB, the smoke test's 16 MiB comparison passing through as well) | about 50 to 57 MiB |
+| 8 | 412 to 472 MiB over the last four passing smoke runs (peaks 422 to 508 MiB, the smoke test's 16 MiB comparison passing through as well) | about 50 to 57 MiB |
 | 16 | 793 MiB (peak 794 MiB) | about 49 MiB |
 | 24 | 912 MiB (peak 914 MiB; 998 MiB in an earlier run on a draft of the block) of the 1,024 MiB limit, no OOM kill: Go collecting at its 800 MiB soft limit | about 37 MiB |
 | 32 | over the limit: the kernel killed Caddy (Docker's `oom` event, exit 137) within a second of the last byte | |
 
 An upload costs the proxy about 50 MiB, three times the file: Caddy reads it into a buffer that doubles as it
 fills (32 MiB to hold 16), and the smaller buffers it outgrew are garbage until Go collects them. Budget
-50 MiB per upload in flight on top of about 15 MiB idle, and size `OP_CADDY_MEM_LIMIT` (with
+50 MiB per upload in flight on top of about 14 MiB idle, and size `OP_CADDY_MEM_LIMIT` (with
 `OP_CADDY_GOMEMLIMIT` about 80% of it) for the uploads you expect at once. **Past the limit the proxy is
 killed**: memory stays bounded, but Docker restarts the container (`restart: unless-stopped`) and every
 connection it held is dropped, searches included, for the few seconds it takes. With the 1 GiB default, 24
@@ -363,8 +364,9 @@ A stalled upload was cut by the proxy when `read_body` ran out (60 s after its r
 included) and never reached the API: with uploads stalled in the proxy, a whole 16 MiB comparison ran at once
 (200), and the API logged only that one. That was measured over HTTP/1.1; a stall over HTTP/2 was not
 measured. Caddy answers a cut upload an empty `200` before closing the connection (its error path writes no
-status): a client sees no comparison in it. A file one byte over 16 MiB gets 413 and one with no length 411,
-both from the proxy, as plain text rather than the API's JSON error.
+status): a client sees no comparison in it. A file one byte over 16 MiB gets 413, one with no length 411 and
+one with a length that isn't plain digits 400, all from the proxy, as plain text rather than the API's JSON
+error (the smoke test checks the 413's text).
 
 `GET /api/v1/meta` then shows `limits.compare`, and the web app offers the panel; no rebuild of the `web`
 image is needed. **To turn them off again**, run `docker compose -f deploy/compose.yml up -d` (without
@@ -434,7 +436,7 @@ its limit with no OOM kill, 413 one byte over 16 MiB, 411 for a file with no len
 every other path (in the proxy's adapted config, and checked without `--compare` too, with `/meta`
 offering no comparisons and HTTP/3 advertised only then). It reads the caddy container's cgroup v2 memory
 files: `memory.peak` needs Linux 5.19 or later (before that it samples `memory.current` while the uploads
-are held). It takes about a minute longer (160 to 186 s, against 97 to 128 s without it, on that Mac):
+are held). It takes about a minute longer (149 to 186 s, against 87 to 128 s without it, on that Mac):
 the stalled uploads wait out `read_body`.
 
 It removes everything it created on exit. It needs Docker and uv, and ports 80 and 443 on 127.0.0.1 (or

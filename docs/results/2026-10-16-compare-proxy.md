@@ -9,9 +9,8 @@ warns), compose v2.23.3, on an 8-CPU Mac whose 1-minute load other sessions kept
 the VM had 7.7 GiB. Caddy 2.11.4 (`deploy/caddy.Dockerfile`'s pinned image). The fixture data directory of
 `backend/tests/deploy/fixture_data.py`; the comparison runs against its `small` index (300 records). Ports
 bound to 127.0.0.1 only. Each upload goes over TLS to `https://localhost:<port>`. The run below is
-on the branch's final `Caddyfile`, `compare.yml`, `smoke-test.sh` and probe (the commit that adds this file's
-last revision; `55965cea` differs from them in comments, the checks rounds 2 and 3 of the review added, the probe's timeouts,
-and the proxy's own 413 for a declared length over 16 MiB).
+on the tree of the commit that last changed this file; earlier passes ran on `55965cea` (review round 1),
+`44a6e050` (round 2) and `c53fe1a2` (round 3).
 
 **Method.** An upload declares `Content-Length: 16777216` and sends 16,777,215 bytes, then stops: the proxy
 must hold its buffer until `read_body` cuts it. Memory is the caddy container's cgroup v2 `memory.current`
@@ -22,22 +21,23 @@ These stalls are HTTP/1.1; HTTP/2 and HTTP/3 stalls were not run (HTTP/3 is off 
 
 ## The smoke test
 
-`OP_HTTP_PORT=127.0.0.1:18080 OP_HTTPS_PORT=127.0.0.1:18443 deploy/smoke-test.sh --compare`, PASS in 186 s
-(without `--compare`, PASS in 100 s, with `/meta` offering no comparisons, HTTP/3 advertised and the 64 KiB
+`OP_HTTP_PORT=127.0.0.1:18080 OP_HTTPS_PORT=127.0.0.1:18443 deploy/smoke-test.sh --compare`, PASS in 149 s
+(without `--compare`, PASS in 87 s, with `/meta` offering no comparisons, HTTP/3 advertised and the 64 KiB
 cap unconditional in the adapted config). Step 6 of the `--compare` run:
 
 ```
 /meta limits.compare.max_body_bytes: 16777216
-proxy: protocols ['h1', 'h2'] | body caps [([{'not': [{'path': ['/api/v1/compare']}]}], 65536)] | /api/* buffers [65536] | /api/v1/compare [('request_body', 16777216, None), ('static_response', 411, [{'method': ['POST'], 'not': [{'header': {'Content-Length': ['*']}}]}]), ('static_response', 413, [{'expression': "int('0' + string({http.request.header.Content-Length})) > 16777216", 'method': ['POST']}]), ('reverse_proxy', 16777216, None)]
+proxy: protocols ['h1', 'h2'] | body caps [([{'not': [{'path': ['/api/v1/compare']}]}], 65536)] | /api/* buffers [65536] | /api/v1/compare [('request_body', 16777216, None), ('static_response', 411, [{'method': ['POST'], 'not': [{'header': {'Content-Length': ['*']}}]}]), ('static_response', 400, [{'expression': {'expr': "!string({http.request.header.Content-Length}).matches('^0*[0-9]{1,18}$')", 'name': 'badlength'}, 'method': ['POST']}]), ('static_response', 413, [{'expression': "int('0' + string({http.request.header.Content-Length})) > 16777216", 'method': ['POST']}]), ('reverse_proxy', 16777216, None)]
 Alt-Svc h3 headers: 0
 api command: serve --host 0.0.0.0 --port 8000 --trusted-proxy 172.30.80.2 --compare
 caddy: read_body 60s, memory limit 1073741824 bytes, GOMEMLIMIT 800MiB
-8 uploads stalled a byte short; proxy memory now 472 MiB
+8 uploads stalled a byte short; proxy memory now 418 MiB
 a 16 MiB comparison while they stall: records, papers = 282 282
-stalled uploads, seconds from each request's start: {"uploads": 8, "cut_min_s": 60.02, "cut_max_s": 60.03, "statuses": ["HTTP/1.1 200 OK"]}
-proxy memory peak 508 MiB of 1024 MiB; oom_kill 0; restarts 0
+stalled uploads, seconds from each request's start: {"uploads": 8, "cut_min_s": 60.03, "cut_max_s": 60.03, "statuses": ["HTTP/1.1 200 OK"]}
+proxy memory peak 422 MiB of 1024 MiB; oom_kill 0; restarts 0
 API compare requests: 1 (the 16 MiB comparison; no stalled upload reached the API)
-16 MiB + 1 byte to /api/v1/compare -> 413 (the proxy's, from the declared length)
+16 MiB + 1 byte to /api/v1/compare -> 413: The file is over 16 MiB (16,777,216 bytes), the most this instance compares.
+an HTTP/2 file with Content-Length: abc to /api/v1/compare -> 400
 a chunked file to /api/v1/compare -> 411
 an HTTP/2 file with no content-length to /api/v1/compare -> 411
 64 KiB + 1 byte to /api/v1/records -> 413
@@ -47,10 +47,11 @@ Each stalled upload's `HTTP/1.1 200 OK` is an empty response Caddy writes after 
 `read_body` (its access log: `status: 0`, `size: 0`), not an answer from the API; the API's access-log count
 is the evidence that none reached it.
 
-Earlier passes on the branch held 412 and 460 MiB (peaks 448 and 496 MiB; 160 s and 161 s, and 97 s and 128 s
-without `--compare`, after review rounds 1 and 2), and before review round 1, which added the adapted-config,
-HTTP/3 and restart checks and timed each upload from its own start, 424 and 446 MiB (peaks 461 and 482 MiB),
-with cuts of 57.8 and 58.4 s counted from the end of sending.
+Earlier passes on the branch held 412, 460 and 472 MiB (peaks 448, 496 and 508 MiB; 160, 161 and 186 s, and 97,
+128 and 100 s without `--compare`, after review rounds 1, 2 and 3), and before review round 1, which added the
+adapted-config, HTTP/3 and restart checks and timed each upload from its own start, 424 and 446 MiB (peaks 461
+and 482 MiB), with cuts of 57.8 and 58.4 s counted from the end of sending. The fifth `--compare` run (on the
+round-2 files) failed on the 502 described below.
 
 ## Uploads held at once
 
@@ -87,8 +88,8 @@ them. With the heap near `GOMEMLIMIT`, Go collects harder and the cost falls tow
   rest of a body, and after a read error it opens the upstream request anyway. With the 411, an unsized `POST`
   never gets that far; a Chromium `fetch` of a `Blob` sent `Content-Length` over HTTP/2 and was compared (200).
 - A declared length over the cap was refused by the API from the header (`API_BODY_TOO_LARGE`, before any
-  slot), not by Caddy: `request_body max_size` only counts what it reads. In the fifth run of the smoke test
-  that refusal reached the client as a 502 (Caddy's error log: `write: connection reset by peer`, the API
+  slot), not by Caddy: `request_body max_size` only counts what it reads. In the fifth `--compare` run of the
+  smoke test (the four before got 413; `smoke-*--compare.log`) that refusal reached the client as a 502 (Caddy's error log: `write: connection reset by peer`, the API
   having closed while the proxy still sent the file), so the comparison path now answers 413 itself from the
   declared length, before reading any of it.
 - A cut upload gets an empty `200` from Caddy (its access log: `status: 0`, `size: 0`); the web app reads an

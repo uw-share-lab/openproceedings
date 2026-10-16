@@ -259,8 +259,8 @@ step "6. comparisons"
 offered=$("${curl_tls[@]}" "$base/api/v1/meta" | json '(d["limits"]["compare"] or {}).get("max_body_bytes")') \
   || fail "GET /meta"
 echo "/meta limits.compare.max_body_bytes: $offered"
-# a status from curl without --fail: the refusals below are the point
-status_of() { curl -sS --cacert "$cert" -o /dev/null -w '%{http_code}' "$@" || true; }
+# a status from curl without --fail: the refusals below are the point. The body goes to $work/answer
+status_of() { curl -sS --cacert "$cert" -o "$work/answer" -w '%{http_code}' "$@" || true; }
 head -c 65537 /dev/zero | tr '\0' x >"$work/over64k.json"
 # the proxy's own body caps and protocols, as Caddy adapted the Caddyfile in the running container: a body
 # that declares its length over 64 KiB is refused by the API from the header whatever the proxy does, so the
@@ -277,6 +277,8 @@ inner = [(h["handler"], h.get("max_size") or h.get("request_buffers") or h.get("
          for routes in compare for r in routes for h in r["handle"]]
 want_inner = [("request_body", 16777216, None),
               ("static_response", 411, [{"method": ["POST"], "not": [{"header": {"Content-Length": ["*"]}}]}]),
+              ("static_response", 400, [{"method": ["POST"], "expression": {"name": "badlength",
+               "expr": "!string({http.request.header.Content-Length}).matches(\x27^0*[0-9]{1,18}$\x27)"}}]),
               ("static_response", 413, [{"method": ["POST"], "expression": "int(\x270\x27 + string({http.request.header.Content-Length})) > 16777216"}]),
               ("reverse_proxy", 16777216, None)]
 print("proxy: protocols", srv.get("protocols"), "| body caps", caps, "| /api/* buffers", api, "| /api/v1/compare", inner)
@@ -360,8 +362,14 @@ sys.exit(0 if abs(cut["cut_min_s"] - limit) <= 2 and abs(cut["cut_max_s"] - limi
   head -c 16777217 /dev/zero | tr '\0' x >"$work/over.ris"
   status=$(status_of -H 'content-type: application/x-research-info-systems' --data-binary "@$work/over.ris" \
     "$base/api/v1/compare?q=$query")
-  echo "16 MiB + 1 byte to /api/v1/compare -> $status (the proxy's, from the declared length)"
-  [ "$status" = 413 ] || fail "a file one byte over 16 MiB answered $status"
+  echo "16 MiB + 1 byte to /api/v1/compare -> $status: $(cat "$work/answer")"
+  if [ "$status" != 413 ] || ! grep -qF 'The file is over 16 MiB' "$work/answer"; then
+    fail "a file one byte over 16 MiB was not refused by the proxy (its 413 and text): $status"
+  fi
+  status=$(status_of --http2 -X POST -H 'Content-Length: abc' -H 'content-type: application/x-research-info-systems' \
+    "$base/api/v1/compare?q=$query")
+  echo "an HTTP/2 file with Content-Length: abc to /api/v1/compare -> $status"
+  [ "$status" = 400 ] || fail "a malformed length answered $status"
   # past request_buffers the proxy streams the rest to the API, so a file must say how long it is
   status=$(status_of --http1.1 -H 'Transfer-Encoding: chunked' -H 'content-type: application/x-research-info-systems' \
     --data-binary "@$work/over64k.json" "$base/api/v1/compare?q=$query")

@@ -544,12 +544,11 @@ the `compare-on` snippet: the 64KiB cap scoped to `@rest` (`not path /api/v1/com
 wrap the path's handle and refuse the file first), and for `/api/v1/compare` alone a `request_body` and
 `request_buffers` of 16MiB (Caddy's `16MB` is 16,000,000 bytes, under the API's 16,777,216), a 411 for a
 `POST` with no `Content-Length` (past `request_buffers` Caddy streams the rest of a body, so an unsized file
-that went over the cap and stalled held the API's slot until its upload timeout) and a 413 for one that
-declares more than 16 MiB, before any of it is read (forwarded, the API's refusal raced the proxy's sending
-and reached the client as a 502 as often as a 413); no HTTP/3 (`protocols h1
-h2`: Caddy v2.11.4 builds its HTTP/3 server with only the idle timeout, so `read_body` never applies there); a
-longer `read_body`
-(`OP_READ_BODY`, 60s there), which is the server's timeout for every request (Caddy has no per-path one); and
+that went over the cap and stalled held the API's slot until its upload timeout), a 400 for a length that
+isn't plain digits and a 413 for one over 16 MiB, before any of the file is read (forwarded, the API's
+refusal raced the proxy's sending and reached the client as a 502 in one smoke run of five), each plain text,
+not the API's error envelope; no HTTP/3 (`protocols h1 h2`: Caddy v2.11.4 builds its HTTP/3 server with only
+the idle timeout, so `read_body` never applies there); a longer `read_body` (`OP_READ_BODY`, 60s there), which is the server's timeout for every request (Caddy has no per-path one); and
 a memory limit on the `caddy` container (`OP_CADDY_MEM_LIMIT`, 1g, with `GOMEMLIMIT` 800MiB). With the proxy
 buffering the file, a slow upload holds a proxy goroutine and about 50 MiB of its memory (measured: Caddy's
 buffer doubles to 32 MiB to hold 16, plus the buffers it outgrew until Go collects them), never the API's
