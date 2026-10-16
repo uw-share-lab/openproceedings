@@ -32,7 +32,7 @@ and 2, 2026-10-11). Under this rule AAAI 2020's lists are independent because th
 camera-ready, 2021's because the copy counted was archived before the conference (the owner's choice, 2026-10-16, TASK-234), and 2012's and 2017's because each differs from the proceedings in count. AAAI 2010's, 2014's
 and 2016's lists match the proceedings exactly and are not shown to predate them (2010's and 2014's only archived
 copies were captured after publication, on 2010-08-30 and 2015-09-06), so each is an ungated cell with a note. Deltas of the four on snapshot
-`2026-10-11-93c2937e2f29` (index `b4f335e07e70`, `docs/results/2026-10-16-coverage.md`): +2 (0.68%), +2 (0.31%), −4 (0.25%)
+`2026-10-16-03eab0ef56c4` (index `78d2e70310f3`, `docs/results/2026-10-16-coverage.md`; the same on `2026-10-11-93c2937e2f29`, index `b4f335e07e70`, since TASK-217 added only AIES 2026): +2 (0.68%), +2 (0.31%), −4 (0.25%)
 and −3 (0.18%; −2 against the later AAAI-21 copy before the owner's choice of 2026-10-16), the same as on
 `2026-10-10-9efa49481112`: the abstract fills change no count.
 

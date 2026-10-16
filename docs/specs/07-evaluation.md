@@ -273,8 +273,10 @@ As built, the milestone's report (`docs/results/2026-10-11-coverage.md`, index `
 `2026-10-11-93c2937e2f29`, 173,253 records) passes `op eval coverage --check`: 81 of 82 gated cells within ±1%, the
 82nd being ICLR 2013's owner-accepted exception, and 1,117 abstracts labelled `abstract_kind:openalex` (AAAI 21,
 AIES 557, FAccT 539); another 4,536 AAAI 1980–2008 abstracts are official, from `aaai_library` (decision-051). Its
-re-run of 2026-10-16 (`docs/results/2026-10-16-coverage.md`, same index) differs only in AAAI 2021's row, re-counted at
-1,697 from the pre-conference copy of AAAI's list (Δ −3, still within the gate; TASK-234). The
+re-run of 2026-10-16 differed only in AAAI 2021's row, re-counted at 1,697 from the pre-conference copy of AAAI's
+list (Δ −3, still within the gate; TASK-234). That report (`docs/results/2026-10-16-coverage.md`) was then
+regenerated on index `78d2e70310f3` (snapshot `2026-10-16-03eab0ef56c4`, 173,518 records: the 265 AIES 2026 records
+added, TASK-217), with the same 81 of 82 gated cells and AIES 2026 main ungated with its note. The
 gate has two fewer cells than the earlier as-built report (`docs/results/2026-10-10-coverage.md`, index
 `9977ed00669f`, 83 of 84, 2,158 OpenAlex abstracts), which stays as history.
 The source of statuses indexed is spec 01's source table as `ingest/statuses.py` holds it (spec 01
