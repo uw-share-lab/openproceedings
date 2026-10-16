@@ -13,7 +13,7 @@ rows for 1987–2012 are each year page's own count (`N papers`), read on 2026-1
 bibliography, and no ICML statement of accepted counts was found for those years (the official pages of 2001–2012
 list papers, but not every year's full set), so those cells are reported, not gated.
 
-Since decision-049 (2026-10-09) the corpus also holds AAAI 2010–2026, AIES 2024–2025 and IASEAI 2026, from
+Since decision-049 (2026-10-09) the corpus also holds AAAI 2010–2026, AIES 2024–2026 (2026 since TASK-217, 2026-10-16) and IASEAI 2026, from
 ojs.aaai.org. Six of their `main` cells have a row, read on 2026-10-09: AAAI 2013, 2015, 2018 and 2019, and AIES 2024
 and 2025, 78 rows in all. Each is the program chairs' own statement of the papers accepted (a proceedings preface, an
 issue's front-matter description, the AI Magazine conference report, the AIES program), not a count of the OAI

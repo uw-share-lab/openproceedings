@@ -212,7 +212,7 @@ so cross-venue counts over those years compare three venues, not more. ICML 1988
 which has no abstracts: only the years whose official ICML pages give abstracts have them (TASK-206), and every
 other record of those years is title-only, counted in the cell's missing abstracts. ICLR 2014–2016 are
 not gaps: their public archive listings supply accepted main-track records (TASK-096).
-**AAAI 2010+, AIES 2024+ and IASEAI (decision-049, milestone A).** The index holds AAAI 2010–2026, AIES 2024–2025 and IASEAI
+**AAAI 2010+, AIES 2024+ and IASEAI (decision-049, milestone A).** The index holds AAAI 2010–2026, AIES 2024–2026 and IASEAI
 2026 from ojs.aaai.org, every record `accepted` (published in the proceedings: the source lists no rejected paper),
 each venue-year a coverage cell with its real tracks (`main`, `student_abstract`, `consortium`, `demo`, `iaai`,
 `eaai`, `other`). AAAI's `main` is the section mapping of `ingest/ojs_sections.toml` (technical, special and Journal

@@ -80,7 +80,8 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
 - From 2024 AIES is on OJS:
   - Vol. 7 (2024, 2 issues): 171 = 150 full archival papers + 20 student abstracts + 1 front matter.
   - Vol. 8 (2025, 4 issues): 279 = 238 main-track papers + 41 student abstracts.
-  - AIES 2026 (Malmö, 12–14 Oct 2026) is not yet published.
+  - AIES 2026 (Malmö, 12–14 Oct 2026) was not yet published on 2026-10-09; Vol. 9 (4 issues) appeared by
+    2026-10-16: see §AIES 2026 below.
 - **The AIES OAI list is 5 pages of 100, not one response.** An earlier note said "450 records in one response, no
   resumption token"; the live chain on 2026-10-09 had 5 pages.
 - Sets: `FUL`, `STU`, `FMT`, `A25-1/2/3`, `A25-SA`, `A25-SA-2`, plus `2025-11` and `ART`, which hold no records.
@@ -120,6 +121,18 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
     .3462537, .3462577, .3462613; 2022 3514094.3534125, .3534151, .3534194.
   Student abstracts from 2024 on are OJS's `student` track (`STU`, `A25-SA`). The table gained a `[[section]]`
   table (venue, year, page range, track, label, check date, source) for the same track here (TASK-224).
+
+### AIES 2026 (Vol. 9; census of 2026-10-16, TASK-217)
+
+- `scripts/ojs_section_census.py AIES --refresh` on 2026-10-16: complete, 18 pages, `completeListSize` 716 = 715
+  live + 1 deleted header; no unavailable article, no fallback set, nothing recovered by `GetRecord`, no
+  duplicates. Vol. 7 (171) and Vol. 8 (279) are unchanged.
+- Vol. 9: 265 live = `A26-1` Main Track I 67, `A26-2` Main Track II 60, `A26-3` Main Track III 57, `A26-4` Main
+  Track IV 59 (243 `main`) + `A26-SA` Student Abstracts 22 (`student_abstract`); the one deleted header is in
+  `A26-SA`. No front matter is listed. The issue pages (`issue/view/743`–`746`, the last "Main Track IV &
+  Student Abstracts") show the same section titles, and issue 746 the same 59 and 22.
+- No code changed: the year comes from the journal's offset (9 + 2017) and the tracks from the five new
+  `[[section]]` rows, as the design expected (a new venue-year at an existing source needs a table row).
 
 ### IASEAI
 
