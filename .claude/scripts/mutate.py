@@ -22,8 +22,8 @@ tables that name its file (its name, or its stem as a word, in the table or a he
 names), then the rest only if those all pass, and a phase stops as soon as one table fails. The verdict is the
 same as running every table (a survivor runs them all); only the time differs: about a third of it on the
 nightly logs, where every mutant ran all 13 tables and four 12-way shards ran past 140 min (TASK-171 rerun).
-A table whose header comment (its leading `#` lines) has `# mutate-scope: <file> ...` lines exercises only those
-files: it runs only for a mutant that changes one of them, so a table that fails for another reason (one slowed
+A table whose header comment (its leading `#` lines) has `# mutate-scope: <file> ...` lines (repo-relative paths,
+exactly as a mutant's `file`) exercises only those files: it runs only for a mutant that changes one of them, so a table that fails for another reason (one slowed
 by load) can never be credited with killing another file's mutant (TASK-238: test-mutate-run.sh, which runs only
 mutate.py, was credited with 15 of 17 docker_digest.py mutants on a loaded machine).
 A table that runs past its timeout under a mutant has hung (an infinite loop): it is stopped, so one hang never
@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import functools
 import json
 import os
 import re
@@ -161,7 +162,8 @@ def table_text(t: str) -> str:
 SCOPE = re.compile(r"#\s*mutate-scope:\s*(.*)")
 
 
-def table_scope(t: str) -> set[str] | None:
+@functools.cache
+def table_scope(t: str) -> frozenset[str] | None:
     """The files table `t` declares it exercises (`# mutate-scope:` lines in its header comment, the `#` lines
     before its first other line; a fixture a table writes later is not its header), or None: it may exercise any."""
     files: set[str] = set()
@@ -170,7 +172,7 @@ def table_scope(t: str) -> set[str] | None:
             break
         if m := SCOPE.match(line):
             files.update(m.group(1).split())
-    return files or None
+    return frozenset(files) or None
 
 
 def can_kill(t: str, files: list[str]) -> bool:

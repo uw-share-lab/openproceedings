@@ -23,14 +23,23 @@ more command wrappers in cmdparse (TASK-248); kill the surviving "xargs flag not
 - The load-sensitive checks were wall-clock bounds measured from the start of a run (`secs -lt 15` for "stopped",
   10 s to see a table start before an interrupt) and `--table-timeout 5`, which mutate.py refuses (exit 2) once a tiny
   table's baseline passes 0.5 s on a loaded machine. Now: the "stopped" check is the log (the slow table never
-  logged its end), the interrupt rows wait up to 60 s for the table to start and time from the signal, the hang row
-  uses `--table-timeout 15` with a 90 s bound (still far from the 60 s floor twice and from the 3017 s sleep), and the
-  hung-once row runs in a copy of the fixture whose floor is 5 s, with no explicit timeout to refuse.
+  logged its end), the interrupt rows wait up to 60 s for the table to start and time from the signal, and the hang
+  rows run in a copy of the fixture whose floor is 5 s: the hung-once row with no explicit timeout to refuse, the hang
+  row with `--table-timeout 30` (refused only past a 3 s baseline) and a lower bound of 55 s, which tells the explicit
+  timeout from the floor and which load can only push further from failing (review round 1: an upper bound of 90 s
+  with `--table-timeout 15` was still refusable on a loaded machine).
 - The xargs mutant survived because the only sh -c row pushed `"$@"`, an unresolved refspec that is refused with or
   without the flag. A commit on a feature branch is allowed unless `via_xargs` is set, so it isolates the flag
   (evidence: probe_hook.py on a mutant copy: enforce-pr-workflow allow; on the real hooks: block).
 - `flock <file> -c '<cmd>'` is easiest to read as `sh -c '<cmd>'`: rewriting the argv lets the walk's child-shell
   branch handle separators, exports and xargs inside it, instead of splitting the string like `env -S`.
+- Stripping a wrapper drops its words from what the gates read, and some of those words are paths the wrapper writes.
+  flock creates its lock file, so skipping it hid `flock .git/op-reviews/<sha> true` from require-review's record
+  check, which blocked it while `flock` was an unknown command word (security review, round 1: a regression). The walk
+  now yields each such file as a `>>` redirect (`Argv.creates`), so every gate's redirect rules apply, and
+  `flock data/snapshots/x.lock` and `flock backlog/…` are refused too. When adding a wrapper, ask what it opens.
+- A wrapper's value-taking options need the tool's whole usage line: doas's `-a style` was missed at first, so
+  `doas -a passwd git push` hid the push (code-reviewer and qa-auditor, round 1).
 - enforce-pr-workflow already refused most wrapper-prefixed commits on main before the change (only the flock `-c`
   rows were red there); require-review, protect-data-dir and block-ai-attribution's `-F` file read all missed them.
 
@@ -45,6 +54,9 @@ more command wrappers in cmdparse (TASK-248); kill the surviving "xargs flag not
   the conservative side for every gate.
 
 ## Follow-ups
+- [ ] A short-option cluster that ends in a value-taking option (`flock -nw 5 <file>`, `doas -nu root`, the older
+  `sudo -nu root`) is not split by `_strip_prefixes`, so its value is read as the command (pre-existing in the shared
+  option loop; reported to the lead as a follow-up).
 - [ ] Other tables that exercise one script (test-mutate-shard.sh: mutate.py; test-merge-group-gate.sh; test-changelog.sh)
   could declare `# mutate-scope:` too (reported to the lead; not filed from this branch).
 

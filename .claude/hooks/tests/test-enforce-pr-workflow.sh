@@ -244,6 +244,9 @@ check feature/x block "echo -- --amend | xargs sh -c 'git commit -m wip \"\$@\"'
 check feature/x allow "echo x | xargs sh -c 'git log -1 \"\$@\"' sh"        # positive control: no guarded command
 
 echo "more wrappers cmdparse strips, each with its value-taking options (TASK-248):"
+# Regression rows: this gate reads any `git` word after a command it doesn't know, so only the flock -c/--command
+# rows (git inside one quoted string) need the stripping; the rows that kill the wrapper mutants are in
+# test-openproceedings-gates.sh's TASK-248 section.
 check main  block 'xcrun git commit -m x'
 check main  block 'xcrun -sdk macosx git commit -m x'                 # -sdk takes a value
 check main  block 'xcrun --toolchain=swift git commit -m x'

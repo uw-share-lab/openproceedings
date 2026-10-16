@@ -18,7 +18,8 @@ matter to a gate:
   * leading reserved words (`if`/`then`/`do`/`{`/`!` …), `VAR=val`, and wrappers (`env`, `sudo`, `nice`,
     `timeout`, `xargs`, `stdbuf`, `watch`, `exec`, `time`, `nohup`, `command`, `builtin`, `xcrun`, `caffeinate`,
     `arch`, `doas`, `flock`, `unbuffer`) are stripped, each wrapper with its own table of value-taking options;
-    `env -S '…'` is split, `env -C`/`sudo -D` move dir; flock's lock file is skipped and its `-c '…'` is a `sh -c`;
+    `env -S '…'` is split, `env -C`/`sudo -D` move dir; flock's lock file is a `>>` redirect (flock creates it)
+    and its `-c`/`--command '…'` is a `sh -c`;
     the argv comes back as an `Argv` that records the `VAR=val` words and whether xargs runs it;
   * command names compare by basename (`/usr/bin/git` is `git`);
   * redirections leave argv as (operator, target) pairs (`walk` yields them);
@@ -123,7 +124,7 @@ WRAPPER_VALUE_OPTS: dict[str, set[str]] = {
     "xcrun": {"-sdk", "--sdk", "-toolchain", "--toolchain"},
     "caffeinate": {"-t", "-w"},
     "arch": {"-arch", "-d"},
-    "doas": {"-u", "-C"},
+    "doas": {"-a", "-u", "-C"},
     "flock": {"-w", "-E", "--wait", "--timeout", "--conflict-exit-code"},
     "unbuffer": set(),
 }
@@ -491,12 +492,15 @@ class Argv(list):
     in_subst: bool = False
     # `cd_stayed`: the directory is where it is because a `cd ~/…` failed in the HOME '' reading (`_change_dir`)
     cd_stayed: bool = False
+    # `creates`: files a stripped wrapper itself creates (flock's lock file); the walk yields each as a `>>` redirect
+    creates: list[str]
 
     def __init__(self, words: list[str], via_xargs: bool = False, assigns: dict[str, str] | None = None):
         super().__init__(words)
         self.via_xargs = via_xargs
         self.assigns = assigns or {}
         self.shell_vars = {}
+        self.creates = []
 
 
 # What xargs may not run: a command whose appended words (paths, refspecs) decide what a gate allows.
@@ -1393,7 +1397,8 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                 i += 1 if (eq or not takes_value) else 2
             if name == "timeout" and i < len(argv):  # the duration
                 i += 1
-            if name == "flock" and i < len(argv):  # the lock file
+            if name == "flock" and i < len(argv):  # the lock file, which flock creates
+                out.creates.append(argv[i])
                 i += 1
                 # `flock <file> -c '<cmd>'`: a shell runs the string
                 if i + 1 < len(argv) and argv[i] in ("-c", "--command"):
@@ -2010,6 +2015,8 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             raw = [_restore(t, subs) for t in raw]
         args, redirects = split_redirects(raw)
         argv = strip_prefixes(args, state)
+        created = [(">>", f) for f in argv.creates]  # a file a wrapper creates is written, as `>>` writes one
+        redirects += created
         if writes_git_config(argv, redirects, state):
             state["config_written"] = True
         if note_exports(argv, state) or not argv:
@@ -2049,6 +2056,8 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             _change_dir(head, argv[1:], state, getattr(argv, "assigns", {}))
             continue
         if head in SHELLS:
+            if created:  # `flock <file> -c '…'`: the lock file is written before the shell runs
+                yield _context(Argv([]), state), state["dir"], created
             for k, a in enumerate(argv[1:], start=1):
                 if a.startswith("-") and not a.startswith("--") and "c" in a and k + 1 < len(argv):
                     # a child shell: it starts with the caller's exports plus the assignments before it

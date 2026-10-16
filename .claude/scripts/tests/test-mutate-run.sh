@@ -150,6 +150,10 @@ check() {  # check <label> <got> <want>
   if [ "$2" = "$3" ]; then pass=$((pass+1)); printf '  ok   %s\n' "$1"
   else fail=$((fail+1)); printf '  FAIL %s: got [%s] want [%s]\n' "$1" "$2" "$3"; fi
 }
+got=$(grep -c '^TIMEOUT_FACTOR, TIMEOUT_FLOOR = 10, 1.0' "$R2/.claude/scripts/mutate.py")
+check "R2's mutate.py has the 1 s floor" "$got" "1"
+got=$(grep -c '^TIMEOUT_FACTOR, TIMEOUT_FLOOR = 10, 5.0' "$R3/.claude/scripts/mutate.py")
+check "R3's mutate.py has the 5 s floor" "$got" "1"
 run() {  # run <label match> [args...]: the result line and exit status in $line $rc, seconds in $secs, log in $TMP/log
   local m="$1"; shift
   : > "$TMP/log"
@@ -224,11 +228,15 @@ got=$(grep -c '^t-a-slow-end ' "$TMP/log")
 check "stopped: the slow table never finished" "$got" "0"
 
 echo "== a hang is stopped at its timeout, and killed"
-run m-hangs --table-timeout 15
+# in R3 (5 s floor) with --table-timeout 30: refused only past a 3 s baseline, and a lower bound tells the 30 s
+# timeout from the floor, which load can only push further from failing
+ROOTDIR="$R3" run m-hangs --table-timeout 30
 check "hang: exit 0" "$rc" "0"
 check "hang: the line" "$line" "ok TIMEOUT m-hangs (t-a.sh hung)"
-got=$([ "$secs" -lt 90 ] && echo yes || echo "no ($secs s)")
-check "hang: answered at the 15 s timeout (twice), not the 60 s floor or the sleep" "$got" "yes"
+got=$([ "$secs" -ge 55 ] && echo yes || echo "no ($secs s)")
+check "hang: stopped at the 30 s --table-timeout (twice), not the 5 s floor" "$got" "yes"
+got=$([ "$secs" -lt 600 ] && echo yes || echo "no ($secs s)")
+check "hang: answered at the timeout, not the sleep" "$got" "yes"
 got=$(pgrep -f "sleep $NAP" > /dev/null && echo "still running" || echo gone)
 check "hang: the table's own children are stopped too" "$got" "gone"
 

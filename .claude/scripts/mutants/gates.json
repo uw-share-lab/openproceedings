@@ -38,7 +38,7 @@
  {
   "label": "doas not a wrapper (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"doas\": {\"-u\", \"-C\"},\n",
+  "old": "    \"doas\": {\"-a\", \"-u\", \"-C\"},\n",
   "new": ""
  },
  {
@@ -74,7 +74,7 @@
  {
   "label": "doas's value-taking options not skipped (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"doas\": {\"-u\", \"-C\"},\n",
+  "old": "    \"doas\": {\"-a\", \"-u\", \"-C\"},\n",
   "new": "    \"doas\": set(),\n"
  },
  {
@@ -86,8 +86,8 @@
  {
   "label": "flock's lock file read as the command (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "            if name == \"flock\" and i < len(argv):  # the lock file\n                i += 1\n",
-  "new": "            if name == \"flock\" and i < len(argv):  # the lock file\n                i += 0\n"
+  "old": "                out.creates.append(argv[i])\n                i += 1\n",
+  "new": "                out.creates.append(argv[i])\n                i += 0\n"
  },
  {
   "label": "flock -c's string not run as sh -c (TASK-248)",
@@ -100,6 +100,18 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "argv[i] in (\"-c\", \"--command\"):",
   "new": "argv[i] in (\"-c\",):"
+ },
+ {
+  "label": "flock's lock file not a write (it hid an op-reviews/ path; TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                out.creates.append(argv[i])\n",
+  "new": ""
+ },
+ {
+  "label": "flock -c's lock file not yielded before its shell (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                yield _context(Argv([]), state), state[\"dir\"], created\n",
+  "new": "                pass\n"
  },
  {
   "label": "wrapper option values not skipped",

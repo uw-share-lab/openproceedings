@@ -2210,7 +2210,12 @@ check $R block "doas -u root git push"                          "$(payload_bash 
 check $R block "flock -E 3 <lock> git push"                     "$(payload_bash 'flock -E 3 /tmp/op.lock git push origin other2')"
 check $R block "flock -n <lock> --command 'git push'"           "$(payload_bash "flock -n /tmp/op.lock --command 'git push origin other2'")"
 check $R block "unbuffer -p git push"                           "$(payload_bash 'unbuffer -p git push origin other2')"
+check $R block "doas -a passwd git push (-a takes a style)"     "$(payload_bash 'doas -a passwd git push origin other2')"
 check $R allow "flock <lock> -c 'git status'"                   "$(payload_bash "flock /tmp/op.lock -c 'git status'")"
+# flock creates its lock file: a write, as a `>>` redirect is (review round 1: it hid an op-reviews/ path)
+check $R block "flock .git/op-reviews/<sha> true (creates a record)" "$(payload_bash 'flock .git/op-reviews/0123abc true')"
+check $R block "flock -w 5 .git/op-reviews/<sha> -c true"       "$(payload_bash "flock -w 5 .git/op-reviews/0123abc -c 'true'")"
+check $R allow "flock <lock> true"                              "$(payload_bash 'flock /tmp/op.lock true')"
 # protect-data-dir, in the data-only repo and the backlog repo
 check $P block "data-only: xcrun -sdk macosx rm -rf data/snapshots" "$(payload_do 'xcrun -sdk macosx rm -rf data/snapshots')"
 check $P block "data-only: caffeinate -t 5 rm -rf data/snapshots" "$(payload_do 'caffeinate -t 5 rm -rf data/snapshots')"
@@ -2219,6 +2224,10 @@ check $P block "data-only: doas -u root rm -rf data/snapshots"  "$(payload_do 'd
 check $P block "data-only: flock --wait 5 <lock> rm -rf data/snapshots" "$(payload_do 'flock --wait 5 /tmp/op.lock rm -rf data/snapshots')"
 check $P block "data-only: flock <lock> -c 'rm -rf data/snapshots'" "$(payload_do "flock /tmp/op.lock -c 'rm -rf data/snapshots'")"
 check $P block "data-only: unbuffer rm -rf data/indexes"        "$(payload_do 'unbuffer rm -rf data/indexes')"
+check $P block "data-only: doas -a passwd rm -rf data/snapshots" "$(payload_do 'doas -a passwd rm -rf data/snapshots')"
+check $P block "data-only: flock data/snapshots/s1/x.lock true (creates it)" "$(payload_do 'flock data/snapshots/s1/x.lock true')"
+check $P block "flock backlog/tasks/x.lock true (creates it)"   "$(payload_bl 'flock backlog/tasks/x.lock true')"
+check $P allow "data-only: flock /tmp/op.lock true"             "$(payload_do 'flock /tmp/op.lock true')"
 check $P allow "data-only: flock <lock> -c 'ls data/snapshots'" "$(payload_do "flock /tmp/op.lock -c 'ls data/snapshots'")"
 check $P allow "data-only: caffeinate -t 5 ls data/snapshots"   "$(payload_do 'caffeinate -t 5 ls data/snapshots')"
 check $P block "xcrun git restore -s dev <task>"                "$(payload_bl "xcrun git restore -s dev $T1")"
