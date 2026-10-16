@@ -73,8 +73,8 @@ def _padding(n: int) -> bytes:
 
 @dataclass
 class Cut:
-    """How one stalled upload ended: seconds from its request's first byte (-1 if it never got to stall), and
-    the status line it got, if any."""
+    """How one stalled upload ended: seconds from its request's first byte (-1 if it never got to stall, or
+    nothing ended it within `WAIT`), and the status line it got, if any."""
 
     after_start_s: float
     status: str | None
@@ -87,7 +87,7 @@ def stall(port: int, cacert: str, target: str, declared: int, sent: int, uploads
         f"Content-Type: application/x-research-info-systems\r\nContent-Length: {declared}\r\n\r\n"
     ).encode()
     line = b"N1  - " + b"x" * 1017 + b"\n"
-    cuts = [Cut(-1.0, "never ran") for _ in range(uploads)]
+    cuts = [Cut(-1.0, "not finished") for _ in range(uploads)]
     ready = threading.Barrier(uploads + 1, timeout=WAIT)
 
     def one(i: int) -> None:
@@ -116,6 +116,9 @@ def stall(port: int, cacert: str, target: str, declared: int, sent: int, uploads
             try:
                 while data := s.recv(4096):
                     got += data
+            except TimeoutError:  # the proxy never ended it: not a cut
+                cuts[i] = Cut(-1.0, "timed out")
+                return
             except OSError:
                 pass
             status = got.split(b"\r\n", 1)[0].decode("latin-1") if got else None

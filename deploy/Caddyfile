@@ -18,7 +18,8 @@
 
 # With comparisons on, no HTTP/3: Caddy builds its HTTP/3 server with only the idle timeout (v2.11.4,
 # modules/caddyhttp/server.go), so read_body never applies there and an upload stalled over QUIC would hold its
-# buffer for as long as the client keeps the connection alive. HTTP/1.1 and HTTP/2 are cut at read_body
+# buffer for as long as the client keeps the connection alive. HTTP/1.1 is cut at read_body (measured; HTTP/2 by
+# the same server timeout, not measured).
 (protocols-off) {
 	protocols h1 h2 h3
 }
@@ -74,12 +75,19 @@
 		# a file must declare its length (411 otherwise). Past request_buffers Caddy streams the rest of a body
 		# to the API, so a chunked (or HTTP/2, unsized) file that went over 16 MiB, or stopped at it, and then
 		# stalled reached the API and held its slot until the API's own upload timeout. A declared length over
-		# the cap the API refuses from the header, before any slot; one within it is buffered here whole
+		# the cap is refused here (413) before any of it is read: forwarded, the API refused it from the header
+		# and reset the connection while the proxy was still sending, which the client saw as a 502 as often as
+		# a 413. A declared length within the cap is buffered here whole
 		@unsized {
 			method POST
 			not header Content-Length *
 		}
 		respond @unsized "Send the file with a Content-Length." 411
+		@oversized {
+			method POST
+			expression int('0' + string({http.request.header.Content-Length})) > 16777216
+		}
+		respond @oversized "The file is over 16 MiB (16,777,216 bytes), the most this instance compares." 413
 		request_body {
 			max_size 16MiB
 		}

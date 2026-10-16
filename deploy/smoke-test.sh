@@ -277,13 +277,15 @@ inner = [(h["handler"], h.get("max_size") or h.get("request_buffers") or h.get("
          for routes in compare for r in routes for h in r["handle"]]
 want_inner = [("request_body", 16777216, None),
               ("static_response", 411, [{"method": ["POST"], "not": [{"header": {"Content-Length": ["*"]}}]}]),
+              ("static_response", 413, [{"method": ["POST"], "expression": "int(\x270\x27 + string({http.request.header.Content-Length})) > 16777216"}]),
               ("reverse_proxy", 16777216, None)]
 print("proxy: protocols", srv.get("protocols"), "| body caps", caps, "| /api/* buffers", api, "| /api/v1/compare", inner)
 ok = api == [65536] and ((srv.get("protocols") == ["h1", "h2"] and inner == want_inner
       and caps == [([{"not": [{"path": ["/api/v1/compare"]}]}], 65536)]) if on else (
       srv.get("protocols") == ["h1", "h2", "h3"] and caps == [(None, 65536)] and not compare))
 sys.exit(0 if ok else 1)' "$compare" || fail "the proxy's adapted body caps or protocols are not what compare=$compare needs"
-# HTTP/3 is advertised (Alt-Svc) only with comparisons off: Caddy doesn't give its HTTP/3 server read_body
+# HTTP/3 is advertised (Alt-Svc) only with comparisons off: Caddy builds its HTTP/3 server with only the idle
+# timeout (deploy/Caddyfile)
 headers=$("${curl_tls[@]}" -D - -o /dev/null "$base/api/v1/healthz") || fail "GET /api/v1/healthz headers"
 h3=$(grep -ci '^alt-svc: h3' <<<"$headers" || true)
 echo "Alt-Svc h3 headers: $h3"
@@ -323,6 +325,7 @@ sys.exit(0 if on == [*base, "--compare"] else 1)' \
   stalls_pid=$!
   for _ in $(seq 1 120); do
     grep -q sent "$work/stalls.out" && break
+    kill -0 "$stalls_pid" 2>/dev/null || break # it gave up before they had all sent
     sleep 1
   done
   grep -q sent "$work/stalls.out" || fail "the stalled uploads never finished sending"
@@ -357,7 +360,7 @@ sys.exit(0 if abs(cut["cut_min_s"] - limit) <= 2 and abs(cut["cut_max_s"] - limi
   head -c 16777217 /dev/zero | tr '\0' x >"$work/over.ris"
   status=$(status_of -H 'content-type: application/x-research-info-systems' --data-binary "@$work/over.ris" \
     "$base/api/v1/compare?q=$query")
-  echo "16 MiB + 1 byte to /api/v1/compare -> $status (the API's, from the declared length)"
+  echo "16 MiB + 1 byte to /api/v1/compare -> $status (the proxy's, from the declared length)"
   [ "$status" = 413 ] || fail "a file one byte over 16 MiB answered $status"
   # past request_buffers the proxy streams the rest to the API, so a file must say how long it is
   status=$(status_of --http1.1 -H 'Transfer-Encoding: chunked' -H 'content-type: application/x-research-info-systems' \

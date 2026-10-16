@@ -518,7 +518,7 @@ too (M3a review round 3; Caddy v2's error logger adds the loggable request to ev
 trickles its body holds a proxy goroutine, not one of the API's `limit_concurrency` slots. That holds for a
 body that declares its length within the cap; an unsized (chunked) body that reaches 64 KiB has the rest
 streamed to the API (Caddy buffers only up to `request_buffers`; found in TASK-183, which closed it for
-`/api/v1/compare` with a 411; open for the other routes, a follow-up filed from TASK-183). A connection
+`/api/v1/compare` with a 411; open for the other routes, recorded in TASK-183's notes as a follow-up to file). A connection
 beyond `limit_concurrency` gets uvicorn's own plain 503, and uvicorn logs `Exceeded concurrency limit.`
 (WARNING, through the JSON handler) once per refusal, not once per episode: a burst of refusals is a burst
 of lines, so alert on their rate rather than on one. The proxy is also
@@ -542,9 +542,11 @@ page not on that machine (a non-loopback `Origin`), and `/meta` doesn't offer th
 overlay `deploy/compare.yml` (TASK-183): `op serve --compare`, and for the proxy `OP_COMPARE=on`, which imports
 the `compare-on` snippet: the 64KiB cap scoped to `@rest` (`not path /api/v1/compare`; a site-wide cap would
 wrap the path's handle and refuse the file first), and for `/api/v1/compare` alone a `request_body` and
-`request_buffers` of 16MiB (Caddy's `16MB` is 16,000,000 bytes, under the API's 16,777,216) and a 411 for a
+`request_buffers` of 16MiB (Caddy's `16MB` is 16,000,000 bytes, under the API's 16,777,216), a 411 for a
 `POST` with no `Content-Length` (past `request_buffers` Caddy streams the rest of a body, so an unsized file
-that went over the cap and stalled held the API's slot until its upload timeout); no HTTP/3 (`protocols h1
+that went over the cap and stalled held the API's slot until its upload timeout) and a 413 for one that
+declares more than 16 MiB, before any of it is read (forwarded, the API's refusal raced the proxy's sending
+and reached the client as a 502 as often as a 413); no HTTP/3 (`protocols h1
 h2`: Caddy v2.11.4 builds its HTTP/3 server with only the idle timeout, so `read_body` never applies there); a
 longer `read_body`
 (`OP_READ_BODY`, 60s there), which is the server's timeout for every request (Caddy has no per-path one); and
@@ -554,7 +556,7 @@ buffer doubles to 32 MiB to hold 16, plus the buffers it outgrew until Go collec
 comparison slot, and `read_body` cuts it; with no limit on how many arrive at once, the memory limit bounds
 the proxy, which past it is killed and restarted, dropping every connection it held, searches included, for a
 few seconds (24 uploads held at once reached the edge of 1 GiB, peaks 914 to 998 MiB, and 32 did not fit;
-Caddy as built limits neither connections nor uploads per client: open, a follow-up filed from TASK-183).
+Caddy as built limits neither connections nor uploads per client: open, recorded in TASK-183's notes as a follow-up to file).
 `deploy/smoke-test.sh --compare` checks all of this, and decision-035 makes passing it on the host a
 condition of any public instance enabling comparisons; it passed on Docker Desktop on 2026-10-16
 (`deploy/README.md` §Comparisons; the measurements are in `docs/results/2026-10-16-compare-proxy.md`).

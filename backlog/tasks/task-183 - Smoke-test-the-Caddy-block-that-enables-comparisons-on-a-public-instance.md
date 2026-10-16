@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-05 08:39'
-updated_date: '2026-10-16 20:06'
+updated_date: '2026-10-16 20:52'
 labels:
   - ops
   - security
@@ -37,4 +37,6 @@ Done (2026-10-16, fix/compare-proxy-block): comparisons are turned on by the ove
 Gate round 1 (2026-10-16): no Must. Fixed: HTTP/3 off with comparisons on (protocols-on snippet; Caddy's HTTP/3 server isn't given read_body); the smoke test now checks the proxy's adapted body caps and protocols (the 64 KiB 413 is the API's own, from the declared length), Alt-Svc only with comparisons off, caddy restarts 0, each stall timed from its request's start (60.02 s with read_body 60s), memory.peak with a sampled fallback; the probe can't hang (connect errors caught, barrier timeout, killed on failure) and has unit tests (backend/tests/deploy/test_compare_probe.py); decision-035 got an as-built note; measurements in docs/results/2026-10-16-compare-proxy.md. Rerun: smoke-test.sh PASS 97 s, --compare PASS 160 s (8 stalls held 412 MiB, peak 448 MiB of 1 GiB).
 
 Gate round 2 (2026-10-16): no Must; one Should (cite follow-up ids in spec 08) rejected, since worktree sessions create no ids: spec 08 marks both gaps open and filed from TASK-183. Nits fixed: the smoke test also checks the /api/* request_buffers and fetches headers before counting Alt-Svc, the probe has socket timeouts and fails rather than print sent on a broken barrier, the HTTP/3 claim cites Caddy v2.11.4 modules/caddyhttp/server.go (only IdleTimeout reaches http3.Server), 24 uploads described as the edge of 1 GiB. Rerun: smoke-test.sh PASS 128 s, --compare PASS 161 s (8 stalls held 460 MiB, peak 496 MiB; cut 60.0 s from each request's start).
+
+Gate round 3 (2026-10-16): no Must; Shoulds fixed (README '24 fitted' made consistent with 'the edge of 1 GiB', spec 08 no longer says the follow-ups are filed, results peak 914). Nits fixed (probe read timeouts reported as not cut, the wait loop notices a dead probe, HTTP/2 cut marked unmeasured). Found on the rerun: a declared length one byte over 16 MiB reached the client as a 502 once in five runs (the API's header refusal reset the connection while Caddy still sent the file), so compare-on now answers 413 itself from the declared length (expression matcher; a missing header can't error). smoke-test.sh PASS 100 s, --compare PASS 186 s (8 stalls held 472 MiB, peak 508 MiB; 413 from the proxy).
 <!-- SECTION:NOTES:END -->
