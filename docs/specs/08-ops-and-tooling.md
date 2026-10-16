@@ -313,8 +313,8 @@ outside call goes through `git`, `curl`, `npm` or `gh`, so the case table
 `.claude/scripts/mutants/dependabot.json`. The run ends with a summary for its log: locally merged, left open (with
 the reason), not reviewed, and what the owner should look at; in the cloud ready for a local run (with the fixes it
 must make), hard stops (with their evidence), not reviewed, and what the owner should look at (procedure §11). The
-gates stay on for Dependabot PRs; exempting
-`dependabot[bot]` from `learnings` and `review-attested` was considered and rejected (decision-048). Decision-048
+gates stay on for Dependabot PRs; exempting `dependabot[bot]` from `learnings` and `review-attested` was considered
+and rejected (decision-048). Decision-048
 set the routine's credential as a fine-grained token: this repository only, `contents`, `pull requests`, `issues`
 and `actions` read and write, nothing else (no `administration`, no `workflows`). As built, the credential depends
 on where the command runs: locally it is the maintainer's own `gh` login; in the cloud it is the Claude GitHub
@@ -352,8 +352,7 @@ queries) are outside `repos/` too, and the proxy refuses them: the 2026-10-16 ru
 are bound to their configured repositories" (TASK-247). So a cloud run reports the advisories as not checked (step 0's
 uv query under "for the owner"; a per-package query as "checked only locally" on that PR's line, which doesn't keep
 it from "ready for a local run"), and the local run that merges a PR makes the queries itself. Because that
-credential has
-`workflows` and repository-hooks write, which can't be removed, **a cloud run executes none of the PR's dependency
+credential has `workflows` and repository-hooks write, which can't be removed, **a cloud run executes none of the PR's dependency
 code** (the owner's decision, 2026-10-13, decision-048): no `uv sync`, `uv run` or `npm ci` of the PR's locks, no
 `make lint`, `make test` or `make e2e`, no smoke test, no `npm audit signatures` (it needs the installed tree), and no
 reviewer running any of them. It keeps what runs none of it: `dev`'s checkers (standard-library Python, `git`, `curl`,
@@ -402,8 +401,8 @@ labels, the body `PATCH`, step 9's close/reopen and run cancel/rerun) are kept o
 not. These guards stop an honest run's mistakes, not a steered one: the session still holds the App's credential, with
 pull-request and checks write, so it could write an attestation marker or a check run under a required check's name
 (`dev`'s required checks aren't tied to an app, `app_id: null`); only the installation's scope (this repository)
-bounds a steered run. A local run reads back every comment and PR body it writes and removes anything added (cheap, though a write from the owner's machine hasn't gained a footer). The procedure
-uses REST only (`gh api repos/<repo>/...`) and checks auth with a repository-scoped call (`gh api
+bounds a steered run. A local run reads back every comment and PR body it writes and removes anything added
+(cheap, though a write from the owner's machine hasn't gained a footer). The procedure uses REST only (`gh api repos/<repo>/...`) and checks auth with a repository-scoped call (`gh api
 repos/uw-share-lab/openproceedings`; the proxy refuses paths outside `repos/`, so `gh api user` may fail there). `prs.py preflight`
 tells the environment by asking GraphQL for the viewer: the session's 403 message is **cloud**, an answer is
 **local** (a maintainer's clone with a real `gh` login), anything else stops the run; in the cloud it also requires

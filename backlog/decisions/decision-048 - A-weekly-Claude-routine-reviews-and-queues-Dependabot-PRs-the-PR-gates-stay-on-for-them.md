@@ -241,7 +241,8 @@ it relies on CI's results for the PR head, which GitHub Actions runs without the
 `playwright` and `bench` (and `web-image` when the PR touches its paths) to be `success`, waiting up to an hour
 while one runs (9 minutes per call, which exits 4 to be called again on the same head). A check run written by another app doesn't count, since the App has `checks` write. A red or
 missing check is a hard stop left for the owner, never rerun in the cloud. The routine reads CI before writing the
-PR body and again just before `prs.py queue` (superseded 2026-10-16: the cloud reads CI once per PR and reports; see
+PR body and again just before `prs.py queue` (superseded 2026-10-16: the cloud reads CI once per PR and reports;
+see
 the last addendum). Locally (a maintainer's machine) nothing changes: the routine runs
 `make test` and the rest as before.
 
@@ -263,8 +264,8 @@ What follows from it:
   unguarded copies, so in the cloud `core.hooksPath` points at `dev`'s hooks extracted into the run directory
   (`setup-dev.sh` leaves it alone while the marker is there) and
   `prs.py check` stops a head whose `Makefile`, pre-push hook or `setup-dev.sh` lacks the guard (the routine
-  comments `@dependabot rebase`; superseded 2026-10-16: the cloud summary lists it as rebase needed). If `git rev-parse` fails, the Makefile's guarded targets and the pre-push hook
-  refuse. Commands typed directly (`uv run`, `npm ci`, `npx`, the smoke test) have no guard: the
+  comments `@dependabot rebase`; superseded 2026-10-16: the cloud summary lists it as rebase needed). If `git
+  rev-parse` fails, the Makefile's guarded targets and the pre-push hook refuse. Commands typed directly (`uv run`, `npm ci`, `npx`, the smoke test) have no guard: the
   procedure, and a verbatim instruction in every cloud reviewer prompt, keep them out.
 - **What it doesn't close.** The session still holds the App's credential behind the proxy, and `dev`'s own
   environment still runs in it (`make tooling`'s three pytest tables, the autofix hook's ruff, prettier and
@@ -360,9 +361,8 @@ for the owner. It showed two things:
   available: sessions are bound to their configured repositories", …}, the session binding's refusal of a path
   outside `repos/`, as step 0's check expects.
 
-The cloud's other unexercised paths (the CCR auto-merge `PUT`/`DELETE` and a push, plus the job-log download, a read
-that is local only now) were never exercised
-from a cloud session (TASK-243 AC2).
+The cloud's other write paths (the CCR auto-merge `PUT`/`DELETE` and a push), and the job-log download (a read, local
+only now), were never exercised from a cloud session (TASK-243 AC2).
 
 **Decision (owner, 2026-10-16): the weekly cloud routine is notify-only.** In cloud mode `/dependabot-review` reviews
 each PR as far as a cloud session can (the session binding, `prs.py check`, the supply-chain checkers that answer
