@@ -21,10 +21,12 @@
 	}
 	servers {
 		timeouts {
-			read_header 5s # a client's request line and headers (default: no timeout)
+			read_header 5s # a client's request line and headers (default: 1m)
 			read_body 10s # its body (default: no timeout)
 			idle 2m # a keep-alive connection between requests
-			# no `write` timeout: an export of the whole matched set streams for as long as it takes
+			# no `write` timeout: an export of the whole matched set streams for as long as it takes; Caddy's
+			# stall-only `write_idle` (default 1m since 2.11.6) still cuts a client that stops reading for a minute
+			# (`read_body_idle`, also 1m, never fires: `read_body` above caps it)
 		}
 		max_header_size 64KB # the API's own request-head limit (a 2,000-code-point q fits)
 	}

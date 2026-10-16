@@ -444,10 +444,10 @@ uvicorn (h11) has no request-header or slow-body timeout of its own, so the prox
 client that sends its request slowly; the app caps a body at 64 KiB (413 `API_BODY_TOO_LARGE`), uvicorn's
 `limit_concurrency` (`ApiConfig.limit_concurrency`, default 256) bounds the connections one process holds,
 and `timeout_keep_alive` (`keep_alive_seconds`, default 5) closes an idle one. The Caddyfile **must** set
-(Caddy v2 directive names, checked against the Caddy docs 2026-09-27; `deploy/Caddyfile` sets them, with the site
-name `{$OP_DOMAIN:localhost}`, a `Strict-Transport-Security` header from `OP_HSTS` on every response, default
-`max-age=63072000` as the web app's own, with `includeSubDomains` left off until TASK-064 decides the domain, and
-`skip_install_trust`):
+(Caddy v2 directive names, checked against the Caddy docs 2026-09-27; defaults re-checked for 2.11.7 on 2026-10-16;
+`deploy/Caddyfile` sets them, with the site name `{$OP_DOMAIN:localhost}`, a `Strict-Transport-Security` header
+from `OP_HSTS` on every response, default `max-age=63072000` as the web app's own, with `includeSubDomains` left
+off until TASK-064 decides the domain, and `skip_install_trust`):
 
 ```caddy
 {
@@ -459,10 +459,12 @@ name `{$OP_DOMAIN:localhost}`, a `Strict-Transport-Security` header from `OP_HST
 	}
 	servers {
 		timeouts {
-			read_header 5s   # a client's request line and headers (default: no timeout)
+			read_header 5s   # a client's request line and headers (default: 1m)
 			read_body   10s  # its body (default: no timeout)
 			idle        2m   # a keep-alive connection between requests
-			# no `write` timeout: an export of the whole matched set streams for as long as it takes
+			# no `write` timeout: an export of the whole matched set streams for as long as it takes; Caddy's
+			# stall-only `write_idle` (default 1m since 2.11.6) still cuts a client that stops reading for a minute
+			# (`read_body_idle`, also 1m, never fires: `read_body` above caps it)
 		}
 		max_header_size 64KB  # the API's own request-head limit (a 2,000-code-point q fits)
 	}
