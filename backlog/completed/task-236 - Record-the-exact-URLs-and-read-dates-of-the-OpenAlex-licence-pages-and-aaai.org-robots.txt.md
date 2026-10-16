@@ -3,10 +3,10 @@ id: TASK-236
 title: >-
   Record the exact URLs and read dates of the OpenAlex licence pages and
   aaai.org/robots.txt
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-11 05:08'
-updated_date: '2026-10-16 16:26'
+updated_date: '2026-10-16 17:04'
 labels:
   - docs
   - new-venues
@@ -33,3 +33,9 @@ The research note cites OpenAlex's Pricing page without its exact URL and aaai.o
 
 2026-10-16 (owner via lead): the ToS/CC0 conflict is folded into TASK-135 (now a launch gate); OpenAlex stays the decision-049 fallback until it is answered. README and spec 01 point to TASK-135; README says the copyright consultation is a launch gate since 2026-10-16.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The research note records the full URLs and read dates (2026-10-16) of OpenAlex's Pricing page, the work-attributes page, the terms page and terms-of-service PDF (sha256, revised 2026-10-02), and aaai.org/robots.txt. It quotes only short phrases. The ToS conflicts with the CC0 statement; that question is TASK-135's (owner), and OpenAlex stays the fallback until it is answered.
+<!-- SECTION:FINAL_SUMMARY:END -->

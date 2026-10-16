@@ -3,10 +3,10 @@ id: TASK-234
 title: >-
   Re-check the AAAI 2021 gate row: where its 40 AI for Social Impact papers were
   counted
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-11 05:08'
-updated_date: '2026-10-16 16:26'
+updated_date: '2026-10-16 17:04'
 labels:
   - coverage
   - new-venues
@@ -36,3 +36,9 @@ AC2 is conditional and does not apply: the list was found (the 40 are the cited 
 
 2026-10-16 (owner, ~11:50 EDT): count the pre-conference copy archived 2020-12-30, since official counts come from a list made before the proceedings. The row is now 1,697 (1,657 main technical + 40 AI for Social Impact; delta -3, 0.18%, gate passes) and names the later copy (1,696). Coverage report regenerated: docs/results/2026-10-16-coverage.md.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The 40 AI for Social Impact papers are the AAAI-21 list PDF's own last section (pp. 121-124). By the owner's choice (2026-10-16) the row counts the copy archived 2020-12-30, before the conference: 1,697 (1,657 + 40; delta -3, gate passes). It names the later copy (1,696) and cites both captures with their digests. The independence rule gains that third ground. Coverage report regenerated (docs/results/2026-10-16-coverage.md).
+<!-- SECTION:FINAL_SUMMARY:END -->
