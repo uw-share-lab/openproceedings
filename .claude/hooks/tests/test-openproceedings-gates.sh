@@ -572,6 +572,10 @@ GH_VIEW="GitHub GraphQL is not available from Claude Code sessions" attest_case 
 attest_case err no  "--pr needs --repo"               "--pr without --repo is refused"          open "$HEADSHA" --attest --pr 5
 attest_case err no  "only apply with --attest"        "--pr without --attest is refused"        open "$HEADSHA" --pr 5 --repo o/r
 attest_case err no  "--repo only applies with --pr"   "--repo without --pr is refused"          open "$HEADSHA" --attest --repo o/r
+MARK="$(cd "$REPO" && git rev-parse --path-format=absolute --git-common-dir)/op-no-dep-code"
+: > "$MARK"   # prs.py preflight's cloud marker: notify-only (decision-048, 2026-10-16)
+attest_case err no  "op-no-dep-code is there: a cloud /dependabot-review run is notify-only" "--attest in a cloud clone is refused" open "$HEADSHA" --attest --pr 5 --repo o/r
+rm -f "$MARK"
 
 echo "== protect-data-dir.sh"
 P=protect-data-dir.sh

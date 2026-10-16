@@ -3836,6 +3836,12 @@
   "new": "                if True:\n"
  },
  {
+  "label": "record: --attest in a cloud clone (the marker) goes ahead",
+  "file": ".claude/scripts/record-review.py",
+  "old": "    if a.attest and (common / \"op-no-dep-code\").exists():",
+  "new": "    if False:"
+ },
+ {
   "label": "modes: 100644 accepted",
   "file": ".claude/scripts/check_file_modes.py",
   "old": "if modes[p] != \"100755\":",
@@ -4112,7 +4118,7 @@
   "new": "@d=$$(git rev-parse --path-format=absolute --git-dir 2>/dev/null)"
  },
  {
-  "label": "no-dep-code: pre-push runs make lint with the marker",
+  "label": "no-dep-code: pre-push lets a push through with the marker",
   "file": ".githooks/pre-push",
   "old": "[ -e \"$common/op-no-dep-code\" ]; then",
   "new": "[ -e \"$common/op-no-dep-code-never\" ]; then"
@@ -4120,8 +4126,14 @@
  {
   "label": "no-dep-code: pre-push skips make lint without the marker",
   "file": ".githooks/pre-push",
-  "old": "  echo \"pre-push: make lint\" && \"${nocred[@]}\" make --no-print-directory lint\n",
-  "new": "  echo \"pre-push: make lint\"\n"
+  "old": "echo \"pre-push: make lint\" && \"${nocred[@]}\" make --no-print-directory lint\n",
+  "new": "echo \"pre-push: make lint\"\n"
+ },
+ {
+  "label": "no-dep-code: pre-push refuses with the marker but exits 0",
+  "file": ".githooks/pre-push",
+  "old": "  exit 1\nfi\necho \"pre-push: make lint\"",
+  "new": "  exit 0\nfi\necho \"pre-push: make lint\""
  },
  {
   "label": "no-dep-code: setup-dev.sh syncs with the marker",

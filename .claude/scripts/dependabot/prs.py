@@ -11,15 +11,14 @@
 
 Every GitHub call is REST (`gh api repos/...`), because a Claude Code cloud session refuses GraphQL with HTTP 403
 ("GitHub GraphQL is not available from Claude Code sessions; …") and so every `gh pr` command that uses it
-(`gh pr list`, `gh pr view`, `gh pr merge`, `gh pr checks`). The one call that differs by environment is
-enabling auto-merge, which `queue` makes after detecting where it runs (`detect_mode`):
+(`gh pr list`, `gh pr view`, `gh pr merge`, `gh pr checks`). Where it runs is detected (`detect_mode`):
 
 - **cloud**: a Claude Code cloud session. GraphQL answers 403 with the message above. Auth is a network secret:
   GH_TOKEN and GITHUB_TOKEN hold placeholders and an egress proxy adds the real credential to requests for
-  api.github.com, so no process in the session ever holds the token. Auto-merge goes through the session's CCR
-  route, `PUT repos/<repo>/pulls/<n>/ccr/auto_merge` (and `DELETE` to turn it off).
+  api.github.com, so no process in the session ever holds the token. A cloud run is **notify-only** (decision-048,
+  2026-10-16): it reviews and reports, and makes no GitHub write, so `queue` refuses there before any call.
 - **local**: a maintainer's clone with a real `gh` login. GraphQL answers; auto-merge is `gh pr merge <n> --auto
-  --match-head-commit <sha>`.
+  --match-head-commit <sha>`. Every merge is a local run's.
 - anything else (GraphQL failing another way) is an error: the run stops rather than guess.
 
 `preflight` (step 0) checks that `gh api repos/uw-share-lab/openproceedings` answers (a repository-scoped call: the
@@ -37,9 +36,9 @@ must have no stored login (one would be a file dependency code could read, which
 token in GH_TOKEN or GITHUB_TOKEN is reported (step 5 strips those). Locally a stored login is allowed: it is the
 maintainer's own machine, where `make test` runs with it every day. In the cloud it also writes the clone's
 no-dependency-code marker, `op-no-dep-code` in git's common directory: a cloud run executes none of a PR's
-dependency code (decision-048, 2026-10-13), and while the marker is there `make sync`, `fmt`, `lint`, `test`, `e2e`
-and `openapi` refuse, `scripts/setup-dev.sh` skips its `uv sync`, and `.githooks/pre-push` skips its `make lint`.
-Locally it removes a marker it finds. A checker: ok / PROBLEM; exit 0, 1 or 2.
+dependency code (decision-048, 2026-10-13) and makes no GitHub write (2026-10-16), and while the marker is there
+`make sync`, `fmt`, `lint`, `test`, `e2e` and `openapi` refuse, `scripts/setup-dev.sh` skips its `uv sync`, and
+`.githooks/pre-push` refuses every push. Locally it removes a marker it finds. A checker: ok / PROBLEM; exit 0, 1 or 2.
 
 `uv-release` (step 0) compares the api image's uv (`deploy/api.Dockerfile` on origin/dev) with uv's latest release
 (`gh api repos/astral-sh/uv/releases/latest`). It prints `ok` lines, and an `OWNER` line for the summary's "for the
@@ -76,20 +75,19 @@ checker allows no change beyond versions and pins. A title naming `tantivy` (han
 spec 08 §Release), a head branch name that isn't plain, or a body with Dependabot's "Cooldown could not be
 applied" notice (it found no publication date, so nothing held the release back 7 days), is a PROBLEM too.
 
-`queue` turns auto-merge on (on `dev` that puts the PR in the merge queue once its checks pass) only for an open
-Dependabot PR into `dev` whose head is still `<sha>` and whose branch name is plain, and never for a github-actions
-PR (the routine's token has no `workflows` permission: the owner queues those). A PR GitHub already shows set to
-merge is left as it is (a re-queue in step 9). Otherwise it makes the call, reads the PR again, and requires GitHub
-to show it set to merge (auto-merge on, or a merge-queue entry in the timeline newer than the request; read once
-more after OP_DEPENDABOT_SETTLE seconds, default 5). If the head moved, the call failed although GitHub shows the
-PR set to merge, or GitHub accepted the call but shows nothing, it turns auto-merge off again, reads the PR back
-and prints a PROBLEM; a PR that closed meanwhile is left alone. If the call or a read after it fails outright (a
-timeout), it undoes it the same way and exits 2, saying whether that worked. In the cloud there is no
-`--match-head-commit`: a push between the read after the PUT and the queue's build is the residual race, and the
-queue's `review-attested` check (the body must attest the head the queue merges) stops it against anyone who
-can't also rewrite the body (decision-048). Exit 0 queued (already set, or merged at `<sha>`); 1 not queued (leave
-the PR open for the owner); 2 a call failed, and the message says whether auto-merge may still be on or the PR
-may still be in the queue.
+`queue` runs locally only: in a cloud session it prints a PROBLEM (notify-only) and exits 1 before reading or
+writing anything else. Locally it turns auto-merge on (on `dev` that puts the PR in the merge queue once its checks
+pass) only for an open Dependabot PR into `dev` whose head is still `<sha>` and whose branch name is plain, and never
+for a github-actions PR (decision-048 keeps `workflows` out of the routine's credential: the owner queues those). A
+PR GitHub already shows set to merge is left as it is (a re-queue in step 9). Otherwise it runs `gh pr merge <n>
+--auto --match-head-commit <sha>`, reads the PR again, and requires GitHub to show it set to merge (auto-merge on, or
+a merge-queue entry in the timeline newer than the request; read once more after OP_DEPENDABOT_SETTLE seconds,
+default 5). If the head moved, the call failed although GitHub shows the PR set to merge, or GitHub accepted the call
+but shows nothing, it turns auto-merge off again (`--disable-auto`), reads the PR back and prints a PROBLEM; a PR that
+closed meanwhile is left alone. If the call or a read after it fails outright (a timeout), it undoes it the same way
+and exits 2, saying whether that worked. Exit 0 queued (already set, or merged at `<sha>`); 1 not queued (leave the
+PR open for the owner, or a cloud session); 2 a call failed, and the message says whether auto-merge may still be on
+or the PR may still be in the queue.
 
 `watch` polls REST every `--interval` seconds and prints a line whenever a PR's state, auto-merge, queue
 presence or check rollup changes. A PR is in the queue while its timeline's latest merge-queue event is
@@ -191,6 +189,11 @@ OTHER_REPO = "astral-sh/uv"
 # the api image's uv stage, whose minors come by hand (step 0; `.github/dependabot.yml` ignores them while uv is 0.x)
 UV_DOCKERFILE = "deploy/api.Dockerfile"
 UV_PIN = re.compile(r"ghcr\.io/astral-sh/uv:(\d+(?:\.\d+)+)@sha256:[0-9a-f]{64}")
+# why a cloud session doesn't queue (the owner's decision, 2026-10-16): it reviews and reports, nothing more
+NOTIFY_ONLY = (
+    "a cloud /dependabot-review run is notify-only and makes no GitHub write (decision-048, 2026-10-16): "
+    "queue it from a local /dependabot-review run"
+)
 
 
 def ecosystem(head: str) -> str:
@@ -295,7 +298,8 @@ def preflight() -> None:
         )
         rep.ok(
             f"no dependency code: {marker} written; make sync, fmt, lint, test, e2e and openapi refuse here, "
-            "setup-dev.sh skips uv sync and the pre-push hook skips make lint (CI's checks stand in: prs.py ci)"
+            "setup-dev.sh skips uv sync and the pre-push hook refuses every push (notify-only; CI's checks stand "
+            "in for the tests: prs.py ci)"
         )
         session_binding(rep)
     else:
@@ -516,12 +520,9 @@ def ci_pr(number: int, head: str, interval: float, timeout_min: float) -> None:
     rep.finish()
 
 
-def auto_merge(mode: str, number: int, on: bool, sha: str) -> tuple[bool, str]:
-    """Turn auto-merge on (at `sha`) or off. (succeeded, what gh said)."""
-    if mode == "cloud":
-        path = f"repos/{REPO}/pulls/{number}/ccr/auto_merge"
-        cmd = ["gh", "api", "-X", "PUT" if on else "DELETE", path]
-    elif on:
+def auto_merge(number: int, on: bool, sha: str) -> tuple[bool, str]:
+    """Turn auto-merge on (at `sha`) or off, locally. (succeeded, what gh said)."""
+    if on:
         cmd = ["gh", "pr", "merge", str(number), "--repo", REPO, "--auto", "--match-head-commit", sha]
     else:
         cmd = ["gh", "pr", "merge", str(number), "--repo", REPO, "--disable-auto"]
@@ -543,6 +544,10 @@ def settle_seconds() -> float:
 
 def queue_pr(number: int, head: str) -> None:
     rep = Report(f"queue #{number}")
+    mode = detect_mode()
+    if mode != "local":  # notify-only (decision-048, 2026-10-16): a cloud run makes no GitHub write
+        rep.problem(f"{mode} session: {NOTIFY_ONLY}")
+        rep.finish()
     settle = settle_seconds()
     sha = run(["git", "rev-parse", "--verify", f"{head}^{{commit}}"]).stdout.strip()
     pr = get_pr(number)
@@ -552,15 +557,13 @@ def queue_pr(number: int, head: str) -> None:
     if rep.problems:
         rep.finish()
     if taken(number, pr):
-        # a re-queue (step 9) of a PR that is still set to merge: a second PUT could fail, and its undo would
-        # take a reviewed PR out of the queue
+        # a re-queue (step 9) of a PR that is still set to merge: a second request could fail, and its undo
+        # would take a reviewed PR out of the queue
         rep.ok(f"#{number} is already set to merge at {sha[:12]}: nothing to do")
         rep.finish()
-    mode = detect_mode()
-    rep.ok(f"mode: {mode}")
     since = now() - dt.timedelta(minutes=2)  # a queue event older than this predates the request (clock skew)
     try:
-        enabled, said = auto_merge(mode, number, True, sha)
+        enabled, said = auto_merge(number, True, sha)
         after = get_pr(number)
         visible = taken(number, after, since)
         if not visible and not after.get("merged"):  # a refused call can take effect late too
@@ -568,9 +571,9 @@ def queue_pr(number: int, head: str) -> None:
             after = get_pr(number)
             visible = taken(number, after, since)
         state, after_sha, merged = after["state"], after["head"]["sha"], bool(after.get("merged"))
-    except Exception as e:  # a timeout, an odd exit, a failed or odd read: the PUT may have taken effect
+    except Exception as e:  # a timeout, an odd exit, a failed or odd read: the request may have taken effect
         failure = e if isinstance(e, ToolError) else f"{type(e).__name__}: {e}"
-        why = undo(mode, number, sha, since, settle)
+        why = undo(number, sha, since, settle)
         if why is None:
             raise ToolError(
                 f"queueing #{number} failed partway ({failure}); auto-merge turned off again"
@@ -595,7 +598,7 @@ def queue_pr(number: int, head: str) -> None:
     if rep.problems:
         # a closed PR can't merge, so there is nothing to undo; otherwise undo whatever may be on
         if state == "open" and (moved or enabled or visible):
-            why = undo(mode, number, sha, since, settle)
+            why = undo(number, sha, since, settle)
             if why is not None:
                 raise ToolError(
                     f"auto-merge may still be on for #{number}, or it may still be in the merge queue ({why}): "
@@ -603,15 +606,15 @@ def queue_pr(number: int, head: str) -> None:
                 )
             rep.ok("auto-merge turned off again")
         rep.finish()
-    rep.ok(f"auto-merge on at {sha[:12]} ({mode}); the queue takes it once its checks pass")
+    rep.ok(f"auto-merge on at {sha[:12]} (local); the queue takes it once its checks pass")
     rep.finish()
 
 
-def undo(mode: str, number: int, sha: str, since: dt.datetime, settle: float) -> str | None:
+def undo(number: int, sha: str, since: dt.datetime, settle: float) -> str | None:
     """Turn auto-merge off, then read the PR back: None when GitHub no longer shows it set to merge, else why
     not (turning auto-merge off doesn't take an entry out of the merge queue)."""
     try:
-        off, why = auto_merge(mode, number, False, sha)
+        off, why = auto_merge(number, False, sha)
         if not off:
             return why
         time.sleep(settle)  # let GitHub catch up before reading it back

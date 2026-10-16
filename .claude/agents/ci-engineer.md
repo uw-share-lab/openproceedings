@@ -81,13 +81,15 @@ tempted to bypass it.
   change to a check changes the script, its rows in `.claude/scripts/tests/dependabot_cases.py` and its
   mutants in `.claude/scripts/mutants/dependabot.json` together. The routine is a Claude Code cloud session,
   which refuses GitHub GraphQL (so every `gh pr` command): the procedure and scripts call GitHub through REST
-  only, and queue through the session's CCR auto-merge route (TASK-213, decision-048's addendum). A cloud run
-  executes none of the PR's dependency code (decision-048, 2026-10-13): it reads CI's results for the head with
-  `prs.py ci` instead of running `make test`, and `prs.py preflight`'s `op-no-dep-code` marker makes the
-  Makefile's dependency targets refuse (`dep-code-allowed`), `setup-dev.sh` skip `uv sync` and the pre-push hook
-  skip `make lint`; a new target that installs or runs dependencies takes `dep-code-allowed` as a prerequisite.
+  only (TASK-213, decision-048's addendum). A cloud run is notify-only (decision-048, 2026-10-16): it reviews and
+  reports through its run summary and makes no GitHub write; merging is a local run's (`prs.py queue` runs `gh pr
+  merge --auto --match-head-commit` and refuses in a cloud session). A cloud run also executes none of the PR's
+  dependency code (2026-10-13): it reads CI's results for the head with `prs.py ci` instead of running `make
+  test`, and `prs.py preflight`'s `op-no-dep-code` marker makes the Makefile's dependency targets refuse
+  (`dep-code-allowed`), `setup-dev.sh` skip `uv sync`, the pre-push hook refuse every push and `record-review.py
+  --attest` refuse; a new target that installs or runs dependencies takes `dep-code-allowed` as a prerequisite.
   The session's proxy refuses the paths outside `repos/` and the other repositories probed so far (with its own
-  403s; the advisory calls are untested, TASK-247), so a cloud check must be one it can answer: `prs.py preflight`
+  403s; the advisory calls too, TASK-247), so a cloud check must be one it can answer: `prs.py preflight`
   checks those refusals in the cloud and the App installation locally, and Sigstore and `actions_pins.py`'s tag
   lookups can't run there (decision-048's TASK-243 AC3/AC6 addendum). Its `uv` entry
   ignores `tantivy`, whose upgrade must bump `SCHEMA_VERSION` by hand (spec 08 §Release), and every image a

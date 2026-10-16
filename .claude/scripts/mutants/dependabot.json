@@ -1098,16 +1098,22 @@
     "new": "\"--auto\"]"
   },
   {
+    "label": "dependabot: prs: a cloud session queues (notify-only not enforced)",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if mode != \"local\":  # notify-only",
+    "new": "    if False:  # notify-only"
+  },
+  {
     "label": "dependabot: prs: a failed PUT ignored",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "    if not enabled:\n",
     "new": "    if False:\n"
   },
   {
-    "label": "dependabot: prs: turning off PUTs again",
+    "label": "dependabot: prs: turning auto-merge off turns it on",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "\"PUT\" if on else \"DELETE\"",
-    "new": "\"PUT\""
+    "old": "REPO, \"--disable-auto\"]",
+    "new": "REPO, \"--auto\"]"
   },
   {
     "label": "dependabot: prs: a queue branch not read as queued",
@@ -1176,9 +1182,9 @@
     "new": "    return in_queue(number, since)\n"
   },
   {
-    "label": "dependabot: prs: a failed call after the PUT not undone",
+    "label": "dependabot: prs: a failed call after the request not undone",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        why = undo(mode, number, sha, since, settle)\n        if why is None:\n            raise ToolError(\n                f\"queueing",
+    "old": "        why = undo(number, sha, since, settle)\n        if why is None:\n            raise ToolError(\n                f\"queueing",
     "new": "        why = None\n        if why is None:\n            raise ToolError(\n                f\"queueing"
   },
   {
@@ -1254,9 +1260,9 @@
     "new": "    has_stored = stored.returncode == 0 and bool(stored.stdout.strip())\n"
   },
   {
-    "label": "dependabot: prs: only a ToolError after the PUT undone",
+    "label": "dependabot: prs: only a ToolError after the request undone",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "    except Exception as e:  # a timeout, an odd exit, a failed or odd read: the PUT may have taken effect\n",
+    "old": "    except Exception as e:  # a timeout, an odd exit, a failed or odd read: the request may have taken effect\n",
     "new": "    except ToolError as e:\n"
   },
   {

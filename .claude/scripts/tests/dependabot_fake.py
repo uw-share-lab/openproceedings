@@ -7,7 +7,8 @@ Answers from the JSON fixtures in $DEPBOT_FIX (`curl.json`, `npm.json`, `gh.json
 `$DEPBOT_FIX/calls.log`, so no case reaches a live service. A request with no fixture fails the way the real
 tool would (HTTP 404, `npm error 404`, a non-zero `gh`). With `"cloud": true` in `gh.json` the fake `gh` is a
 Claude Code cloud session (TASK-213): every GraphQL call, so every `gh pr` command, fails with the session's
-HTTP 403 body, and the `/ccr/` routes answer (outside a session they are a 404, as on api.github.com). Its proxy
+HTTP 403 body, and the `/ccr/` routes answer (outside a session they are a 404, as on api.github.com; no script
+calls them since the cloud became notify-only, decision-048's 2026-10-16 addendum). Its proxy
 also confines the session to this repository, as the 2026-10-13 probe found (TASK-243 AC6): a path outside
 `repos/...` answers its HTTP 403 "sessions are bound to their configured repositories", another repository its HTTP
 403 "not enabled for this session" (unless the row gives that exact key a fixture), and `gh attestation verify`
@@ -304,10 +305,20 @@ def gh(args: list[str]) -> int:
         if fx.get("cloud"):
             return graphql_blocked()
         if args[1:2] == ["merge"]:
-            code = int(fx.get("pr merge", 1))
-            if code:
+            # "pr merge --auto" / "pr merge --disable-auto" answer that call, else "pr merge" answers both: an exit
+            # code (non-zero: refused), {"__exit": n, "message": "..."} (refused saying that), or {"__conn": true}
+            # (the connection failed, as gh says it: exit 1)
+            which = "--auto" if "--auto" in args else "--disable-auto" if "--disable-auto" in args else ""
+            ans = answer(fx, f"pr merge {which}") if f"pr merge {which}" in fx else fx.get("pr merge", 1)
+            if isinstance(ans, dict) and "__conn" in ans:
+                print("error connecting to api.github.com", file=sys.stderr)
+                return 1
+            if isinstance(ans, dict):
+                print(ans.get("message", "fake gh: merge refused"), file=sys.stderr)
+                return int(ans["__exit"])
+            if int(ans):
                 print("fake gh: merge refused", file=sys.stderr)
-            return code
+            return int(ans)
     print(f"fake gh: unexpected call {args}", file=sys.stderr)
     return 2
 

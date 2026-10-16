@@ -20,7 +20,9 @@ Refuses to record unless:
 --attest also writes `<!-- op-review: <sha> APPROVE -->` into the open PR's body, which CI's
 `review-attested` check compares against the PR head sha. It finds the branch's PR with `gh pr view`, which uses
 GraphQL; `--pr <n> --repo <owner>/<name>` reads PR <n> over REST instead (a Claude Code cloud session refuses
-GraphQL; TASK-213) and refuses a PR that isn't open or whose head isn't HEAD. A `gh pr view` failure other than
+GraphQL; TASK-213) and refuses a PR that isn't open or whose head isn't HEAD. --attest is refused, before
+anything is written, in a clone holding prs.py preflight's cloud marker (`op-no-dep-code` in git's common directory):
+a cloud /dependabot-review run is notify-only (decision-048, 2026-10-16). A `gh pr view` failure other than
 "no pull requests found" is an error, never a silent skip. The record is written before any of that, so a refused
 attestation still leaves the record (which is about the commit, not the PR); fix the cause and run it again.
 """
@@ -138,6 +140,13 @@ def main() -> None:
         head = git("rev-parse", "HEAD")
     except subprocess.CalledProcessError:
         fail("not inside a git repository with at least one commit")
+    common = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir"))
+    if a.attest and (common / "op-no-dep-code").exists():
+        # prs.py preflight's cloud marker: a cloud /dependabot-review run is notify-only (decision-048, 2026-10-16)
+        fail(
+            f"{common / 'op-no-dep-code'} is there: a cloud /dependabot-review run is notify-only and writes no PR "
+            "body; attest from a local run"
+        )
     if git("status", "--porcelain", "--untracked-files=normal"):
         fail("working tree is not clean — commit (or stash) first; an approval covers committed bytes only")
 
@@ -174,7 +183,7 @@ def main() -> None:
     if a.verdict == "APPROVE" and open_must:
         fail(f"{open_must} [must] finding(s) not fixed — APPROVE refused")
 
-    store = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")) / "op-reviews"
+    store = common / "op-reviews"
     store.mkdir(exist_ok=True)
     stamp = dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     branch = git("rev-parse", "--abbrev-ref", "HEAD")

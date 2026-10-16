@@ -2468,21 +2468,22 @@ def _(c: Case) -> None:
 
 # queue
 
-PUT = f"api PUT {R}/pulls/7/ccr/auto_merge"
-DELETE = f"api DELETE {R}/pulls/7/ccr/auto_merge"
+AUTO_ON = "pr merge --auto"  # the fake gh's answers to `gh pr merge --auto` and `--disable-auto` (local mode)
+AUTO_OFF = "pr merge --disable-auto"
 
 
-def queue_case(c: Case, *before_after: dict[str, Any], head: str = "dependabot/uv/g", cloud: bool = True,
-               put: dict[str, Any] | None = None, delete: dict[str, Any] | None = None) -> list[str]:  # fmt: skip
+def queue_case(c: Case, *before_after: dict[str, Any], head: str = "dependabot/uv/g", cloud: bool = False,
+               on: Any = 0, off: Any = 0) -> list[str]:  # fmt: skip
+    """`on`/`off`: what `gh pr merge --auto` and `--disable-auto` answer (an exit code, {"__exit": n, "message": …}
+    or {"__conn": true}). A cloud session (`cloud`) is notify-only: queue refuses before any call."""
     sha_ = c.commit({"uv.lock": "b\n"}, who=BOT)
     reads = [rest_pr(sha_, head, **kw) for kw in before_after] or [rest_pr(sha_, head)]
     c.gh[f"api {R}/pulls/7"] = {"__seq": reads}
     if cloud:
         c.gh["cloud"] = True
-        c.gh[PUT] = put if put is not None else {"__status": 200, "body": {}}
-        c.gh[DELETE] = delete if delete is not None else {"__status": 204, "body": ""}
     else:
         c.gh["graphql"] = {"data": {"viewer": {"login": "maintainer"}}}
+    c.gh[AUTO_ON], c.gh[AUTO_OFF] = on, off
     c.gh[page1(f"{R}/issues/7/timeline")] = []  # no merge-queue event unless a row adds one
     return ["queue", "7", "--head", sha_]
 
@@ -2496,41 +2497,56 @@ def called(c: Case, *words: str) -> bool:
     return any(all(w in call for w in words) for call in calls(c))
 
 
-@row("prs queue: cloud turns auto-merge on through the CCR route, then finds the head unmoved")
+@row("prs queue: a cloud session is notify-only: refused before any read or write (decision-048, 2026-10-16)")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {"auto": True}, cloud=True)
+    c.gh[f"api PUT {R}/pulls/7/ccr/auto_merge"] = {"__status": 200, "body": {}}  # answered, yet never called
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM cloud session: a cloud /dependabot-review run is notify-only")
+    assert [x for x in calls(c) if x[1:2] != ["api"] or x[2:3] != ["graphql"]] == [], calls(c)
+
+
+@row("prs queue: a cloud session is refused even for a PR already set to merge")
+def _(c: Case) -> None:
+    args = queue_case(c, {"auto": True}, cloud=True)
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM cloud session: .*queue it from a local /dependabot-review run")
+    assert not called(c, f"{R}/pulls/7") and not called(c, "PUT"), calls(c)
+
+
+@row("prs queue: local turns auto-merge on, then finds the head unmoved")
 def _(c: Case) -> None:
     args = queue_case(c, {}, {"auto": True})
-    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(cloud\)")
-    assert called(c, "PUT", f"{R}/pulls/7/ccr/auto_merge") and not called(c, "DELETE"), calls(c)
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(local\)")
+    assert called(c, "--auto") and not called(c, "--disable-auto"), calls(c)
     assert calls(c).count(["gh", "api", f"{R}/pulls/7"]) == 2, calls(c)  # the head is read before and after
 
 
-@row("prs queue: a head that moved before the PUT is never queued")
+@row("prs queue: a head that moved before the request is never queued")
 def _(c: Case) -> None:
     args = queue_case(c, {})
     c.gh[f"api {R}/pulls/7"] = rest_pr("f" * 40)
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub's head is ffffffffffff")
-    assert not called(c, "PUT") and not called(c, "graphql"), calls(c)
+    assert not called(c, "--auto") and not called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: a head that moved after the PUT turns auto-merge off again")
+@row("prs queue: a head that moved after the request turns auto-merge off again")
 def _(c: Case) -> None:
     args = queue_case(c, {})
     first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
     c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {**first, "head": {**first["head"], "sha": "f" * 40}}]}
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR changed while it was queued: open at ffffffffffff")
-    assert called(c, "PUT") and called(c, "DELETE", f"{R}/pulls/7/ccr/auto_merge"), calls(c)
+    assert called(c, "--auto") and called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: a PR closed after the PUT is left as it is (a closed PR can't merge)")
+@row("prs queue: a PR closed after the request is left as it is (a closed PR can't merge)")
 def _(c: Case) -> None:
     args = queue_case(c, {}, {"state": "closed"})
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR changed while it was queued: closed")
-    assert called(c, "PUT") and not called(c, "DELETE"), calls(c)
+    assert called(c, "--auto") and not called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: auto-merge that can't be turned off again is an error naming the danger")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, delete={"__status": 500, "body": {"message": "boom"}})
+    args = queue_case(c, {}, {}, off={"__exit": 1, "message": "boom"})
     first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
     c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {**first, "head": {**first["head"], "sha": "f" * 40}}]}
     c.expect(
@@ -2541,29 +2557,29 @@ def _(c: Case) -> None:
     )
 
 
-@row("prs queue: a refused PUT leaves the PR open (no DELETE when nothing was turned on)")
+@row("prs queue: a refused request leaves the PR open (no --disable-auto when nothing was turned on)")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, put={"__status": 422, "body": {"message": "merge_method is required"}})
+    args = queue_case(c, {}, {}, on={"__exit": 1, "message": "merge_method is required"})
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM turning auto-merge on failed: .*merge_method is required")
-    assert not called(c, "DELETE"), calls(c)
+    assert not called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: a refused PUT that left auto-merge on turns it off")
+@row("prs queue: a refused request that left auto-merge on turns it off")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {"auto": True}, {}, put={"__status": 502, "body": {"message": "bad gateway"}})
+    args = queue_case(c, {}, {"auto": True}, {}, on={"__exit": 1, "message": "bad gateway"})
     c.expect(
         "prs.py",
         args,
         PROBLEM,
         r"^PROBLEM turning auto-merge on failed(?s:.*)^ok +auto-merge turned off again",
     )
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: a refused PUT that takes effect late is seen on the second read and undone")
+@row("prs queue: a refused request that takes effect late is seen on the second read and undone")
 def _(c: Case) -> None:
     args = queue_case(
-        c, {}, {}, {"auto": True}, {}, put={"__status": 502, "body": {"message": "bad gateway"}}
+        c, {}, {}, {"auto": True}, {}, on={"__exit": 1, "message": "bad gateway"}
     )
     c.expect(
         "prs.py",
@@ -2571,7 +2587,7 @@ def _(c: Case) -> None:
         PROBLEM,
         r"^PROBLEM turning auto-merge on failed(?s:.*)^ok +auto-merge turned off again",
     )
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: a settle time that is not finite stops before any write")
@@ -2579,7 +2595,7 @@ def _(c: Case) -> None:
     args = queue_case(c, {})
     c.env["OP_DEPENDABOT_SETTLE"] = "nan"
     c.expect("prs.py", args, ERROR, r"^ERROR +OP_DEPENDABOT_SETTLE is 'nan', not a number of seconds")
-    assert not called(c, "PUT"), calls(c)
+    assert not called(c, "--auto"), calls(c)
 
 
 @row("prs queue: a negative settle time stops before any write")
@@ -2587,12 +2603,12 @@ def _(c: Case) -> None:
     args = queue_case(c, {})
     c.env["OP_DEPENDABOT_SETTLE"] = "-1"
     c.expect("prs.py", args, ERROR, r"^ERROR +OP_DEPENDABOT_SETTLE is '-1', not a number of seconds")
-    assert not called(c, "PUT"), calls(c)
+    assert not called(c, "--auto"), calls(c)
 
 
-@row("prs queue: a refused PUT that GitHub queued anyway is taken out again")
+@row("prs queue: a refused request that GitHub queued anyway is taken out again")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, put={"__status": 502, "body": {"message": "bad gateway"}})
+    args = queue_case(c, {}, {}, on={"__exit": 1, "message": "bad gateway"})
     added = {"event": "added_to_merge_queue", "created_at": CLOCK}
     c.gh[page1(f"{R}/issues/7/timeline")] = {
         "__seq": [[], [added], [added, {"event": "removed_from_merge_queue"}]]
@@ -2603,12 +2619,12 @@ def _(c: Case) -> None:
         PROBLEM,
         r"^PROBLEM turning auto-merge on failed(?s:.*)^ok +auto-merge turned off again",
     )
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: a queue entry still there after turning auto-merge off is for the owner")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, put={"__status": 502, "body": {"message": "bad gateway"}})
+    args = queue_case(c, {}, {}, on={"__exit": 1, "message": "bad gateway"})
     added = {"event": "added_to_merge_queue", "created_at": CLOCK}
     c.gh[page1(f"{R}/issues/7/timeline")] = {"__seq": [[], [added]]}
     c.expect(
@@ -2619,50 +2635,50 @@ def _(c: Case) -> None:
     )
 
 
-@row("prs queue: a PR already set to merge is left alone (no PUT, no DELETE)")
+@row("prs queue: a PR already set to merge is left alone (no --auto, no --disable-auto)")
 def _(c: Case) -> None:
     args = queue_case(c, {"auto": True})
     c.expect("prs.py", args, OK, r"^ok +#7 is already set to merge at [0-9a-f]{12}: nothing to do")
-    assert not called(c, "PUT") and not called(c, "DELETE") and not called(c, "graphql"), calls(c)
+    assert not called(c, "--auto") and not called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: a github-actions PR is the owner's to queue")
 def _(c: Case) -> None:
     args = queue_case(c, {}, head="dependabot/github_actions/g")
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM a github-actions PR is queued by the owner")
-    assert not called(c, "PUT"), calls(c)
+    assert not called(c, "--auto"), calls(c)
 
 
 @row("prs queue: someone else's PR is never queued")
 def _(c: Case) -> None:
     args = queue_case(c, {"login": "mallory"})
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR was opened by mallory")
-    assert not called(c, "PUT"), calls(c)
+    assert not called(c, "--auto"), calls(c)
 
 
 @row("prs queue: local uses gh pr merge --auto --match-head-commit, never the CCR route")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {"auto": True}, cloud=False)
-    c.gh["pr merge"] = 0
+    args = queue_case(c, {}, {"auto": True})
     c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(local\)")
     want = ["gh", "pr", "merge", "7", "--repo", "uw-share-lab/openproceedings", "--auto",
             "--match-head-commit", args[3]]  # fmt: skip
-    assert want in calls(c) and not called(c, "PUT"), calls(c)
+    assert want in calls(c) and not called(c, "ccr"), calls(c)
+    assert not any("ccr" in w for x in calls(c) for w in x), calls(c)
 
 
 @row("prs queue: local, gh pr merge refused")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, cloud=False)
+    args = queue_case(c, {}, {}, on=1)
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM turning auto-merge on failed: fake gh: merge refused")
 
 
-@row("prs queue: a PUT GitHub accepted but doesn't show is undone, after one more read")
+@row("prs queue: a request GitHub accepted but doesn't show is undone, after one more read")
 def _(c: Case) -> None:
     args = queue_case(c, {}, {})
     c.expect(
         "prs.py", args, PROBLEM, r"^PROBLEM GitHub accepted the request but shows neither auto-merge nor"
     )
-    assert called(c, "DELETE") and calls(c).count(["gh", "api", f"{R}/pulls/7"]) == 4, calls(
+    assert called(c, "--disable-auto") and calls(c).count(["gh", "api", f"{R}/pulls/7"]) == 4, calls(
         c
     )  # +settle, +undo
 
@@ -2672,8 +2688,8 @@ def _(c: Case) -> None:
     args = queue_case(c, {}, {})
     added = {"event": "added_to_merge_queue", "created_at": CLOCK}
     c.gh[page1(f"{R}/issues/7/timeline")] = {"__seq": [[], [{"event": "commented"}, added]]}
-    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(cloud\)")
-    assert not called(c, "DELETE"), calls(c)
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(local\)")
+    assert not called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: a queue entry from before the request doesn't count")
@@ -2694,9 +2710,9 @@ def _(c: Case) -> None:
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub accepted the request but shows neither")
 
 
-@row("prs queue: a PUT whose connection drops, though GitHub queued the PR, is undone")
+@row("prs queue: a request whose connection drops, though GitHub queued the PR, is undone")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, put={"__conn": True})
+    args = queue_case(c, {}, {}, on={"__conn": True})
     added = {"event": "added_to_merge_queue", "created_at": CLOCK}
     c.gh[page1(f"{R}/issues/7/timeline")] = {
         "__seq": [[], [added], [added, {"event": "removed_from_merge_queue"}]]
@@ -2707,26 +2723,26 @@ def _(c: Case) -> None:
         PROBLEM,
         r"^PROBLEM turning auto-merge on failed: error connecting(?s:.*)^ok +auto-merge turned off again",
     )
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: a PUT that is cancelled (gh exits 2) is undone and is an error")
+@row("prs queue: a request that is cancelled (gh exits 2) is undone and is an error")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, put={"__exit": 2})
+    args = queue_case(c, {}, {}, on={"__exit": 2})
     c.expect("prs.py", args, ERROR, r"^ERROR +queueing #7 failed partway .*auto-merge turned off again")
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: the read after the PUT failing is undone and is an error")
+@row("prs queue: the read after the request failing is undone and is an error")
 def _(c: Case) -> None:
     args = queue_case(c, {})
     first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
     c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {"__status": 500, "body": {"message": "boom"}}, first]}
     c.expect("prs.py", args, ERROR, r"^ERROR +queueing #7 failed partway .*auto-merge turned off again")
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: a read after the PUT of the wrong shape is undone too")
+@row("prs queue: a read after the request of the wrong shape is undone too")
 def _(c: Case) -> None:
     args = queue_case(c, {})
     first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
@@ -2737,7 +2753,7 @@ def _(c: Case) -> None:
         ERROR,
         r"^ERROR +queueing #7 failed partway \(KeyError: 'head'\); auto-merge turned off again",
     )
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: a settle time that isn't a number stops before any write")
@@ -2745,7 +2761,7 @@ def _(c: Case) -> None:
     args = queue_case(c, {})
     c.env["OP_DEPENDABOT_SETTLE"] = "abc"
     c.expect("prs.py", args, ERROR, r"^ERROR +OP_DEPENDABOT_SETTLE is 'abc', not a number of seconds")
-    assert not called(c, "PUT"), calls(c)
+    assert not called(c, "--auto"), calls(c)
 
 
 @row("prs queue: a queue entry 1 minute before the request counts (clock skew)")
@@ -2764,9 +2780,9 @@ def _(c: Case) -> None:
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub accepted the request but shows neither")
 
 
-@row("prs queue: a dead PUT that can't be undone says auto-merge may still be on")
+@row("prs queue: a dead request that can't be undone says auto-merge may still be on")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, put={"__exit": 2}, delete={"__status": 500, "body": {"message": "boom"}})
+    args = queue_case(c, {}, on={"__exit": 2}, off={"__exit": 1, "message": "boom"})
     c.expect("prs.py", args, ERROR, r"^ERROR +queueing #7 failed partway .*auto-merge may still be on for #7")
 
 
@@ -2774,7 +2790,7 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     args = queue_case(c, {}, {"state": "closed", "merged": True})
     c.expect("prs.py", args, OK, r"^ok +#7 merged already, at [0-9a-f]{12}")
-    assert not called(c, "DELETE"), calls(c)
+    assert not called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: a PR that merged at another head is the owner's")
@@ -2784,13 +2800,12 @@ def _(c: Case) -> None:
     gone = {**first, "state": "closed", "merged": True, "head": {**first["head"], "sha": "f" * 40}}
     c.gh[f"api {R}/pulls/7"] = {"__seq": [first, gone]}
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM #7 merged at ffffffffffff, not the reviewed")
-    assert not called(c, "DELETE"), calls(c)
+    assert not called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: local, a head that moved after is turned off with --disable-auto")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, cloud=False)
-    c.gh["pr merge"] = 0
+    args = queue_case(c, {})
     first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
     c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {**first, "head": {**first["head"], "sha": "f" * 40}}]}
     c.expect("prs.py", args, PROBLEM, r"^ok +auto-merge turned off again")
@@ -2799,10 +2814,10 @@ def _(c: Case) -> None:
 
 @row("prs queue: a mode it can't tell stops before any write")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, cloud=False)
+    args = queue_case(c, {})
     del c.gh["graphql"]
     c.expect("prs.py", args, ERROR, r"^ERROR .*not as a Claude Code session refuses it")
-    assert not called(c, "PUT") and not called(c, "pr", "merge"), calls(c)
+    assert not called(c, "--auto") and not called(c, "pr", "merge"), calls(c)
 
 
 # watch
@@ -2954,8 +2969,8 @@ def _(c: Case) -> None:
 @row("prs queue: auto-merge shown only on the settle re-read is queued")
 def _(c: Case) -> None:
     args = queue_case(c, {}, {}, {"auto": True})
-    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(cloud\)")
-    assert not called(c, "DELETE"), calls(c)
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(local\)")
+    assert not called(c, "--disable-auto"), calls(c)
 
 
 @row("prs watch: out of the queue for exactly two polls, then merged, is still a drop")

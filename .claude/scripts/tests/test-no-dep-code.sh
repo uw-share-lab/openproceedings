@@ -2,7 +2,7 @@
 # Case table for the no-dependency-code marker (decision-048, 2026-10-13): a cloud /dependabot-review run executes
 # none of a PR's dependency code, so once `prs.py preflight` has written `op-no-dep-code` in git's common directory
 # (its rows are in dependabot_cases.py), the Makefile's dependency targets refuse, scripts/setup-dev.sh skips its
-# `uv sync`, and .githooks/pre-push skips its `make lint`. Each row runs the real file in a throwaway repo with
+# `uv sync`, and .githooks/pre-push refuses every push (a cloud run is notify-only, 2026-10-16). Each row runs the real file in a throwaway repo with
 # fake uv, npm, npx and make first on PATH, logging every call. Mutants: .claude/scripts/mutants/gates.json.
 set -u
 # Never inherit a repo from the caller (git exports GIT_DIR etc. to hooks such as pre-push).
@@ -51,7 +51,7 @@ fresh
 out=$(cd "$R" && PATH="$BIN:$PATH" "$REAL_MAKE" --no-print-directory test 2>&1); rc=$?
 result "make test runs pytest and vitest without the marker" \
   test "$rc" -eq 0 -a -n "$(grep 'uv run --locked pytest' "$LOG")" -a -n "$(grep 'npm test --workspace frontend' "$LOG")"
-for target in tooling mutate; do   # the repo's own scripts: they run in a cloud clone (pre-push runs make tooling)
+for target in tooling mutate; do   # the repo's own scripts: they run in a cloud clone (step 5)
   fresh; mark
   out=$(cd "$R" && PATH="$BIN:$PATH" "$REAL_MAKE" --no-print-directory "$target" 2>&1); rc=$?
   want=$([ "$target" = tooling ] && echo 'python3 .claude/scripts/lint_tooling.py' || echo 'python3 .claude/scripts/mutate.py')
@@ -72,12 +72,12 @@ result "make test in a linked worktree refuses (the marker is in the common git 
   test "$rc" -ne 0 -a ! -s "$LOG" -a -n "$(printf '%s' "$out" | grep 'refused: .*/r/\.git/op-no-dep-code')"
 git -C "$R" worktree remove --force "$TMP/wt" 2>/dev/null; rm -rf "$TMP/wt"
 
-echo "== .githooks/pre-push: make lint stands down while the marker is there; make tooling still runs"
+echo "== .githooks/pre-push: every push is refused while the marker is there (notify-only); nothing runs"
 fresh; mark
 out=$(cd "$R" && PATH="$BIN:$PATH" bash .githooks/pre-push 2>&1); rc=$?
-result "pre-push with the marker runs make tooling only" \
-  test "$rc" -eq 0 -a "$(grep -c '^make ' "$LOG")" = 1 -a -n "$(grep '^make --no-print-directory tooling' "$LOG")"
-result "pre-push with the marker says why lint was skipped" test -n "$(printf '%s' "$out" | grep 'make lint skipped: .*op-no-dep-code is there')"
+result "pre-push with the marker refuses the push and runs nothing" test "$rc" -ne 0 -a ! -s "$LOG"
+result "pre-push with the marker says why" \
+  test -n "$(printf '%s' "$out" | grep 'refused: .*op-no-dep-code is there (a cloud /dependabot-review run is notify-only')"
 fresh
 out=$(cd "$R" && PATH="$BIN:$PATH" bash .githooks/pre-push 2>&1); rc=$?
 result "pre-push without the marker runs make lint and make tooling" \
@@ -93,7 +93,7 @@ linked() {  # fresh repo with the marker, a commit, and a linked worktree at $TM
 }
 linked
 out=$(cd "$TMP/wt" && PATH="$BIN:$PATH" bash .githooks/pre-push 2>&1); rc=$?
-result "pre-push in a linked worktree skips make lint" test "$rc" -eq 0 -a -z "$(grep 'make --no-print-directory lint' "$LOG")"
+result "pre-push in a linked worktree refuses the push (the marker is in the common git directory)" test "$rc" -ne 0 -a ! -s "$LOG"
 git -C "$R" worktree remove --force "$TMP/wt" 2>/dev/null; rm -rf "$TMP/wt"
 
 # a git that fails only when asked for the common directory, so the hook gets as far as the marker check

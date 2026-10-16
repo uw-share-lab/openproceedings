@@ -89,8 +89,10 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
 - Records are **per-sha**: an approval covers exactly one commit.
 - `--attest` adds `<!-- op-review: <sha> APPROVE -->` to the PR body; CI's `review-attested` step compares
   it to the PR head sha. After pushing a fix to an open PR, re-run the gate and `--attest` again. It finds the
-  branch's PR with `gh pr view` (GraphQL); `--attest --pr <n> --repo <owner>/<name>` reads it over REST instead,
-  for a Claude Code cloud session, which refuses GraphQL, and refuses a PR that isn't open at HEAD (TASK-213).
+  branch's PR with `gh pr view` (GraphQL); `--attest --pr <n> --repo <owner>/<name>` reads it over REST instead
+  (`/dependabot-review` uses it; TASK-213), and refuses a PR that isn't open at HEAD. In a cloud
+  `/dependabot-review` clone (`prs.py preflight`'s `op-no-dep-code` marker) `--attest` refuses: that run is
+  notify-only (decision-048, 2026-10-16).
 
 ## Required CI checks (six)
 | Check (workflow) | Covers |
