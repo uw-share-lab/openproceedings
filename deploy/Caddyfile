@@ -77,7 +77,7 @@
 		# stalled reached the API and held its slot until the API's own upload timeout. A declared length over
 		# the cap is refused here (413) before any of it is read: forwarded, the API refused it from the header
 		# and reset the connection while the proxy was still sending, which the client once saw as a 502. A
-		# length that isn't plain digits is refused (400; over HTTP/2 Go passes it on, and int() would fail into
+		# length that isn't 1 to 18 plain digits is refused (400; over HTTP/2 Go passes it on, and int() would fail into
 		# a 500). A declared length within the cap is buffered here whole
 		@unsized {
 			method POST

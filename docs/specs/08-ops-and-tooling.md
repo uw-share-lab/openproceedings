@@ -545,7 +545,7 @@ wrap the path's handle and refuse the file first), and for `/api/v1/compare` alo
 `request_buffers` of 16MiB (Caddy's `16MB` is 16,000,000 bytes, under the API's 16,777,216), a 411 for a
 `POST` with no `Content-Length` (past `request_buffers` Caddy streams the rest of a body, so an unsized file
 that went over the cap and stalled held the API's slot until its upload timeout), a 400 for a length that
-isn't plain digits and a 413 for one over 16 MiB, before any of the file is read (forwarded, the API's
+isn't 1 to 18 plain digits and a 413 for one over 16 MiB, before any of the file is read (forwarded, the API's
 refusal raced the proxy's sending and reached the client as a 502 in one smoke run of five), each plain text,
 not the API's error envelope; no HTTP/3 (`protocols h1 h2`: Caddy v2.11.4 builds its HTTP/3 server with only
 the idle timeout, so `read_body` never applies there); a longer `read_body` (`OP_READ_BODY`, 60s there), which is the server's timeout for every request (Caddy has no per-path one); and

@@ -319,7 +319,7 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
   30 s upload timeout (seen on this stack before the fix). A declared length over 16 MiB gets 413 from the
   proxy before it reads any of the file (forwarded, the API refused it from the header and reset the
   connection while the proxy was still sending, which reached the client as a 502 in one smoke run of five,
-  the other four getting 413); a length that isn't plain digits gets 400 (over HTTP/2 Go passes it on to
+  the other four getting 413); a length that isn't 1 to 18 plain digits gets 400 (over HTTP/2 Go passes it on to
   Caddy, whose arithmetic on it would fail into a 500); browsers
   declare a file's length (Chromium over HTTP/2 did). The server
   also stops speaking HTTP/3 (`protocols h1 h2`): Caddy builds its HTTP/3 server with only the idle timeout
@@ -365,7 +365,7 @@ included) and never reached the API: with uploads stalled in the proxy, a whole 
 (200), and the API logged only that one. That was measured over HTTP/1.1; a stall over HTTP/2 was not
 measured. Caddy answers a cut upload an empty `200` before closing the connection (its error path writes no
 status): a client sees no comparison in it. A file one byte over 16 MiB gets 413, one with no length 411 and
-one with a length that isn't plain digits 400, all from the proxy, as plain text rather than the API's JSON
+one with a length that isn't 1 to 18 plain digits 400, all from the proxy, as plain text rather than the API's JSON
 error (the smoke test checks the 413's text).
 
 `GET /api/v1/meta` then shows `limits.compare`, and the web app offers the panel; no rebuild of the `web`
@@ -429,15 +429,15 @@ touches a running stack or its images. It checks what this runbook claims:
 - a withheld abstract next to a served one, with `takedown-check` passing;
 - no query text in any log.
 
-`deploy/smoke-test.sh --compare` runs the same over `compose.yml` and `compare.yml`, and adds what
-§Comparisons claims: the overlay's `api` command, a 16 MiB comparison while uploads stalled in the proxy
-(`OP_SMOKE_STALLS`, default 8) neither reach the API nor outlast `read_body`, the proxy's memory peak under
-its limit with no OOM kill, 413 one byte over 16 MiB, 411 for a file with no length, and the 64 KiB cap on
-every other path (in the proxy's adapted config, and checked without `--compare` too, with `/meta`
-offering no comparisons and HTTP/3 advertised only then). It reads the caddy container's cgroup v2 memory
-files: `memory.peak` needs Linux 5.19 or later (before that it samples `memory.current` while the uploads
-are held). It takes about a minute longer (149 to 186 s, against 87 to 128 s without it, on that Mac):
-the stalled uploads wait out `read_body`.
+`deploy/smoke-test.sh --compare` runs the same over `compose.yml` and `compare.yml`, and adds what §Comparisons
+claims: the overlay's `api` command, a 16 MiB comparison while uploads stalled in the proxy (`OP_SMOKE_STALLS`,
+default 8) neither reach the API nor outlast `read_body`, the proxy's memory peak under its limit with no OOM
+kill, the proxy's own 413 (by its text) one byte over 16 MiB, 411 for a file with no length, 400 for an HTTP/2
+`Content-Length: abc`, and the 64 KiB cap on every other path (in the proxy's adapted config, and checked
+without `--compare` too, with `/meta` offering no comparisons and HTTP/3 advertised only then). It reads the
+caddy container's cgroup v2 memory files: `memory.peak` needs Linux 5.19 or later (before that it samples
+`memory.current` while the uploads are held). It takes about a minute longer (149 to 186 s, against 87 to 128 s
+without it, on that Mac): the stalled uploads wait out `read_body`.
 
 It removes everything it created on exit. It needs Docker and uv, and ports 80 and 443 on 127.0.0.1 (or
 `OP_HTTP_PORT`/`OP_HTTPS_PORT`, such as `127.0.0.1:18443`; it binds loopback only). Docker Desktop keeps a host
