@@ -61,8 +61,8 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
 - AAAI's `ListSets` is paginated (99 sets on its first page). It lists 386 sets, but only 383 distinct specs (see
   quirk 2).
 - **Pre-2010** is not on OJS. The aaai.org library pages redirect to WordPress pages with no abstracts, and
-  aaai.org's robots.txt (https://www.aaai.org/robots.txt, read during this research in 2026-10; the exact date was
-  not recorded) sets `Crawl-delay: 43200`. Milestone B takes AAAI 1980–2008 from the pinned dblp release:
+  aaai.org's robots.txt (https://www.aaai.org/robots.txt, which redirects to https://aaai.org/robots.txt; re-read
+  2026-10-16, TASK-236) sets `Crawl-delay: 43200` for `User-agent: *`. Milestone B takes AAAI 1980–2008 from the pinned dblp release:
   `conf/aaai/<year>` 1980–2026, with no AAAI in 1981, 1985, 1989, 1995, 2001, 2003 or 2009 (1995 was found by the
   2026-10-10 census; see §AAAI 1980–2008 (dblp)). Its main keys total 28,802,
   and its workshop keys (`2015ethics`, `2017w`, `2021safeai`, …) total 2,368. From 2014 dblp matches OJS closely:
@@ -459,17 +459,26 @@ ran 2026-10-10 21:09–21:16 UTC (387 s, of which about 290 s is the offline rep
 - A key, when there is one, goes as `Authorization: Bearer <key>` (`crawl.openalex_fetcher`), never in a URL. The
   answers' `access-control-allow-headers` list `Authorization`.
 
-**Licence (read by the controller, 2026-10-10; not re-opened in review, which had no network).** The API itself
-states none: its root answer is `{"version", "documentation_url", "msg"}`, and a work answer carries only each paper's
-own `license` field, which is not a data licence. The two statements that matter are in OpenAlex's help pages:
-- OpenAlex's Pricing page on https://help.openalex.org/ (the page's exact URL was not recorded): the data is released
-  under CC0, with no "personal use only" carve-out. A pricing page is an odd home for a data licence; OpenAlex's own
-  terms or data-licence page, if it has one, was not read, and should be cited here when it is (TASK-236).
-- The work-object documentation (https://help.openalex.org/api-entities/works/work-object): OpenAlex does not ship
-  abstracts as plain text, "for legal reasons", and gives the inverted index to rebuild them from. Only "for legal
-  reasons" is quoted; the rest is paraphrased, since the wording held earlier read as a paraphrase in quote marks.
+**Licence (read by the controller, 2026-10-10; each page re-read and its URL recorded 2026-10-16, TASK-236).** The
+API itself states none: its root answer is `{"version", "documentation_url", "msg"}`, and a work answer carries only
+each paper's own `license` field, which is not a data licence. The statements that matter are on three pages:
+- OpenAlex's Pricing page, https://help.openalex.org/access/pricing/ (read 2026-10-16 through its Markdown sibling,
+  https://help.openalex.org/access/pricing.md): the data is released under "a CC0 public-domain license", with no
+  personal-use carve-out and no permission needed.
+- The work-object documentation, now https://help.openalex.org/data/works/attributes/ (the old
+  https://help.openalex.org/api-entities/works/work-object redirects there; read 2026-10-16): OpenAlex does not ship
+  abstracts as plain text, "for legal reasons", and gives the inverted index to rebuild them from.
+- OpenAlex's terms page, https://openalex.org/terms (read 2026-10-16), names its PDFs as "the canonical versions".
+  The terms of service, https://openalex.org/OpenAlex_termsofservice.pdf ("Last Revised: October 2, 2026"; sha256
+  `58dacd4243971000748a2a1a232299328ef75c3723bd1df351ad7dbac5c89197`, read 2026-10-16), apply to the API and the
+  snapshot by name. They grant a "freely revocable, limited license" to use the free features, and say that
+  republishing the Data without Impactstory's "prior written consent is strictly prohibited". **This contradicts the
+  Pricing page's CC0 statement.** No separate data-licence page was found: help.openalex.org's page index
+  (https://help.openalex.org/llms.txt, read 2026-10-16) lists none, and its "Licenses" page
+  (https://help.openalex.org/data/licenses/) covers the licences of the works OpenAlex indexes, not OpenAlex's own.
+  Whether the terms change the fallback is the owner's question (TASK-236's report); nothing here changes the fill.
 
-So the data is CC0, but the abstract text is deliberately not shipped: the `abstract_inverted_index` is the form
+So the Pricing page calls the data CC0, though the terms of service read since say otherwise; either way the abstract text is deliberately not shipped: the `abstract_inverted_index` is the form
 OpenAlex releases, and `openalex.rebuild` turns it back into text. The consequence for this project is that serving a
 rebuilt OpenAlex abstract carries **the same copyright posture as serving a publisher's abstract**, not a CC0 one.
 It rests on decision-018 (README §Abstracts on a public instance), the takedown list (a listed paper's abstract is
@@ -681,7 +690,7 @@ project's position is decision-018 (README §Abstracts on a public instance).
 | Crossref (FAccT 2019–2026, AIES 2018–2023) | not read: milestone B takes titles, authors and DOIs from it and no abstract (it holds none for these DOIs) | not checked (2026-10-10, no network in the review) |
 | PMLR v81 (FAccT 2018) | PMLR's CC BY 4.0, as README states for its volumes (known from ICML 2017, v70); v81's own page not read for it | 2026-10-10 *(v81 unverified)* |
 | the pinned dblp release | CC0, as spec 01 records for the Dagstuhl DROPS release (titles, no abstracts; decision-047, and AAAI 1980–2008 in milestone B) | spec 01's record of the release page; not re-read 2026-10-10 |
-| OpenAlex (milestone C fallback) | CC0 for the data, "with no 'personal use only' carve-out and no permission to ask" (help.openalex.org, Pricing); abstracts are not shipped as text "for legal reasons" and are rebuilt from the inverted index (the work-object docs). A rebuilt abstract is served on the publisher-abstract posture: decision-018, the takedown list and TASK-135 | 2026-10-10: controller read both help pages |
+| OpenAlex (milestone C fallback) | the Pricing page (https://help.openalex.org/access/pricing/) says "a CC0 public-domain license"; the terms of service (https://openalex.org/OpenAlex_termsofservice.pdf, revised 2026-10-02) grant a "freely revocable, limited license" and forbid republishing the Data without "prior written consent", which contradicts it (§OpenAlex, Licence); abstracts are not shipped as text "for legal reasons" and are rebuilt from the inverted index (https://help.openalex.org/data/works/attributes/). A rebuilt abstract is served on the publisher-abstract posture: decision-018, the takedown list and TASK-135 | 2026-10-10: controller read both help pages; 2026-10-16: all three pages re-read, URLs recorded (TASK-236) |
 
 **Index versus fixtures.** The live index stores and shows an OJS abstract with its attribution ("AAAI Digital
 Library") and a link to the paper's own page on ojs.aaai.org, never the full text, on decision-018's fair-dealing
@@ -853,7 +862,7 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
 | AAAI 2016 | 548 | AAAI's list, "ordered … in each proceedings category", matching the OJS sections exactly (submissions 2,132) | aaai.org list; issue page 303 | 548 | not gated: the list appears derived from the proceedings (note) |
 | AAAI 2017 | 637 | counted on AAAI's own list: 599 main technical + 38 in three special tracks (submissions 2,571) | https://aaai.org/wp-content/uploads/2023/01/aaai17accepted-papers.pdf | 639 | gateable (row, list count, 2026-10-10) |
 | AAAI 2020 | 1,614 | counted on AAAI's own pre-camera-ready lists: 1,589 main technical + 25 AI for Social Impact | https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-Paper-List.pdf and https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-AISI-Papers.pdf | 1,610 | gateable (row, list count, 2026-10-10) |
-| AAAI 2021 | 1,696 | counted on AAAI's own list: 1,656 main technical + 40 AI for Social Impact | https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf | 1,694 | gateable (row, list count, 2026-10-10) |
+| AAAI 2021 | 1,696 | counted on AAAI's own list: 1,656 main technical + 40 AI for Social Impact, both from the one PDF (the 40 its last section, pp. 121–124) | https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf; earlier copy archived 2020-12-30 (1,657 + the same 40) | 1,694 | gateable (row, list count, 2026-10-10; re-checked 2026-10-16) |
 | AAAI 2022–2026 | none | chairs' notification emails quoted on third-party sites and aggregator figures only (1,349; 1,721; 2,342; 3,032; 4,167), apparently the main technical track alone | none official | see the per-year table | not found (note) |
 | IASEAI 2026 | 92 | accepted research papers, 35 of them non-archival and unpublished on OJS | https://ojs.aaai.org/index.php/IASEAI/issue/view/741 | 57 | definition mismatch: recorded, not gated |
 
@@ -876,9 +885,19 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
     not of the lists, so their upload dates say nothing. All four are gated, each row naming its ground: the 2020
     lists say they were made before camera-ready; 2012, 2017 and 2021 differ from the proceedings the crawl reads in
     count (deltas +2, +2 and −2 on the snapshot below; 2020's is −4).
-  - 2021: the row cites only the "Main Technical Track" PDF, but counts 1,656 main technical papers plus 40 AI for
-    Social Impact. Where the 40 were counted was not recorded, so the row is re-checked against AAAI's own AI for
-    Social Impact list (TASK-234).
+  - 2021 (re-checked 2026-10-16, TASK-234): the 40 AI for Social Impact papers are in the cited PDF itself. Its
+    first page says the special track's list "appears at the end of this document", and its last section,
+    "Special Track on AI for Social Impact" (pp. 121–124), has 40 numbered entries; the 1,656 main technical are
+    the entries before it. No separate AI for Social Impact list exists among the Internet Archive's captures of
+    `aaai.org/Conferences/AAAI-21/` (887 URLs, none another accepted list). The PDF doesn't say it predates the
+    proceedings, and the cited copy (SHA-1 base32 `SOFX7UV3F7DWXILKLOLHRV5OKIO76JPZ`, embedded creation date
+    2021-01-29) was first captured on 2021-11-10. But an earlier copy, at
+    `aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/…` and captured on 2020-12-30 and 2021-01-26
+    (`DZJNTKYZTPBVFWBS5AXMQIUBXI457YSX`, embedded creation date 2020-12-23), was made before the conference
+    (2021-02-02 to 02-09) and so before the proceedings. It lists the same 40 AI for Social Impact papers and 1,657
+    main technical: paper 7140 is on it and not on the cited copy. The row keeps the cited copy's 1,696, still
+    independent because it differs from the proceedings in count, and names the earlier copy. Counted against the
+    earlier copy, the row would be 1,697 (Δ −3, 0.18%), which also passes the gate.
 
   The deltas are those of snapshot `2026-10-10-9efa49481112` and are unchanged on the final snapshot
   `2026-10-11-93c2937e2f29` (`docs/results/2026-10-11-coverage.md`), where the gate passes at 81 of 82 cells.
@@ -919,9 +938,17 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   2025-06 and 2026-06 (2,704; 3,776; 5,141; 4,389), to size the windows
 - https://proceedings.mlr.press/v81/ and https://proceedings.mlr.press/ (2026-10-10)
 - api.openalex.org (2026-10-10, keyless; §OpenAlex lists every query)
-- https://www.aaai.org/robots.txt (`Crawl-delay: 43200`; read during this research in 2026-10, the exact date not
-  recorded) and web.archive.org's CDX index and `id_` captures of `www.aaai.org/Library/` (2026-10-10, TASK-232)
-- help.openalex.org: the Pricing page and the work-object documentation (read by the controller, 2026-10-10)
+- https://www.aaai.org/robots.txt, which redirects to https://aaai.org/robots.txt (`Crawl-delay: 43200`; read
+  during this research in 2026-10 and re-read 2026-10-16, TASK-236), and web.archive.org's CDX index and `id_`
+  captures of `www.aaai.org/Library/` (2026-10-10, TASK-232)
+- OpenAlex's Pricing page, https://help.openalex.org/access/pricing/, and its work-object documentation, now
+  https://help.openalex.org/data/works/attributes/ (both read by the controller 2026-10-10, re-read 2026-10-16);
+  its terms page, https://openalex.org/terms, and terms of service, https://openalex.org/OpenAlex_termsofservice.pdf
+  (2026-10-16); help.openalex.org's page index, https://help.openalex.org/llms.txt (2026-10-16), for a data-licence
+  page (none)
+- AAAI-21's accepted-paper list, https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf,
+  and its earlier copies under `aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/` in the Internet Archive
+  (CDX and `id_` captures of 2020-12-30 and 2023-09-29; read 2026-10-16, TASK-234)
 - the pinned dblp release `dblp-2026-10-03.xml.gz`
 
 ## AAAI 1993–2008 sections (TASK-224/225/226, decision-050, 2026-10-10)
