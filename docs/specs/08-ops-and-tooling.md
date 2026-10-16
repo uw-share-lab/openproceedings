@@ -454,8 +454,8 @@ operator's account; `web` as `node`; `caddy` as uid 10002, binding 80 and 443 th
 the container's `net.ipv4.ip_unprivileged_port_start`) with a read-only root filesystem, every capability dropped
 and `no-new-privileges`; `api` and `web` are on an `internal` network with no route out, and `--trusted-proxy`
 names Caddy's fixed address on it. `deploy/smoke-test.sh` runs the whole stack over a fixture (TLS, the users and
-mounts, a promotion, refused and done retires, a takedown with `op takedown check`, no query in any log); it is
-run by hand, not in CI. Caddy must not log query strings: `GET /api/v1/search?q=…` carries the query
+mounts, a promotion, refused and done retires, a takedown with `op takedown check`, the 64 KiB body cap, no query
+in any log; with `--compare`, the comparison overlay below); it is run by hand, not in CI. Caddy must not log query strings: `GET /api/v1/search?q=…` carries the query
 (spec 04 §Implementation notes). **`op serve` must sit behind that proxy**, never face clients directly:
 uvicorn (h11) has no request-header or slow-body timeout of its own, so the proxy's timeouts are what bound a
 client that sends its request slowly; the app caps a body at 64 KiB (413 `API_BODY_TOO_LARGE`), uvicorn's
@@ -477,21 +477,25 @@ off until TASK-064 decides the domain, and `skip_install_trust`):
 	servers {
 		timeouts {
 			read_header 5s   # a client's request line and headers (default: 1m)
-			read_body   10s  # its body (default: no timeout)
+			read_body   {$OP_READ_BODY:10s}  # its body (default: no timeout); a timeout of the whole server
 			idle        2m   # a keep-alive connection between requests
 			# no `write` timeout: an export of the whole matched set streams for as long as it takes; Caddy's
 			# stall-only `write_idle` (default 1m since 2.11.6) still cuts a client that stops reading for a minute
 			# (`read_body_idle`, also 1m, never fires: `read_body` above caps it)
 		}
-		max_header_size 64KB  # the API's own request-head limit (a 2,000-code-point q fits)
+		max_header_size 64KiB  # the API's own request-head limit (a 2,000-code-point q fits)
 	}
 }
-openproceedings.example {
+(compare-off) {
 	request_body {
-		max_size 64KB  # the API's own body cap: refuse larger before forwarding
+		max_size 64KiB  # the API's own body cap (65,536 bytes; Caddy's 64KB is 64,000): refuse larger first
 	}
+}
+(compare-on) { … }  # deploy/compose.yml + deploy/compare.yml only: below
+openproceedings.example {
+	import compare-{$OP_COMPARE:off}
 	reverse_proxy /api/* api:8000 {
-		request_buffers 64KB  # read the whole (capped) body before opening the upstream request
+		request_buffers 64KiB  # read the whole (capped) body before opening the upstream request
 	}
 	log {
 		format filter {  # never the query: GET /api/v1/search?q=… carries it, and so does a Referer
@@ -530,15 +534,22 @@ and then refuses a comparison (403) to every request the proxy forwards (one car
 page not on that machine (a non-loopback `Origin`), and `/meta` doesn't offer them to those requests (04
 §Comparing with a RIS file); a proxy that sets none of those headers, in front of a client that sends no
 `Origin`, would still offer comparisons to everyone it serves. So a proxied instance always passes
-`--trusted-proxy` (as `compose.yml` does) or `--no-compare`. The proxy must then let that one path
-through: a `request_body` and `request_buffers` of 16MiB for `/api/v1/compare` only (the site-wide 64KB stays
-for everything else), and a longer `read_body`, which is the server's timeout for every request (Caddy has no
-per-path one), as `deploy/README.md` §Comparisons shows; with the
-proxy buffering the file, a slow upload holds a proxy goroutine, never the API's comparison slot, and up to
-16 MiB of the proxy's memory, with no limit on how many arrive at once: budget 16 MiB per concurrent upload
-and give the `caddy` service a memory limit when turning comparisons on. That proxy
-block cannot work as written and has not been run through `deploy/smoke-test.sh` (TASK-183): decision-035 makes
-fixing it and passing that smoke test a condition of any public instance enabling comparisons. Swagger UI (`/api/v1/docs`, scripts from a
+`--trusted-proxy` (as `compose.yml` does) or `--no-compare`. On this stack comparisons are turned on by the
+overlay `deploy/compare.yml` (TASK-183): `op serve --compare`, and for the proxy `OP_COMPARE=on`, which imports
+the `compare-on` snippet: the 64KiB cap scoped to `@rest` (`not path /api/v1/compare`; a site-wide cap would
+wrap the path's handle and refuse the file first), and for `/api/v1/compare` alone a `request_body` and
+`request_buffers` of 16MiB (Caddy's `16MB` is 16,000,000 bytes, under the API's 16,777,216) and a 411 for a
+`POST` with no `Content-Length` (past `request_buffers` Caddy streams the rest of a body, so an unsized file
+that went over the cap and stalled held the API's slot until its upload timeout); a longer `read_body`
+(`OP_READ_BODY`, 60s there), which is the server's timeout for every request (Caddy has no per-path one); and
+a memory limit on the `caddy` container (`OP_CADDY_MEM_LIMIT`, 1g, with `GOMEMLIMIT` 800MiB). With the proxy
+buffering the file, a slow upload holds a proxy goroutine and about 50 MiB of its memory (measured: Caddy's
+buffer doubles to 32 MiB to hold 16, plus the buffers it outgrew until Go collects them), never the API's
+comparison slot, and `read_body` cuts it; with no limit on how many arrive at once, the memory limit bounds
+the proxy, which past it is killed and restarted (24 uploads held at once fit in 1 GiB, 32 did not).
+`deploy/smoke-test.sh --compare` checks all of this, and decision-035 makes passing it on the host a
+condition of any public instance enabling comparisons; it passed on Docker Desktop on 2026-10-16
+(`deploy/README.md` §Comparisons has the measurements). Swagger UI (`/api/v1/docs`, scripts from a
 CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. `api` mounts `snapshots/` and `takedowns/` read-only, the
 search records' directory `records/` read-write (a host directory, 0700 and owned by the API's uid, 10001 by default; `records.sqlite` and
 the WAL files SQLite writes beside it; spec 04 §Search records), and `indexes/` read-write but closed by file modes: Tantivy opens an index only after taking
