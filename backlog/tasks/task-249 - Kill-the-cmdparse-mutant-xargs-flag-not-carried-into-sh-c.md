@@ -1,9 +1,10 @@
 ---
 id: TASK-249
 title: Kill the cmdparse mutant 'xargs flag not carried into sh -c'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-14 22:59'
+updated_date: '2026-10-16 16:06'
 labels:
   - tooling
 dependencies: []
@@ -18,5 +19,11 @@ make mutate on dev (ba8a0598) leaves the gates.json mutant 'xargs flag not carri
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A case row kills the mutant, or it is marked equivalent with a distinguishing negative case and a positive control
+- [x] #1 A case row kills the mutant, or it is marked equivalent with a distinguishing negative case and a positive control
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Killed by a row, not marked equivalent: test-enforce-pr-workflow.sh, on feature/x, `echo -- --amend | xargs sh -c 'git commit -m wip "$@"' sh` is refused only because via_xargs is carried into the sh -c's commit (with the mutant the commit on a feature branch passes); positive control `echo x | xargs sh -c 'git log -1 "$@"' sh` is allowed. The older push row stayed green under the mutant because its unresolved "$@" refspec is refused anyway.
+<!-- SECTION:NOTES:END -->

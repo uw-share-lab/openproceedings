@@ -235,8 +235,8 @@
  {
   "label": "mutate run: also files not mutated (TASK-243)",
   "file": ".claude/scripts/mutate.py",
-  "old": "            for f in [m[\"file\"], *m.get(\"also\", [])]:",
-  "new": "            for f in [m[\"file\"]]:"
+  "old": "            for f in files:",
+  "new": "            for f in files[:1]:"
  },
  {
   "label": "mutate run: an also file without the text not stale (TASK-243)",
