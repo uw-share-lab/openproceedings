@@ -272,18 +272,20 @@ srv = next(s for s in json.load(sys.stdin)["apps"]["http"]["servers"].values() i
 site = srv["routes"][0]["handle"][0]["routes"]
 caps = [(r.get("match"), h["max_size"]) for r in site for h in r.get("handle", []) if h["handler"] == "request_body"]
 compare = [r["handle"][0]["routes"] for r in site if r.get("match") == [{"path": ["/api/v1/compare"]}]]
+api = [h.get("request_buffers") for r in site if r.get("match") == [{"path": ["/api/*"]}] for h in r["handle"]]
 inner = [(h["handler"], h.get("max_size") or h.get("request_buffers") or h.get("status_code"), r.get("match"))
          for routes in compare for r in routes for h in r["handle"]]
 want_inner = [("request_body", 16777216, None),
               ("static_response", 411, [{"method": ["POST"], "not": [{"header": {"Content-Length": ["*"]}}]}]),
               ("reverse_proxy", 16777216, None)]
-print("proxy: protocols", srv.get("protocols"), "| body caps", caps, "| /api/v1/compare", inner)
-ok = (srv.get("protocols") == ["h1", "h2"] and caps == [([{"not": [{"path": ["/api/v1/compare"]}]}], 65536)]
-      and sorted(map(str, inner)) == sorted(map(str, want_inner))) if on else (
-      srv.get("protocols") == ["h1", "h2", "h3"] and caps == [(None, 65536)] and not compare)
+print("proxy: protocols", srv.get("protocols"), "| body caps", caps, "| /api/* buffers", api, "| /api/v1/compare", inner)
+ok = api == [65536] and ((srv.get("protocols") == ["h1", "h2"] and inner == want_inner
+      and caps == [([{"not": [{"path": ["/api/v1/compare"]}]}], 65536)]) if on else (
+      srv.get("protocols") == ["h1", "h2", "h3"] and caps == [(None, 65536)] and not compare))
 sys.exit(0 if ok else 1)' "$compare" || fail "the proxy's adapted body caps or protocols are not what compare=$compare needs"
 # HTTP/3 is advertised (Alt-Svc) only with comparisons off: Caddy doesn't give its HTTP/3 server read_body
-h3=$("${curl_tls[@]}" -D - -o /dev/null "$base/api/v1/healthz" | grep -ci '^alt-svc: h3' || true)
+headers=$("${curl_tls[@]}" -D - -o /dev/null "$base/api/v1/healthz") || fail "GET /api/v1/healthz headers"
+h3=$(grep -ci '^alt-svc: h3' <<<"$headers" || true)
 echo "Alt-Svc h3 headers: $h3"
 if ! $compare; then
   [ "$offered" = None ] || fail "comparisons are offered without deploy/compare.yml"
@@ -304,7 +306,7 @@ sys.exit(0 if on == [*base, "--compare"] else 1)' \
   mem() { "${dc[@]}" exec -T caddy cat "/sys/fs/cgroup/$1"; }
   read_body=$("${dc[@]}" exec -T caddy printenv OP_READ_BODY) || fail "reading caddy's OP_READ_BODY"
   case "$read_body" in
-    *[!0-9]*s | s | *[!s]) fail "this test reads OP_READ_BODY in whole seconds (60s), not '$read_body'" ;;
+    "" | *[!0-9]*s | s | *[!s]) fail "this test reads OP_READ_BODY in whole seconds (60s), not '$read_body'" ;;
   esac
   limit=$(mem memory.max) || fail "reading caddy's memory limit (cgroup v2)"
   echo "caddy: read_body $read_body, memory limit $limit bytes, GOMEMLIMIT $("${dc[@]}" exec -T caddy printenv GOMEMLIMIT)"

@@ -19,7 +19,6 @@ there; -1 for one that failed to connect or was cut while still sending), and th
 
 from __future__ import annotations
 
-import contextlib
 import json
 import socket
 import ssl
@@ -94,7 +93,7 @@ def stall(port: int, cacert: str, target: str, declared: int, sent: int, uploads
     def one(i: int) -> None:
         try:
             s = context.wrap_socket(
-                socket.create_connection(("localhost", port)), server_hostname="localhost"
+                socket.create_connection(("localhost", port), timeout=WAIT), server_hostname="localhost"
             )
         except OSError:
             cuts[i] = Cut(-1.0, "connect failed")
@@ -113,7 +112,6 @@ def stall(port: int, cacert: str, target: str, declared: int, sent: int, uploads
                 return
             finally:
                 _wait(ready)
-            s.settimeout(WAIT)
             got = b""
             try:
                 while data := s.recv(4096):
@@ -126,10 +124,12 @@ def stall(port: int, cacert: str, target: str, declared: int, sent: int, uploads
     threads = [threading.Thread(target=one, args=(i,), daemon=True) for i in range(uploads)]
     for t in threads:
         t.start()
-    _wait(ready)
+    if not _wait(ready):
+        raise SystemExit(f"the uploads didn't all send their bytes within {WAIT} s")
     print("sent", flush=True)
+    deadline = time.monotonic() + WAIT
     for t in threads:
-        t.join(WAIT)
+        t.join(max(0.0, deadline - time.monotonic()))
     after = [c.after_start_s for c in cuts]
     statuses = sorted({str(c.status) for c in cuts})
     print(
@@ -139,10 +139,13 @@ def stall(port: int, cacert: str, target: str, declared: int, sent: int, uploads
     )
 
 
-def _wait(barrier: threading.Barrier) -> None:
-    """Wait at `barrier`, or go on once it has waited `WAIT` (it is then broken for every thread)."""
-    with contextlib.suppress(threading.BrokenBarrierError):
+def _wait(barrier: threading.Barrier) -> bool:
+    """Wait at `barrier`; False once it has waited `WAIT` (it is then broken for every thread)."""
+    try:
         barrier.wait()
+    except threading.BrokenBarrierError:
+        return False
+    return True
 
 
 def main() -> None:

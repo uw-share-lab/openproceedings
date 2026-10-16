@@ -318,11 +318,13 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
   file that went over 16 MiB and then stalled reached the API and held its one slot until the API's own
   30 s upload timeout (seen on this stack before the fix). A declared length over the cap the API refuses
   from the header, before any slot; browsers declare a file's length (Chromium over HTTP/2 did). The server
-  also stops speaking HTTP/3 (`protocols h1 h2`): Caddy doesn't give its HTTP/3 server `read_body`, so an
+  also stops speaking HTTP/3 (`protocols h1 h2`): Caddy builds its HTTP/3 server with only the idle timeout
+  (read in v2.11.4's `modules/caddyhttp/server.go`; not measured), so `read_body` never applies there and an
   upload stalled over QUIC could hold its buffer for as long as the client keeps the connection alive. Any
   value of `OP_COMPARE` but `on` or `off` names a snippet (or file) that doesn't exist, and Caddy refuses to
   start.
-- **`caddy`** also gets `OP_READ_BODY` (default `60s`: a 16 MiB file then needs 2.2 Mbit/s), a memory limit
+- **`caddy`** also gets `OP_READ_BODY` (default `60s`: a 16 MiB file then needs more than 2.24 Mbit/s), a
+  memory limit
   `OP_CADDY_MEM_LIMIT` (default `1g`, with no swap on top) and `GOMEMLIMIT` `OP_CADDY_GOMEMLIMIT` (default
   `800MiB`: Go collects harder as the heap nears it, well before the kernel's limit). **`read_body` is a
   timeout of the whole server**, every path, not of the comparison path: Caddy has no per-path setting for
@@ -338,9 +340,9 @@ each time:
 
 | Uploads held at once | Proxy memory held (peak) | Per upload |
 |---|---|---|
-| 8 | 412 MiB (peak 448 MiB with the smoke test's 16 MiB comparison passing through as well) | about 50 MiB |
+| 8 | 412 to 460 MiB over the last two smoke runs (peaks 448 to 496 MiB, the smoke test's 16 MiB comparison passing through as well) | about 50 to 56 MiB |
 | 16 | 793 MiB (peak 794 MiB) | about 49 MiB |
-| 24 | 912 MiB (peak 914 MiB; 998 MiB in an earlier run) of the 1,024 MiB limit, no OOM kill: Go collecting at its 800 MiB soft limit | about 37 MiB |
+| 24 | 912 MiB (peak 914 MiB; 998 MiB in an earlier run on a draft of the block) of the 1,024 MiB limit, no OOM kill: Go collecting at its 800 MiB soft limit | about 37 MiB |
 | 32 | over the limit: the kernel killed Caddy (Docker's `oom` event, exit 137) within a second of the last byte | |
 
 An upload costs the proxy about 50 MiB, three times the file: Caddy reads it into a buffer that doubles as it
@@ -349,8 +351,9 @@ fills (32 MiB to hold 16), and the smaller buffers it outgrew are garbage until 
 `OP_CADDY_GOMEMLIMIT` about 80% of it) for the uploads you expect at once. **Past the limit the proxy is
 killed**: memory stays bounded, but Docker restarts the container (`restart: unless-stopped`) and every
 connection it held is dropped, searches included, for the few seconds it takes. With the 1 GiB default, 24
-uploads held at once stayed under it and 32 did not: some 30 uploads (about 500 MB of traffic, each at
-2.2 Mbit/s to beat `read_body 60s`) are enough, from one address or many, and Caddy as built here limits
+uploads held at once reached its edge (peaks of 914 and 998 MiB) and 32 did not fit: somewhere between the two
+(about 500 MB of traffic, each upload faster than 2.24 Mbit/s to beat `read_body 60s`) is enough, from one
+address or many, and Caddy as built here limits
 neither connections nor uploads per client. That bound is the host's or a front proxy's to add, not this
 stack's.
 
@@ -369,7 +372,8 @@ image is needed. **To turn them off again**, run `docker compose -f deploy/compo
 ### Tuning comparisons
 
 Each cap and cost below is an `op serve` flag (TASK-184), added to the `api` service's `command` in
-`compare.yml`, after `--compare`. A flag left out keeps its default; a value out of range, or a float that isn't finite, stops
+`compare.yml`, after `--compare`. A flag left out keeps its default; a value out of range, or a float that
+isn't finite, stops
 `op serve` at start with `invalid serve options: <field>: <reason>`; the bounds in brackets keep a finite but
 extreme value from overflowing the pause or the debit, or from lifting the bound the flag is (the field is the flag's name with
 underscores; the three costs are under `rate_limit.`). The caps are stated in `GET /api/v1/meta`
@@ -426,13 +430,15 @@ touches a running stack or its images. It checks what this runbook claims:
 §Comparisons claims: the overlay's `api` command, a 16 MiB comparison while uploads stalled in the proxy
 (`OP_SMOKE_STALLS`, default 8) neither reach the API nor outlast `read_body`, the proxy's memory peak under
 its limit with no OOM kill, 413 one byte over 16 MiB, 411 for a file with no length, and the 64 KiB cap on
-every other path (in the proxy's adapted config, and checked without `--compare` too, with `/meta` offering no
-comparisons and HTTP/3 advertised only then). It reads the caddy container's cgroup v2 memory files:
-`memory.peak` needs Linux 5.19 or later (before that it samples `memory.current` while the uploads are held). It takes about a
-minute longer (160 s against 97 s on that Mac): the stalled uploads wait out `read_body`.
+every other path (in the proxy's adapted config, and checked without `--compare` too, with `/meta`
+offering no comparisons and HTTP/3 advertised only then). It reads the caddy container's cgroup v2 memory
+files: `memory.peak` needs Linux 5.19 or later (before that it samples `memory.current` while the uploads
+are held). It takes about a
+minute longer (160 s and 161 s, against 97 s and 128 s without it, on that Mac): the stalled uploads wait out `read_body`.
 
 It removes everything it created on exit. It needs Docker and uv, and ports 80 and 443 on 127.0.0.1 (or
-`OP_HTTP_PORT`/`OP_HTTPS_PORT`, such as `127.0.0.1:18443`; it binds loopback only). Docker Desktop keeps a host file's owner on bind mounts, so there the
+`OP_HTTP_PORT`/`OP_HTTPS_PORT`, such as `127.0.0.1:18443`; it binds loopback only). Docker Desktop keeps a host
+file's owner on bind mounts, so there the
 ownership steps and checks (§Permissions, and the host-side retire) are skipped and say so. They run on a
 Linux host. No CI job runs it.
 

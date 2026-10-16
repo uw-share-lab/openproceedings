@@ -8,7 +8,9 @@ decision-035's precondition and `deploy/README.md` §Comparisons.
 warns), compose v2.23.3, on an 8-CPU Mac whose 1-minute load other sessions kept between about 20 and 160;
 the VM had 7.7 GiB. Caddy 2.11.4 (`deploy/caddy.Dockerfile`'s pinned image). The fixture data directory of
 `backend/tests/deploy/fixture_data.py`; the comparison runs against its `small` index (300 records). Ports
-bound to 127.0.0.1 only. Each upload goes over TLS to `https://localhost:<port>`.
+bound to 127.0.0.1 only. Each upload goes over TLS to `https://localhost:<port>`. The run below is
+on the branch's final `Caddyfile`, `compare.yml`, `smoke-test.sh` and probe (the commit that adds this file's
+last revision; `55965cea` differs from them only in comments and in the checks round 2 of the review added).
 
 **Method.** An upload declares `Content-Length: 16777216` and sends 16,777,215 bytes, then stops: the proxy
 must hold its buffer until `read_body` cuts it. Memory is the caddy container's cgroup v2 `memory.current`
@@ -19,30 +21,34 @@ These stalls are HTTP/1.1; HTTP/2 and HTTP/3 stalls were not run (HTTP/3 is off 
 
 ## The smoke test
 
-`OP_HTTP_PORT=127.0.0.1:18080 OP_HTTPS_PORT=127.0.0.1:18443 deploy/smoke-test.sh --compare`, PASS in 160 s
-(without `--compare`, PASS in 97 s, with `/meta` offering no comparisons, HTTP/3 advertised and the 64 KiB cap
+`OP_HTTP_PORT=127.0.0.1:18080 OP_HTTPS_PORT=127.0.0.1:18443 deploy/smoke-test.sh --compare`, PASS in 161 s
+(without `--compare`, PASS in 128 s, the 1-minute load near 100, with `/meta` offering no comparisons, HTTP/3 advertised and the 64 KiB cap
 unconditional in the adapted config). Step 6 of the `--compare` run:
 
 ```
 /meta limits.compare.max_body_bytes: 16777216
-proxy: protocols ['h1', 'h2'] | body caps [([{'not': [{'path': ['/api/v1/compare']}]}], 65536)] | /api/v1/compare [('request_body', 16777216, None), ('static_response', 411, [{'method': ['POST'], 'not': [{'header': {'Content-Length': ['*']}}]}]), ('reverse_proxy', 16777216, None)]
+proxy: protocols ['h1', 'h2'] | body caps [([{'not': [{'path': ['/api/v1/compare']}]}], 65536)] | /api/* buffers [65536] | /api/v1/compare [('request_body', 16777216, None), ('static_response', 411, [{'method': ['POST'], 'not': [{'header': {'Content-Length': ['*']}}]}]), ('reverse_proxy', 16777216, None)]
 Alt-Svc h3 headers: 0
 api command: serve --host 0.0.0.0 --port 8000 --trusted-proxy 172.30.80.2 --compare
 caddy: read_body 60s, memory limit 1073741824 bytes, GOMEMLIMIT 800MiB
-8 uploads stalled a byte short; proxy memory now 412 MiB
+8 uploads stalled a byte short; proxy memory now 460 MiB
 a 16 MiB comparison while they stall: records, papers = 282 282
-stalled uploads, seconds from each request's start: {"uploads": 8, "cut_min_s": 60.02, "cut_max_s": 60.02, "statuses": ["HTTP/1.1 200 OK"]}
-proxy memory peak 448 MiB of 1024 MiB; oom_kill 0; restarts 0
+stalled uploads, seconds from each request's start: {"uploads": 8, "cut_min_s": 60.0, "cut_max_s": 60.01, "statuses": ["HTTP/1.1 200 OK"]}
+proxy memory peak 496 MiB of 1024 MiB; oom_kill 0; restarts 0
 API compare requests: 1 (the 16 MiB comparison; no stalled upload reached the API)
 16 MiB + 1 byte to /api/v1/compare -> 413 (the API's, from the declared length)
 a chunked file to /api/v1/compare -> 411
 an HTTP/2 file with no content-length to /api/v1/compare -> 411
 64 KiB + 1 byte to /api/v1/records -> 413
 ```
+Each stalled upload's `HTTP/1.1 200 OK` is an empty response Caddy writes after it dropped the request at
+`read_body` (its access log: `status: 0`, `size: 0`), not an answer from the API; the API's access-log count
+is the evidence that none reached it.
 
-Two earlier passes on the branch (before the review round added the adapted-config, HTTP/3 and restart checks
-and timed each upload from its own start) held 424 and 446 MiB for the 8 uploads (peaks 461 and 482 MiB), and
-their cuts read 57.8 and 58.4 s counted from the end of sending.
+Earlier passes on the branch held 412 MiB (peak 448 MiB; 160 s, and 97 s without `--compare`, after review
+round 1), and before review round 1, which added the adapted-config, HTTP/3 and restart checks and timed each
+upload from its own start, 424 and 446 MiB (peaks 461 and 482 MiB), with cuts of 57.8 and 58.4 s counted from
+the end of sending.
 
 ## Uploads held at once
 

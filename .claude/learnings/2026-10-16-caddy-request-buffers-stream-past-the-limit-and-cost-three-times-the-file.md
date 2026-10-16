@@ -24,7 +24,7 @@ bounded and measured.
   declared 16 MiB minus one byte sent, the API logged nothing, a whole 16 MiB comparison ran while 8 such
   uploads were held, and each was cut at `read_body` (60.02 s after its request's start with `60s`: the
   timeout counts from there, sending included). Caddy then answers the client an empty `200` (its access log says `status: 0`).
-- **Memory: about 50 MiB per buffered 16 MiB upload.** cgroup `memory.current` held 412, 793 and 912 MiB for
+- **Memory: about 50 MiB per buffered 16 MiB upload.** cgroup `memory.current` held 412 to 460, 793 and 912 MiB for
   8, 16 and 24 uploads; `bytes.Buffer.ReadFrom` doubles to 32 MiB to hold 16 and the outgrown buffers wait
   for GC. With `mem_limit 1g` and `GOMEMLIMIT 800MiB`, 24 fit and 32 got the kernel's OOM kill (Docker's `oom`
   event, exit 137) and a restart: bounded, but a few dozen uploads take the proxy down. `OOMKilled` stayed
@@ -46,9 +46,10 @@ bounded and measured.
 - 411 for an unsized `POST` to the comparison path instead of a buffer one byte over the cap → it closes the
   stream-through for every unsized body, over HTTP/2 as well as chunked → reverse if a client that must
   stream (no known length) needs comparisons.
-- No HTTP/3 with comparisons on (`protocols h1 h2` from a `protocols-on` snippet) → by the review's reading
-  Caddy builds its HTTP/3 server without `read_body`, so a QUIC upload that stalls would never be cut (not
-  measured: this Mac's curl has no HTTP/3) → reverse once an HTTP/3 stall is shown to be cut.
+- No HTTP/3 with comparisons on (`protocols h1 h2` from a `protocols-on` snippet) → Caddy v2.11.4 builds its
+  HTTP/3 server with only `IdleTimeout` (`modules/caddyhttp/server.go`, `http3.Server{...}`), so a QUIC upload
+  that stalls would never be cut by `read_body` (read in the source, raised by the review; not measured: this
+  Mac's curl has no HTTP/3) → reverse once Caddy gives HTTP/3 a read timeout and a stall is shown to be cut.
 - The overlay `deploy/compare.yml` instead of README edits → one switch that the smoke test runs exactly as
   an operator would → a deploy that templated its Caddyfile could fold it in.
 
@@ -60,6 +61,7 @@ bounded and measured.
 
 ## Propagated to
 - `deploy/README.md` §Comparisons (the measurements and the enable steps), spec 08 §Deploy, the
-  `Caddyfile`'s and `compare.yml`'s comments.
+  `Caddyfile`'s and `compare.yml`'s comments, decision-035's as-built note, and the raw measurements in
+  `docs/results/2026-10-16-compare-proxy.md`.
 - Test: `deploy/smoke-test.sh --compare` checks the stall, the memory peak, 413, 411 and the 64 KiB cap; no
   skill change (no skill covers Caddy).

@@ -16,8 +16,9 @@
 #             Caddy refuses to start.
 # OP_READ_BODY  the server's read_body timeout (default 10s); deploy/compare.yml raises it for 16 MiB uploads.
 
-# With comparisons on, no HTTP/3: Caddy's HTTP/3 server is not given read_body, so an upload stalled over QUIC
-# would hold its buffer for as long as the client keeps the connection alive. HTTP/1.1 and HTTP/2 are cut
+# With comparisons on, no HTTP/3: Caddy builds its HTTP/3 server with only the idle timeout (v2.11.4,
+# modules/caddyhttp/server.go), so read_body never applies there and an upload stalled over QUIC would hold its
+# buffer for as long as the client keeps the connection alive. HTTP/1.1 and HTTP/2 are cut at read_body
 (protocols-off) {
 	protocols h1 h2 h3
 }

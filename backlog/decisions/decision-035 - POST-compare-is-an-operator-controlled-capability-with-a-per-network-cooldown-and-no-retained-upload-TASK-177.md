@@ -105,7 +105,8 @@ one IPv6 /48, held the slot 100% of the time.
   the host. It passed on Docker Desktop on 2026-10-16 (the Linux-only ownership checks skipped there). A
   further stated limit it measured: every upload in flight costs the proxy about 50 MiB, and the stack bounds
   how many by the memory limit alone, past which the proxy is OOM-killed and restarted, dropping every
-  connection, searches included (24 at once fitted in 1 GiB, 32 did not; `docs/results/2026-10-16-compare-proxy.md`).
+  connection, searches included (24 at once reached the edge of 1 GiB, peaks 914 to 998 MiB, and 32 did not
+  fit: budget about 20; `docs/results/2026-10-16-compare-proxy.md`).
 - The comparison's classes and matching are the report's (spec 07 §B): a change to either changes both. The
   inflection-only stand-in for Scholar's stemmer is decision-038's.
 - Turning the capability on costs an instance about 80 MB for the table and up to a minute of CPU per

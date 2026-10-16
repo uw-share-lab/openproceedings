@@ -11,11 +11,12 @@
 #   caddy  OP_COMPARE=on (deploy/Caddyfile: the 64KiB body cap kept off /api/v1/compare, which gets 16MiB,
 #          buffers the whole file before the API is asked and wants a Content-Length; no HTTP/3), a longer
 #          read_body for the whole server, and a memory limit, since the proxy holds every upload in flight in
-#          memory (about 50 MiB each) however many arrive at once.
+#          memory (about 50 MiB each) however many arrive at once. compose.yml still publishes 443/udp, which
+#          nothing then listens on (an overlay can add ports, not remove them).
 #
 # Settings (environment, or deploy/.env):
 #   OP_READ_BODY          the proxy's read_body timeout, for every request (default here 60s: a 16 MiB file
-#                         needs 2.2 Mbit/s; the default without this file is 10s)
+#                         needs more than 2.24 Mbit/s; the default without this file is 10s)
 #   OP_CADDY_MEM_LIMIT    the caddy container's memory limit (default 1g; deploy/README.md §Comparisons)
 #   OP_CADDY_GOMEMLIMIT   the Go runtime's soft limit inside it, below the hard one (default 800MiB)
 services:
