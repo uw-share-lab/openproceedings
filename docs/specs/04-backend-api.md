@@ -946,7 +946,7 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   removed. In particular `unresolved` (a source's own signals disagree and the field is `unknown`, decision-020)
   is a classification outcome; the coverage report lists those records (spec 07 §C).
   `searched_at` is UTC to the second (`…Z`). `semantic_version` is null until the near-miss panel exists
-  (M5, deferred to phase 2 by decision-017), so it is always null in v1. `excluded` keeps the pinned bucket order.
+  (M5, shelved by decision-017), so it is always null in v1. `excluded` keeps the pinned bucket order.
 - **`ids` are left out of `GET /records/{id}`** (`record.ids` is null) unless `?include=ids`; to fetch the
   papers themselves use `GET /export?record_id=` (§Exports).
 - **`record.identified_total` and `record.unclassified_total`** (TASK-090, additive) are derived when the

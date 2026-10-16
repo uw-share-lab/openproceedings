@@ -16,7 +16,7 @@ guarantees are the review standard for everything else.
 | [03 Search engine](specs/03-search-engine.md) | the Tantivy index, compilation, ranking, the reference matcher, `index_version` |
 | [04 Backend API](specs/04-backend-api.md) | the `/api/v1` endpoints, search records and replay, exports, errors, rate limits |
 | [05 Frontend](specs/05-frontend.md) | the web app: editor, builder, results, paper and record pages, exports, coverage and help |
-| [06 Semantic layer](specs/06-semantic-layer.md) | deferred to phase 2 (decision-017); not in v1 |
+| [06 Semantic layer](specs/06-semantic-layer.md) | shelved (decision-017); not in v1 |
 | [07 Evaluation](specs/07-evaluation.md) | the test suites, the Scholar comparison, the coverage report and the M4 gate |
 | [08 Ops and tooling](specs/08-ops-and-tooling.md) | the layout, the `op` CLI, CI, the merge queue, deploy, release, and the `.claude/` tooling and hooks |
 

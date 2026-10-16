@@ -28,7 +28,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   contract), routers `search.py` (parse and search), `papers.py`, `records.py`, `meta.py`, `coverage.py`, `health.py`, `export.py`
   (streamed exports, `op export`'s writers), `compare.py` (`POST /compare`: a reviewer's own RIS file against a query, read in memory for the one request, off unless `op serve` is local or run with `--compare`; TASK-177), `server.py` → `op serve`, `openapi.py` → `op openapi`);
   `eval/` (`coverage_report.py` → `op eval coverage`, TASK-054; `scholar_compare.py` (a RIS set against a query's result on one index: matching by the merge rules, scope, and every disagreement's class; the one implementation, TASK-056/TASK-177) and `scholar_report.py` → `op eval scholar`; `openalex_audit.py` → `op eval openalex`; the other reports arrive with their tasks),
-  no `semantic/` in v1: spec 06 is deferred to phase 2 by decision-017). Tests in `backend/tests/`; `uv run pytest` from the root.
+  no `semantic/` in v1: spec 06 is shelved by decision-017). Tests in `backend/tests/`; `uv run pytest` from the root.
 - **API contract:** after changing a route or a response model, run `make openapi` and commit both
   `backend/tests/contract/openapi.json` (the snapshot) and `frontend/src/api/schema.ts` (generated from it;
   never hand-edited). A contract test and CI's `test` job fail while either is stale (`api-contract` skill).

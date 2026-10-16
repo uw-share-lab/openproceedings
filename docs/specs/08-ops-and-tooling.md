@@ -19,7 +19,7 @@ openproceedings/
 │   │   ├── ingest/              # 01: record.py, classify.py, urls.py, volumes.py (+ pmlr_volumes.toml), dblp_table.py (+ dblp_icml.toml), dblp_aaai_table.py (+ dblp_aaai.toml), acm_table.py (+ acm_proceedings.toml), facct_site.toml, ris.py, dedup.py, snapshot.py (built); sources/ (M4 crawlers: http.py (the one HTTP layer), common.py, openreview_client.py, openreview_v2.py, openreview_v1.py, iclr.py, neurips.py, pmlr.py, dblp.py, dblp_aaai.py, ojs.py, crossref.py, facct_site.py, crawl.py)
 │   │   ├── query/               # 02: normalize.py, mathsyms.py, lexer.py, parser.py, ast.py, canonical.py, defaults.py, compat.py
 │   │   ├── engine/              # 03: protocol.py, reference.py, index.py, compile.py, tantivy_engine.py, exclusions.py, highlight.py, parity.py
-│   │   ├── semantic/            # 06 (deferred: phase 2, decision-017; not created)
+│   │   ├── semantic/            # 06 (shelved, decision-017; not created)
 │   │   ├── api/                 # 04: app.py, config.py, state.py, deps.py, errors.py, middleware.py, models.py, openapi.py, server.py; routers search.py, papers.py, meta.py, coverage.py, records.py, export.py, compare.py (`POST /compare`, TASK-177), health.py
 │   │   ├── eval/                # 07 report generators
 │   │   ├── diagnostics.py       # error-code registry (one Diagnostic shape; error-diagnostics skill)

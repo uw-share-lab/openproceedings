@@ -59,7 +59,7 @@ log = logging.getLogger(__name__)
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
     "embed": (
-        "build SPECTER2 embeddings for the current index (spec 06; deferred to phase 2, decision-017)",
+        "build SPECTER2 embeddings for the current index (spec 06; shelved, decision-017)",
         "task-058",
     ),
 }
@@ -71,7 +71,7 @@ PLANNED_EVALS: dict[str, str] = {"audit": "task-055", "near-miss": "task-061"}
 EXIT_MISMATCH = 3
 # `op ingest <source>` sources still to come -> the task that implements them
 PLANNED_SOURCES: dict[str, str] = {}  # none left: ris, openreview, neurips and pmlr are all implemented
-# tasks deferred to phase 2 with the semantic layer (spec 06, decision-017): their stubs say so
+# tasks shelved with the semantic layer (spec 06, decision-017): their stubs say so
 DEFERRED_TASKS: frozenset[str] = frozenset({"task-058", "task-061"})
 MIN_DELAY = 0.5  # seconds between requests to a proceedings host: never faster (politeness)
 
@@ -88,8 +88,8 @@ def default_data_dir() -> Path:
 
 
 def _stub_status(task: str) -> str:
-    """How a stub names its task: planned, or deferred to phase 2 with the semantic layer (decision-017)."""
-    return "deferred to phase 2 (decision-017)" if task in DEFERRED_TASKS else f"planned in {task}"
+    """How a stub names its task: planned, or shelved with the semantic layer (decision-017)."""
+    return "shelved (decision-017)" if task in DEFERRED_TASKS else f"planned in {task}"
 
 
 def _stub(p: argparse.ArgumentParser, name: str, task: str) -> None:

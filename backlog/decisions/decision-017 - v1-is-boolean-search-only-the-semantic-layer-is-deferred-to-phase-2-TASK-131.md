@@ -73,3 +73,17 @@ missing vocabulary as a real problem that the Boolean tools (wildcards, the conc
 help) don't solve, or a review team asks for query-revision suggestions. The steps below are TASK-131's. Resuming means a new decision that
 supersedes this one, re-checking spec 06 against the as-built API, and starting at TASK-058. The recall@25
 rule still applies: the near-miss panel ships only if it beats the BM25-OR baseline.
+
+## Addendum (2026-10-16): shelved, tasks archived
+
+The project owner decided on 2026-10-16 that the semantic-layer tasks aren't needed, and chose to shelve the
+layer and keep its design as a reference. Recorded:
+- TASK-058 to 062 and TASK-084 are archived (`backlog/archive/tasks/`), and milestone M5 is archived. The
+  layer is no longer phase-2 work; it is not planned.
+- Spec 06, the `embedding-engineer` and `near-miss-evaluator` agents and the `specter2-embeddings` skill stay
+  as a design reference. Specs, skills, the README and the CLI and engine messages say "shelved" where they
+  said "deferred to phase 2" (the engine hint above now reads "semantic sort is shelved (decision-017)").
+- Nothing in API v1 changes: `semantic_version` stays on search records, always null, and `sort=semantic`
+  stays refused (spec 04).
+- Resuming still takes a new decision that supersedes this one, plus new tasks: the archived ones may be
+  restored or replaced. The condition and the recall@25 rule above are unchanged.

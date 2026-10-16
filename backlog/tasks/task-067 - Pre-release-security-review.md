@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-03 14:36'
+updated_date: '2026-10-16 15:37'
 labels:
   - ops
   - security
@@ -51,4 +51,6 @@ Full-tree security-reviewer pass before going public with an instance.
 - New privileged surface for security-reviewer: the ops one-off (root, CHOWN, DAC_OVERRIDE, FOWNER, no network; the record store and indexes/). It was reviewed in the TASK-065 PR.
 
 2026-10-03 code-only main promotion: fresh whole-application security review of main 0b31ebc425c3b27611550c116f1e3907330ff878 to dev 07fe70f0fb6b18202f819149088cfcc54b75ef00 approved with no Must/Should/Nit findings. Fresh make tooling exited 0 and 404 focused security tests passed. The report is summarized in docs/results/2026-10-03-release-preparation.md; full local report and raw evidence are /tmp/main-promotion-security-review.md and /tmp/main-promotion-security-{tooling,tests}.log. This refreshes AC#1 evidence only: AC#2 remains unchecked until rate limits and CORS are verified on an actual deployed instance. No public instance or tag was created.
+
+2026-10-16: AC#2 (rate limits and CORS on the deployed instance) is all that is left; it waits on hosting (TASK-064) and then a deployment. Not added as a dependency: the CLI refuses a list holding the completed TASK-065.
 <!-- SECTION:NOTES:END -->

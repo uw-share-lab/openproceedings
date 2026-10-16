@@ -11,7 +11,7 @@ PLANNED = {
     "embed": "task-058",
 }
 PLANNED_EVALS = {"audit": "task-055", "near-miss": "task-061"}  # coverage: TASK-054, scholar: TASK-056
-DEFERRED = {"embed", "eval near-miss"}  # the semantic layer, deferred to phase 2 (decision-017)
+DEFERRED = {"embed", "eval near-miss"}  # the semantic layer, shelved (decision-017)
 
 
 def test_help_lists_every_planned_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
@@ -33,7 +33,7 @@ def test_eval_stubs_exit_2_and_name_their_task(
     assert cli.main(["eval", name]) == 2
     err = capsys.readouterr().err
     assert f"op eval {name}" in err and task in err and "not implemented yet" in err
-    assert ("deferred to phase 2 (decision-017)" in err) == (f"eval {name}" in DEFERRED)
+    assert ("shelved (decision-017)" in err) == (f"eval {name}" in DEFERRED)
     assert ("planned in" in err) == (f"eval {name}" not in DEFERRED)
 
 
@@ -48,7 +48,7 @@ def test_stub_exits_2_and_names_its_task(name: str, task: str, capsys: pytest.Ca
     assert f"op {name}" in err
     assert task in err
     assert "not implemented yet" in err
-    assert ("deferred to phase 2 (decision-017)" in err) == (name in DEFERRED)
+    assert ("shelved (decision-017)" in err) == (name in DEFERRED)
 
 
 @pytest.mark.parametrize(("name", "found"), [("snap", True), ("../outside", False), (".hidden", False)])
