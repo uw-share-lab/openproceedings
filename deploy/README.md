@@ -366,8 +366,8 @@ stack's.
 A stalled upload was cut by the proxy when `read_body` ran out (60 s after its request started, sending
 included) and never reached the API: with uploads stalled in the proxy, a whole 16 MiB comparison ran at once
 (200), and the API logged only that one. That was measured over HTTP/1.1; a stall over HTTP/2 was not
-measured. Caddy 2.11.7 answers a cut upload `499` before closing the connection (2.11.4 wrote an empty
-`200`): a client sees no comparison in it. A file one byte over 16 MiB gets 413, one with no length 411 and
+measured. A cut upload gets `499` from Caddy 2.11.7 (2.11.4 wrote an empty `200`), and the API logged none
+of them: a client sees no comparison in it. A file one byte over 16 MiB gets 413, one with no length 411 and
 one with a length that isn't 1 to 18 plain digits 400, all from the proxy, as plain text rather than the API's JSON
 error (the smoke test checks the 413's text).
 

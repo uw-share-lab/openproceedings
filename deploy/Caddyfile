@@ -45,7 +45,8 @@
 			idle 2m # a keep-alive connection between requests
 			# no `write` timeout: an export of the whole matched set streams for as long as it takes; Caddy's
 			# stall-only `write_idle` (default 1m since 2.11.6) still cuts a client that stops reading for a minute
-			# (`read_body_idle`, also 1m, never fires: `read_body` above caps it)
+			# (`read_body_idle`, also 1m, doesn't fire first while `read_body` is at most 1m; leave it non-zero: it is
+			# what sets the per-request read deadline, the only one an HTTP/3 stream gets)
 		}
 		max_header_size 64KiB # the API's own request-head limit (a 2,000-code-point q fits)
 		import protocols-{$OP_COMPARE:off}

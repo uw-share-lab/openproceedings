@@ -29,7 +29,7 @@ bounded and measured.
   the review on a throwaway caddy with h2c).
 - **A stall that never reaches the limit is cut by `read_body` and never reaches the upstream**: with the
   declared 16 MiB minus one byte sent, the API logged nothing, a whole 16 MiB comparison ran while 8 such
-  uploads were held, and each was cut at `read_body` (60.0 to 60.03 s after its request's start with `60s`: the
+  uploads were held, and each was cut at `read_body` (60.0 to 60.04 s after its request's start with `60s`: the
   timeout counts from there, sending included). Caddy 2.11.4 then answered the client an empty `200` (its access log said `status: 0`); 2.11.7 answers
   `499`.
 - **Memory: about 50 MiB per buffered 16 MiB upload.** cgroup `memory.current` held 412 to 472, 793 and 912 MiB for

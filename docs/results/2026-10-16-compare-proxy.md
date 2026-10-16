@@ -9,8 +9,8 @@ warns), compose v2.23.3, on an 8-CPU Mac whose 1-minute load other sessions kept
 the VM had 7.7 GiB. Caddy 2.11.7, the image `deploy/caddy.Dockerfile` pins on `dev` since the branch was
 rebased onto it; the branch's earlier runs were on 2.11.4 (below). The fixture data directory of
 `backend/tests/deploy/fixture_data.py`; the comparison runs against its `small` index (300 records). Ports
-bound to 127.0.0.1 only. Each upload goes over TLS to `https://localhost:<port>`. The runs below are on the tree
-of the commit that last changed this file.
+bound to 127.0.0.1 only. Each upload goes over TLS to `https://localhost:<port>`. The runs below are on the tree of
+`e5f07b53` (the rebased branch before `5299130e`, which changes comments and docs only).
 
 **Method.** An upload declares `Content-Length: 16777216` and sends 16,777,215 bytes, then stops: the proxy
 must hold its buffer until `read_body` cuts it. Memory is the caddy container's cgroup v2 `memory.current`
@@ -43,7 +43,8 @@ an HTTP/2 file with no content-length to /api/v1/compare -> 411
 64 KiB + 1 byte to /api/v1/records -> 413
 ```
 
-Each stalled upload's `499` is Caddy's answer once it dropped the request at `read_body`, not an answer from the
+Each stalled upload's `499` is reverse_proxy's answer for a cancelled round trip, after `request_buffers`'
+read failed at `read_body` (`modules/caddyhttp/reverseproxy/reverseproxy.go` in 2.11.7), not an answer from the
 API (Caddy 2.11.4 wrote an empty `200` instead, its access log saying `status: 0`); the API's access-log count
 is the evidence that none reached it.
 
@@ -56,14 +57,14 @@ before each N (MiB):
 |---|---|---|---|---|---|
 | 16 | 14, 15 | 5 s | 765, 804 | 765, 804 | all cut at `read_body` (60.0 s from their start); restarts 0 |
 | 24 | 16, 17 | 7 s | 883, 890 | 803, 890 | all cut at `read_body` (60.0 s); restarts 0 |
-| 32 | 16, 17 | 11 s | (container gone) | 14, 15 (a new container) | `docker events`: `oom`, then `die` with exit 137, then `start`; every connection dropped 10.7 s after it started, as the last bytes arrived; restarts 1 |
+| 32 | 16, 17 | 11 s | (container gone) | 14, 15 (a new container) | `docker events`: `oom`, then `die` with exit 137; restarted (restarts 1); every connection dropped 10.7 s after it started, as the last bytes arrived |
 
 `docker inspect` reported `OOMKilled=false` for the 32-upload run although the kernel killed Caddy: `init: true`
 makes tini PID 1, and the OOM killer took its child. `docker events` is the evidence.
 
-**On Caddy 2.11.4**, before the rebase, with the same block but HTTP/3 still on (HTTP/1.1 stalls either way):
-16 uploads held 793 MiB (peak 794), 24 held 912 MiB (peak 914; 998 MiB in an earlier run on a draft of the
-block with a 30 s `read_body`), and 32 were OOM-killed 0.83 s after the last byte. The smoke test's 8 uploads
+**On Caddy 2.11.4**, before the rebase, the 16, 24 and 32-upload runs (same block, but HTTP/3 still on;
+HTTP/1.1 stalls either way): 16 uploads held 793 MiB (peak 794), 24 held 912 MiB (peak 914; 998 MiB in an earlier run on a draft of the
+block with a 30 s `read_body`), and 32 were OOM-killed 0.83 s after the last byte. The smoke test's 8 uploads (HTTP/3 off)
 held 412 to 472 MiB (peaks 422 to 508) over its four passing 2.11.4 runs (149 to 186 s; 87 to 128 s without
 `--compare`). The 24-upload peak varies with how fast the uploads arrive and when Go collects (890 to 998 MiB
 over both versions): 24 sits at the edge of the 1 GiB limit, not inside it.

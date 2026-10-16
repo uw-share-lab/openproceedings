@@ -286,8 +286,8 @@ ok = api == [65536] and ((srv.get("protocols") == ["h1", "h2"] and inner == want
       and caps == [([{"not": [{"path": ["/api/v1/compare"]}]}], 65536)]) if on else (
       srv.get("protocols") == ["h1", "h2", "h3"] and caps == [(None, 65536)] and not compare))
 sys.exit(0 if ok else 1)' "$compare" || fail "the proxy's adapted body caps or protocols are not what compare=$compare needs"
-# HTTP/3 is advertised (Alt-Svc) only with comparisons off: Caddy builds its HTTP/3 server with only the idle
-# timeout (deploy/Caddyfile)
+# HTTP/3 is advertised (Alt-Svc) only with comparisons off: no stall over QUIC has been run against the block
+# (deploy/Caddyfile)
 headers=$("${curl_tls[@]}" -D - -o /dev/null "$base/api/v1/healthz") || fail "GET /api/v1/healthz headers"
 h3=$(grep -ci '^alt-svc: h3' <<<"$headers" || true)
 echo "Alt-Svc h3 headers: $h3"
