@@ -354,8 +354,9 @@ sys.exit(0 if abs(cut["cut_min_s"] - limit) <= 2 and abs(cut["cut_max_s"] - limi
   oom=$(mem memory.events | sed -n 's/^oom_kill //p') || fail "reading caddy's OOM kills"
   restarts=$(docker inspect --format '{{.RestartCount}}' "$caddy_id") || fail "reading caddy's restarts"
   echo "proxy memory peak $((peak / 1048576)) MiB of $((limit / 1048576)) MiB; oom_kill $oom; restarts $restarts"
-  [ "$oom" = 0 ] && [ "$restarts" = 0 ] && [ "$("${dc[@]}" ps -q caddy)" = "$caddy_id" ] \
-    || fail "the proxy was killed (over its memory limit?)"
+  if [ "$oom" != 0 ] || [ "$restarts" != 0 ] || [ "$("${dc[@]}" ps -q caddy)" != "$caddy_id" ]; then
+    fail "the proxy was killed (over its memory limit?)"
+  fi
   after=$(compared)
   echo "API compare requests: $((after - before)) (the 16 MiB comparison; no stalled upload reached the API)"
   [ "$((after - before))" = 1 ] || fail "a stalled upload reached the API"
