@@ -3842,6 +3842,18 @@
   "new": "    if False:"
  },
  {
+  "label": "record: the marker refuses every record, not only --attest",
+  "file": ".claude/scripts/record-review.py",
+  "old": "    if a.attest and (common / \"op-no-dep-code\").exists():",
+  "new": "    if (common / \"op-no-dep-code\").exists():"
+ },
+ {
+  "label": "record: --attest --pr in a cloud session (GraphQL refused) goes ahead",
+  "file": ".claude/scripts/record-review.py",
+  "old": "        if GRAPHQL_BLOCKED in probe.stdout + probe.stderr:\n",
+  "new": "        if False:\n"
+ },
+ {
   "label": "modes: 100644 accepted",
   "file": ".claude/scripts/check_file_modes.py",
   "old": "if modes[p] != \"100755\":",

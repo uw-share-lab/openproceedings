@@ -2236,12 +2236,10 @@ def _(c: Case) -> None:
     args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
     guarded_checkout(c)
     marker(c).write_text("cloud\n")
-    c.expect(
-        "prs.py",
-        args,
-        PROBLEM,
-        r"^PROBLEM the head's Makefile, \.githooks/pre-push, scripts/setup-dev\.sh predate",
-    )
+    got, out = c.run("prs.py", *args)
+    want = r"^PROBLEM the head's Makefile, \.githooks/pre-push, scripts/setup-dev\.sh predate.*rebase needed"
+    assert got == PROBLEM and re.search(want, out, re.MULTILINE), out
+    assert "comment" not in out, out  # a cloud run posts nothing (notify-only, decision-048 2026-10-16)
 
 
 @row("prs check: in a cloud clone, a head missing only the pre-push guard is a stop")
@@ -2513,7 +2511,7 @@ def _(c: Case) -> None:
     c.expect(
         "prs.py", args, PROBLEM, r"^PROBLEM cloud session: .*queue it from a local /dependabot-review run"
     )
-    assert not called(c, f"{R}/pulls/7") and not called(c, "PUT"), calls(c)
+    assert [x for x in calls(c) if x[1:2] != ["api"] or x[2:3] != ["graphql"]] == [], calls(c)
 
 
 @row("prs queue: local turns auto-merge on, then finds the head unmoved")
@@ -2647,7 +2645,7 @@ def _(c: Case) -> None:
 @row("prs queue: a github-actions PR is the owner's to queue")
 def _(c: Case) -> None:
     args = queue_case(c, {}, head="dependabot/github_actions/g")
-    c.expect("prs.py", args, PROBLEM, r"^PROBLEM a github-actions PR is queued by the owner")
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM a github-actions PR is queued by the owner by hand")
     assert not called(c, "--auto"), calls(c)
 
 
@@ -2664,8 +2662,7 @@ def _(c: Case) -> None:
     c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(local\)")
     want = ["gh", "pr", "merge", "7", "--repo", "uw-share-lab/openproceedings", "--auto",
             "--match-head-commit", args[3]]  # fmt: skip
-    assert want in calls(c) and not called(c, "ccr"), calls(c)
-    assert not any("ccr" in w for x in calls(c) for w in x), calls(c)
+    assert want in calls(c) and not any("ccr" in w for x in calls(c) for w in x), calls(c)
 
 
 @row("prs queue: local, gh pr merge refused")

@@ -305,9 +305,9 @@ def gh(args: list[str]) -> int:
         if fx.get("cloud"):
             return graphql_blocked()
         if args[1:2] == ["merge"]:
-            # "pr merge --auto" / "pr merge --disable-auto" answer that call, else "pr merge" answers both: an exit
-            # code (non-zero: refused), {"__exit": n, "message": "..."} (refused saying that), or {"__conn": true}
-            # (the connection failed, as gh says it: exit 1)
+            # "pr merge --auto" / "pr merge --disable-auto" answer that call (queue_case sets both), else "pr merge"
+            # answers both (no fixture at all: refused): an exit code (non-zero: refused), {"__exit": n, "message":
+            # "..."} (refused saying that), or {"__conn": true} (the connection failed, as gh says it: exit 1)
             which = "--auto" if "--auto" in args else "--disable-auto" if "--disable-auto" in args else ""
             ans = answer(fx, f"pr merge {which}") if f"pr merge {which}" in fx else fx.get("pr merge", 1)
             if isinstance(ans, dict) and "__conn" in ans:

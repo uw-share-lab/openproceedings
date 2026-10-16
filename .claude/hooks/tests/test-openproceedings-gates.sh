@@ -541,6 +541,7 @@ cat > "$TMP/ghbin/gh" <<EOF
 printf '%s\n' "\$*" >> "$TMP/gh.log"
 case "\$1 \$2" in
   "api repos/o/r/pulls/5") cat "$TMP/pr5.json"; exit 0 ;;
+  "api graphql") if [ -n "\${GH_GQL-}" ]; then echo "\$GH_GQL" >&2; exit 1; fi; echo '{"data":{"viewer":{"login":"m"}}}'; exit 0 ;;
   "api -X") exit 0 ;;
   "pr view") echo "\$GH_VIEW" >&2; exit 1 ;;
 esac
@@ -555,7 +556,7 @@ attest_case() {
   if [ "$state" = garbage ]; then printf 'not json' > "$TMP/pr5.json"
   else printf '{"state":"%s","head":{"sha":"%s"},"body":"Summary"}' "$state" "$prhead" > "$TMP/pr5.json"; fi
   : > "$TMP/gh.log"
-  if (cd "$REPO" && env PATH="$TMP/ghbin:$PATH" GH_VIEW="${GH_VIEW-}" python3 "$RECORD" APPROVE "$TMP/none.md" "$@" >"$TMP/attest.out" 2>&1); then got=ok; else got=err; fi
+  if (cd "$REPO" && env PATH="$TMP/ghbin:$PATH" GH_VIEW="${GH_VIEW-}" GH_GQL="${GH_GQL-}" python3 "$RECORD" APPROVE "$TMP/none.md" "$@" >"$TMP/attest.out" 2>&1); then got=ok; else got=err; fi
   if grep -q '^api -X PATCH' "$TMP/gh.log"; then sent=yes; else sent=no; fi
   if [ "$got" = "$want" ] && [ "$sent" = "$patch" ] && grep -Eq -- "$msg" "$TMP/attest.out"; then
     pass=$((pass+1)); printf '  ok   %-24s %-60s -> %s\n' "script" "$label" "$got"
@@ -572,10 +573,16 @@ GH_VIEW="GitHub GraphQL is not available from Claude Code sessions" attest_case 
 attest_case err no  "--pr needs --repo"               "--pr without --repo is refused"          open "$HEADSHA" --attest --pr 5
 attest_case err no  "only apply with --attest"        "--pr without --attest is refused"        open "$HEADSHA" --pr 5 --repo o/r
 attest_case err no  "--repo only applies with --pr"   "--repo without --pr is refused"          open "$HEADSHA" --attest --repo o/r
-MARK="$(cd "$REPO" && git rev-parse --path-format=absolute --git-common-dir)/op-no-dep-code"
+STORE="$(cd "$REPO" && git rev-parse --path-format=absolute --git-common-dir)/op-reviews"
+MARK="$(dirname "$STORE")/op-no-dep-code"
 : > "$MARK"   # prs.py preflight's cloud marker: notify-only (decision-048, 2026-10-16)
+rm -f "$STORE/$HEADSHA"
 attest_case err no  "op-no-dep-code is there: a cloud /dependabot-review run is notify-only" "--attest in a cloud clone is refused" open "$HEADSHA" --attest --pr 5 --repo o/r
+if [ ! -e "$STORE/$HEADSHA" ]; then pass=$((pass+1)); echo "  ok   --attest in a cloud clone writes no record (refused before anything is written)"
+else fail=$((fail+1)); echo "  FAIL --attest in a cloud clone wrote a record"; fi
+attest_case ok  no  "recorded APPROVE"                "a record without --attest in a cloud clone is still written" open "$HEADSHA"
 rm -f "$MARK"
+GH_GQL="gh: GitHub GraphQL is not available from Claude Code sessions; use the REST API (HTTP 403)" attest_case err no "this is a Claude Code cloud session" "--attest --pr in a cloud session without the marker is refused" open "$HEADSHA" --attest --pr 5 --repo o/r
 
 echo "== protect-data-dir.sh"
 P=protect-data-dir.sh

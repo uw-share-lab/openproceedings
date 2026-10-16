@@ -1104,7 +1104,7 @@
     "new": "    if False:  # notify-only"
   },
   {
-    "label": "dependabot: prs: a failed PUT ignored",
+    "label": "dependabot: prs: a failed request ignored",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "    if not enabled:\n",
     "new": "    if False:\n"
@@ -1170,7 +1170,7 @@
     "new": "    if not events or events[0][\"event\"] != \"added_to_merge_queue\":\n"
   },
   {
-    "label": "dependabot: prs: an accepted PUT not checked for effect",
+    "label": "dependabot: prs: an accepted request not checked for effect",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "    elif not visible:\n",
     "new": "    elif False:\n"
@@ -1188,7 +1188,7 @@
     "new": "        why = None\n        if why is None:\n            raise ToolError(\n                f\"queueing"
   },
   {
-    "label": "dependabot: prs: a failed undo after a dead PUT read as done",
+    "label": "dependabot: prs: a failed undo after a dead request read as done",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "        if why is None:\n            raise ToolError(\n                f\"queueing",
     "new": "        if True:\n            raise ToolError(\n                f\"queueing"
@@ -1206,13 +1206,13 @@
     "new": "        if True:\n"
   },
   {
-    "label": "dependabot: prs: turned off again on a refused PUT that turned nothing on",
+    "label": "dependabot: prs: turned off again on a refused request that turned nothing on",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "        if state == \"open\" and (moved or enabled or visible):\n",
     "new": "        if state == \"open\":\n"
   },
   {
-    "label": "dependabot: prs: a PR already set to merge PUT again",
+    "label": "dependabot: prs: a PR already set to merge request again",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "    if taken(number, pr):\n",
     "new": "    if False:\n"
@@ -1236,7 +1236,7 @@
     "new": "        if False:\n"
   },
   {
-    "label": "dependabot: prs: a failed PUT that GitHub queued not undone",
+    "label": "dependabot: prs: a failed request that GitHub queued not undone",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "        if state == \"open\" and (moved or enabled or visible):\n",
     "new": "        if state == \"open\" and (moved or enabled):\n"

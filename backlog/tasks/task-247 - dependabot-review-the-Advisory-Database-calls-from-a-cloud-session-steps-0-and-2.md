@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-14 01:13'
-updated_date: '2026-10-16 16:01'
+updated_date: '2026-10-16 16:32'
 labels:
   - tooling
   - ci
@@ -34,4 +34,6 @@ The GitHub Advisory Database calls /dependabot-review makes (gh api advisories?e
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-16 (chore/dependabot-cloud-notify-only): AC1: the scheduled cloud run (session cse_014uvWwXsnPaQKx5UQf2fD6u, 15:02-15:05Z) called gh api 'advisories?ecosystem=pip&affects=uv&per_page=100' (step 0's query; the same advisories endpoint as AC1's npm/next probe) and was refused with HTTP 403 {"message":"This GitHub API path is not available: sessions are bound to their configured repositories"...}. AC2: the owner decided on 2026-10-16 that the cloud routine is notify-only (decision-048 addendum), so no cloud run merges: a refused per-package query keeps that PR off the cloud summary's 'ready for a local run' list ('advisories for <pkg>: not checked in the cloud'), a refused uv query goes under 'for the owner', and the local run that merges makes the queries itself; procedure steps 0 and 2 and spec 08 say so. AC3: not applicable (the call is refused); the 'not yet seen from a cloud session' caveats are replaced with the recorded refusal.
+
+Review round 1: AC1's text names an npm/next probe; the recorded call is step 0's pip/uv query on the same advisories endpoint, which answers the question AC1 asks. AC3 is conditional ('if it answers') and is ticked as settled: the call is refused, and the 'not yet seen from a cloud session' caveats are gone. Correction to the note above: a refused per-package query does not keep a PR from 'ready for a local run' (that would make every cloud PR unready, since every cloud query is refused); it is listed as 'checked only locally' on the PR's line, and the local run makes the query (procedure step 2, spec 08, decision-048).
 <!-- SECTION:NOTES:END -->

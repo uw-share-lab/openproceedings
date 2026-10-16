@@ -150,11 +150,12 @@ We keep every safety property above and change only how it is reached:
   for leftover processes from the PR's dependencies before it queues (step 5), which catches accidents such
   as a dev server left running but can't rule out code that hides itself (a renamed process, a file it wrote
   that runs later); what bounds that is the rule above that only registry-verified versions run, and the
-  token's narrow scope.
+  token's narrow scope. (Superseded 2026-10-16: the cloud no longer queues, and locally `--match-head-commit`
+  applies; see the last addendum.)
 - **Options.** The alternative to the CCR route was to attest in the cloud and leave every queueing to the
   owner, as for github-actions PRs: no undocumented route and no race, at the cost of a manual step each week
   for every PR, which is most of what decision-048 set out to remove. We take the CCR route, with every
-  failure leaving the PR open; if it proves unreliable, that alternative is the fallback.
+  failure leaving the PR open; if it proves unreliable, that alternative is the fallback. (Superseded 2026-10-16: the cloud is notify-only; see the last addendum.)
 - **Not yet exercised from a cloud session** (as of 2026-10-08): the CCR `PUT`/`DELETE`, the job-log download
   (a redirect to a storage host the egress proxy may not allow) and `gh attestation verify` (sigstore hosts).
   The `PUT`, the log download and the attestation fail closed (the PR stays open). A failing `DELETE` does
@@ -219,7 +220,8 @@ request a rebase instead).
   executes dependency code, which can use the session's credential through the proxy.
 - **Still unconfirmed from the cloud (TASK-243):** step 0's installation calls, the CCR auto-merge `PUT` and
   `DELETE`, the job-log download, a push, `gh attestation verify` (see above), and whether the `attribution`
-  setting holds there.
+  setting holds there. (Superseded 2026-10-16: the setting doesn't hold for a cloud write, and with the cloud
+  notify-only the write paths are moot; see the last addendum.)
 
 ## Addendum (2026-10-13, TASK-243: a cloud run executes none of a PR's dependency code)
 
@@ -253,7 +255,8 @@ What follows from it:
   git common directory. While it is there, the Makefile's `dep-code-allowed` makes `make sync`, `fmt`, `lint`,
   `test`, `e2e` and `openapi` refuse, `scripts/setup-dev.sh` skips its `uv sync`, and `.githooks/pre-push` skips
   its `make lint` (`uv run --locked` would sync the PR's `uv.lock` and run its ruff and mypy) and still runs
-  `make tooling`; CI's `lint` on the pushed head stands in. Locally `preflight` removes a marker it finds. Rows:
+  `make tooling`; CI's `lint` on the pushed head stands in (superseded 2026-10-16: the pre-push hook refuses every
+  push while the marker is there; see the last addendum). Locally `preflight` removes a marker it finds. Rows:
   `.claude/scripts/tests/test-no-dep-code.sh` and `dependabot_cases.py`; mutants in `gates.json` and
   `dependabot.json`. The guard lives in the checked-out tree, and a Dependabot PR based on an older `dev` carries
   unguarded copies, so in the cloud `core.hooksPath` points at `dev`'s hooks extracted into the run directory
@@ -334,7 +337,9 @@ Consequences:
 - Not decided here: the GitHub Advisory Database calls (`gh api advisories?…`, step 0's uv query and step 2's
   per-package queries) are a path outside `repos/`, so the proxy may refuse them too; no cloud session has made
   one yet (TASK-247). Until it is decided, the procedure fails closed: a refused step 2 query is a check that
-  couldn't run (a hard stop for that PR), and a refused step 0 uv query goes under "for the owner".
+  couldn't run (a hard stop for that PR), and a refused step 0 uv query goes under "for the owner". (Decided
+  2026-10-16: the proxy refuses them, and with the cloud notify-only a refused query is reported, not a stop; see
+  the last addendum.)
 - What would change this: the proxy answering the installation API (then check the installation's repository list
   in the cloud again), or Sigstore's TUF hosts becoming reachable from a session.
 
@@ -361,7 +366,8 @@ from a cloud session (TASK-243 AC2).
 each PR as far as a cloud session can (the session binding, `prs.py check`, the supply-chain checkers that answer
 there, the release notes, CI's results through `prs.py ci`, the reviewers reading diffs) and reports through its run
 summary, which the routine's push notification carries. It makes **no GitHub write**: no comment (a hard stop's or
-`@dependabot rebase`), no label, no PR-body edit or attestation, no queueing or auto-merge, no push, no workflow rerun.
+`@dependabot rebase`), no label, no PR-body edit or attestation, no queueing or auto-merge, no push, no rerun or
+cancel of a workflow run, no close or reopen.
 Merging is always a local `/dependabot-review` run from a maintainer's clone, which runs the procedure in full,
 including the checks the cloud can't (Sigstore, the advisory queries, the tag lookups, the tests) and every write. The
 routine itself on claude.ai is unchanged (its prompt stays `/dependabot-review`); the behaviour lives in the committed
@@ -372,15 +378,27 @@ What follows from it:
   CCR route is removed, and locally it runs `gh pr merge --auto --match-head-commit` as before. `record-review.py
   --attest` refuses in a clone holding `prs.py preflight`'s cloud marker (`op-no-dep-code`), and `.githooks/pre-push`
   refuses every push while that marker is there (it used to skip `make lint`). The `gh api` writes the procedure names
-  (comments, labels, the body `PATCH`) have no script of their own; the procedure keeps them out of a cloud run. Rows:
-  `dependabot_cases.py` (queue), `test-no-dep-code.sh` (pre-push), `test-openproceedings-gates.sh` (record-review);
-  mutants in `dependabot.json` and `gates.json`.
+  (comments, labels, the body `PATCH`) have no script of their own; the procedure keeps them out of a cloud run.
+  `record-review.py --attest --pr` also refuses wherever GraphQL is refused the way a cloud session refuses it, so
+  the one attest path a cloud session has is closed even in a clone without the marker. Rows: `dependabot_cases.py`
+  (queue), `test-no-dep-code.sh` (pre-push), `test-openproceedings-gates.sh` (record-review); mutants in
+  `dependabot.json` and `gates.json`.
+- **What the guards don't do.** They stop an honest run's mistakes, not a run something has steered (a prompt in a
+  PR's text or release notes, which the procedure treats as data): the session still holds the App's credential,
+  with pull-request, contents and workflows write, and could call `gh api` itself (`git push --no-verify` skips the
+  hook). That is no regression, since the cloud could write before; what bounds it is still the installation's
+  scope and the merge queue's required checks, `review-attested` among them. "Notify-only" is the routine's
+  behaviour, not a security property to relax another gate on.
 - **TASK-243 AC2 is moot**: with no cloud write, the CCR route, the job-log download and a cloud push have nothing left
   to confirm. The CCR route is gone from `prs.py`; the fake `gh` still answers it in cloud mode, and a row checks
   `queue` never calls it.
-- **TASK-247**: a refused per-package advisory query keeps that PR from the cloud summary's "ready for a local run"
-  list, and a refused step 0 uv query goes under "for the owner"; the local run that merges a PR makes the queries
-  itself. No hard stop is needed in the cloud, since nothing merges there.
+- **TASK-247**: a refused per-package advisory query is listed as "checked only locally" on that PR's line, and
+  doesn't keep it from the cloud summary's "ready for a local run" list; a refused step 0 uv query goes under "for
+  the owner". The local run that merges a PR makes the queries itself. No hard stop is needed in the cloud, since
+  nothing merges there.
+- **github-actions PRs**: the reason they aren't queued by the command is no longer the routine's credential (the
+  cloud doesn't queue, and a local run holds the maintainer's login): a workflow change runs with the repository's
+  secrets once it merges, so the owner queues it by hand after reading it; `prs.py queue` still refuses one.
 - **The cloud summary** lists the PRs ready for a local run (with any fix the local run must make), the hard stops with
   their evidence, the PRs not reviewed (a rebase needed, for one) and what is for the owner. A local run's summary is
   unchanged.

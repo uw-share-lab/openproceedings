@@ -78,7 +78,7 @@ applied" notice (it found no publication date, so nothing held the release back 
 `queue` runs locally only: in a cloud session it prints a PROBLEM (notify-only) and exits 1 before reading or
 writing anything else. Locally it turns auto-merge on (on `dev` that puts the PR in the merge queue once its checks
 pass) only for an open Dependabot PR into `dev` whose head is still `<sha>` and whose branch name is plain, and never
-for a github-actions PR (decision-048 keeps `workflows` out of the routine's credential: the owner queues those). A
+for a github-actions PR (the owner queues a workflow change by hand after reading it, decision-048). A
 PR GitHub already shows set to merge is left as it is (a re-queue in step 9). Otherwise it runs `gh pr merge <n>
 --auto --match-head-commit <sha>`, reads the PR again, and requires GitHub to show it set to merge (auto-merge on, or
 a merge-queue entry in the timeline newer than the request; read once more after OP_DEPENDABOT_SETTLE seconds,
@@ -163,11 +163,14 @@ FAILED = {"failure", "timed_out", "cancelled", "action_required", "startup_failu
 QUEUE_EVENTS = ("added_to_merge_queue", "removed_from_merge_queue")
 # A Dependabot head branch: the PR's text reaches git commands the procedure writes, so its name must be plain.
 HEAD_SHAPE = re.compile(r"dependabot/[a-z_]+/(?!.*\.\.)[A-Za-z0-9._/@+-]+")  # git forbids ".." too
-# In git's common directory of a cloud clone: make's dependency targets, setup-dev.sh's uv sync and the pre-push
-# hook's make lint stand down while it exists (decision-048, 2026-10-13: a cloud run executes no PR dependency code).
+# In git's common directory of a cloud clone: make's dependency targets and setup-dev.sh's uv sync stand down while it
+# exists (decision-048, 2026-10-13: a cloud run executes no PR dependency code), the pre-push hook refuses every push
+# and record-review.py refuses --attest (2026-10-16: a cloud run is notify-only).
 NO_DEP_CODE = "op-no-dep-code"
 # What a tree honours the marker with. A PR based on an older dev lacks them, and git runs the checked-out tree's
-# Makefile and pre-push hook, so in a cloud clone `check` stops such a head (the routine asks Dependabot to rebase).
+# Makefile and pre-push hook, so in a cloud clone `check` stops such a head (rebase needed: the cloud summary says so).
+# This guards the no-dependency-code rule; the push refusal is dev's own pre-push in $RUN (core.hooksPath), which a
+# head with only the 2026-10-13 hook (it skips make lint, then pushes) can't replace.
 GUARDED = {
     "Makefile": "dep-code-allowed",
     ".githooks/pre-push": NO_DEP_CODE,
@@ -449,8 +452,8 @@ def check_pr(number: int, head: str) -> None:
         old = [f for f, word in GUARDED.items() if word not in (git_show(sha, f) or "")]
         if old:
             rep.problem(
-                f"the head's {', '.join(old)} predate the no-dependency-code guard (a base older than it): comment "
-                "`@dependabot rebase` and list the PR as not reviewed"
+                f"the head's {', '.join(old)} predate the no-dependency-code guard (a base older than it): list the "
+                "PR as not reviewed, rebase needed (`@dependabot rebase`, from a local run: the cloud is notify-only)"
             )
     if not rep.problems:
         rep.ok(f"{eco}: {len(paths)} file(s) and {len(commits)} commit(s), all Dependabot's, at {sha[:12]}")
@@ -537,7 +540,7 @@ def settle_seconds() -> float:
         seconds = float(raw)
     except ValueError as e:
         raise ToolError(f"OP_DEPENDABOT_SETTLE is {raw!r}, not a number of seconds") from e
-    if not math.isfinite(seconds) or seconds < 0:  # time.sleep refuses these, after the PUT
+    if not math.isfinite(seconds) or seconds < 0:  # time.sleep refuses these, after the request
         raise ToolError(f"OP_DEPENDABOT_SETTLE is {raw!r}, not a number of seconds")
     return seconds
 
@@ -553,7 +556,7 @@ def queue_pr(number: int, head: str) -> None:
     pr = get_pr(number)
     pr_problems(rep, pr, sha)
     if ecosystem(pr["head"]["ref"]) == "github_actions":
-        rep.problem("a github-actions PR is queued by the owner (the token has no `workflows` permission)")
+        rep.problem("a github-actions PR is queued by the owner by hand, after reading it (decision-048)")
     if rep.problems:
         rep.finish()
     if taken(number, pr):
