@@ -80,6 +80,8 @@ The project owner decided on 2026-10-16 that the semantic-layer tasks aren't nee
 layer and keep its design as a reference. Recorded:
 - TASK-058 to 062 and TASK-084 are archived (`backlog/archive/tasks/`), and milestone M5 is archived. The
   layer is no longer phase-2 work; it is not planned.
+- Archiving dropped the links among those tasks; their order on `dev` before archiving was 058 (after TASK-054)
+  → 059 and 060 (060 also after TASK-035) → 061 → 062 (also after TASK-042) → 084 (after 060 and 062).
 - Spec 06, the `embedding-engineer` and `near-miss-evaluator` agents and the `specter2-embeddings` skill stay
   as a design reference. Specs, skills, the README and the CLI and engine messages say "shelved" where they
   said "deferred to phase 2" (the engine hint above now reads "semantic sort is shelved (decision-017)").

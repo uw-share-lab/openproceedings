@@ -56,7 +56,7 @@ summed over the query's positive scoring clauses.
 | `relevance` (default) | `(-score, id)` |
 | `year_desc` / `year_asc` | `(-year, id)` / `(year, id)` |
 | `title` | `(casefold(NFKC(display title)), id)` |
-| `semantic` (deferred) | supplied by 06 when enabled (shelved, decision-017); still tie-broken by `id` |
+| `semantic` (shelved) | supplied by 06 when enabled (shelved, decision-017); still tie-broken by `id` |
 
 - The tie-breaker is **always `id`**. Tantivy's internal doc order depends on segments, so it is never a
   tie-breaker. The id only breaks ties if tied documents really get equal floats (the balanced trees

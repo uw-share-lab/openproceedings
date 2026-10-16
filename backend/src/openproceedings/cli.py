@@ -92,6 +92,13 @@ def _stub_status(task: str) -> str:
     return "shelved (decision-017)" if task in DEFERRED_TASKS else f"planned in {task}"
 
 
+def _stub_pointer(task: str) -> str:
+    """Where a stub sends the reader: the task, or spec 06 for a shelved one (its task is archived)."""
+    if task in DEFERRED_TASKS:
+        return f"see docs/specs/06-semantic-layer.md (archived {task})"
+    return f"see `backlog task view {task}`"
+
+
 def _stub(p: argparse.ArgumentParser, name: str, task: str) -> None:
     p.add_argument("args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
     p.set_defaults(stub=(name, task))
@@ -2282,7 +2289,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if hasattr(ns, "stub"):
         name, task = ns.stub
         print(
-            f"op {name}: not implemented yet — {_stub_status(task)}; see `backlog task view {task}`",
+            f"op {name}: not implemented yet — {_stub_status(task)}; {_stub_pointer(task)}",
             file=sys.stderr,
         )
         return 2

@@ -15,7 +15,7 @@ build). Others are reports (they're regenerated and committed as dated results, 
 | Golden queries | Query → expected ID set on a hand-built 200-record fixture, with the cases written to be tricky (benchmark/benchmarking, trust/trustworthy, hyphens, LaTeX, phrases that span fields, NEAR ordering) | 100% pass |
 | Differential | Hypothesis random ASTs: `TantivyEngine == ReferenceEngine` on the synthetic 5k fixture snapshot plus 20 cap-edge records (5,020, both hash-pinned; decision-004) | 0 counterexamples in 200 examples per PR CI run, 50k nightly |
 | Tokenizer parity | Stored text, positions (phrase read-back) and every term's document frequency in the index == `normalize.py`, over the whole corpus (term frequency only as far as the phrases imply) | 0 diffs |
-| Semantic invariant (deferred with 06, decision-017; not a v1 gate) | Search results identical with 06 on and off | 0 diffs, once 06 is built |
+| Semantic invariant (shelved with 06, decision-017; not a v1 gate) | Search results identical with 06 on and off | 0 diffs, if 06 is ever built |
 | Determinism | Same canonical query + `index_version` → identical order and scores | 0 diffs |
 
 As built (task-028): the differential is `backend/tests/differential/`, on a synthetic 5k corpus generated
@@ -368,11 +368,11 @@ with and without them on the fixture and on the real corpus (every Trust-Evals s
 (`backend/tests/bench/group_counts_report.py` → `docs/results/<date>-bench-group-counts.md`; median and p95
 of 200 rounds, cited only at a 1-minute load under 5 at the start and the end), cited by 04 §SearchResponse.
 
-## F. Usefulness of near-misses (report, M5: deferred)
+## F. Usefulness of near-misses (report, M5: shelved)
 
-This is 06's recall@25 protocol, using the review's Covidence included set as ground truth. Deferred with
+This is 06's recall@25 protocol, using the review's Covidence included set as ground truth. Shelved with
 06 (decision-017): v1 is Boolean search only, so neither this report nor §A's semantic invariant is a v1
-release gate. Both become required when the semantic layer is built.
+release gate. Both become required only if a decision superseding decision-017 resumes the semantic layer.
 
 ## G. OpenAlex abstract fidelity (report, `op eval openalex`)
 

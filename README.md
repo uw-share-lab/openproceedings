@@ -76,7 +76,7 @@ authoritative):
 and development deployments may leave the contact out. For the 2024+ conferences, OpenReview's terms dedicate
 the abstracts under CC0, and PMLR grants CC BY 4.0 (known from ICML 2017, v70). The other years, and
 AAAI, AIES, FAccT and IASEAI (ojs.aaai.org states AAAI copyright and no open licence; for ACM's papers, open access since 2026-01-01, no metadata or abstract licence was found, and the ACM Digital Library refuses automated reads; the research note §Licence posture), rest on
-Canadian fair dealing alone. So do the abstracts filled from OpenAlex: its data is CC0, but it ships no plaintext abstracts, so a rebuilt one carries the publisher-abstract posture, and the label `abstract_kind:openalex` lets a review leave them out. Consulting the University of Waterloo copyright office before launch is
+Canadian fair dealing alone. So do the abstracts filled from OpenAlex: its Pricing page calls the data CC0, but its terms of service (revised 2026-10-02) grant only a revocable licence and forbid republishing without consent (pending TASK-135), and it ships no plaintext abstracts, so a rebuilt one carries the publisher-abstract posture, and the label `abstract_kind:openalex` lets a review leave them out. Consulting the University of Waterloo copyright office before launch is
 recommended, not a gate
 ([decision-018](backlog/decisions/decision-018%20-%20The-public-instance-serves-every-abstract-with-attribution-and-a-source-link-and-a-takedown-contact-on-public-instances-TASK-063.md),
 spec 08 §Deploy). Older index versions that saved searches pin still match on a withheld abstract's words,

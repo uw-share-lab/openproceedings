@@ -4,7 +4,7 @@ title: Usability test round 2 on the deployed instance
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-29 23:58'
+updated_date: '2026-10-16 15:52'
 labels:
   - ux
   - research
@@ -18,7 +18,7 @@ ordinal: 67000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Second round of usability testing on the deployed v1 instance, after round 1 (TASK-047) and the deployment (TASK-065) (usability-testing skill). v1 is Boolean search only (decision-017), so this round covers the Boolean workspace; the near-miss panel (M5) is deferred to phase 2 and is not part of it.
+Second round of usability testing on the deployed v1 instance, after round 1 (TASK-047) and the deployment (TASK-065) (usability-testing skill). v1 is Boolean search only (decision-017), so this round covers the Boolean workspace; the near-miss panel (M5) is shelved (decision-017, addendum 2026-10-16) and is not part of it.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

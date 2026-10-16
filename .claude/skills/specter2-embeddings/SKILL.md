@@ -5,7 +5,7 @@ description: The semantic-layer standard (spec 06, M5, shelved by decision-017, 
 
 # SPECTER2 embeddings (spec 06)
 
-**Deferred (decision-017, 2026-09-29).** v1 is Boolean search only; the semantic layer (spec 06, M5) is
+**Shelved (decision-017, 2026-09-29; addendum 2026-10-16).** v1 is Boolean search only; the semantic layer (spec 06, M5) is
 shelved and not v1 work. Its tasks (TASK-058 to 062, TASK-084) were archived on 2026-10-16. Don't start them
 without a decision that supersedes decision-017.
 

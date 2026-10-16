@@ -35,6 +35,9 @@ def test_eval_stubs_exit_2_and_name_their_task(
     assert f"op eval {name}" in err and task in err and "not implemented yet" in err
     assert ("shelved (decision-017)" in err) == (f"eval {name}" in DEFERRED)
     assert ("planned in" in err) == (f"eval {name}" not in DEFERRED)
+    # a shelved task is archived, so `backlog task view` can't find it: the stub points at spec 06
+    assert ("backlog task view" in err) == (f"eval {name}" not in DEFERRED)
+    assert ("docs/specs/06-semantic-layer.md" in err) == (f"eval {name}" in DEFERRED)
 
 
 def test_eval_stub_list_matches_the_planned_table() -> None:
@@ -49,6 +52,8 @@ def test_stub_exits_2_and_names_its_task(name: str, task: str, capsys: pytest.Ca
     assert task in err
     assert "not implemented yet" in err
     assert ("shelved (decision-017)" in err) == (name in DEFERRED)
+    assert ("backlog task view" in err) == (name not in DEFERRED)
+    assert ("docs/specs/06-semantic-layer.md" in err) == (name in DEFERRED)
 
 
 @pytest.mark.parametrize(("name", "found"), [("snap", True), ("../outside", False), (".hidden", False)])

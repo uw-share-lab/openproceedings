@@ -110,7 +110,7 @@ reviews without the UI.
 | `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date, what kind its window is and whether its counts are citable; per venue-year the statuses indexed, per venue × year × track the spec 07 §C cell (official count, delta, gate) |
 | `GET` | `/meta` | Current and servable `index_version`s, the field names and the venue, track, status and `abstract_kind` vocabularies (these feed the UI's autocomplete), and this instance's query `limits`; `limits.compare` holds `POST /compare`'s caps, or null when comparisons are off |
 | `GET` | `/healthz` | Liveness and whether the index is loaded |
-| `GET` | `/near-misses` | **M5 only, deferred** (not in v1, decision-017): the semantic suggestion panel, a separate resource (see 06) |
+| `GET` | `/near-misses` | **M5 only, shelved** (not in v1, decision-017): the semantic suggestion panel, a separate resource (see 06) |
 
 ### `SearchResponse`
 
