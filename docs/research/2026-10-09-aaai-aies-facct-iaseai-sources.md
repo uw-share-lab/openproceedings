@@ -477,7 +477,8 @@ each paper's own `license` field, which is not a data licence. The statements th
   statement.** No separate data-licence page was found: help.openalex.org's page index
   (https://help.openalex.org/llms.txt, read 2026-10-16) lists none, and its "Licenses" page
   (https://help.openalex.org/data/licenses/) covers the licences of the works OpenAlex indexes, not OpenAlex's own.
-  Whether the terms change the fallback is the owner's question (TASK-236's report); nothing here changes the fill.
+  The two conflict, and an owner decision is pending: since 2026-10-16 TASK-135 (the copyright-office consultation,
+  a launch gate) covers it, and OpenAlex stays the decision-049 fallback, unchanged, until it is answered.
 
 So the Pricing page calls the data CC0, though the terms of service (read 2026-10-16) restrict republication. Either
 way the abstract text is deliberately not shipped: the `abstract_inverted_index` is the form OpenAlex releases, and
@@ -489,7 +490,7 @@ whatever its source, so an OpenAlex abstract too) and the pending copyright-offi
 question that this posture doesn't answer: fair dealing (decision-018) is a copyright defence, not a licence to
 breach a contract term. The terms were revised on 2026-10-02, before the 2026-10-10 crawl, so the extract was
 taken under them, and serving rebuilt abstracts on a public instance is the kind of republication they cover. That
-is for the owner (item 1 of §Fixtures and what the census leaves for the owner).
+question is TASK-135's (item 1 of §Fixtures and what the census leaves for the owner).
 
 ### The DOI route (AIES 2018–2023, FAccT, two AAAI 2020 records)
 
@@ -625,8 +626,9 @@ DOI, 1,150 by title) and leaves 3,560 at `none` (§TASK-231 below). These are th
   - `test_openalex_recorded.py` pins them to the parser, the rebuild and the shipped table.
 - **For the owner:**
   1. Open (2026-10-16): the Pricing page says CC0, but OpenAlex's terms of service (revised 2026-10-02) restrict
-     republishing its data without written consent (§OpenAlex, Licence). Whether OpenAlex stays the fallback is the
-     owner's decision. Abstracts rebuilt from the index are served on the publisher-abstract posture either way.
+     republishing its data without written consent (§OpenAlex, Licence). The owner folded the question into TASK-135
+     (2026-10-16), a launch gate; OpenAlex stays the fallback, unchanged, until it is answered. Abstracts rebuilt from
+     the index are served on the publisher-abstract posture either way.
   2. Decided (TASK-231, 2026-10-10): a key holding CR/LF is read as its words joined by one space, at its one
      position (§TASK-231 below). The extract keeps the raw index, so no refetch was needed.
   3. Note that the `works` counts are a live total. If OpenAlex adds or merges a work under S4306420577 for a
@@ -869,7 +871,7 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
 | AAAI 2016 | 548 | AAAI's list, "ordered … in each proceedings category", matching the OJS sections exactly (submissions 2,132) | aaai.org list; issue page 303 | 548 | not gated: the list appears derived from the proceedings (note) |
 | AAAI 2017 | 637 | counted on AAAI's own list: 599 main technical + 38 in three special tracks (submissions 2,571) | https://aaai.org/wp-content/uploads/2023/01/aaai17accepted-papers.pdf | 639 | gateable (row, list count, 2026-10-10) |
 | AAAI 2020 | 1,614 | counted on AAAI's own pre-camera-ready lists: 1,589 main technical + 25 AI for Social Impact | https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-Paper-List.pdf and https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-AISI-Papers.pdf | 1,610 | gateable (row, list count, 2026-10-10) |
-| AAAI 2021 | 1,696 | counted on AAAI's own list: 1,656 main technical + 40 AI for Social Impact, both from the one PDF (the 40 its last section, pp. 121–124) | https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf; earlier copy archived 2020-12-30 (1,657 + the same 40) | 1,694 | gateable (row, list count, 2026-10-10; re-checked 2026-10-16) |
+| AAAI 2021 | 1,697 | counted on AAAI's own list as archived 2020-12-30, before the conference: 1,657 main technical + 40 AI for Social Impact, both from the one PDF (the 40 its last section, pp. 121–124); the later copy has 1,656 + the same 40 | https://web.archive.org/web/20201230042125id_/https://aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf; later copy https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf | 1,694 | gateable (row, list count, 2026-10-10; re-checked and re-counted from the pre-conference copy 2026-10-16, owner's choice) |
 | AAAI 2022–2026 | none | chairs' notification emails quoted on third-party sites and aggregator figures only (1,349; 1,721; 2,342; 3,032; 4,167), apparently the main technical track alone | none official | see the per-year table | not found (note) |
 | IASEAI 2026 | 92 | accepted research papers, 35 of them non-archival and unpublished on OJS | https://ojs.aaai.org/index.php/IASEAI/issue/view/741 | 57 | definition mismatch: recorded, not gated |
 
@@ -890,32 +892,35 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
     publication). Each is an ungated cell with a note.
   - 2012, 2017, 2020 and 2021: the PDFs sit under `wp-content/uploads/2023/01/`, the date of AAAI's site migration,
     not of the lists, so their upload dates say nothing. All four are gated, each row naming its ground: the 2020
-    lists say they were made before camera-ready; 2012, 2017 and 2021 differ from the proceedings the crawl reads in
-    count (deltas +2, +2 and −2 on the snapshot below; 2020's is −4).
-  - 2021 (re-checked 2026-10-16, TASK-234): the 40 AI for Social Impact papers are in the cited PDF itself. Its
+    lists say they were made before camera-ready; 2012 and 2017 differ from the proceedings the crawl reads in count
+    (deltas +2 and +2 on the snapshot below; 2020's is −4); and 2021's is counted from a copy archived before the
+    conference (next bullet; Δ −3).
+  - 2021 (re-checked 2026-10-16, TASK-234): the 40 AI for Social Impact papers are in the list PDF itself. Its
     first page says the special track's list "appears at the end of this document", and its last section,
     "Special Track on AI for Social Impact" (pp. 121–124), has 40 numbered entries; the 1,656 main technical are
-    the entries before it (counted 2026-10-16 by the AI assistant session working for the owner, from the
-    2023-09-29 capture `https://web.archive.org/web/20230929155523id_/https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf`).
+    the entries before it in the copy aaai.org serves now (counted 2026-10-16 by the AI assistant session working
+    for the owner, from the 2023-09-29 capture
+    `https://web.archive.org/web/20230929155523id_/https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf`).
     No separate AI for Social Impact list was found under either path the Internet Archive holds:
     `https://web.archive.org/cdx/search/cdx?url=aaai.org/Conferences/AAAI-21/*&collapse=urlkey` lists 887 URLs, none
     another accepted list, and `https://web.archive.org/cdx/search/cdx?url=aaai.org/wp-content/uploads/2023/01/AAAI-21*&collapse=urlkey`
     lists four files, this PDF, the program committee, the schedule overview and the poster schedule (both queried
     2026-10-16; AAAI-20's separate AISI list sits under the 2023/01 path, AAAI-21's doesn't). The PDF doesn't say it
-    predates the proceedings, and the cited copy (SHA-1 base32 `SOFX7UV3F7DWXILKLOLHRV5OKIO76JPZ`, embedded creation
+    predates the proceedings, and the later copy (SHA-1 base32 `SOFX7UV3F7DWXILKLOLHRV5OKIO76JPZ`, embedded creation
     date 2021-01-29) was first captured on 2021-11-10, at the old path
     `aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf`.
     An earlier copy at that path, captured on 2020-12-30 and 2021-01-26 (`DZJNTKYZTPBVFWBS5AXMQIUBXI457YSX`,
     embedded creation date 2020-12-23), was made before the conference (2021-02-02 to 02-09) and so before the
     proceedings. It lists the same 40 AI for Social Impact papers and 1,657 main technical: paper 7140 ("Fused
-    Sequential and Hierarchical Representation Model for Aspect Term Extraction") is on it and not on the cited copy,
+    Sequential and Hierarchical Representation Model for Aspect Term Extraction") is on it and not on the later copy,
     and is not in the index (snapshot `2026-10-11-93c2937e2f29`), so the later copy was edited toward the
-    proceedings. The row keeps the cited copy's 1,696, which still differs from the proceedings in count, and names
-    the earlier copy and which copy each number comes from. Counted against the earlier copy, the row would be 1,697
-    (Δ −3, 0.18%), which also passes the gate; which copy to count is the owner's choice (reported 2026-10-16).
+    proceedings. **The owner chose the earlier copy (2026-10-16)**, since official counts come from a list made
+    before the proceedings: the row counts it, 1,697 (Δ −3, 0.18% on snapshot `2026-10-11-93c2937e2f29`; the gate
+    passes), and names the later copy (1,696) too.
 
   The deltas are those of snapshot `2026-10-10-9efa49481112` and are unchanged on the final snapshot
-  `2026-10-11-93c2937e2f29` (`docs/results/2026-10-11-coverage.md`), where the gate passes at 81 of 82 cells.
+  `2026-10-11-93c2937e2f29` (`docs/results/2026-10-11-coverage.md`), where the gate passes at 81 of 82 cells; with
+  2021 re-counted at 1,697 its delta is −3 (`docs/results/2026-10-16-coverage.md`), and the gate still passes.
 - **Ungated-cell notes (TASK-222).** AAAI 2010, 2011, 2014, 2016 and 2022–2026 main and IASEAI 2026 main each carry a
   cited note
   saying why they are not gated (`official_counts.UNGATED_NOTES`, `coverage-sources.md` §Ungated cells with a note),

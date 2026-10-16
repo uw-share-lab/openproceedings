@@ -76,9 +76,9 @@ OFFICIAL_ACCEPTED: OfficialTable = {
         date(2026, 10, 10),
     ),
     ("AAAI", 2021, "main"): OfficialCount(
-        1696,
-        "papers counted on AAAI's own accepted-paper list (the AAAI-21 PDF on aaai.org headed Main Technical Track): 1,656 main technical plus 40 AI for Social Impact, the 40 from the same PDF's last section, Special Track on AI for Social Impact (pp. 121–124); independent of the proceedings because it differs from them in count (−2 on snapshot 2026-10-10-9efa49481112); an earlier copy archived on 2020-12-30, before the conference, lists the same 40 and 1,657 main technical",
-        "https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (linked from https://aaai.org/conference/aaai/aaai-21/), counted from its Internet Archive capture https://web.archive.org/web/20230929155523id_/https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (SHA-1 base32 SOFX7UV3F7DWXILKLOLHRV5OKIO76JPZ); earlier copy: https://web.archive.org/web/20201230042125/https://aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (DZJNTKYZTPBVFWBS5AXMQIUBXI457YSX)",
+        1697,
+        "papers counted on AAAI's own accepted-paper list as it stood before the proceedings (the AAAI-21 PDF headed Main Technical Track, in the copy the Internet Archive captured on 2020-12-30, before the conference): 1,657 main technical plus 40 AI for Social Impact, the 40 from the PDF's last section, Special Track on AI for Social Impact (pp. 121–124); independent of the proceedings because it was made before them; the owner chose this copy on 2026-10-16, since official counts come from a list made before the proceedings; the later copy on aaai.org has 1,656 plus the same 40, dropping one paper absent from the proceedings",
+        "https://web.archive.org/web/20201230042125id_/https://aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (SHA-1 base32 DZJNTKYZTPBVFWBS5AXMQIUBXI457YSX); the later copy: https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (linked from https://aaai.org/conference/aaai/aaai-21/; captured https://web.archive.org/web/20230929155523id_/https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf, SOFX7UV3F7DWXILKLOLHRV5OKIO76JPZ)",
         date(2026, 10, 16),
     ),
     ("AIES", 2024, "main"): OfficialCount(

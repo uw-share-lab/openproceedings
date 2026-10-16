@@ -20,12 +20,12 @@ Find where the AAAI 2021 gate row's 40 AI for Social Impact papers were counted,
 - Grepping `pdftotext` output for `^Special` failed because of the layout spacing; a Python regex with `\s+` found the heading.
 
 ## Decisions (and what would change them)
-- The AAAI 2021 row keeps the cited copy's 1,696 (it is independent because its count differs from the proceedings) and names the earlier copy. If the owner prefers the pre-proceedings copy, the row becomes 1,697 (Δ −3, 0.18%), which still passes.
-- The OpenAlex terms/CC0 conflict is recorded, not acted on. Whether OpenAlex stays the decision-049 fallback is an owner decision.
+- The AAAI 2021 row counts the pre-conference copy, 1,697 (Δ −3, 0.18%): the owner chose it on 2026-10-16 because official counts come from a list made before the proceedings. The later copy (1,696) drops paper 7140, which is not in the index, so it was edited toward the proceedings; it is named in the row too. A later copy that differs from the proceedings in count would have passed the independence rule, but the earlier copy needs no such argument.
+- The OpenAlex terms/CC0 conflict is recorded, not acted on. The owner folded it into TASK-135 (2026-10-16), a launch gate; OpenAlex stays the decision-049 fallback until it is answered.
 
 ## Follow-ups
-- [ ] Owner decision on OpenAlex's terms of service against its CC0 statement (reported to the lead; the lead files it).
-- [ ] Owner choice of the AAAI 2021 row's copy: the cited 1,696, or the pre-proceedings 1,697 (reported to the lead).
+- [x] OpenAlex's terms of service against its CC0 statement: folded into TASK-135 (owner, 2026-10-16), a launch gate; OpenAlex stays the decision-049 fallback until it is answered.
+- [x] The AAAI 2021 row's copy: the owner chose the pre-conference copy's 1,697 (2026-10-16).
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? `.claude/skills/coverage-reporting/SKILL.md` (count the whole cited document; date a list from every CDX capture of its URL and its pre-migration path) and `.claude/skills/logging-standards/SKILL.md` (`library_compared`).
