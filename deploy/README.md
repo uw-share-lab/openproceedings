@@ -322,9 +322,11 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
   the other four getting 413); a length that isn't 1 to 18 plain digits gets 400 (over HTTP/2 Go passes it on to
   Caddy, whose arithmetic on it would fail into a 500); browsers
   declare a file's length (Chromium over HTTP/2 did). The server
-  also stops speaking HTTP/3 (`protocols h1 h2`): Caddy builds its HTTP/3 server with only the idle timeout
-  (read in v2.11.4's `modules/caddyhttp/server.go`; not measured), so `read_body` never applies there and an
-  upload stalled over QUIC could hold its buffer for as long as the client keeps the connection alive. Any
+  also stops speaking HTTP/3 (`protocols h1 h2`): no stall over QUIC has been run against this block. Caddy
+  builds its HTTP/3 server with only the idle timeout, and `read_body` reaches a QUIC stream only through the
+  per-request read deadline Caddy sets since 2.11.6 (`modules/caddyhttp/server.go`); until a stall is shown
+  to be cut there, an upload stalled over QUIC might hold its buffer for as long as the client keeps the
+  connection alive. Any
   value of `OP_COMPARE` but `on` or `off` names a snippet (or file) that doesn't exist, and Caddy refuses to
   start.
 - **`caddy`** also gets `OP_READ_BODY` (default `60s`: a 16 MiB file then needs more than 2.24 Mbit/s), a
@@ -334,7 +336,8 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
   no per-path setting for it, so a slow client of any route is now cut after 60 s rather than 10.
 
 What was measured on this stack with `compare.yml`'s defaults (TASK-183, 2026-10-16: Docker Desktop, engine
-24.0.7, on an 8-CPU Mac shared with other builds; caddy 2.11.4; the raw output is in
+24.0.7, on an 8-CPU Mac shared with other builds; caddy 2.11.7, with 2.11.4's figures close to these; the raw
+output is in
 [`docs/results/2026-10-16-compare-proxy.md`](../docs/results/2026-10-16-compare-proxy.md)). Each upload declared
 16 MiB and stopped one byte short, sent over TLS (HTTP/1.1) on loopback by
 `backend/tests/deploy/compare_probe.py stall`, which `smoke-test.sh --compare` runs with 8; memory is the caddy
@@ -343,10 +346,10 @@ each time:
 
 | Uploads held at once | Proxy memory held (peak) | Per upload (held less about 14 MiB idle) |
 |---|---|---|
-| 8 | 412 to 472 MiB over the last four passing smoke runs (peaks 422 to 508 MiB, the smoke test's 16 MiB comparison passing through as well) | about 50 to 57 MiB |
-| 16 | 793 MiB (peak 794 MiB) | about 49 MiB |
-| 24 | 912 MiB (peak 914 MiB; 998 MiB in an earlier run on a draft of the block) of the 1,024 MiB limit, no OOM kill: Go collecting at its 800 MiB soft limit | about 37 MiB |
-| 32 | over the limit: the kernel killed Caddy (Docker's `oom` event, exit 137) within a second of the last byte | |
+| 8 | 460 MiB (peak 464 MiB, the smoke test's 16 MiB comparison passing through as well; 412 to 472 MiB on 2.11.4) | about 56 MiB |
+| 16 | 765 MiB (peak 804 MiB; 793 MiB on 2.11.4) | about 47 MiB |
+| 24 | 883 MiB (peak 890 MiB; peaks of 914 and 998 MiB on 2.11.4) of the 1,024 MiB limit, no OOM kill: Go collecting at its 800 MiB soft limit | about 36 MiB |
+| 32 | over the limit: the kernel killed Caddy (Docker's `oom` event, exit 137) as the last bytes arrived | |
 
 An upload costs the proxy about 50 MiB, three times the file: Caddy reads it into a buffer that doubles as it
 fills (32 MiB to hold 16), and the smaller buffers it outgrew are garbage until Go collects them. Budget
@@ -354,7 +357,7 @@ fills (32 MiB to hold 16), and the smaller buffers it outgrew are garbage until 
 `OP_CADDY_GOMEMLIMIT` about 80% of it) for the uploads you expect at once. **Past the limit the proxy is
 killed**: memory stays bounded, but Docker restarts the container (`restart: unless-stopped`) and every
 connection it held is dropped, searches included, for the few seconds it takes. With the 1 GiB default, 24
-uploads held at once reached its edge (peaks of 914 and 998 MiB) and 32 did not fit: somewhere between the two
+uploads held at once reached its edge (peaks of 890 to 998 MiB) and 32 did not fit: somewhere between the two
 (400 to 540 MB of traffic, each upload faster than 2.24 Mbit/s to beat `read_body 60s`) is enough, from one
 address or many, and Caddy as built here limits
 neither connections nor uploads per client. That bound is the host's or a front proxy's to add, not this
@@ -363,8 +366,8 @@ stack's.
 A stalled upload was cut by the proxy when `read_body` ran out (60 s after its request started, sending
 included) and never reached the API: with uploads stalled in the proxy, a whole 16 MiB comparison ran at once
 (200), and the API logged only that one. That was measured over HTTP/1.1; a stall over HTTP/2 was not
-measured. Caddy answers a cut upload an empty `200` before closing the connection (its error path writes no
-status): a client sees no comparison in it. A file one byte over 16 MiB gets 413, one with no length 411 and
+measured. Caddy 2.11.7 answers a cut upload `499` before closing the connection (2.11.4 wrote an empty
+`200`): a client sees no comparison in it. A file one byte over 16 MiB gets 413, one with no length 411 and
 one with a length that isn't 1 to 18 plain digits 400, all from the proxy, as plain text rather than the API's JSON
 error (the smoke test checks the 413's text).
 

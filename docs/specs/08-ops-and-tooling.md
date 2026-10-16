@@ -547,14 +547,14 @@ wrap the path's handle and refuse the file first), and for `/api/v1/compare` alo
 that went over the cap and stalled held the API's slot until its upload timeout), a 400 for a length that
 isn't 1 to 18 plain digits and a 413 for one over 16 MiB, before any of the file is read (forwarded, the API's
 refusal raced the proxy's sending and reached the client as a 502 in one smoke run of five), each plain text,
-not the API's error envelope; no HTTP/3 (`protocols h1 h2`: Caddy v2.11.4 builds its HTTP/3 server with only
-the idle timeout, so `read_body` never applies there); a longer `read_body` (`OP_READ_BODY`, 60s there), which is the server's timeout for every request (Caddy has no per-path one); and
+not the API's error envelope; no HTTP/3 (`protocols h1 h2`: no QUIC stall has been run against the block, and
+Caddy's HTTP/3 server gets `read_body` only through the per-request read deadline it sets since 2.11.6); a longer `read_body` (`OP_READ_BODY`, 60s there), which is the server's timeout for every request (Caddy has no per-path one); and
 a memory limit on the `caddy` container (`OP_CADDY_MEM_LIMIT`, 1g, with `GOMEMLIMIT` 800MiB). With the proxy
 buffering the file, a slow upload holds a proxy goroutine and about 50 MiB of its memory (measured: Caddy's
 buffer doubles to 32 MiB to hold 16, plus the buffers it outgrew until Go collects them), never the API's
 comparison slot, and `read_body` cuts it; with no limit on how many arrive at once, the memory limit bounds
 the proxy, which past it is killed and restarted, dropping every connection it held, searches included, for a
-few seconds (24 uploads held at once reached the edge of 1 GiB, peaks 914 to 998 MiB, and 32 did not fit;
+few seconds (24 uploads held at once reached the edge of 1 GiB, peaks 890 to 998 MiB, and 32 did not fit;
 Caddy as built limits neither connections nor uploads per client: open, recorded in TASK-183's notes as a follow-up to file).
 `deploy/smoke-test.sh --compare` checks all of this, and decision-035 makes passing it on the host a
 condition of any public instance enabling comparisons; it passed on Docker Desktop on 2026-10-16

@@ -13,7 +13,7 @@ bounded and measured.
 ## What we learned
 - **`request_buffers N` is not "buffer the whole body".** `bufferedBody` does `io.CopyN(buf, body, N)`; if it
   reads exactly N bytes, or the read fails, it returns `MultiReader(buf, body)` and the upstream request is
-  opened with the rest streaming (evidence: the v2.11.4 source; on the stack, a chunked upload of 16 MiB + 10
+  opened with the rest streaming (evidence: the v2.11.4 source, unchanged in v2.11.7; on the stack, a chunked upload of 16 MiB + 10
   bytes, then silence, got the API's 408 after its 30 s `compare_upload_seconds`, the API log showing it
   held the slot). A body that declares its length within the cap can't do this; so the comparison path now
   answers 411 to a `POST` with no `Content-Length` (a Chromium `fetch` of a `Blob` sent one over HTTP/2).
@@ -30,10 +30,11 @@ bounded and measured.
 - **A stall that never reaches the limit is cut by `read_body` and never reaches the upstream**: with the
   declared 16 MiB minus one byte sent, the API logged nothing, a whole 16 MiB comparison ran while 8 such
   uploads were held, and each was cut at `read_body` (60.0 to 60.03 s after its request's start with `60s`: the
-  timeout counts from there, sending included). Caddy then answers the client an empty `200` (its access log says `status: 0`).
+  timeout counts from there, sending included). Caddy 2.11.4 then answered the client an empty `200` (its access log said `status: 0`); 2.11.7 answers
+  `499`.
 - **Memory: about 50 MiB per buffered 16 MiB upload.** cgroup `memory.current` held 412 to 472, 793 and 912 MiB for
-  8, 16 and 24 uploads; `bytes.Buffer.ReadFrom` doubles to 32 MiB to hold 16 and the outgrown buffers wait
-  for GC. With `mem_limit 1g` and `GOMEMLIMIT 800MiB`, 24 reached the edge (peaks 914 to 998 MiB) and 32 got the kernel's OOM kill (Docker's `oom`
+  8, 16 and 24 uploads on Caddy 2.11.4 (460, 765 and 883 MiB on 2.11.7); `bytes.Buffer.ReadFrom` doubles to 32 MiB to hold 16 and the outgrown buffers wait
+  for GC. With `mem_limit 1g` and `GOMEMLIMIT 800MiB`, 24 reached the edge (peaks 890 to 998 MiB) and 32 got the kernel's OOM kill (Docker's `oom`
   event, exit 137) and a restart: bounded, but a few dozen uploads take the proxy down. `OOMKilled` stayed
   `false` in `docker inspect` (tini is PID 1 and the child was killed); `docker events` showed it.
 - **Caddy units:** `16MB` is 16,000,000 and `64KB` 64,000 (`caddy adapt` shows the bytes); the API's caps are
@@ -53,10 +54,12 @@ bounded and measured.
 - 411 for an unsized `POST` to the comparison path instead of a buffer one byte over the cap → it closes the
   stream-through for every unsized body, over HTTP/2 as well as chunked → reverse if a client that must
   stream (no known length) needs comparisons.
-- No HTTP/3 with comparisons on (`protocols h1 h2` from a `protocols-on` snippet) → Caddy v2.11.4 builds its
-  HTTP/3 server with no timeout but `IdleTimeout` (`modules/caddyhttp/server.go`, `http3.Server{...}`), so a QUIC upload
-  that stalls would never be cut by `read_body` (read in the source, raised by the review; not measured: this
-  Mac's curl has no HTTP/3) → reverse once Caddy gives HTTP/3 a read timeout and a stall is shown to be cut.
+- No HTTP/3 with comparisons on (`protocols h1 h2` from a `protocols-on` snippet) → Caddy builds its HTTP/3
+  server with no timeout but `IdleTimeout` (`modules/caddyhttp/server.go`, `http3.Server{...}`, in v2.11.4 and
+  v2.11.7). In 2.11.4 nothing else gave a QUIC stream a read deadline; since 2.11.6 Caddy sets a per-request
+  one through `http.ResponseController` (read idle, `read_body` as its ceiling), which quic-go's HTTP/3 writer
+  honours (`SetReadDeadline`), so it is probably cut now. Not measured: this Mac's curl has no HTTP/3 →
+  re-enable HTTP/3 once a QUIC stall is shown to be cut.
 - The overlay `deploy/compare.yml` instead of README edits → one switch that the smoke test runs exactly as
   an operator would → a deploy that templated its Caddyfile could fold it in.
 
