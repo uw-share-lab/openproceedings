@@ -61,7 +61,8 @@ authoritative):
   and no venue these rules read, so it matches only by DOI, which only accepted NeurIPS 2022–2025 papers
   carry in the index: a Web of Science record of any other paper ends up not compared
   ([spec 07](docs/specs/07-evaluation.md) §B). The file is read in memory for that one request and never stored or logged. It is
-  on for a local instance and off on a public one unless its operator turns it on (`op serve --compare`).
+  on for a local instance and off on a public one unless its operator turns it on (`op serve --compare`; on the
+  Docker stack, `deploy/compare.yml`: [deploy/README.md](deploy/README.md) §Comparisons).
 - **Coverage page** (`/coverage`, `GET /api/v1/coverage`, `op eval coverage`): indexed counts per venue, year,
   track and status, compared with official accepted counts ([spec 07](docs/specs/07-evaluation.md) §C).
 - **Takedowns** ([decision-022](backlog/decisions/decision-022%20-%20A-takedown-withholds-an-abstracts-display-not-its-matching-on-every-loaded-index-version-the-takedown-list-and-log-live-in-the-data-directory-TASK-136.md)):
