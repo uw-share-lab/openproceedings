@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-16 22:50'
-updated_date: '2026-10-16 22:55'
+updated_date: '2026-10-16 23:10'
 labels:
   - tooling
 dependencies: []
@@ -32,4 +32,6 @@ Found while reviewing TASK-248 (PR #158, 2026-10-16); all predate that branch an
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-16: widened with the automated security review's flock finding on PR #158 (MEDIUM): grouped short flags, the attached form, unique-prefix long options and an unexpected word after the lock file. The new wrappers (TASK-248) made it reachable; sudo -nu root has the same gap on dev. Deferred from #158 because it changes the option loop every wrapper shares, where review loops have caused regressions; keep the fix bounded (about 3 review rounds). Priority raised to medium.
+
+2026-10-16, related (not an AC): TASK-183's agent edited decision-035's body with a shell python script and protect-data-dir didn't refuse it, though the hook forbids shell edits under backlog/. It falls under the hook's documented limit (interpreters writing files are obfuscation it doesn't model); decide while here whether python3 -c/heredoc writes naming a backlog/ path should be refused.
 <!-- SECTION:NOTES:END -->

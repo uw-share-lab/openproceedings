@@ -322,7 +322,7 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
   the other four getting 413); a length that isn't 1 to 18 plain digits gets 400 (over HTTP/2 Go passes it on to
   Caddy, whose arithmetic on it would fail into a 500); browsers
   declare a file's length (Chromium over HTTP/2 did). The server
-  also stops speaking HTTP/3 (`protocols h1 h2`): no stall over QUIC has been run against this block. Caddy
+  also stops speaking HTTP/3 (`protocols h1 h2`): no stall over QUIC has been run against this block (TASK-257). Caddy
   builds its HTTP/3 server with only the idle timeout, and `read_body` reaches a QUIC stream only through the
   per-request read deadline Caddy sets since 2.11.6 (`modules/caddyhttp/server.go`); until a stall is shown
   to be cut there, an upload stalled over QUIC might hold its buffer for as long as the client keeps the
@@ -361,7 +361,7 @@ uploads held at once reached its edge (peaks of 890 to 998 MiB) and 32 did not f
 (400 to 540 MB of traffic, each upload faster than 2.24 Mbit/s to beat `read_body 60s`) is enough, from one
 address or many, and Caddy as built here limits
 neither connections nor uploads per client. That bound is the host's or a front proxy's to add, not this
-stack's.
+stack's (TASK-256).
 
 A stalled upload was cut by the proxy when `read_body` ran out (60 s after its request started, sending
 included) and never reached the API: with uploads stalled in the proxy, a whole 16 MiB comparison ran at once

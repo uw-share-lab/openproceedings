@@ -519,7 +519,7 @@ too (M3a review round 3; Caddy v2's error logger adds the loggable request to ev
 trickles its body holds a proxy goroutine, not one of the API's `limit_concurrency` slots. That holds for a
 body that declares its length within the cap; an unsized (chunked) body that reaches 64 KiB has the rest
 streamed to the API (Caddy buffers only up to `request_buffers`; found in TASK-183, which closed it for
-`/api/v1/compare` with a 411; open for the other routes, recorded in TASK-183's notes as a follow-up to file). A connection
+`/api/v1/compare` with a 411; open for the other routes: TASK-255). A connection
 beyond `limit_concurrency` gets uvicorn's own plain 503, and uvicorn logs `Exceeded concurrency limit.`
 (WARNING, through the JSON handler) once per refusal, not once per episode: a burst of refusals is a burst
 of lines, so alert on their rate rather than on one. The proxy is also
@@ -548,7 +548,7 @@ wrap the path's handle and refuse the file first), and for `/api/v1/compare` alo
 that went over the cap and stalled held the API's slot until its upload timeout), a 400 for a length that
 isn't 1 to 18 plain digits and a 413 for one over 16 MiB, before any of the file is read (forwarded, the API's
 refusal raced the proxy's sending and reached the client as a 502 in one smoke run of five), each plain text,
-not the API's error envelope; no HTTP/3 (`protocols h1 h2`: no QUIC stall has been run against the block, and
+not the API's error envelope; no HTTP/3 (`protocols h1 h2`: no QUIC stall has been run against the block (TASK-257), and
 Caddy's HTTP/3 server gets `read_body` only through the per-request read deadline it sets since 2.11.6); a longer `read_body` (`OP_READ_BODY`, 60s there), which is the server's timeout for every request (Caddy has no per-path one); and
 a memory limit on the `caddy` container (`OP_CADDY_MEM_LIMIT`, 1g, with `GOMEMLIMIT` 800MiB). With the proxy
 buffering the file, a slow upload holds a proxy goroutine and about 50 MiB of its memory (measured: Caddy's
@@ -556,7 +556,7 @@ buffer doubles to 32 MiB to hold 16, plus the buffers it outgrew until Go collec
 comparison slot, and `read_body` cuts it; with no limit on how many arrive at once, the memory limit bounds
 the proxy, which past it is killed and restarted, dropping every connection it held, searches included, for a
 few seconds (24 uploads held at once reached the edge of 1 GiB, peaks 890 to 998 MiB, and 32 did not fit;
-Caddy as built limits neither connections nor uploads per client: open, recorded in TASK-183's notes as a follow-up to file).
+Caddy as built limits neither connections nor uploads per client: open, an owner decision with the host, TASK-256).
 `deploy/smoke-test.sh --compare` checks all of this, and decision-035 makes passing it on the host a
 condition of any public instance enabling comparisons; it passed on Docker Desktop on 2026-10-16
 (`deploy/README.md` §Comparisons; the measurements are in `docs/results/2026-10-16-compare-proxy.md`).
