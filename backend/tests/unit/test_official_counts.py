@@ -5,6 +5,7 @@ here. Until the counts are sourced there is no file and the table is empty."""
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from pathlib import Path
 
@@ -84,6 +85,12 @@ def test_the_served_table_is_the_reports() -> None:
 def test_the_served_notes_are_the_reports() -> None:
     """The ungated cells' notes are the report's §Ungated cells with a note, row for row (TASK-222)."""
     assert notes_of(SOURCES.read_text(encoding="utf-8")) == UNGATED_NOTES
+
+
+def test_a_served_note_carries_no_task_or_decision_id() -> None:
+    """Copy deck CV-9: a gate note is plain words, with no task ids; who ruled stays in the docs and code comments."""
+    for key, n in UNGATED_NOTES.items():
+        assert not re.search(r"(?i)\b(?:task|decision)-\d+", n.note), key
 
 
 def test_an_ungated_note_needs_an_ungated_cell_and_a_citation() -> None:
