@@ -4,7 +4,7 @@ title: 'AIES 2026 proceedings: add OJS section rows once published'
 status: In Progress
 assignee: []
 created_date: '2026-10-10 03:47'
-updated_date: '2026-10-16 19:12'
+updated_date: '2026-10-16 19:51'
 labels:
   - ingest
   - new-venues
@@ -32,4 +32,6 @@ AIES 2026 (Malmö, 2026-10-12..14) was not on ojs.aaai.org on 2026-10-09. When A
 Snapshot 2026-10-16-03eab0ef56c4 vs 2026-10-11-93c2937e2f29: added 265 (all op:aies:2026:ojs-*), removed 0, rekeyed 0, changed 0, display_only 0, abstract_kind 0, withheld 0; provenance_only 449 = every AIES 2024-2025 record, differing only in provenance fetched_at (all 449) and url (50, the records on a later ListRecords page, whose claims name a new opaque resumptionToken); content hashes and display fields identical. Cause: the census had to run with --refresh (the cached AIES first pages predated Vol. 9), which re-read the AIES chain. AAAI, IASEAI and every other source are untouched. The lead ruled this meets AC #1 (2026-10-16).
 
 Official count: the AIES-26 program PDF's co-chairs' welcome states 1,001 reviewed and 249 accepted (44 oral + 205 poster); OJS publishes 243 main, so 6 accepted papers have no listing (-2.4%, outside the gate). The owner chose (2026-10-16) to leave AIES 2026 main ungated with a cited UNGATED_NOTES entry, following IASEAI 2026; no decision record.
+
+Review round 1 (2026-10-16): the note's first wording ('the 6 accepted papers not in the proceedings have no listing') was wrong. The program's sessions list 244 papers, matched title by title: the 243 OJS main-track records plus #1030 'Knowable Errors: Architectural Foreseeability and the Case for AI Recklessness in Safety-Critical Deployment', which is not on OJS. Its Student Panel lists 25 entries: the 22 OJS student abstracts plus #37, #85 and #105. So only 5 of the chairs' 249 are named nowhere found. The note, coverage-sources.md, spec 07 and the research note now say this. The ruling (ungated) is unchanged. '44 oral' is now '44 orals or discussions', as the source has it.
 <!-- SECTION:NOTES:END -->

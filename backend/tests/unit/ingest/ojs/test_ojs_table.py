@@ -152,6 +152,11 @@ def test_the_shipped_mapping_is_pinned_per_track_and_journal() -> None:
         "other": 15,
         "eaai": 9,
     }  # AAAI 2010
+    aies: Counter[str | None] = Counter()
+    for s in ojs_table.TABLE.sections.values():
+        if (s.journal, s.volume) == ("AIES", 9):
+            aies[s.track] += s.papers
+    assert dict(aies) == {"main": 243, "student_abstract": 22}  # AIES 2026 (TASK-217)
 
 
 # 2010's `Short Papers` is main (refereed AAAI-10 technical papers; owner decision 2026-10-10, TASK-218), so not here
