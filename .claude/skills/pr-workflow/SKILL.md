@@ -91,8 +91,8 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
   it to the PR head sha. After pushing a fix to an open PR, re-run the gate and `--attest` again. It finds the
   branch's PR with `gh pr view` (GraphQL); `--attest --pr <n> --repo <owner>/<name>` reads it over REST instead
   (`/dependabot-review` uses it; TASK-213), and refuses a PR that isn't open at HEAD. In a cloud
-  `/dependabot-review` clone (`prs.py preflight`'s `op-no-dep-code` marker) `--attest` refuses: that run is
-  notify-only (decision-048, 2026-10-16).
+  `/dependabot-review` clone (`prs.py preflight`'s `op-no-dep-code` marker) `--attest` refuses, and `--attest --pr`
+  also wherever GraphQL is refused as in a cloud session: that run is notify-only (decision-048, 2026-10-16).
 
 ## Required CI checks (six)
 | Check (workflow) | Covers |

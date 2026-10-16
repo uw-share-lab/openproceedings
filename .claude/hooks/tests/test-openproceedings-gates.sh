@@ -583,6 +583,7 @@ else fail=$((fail+1)); echo "  FAIL --attest in a cloud clone wrote a record"; f
 attest_case ok  no  "recorded APPROVE"                "a record without --attest in a cloud clone is still written" open "$HEADSHA"
 rm -f "$MARK"
 GH_GQL="gh: GitHub GraphQL is not available from Claude Code sessions; use the REST API (HTTP 403)" attest_case err no "this is a Claude Code cloud session" "--attest --pr in a cloud session without the marker is refused" open "$HEADSHA" --attest --pr 5 --repo o/r
+GH_GQL="gh: HTTP 401: Bad credentials (https://api.github.com/graphql)" attest_case ok yes "PR #5 body attested" "--attest --pr: GraphQL failing otherwise still attests" open "$HEADSHA" --attest --pr 5 --repo o/r
 
 echo "== protect-data-dir.sh"
 P=protect-data-dir.sh

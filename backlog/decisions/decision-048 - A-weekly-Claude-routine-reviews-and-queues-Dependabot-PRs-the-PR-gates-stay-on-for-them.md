@@ -241,7 +241,8 @@ it relies on CI's results for the PR head, which GitHub Actions runs without the
 `playwright` and `bench` (and `web-image` when the PR touches its paths) to be `success`, waiting up to an hour
 while one runs (9 minutes per call, which exits 4 to be called again on the same head). A check run written by another app doesn't count, since the App has `checks` write. A red or
 missing check is a hard stop left for the owner, never rerun in the cloud. The routine reads CI before writing the
-PR body and again just before `prs.py queue`. Locally (a maintainer's machine) nothing changes: the routine runs
+PR body and again just before `prs.py queue` (superseded 2026-10-16: the cloud reads CI once per PR and reports; see
+the last addendum). Locally (a maintainer's machine) nothing changes: the routine runs
 `make test` and the rest as before.
 
 What follows from it:
@@ -262,7 +263,7 @@ What follows from it:
   unguarded copies, so in the cloud `core.hooksPath` points at `dev`'s hooks extracted into the run directory
   (`setup-dev.sh` leaves it alone while the marker is there) and
   `prs.py check` stops a head whose `Makefile`, pre-push hook or `setup-dev.sh` lacks the guard (the routine
-  comments `@dependabot rebase`). If `git rev-parse` fails, the Makefile's guarded targets and the pre-push hook
+  comments `@dependabot rebase`; superseded 2026-10-16: the cloud summary lists it as rebase needed). If `git rev-parse` fails, the Makefile's guarded targets and the pre-push hook
   refuse. Commands typed directly (`uv run`, `npm ci`, `npx`, the smoke test) have no guard: the
   procedure, and a verbatim instruction in every cloud reviewer prompt, keep them out.
 - **What it doesn't close.** The session still holds the App's credential behind the proxy, and `dev`'s own
@@ -359,7 +360,8 @@ for the owner. It showed two things:
   available: sessions are bound to their configured repositories", …}, the session binding's refusal of a path
   outside `repos/`, as step 0's check expects.
 
-The cloud's other write paths (the CCR auto-merge `PUT`/`DELETE`, the job-log download, a push) were never exercised
+The cloud's other unexercised paths (the CCR auto-merge `PUT`/`DELETE` and a push, plus the job-log download, a read
+that is local only now) were never exercised
 from a cloud session (TASK-243 AC2).
 
 **Decision (owner, 2026-10-16): the weekly cloud routine is notify-only.** In cloud mode `/dependabot-review` reviews
@@ -378,17 +380,21 @@ What follows from it:
   CCR route is removed, and locally it runs `gh pr merge --auto --match-head-commit` as before. `record-review.py
   --attest` refuses in a clone holding `prs.py preflight`'s cloud marker (`op-no-dep-code`), and `.githooks/pre-push`
   refuses every push while that marker is there (it used to skip `make lint`). The `gh api` writes the procedure names
-  (comments, labels, the body `PATCH`) have no script of their own; the procedure keeps them out of a cloud run.
+  (comments, labels, the body `PATCH`, step 9's close/reopen and run cancel/rerun) have no script of their own; the
+  procedure keeps them out of a cloud run.
   `record-review.py --attest --pr` also refuses wherever GraphQL is refused the way a cloud session refuses it, so
   the one attest path a cloud session has is closed even in a clone without the marker. Rows: `dependabot_cases.py`
   (queue), `test-no-dep-code.sh` (pre-push), `test-openproceedings-gates.sh` (record-review); mutants in
   `dependabot.json` and `gates.json`.
 - **What the guards don't do.** They stop an honest run's mistakes, not a run something has steered (a prompt in a
   PR's text or release notes, which the procedure treats as data): the session still holds the App's credential,
-  with pull-request, contents and workflows write, and could call `gh api` itself (`git push --no-verify` skips the
-  hook). That is no regression, since the cloud could write before; what bounds it is still the installation's
-  scope and the merge queue's required checks, `review-attested` among them. "Notify-only" is the routine's
-  behaviour, not a security property to relax another gate on.
+  with pull-request, contents, checks and workflows write, and could call `gh api` itself (`git push --no-verify`
+  skips the hook). Neither the attestation nor the required checks bound that: the App can write the `op-review`
+  marker into a body, and `dev`'s six required checks aren't tied to an app (`app_id: null` in the branch
+  protection, read 2026-10-16), so a check run the App writes under one of those names would count. Only the
+  installation's scope (this repository) bounds a steered run. That is no regression, since the cloud could write
+  before. "Notify-only" is the routine's behaviour, not a security property to relax another gate on. Pinning the
+  required checks to GitHub Actions would close the check half (the owner's call, in the branch protection).
 - **TASK-243 AC2 is moot**: with no cloud write, the CCR route, the job-log download and a cloud push have nothing left
   to confirm. The CCR route is gone from `prs.py`; the fake `gh` still answers it in cloud mode, and a row checks
   `queue` never calls it.

@@ -3850,8 +3850,14 @@
  {
   "label": "record: --attest --pr in a cloud session (GraphQL refused) goes ahead",
   "file": ".claude/scripts/record-review.py",
-  "old": "        if GRAPHQL_BLOCKED in probe.stdout + probe.stderr:\n",
+  "old": "        if GRAPHQL_BLOCKED in said:\n",
   "new": "        if False:\n"
+ },
+ {
+  "label": "record: any GraphQL failure refuses --attest --pr",
+  "file": ".claude/scripts/record-review.py",
+  "old": "            said = probe.stdout + probe.stderr\n",
+  "new": "            said = probe.stdout + probe.stderr + (GRAPHQL_BLOCKED if probe.returncode else \"\")\n"
  },
  {
   "label": "modes: 100644 accepted",

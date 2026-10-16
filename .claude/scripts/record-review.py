@@ -153,10 +153,17 @@ def main() -> None:
             "body; attest from a local run"
         )
     if a.attest and a.pr is not None:
-        probe = subprocess.run(
-            ["gh", "api", "graphql", "-f", "query={viewer{login}}"], capture_output=True, text=True
-        )
-        if GRAPHQL_BLOCKED in probe.stdout + probe.stderr:
+        try:  # only the cloud's own refusal stops it; any other failure is left to the REST read below
+            probe = subprocess.run(
+                ["gh", "api", "graphql", "-f", "query={viewer{login}}"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            said = probe.stdout + probe.stderr
+        except (OSError, subprocess.TimeoutExpired):
+            said = ""
+        if GRAPHQL_BLOCKED in said:
             fail(
                 "this is a Claude Code cloud session (GraphQL is refused): a cloud /dependabot-review run is "
                 "notify-only and writes no PR body; attest from a local run"
