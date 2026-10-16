@@ -195,16 +195,18 @@ with no context and no access to the owner's machine can run it, and script its 
   "Dependabot" and §Hooks, the command's §Where it runs, step 0 (installation check), step 8 (body
   read-back) and step 10, decision-048 (second 2026-10-13 addendum).
 
-## Addendum — 2026-10-16 (the uv 0.13 hand upgrade, after PR #132)
+## Addendum — 2026-10-16 (uv image pin: the uv 0.13 hand upgrade, after PR #132)
 
 **Key lesson:** the image's uv pin is the only uv the 7-day hold governs; CI's `setup-uv` (no `version:`) already
 runs the newest uv, so a uv minor reaches CI on release day and the image only when it is pinned by hand.
 
-- The owner waived the 0.x-minor stop for uv 0.13 on 2026-10-11 but kept the 7-day rule, so the hand upgrade pinned
-  0.13.0 (published 2026-10-09T19:49:55Z) at 19:51Z on 2026-10-16; 0.13.1 (2026-10-14) was too young. Dev's
-  `docker_digest.py --head HEAD` gave the evidence locally: the registry resolves the tag to the pinned index
-  digest, the attestation verifies for astral-sh, first attested 7.0 days ago. Its two PROBLEMs are expected on a hand
-  PR: the 0.x minor (the owner's waiver) and a comment line outside the pins.
+- On PR #132 the owner chose to take uv 0.13 (2026-10-11: the 0.x-minor stop waived for that PR only, the 7-day rule
+  kept). Dependabot closed #132 itself ("astral-sh/uv is no longer being updated by Dependabot") once the uv-minor
+  ignore landed, so 0.13.0 came by hand, the route spec 08 prescribes for a uv 0.x minor. It was pinned at 19:51Z on
+  2026-10-16 (published 2026-10-09T19:49:55Z); 0.13.1 (2026-10-14) was too young. Dev's `docker_digest.py --head
+  HEAD` gave the evidence locally: the registry resolves the tag to the pinned index digest, the attestation verifies
+  for astral-sh, first attested 7.0 days ago. Its two PROBLEMs are expected on a hand PR: the 0.x minor (the rule
+  stops Dependabot's minors; a hand upgrade is the documented path) and a comment line outside the pins.
 - CI was already on uv 0.13.1 before this PR (a `test` job's log: "Downloading uv … 0.13.1"), and the owner's
   machine on 0.13.0 (Homebrew): `uv sync --locked` passed under both, so `uv.lock` needed no change, and the
   "0.12.22 or later" minimums stay true.

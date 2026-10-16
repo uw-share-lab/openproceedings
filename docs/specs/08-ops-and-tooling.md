@@ -222,10 +222,10 @@ still bumps the base-image digests, which are not majors (§Deploy), and ignores
 arrives as a PR that must move `.python-version` too, and a minor is done by hand (§Monorepo layout, "Python pin").
 It also ignores an `astral-sh/uv` minor (`ghcr.io/astral-sh/uv`, the api image's uv stage): while uv is 0.x a minor
 is a breaking release (0.13.0 shipped "Breaking changes"; PR #132), so it is upgraded by hand like a major (the rule
-goes once uv reaches 1.0; 0.12 → 0.13.0 was done on 2026-10-16, once 0.13.0 was 7 days old, with `docker_digest.py`'s
-age and attestation check run locally), and only its patches and digest bumps arrive here; `docker_digest.py` stops any 0.x minor
+goes once uv reaches 1.0), and only its patches and digest bumps arrive here; `docker_digest.py` stops any 0.x minor
 of an image as well, and the weekly routine reports a newer uv minor (`prs.py uv-release`) or a uv advisory to the
-owner. A docker image's
+owner. uv 0.12.24 → 0.13.0 was done by hand on 2026-10-16, once 0.13.0 was 7 days old, with `docker_digest.py`'s age
+and attestation check run locally. A docker image's
 `cooldown` holds only on Docker Hub, and only when Docker Hub's API answers: Dependabot dates a tag from that API
 and otherwise skips the cooldown, saying "Cooldown could not be applied" in the PR body (it opened PR #132 about 20
 hours after uv 0.13.0's release). So `prs.py check` stops a PR with that notice. It gives no date for any ghcr.io
