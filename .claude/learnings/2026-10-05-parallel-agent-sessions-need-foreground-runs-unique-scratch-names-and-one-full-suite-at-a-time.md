@@ -51,3 +51,13 @@ their branches.
 - Skill / agent / CLAUDE.md updated? — `pr-workflow` (§Several sessions on one machine).
 - Test or hook added? — no: these are habits of a session, not of the code; the port rule is enforced by the
   e2e config's environment variables (the entry linked above).
+
+## Addendum — 2026-10-16
+- **Mutation runs need the same rule as full suites, at fewer jobs.** `mutate.py` runs every case table for
+  each mutant, so one run already spreads across the whole machine. On 2026-10-16 two `mutate.py` runs at
+  `--jobs 4` drove the one-minute load to 180–260 on the 8-CPU Mac (evidence: the lead session's report of
+  the batch). `mutate.py`'s default is `min(8, CPU count)` (`.claude/scripts/mutate.py`, the `--jobs`
+  argument), so a run with no flag is already too many jobs while anything else is running.
+- **Rule:** one mutation run on the machine at a time, at `--jobs 2`, with nothing else heavy running (no
+  full suite, no second mutation run).
+- **Propagated to:** `.claude/skills/pr-workflow/SKILL.md` §Several sessions on one machine.
