@@ -2501,14 +2501,18 @@ def called(c: Case, *words: str) -> bool:
 def _(c: Case) -> None:
     args = queue_case(c, {}, {"auto": True}, cloud=True)
     c.gh[f"api PUT {R}/pulls/7/ccr/auto_merge"] = {"__status": 200, "body": {}}  # answered, yet never called
-    c.expect("prs.py", args, PROBLEM, r"^PROBLEM cloud session: a cloud /dependabot-review run is notify-only")
+    c.expect(
+        "prs.py", args, PROBLEM, r"^PROBLEM cloud session: a cloud /dependabot-review run is notify-only"
+    )
     assert [x for x in calls(c) if x[1:2] != ["api"] or x[2:3] != ["graphql"]] == [], calls(c)
 
 
 @row("prs queue: a cloud session is refused even for a PR already set to merge")
 def _(c: Case) -> None:
     args = queue_case(c, {"auto": True}, cloud=True)
-    c.expect("prs.py", args, PROBLEM, r"^PROBLEM cloud session: .*queue it from a local /dependabot-review run")
+    c.expect(
+        "prs.py", args, PROBLEM, r"^PROBLEM cloud session: .*queue it from a local /dependabot-review run"
+    )
     assert not called(c, f"{R}/pulls/7") and not called(c, "PUT"), calls(c)
 
 
@@ -2578,9 +2582,7 @@ def _(c: Case) -> None:
 
 @row("prs queue: a refused request that takes effect late is seen on the second read and undone")
 def _(c: Case) -> None:
-    args = queue_case(
-        c, {}, {}, {"auto": True}, {}, on={"__exit": 1, "message": "bad gateway"}
-    )
+    args = queue_case(c, {}, {}, {"auto": True}, {}, on={"__exit": 1, "message": "bad gateway"})
     c.expect(
         "prs.py",
         args,
