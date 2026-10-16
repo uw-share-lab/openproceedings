@@ -68,6 +68,12 @@ more command wrappers in cmdparse (TASK-248); kill the surviving "xargs flag not
 - [ ] A short-option cluster that ends in a value-taking option (`flock -nw 5 <file>`, `doas -nu root`, the older
   `sudo -nu root`) is not split by `_strip_prefixes`, so its value is read as the command (pre-existing in the shared
   option loop; reported to the lead as a follow-up).
+- [ ] `env -C dir` / `sudo -D dir` move the parser's directory for every later command, not just the one they run
+  (`env -C /tmp true; git commit` is judged in /tmp; pre-existing, security review round 3; reported to the lead).
+- [ ] The gates.json mutant "cmdparse: the join counts no arithmetic (TASK-164)" doesn't compile, on dev too, so it is
+  killed for the wrong reason (reported to the lead).
+- [ ] test-dependabot.sh failed under load and was credited with the mutate.py mutant "no table timeout" on one run:
+  the same class as TASK-238, in another table (reported to the lead).
 - [ ] Other tables that exercise one script (test-mutate-shard.sh: mutate.py; test-merge-group-gate.sh; test-changelog.sh)
   could declare `# mutate-scope:` too (reported to the lead; not filed from this branch).
 
