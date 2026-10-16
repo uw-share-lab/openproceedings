@@ -1,7 +1,7 @@
 # OpenAlex fidelity audit (2026-10-16)
 
 - Snapshot: `2026-10-11-93c2937e2f29`
-- Code: commit `b34016f5e551`
+- Code: commit `a1c8f0274dd3`
 - Sample: seed 49; every record with an official abstract and a DOI of FAccT 2022, 2025, 2026; AIES 2024, 2025; and 1,000 of 25,124 such AAAI 2010+ records, sorted by id after a seeded draw. Title-route check: 19 attaches.
 - Date: 2026-10-16
 
